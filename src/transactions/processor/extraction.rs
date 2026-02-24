@@ -83,7 +83,7 @@ impl TransactionProcessor {
             let mut temp_transaction = Transaction::new(signature.to_string());
             temp_transaction.raw_transaction_data = Some(
                 serde_json::to_value(&tx_details)
-                    .map_err(|e| format!("Failed to serialize transaction details: {}", e))?,
+                    .map_err(|e| format!("Failed to serialize transaction details: {e}"))?,
             );
             temp_transaction.slot = Some(tx_details.slot);
             temp_transaction.block_time = tx_details.block_time;
@@ -136,7 +136,7 @@ impl TransactionProcessor {
         // Store raw transaction data for future reference
         transaction.raw_transaction_data = Some(
             serde_json::to_value(tx_data)
-                .map_err(|e| format!("Failed to serialize transaction data: {}", e))?,
+                .map_err(|e| format!("Failed to serialize transaction data: {e}"))?,
         );
 
         // Add comprehensive debug logging for transaction structure

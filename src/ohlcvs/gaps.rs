@@ -238,7 +238,7 @@ impl GapManager {
                     }
                     Err(e) => {
                         stats.failed_gaps += 1;
-                        logger::error(LogTag::Ohlcv, &format!("Failed to fill gap: {}", e));
+                        logger::error(LogTag::Ohlcv, &format!("Failed to fill gap: {e}"));
 
                         // ERROR: Record gap fill failure
                         record_ohlcv_event(

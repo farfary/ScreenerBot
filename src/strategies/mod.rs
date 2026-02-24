@@ -101,7 +101,7 @@ pub async fn evaluate_entry_strategies(
                 if let Err(e) = record_evaluation(&eval_result, token_mint) {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to record evaluation: {}", e),
+                        &format!("Failed to record evaluation: {e}"),
                     );
                 }
 
@@ -187,7 +187,7 @@ pub async fn evaluate_exit_strategies(
                 if let Err(e) = record_evaluation(&eval_result, token_mint) {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to record evaluation: {}", e),
+                        &format!("Failed to record evaluation: {e}"),
                     );
                 }
 

@@ -111,7 +111,7 @@ pub async fn start_global_transaction_service(
         if let Err(e) = run_transaction_service(config).await {
             logger::info(
                 LogTag::Transactions,
-                &format!("Transaction service error: {}", e),
+                &format!("Transaction service error: {e}"),
             );
         }
     }));

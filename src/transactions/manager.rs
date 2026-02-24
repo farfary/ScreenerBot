@@ -89,7 +89,7 @@ impl TransactionsManager {
                 Err(e) => {
                     logger::warning(
                         LogTag::Transactions,
-                        &format!("Failed to initialize transaction database: {}", e),
+                        &format!("Failed to initialize transaction database: {e}"),
                     );
                     None
                 }
@@ -136,7 +136,7 @@ impl TransactionsManager {
                 Err(e) => {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Failed to load known signatures count: {}", e),
+                        &format!("Failed to load known signatures count: {e}"),
                     );
                 }
             }
@@ -160,7 +160,7 @@ impl TransactionsManager {
                 Err(e) => {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Failed to load pending transactions: {}", e),
+                        &format!("Failed to load pending transactions: {e}"),
                     );
                 }
             }
@@ -226,7 +226,7 @@ impl TransactionsManager {
             {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Failed to save pending transactions during shutdown: {}", e),
+                    &format!("Failed to save pending transactions during shutdown: {e}"),
                 );
             }
         }
@@ -335,7 +335,7 @@ impl TransactionsManager {
                 if self.debug_enabled {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Failed to add signature to database: {}", e),
+                        &format!("Failed to add signature to database: {e}"),
                     );
                 }
             }

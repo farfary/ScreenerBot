@@ -40,7 +40,7 @@ impl Service for TransactionsService {
         let wallet_pubkey = crate::config::get_wallet_pubkey().map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Start {
                 service: "transactions".to_string(),
-                message: format!("Failed to load wallet: {}", e),
+                message: format!("Failed to load wallet: {e}"),
             })
         })?;
 
@@ -51,7 +51,7 @@ impl Service for TransactionsService {
                 .map_err(|e| {
                     crate::Error::Service(crate::errors::ServiceError::Start {
                         service: "transactions".to_string(),
-                        message: format!("Failed to start transactions service: {}", e),
+                        message: format!("Failed to start transactions service: {e}"),
                     })
                 })?;
 

@@ -350,10 +350,10 @@ pub fn get_strategy(strategy_id: &str) -> crate::Result<Option<Strategy>> {
                 }
             };
             let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-                .map_err(|e| Error::parse_error(format!("Failed to parse created_at: {}", e)))?
+                .map_err(|e| Error::parse_error(format!("Failed to parse created_at: {e}")))?
                 .with_timezone(&Utc);
             let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-                .map_err(|e| Error::parse_error(format!("Failed to parse updated_at: {}", e)))?
+                .map_err(|e| Error::parse_error(format!("Failed to parse updated_at: {e}")))?
                 .with_timezone(&Utc);
 
             Ok(Some(Strategy {
@@ -627,7 +627,7 @@ pub fn get_strategy_performance(strategy_id: &str) -> crate::Result<Option<Strat
             }
 
             let last_evaluation = DateTime::parse_from_rfc3339(&last_eval_str)
-                .map_err(|e| Error::parse_error(format!("Failed to parse timestamp: {}", e)))?
+                .map_err(|e| Error::parse_error(format!("Failed to parse timestamp: {e}")))?
                 .with_timezone(&Utc);
 
             Ok(Some(StrategyPerformance {

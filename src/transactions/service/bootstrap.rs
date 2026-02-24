@@ -99,7 +99,7 @@ pub async fn perform_initial_transaction_bootstrap(
             Err(e) => {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Failed to load bootstrap state: {}", e),
+                    &format!("Failed to load bootstrap state: {e}"),
                 );
                 // Fallback to default behavior (FULL with checkpoint on oldest-known if any)
                 checkpoint_signature = None;
@@ -221,7 +221,7 @@ pub async fn perform_initial_transaction_bootstrap(
                 if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Failed to persist backfill cursor: {}", e),
+                        &format!("Failed to persist backfill cursor: {e}"),
                     );
                 }
             }
@@ -583,7 +583,7 @@ pub async fn perform_initial_transaction_bootstrap(
             Err(e) => {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Failed to refresh known signatures count: {}", e),
+                    &format!("Failed to refresh known signatures count: {e}"),
                 );
                 stats.errors += 1;
             }
@@ -599,14 +599,14 @@ pub async fn perform_initial_transaction_bootstrap(
                 if let Err(e) = db.mark_full_history_completed().await {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Failed to mark full history completed: {}", e),
+                        &format!("Failed to mark full history completed: {e}"),
                     );
                 } else {
                     // Clear cursor since we reached chain end
                     if let Err(e) = db.clear_backfill_cursor().await {
                         logger::info(
                             LogTag::Transactions,
-                            &format!("Failed to clear backfill cursor: {}", e),
+                            &format!("Failed to clear backfill cursor: {e}"),
                         );
                     }
                     logger::info(
@@ -619,7 +619,7 @@ pub async fn perform_initial_transaction_bootstrap(
                 if let Err(e) = db.set_backfill_cursor(before.as_deref()).await {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Failed to persist final backfill cursor: {}", e),
+                        &format!("Failed to persist final backfill cursor: {e}"),
                     );
                 }
             }

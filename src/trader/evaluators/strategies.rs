@@ -28,7 +28,7 @@ impl StrategyEvaluator {
             Err(e) => {
                 logger::debug(
                     LogTag::Trader,
-                    &format!("Failed to check entry strategies: {}", e),
+                    &format!("Failed to check entry strategies: {e}"),
                 );
                 return Ok(None);
             }
@@ -187,7 +187,7 @@ impl StrategyEvaluator {
             Err(e) => {
                 logger::debug(
                     LogTag::Trader,
-                    &format!("Failed to check exit strategies: {}", e),
+                    &format!("Failed to check exit strategies: {e}"),
                 );
                 return Ok(None);
             }

@@ -42,7 +42,7 @@ pub async fn start_automated_trading(
     // Spawn entry monitor
     let entry_task = tokio::spawn(async move {
         if let Err(e) = monitor_entries(entry_shutdown).await {
-            logger::error(LogTag::Trader, &format!("Entry monitor error: {}", e));
+            logger::error(LogTag::Trader, &format!("Entry monitor error: {e}"));
 
             // Record entry monitor error
             record_trader_event(
@@ -62,7 +62,7 @@ pub async fn start_automated_trading(
     // Spawn exit monitor
     let exit_task = tokio::spawn(async move {
         if let Err(e) = monitor_positions(exit_shutdown).await {
-            logger::error(LogTag::Trader, &format!("Exit monitor error: {}", e));
+            logger::error(LogTag::Trader, &format!("Exit monitor error: {e}"));
 
             // Record exit monitor error
             record_trader_event(

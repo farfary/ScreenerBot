@@ -39,7 +39,7 @@ impl Service for OhlcvService {
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Initialize {
                     service: "ohlcv".to_string(),
-                    message: format!("Failed to initialize OHLCV service: {}", e),
+                    message: format!("Failed to initialize OHLCV service: {e}"),
                 })
             })?;
         Ok(())
@@ -55,7 +55,7 @@ impl Service for OhlcvService {
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
                     service: "ohlcv".to_string(),
-                    message: format!("Failed to start OHLCV runtime: {}", e),
+                    message: format!("Failed to start OHLCV runtime: {e}"),
                 })
             })?;
 

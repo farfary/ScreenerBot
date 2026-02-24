@@ -52,7 +52,7 @@ impl Service for EventsService {
         crate::events::init().await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
                 service: "events".to_string(),
-                message: format!("Failed to initialize events system: {}", e),
+                message: format!("Failed to initialize events system: {e}"),
             })
         })?;
         Ok(())

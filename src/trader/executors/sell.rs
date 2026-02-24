@@ -66,7 +66,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
                 ))
             }
             Err(e) => {
-                let error = format!("Partial sell execution failed: {}", e);
+                let error = format!("Partial sell execution failed: {e}");
                 logger::error(LogTag::Trader, &error);
                 Ok(TradeResult::failure(decision.clone(), error, 0))
             }
@@ -92,7 +92,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
                 ))
             }
             Err(e) => {
-                let error = format!("Full sell execution failed: {}", e);
+                let error = format!("Full sell execution failed: {e}");
                 logger::error(LogTag::Trader, &error);
                 Ok(TradeResult::failure(decision.clone(), error, 0))
             }

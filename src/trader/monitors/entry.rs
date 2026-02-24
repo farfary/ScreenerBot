@@ -148,7 +148,7 @@ pub async fn monitor_entries(
                         Ok(Err(e)) => {
                             logger::error(
                                 LogTag::Trader,
-                                &format!("Failed to acquire semaphore for entry check: {}", e),
+                                &format!("Failed to acquire semaphore for entry check: {e}"),
                             );
                             return None;
                         }

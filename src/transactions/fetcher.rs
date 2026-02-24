@@ -194,7 +194,7 @@ impl TransactionFetcher {
         let sig_infos = rpc_client
             .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before)
             .await
-            .map_err(|e| format!("RPC signature fetch failed: {}", e))?;
+            .map_err(|e| format!("RPC signature fetch failed: {e}"))?;
 
         let signatures: Vec<String> = sig_infos
             .into_iter()
@@ -393,7 +393,7 @@ impl TransactionFetcher {
         rpc_client
             .get_transaction_details(signature)
             .await
-            .map_err(|e| format!("Failed to fetch transaction details: {}", e))
+            .map_err(|e| format!("Failed to fetch transaction details: {e}"))
     }
 
     /// Fetch multiple transaction details concurrently with rate limiting

@@ -40,7 +40,7 @@ impl Service for SolPriceService {
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
                     service: "sol_price".to_string(),
-                    message: format!("Failed to start SOL price service: {}", e),
+                    message: format!("Failed to start SOL price service: {e}"),
                 })
             })?;
 

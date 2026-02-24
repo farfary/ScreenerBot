@@ -71,7 +71,7 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
                 return Ok(TradeResult::failure(decision.clone(), guard_msg, 0));
             }
 
-            let error = format!("Buy execution failed: {}", e);
+            let error = format!("Buy execution failed: {e}");
             logger::error(LogTag::Trader, &error);
             Ok(TradeResult::failure(decision.clone(), error, 0))
         }
@@ -121,7 +121,7 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
             ))
         }
         Err(e) => {
-            let error = format!("DCA execution failed: {}", e);
+            let error = format!("DCA execution failed: {e}");
             logger::error(LogTag::Trader, &error);
             Ok(TradeResult::failure(decision.clone(), error, 0))
         }

@@ -500,7 +500,7 @@ impl OhlcvFetcher {
         let mut queue = self
             .request_queue
             .lock()
-            .map_err(|e| OhlcvError::ApiError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::ApiError(format!("Lock error: {e}")))?;
 
         queue.push(FetchRequest {
             mint,
@@ -521,7 +521,7 @@ impl OhlcvFetcher {
             let mut queue = self
                 .request_queue
                 .lock()
-                .map_err(|e| OhlcvError::ApiError(format!("Lock error: {}", e)))?;
+                .map_err(|e| OhlcvError::ApiError(format!("Lock error: {e}")))?;
 
             queue.pop()
         };

@@ -106,7 +106,7 @@ impl Service for TelegramService {
             if let Err(e) = notifier::init_notifier() {
                 logger::warning(
                     LogTag::Telegram,
-                    &format!("Failed to initialize notifier: {}", e),
+                    &format!("Failed to initialize notifier: {e}"),
                 );
             }
         }
@@ -161,7 +161,7 @@ impl Service for TelegramService {
                     Err(e) => {
                         logger::warning(
                             LogTag::Telegram,
-                            &format!("Failed to start command handler: {}", e),
+                            &format!("Failed to start command handler: {e}"),
                         );
                     }
                 }

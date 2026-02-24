@@ -129,7 +129,7 @@ impl Service for TraderService {
 
         let handle = tokio::spawn(monitor.instrument(async move {
             if let Err(e) = monitors::start_automated_trading(watch_rx).await {
-                logger::error(LogTag::Trader, &format!("Auto trading error: {}", e));
+                logger::error(LogTag::Trader, &format!("Auto trading error: {e}"));
 
                 record_trader_event(
                     "auto_trading_error",

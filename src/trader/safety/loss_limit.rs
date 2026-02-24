@@ -238,7 +238,7 @@ pub async fn initialize_from_history() {
         Err(e) => {
             logger::warning(
                 LogTag::Trader,
-                &format!("Failed to initialize loss limit from history: {}", e),
+                &format!("Failed to initialize loss limit from history: {e}"),
             );
         }
     }

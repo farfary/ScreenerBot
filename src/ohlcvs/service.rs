@@ -132,7 +132,7 @@ impl OhlcvServiceImpl {
             )
         })
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
 
         // Fallback: if no candles found for specific pool, try querying without pool filter
         // This handles cases where candles were stored under a different pool address
@@ -150,7 +150,7 @@ impl OhlcvServiceImpl {
                 )
             })
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
+            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
         }
 
         // Fallback: if still empty and requested timeframe is not 1m, try aggregating from 1m data
@@ -173,7 +173,7 @@ impl OhlcvServiceImpl {
                 )
             })
             .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
+            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
 
             if !raw_candles.is_empty() {
                 // Aggregate 1m data to requested timeframe
@@ -372,7 +372,7 @@ impl OhlcvServiceImpl {
                     )
                 })
                 .await
-                .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
+                .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
 
                 Ok(candles)
             });
@@ -394,7 +394,7 @@ impl OhlcvServiceImpl {
 
         for (idx, result) in results.into_iter().enumerate() {
             let candles =
-                result.map_err(|e| OhlcvError::ApiError(format!("Task join error: {}", e)))??;
+                result.map_err(|e| OhlcvError::ApiError(format!("Task join error: {e}")))??;
 
             match idx {
                 0 => m1 = candles,
@@ -649,7 +649,7 @@ pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
     // Wrap sync DB call in spawn_blocking to prevent blocking async runtime
     tokio::task::spawn_blocking(move || service_clone.has_data(&mint_owned))
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }
 
 pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String>> {
@@ -663,7 +663,7 @@ pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String
 
     tokio::task::spawn_blocking(move || service_clone.get_mints_with_data(&owned))
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }
 
 async fn get_metrics_impl(service: &OhlcvServiceImpl) -> OhlcvMetrics {
@@ -734,7 +734,7 @@ pub async fn get_all_tokens_with_status() -> OhlcvResult<Vec<OhlcvTokenStatus>> 
 
     tokio::task::spawn_blocking(move || db.get_all_tokens_with_status())
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }
 
 /// Delete all OHLCV data for a specific token
@@ -748,7 +748,7 @@ pub async fn delete_token_data(mint: &str) -> OhlcvResult<DeleteResult> {
 
     tokio::task::spawn_blocking(move || db.delete_token_data(&mint_owned))
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }
 
 /// Delete OHLCV data for tokens that have been inactive for specified hours
@@ -758,7 +758,7 @@ pub async fn delete_inactive_tokens(inactive_hours: i64) -> OhlcvResult<Vec<Stri
 
     tokio::task::spawn_blocking(move || db.delete_inactive_tokens(inactive_hours))
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }
 
 /// Get database statistics
@@ -768,5 +768,5 @@ pub async fn get_database_stats() -> OhlcvResult<DatabaseStats> {
 
     tokio::task::spawn_blocking(move || db.get_database_stats())
         .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }

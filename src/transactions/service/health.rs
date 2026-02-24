@@ -126,7 +126,7 @@ pub async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), St
     // Check database connectivity
     if let Some(db) = crate::transactions::database::get_transaction_database().await {
         if let Err(e) = db.health_check().await {
-            return Err(format!("Database health check failed: {}", e));
+            return Err(format!("Database health check failed: {e}"));
         }
     }
 

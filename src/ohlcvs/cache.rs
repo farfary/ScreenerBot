@@ -74,7 +74,7 @@ impl OhlcvCache {
         let mut cache = self
             .hot_cache
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         if let Some(entry) = cache.get_mut(&key) {
             // Check if expired
@@ -163,7 +163,7 @@ impl OhlcvCache {
         let mut cache = self
             .hot_cache
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         // Check if we need to evict
         if cache.len() >= HOT_CACHE_MAX_TOKENS && !cache.contains_key(&key) {
@@ -186,7 +186,7 @@ impl OhlcvCache {
         let mut cache = self
             .hot_cache
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         let keys_to_remove: Vec<CacheKey> = cache
             .keys()
@@ -211,14 +211,14 @@ impl OhlcvCache {
         let mut cache = self
             .hot_cache
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         cache.clear();
 
         let mut access_order = self
             .access_order
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         access_order.clear();
 
@@ -248,7 +248,7 @@ impl OhlcvCache {
         let mut cache = self
             .hot_cache
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         let max_age = Duration::from_secs(3600 * (HOT_CACHE_RETENTION_HOURS as u64));
 
@@ -286,7 +286,7 @@ impl OhlcvCache {
         let mut access_order = self
             .access_order
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         // Remove if exists
         access_order.retain(|k| k != key);
@@ -301,7 +301,7 @@ impl OhlcvCache {
         let mut access_order = self
             .access_order
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         access_order.retain(|k| k != key);
 
@@ -312,7 +312,7 @@ impl OhlcvCache {
         let mut access_order = self
             .access_order
             .lock()
-            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {}", e)))?;
+            .map_err(|e| OhlcvError::CacheError(format!("Lock error: {e}")))?;
 
         while let Some(lru_key) = access_order.pop_front() {
             if cache.remove(&lru_key).is_some() {

@@ -114,7 +114,7 @@ impl SolanaWebSocketClient {
         // Connect to WebSocket endpoint
         let (ws_stream, _) = connect_async(ws_url)
             .await
-            .map_err(|e| format!("Failed to connect to WebSocket: {}", e))?;
+            .map_err(|e| format!("Failed to connect to WebSocket: {e}"))?;
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -135,7 +135,7 @@ impl SolanaWebSocketClient {
         };
 
         let subscribe_text = serde_json::to_string(&subscribe_message)
-            .map_err(|e| format!("Failed to serialize subscription: {}", e))?;
+            .map_err(|e| format!("Failed to serialize subscription: {e}"))?;
 
         logger::info(
             LogTag::Websocket,
@@ -146,7 +146,7 @@ impl SolanaWebSocketClient {
         ws_sender
             .send(Message::Text(subscribe_text))
             .await
-            .map_err(|e| format!("Failed to send subscription: {}", e))?;
+            .map_err(|e| format!("Failed to send subscription: {e}"))?;
 
         // Create heartbeat timer (ping every 5 seconds to prevent server timeout)
         let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
@@ -165,7 +165,7 @@ impl SolanaWebSocketClient {
 
                      // Send close message to server
                      if let Err(e) = ws_sender.send(Message::Close(None)).await {
-                       logger::warning(LogTag::Websocket, &format!("Failed to send close message: {}", e));
+                       logger::warning(LogTag::Websocket, &format!("Failed to send close message: {e}"));
                      }
 
                      break;
@@ -173,7 +173,7 @@ impl SolanaWebSocketClient {
                    _ = heartbeat_interval.tick() => {
                      // Send periodic ping to keep connection alive
                      if let Err(e) = ws_sender.send(Message::Ping(vec![])).await {
-                       logger::warning(LogTag::Websocket, &format!("Failed to send heartbeat ping: {}", e));
+                       logger::warning(LogTag::Websocket, &format!("Failed to send heartbeat ping: {e}"));
                        break; // Connection failed, exit to trigger reconnect
                      } else {
             logger::verbose(LogTag::Websocket, "Sent heartbeat ping to keep connection alive");
@@ -185,14 +185,14 @@ impl SolanaWebSocketClient {
                          if let Err(e) = self.handle_websocket_message(&text).await {
                            logger::warning(
                              LogTag::Websocket,
-                             &format!("Failed to handle WebSocket message: {}", e)
+                             &format!("Failed to handle WebSocket message: {e}")
                            );
                          }
                        }
                        Some(Ok(Message::Ping(payload))) => {
                          // Respond to server ping with pong to keep connection alive
                          if let Err(e) = ws_sender.send(Message::Pong(payload)).await {
-                           logger::warning(LogTag::Websocket, &format!("Failed to respond to ping: {}", e));
+                           logger::warning(LogTag::Websocket, &format!("Failed to respond to ping: {e}"));
                            break; // Connection failed, exit to trigger reconnect
                          } else {
             logger::verbose(LogTag::Websocket, "Responded to server ping with pong");
@@ -215,7 +215,7 @@ impl SolanaWebSocketClient {
                          logger::info(LogTag::Websocket, "Received raw frame message (ignored)");
                        }
                        Some(Err(e)) => {
-                         logger::warning(LogTag::Websocket, &format!("WebSocket error: {}", e));
+                         logger::warning(LogTag::Websocket, &format!("WebSocket error: {e}"));
                          break;
                        }
                        None => {

@@ -113,7 +113,7 @@ pub async fn evaluate_entry_for_token(
             Err(e) => {
                 crate::logger::warning(
                     crate::logger::LogTag::Trader,
-                    &format!("Failed to fetch token data for AI analysis: {}", e),
+                    &format!("Failed to fetch token data for AI analysis: {e}"),
                 );
             }
         }

@@ -174,7 +174,7 @@ pub async fn evaluate_exit_for_position(
             Err(e) => {
                 crate::logger::warning(
                     crate::logger::LogTag::Trader,
-                    &format!("Failed to fetch token data for AI exit analysis: {}", e),
+                    &format!("Failed to fetch token data for AI exit analysis: {e}"),
                 );
             }
         }

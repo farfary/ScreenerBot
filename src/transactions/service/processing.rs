@@ -78,7 +78,7 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
                if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
                  logger::warning(
                    LogTag::Transactions,
-                   &format!("Periodic check failed: {}", e)
+                   &format!("Periodic check failed: {e}")
                  );
                }
              }
@@ -98,7 +98,7 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
                    if let Err(e) = handle_websocket_transaction(&config, &processor, sig).await {
                      logger::warning(
                        LogTag::Transactions,
-                       &format!("WebSocket transaction handling failed: {}", e)
+                       &format!("WebSocket transaction handling failed: {e}")
                      );
                    }
                  }
@@ -175,7 +175,7 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
                if let Err(e) = perform_health_check(&mut metrics).await {
                  logger::warning(
                    LogTag::Transactions,
-                   &format!("Health check failed: {}", e)
+                   &format!("Health check failed: {e}")
                  );
                }
              }

@@ -1536,7 +1536,7 @@ impl OhlcvMonitor {
                         }
                     }
                     Err(e) => {
-                        logger::error(LogTag::Ohlcv, &format!("Gap cleanup error: {}", e));
+                        logger::error(LogTag::Ohlcv, &format!("Gap cleanup error: {e}"));
                         record_ohlcv_event(
                             "gap_cleanup_failed",
                             Severity::Error,
@@ -1567,7 +1567,7 @@ impl OhlcvMonitor {
 
             // Clean up expired cache entries
             if let Err(e) = self.cache.cleanup_expired() {
-                logger::error(LogTag::Ohlcv, &format!("Cache cleanup error: {}", e));
+                logger::error(LogTag::Ohlcv, &format!("Cache cleanup error: {e}"));
                 record_ohlcv_event(
                     "cache_cleanup_failed",
                     Severity::Error,

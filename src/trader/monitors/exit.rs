@@ -161,7 +161,7 @@ pub async fn monitor_positions(
                 Err(e) => {
                     logger::info(
                         LogTag::Trader,
-                        &format!("Position evaluation task failed: {}", e),
+                        &format!("Position evaluation task failed: {e}"),
                     );
                     None
                 }
@@ -325,7 +325,7 @@ pub async fn monitor_positions(
                                 a.fail(&e).await;
                             }
 
-                            logger::error(LogTag::Trader, &format!("Failed to execute DCA: {}", e));
+                            logger::error(LogTag::Trader, &format!("Failed to execute DCA: {e}"));
                         }
                     }
                 }
@@ -333,7 +333,7 @@ pub async fn monitor_positions(
             Err(e) => {
                 logger::error(
                     LogTag::Trader,
-                    &format!("Error processing DCA opportunities: {}", e),
+                    &format!("Error processing DCA opportunities: {e}"),
                 );
             }
         }

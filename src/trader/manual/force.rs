@@ -128,7 +128,7 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
     if let Err(e) = super::tracking::record_manual_trade(&result).await {
         logger::warning(
             LogTag::Trader,
-            &format!("Failed to record manual trade: {}", e),
+            &format!("Failed to record manual trade: {e}"),
         );
     }
 
@@ -257,7 +257,7 @@ pub async fn force_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResu
     if let Err(e) = super::tracking::record_manual_trade(&result).await {
         logger::warning(
             LogTag::Trader,
-            &format!("Failed to record manual trade: {}", e),
+            &format!("Failed to record manual trade: {e}"),
         );
     }
 

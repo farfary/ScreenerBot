@@ -400,7 +400,7 @@ impl ServiceManager {
             Err(e) => {
                 logger::error(
                     LogTag::System,
-                    &format!("Failed to resolve service startup order: {}", e),
+                    &format!("Failed to resolve service startup order: {e}"),
                 );
                 return Err(e);
             }
@@ -442,7 +442,7 @@ impl ServiceManager {
                         );
                         failed_starts.push(ServiceStartupFailure {
                             name: service_name,
-                            error: format!("Initialize failed: {}", e),
+                            error: format!("Initialize failed: {e}"),
                         });
                         continue; // Skip starting this service
                     }
@@ -486,7 +486,7 @@ impl ServiceManager {
                         );
                         failed_starts.push(ServiceStartupFailure {
                             name: service_name,
-                            error: format!("Start failed: {}", e),
+                            error: format!("Start failed: {e}"),
                         });
                     }
                 }

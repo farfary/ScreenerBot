@@ -126,7 +126,7 @@ impl TransactionProcessor {
                 if self.debug_enabled {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Failed to cache processed transaction: {}", e),
+                        &format!("Failed to cache processed transaction: {e}"),
                     );
                 }
             } else if self.debug_enabled {

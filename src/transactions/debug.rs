@@ -213,7 +213,7 @@ pub async fn debug_transactions_batch(
             Err(e) => {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Failed to debug transaction: {}", e),
+                    &format!("Failed to debug transaction: {e}"),
                 );
             }
         }

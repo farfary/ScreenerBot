@@ -101,7 +101,7 @@ impl Service for WebserverService {
             );
             return Err(crate::Error::Service(crate::errors::ServiceError::Start {
                 service: "webserver".to_string(),
-                message: format!("Failed to bind webserver port: {}", e),
+                message: format!("Failed to bind webserver port: {e}"),
             }));
         }
 
@@ -125,7 +125,7 @@ impl Service for WebserverService {
             if let Err(e) = crate::webserver::start_server(port_override, host_override).await {
                 logger::error(
                     LogTag::System,
-                    &format!("[WEBSERVER] ❌ start_server() FAILED: {}", e),
+                    &format!("[WEBSERVER] ❌ start_server() FAILED: {e}"),
                 );
             } else {
                 logger::debug(
