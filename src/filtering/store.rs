@@ -298,7 +298,7 @@ impl FilteringStore {
                 Err(e) => {
                     logger::warning(
                         LogTag::Filtering,
-                        &format!("Failed to get rejection stats from DB: {}", e),
+                        &format!("Failed to get rejection stats from DB: {e}"),
                     );
                     // Fallback to snapshot if DB query fails
                     let mut unique_reasons: HashSet<String> = HashSet::new();

@@ -134,7 +134,7 @@ impl EndpointMonitor for GmgnMonitor {
                 }
             }
             Ok(Err(e)) => {
-                HealthCheckResult::failure(format!("GMGN health check request failed: {}", e))
+                HealthCheckResult::failure(format!("GMGN health check request failed: {e}"))
             }
             Err(_) => HealthCheckResult::failure(format!(
                 "GMGN health check timed out after {}s",

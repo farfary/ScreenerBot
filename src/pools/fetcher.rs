@@ -623,7 +623,7 @@ impl AccountFetcher {
 
                     logger::error(
                         LogTag::PoolFetcher,
-                        &format!("Failed to fetch account batch: {}", e),
+                        &format!("Failed to fetch account batch: {e}"),
                     );
 
                     record_safe(Event::error(
@@ -1053,7 +1053,7 @@ impl AccountFetcher {
         let message = FetcherMessage::FetchPool { pool_id, accounts };
         self.fetcher_tx
             .send(message)
-            .map_err(|e| format!("Failed to send fetch request: {}", e))?;
+            .map_err(|e| format!("Failed to send fetch request: {e}"))?;
         Ok(())
     }
 
@@ -1062,7 +1062,7 @@ impl AccountFetcher {
         let message = FetcherMessage::FetchAccounts { accounts };
         self.fetcher_tx
             .send(message)
-            .map_err(|e| format!("Failed to send fetch request: {}", e))?;
+            .map_err(|e| format!("Failed to send fetch request: {e}"))?;
         Ok(())
     }
 

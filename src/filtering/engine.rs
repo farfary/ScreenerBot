@@ -45,7 +45,7 @@ pub async fn compute_snapshot(
     let load_start = StdInstant::now();
     let mut tokens = get_all_tokens_for_filtering_async()
         .await
-        .map_err(|e| format!("Failed to batch load tokens: {}", e))?;
+        .map_err(|e| format!("Failed to batch load tokens: {e}"))?;
 
     let load_duration_ms = load_start.elapsed().as_millis();
     let total_candidates = tokens.len();
@@ -405,7 +405,7 @@ pub async fn compute_snapshot(
             if let Err(e) = batch_clear_rejection_status_async(batch_clear_mints).await {
                 logger::warning(
                     LogTag::Filtering,
-                    &format!("Failed to batch clear rejection status: {}", e),
+                    &format!("Failed to batch clear rejection status: {e}"),
                 );
             }
         });
@@ -416,7 +416,7 @@ pub async fn compute_snapshot(
             if let Err(e) = batch_update_priority_async(batch_priority_mints, 60).await {
                 logger::warning(
                     LogTag::Filtering,
-                    &format!("Failed to batch update priorities: {}", e),
+                    &format!("Failed to batch update priorities: {e}"),
                 );
             }
         });
@@ -427,7 +427,7 @@ pub async fn compute_snapshot(
             if let Err(e) = batch_update_rejection_status_async(batch_rejection_updates).await {
                 logger::warning(
                     LogTag::Filtering,
-                    &format!("Failed to batch update rejection status: {}", e),
+                    &format!("Failed to batch update rejection status: {e}"),
                 );
             }
         });
@@ -438,7 +438,7 @@ pub async fn compute_snapshot(
             if let Err(e) = batch_upsert_rejection_stats_async(batch_rejection_stats).await {
                 logger::warning(
                     LogTag::Filtering,
-                    &format!("Failed to batch upsert rejection stats: {}", e),
+                    &format!("Failed to batch upsert rejection stats: {e}"),
                 );
             }
         });

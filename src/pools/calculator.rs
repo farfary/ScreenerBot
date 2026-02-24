@@ -442,7 +442,7 @@ impl PriceCalculator {
 
         self.calculator_tx
             .send(message)
-            .map_err(|e| format!("Failed to send calculation request: {}", e))?;
+            .map_err(|e| format!("Failed to send calculation request: {e}"))?;
 
         Ok(())
     }

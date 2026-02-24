@@ -128,7 +128,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
     if let Err(e) = db::initialize_database().await {
         logger::error(
             LogTag::PoolService,
-            &format!("Failed to initialize database: {}", e),
+            &format!("Failed to initialize database: {e}"),
         );
         SERVICE_RUNNING.store(false, Ordering::Relaxed);
 
@@ -530,7 +530,7 @@ async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
           }
           _ = interval.tick() => {
             if let Err(e) = db::cleanup_old_entries().await {
-              logger::error(LogTag::PoolService, &format!("Database cleanup failed: {}", e));
+              logger::error(LogTag::PoolService, &format!("Database cleanup failed: {e}"));
             } else {
               logger::info(LogTag::PoolService, "Database cleanup completed successfully");
             }
@@ -569,7 +569,7 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
                 }
               }
               Err(e) => {
-                logger::error(LogTag::PoolService, &format!("Gap cleanup failed: {}", e));
+                logger::error(LogTag::PoolService, &format!("Gap cleanup failed: {e}"));
               }
             }
           }

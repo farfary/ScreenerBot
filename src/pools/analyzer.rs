@@ -979,7 +979,7 @@ impl PoolAnalyzer {
 
         self.analyzer_tx
             .send(message)
-            .map_err(|e| format!("Failed to send analysis request: {}", e))?;
+            .map_err(|e| format!("Failed to send analysis request: {e}"))?;
 
         Ok(())
     }

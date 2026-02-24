@@ -138,7 +138,7 @@ impl PumpFunAmmDecoder {
             Err(e) => {
                 logger::warning(
                     LogTag::PoolDecoder,
-                    &format!("PumpFun pool validation failed: {}", e),
+                    &format!("PumpFun pool validation failed: {e}"),
                 );
                 return None;
             }

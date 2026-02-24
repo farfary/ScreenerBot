@@ -89,7 +89,7 @@ impl RaydiumClmmSwap {
     /// Load wallet from configuration
     async fn load_wallet() -> Result<Keypair, SwapError> {
         crate::config::get_wallet_keypair()
-            .map_err(|e| SwapError::ExecutionError(format!("Failed to load wallet: {}", e)))
+            .map_err(|e| SwapError::ExecutionError(format!("Failed to load wallet: {e}")))
     }
 
     /// Calculate swap parameters using CLMM concentrated liquidity math
@@ -319,7 +319,7 @@ impl RaydiumClmmSwap {
         let recent_blockhash = rpc_client
             .get_latest_blockhash()
             .await
-            .map_err(|e| SwapError::RpcError(format!("Failed to get blockhash: {}", e)))?;
+            .map_err(|e| SwapError::RpcError(format!("Failed to get blockhash: {e}")))?;
 
         let transaction = Transaction::new_with_payer(&instructions, Some(&wallet_pubkey));
         let mut transaction_with_blockhash = transaction;
@@ -341,9 +341,9 @@ impl RaydiumClmmSwap {
     ) -> Result<Instruction, SwapError> {
         // Use the passed pool address
         let amm_config = Pubkey::from_str(&pool_info.amm_config)
-            .map_err(|e| SwapError::TransactionError(format!("Invalid amm_config: {}", e)))?;
+            .map_err(|e| SwapError::TransactionError(format!("Invalid amm_config: {e}")))?;
         let observation_key = Pubkey::from_str(&pool_info.observation_key)
-            .map_err(|e| SwapError::TransactionError(format!("Invalid observation_key: {}", e)))?;
+            .map_err(|e| SwapError::TransactionError(format!("Invalid observation_key: {e}")))?;
 
         // Get mint addresses
         let wsol_mint = Pubkey::from_str(SOL_MINT).unwrap();
@@ -355,9 +355,9 @@ impl RaydiumClmmSwap {
 
         // Token vaults
         let token_vault_0 = Pubkey::from_str(&pool_info.token_vault_0)
-            .map_err(|e| SwapError::TransactionError(format!("Invalid token_vault_0: {}", e)))?;
+            .map_err(|e| SwapError::TransactionError(format!("Invalid token_vault_0: {e}")))?;
         let token_vault_1 = Pubkey::from_str(&pool_info.token_vault_1)
-            .map_err(|e| SwapError::TransactionError(format!("Invalid token_vault_1: {}", e)))?;
+            .map_err(|e| SwapError::TransactionError(format!("Invalid token_vault_1: {e}")))?;
 
         // Determine input/output accounts based on direction and token orientation
         let (input_token_account, output_token_account, input_vault, output_vault) =
@@ -437,13 +437,13 @@ impl RaydiumClmmSwap {
     async fn get_token_program_for_mint(mint_address: &str) -> Result<Pubkey, SwapError> {
         let rpc_client = get_rpc_client();
         let mint_pubkey = Pubkey::from_str(mint_address)
-            .map_err(|e| SwapError::RpcError(format!("Invalid mint address: {}", e)))?;
+            .map_err(|e| SwapError::RpcError(format!("Invalid mint address: {e}")))?;
 
         // Get the mint account to check its owner
         let mint_account = rpc_client
             .get_account(&mint_pubkey)
             .await
-            .map_err(|e| SwapError::RpcError(format!("Failed to fetch mint account: {}", e)))?
+            .map_err(|e| SwapError::RpcError(format!("Failed to fetch mint account: {e}")))?
             .ok_or_else(|| {
                 SwapError::RpcError(format!("Mint account not found: {}", mint_address))
             })?;
@@ -459,12 +459,12 @@ impl RaydiumClmmSwap {
     async fn get_token_account_balance(account_address: &str) -> Result<u64, SwapError> {
         let rpc_client = get_rpc_client();
         let pubkey = Pubkey::from_str(account_address)
-            .map_err(|e| SwapError::RpcError(format!("Invalid account address: {}", e)))?;
+            .map_err(|e| SwapError::RpcError(format!("Invalid account address: {e}")))?;
 
         let account = rpc_client
             .get_account(&pubkey)
             .await
-            .map_err(|e| SwapError::RpcError(format!("Failed to fetch account: {}", e)))?
+            .map_err(|e| SwapError::RpcError(format!("Failed to fetch account: {e}")))?
             .ok_or_else(|| {
                 SwapError::RpcError(format!("Token account not found: {}", account_address))
             })?;

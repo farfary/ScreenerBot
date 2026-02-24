@@ -46,7 +46,7 @@ impl EndpointMonitor for GeckoTerminalMonitor {
             .build()
         {
             Ok(c) => c,
-            Err(e) => return HealthCheckResult::failure(format!("Failed to create client: {}", e)),
+            Err(e) => return HealthCheckResult::failure(format!("Failed to create client: {e}")),
         };
 
         // Use networks endpoint as health check (lightweight)
@@ -67,7 +67,7 @@ impl EndpointMonitor for GeckoTerminalMonitor {
                 if e.is_timeout() {
                     HealthCheckResult::failure(format!("Timeout after {}s", timeout_secs))
                 } else {
-                    HealthCheckResult::failure(format!("Request failed: {}", e))
+                    HealthCheckResult::failure(format!("Request failed: {e}"))
                 }
             }
         }

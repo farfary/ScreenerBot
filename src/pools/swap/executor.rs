@@ -20,7 +20,7 @@ impl SwapExecutor {
     ) -> Result<SwapResult, SwapError> {
         // Serialize transaction to base64 for signing service
         let serialized_tx = bincode::serialize(&transaction).map_err(|e| {
-            SwapError::ExecutionError(format!("Failed to serialize transaction: {}", e))
+            SwapError::ExecutionError(format!("Failed to serialize transaction: {e}"))
         })?;
         let transaction_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized_tx);
 
@@ -33,7 +33,7 @@ impl SwapExecutor {
         let signature = rpc_client
             .sign_and_send_with_main_wallet(&transaction_base64)
             .await
-            .map_err(|e| SwapError::ExecutionError(format!("Transaction failed: {}", e)))?;
+            .map_err(|e| SwapError::ExecutionError(format!("Transaction failed: {e}")))?;
 
         logger::info(LogTag::System, &format!("Transaction sent: {}", signature));
 

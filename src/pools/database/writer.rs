@@ -74,7 +74,7 @@ async fn flush_write_buffer(
     match tokio::task::spawn_blocking(move || {
         let connection_guard = conn_arc
             .lock()
-            .map_err(|e| format!("Failed to lock connection: {}", e))?;
+            .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
         let conn = match connection_guard.as_ref() {
             Some(conn) => conn,
@@ -83,7 +83,7 @@ async fn flush_write_buffer(
 
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| format!("Failed to start price history transaction: {}", e))?;
+            .map_err(|e| format!("Failed to start price history transaction: {e}"))?;
 
         let mut inserted = 0usize;
 
@@ -95,7 +95,7 @@ async fn flush_write_buffer(
            timestamp_unix, sol_reserves, token_reserves, source_pool, created_at) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
-                .map_err(|e| format!("Failed to prepare price history insert: {}", e))?;
+                .map_err(|e| format!("Failed to prepare price history insert: {e}"))?;
 
             for price in &entries_for_task {
                 let db_price = DbPriceResult::from_price_result(price);
@@ -114,17 +114,17 @@ async fn flush_write_buffer(
                         db_price.source_pool,
                         db_price.created_at.to_rfc3339()
                     ])
-                    .map_err(|e| format!("Failed to insert price history entry: {}", e))?;
+                    .map_err(|e| format!("Failed to insert price history entry: {e}"))?;
             }
         }
 
         tx.commit()
-            .map_err(|e| format!("Failed to commit price history transaction: {}", e))?;
+            .map_err(|e| format!("Failed to commit price history transaction: {e}"))?;
 
         Ok::<usize, String>(inserted)
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {}", e))
+    .map_err(|e| format!("Blocking task failed: {e}"))
     {
         Ok(Ok(inserted)) => {
             if inserted > 0 {

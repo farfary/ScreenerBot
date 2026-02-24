@@ -83,7 +83,7 @@ impl RaydiumCpmmSwap {
     /// Load wallet from configuration
     async fn load_wallet() -> Result<Keypair, SwapError> {
         crate::config::get_wallet_keypair()
-            .map_err(|e| SwapError::ExecutionError(format!("Failed to load wallet: {}", e)))
+            .map_err(|e| SwapError::ExecutionError(format!("Failed to load wallet: {e}")))
     }
 
     /// Calculate swap parameters using constant product formula
@@ -270,7 +270,7 @@ impl RaydiumCpmmSwap {
         let recent_blockhash = rpc_client
             .get_latest_blockhash()
             .await
-            .map_err(|e| SwapError::RpcError(format!("Failed to get recent blockhash: {}", e)))?;
+            .map_err(|e| SwapError::RpcError(format!("Failed to get recent blockhash: {e}")))?;
 
         let transaction = Transaction::new_with_payer(&instructions, Some(&wallet_pubkey));
         let mut transaction_with_blockhash = transaction;
@@ -381,12 +381,12 @@ impl RaydiumCpmmSwap {
     async fn get_token_account_balance(account_address: &str) -> Result<u64, SwapError> {
         let rpc_client = get_rpc_client();
         let account_pubkey = Pubkey::from_str(account_address)
-            .map_err(|e| SwapError::InvalidInput(format!("Invalid account address: {}", e)))?;
+            .map_err(|e| SwapError::InvalidInput(format!("Invalid account address: {e}")))?;
 
         let account = rpc_client
             .get_account(&account_pubkey)
             .await
-            .map_err(|e| SwapError::RpcError(format!("Failed to get token account: {}", e)))?
+            .map_err(|e| SwapError::RpcError(format!("Failed to get token account: {e}")))?
             .ok_or_else(|| {
                 SwapError::RpcError(format!("Token account not found: {}", account_address))
             })?;

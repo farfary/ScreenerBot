@@ -62,7 +62,7 @@ pub fn update_price(price: PriceResult) {
         if let Err(e) = db::queue_price_for_storage(price_for_db).await {
             logger::error(
                 LogTag::PoolCache,
-                &format!("Failed to queue price for storage: {}", e),
+                &format!("Failed to queue price for storage: {e}"),
             );
         }
     });

@@ -141,7 +141,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
         Err(e) => {
             logger::warning(
                 LogTag::Filtering,
-                &format!("Initial rejection history cleanup failed: {}", e),
+                &format!("Initial rejection history cleanup failed: {e}"),
             );
         }
     }
@@ -162,7 +162,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
         Err(e) => {
             logger::warning(
                 LogTag::Filtering,
-                &format!("Initial rejection stats cleanup failed: {}", e),
+                &format!("Initial rejection stats cleanup failed: {e}"),
             );
         }
     }
@@ -190,7 +190,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
             Err(e) => {
                 logger::warning(
                     LogTag::Filtering,
-                    &format!("Rejection history cleanup failed: {}", e),
+                    &format!("Rejection history cleanup failed: {e}"),
                 );
             }
         }
@@ -211,7 +211,7 @@ pub async fn run_cleanup_loop(shutdown: Arc<Notify>) {
             Err(e) => {
                 logger::warning(
                     LogTag::Filtering,
-                    &format!("Rejection stats cleanup failed: {}", e),
+                    &format!("Rejection stats cleanup failed: {e}"),
                 );
             }
         }

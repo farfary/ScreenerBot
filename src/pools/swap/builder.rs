@@ -105,7 +105,7 @@ impl SwapBuilder {
         let pool_account = rpc_client
             .get_account(pool_address)
             .await
-            .map_err(|e| SwapError::RpcError(format!("Failed to fetch pool: {}", e)))?
+            .map_err(|e| SwapError::RpcError(format!("Failed to fetch pool: {e}")))?
             .ok_or_else(|| {
                 SwapError::RpcError(format!("Pool account not found: {}", pool_address))
             })?;
@@ -158,7 +158,7 @@ impl SwapRequestBuilder {
     pub fn pool_address(mut self, address: &str) -> Result<Self, SwapError> {
         self.pool_address = Some(
             Pubkey::from_str(address)
-                .map_err(|e| SwapError::InvalidInput(format!("Invalid pool address: {}", e)))?,
+                .map_err(|e| SwapError::InvalidInput(format!("Invalid pool address: {e}")))?,
         );
         Ok(self)
     }
@@ -166,7 +166,7 @@ impl SwapRequestBuilder {
     pub fn token_mint(mut self, mint: &str) -> Result<Self, SwapError> {
         self.token_mint = Some(
             Pubkey::from_str(mint)
-                .map_err(|e| SwapError::InvalidInput(format!("Invalid token mint: {}", e)))?,
+                .map_err(|e| SwapError::InvalidInput(format!("Invalid token mint: {e}")))?,
         );
         Ok(self)
     }

@@ -325,7 +325,7 @@ pub fn reload_config_from_path(path: &str) -> Result<(), String> {
     if let Some(config_lock) = CONFIG.get() {
         let mut config = config_lock
             .write()
-            .map_err(|e| format!("Failed to acquire config write lock: {}", e))?;
+            .map_err(|e| format!("Failed to acquire config write lock: {e}"))?;
         *config = new_config;
         Ok(())
     } else {
@@ -406,7 +406,7 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
     let path = path.unwrap_or(&default_path_str);
 
     let config_str = with_config(|cfg| {
-        toml::to_string_pretty(cfg).map_err(|e| format!("Failed to serialize config: {}", e))
+        toml::to_string_pretty(cfg).map_err(|e| format!("Failed to serialize config: {e}"))
     })?;
 
     std::fs::write(path, config_str)
@@ -446,12 +446,12 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
 
     // Serialize to TOML
     let config_str =
-        toml::to_string_pretty(config).map_err(|e| format!("Failed to serialize config: {}", e))?;
+        toml::to_string_pretty(config).map_err(|e| format!("Failed to serialize config: {e}"))?;
 
     // Ensure parent directory exists
     if let Some(parent) = std::path::Path::new(path).parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+            .map_err(|e| format!("Failed to create config directory: {e}"))?;
     }
 
     // Write to file
@@ -463,11 +463,11 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
     {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = std::fs::metadata(path)
-            .map_err(|e| format!("Failed to get file metadata: {}", e))?
+            .map_err(|e| format!("Failed to get file metadata: {e}"))?
             .permissions();
         perms.set_mode(0o600); // rw------- (owner read/write only)
         std::fs::set_permissions(path, perms)
-            .map_err(|e| format!("Failed to set file permissions: {}", e))?;
+            .map_err(|e| format!("Failed to set file permissions: {e}"))?;
     }
 
     logger::info(
@@ -556,7 +556,7 @@ fn get_wallet_keypair_from_config() -> Result<Keypair, String> {
         };
 
         let private_key = crate::secure_storage::decrypt_private_key(&encrypted)
-            .map_err(|e| format!("Failed to decrypt wallet: {}", e))?;
+            .map_err(|e| format!("Failed to decrypt wallet: {e}"))?;
 
         // Parse the decrypted private key (base58 or array format)
         let keypair = if private_key.starts_with('[') && private_key.ends_with(']') {
@@ -592,9 +592,9 @@ fn load_keypair_from_array_format(private_key_str: &str) -> Result<Keypair, Stri
                 ));
             }
             Keypair::from_bytes(&bytes)
-                .map_err(|e| format!("Failed to create keypair from array: {}", e))
+                .map_err(|e| format!("Failed to create keypair from array: {e}"))
         }
-        Err(e) => Err(format!("Failed to parse private key array: {}", e)),
+        Err(e) => Err(format!("Failed to parse private key array: {e}")),
     }
 }
 
@@ -605,7 +605,7 @@ fn load_keypair_from_array_format(private_key_str: &str) -> Result<Keypair, Stri
 fn load_keypair_from_base58_format(private_key_str: &str) -> Result<Keypair, String> {
     let decoded = bs58::decode(private_key_str)
         .into_vec()
-        .map_err(|e| format!("Failed to decode base58 private key: {}", e))?;
+        .map_err(|e| format!("Failed to decode base58 private key: {e}"))?;
 
     if decoded.len() != 64 {
         return Err(format!(
@@ -615,7 +615,7 @@ fn load_keypair_from_base58_format(private_key_str: &str) -> Result<Keypair, Str
     }
 
     Keypair::from_bytes(&decoded)
-        .map_err(|e| format!("Failed to create keypair from base58: {}", e))
+        .map_err(|e| format!("Failed to create keypair from base58: {e}"))
 }
 
 /// Get the wallet public key from the configuration
@@ -703,7 +703,7 @@ where
     {
         let mut config = config_lock
             .write()
-            .map_err(|e| format!("Failed to acquire config write lock: {}", e))?;
+            .map_err(|e| format!("Failed to acquire config write lock: {e}"))?;
 
         // Apply the update
         update_fn(&mut config);
@@ -812,7 +812,7 @@ pub fn reset_config_to_defaults_preserving_credentials() -> Result<(), String> {
         Err(e) => {
             logger::error(
                 LogTag::System,
-                &format!("Failed to reset configuration: {}", e),
+                &format!("Failed to reset configuration: {e}"),
             );
             Err(e)
         }

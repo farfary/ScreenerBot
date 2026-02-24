@@ -105,8 +105,8 @@ impl FileLogger {
         })
         .await
         {
-            Ok(result) => result.map_err(|e| format!("Cleanup error: {}", e).into()),
-            Err(e) => Err(format!("Cleanup task failed: {}", e).into()),
+            Ok(result) => result.map_err(|e| format!("Cleanup error: {e}").into()),
+            Err(e) => Err(format!("Cleanup task failed: {e}").into()),
         }
     }
 

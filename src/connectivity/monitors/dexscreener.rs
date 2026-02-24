@@ -46,7 +46,7 @@ impl EndpointMonitor for DexScreenerMonitor {
             .build()
         {
             Ok(c) => c,
-            Err(e) => return HealthCheckResult::failure(format!("Failed to create client: {}", e)),
+            Err(e) => return HealthCheckResult::failure(format!("Failed to create client: {e}")),
         };
 
         // Use latest/dex/tokens endpoint with a known good token as health check
@@ -70,7 +70,7 @@ impl EndpointMonitor for DexScreenerMonitor {
                 if e.is_timeout() {
                     HealthCheckResult::failure(format!("Timeout after {}s", timeout_secs))
                 } else {
-                    HealthCheckResult::failure(format!("Request failed: {}", e))
+                    HealthCheckResult::failure(format!("Request failed: {e}"))
                 }
             }
         }
