@@ -167,7 +167,7 @@ static FILE_LOGGER: LazyLock<Arc<Mutex<Option<FileLogger>>>> = LazyLock::new(|| 
         match FileLogger::new() {
             Ok(logger) => Arc::new(Mutex::new(Some(logger))),
             Err(e) => {
-                eprintln!("Failed to initialize file logger: {}", e);
+                eprintln!("Failed to initialize file logger: {e}");
                 Arc::new(Mutex::new(None))
             }
         }

@@ -82,7 +82,7 @@ impl StatsCollector {
 
         if let Err(e) = self.db.record_calls(&self.session_id, &records) {
             // Log error but don't fail - stats are not critical
-            eprintln!("Failed to flush RPC stats: {}", e);
+            eprintln!("Failed to flush RPC stats: {e}");
         }
     }
 

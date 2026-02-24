@@ -277,7 +277,7 @@ impl fmt::Display for LlmError {
                 status_code,
                 message,
             } => {
-                write!(f, "[{}] API error {}: {}", provider, status_code, message)
+                write!(f, "[{provider}] API error {status_code}: {message}")
             }
             LlmError::ProviderDisabled { provider } => {
                 write!(f, "[{provider}] Provider disabled in config")

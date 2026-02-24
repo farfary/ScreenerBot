@@ -56,7 +56,7 @@ pub fn get_rpc_client() -> &'static RpcClient {
         // Auto-initialize if not done
         match init_rpc_client() {
             Ok(client) => client,
-            Err(e) => panic!("Failed to initialize RPC client: {}", e),
+            Err(e) => panic!("Failed to initialize RPC client: {e}"),
         }
     })
 }

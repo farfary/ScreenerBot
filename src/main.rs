@@ -138,8 +138,8 @@ fn send_telegram_crash_notification(bot_token: &str, chat_id: &str, message: &st
             }
         }
         Err(e) => {
-            eprintln!("⚠️ Failed to send crash notification: {}", e);
-            eprintln!("📝 Crash message: {}", message);
+            eprintln!("⚠️ Failed to send crash notification: {e}");
+            eprintln!("📝 Crash message: {message}");
         }
     }
 }

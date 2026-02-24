@@ -309,7 +309,7 @@ async fn persist_position_with_retry(position: &Position) -> i64 {
           );
                     logger::error(LogTag::Positions, &fatal);
 
-                    panic!("{}", fatal);
+                    panic!("{fatal}");
                 }
 
                 let backoff = position_save_backoff_ms(attempt);

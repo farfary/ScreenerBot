@@ -89,7 +89,7 @@ async fn stream_actions(
                             yield Ok(Event::default().data(json));
                         }
                         Err(e) => {
-                            eprintln!("Failed to serialize action update: {}", e);
+                            eprintln!("Failed to serialize action update: {e}");
                             continue;
                         }
                     }
