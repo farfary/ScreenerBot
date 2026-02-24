@@ -115,7 +115,16 @@ impl Service for TokensServiceNew {
 
         // Load blocked authorities from DB into memory cache
         {
-            let db_for_auth = self.db.as_ref().unwrap().clone();
+            let db_for_auth = self
+                .db
+                .as_ref()
+                .ok_or_else(|| {
+                    crate::Error::Service(crate::errors::ServiceError::Initialize {
+                        service: "TokenService".to_owned(),
+                        message: "Database not initialized for authority loading".to_owned(),
+                    })
+                })?
+                .clone();
             match tokio::task::spawn_blocking(move || db_for_auth.load_blocked_authorities()).await
             {
                 Ok(Ok(blocked)) => {
