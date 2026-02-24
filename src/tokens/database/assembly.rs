@@ -1033,10 +1033,10 @@ pub(super) fn assemble_token(
     let is_rugged = security_ref.is_some_and(|sec| sec.rugged);
     let security_risks = security_ref
         .map(|sec| sec.risks.clone())
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
     let top_holders = security_ref
         .map(|sec| sec.top_holders.clone())
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
     let total_holders = security_ref.and_then(|sec| sec.total_holders);
     let top_10_holders_pct = security_ref.and_then(|sec| sec.top_10_holders_pct);
     let creator_balance_pct = security_ref.and_then(|sec| sec.creator_balance_pct);
@@ -1204,10 +1204,10 @@ pub(super) fn assemble_token_without_market_data(
     let is_rugged = security_ref.is_some_and(|sec| sec.rugged);
     let security_risks = security_ref
         .map(|sec| sec.risks.clone())
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
     let top_holders = security_ref
         .map(|sec| sec.top_holders.clone())
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
     let total_holders = security_ref.and_then(|sec| sec.total_holders);
     let top_10_holders_pct = security_ref.and_then(|sec| sec.top_10_holders_pct);
     let creator_balance_pct = security_ref.and_then(|sec| sec.creator_balance_pct);

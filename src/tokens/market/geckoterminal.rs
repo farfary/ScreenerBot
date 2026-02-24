@@ -189,7 +189,7 @@ pub async fn fetch_geckoterminal_data_batch(
 
     // Mark tokens with no data as None (not listed)
     for mint in &to_fetch {
-        results.entry(mint.clone()).or_insert(None);
+        results.entry(mint.clone()).or_default();
     }
 
     Ok(results)

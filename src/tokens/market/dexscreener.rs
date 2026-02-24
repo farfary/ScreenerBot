@@ -283,7 +283,7 @@ pub async fn fetch_dexscreener_data_batch(
 
     // Mark tokens with no pools as None (not listed)
     for mint in &to_fetch {
-        results.entry(mint.clone()).or_insert(None);
+        results.entry(mint.clone()).or_default();
     }
 
     Ok(results)
