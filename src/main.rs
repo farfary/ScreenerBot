@@ -68,7 +68,11 @@ fn setup_panic_hook() {
 
             // Truncate message if too long
             let panic_message = if panic_message.len() > 200 {
-                format!("{}...", &panic_message[..200])
+                let mut end = 200;
+                while end > 0 && !panic_message.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &panic_message[..end])
             } else {
                 panic_message
             };

@@ -208,7 +208,11 @@ async fn handle_discovery_message(
     // Get message preview (first 50 chars)
     let message_preview = message.text().map(|t| {
         if t.len() > 50 {
-            format!("{}...", &t[..47])
+            let mut end = 47;
+            while end > 0 && !t.is_char_boundary(end) {
+                end -= 1;
+            }
+            format!("{}...", &t[..end])
         } else {
             t.to_string()
         }

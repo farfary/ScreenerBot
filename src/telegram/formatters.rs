@@ -172,7 +172,11 @@ pub fn format_ai_reasoning(reasoning: &Option<String>) -> String {
             let escaped = html_escape(r);
             // Truncate if too long to avoid Telegram message limits
             let truncated = if escaped.len() > 300 {
-                format!("{}...", &escaped[..300])
+                let mut end = 300;
+                while end > 0 && !escaped.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{}...", &escaped[..end])
             } else {
                 escaped
             };
