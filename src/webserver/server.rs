@@ -12,7 +12,7 @@
 //! - Uses host from config (default 127.0.0.1, use 0.0.0.0 for remote access)
 //! - No security token required (accessible via browser)
 
-use axum::Router;
+use axum::{middleware::from_fn, Router};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -282,16 +282,16 @@ fn build_app(state: Arc<AppState>) -> Router {
     // 4. Initialization gate checks init status
     // 5. Cache control adds no-cache headers (innermost, runs last on response)
     let app = app
-        .layer(axum::middleware::from_fn(
+        .layer(from_fn(
             crate::webserver::middleware::cache_control,
         ))
-        .layer(axum::middleware::from_fn(
+        .layer(from_fn(
             crate::webserver::middleware::initialization_gate,
         ))
-        .layer(axum::middleware::from_fn(
+        .layer(from_fn(
             crate::webserver::middleware::auth_gate,
         ))
-        .layer(axum::middleware::from_fn(
+        .layer(from_fn(
             crate::webserver::middleware::security_gate,
         ))
         .layer(CompressionLayer::new());
