@@ -240,7 +240,7 @@ impl OhlcvCache {
 
     /// Get cache size
     pub fn size(&self) -> usize {
-        self.hot_cache.lock().map(|cache| cache.len()).unwrap_or(0)
+        self.hot_cache.lock().map(|cache| cache.len()).unwrap_or_default()
     }
 
     /// Cleanup expired entries

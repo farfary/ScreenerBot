@@ -41,7 +41,7 @@ fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .unwrap_or_default()
 }
 
 /// Create a new session with the given token
@@ -119,7 +119,7 @@ pub fn cleanup_expired_sessions() {
 
 /// Get the number of active sessions (for debugging/monitoring)
 pub fn active_session_count() -> usize {
-    SESSIONS.read().map(|s| s.len()).unwrap_or(0)
+    SESSIONS.read().map(|s| s.len()).unwrap_or_default()
 }
 
 /// Clear all sessions (for testing or security reset)

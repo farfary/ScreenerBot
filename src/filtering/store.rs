@@ -537,7 +537,7 @@ impl FilteringStore {
                     .tokens
                     .get(&t.mint)
                     .map(|e| e.has_open_position)
-                    .unwrap_or(false)
+                    .unwrap_or_default()
             })
             .count();
         let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
@@ -673,7 +673,7 @@ fn collect_entries<'a>(
                         .pair_created_at
                         .and_then(|ts| DateTime::<Utc>::from_timestamp(ts, 0))
                         .map(|created| created > cutoff)
-                        .unwrap_or(false)
+                        .unwrap_or_default()
                 })
                 .collect()
         }
@@ -714,7 +714,7 @@ fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &Fil
     }
 
     if let Some(min) = query.min_liquidity {
-        items.retain(|t| t.liquidity_usd.unwrap_or(0.0) >= min);
+        items.retain(|t| t.liquidity_usd.unwrap_or_default() >= min);
     }
 
     if let Some(max) = query.max_liquidity {
@@ -722,7 +722,7 @@ fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &Fil
     }
 
     if let Some(min) = query.min_volume_24h {
-        items.retain(|t| t.volume_h24.unwrap_or(0.0) >= min);
+        items.retain(|t| t.volume_h24.unwrap_or_default() >= min);
     }
 
     if let Some(max) = query.max_volume_24h {
@@ -734,7 +734,7 @@ fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &Fil
     }
 
     if let Some(min) = query.min_unique_holders {
-        items.retain(|t| t.total_holders.unwrap_or(0) >= (min as i64));
+        items.retain(|t| t.total_holders.unwrap_or_default() >= (min as i64));
     }
 
     if let Some(flag) = query.has_pool_price {
@@ -742,7 +742,7 @@ fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &Fil
             flags
                 .get(t.mint.as_str())
                 .map(|(_, hp, _, _)| *hp == flag)
-                .unwrap_or(false)
+                .unwrap_or_default()
         });
     }
 
@@ -751,7 +751,7 @@ fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &Fil
             flags
                 .get(t.mint.as_str())
                 .map(|(_, _, op, _)| *op == flag)
-                .unwrap_or(false)
+                .unwrap_or_default()
         });
     }
 
@@ -764,7 +764,7 @@ fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &Fil
             flags
                 .get(t.mint.as_str())
                 .map(|(_, _, _, oh)| *oh == flag)
-                .unwrap_or(false)
+                .unwrap_or_default()
         });
     }
 
@@ -774,7 +774,7 @@ fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &Fil
             t.last_rejection_reason
                 .as_ref()
                 .map(|reason| reason.eq_ignore_ascii_case(target_reason))
-                .unwrap_or(false)
+                .unwrap_or_default()
         });
     }
 }
@@ -853,8 +853,8 @@ fn sort_tokens(items: &mut Vec<&Token>, sort_key: TokenSortKey, direction: SortD
 }
 
 fn cmp_f64(lhs: Option<f64>, rhs: Option<f64>) -> Ordering {
-    let left = lhs.unwrap_or(0.0);
-    let right = rhs.unwrap_or(0.0);
+    let left = lhs.unwrap_or_default();
+    let right = rhs.unwrap_or_default();
     left.partial_cmp(&right).unwrap_or(Ordering::Equal)
 }
 

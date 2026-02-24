@@ -55,7 +55,7 @@ pub fn log_price_change(
                             }
                         }
                     })
-                    .collect::<Vec<String>>()
+                    .collect::<Vec<_>>()
                     .join(" ")
             }
         })
@@ -160,11 +160,7 @@ pub fn log_price_change(
         );
     }
 
-    let line2 = line2_parts
-        .into_iter()
-        .map(|part| part.to_string())
-        .collect::<Vec<String>>()
-        .join("");
+    let line2 = line2_parts.join("");
 
     // Combine both lines
     let combined_message = format!("{}\n{}", line1, line2);

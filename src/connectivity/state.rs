@@ -178,7 +178,7 @@ impl ConnectivityState {
         self.health
             .get(name)
             .map(|h| h.is_available())
-            .unwrap_or(false)
+            .unwrap_or_default()
     }
 
     /// Check if all critical endpoints are healthy
