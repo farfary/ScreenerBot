@@ -344,7 +344,7 @@ async fn extract_token_balance_changes(
 
             token_changes
                 .entry(account_key_owned)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(token_change);
         }
     }

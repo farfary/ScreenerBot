@@ -140,7 +140,7 @@ impl ToolRegistry {
             let def = tool.definition();
             grouped
                 .entry(def.category.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(def);
         }
 

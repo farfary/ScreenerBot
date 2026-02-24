@@ -750,7 +750,7 @@ impl ActionsDatabase {
         for (action_id, step) in steps_rows {
             steps_map
                 .entry(action_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(step);
         }
 

@@ -96,7 +96,7 @@ pub async fn compute_snapshot(
                 };
                 let reasons = blacklist_reasons_map
                     .entry(entry.mint)
-                    .or_insert_with(Vec::new);
+                    .or_default();
                 if !reasons.contains(&info) {
                     reasons.push(info);
                 }
@@ -140,7 +140,7 @@ pub async fn compute_snapshot(
                     detail,
                 };
 
-                let reasons = blacklist_reasons_map.entry(mint).or_insert_with(Vec::new);
+                let reasons = blacklist_reasons_map.entry(mint).or_default();
                 if !reasons.contains(&info) {
                     reasons.push(info);
                 }
@@ -188,7 +188,7 @@ pub async fn compute_snapshot(
                         .or(detail),
                 };
 
-                let reasons = blacklist_reasons_map.entry(mint).or_insert_with(Vec::new);
+                let reasons = blacklist_reasons_map.entry(mint).or_default();
                 if !reasons.contains(&info) {
                     reasons.push(info);
                 }
@@ -212,7 +212,7 @@ pub async fn compute_snapshot(
         } else if token.is_blacklisted {
             let reasons = blacklist_reasons_map
                 .entry(token.mint.clone())
-                .or_insert_with(Vec::new);
+                .or_default();
             let fallback = BlacklistReasonInfo {
                 category: "token".to_string(),
                 reason: "database".to_string(),
