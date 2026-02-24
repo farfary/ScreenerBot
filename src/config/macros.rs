@@ -89,7 +89,7 @@ macro_rules! config_struct {
                     let docs: Option<&'static str> = {
                         let doc = concat!($($doc, "\n",)* "");
                         let doc = doc.trim();
-                        if doc.is_empty() { None } else { Some(doc) }
+                        (!doc.is_empty()).then_some(doc)
                     };
 
                     let default_value: $field_type = $default_value;

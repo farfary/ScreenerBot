@@ -298,13 +298,13 @@ async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
     }
     .to_string();
 
-    let retry_after_ms = if ui_ready { None } else { Some(750) };
+    let retry_after_ms = (!ui_ready).then_some(750);
 
     // Get onboarding status from config
     let onboarding_complete = if initialization_required {
         // Check if onboarding was previously completed
         crate::arguments::is_dashboard_onboarding_forced()
-            .then(|| false)
+            .then_some(false)
             .unwrap_or_else(|| {
                 let config_path = crate::paths::get_config_path();
                 if config_path.exists() {
