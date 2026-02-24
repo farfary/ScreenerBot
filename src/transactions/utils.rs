@@ -195,29 +195,6 @@ pub fn format_lamports_change_as_sol(change_lamports: i64) -> String {
 // VALIDATION UTILITIES
 // =============================================================================
 
-/// Base58 character set (excludes 0, O, I, l to avoid ambiguity)
-const BASE58_ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-/// Check if a character is valid Base58
-#[inline]
-fn is_base58_char(c: char) -> bool {
-    c.is_ascii() && BASE58_ALPHABET.contains(&(c as u8))
-}
-
-/// Validate that a string is a valid Solana signature
-/// Solana signatures are Base58 encoded and should be 87-88 characters long
-pub fn is_valid_signature(signature: &str) -> bool {
-    let len = signature.len();
-    (len == 87 || len == 88) && signature.chars().all(is_base58_char)
-}
-
-/// Validate that a string is a valid Solana pubkey
-/// Solana pubkeys are Base58 encoded and should be 32-44 characters long
-pub fn is_valid_pubkey(pubkey: &str) -> bool {
-    let len = pubkey.len();
-    len >= 32 && len <= 44 && pubkey.chars().all(is_base58_char)
-}
-
 /// Check if mint address is WSOL (wrapped SOL)
 pub fn is_wsol_mint(mint: &str) -> bool {
     mint == WSOL_MINT
@@ -279,48 +256,4 @@ pub fn chunk_signatures(signatures: Vec<String>, chunk_size: usize) -> Vec<Vec<S
         .chunks(chunk_size)
         .map(|chunk| chunk.to_vec())
         .collect()
-}
-
-/// Merge transaction statistics
-pub fn merge_transaction_stats(
-    stats1: TransactionStats,
-    stats2: TransactionStats,
-) -> TransactionStats {
-    TransactionStats {
-        total_transactions: stats1.total_transactions + stats2.total_transactions,
-        new_transactions_count: stats1.new_transactions_count + stats2.new_transactions_count,
-        known_signatures_count: stats1.known_signatures_count + stats2.known_signatures_count,
-        pending_transactions_count: stats1.pending_transactions_count
-            + stats2.pending_transactions_count,
-        failed_transactions_count: stats1.failed_transactions_count
-            + stats2.failed_transactions_count,
-        successful_transactions_count: stats1.successful_transactions_count
-            + stats2.successful_transactions_count,
-    }
-}
-
-// =============================================================================
-// ERROR HANDLING UTILITIES
-// =============================================================================
-
-/// Create a standardized error message for transaction operations
-pub fn create_transaction_error(operation: &str, signature: &str, error: &str) -> String {
-    format!(
-        "Transaction {} failed for {}: {}",
-        operation, signature, error
-    )
-}
-
-/// Create a standardized error message with full address (for debugging)
-pub fn create_transaction_error_with_full_address(
-    operation: &str,
-    signature: &str,
-    error: &str,
-) -> String {
-    format!(
-        "Transaction {} failed for {}: {}",
-        operation,
-        signature, // Full address as required by project guidelines
-        error
-    )
 }

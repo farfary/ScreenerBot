@@ -8,10 +8,7 @@
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use tabled::{
-    settings::{object::Rows, Alignment, Modify, Style},
-    Table, Tabled,
-};
+use tabled::Tabled;
 
 use crate::logger::{self, LogTag};
 use crate::transactions::{
@@ -606,22 +603,6 @@ pub fn print_debug_statistics(stats: &TransactionDebugStats) {
     }
 
     println!("═══════════════════════════════════════════════════════════════");
-}
-
-/// Print transactions debug table
-pub fn print_transactions_debug_table(debug_infos: &[TransactionDebugInfo]) {
-    if debug_infos.is_empty() {
-        println!("No transactions to display.");
-        return;
-    }
-
-    let mut table_builder = Table::new(debug_infos);
-    let table = table_builder
-        .with(Style::rounded())
-        .with(Modify::new(Rows::new(1..)).with(Alignment::left()));
-
-    println!("\n TRANSACTIONS DEBUG TABLE");
-    println!("{table}");
 }
 
 // =============================================================================

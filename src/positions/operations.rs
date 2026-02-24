@@ -1463,46 +1463,6 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
 // PRICE CALCULATION HELPERS
 // =============================================================================
 
-/// Calculate weighted average entry price
-pub fn calculate_average_entry_price(
-    current_total_sol: f64,
-    current_total_tokens: u64,
-    new_sol: f64,
-    new_tokens: u64,
-    decimals: u8,
-) -> f64 {
-    let new_total_sol = current_total_sol + new_sol;
-    let new_total_tokens_float =
-        (current_total_tokens + new_tokens) as f64 / 10_f64.powi(decimals as i32);
-
-    if new_total_tokens_float > 0.0 {
-        new_total_sol / new_total_tokens_float
-    } else {
-        0.0
-    }
-}
-
-/// Calculate weighted average exit price
-pub fn calculate_average_exit_price(
-    current_average: Option<f64>,
-    current_total_exited: u64,
-    new_exited: u64,
-    new_price: f64,
-) -> f64 {
-    match current_average {
-        Some(avg) => {
-            let total_tokens = current_total_exited + new_exited;
-            if total_tokens == 0 {
-                return new_price;
-            }
-            let current_weight = current_total_exited as f64 / total_tokens as f64;
-            let new_weight = new_exited as f64 / total_tokens as f64;
-            (avg * current_weight) + (new_price * new_weight)
-        }
-        None => new_price,
-    }
-}
-
 /// Update position's current price and track high/low for trailing stop
 pub async fn update_position_price(token_mint: &str, current_price: f64) -> Result<(), String> {
     if !current_price.is_finite() || current_price <= 0.0 {
