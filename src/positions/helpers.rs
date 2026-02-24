@@ -428,7 +428,7 @@ async fn fetch_and_create_token_snapshot(
     // Token meta links
     let token_description = token.description.clone();
     let token_image = token.image_url.clone();
-    let token_website = token.websites.get(0).map(|w| w.url.clone());
+    let token_website = token.websites.first().map(|w| w.url.clone());
     let token_twitter = token
         .socials
         .iter()

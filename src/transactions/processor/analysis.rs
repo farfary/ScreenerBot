@@ -653,7 +653,7 @@ impl TransactionProcessor {
                     input_ui_amount: input_ui,
                     output_ui_amount: output_ui,
                     pool_address: analysis.dex.pool_address.clone(),
-                    program_id: analysis.dex.program_ids.get(0).cloned().unwrap_or_default(),
+                    program_id: analysis.dex.program_ids.first().cloned().unwrap_or_default(),
                 };
 
                 // Add sanity checks for unreasonable swap amounts (user trades max 0.01 SOL)

@@ -681,7 +681,7 @@ impl AccountFetcher {
             if account_state.failures >= account_blacklist_threshold() && !account_state.blacklisted
             {
                 let (pool_id_str, token_mint_str) = directory_snapshot
-                    .get(0)
+                    .first()
                     .map(|(pool_id, descriptor)| {
                         let token_mint = if is_sol_mint(&descriptor.base_mint.to_string()) {
                             descriptor.quote_mint.to_string()
