@@ -373,6 +373,8 @@ Balance monitoring with historical snapshots in SQLite (`data/wallet.db`). Track
 
 Code organization: when `src/wallets/manager.rs` grows, prefer splitting it into small submodules under `src/wallets/manager/` (e.g. `cache.rs`) and keeping `manager.rs` as the single public entry point via `mod` + `use`/re-exports.
 
+Current wallet submodules: `src/wallets/manager/` (cache, main_wallet, migration, crud, access, balance_constants, token_balance_queries), `src/wallets/balance_monitor/database/` (schema, metrics, flow_cache, dashboard_metrics, snapshots), `src/wallets/balance_monitor/dashboard/` (token_metadata).
+
 ### Transactions (src/transactions/)
 
 Real-time monitoring via WebSocket + bootstrap. Comprehensive DEX transaction analysis. Files: `manager.rs` (TransactionsManager lifecycle), `service/` (config.rs, lifecycle.rs, bootstrap.rs, processing.rs, websocket.rs, health.rs), `analyzer/` (classification, swap detection, P&L calculation, patterns.rs for pattern detection and risk assessment — 6-step pipeline), `processor/` (core.rs, extraction.rs, analysis.rs, helpers.rs), `fetcher.rs` (RPC batching with 50-account limit), `verifier.rs` (position integration), `websocket.rs` (real-time streaming), `database/` (types.rs, schema.rs, operations.rs, maintenance.rs, global.rs), `debug.rs` (diagnostics), `types.rs` (Transaction, TransactionType, SwapPnLInfo, AtaOperation), `utils.rs` (helpers), `program_ids.rs` (DEX program ID constants).
