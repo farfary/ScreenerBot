@@ -392,7 +392,7 @@ impl SwapRouter for GmgnRouter {
             .quote
             .price_impact_pct
             .parse::<f64>()
-            .unwrap_or(0.0);
+            .unwrap_or_default();
 
         let execution_data = serde_json::to_vec(&swap_data)
             .map_err(|e| Error::internal_error(format!("Swap data serialization failed: {}", e)))?;

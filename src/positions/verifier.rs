@@ -110,7 +110,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     return match item.kind {
                         VerificationKind::Entry => VerificationOutcome::PermanentFailure(
                             PositionTransition::RemoveOrphanEntry {
-                                position_id: item.position_id.unwrap_or(0),
+                                position_id: item.position_id.unwrap_or_default(),
                             },
                         ),
                         VerificationKind::Exit => {
@@ -150,7 +150,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             } else {
                                 VerificationOutcome::PermanentFailure(
                                     PositionTransition::ExitPermanentFailureSynthetic {
-                                        position_id: item.position_id.unwrap_or(0),
+                                        position_id: item.position_id.unwrap_or_default(),
                                         exit_time: Utc::now(),
                                     },
                                 )
@@ -227,7 +227,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             VerificationKind::Entry => {
                                 return VerificationOutcome::PermanentFailure(
                                     PositionTransition::RemoveOrphanEntry {
-                                        position_id: item.position_id.unwrap_or(0),
+                                        position_id: item.position_id.unwrap_or_default(),
                                     },
                                 );
                             }
@@ -271,7 +271,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 } else {
                                     return VerificationOutcome::PermanentFailure(
                                         PositionTransition::ExitPermanentFailureSynthetic {
-                                            position_id: item.position_id.unwrap_or(0),
+                                            position_id: item.position_id.unwrap_or_default(),
                                             exit_time: Utc::now(),
                                         },
                                     );
@@ -381,7 +381,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                     VerificationKind::Entry => {
                                         return VerificationOutcome::PermanentFailure(
                                             PositionTransition::RemoveOrphanEntry {
-                                                position_id: item.position_id.unwrap_or(0),
+                                                position_id: item.position_id.unwrap_or_default(),
                                             },
                                         );
                                     }
@@ -428,7 +428,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                         } else {
                                             return VerificationOutcome::PermanentFailure(
                                                 PositionTransition::ExitPermanentFailureSynthetic {
-                                                    position_id: item.position_id.unwrap_or(0),
+                                                    position_id: item.position_id.unwrap_or_default(),
                                                     exit_time: Utc::now(),
                                                 },
                                             );
@@ -478,14 +478,14 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         return VerificationOutcome::RetryTransient("Token mint mismatch".to_string());
     }
 
-    let position_id = item.position_id.unwrap_or(0);
+    let position_id = item.position_id.unwrap_or_default();
 
     match item.kind {
         VerificationKind::Entry => {
             if swap_info.swap_type != "Buy" {
                 if item.is_dca {
                     return VerificationOutcome::Transition(PositionTransition::DcaFailed {
-                        position_id: item.position_id.unwrap_or(0),
+                        position_id: item.position_id.unwrap_or_default(),
                         dca_signature: item.signature.clone(),
                         reason: "Swap analysis reported non-buy for DCA".to_string(),
                     });

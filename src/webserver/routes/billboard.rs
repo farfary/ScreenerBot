@@ -200,8 +200,8 @@ async fn fetch_jupiter_organic() -> Result<Vec<ExternalToken>, String> {
             discord: None,
             price_usd: t.usd_price,
             volume_24h: t.stats24h.as_ref().and_then(|s| {
-                let buy = s.buy_volume.unwrap_or(0.0);
-                let sell = s.sell_volume.unwrap_or(0.0);
+                let buy = s.buy_volume.unwrap_or_default();
+                let sell = s.sell_volume.unwrap_or_default();
                 Some(buy + sell)
             }),
             liquidity: t.liquidity,
@@ -237,8 +237,8 @@ async fn fetch_jupiter_traded() -> Result<Vec<ExternalToken>, String> {
             discord: None,
             price_usd: t.usd_price,
             volume_24h: t.stats24h.as_ref().and_then(|s| {
-                let buy = s.buy_volume.unwrap_or(0.0);
-                let sell = s.sell_volume.unwrap_or(0.0);
+                let buy = s.buy_volume.unwrap_or_default();
+                let sell = s.sell_volume.unwrap_or_default();
                 Some(buy + sell)
             }),
             liquidity: t.liquidity,

@@ -47,7 +47,7 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
             Ok(TradeResult::success(
                 decision.clone(),
                 transaction_signature,
-                decision.price_sol.unwrap_or(0.0), // Will be updated by verification
+                decision.price_sol.unwrap_or_default(), // Will be updated by verification
                 trade_size_sol,
                 None, // Position ID will be set by verification
             ))
@@ -115,7 +115,7 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
             Ok(TradeResult::success(
                 decision.clone(),
                 transaction_signature,
-                decision.price_sol.unwrap_or(0.0),
+                decision.price_sol.unwrap_or_default(),
                 dca_amount_sol,
                 decision.position_id.clone(),
             ))

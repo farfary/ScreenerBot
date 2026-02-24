@@ -256,21 +256,21 @@ async fn process_geckoterminal_trades(
                 .from_token_amount
                 .as_ref()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(0.0),
+                .unwrap_or_default(),
             amount_quote: attrs
                 .to_token_amount
                 .as_ref()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(0.0),
+                .unwrap_or_default(),
             price: attrs
                 .price_from_in_usd
                 .as_ref()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(0.0),
-            volume_usd: attrs.volume_in_usd.parse().unwrap_or(0.0),
+                .unwrap_or_default(),
+            volume_usd: attrs.volume_in_usd.parse().unwrap_or_default(),
             timestamp: chrono::DateTime::parse_from_rfc3339(&attrs.block_timestamp)
                 .map(|dt| dt.timestamp())
-                .unwrap_or(0),
+                .unwrap_or_default(),
         };
 
         // Process the detected trade

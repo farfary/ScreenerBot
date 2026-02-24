@@ -120,7 +120,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
             let sol_balance = rpc
                 .get_sol_balance(&wallet.wallet.address)
                 .await
-                .unwrap_or(0.0);
+                .unwrap_or_default();
 
             wallets_with_balance.push(WalletTokenBalanceResponse {
                 wallet_id: wallet.wallet.id,

@@ -40,7 +40,7 @@ pub async fn get_wallets_summary() -> Response {
 
     for wallet in &all_wallets {
         // Get SOL balance via RPC
-        let sol_balance = rpc.get_sol_balance(&wallet.address).await.unwrap_or(0.0);
+        let sol_balance = rpc.get_sol_balance(&wallet.address).await.unwrap_or_default();
 
         total_sol += sol_balance;
 

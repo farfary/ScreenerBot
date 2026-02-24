@@ -195,7 +195,7 @@ pub async fn evaluate_exit_strategies(
                 if eval_result.result {
                     logger::info(LogTag::System, &format!("Exit strategy triggered: strategy={}, token={}, price={:.9}, entry_price={:.9}, profit_pct={:.2}%",
                             strategy.name, token_mint, current_price, position_data.entry_price,
-                            position_data.unrealized_profit_pct.unwrap_or(0.0)),
+                            position_data.unrealized_profit_pct.unwrap_or_default()),
                     );
                     return Ok(Some(strategy.id.clone()));
                 }

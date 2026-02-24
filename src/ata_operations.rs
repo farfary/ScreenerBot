@@ -540,7 +540,7 @@ pub async fn close_token_account_with_context(
     let is_token_2022 = rpc_client
         .is_token_account_token_2022(&token_account)
         .await
-        .unwrap_or(false);
+        .unwrap_or_default();
 
     if is_token_2022 {
         logger::debug(

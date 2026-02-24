@@ -53,16 +53,16 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
 
     let open_positions = open_positions_result
         .map(|positions| positions.len())
-        .unwrap_or(0);
+        .unwrap_or_default();
     let closed_positions_today = closed_positions_result
         .map(|count| count.max(0) as usize)
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let app_state = get_app_state().await;
     let uptime_seconds = app_state
         .as_ref()
         .map(|state| state.uptime_seconds())
-        .unwrap_or(0);
+        .unwrap_or_default();
     let uptime_formatted = format_duration(uptime_seconds);
 
     let rpc_stats_raw = get_global_rpc_stats();
@@ -112,8 +112,8 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         last_session: stats.last_session.clone(),
     });
 
-    let sol_balance = wallet.as_ref().map(|w| w.sol_balance).unwrap_or(0.0);
-    let usdc_balance = wallet.as_ref().map(|w| w.usdc_balance).unwrap_or(0.0);
+    let sol_balance = wallet.as_ref().map(|w| w.sol_balance).unwrap_or_default();
+    let usdc_balance = wallet.as_ref().map(|w| w.usdc_balance).unwrap_or_default();
 
     StatusSnapshot {
         timestamp: Utc::now(),

@@ -60,7 +60,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
                 Ok(TradeResult::success(
                     decision.clone(),
                     transaction_signature,
-                    decision.price_sol.unwrap_or(0.0),
+                    decision.price_sol.unwrap_or_default(),
                     0.0, // Exit size will be calculated by verification
                     decision.position_id.clone(),
                 ))
@@ -86,7 +86,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
                 Ok(TradeResult::success(
                     decision.clone(),
                     transaction_signature,
-                    decision.price_sol.unwrap_or(0.0),
+                    decision.price_sol.unwrap_or_default(),
                     0.0, // Exit size will be calculated by verification
                     decision.position_id.clone(),
                 ))

@@ -146,7 +146,7 @@ pub async fn scan_burnable_tokens() -> Response {
                     TokenCategory::HasValue,
                     "Has Value".to_string(),
                     true,
-                    Some(format!("Worth ~{:.6} SOL", value_sol.unwrap_or(0.0))),
+                    Some(format!("Worth ~{:.6} SOL", value_sol.unwrap_or_default())),
                 )
             } else {
                 categories.zero_liquidity += 1;
@@ -201,8 +201,8 @@ pub async fn scan_burnable_tokens() -> Response {
 
         // Within same category, sort by value (highest first)
         b.value_sol
-            .unwrap_or(0.0)
-            .partial_cmp(&a.value_sol.unwrap_or(0.0))
+            .unwrap_or_default()
+            .partial_cmp(&a.value_sol.unwrap_or_default())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
