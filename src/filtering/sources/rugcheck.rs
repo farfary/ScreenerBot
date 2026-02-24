@@ -1,3 +1,5 @@
+//! Rugcheck filter source — validates token safety scores and risk indicators.
+
 use crate::config::schemas::RugCheckFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::{SecurityRisk, Token};

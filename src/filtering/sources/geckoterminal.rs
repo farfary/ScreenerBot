@@ -1,3 +1,5 @@
+//! GeckoTerminal filter source — validates market data from GeckoTerminal API.
+
 use crate::config::schemas::GeckoTerminalFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::{DataSource, Token};

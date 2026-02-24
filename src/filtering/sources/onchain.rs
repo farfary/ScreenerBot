@@ -1,3 +1,5 @@
+//! On-chain filter source — validates token accounts, authorities, and program ownership.
+
 use crate::config::schemas::OnChainFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::Token;

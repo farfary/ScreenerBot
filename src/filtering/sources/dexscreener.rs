@@ -1,3 +1,5 @@
+//! DexScreener filter source — validates market data from DexScreener API.
+
 use crate::config::schemas::DexScreenerFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::{DataSource, Token};

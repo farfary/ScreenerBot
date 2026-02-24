@@ -1,3 +1,5 @@
+//! Router trait — defines the unified interface for all DEX swap routers.
+
 use crate::tokens::Token;
 use crate::Result;
 /// Router Trait - Unified swap router interface

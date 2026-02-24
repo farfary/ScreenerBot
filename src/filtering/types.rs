@@ -1,3 +1,5 @@
+//! Filtering data types — filter results, rejection reasons, and passed token structs.
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

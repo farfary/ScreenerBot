@@ -1,3 +1,5 @@
+//! Telegram message pagination — manages multi-page token lists in chat messages.
+
 use crate::filtering::types::PassedToken;
 use dashmap::DashMap;
 use std::sync::LazyLock;

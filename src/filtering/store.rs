@@ -1,3 +1,5 @@
+//! Token filter store — manages filtered token results with pagination and querying.
+
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};

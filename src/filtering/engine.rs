@@ -1,3 +1,5 @@
+//! Filtering engine — orchestrates multi-source token filtering with parallel execution.
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant as StdInstant;

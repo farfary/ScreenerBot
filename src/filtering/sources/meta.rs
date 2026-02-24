@@ -1,3 +1,5 @@
+//! Metadata filter source — validates token name, symbol, age, and description fields.
+
 use chrono::Utc;
 
 use crate::config::FilteringConfig;
