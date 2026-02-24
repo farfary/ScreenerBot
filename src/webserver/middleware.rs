@@ -5,7 +5,7 @@
 use axum::{
     body::Body,
     extract::Request,
-    http::{header, StatusCode},
+    http::{header, header::HeaderValue, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -211,7 +211,7 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
     {
         headers.insert(
             header::CACHE_CONTROL,
-            "public, max-age=31536000, immutable".parse().unwrap(),
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
         );
     }
     // Static assets without version hash - short cache with revalidation
@@ -221,23 +221,21 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
     {
         headers.insert(
             header::CACHE_CONTROL,
-            "public, max-age=3600, must-revalidate".parse().unwrap(),
+            HeaderValue::from_static("public, max-age=3600, must-revalidate"),
         );
     }
     // API endpoints - no caching
     else if path.starts_with("/api/") {
         headers.insert(
             header::CACHE_CONTROL,
-            "no-cache, no-store, must-revalidate, max-age=0"
-                .parse()
-                .unwrap(),
+            HeaderValue::from_static("no-cache, no-store, must-revalidate, max-age=0"),
         );
-        headers.insert(header::PRAGMA, "no-cache".parse().unwrap());
-        headers.insert(header::EXPIRES, "0".parse().unwrap());
+        headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+        headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
     }
     // HTML pages - conditional caching
     else {
-        headers.insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     }
 
     response
