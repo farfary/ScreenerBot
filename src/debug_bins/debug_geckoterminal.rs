@@ -1,3 +1,5 @@
+//! Debug binary — tests GeckoTerminal API integration and pool data retrieval.
+
 /// Comprehensive GeckoTerminal API debug tool
 ///
 /// Tests ALL available GeckoTerminal endpoints and validates implementation

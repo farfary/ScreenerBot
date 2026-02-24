@@ -1,5 +1,7 @@
 #![allow(warnings)]
 
+//! Debug binary — sells all open positions and resets the trading state.
+
 //! # Sell All Tokens, Close ATAs, and Reset Bot Data
 //!
 //! This utility performs a comprehensive wallet cleanup and bot data reset by:

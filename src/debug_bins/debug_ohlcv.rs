@@ -1,3 +1,5 @@
+//! Debug binary — inspects OHLCV candlestick data collection and storage.
+
 // Debug tool for OHLCV module - testing API, parsing, and database operations
 //
 // Usage:

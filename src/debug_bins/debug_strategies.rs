@@ -1,3 +1,5 @@
+//! Debug binary — tests strategy condition schemas and evaluation logic.
+
 use chrono::Utc;
 use screenerbot::strategies::{
   db::{get_all_strategies, get_enabled_strategies, get_strategy, insert_strategy},

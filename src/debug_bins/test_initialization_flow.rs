@@ -1,3 +1,5 @@
+//! Debug binary — tests the full bot initialization and startup sequence.
+
 /// Test initialization flow - mimics the exact flow from webserver initialization
 ///
 /// This tests the complete validation flow that happens

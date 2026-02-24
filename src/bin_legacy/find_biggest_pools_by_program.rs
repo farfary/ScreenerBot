@@ -1,3 +1,5 @@
+//! Legacy binary — finds the largest liquidity pools grouped by DEX program.
+
 use screenerbot::global::is_debug_api_enabled;
 use screenerbot::logger::{log, LogTag};
 use screenerbot::pools::types::ProgramKind;

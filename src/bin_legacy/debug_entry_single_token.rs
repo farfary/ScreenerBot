@@ -1,3 +1,5 @@
+//! Legacy binary — tests entry logic for a single token with manual configuration.
+
 /// Debug tool for testing entry::should_buy on a single token
 ///
 /// - Starts the pool service focused on one token

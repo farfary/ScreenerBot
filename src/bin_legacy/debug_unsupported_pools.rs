@@ -1,3 +1,5 @@
+//! Legacy binary — identifies pools using unsupported DEX programs.
+
 /// Debug tool: find pools that are currently unsupported or failing in calculation
 ///
 /// This tool does NOT start the full pool service. It:

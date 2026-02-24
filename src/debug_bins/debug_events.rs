@@ -1,3 +1,5 @@
+//! Debug binary — inspects the events database for debugging event processing.
+
 /// Debug tool for testing and demonstrating the events system
 ///
 /// This tool allows you to:

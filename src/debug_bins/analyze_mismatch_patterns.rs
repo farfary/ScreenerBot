@@ -1,3 +1,5 @@
+//! Debug binary — analyzes price mismatch patterns from CSV trade data.
+
 use clap::{Arg, Command};
 use std::collections::HashMap;
 

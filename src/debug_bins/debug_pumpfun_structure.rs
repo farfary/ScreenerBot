@@ -1,3 +1,5 @@
+//! Debug binary — analyzes PumpFun AMM account data layout and fields.
+
 use anyhow::Result;
 use screenerbot::rpc::init_rpc_client;
 use solana_sdk::pubkey::Pubkey;

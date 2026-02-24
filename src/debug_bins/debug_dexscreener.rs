@@ -1,3 +1,5 @@
+//! Debug binary — tests DexScreener API integration and token pair data.
+
 /// Comprehensive DexScreener API debug tool
 ///
 /// Tests ALL documented endpoints from https://docs.dexscreener.com/api/reference

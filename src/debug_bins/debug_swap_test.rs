@@ -1,3 +1,5 @@
+//! Debug binary — end-to-end swap execution testing with real transactions.
+
 /// Real Swap Testing Tool for Jupiter Router
 ///
 /// Tests actual on-chain swaps: SOL → BONK → SOL

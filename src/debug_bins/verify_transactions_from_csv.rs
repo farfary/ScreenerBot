@@ -1,5 +1,7 @@
 #![allow(warnings)]
 
+//! Debug binary — verifies transaction analysis accuracy against CSV ground truth.
+
 //! Verify transaction swap analysis against a Solscan CSV export.
 //!
 //! This tool parses a Solscan DeFi activities export, reprocesses each

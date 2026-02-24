@@ -1,3 +1,5 @@
+//! Debug binary — traces token filtering decisions with detailed reasoning output.
+
 /// Simple test tool for new filtering system
 use screenerbot::filtering::get_filtered_token_mints;
 

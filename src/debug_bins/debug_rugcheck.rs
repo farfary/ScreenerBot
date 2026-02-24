@@ -1,3 +1,5 @@
+//! Debug binary — tests Rugcheck API integration and token safety scoring.
+
 /// Debug tool for Rugcheck API
 ///
 /// Tests the Rugcheck API endpoints (report + stats).

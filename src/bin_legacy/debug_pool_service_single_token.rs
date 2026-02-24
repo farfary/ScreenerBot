@@ -1,3 +1,5 @@
+//! Legacy binary — tests pool service operation for a single token.
+
 /// Debug tool for monitoring price changes in the biggest pool of a single token
 ///
 /// This tool starts the complete pool service but configures it to monitor

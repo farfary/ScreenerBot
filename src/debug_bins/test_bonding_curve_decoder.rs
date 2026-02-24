@@ -1,3 +1,5 @@
+//! Debug binary — validates PumpFun bonding curve account decoding.
+
 /// Test PumpFun Legacy bonding curve decoder with real pool
 use screenerbot::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_MINT};
 use screenerbot::pools::decoders::pumpfun_legacy::PumpFunLegacyDecoder;

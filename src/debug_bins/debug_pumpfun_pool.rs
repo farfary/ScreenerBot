@@ -1,3 +1,5 @@
+//! Debug binary — decodes and inspects PumpFun pool account structures.
+
 /// Debug tool for analyzing PumpFun pool data
 ///
 /// This tool fetches raw account data for a specific pool and analyzes:

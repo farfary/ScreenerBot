@@ -1,3 +1,5 @@
+//! Debug binary — tests CoinGecko API integration and price data retrieval.
+
 use clap::Parser;
 use screenerbot::apis::coingecko::CoinGeckoClient;
 use std::error::Error;

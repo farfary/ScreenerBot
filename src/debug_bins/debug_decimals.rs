@@ -1,3 +1,5 @@
+//! Debug binary — verifies token decimal resolution for SPL and Token-2022 mints.
+
 use clap::Parser;
 use screenerbot::logger::{self as logger, LogTag};
 use screenerbot::tokens::database::{init_global_database, TokenDatabase};

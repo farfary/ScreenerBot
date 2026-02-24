@@ -1,3 +1,5 @@
+//! Debug binary — tests WebSocket subscription and transaction streaming.
+
 /// WebSocket Debug Tool - Comprehensive WebSocket Connection Testing
 ///
 /// This tool performs detailed diagnostics of WebSocket connectivity:

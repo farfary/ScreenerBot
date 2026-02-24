@@ -14,6 +14,8 @@
 use std::{collections::HashMap, str::FromStr};
 
 use anyhow::{anyhow, Context, Result};
+//! Debug binary — detects and categorizes transaction patterns from on-chain data.
+
 use clap::Parser;
 use colored::*;
 use serde_json::Value;

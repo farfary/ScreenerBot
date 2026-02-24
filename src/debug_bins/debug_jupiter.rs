@@ -1,3 +1,5 @@
+//! Debug binary — tests Jupiter swap API quote and transaction building.
+
 /// Debug tool for Jupiter API
 ///
 /// Tests Jupiter token discovery endpoints.
@@ -9,6 +11,8 @@
 /// cargo run --bin debug_jupiter --traded # Test top traded (24h)
 /// cargo run --bin debug_jupiter --trending # Test top trending (24h)
 /// cargo run --bin debug_jupiter --all # Test all endpoints
+//! Debug binary — tests Jupiter swap API quote and transaction building.
+
 use clap::Parser;
 use screenerbot::apis::jupiter::JupiterClient;
 

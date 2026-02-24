@@ -1,3 +1,5 @@
+//! Debug binary — tests DefiLlama API integration for TVL and price data.
+
 use clap::Parser;
 use screenerbot::apis::defillama::DefiLlamaClient;
 use std::error::Error;

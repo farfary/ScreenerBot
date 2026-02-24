@@ -1,3 +1,5 @@
+//! Debug binary — launches the web dashboard in isolation for UI testing.
+
 /// Test binary for webserver-only startup
 /// This allows testing events and WebSocket functionality without running the full bot
 use screenerbot::{

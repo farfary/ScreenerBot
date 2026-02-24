@@ -1,3 +1,5 @@
+//! Debug binary — tests position semaphore concurrency control behavior.
+
 use screenerbot::{
     arguments,
     logger::{self as logger, LogTag},

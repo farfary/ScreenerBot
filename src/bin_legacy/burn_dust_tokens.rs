@@ -1,3 +1,5 @@
+//! Legacy binary — burns worthless dust tokens to reclaim rent from ATAs.
+
 /// Dust Token Burner Tool
 ///
 /// This tool scans the wallet for dust tokens (very small amounts) and burns them

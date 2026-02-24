@@ -1,3 +1,5 @@
+//! Debug binary — inspects the token database with detailed query tools.
+
 use std::sync::Arc;
 
 use chrono::{DateTime, SecondsFormat, Utc};

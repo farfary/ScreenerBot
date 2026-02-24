@@ -1,3 +1,5 @@
+//! Debug binary — tests on-chain token filtering rules against live mint data.
+
 use clap::Parser;
 use screenerbot::constants::METAPLEX_PROGRAM_ID;
 use screenerbot::rpc::{get_rpc_client, init_rpc_client, RpcClientMethods};
