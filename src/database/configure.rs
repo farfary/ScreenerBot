@@ -1,7 +1,7 @@
-// Shared SQLite configuration for all databases.
-//
-// Every database connection in the bot MUST use `configure_connection()` via
-// `with_init()` so that PRAGMAs survive r2d2 connection recycling.
+//! Shared SQLite configuration for all databases.
+//!
+//! Every database connection in the bot MUST use `configure_connection()` via
+//! `with_init()` so that PRAGMAs survive r2d2 connection recycling.
 
 use rusqlite::Connection;
 

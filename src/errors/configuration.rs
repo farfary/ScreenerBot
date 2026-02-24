@@ -1,3 +1,5 @@
+//! Configuration validation errors — invalid settings, missing fields, parse failures.
+
 #[derive(Debug, Clone)]
 pub enum ConfigurationError {
     InvalidConfig { field: String, reason: String },

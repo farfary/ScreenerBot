@@ -1,3 +1,5 @@
+//! Network errors — HTTP request failures, timeouts, and connection issues.
+
 #[derive(Debug, Clone)]
 pub enum NetworkError {
     ConnectionTimeout {

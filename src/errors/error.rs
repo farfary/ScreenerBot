@@ -1,3 +1,5 @@
+//! Top-level Error enum — unifies all domain-specific error types.
+
 use super::{
     BlockchainError, ConfigurationError, DataError, DatabaseError, InternalError, IoError,
     NetworkError, PositionError, RateLimitError, RpcProviderError, ServiceError,

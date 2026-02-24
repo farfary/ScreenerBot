@@ -1,3 +1,5 @@
+//! Data processing errors — parsing, transformation, and validation failures.
+
 #[derive(Debug, Clone)]
 pub enum DataError {
     ParseError {

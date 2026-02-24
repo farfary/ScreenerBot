@@ -1,3 +1,5 @@
+//! Rate limiting errors — API throttling and backoff failures.
+
 #[derive(Debug, Clone)]
 pub enum RateLimitError {
     ExceededLimit {

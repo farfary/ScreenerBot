@@ -1,3 +1,5 @@
+//! Position lifecycle errors — entry, exit, and state transition failures.
+
 #[derive(Debug, Clone)]
 pub enum PositionError {
     PositionNotFound {

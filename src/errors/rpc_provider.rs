@@ -1,3 +1,5 @@
+//! RPC provider error tracking — records and categorizes provider failures.
+
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]
