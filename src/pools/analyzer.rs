@@ -980,9 +980,4 @@ impl PoolAnalyzer {
             .collect()
     }
 
-    /// Clear analyzed pools (for cleanup)
-    pub fn clear_pools(&self) {
-        let mut directory = self.pool_directory.write().unwrap();
-        directory.clear();
     }
-}

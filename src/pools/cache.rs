@@ -358,43 +358,6 @@ async fn load_historical_data_into_cache() {
     );
 }
 
-/// Load historical data for a specific token from database
-pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> {
-    match db::load_historical_data_for_token(mint).await {
-        Ok(historical_prices) => {
-            if !historical_prices.is_empty() {
-                // Create or update history entry - DashMap is thread-safe
-                let mut new_history =
-                    PriceHistory::new(mint.to_string(), PRICE_HISTORY_MAX_ENTRIES);
-                let prices_count = historical_prices.len();
-
-                // Add all historical prices
-                for price in historical_prices {
-                    new_history.add_price(price);
-                }
-
-                PRICE_HISTORY.insert(mint.to_string(), new_history);
-
-                logger::debug(
-                    LogTag::PoolCache,
-                    &format!(
-                        "Loaded {} historical prices for token: {}",
-                        prices_count, mint
-                    ),
-                );
-            }
-            Ok(())
-        }
-        Err(e) => {
-            logger::warning(
-                LogTag::PoolCache,
-                &format!("Failed to load historical data for {mint}: {e}"),
-            );
-            Err(e)
-        }
-    }
-}
-
 /// Cleanup gapped data from all tokens in memory
 pub async fn cleanup_all_memory_gaps() -> (usize, usize) {
     let mut total_removed = 0;

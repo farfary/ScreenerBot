@@ -9,7 +9,7 @@
 use super::cache;
 use super::decoders;
 use super::fetcher::{AccountData, PoolAccountBundle};
-use super::types::{PoolDescriptor, PriceResult, ProgramKind};
+use super::types::{PoolDescriptor, PriceResult};
 
 use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::events::{record_safe, Event, EventCategory, Severity};
@@ -448,75 +448,7 @@ impl PriceCalculator {
         Ok(())
     }
 
-    /// Calculate price from pool account data (synchronous version for direct use)
-    pub fn calculate_price_sync(
-        &self,
-        pool_accounts: &HashMap<String, AccountData>,
-        program_kind: ProgramKind,
-        base_mint: &str,
-        quote_mint: &str,
-        pool_id: &str,
-    ) -> Option<PriceResult> {
-        logger::debug(
-            LogTag::PoolCalculator,
-            &format!(
-                "Calculating price for token {} in pool {} using {} decoder",
-                base_mint,
-                pool_id,
-                program_kind.display_name()
-            ),
-        );
-
-        // Use decoder to parse and calculate
-        let mut price_result =
-            decoders::decode_pool(program_kind, pool_accounts, base_mint, quote_mint)?;
-
-        // Set pool address
-        price_result.pool_address = pool_id.to_string();
-
-        // Calculate confidence (simplified for sync version)
-        let age_seconds = price_result.timestamp.elapsed().as_secs();
-        let mut confidence = 1.0f32;
-        if age_seconds > 10 {
-            confidence *= 0.9;
-        }
-        if price_result.sol_reserves < 1.0 {
-            confidence *= 0.5;
-        }
-        price_result.confidence = confidence.clamp(0.0, 1.0);
-
-        Some(price_result)
-    }
-
-    /// Update price in cache
-    pub fn update_price(&self, price: PriceResult) {
-        cache::update_price(price);
-    }
-
-    /// Get calculation statistics
-    pub fn get_calculation_stats(&self) -> CalculationStats {
-        // For now, return basic stats
-        // In a full implementation, we would track detailed metrics
-        CalculationStats {
-            total_calculations: 0,
-            successful_calculations: 0,
-            failed_calculations: 0,
-            average_confidence: 0.0,
-        }
-    }
-
-    /// Update SOL reference price (for future USD calculations if needed)
-    pub fn update_sol_reference_price(&self, sol_price_usd: f64) {
-        let mut reference = self.sol_reference_price.write().unwrap();
-        *reference = sol_price_usd;
-
-        logger::debug(
-            LogTag::PoolCalculator,
-            &format!("Updated SOL reference price to ${:.2}", sol_price_usd),
-        );
-    }
-
-    /// Get the canonical pool used for pricing a given token mint (highest-quality pool)
+        /// Get the canonical pool used for pricing a given token mint (highest-quality pool)
     pub fn get_canonical_pool(&self, mint: &Pubkey) -> Option<PoolDescriptor> {
         let sol_mint = Pubkey::from_str(SOL_MINT).ok()?;
         if mint == &sol_mint {
@@ -543,13 +475,4 @@ impl PriceCalculator {
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
-}
-
-/// Calculation statistics
-#[derive(Debug, Clone)]
-pub struct CalculationStats {
-    pub total_calculations: u64,
-    pub successful_calculations: u64,
-    pub failed_calculations: u64,
-    pub average_confidence: f32,
 }
