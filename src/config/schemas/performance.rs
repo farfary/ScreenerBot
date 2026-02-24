@@ -20,7 +20,7 @@ config_struct! {
             impact: "high",
             category: "Performance",
         })]
-        memory_profile: String = String::from("auto"),
+        memory_profile: String = "auto".to_owned(),
 
         /// SQLite cache size multiplier (0 = use profile default).
         /// Applied to the per-database cache_size preset.

@@ -338,7 +338,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
     let download_dir = get_download_dir()?;
     // We'll determine the actual filename after following redirects
     // Use a placeholder for now, update after we get the final URL
-    let mut actual_filename = String::from("screenerbot-update");
+    let mut actual_filename = "screenerbot-update".to_owned();
 
     // Construct full download URL (handle relative paths)
     let download_url = if update.download_url.starts_with("http://")

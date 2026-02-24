@@ -823,7 +823,7 @@ impl ActionsDatabase {
         let total = {
             let conn = self.get_read_connection()?;
 
-            let mut count_query = String::from("SELECT COUNT(*) FROM actions WHERE 1=1");
+            let mut count_query = "SELECT COUNT(*) FROM actions WHERE 1=1".to_owned();
             let mut params: Vec<String> = Vec::new();
 
             if let Some(action_type) = filters.action_type {

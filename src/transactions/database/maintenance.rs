@@ -945,7 +945,7 @@ impl TransactionDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let mut query =
-            String::from("SELECT COUNT(*) FROM raw_transactions r WHERE r.wallet_address = ?1");
+            "SELECT COUNT(*) FROM raw_transactions r WHERE r.wallet_address = ?1".to_owned();
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         params_vec.push(Box::new(wallet_address));

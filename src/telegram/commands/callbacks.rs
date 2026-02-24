@@ -295,7 +295,7 @@ async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
         return send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await;
     }
 
-    let mut msg = String::from("📋 <b>Recent Trades</b>\n\n");
+    let mut msg = "📋 <b>Recent Trades</b>\n\n".to_owned();
     for pos in positions.iter().take(10) {
         let pnl = pos.pnl.unwrap_or_default();
         let pnl_emoji = if pnl >= 0.0 { "🟢" } else { "🔴" };

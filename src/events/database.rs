@@ -917,7 +917,7 @@ impl EventsDatabase {
         search: Option<&str>,
     ) -> Result<i64, String> {
         let conn = self.get_read_connection()?;
-        let mut query = String::from("SELECT COUNT(*) FROM events");
+        let mut query = "SELECT COUNT(*) FROM events".to_owned();
         let mut where_added = false;
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         let mut idx = 1;

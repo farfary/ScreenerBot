@@ -195,7 +195,7 @@ pub async fn get_rpc_url() -> String {
     if let Some(client) = global::try_get_rpc_client() {
         client.primary_url_masked().await
     } else {
-        String::from("(not initialized)")
+        "(not initialized)".to_owned()
     }
 }
 

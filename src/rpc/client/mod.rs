@@ -58,7 +58,7 @@ impl RpcClient {
     pub async fn primary_url_masked(&self) -> String {
         match self.manager.primary_url().await {
             Some(url) => mask_url(&url),
-            None => String::from("(no providers)"),
+            None => "(no providers)".to_owned(),
         }
     }
 

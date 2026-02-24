@@ -136,7 +136,7 @@ fn print_reset_targets(targets: &[PathBuf]) {
                 .map(|m| format!("({:.2} MB)", m.len() as f64 / 1_048_576.0))
                 .unwrap_or_default()
         } else {
-            String::from("(does not exist)")
+            "(does not exist)".to_owned()
         };
 
         logger::info(LogTag::System, &format!("• {}{}", target.display(), size));

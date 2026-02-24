@@ -51,7 +51,7 @@ pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoRe
     };
 
     // Build CSV content
-    let mut csv_content = String::from("name,address,role,is_main,is_active,notes,created_at\n");
+    let mut csv_content = "name,address,role,is_main,is_active,notes,created_at\n".to_owned();
 
     for wallet in &wallets {
         let notes = wallet.notes.as_deref().unwrap_or("");
@@ -198,7 +198,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
     }
 
     // Build CSV with private keys
-    let mut csv_content = String::from("name,address,private_key,role,is_main,notes,created_at\n");
+    let mut csv_content = "name,address,private_key,role,is_main,notes,created_at\n".to_owned();
 
     for export in &filtered_exports {
         let escaped_name = escape_csv_field(&export.name);
