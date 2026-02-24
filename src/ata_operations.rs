@@ -1,3 +1,8 @@
+//! Associated Token Account (ATA) operations
+//!
+//! Balance queries and token account management including ATA closing.
+//! Note: Automatic ATA cleanup is handled by the background service (see ata_cleanup.rs).
+
 use crate::constants::TOKEN_2022_PROGRAM_ID;
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
@@ -12,6 +17,10 @@ use solana_sdk::{
 };
 use spl_token::instruction::close_account;
 use std::str::FromStr;
+
+// =============================================================================
+// BALANCE QUERIES
+// =============================================================================
 
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
@@ -163,6 +172,10 @@ pub async fn get_all_token_accounts(
         .await
         .map_err(Error::from)
 }
+
+// =============================================================================
+// ATA CLOSING OPERATIONS
+// =============================================================================
 
 /// Closes a single empty ATA (Associated Token Account) for a specific mint
 /// Returns the transaction signature if successful
@@ -607,6 +620,10 @@ pub async fn close_token_account_with_context(
         }
     }
 }
+
+// =============================================================================
+// INTERNAL HELPERS
+// =============================================================================
 
 /// Gets the associated token account address for a wallet and mint
 async fn get_associated_token_account(wallet_address: &str, mint: &str) -> Result<String> {
