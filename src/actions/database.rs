@@ -482,11 +482,7 @@ impl ActionsDatabase {
             .optional()
             .map_err(|e| format!("Failed to query action: {e}"))?;
 
-        if action_row.is_none() {
-            return Ok(None);
-        }
-
-        let (
+        let Some((
             id,
             action_type_str,
             entity_id,
@@ -496,7 +492,10 @@ impl ActionsDatabase {
             completed_at_str,
             metadata_str,
             _updated_at,
-        ) = action_row.unwrap();
+        )) = action_row
+        else {
+            return Ok(None);
+        };
 
         // Parse action type
         let action_type = self.parse_action_type(&action_type_str)?;
