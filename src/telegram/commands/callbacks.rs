@@ -1050,7 +1050,7 @@ async fn find_token_by_prefix(prefix: &str) -> Option<crate::tokens::types::Toke
     };
 
     match crate::filtering::query_tokens(query).await {
-        Ok(result) if !result.items.is_empty() => Some(result.items.into_iter().next().unwrap()),
+        Ok(result) => result.items.into_iter().next(),
         _ => None,
     }
 }
