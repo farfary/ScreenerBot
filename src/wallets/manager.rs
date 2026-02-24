@@ -22,6 +22,9 @@ use super::types::{
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 
+mod cache;
+use cache::{refresh_main_wallet_cache, MAIN_WALLET_CACHE};
+
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
@@ -29,16 +32,6 @@ use crate::rpc::{get_rpc_client, RpcClientMethods};
 /// Global wallet database instance
 static WALLETS_DB: LazyLock<Arc<RwLock<Option<WalletsDatabase>>>> =
     LazyLock::new(|| Arc::new(RwLock::new(None)));
-
-/// Cached main wallet keypair for fast access
-static MAIN_WALLET_CACHE: LazyLock<Arc<RwLock<Option<CachedMainWallet>>>> =
-    LazyLock::new(|| Arc::new(RwLock::new(None)));
-
-/// Cached main wallet data
-struct CachedMainWallet {
-    wallet: Wallet,
-    keypair: Keypair,
-}
 
 // =============================================================================
 // INITIALIZATION
@@ -114,35 +107,6 @@ async fn migrate_from_config() -> Result<(), String> {
         LogTag::Wallet,
         &format!("Migrated wallet from config.toml: {address}"),
     );
-
-    Ok(())
-}
-
-/// Refresh the cached main wallet
-async fn refresh_main_wallet_cache() -> Result<(), String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    let main_wallet = match db.get_main_wallet()? {
-        Some(w) => w,
-        None => {
-            let mut cache = MAIN_WALLET_CACHE.write().await;
-            *cache = None;
-            return Ok(());
-        }
-    };
-
-    let (encrypted, nonce) = db
-        .get_main_wallet_encrypted_key()?
-        .ok_or("Main wallet encrypted key not found")?;
-
-    let keypair = decrypt_to_keypair(&encrypted, &nonce)?;
-
-    let mut cache = MAIN_WALLET_CACHE.write().await;
-    *cache = Some(CachedMainWallet {
-        wallet: main_wallet,
-        keypair,
-    });
 
     Ok(())
 }
