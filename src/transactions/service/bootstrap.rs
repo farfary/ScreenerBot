@@ -333,10 +333,7 @@ pub async fn perform_initial_transaction_bootstrap(
 
     // Split into batches and process in parallel
     for batch_start in (0..signatures_to_process.len()).step_by(CONCURRENT_BATCH_SIZE) {
-        let batch_end = std::cmp::min(
-            batch_start + CONCURRENT_BATCH_SIZE,
-            signatures_to_process.len(),
-        );
+        let batch_end = (batch_start + CONCURRENT_BATCH_SIZE).min(signatures_to_process.len());
         let batch = &signatures_to_process[batch_start..batch_end];
 
         // Create futures for parallel processing with timeout
@@ -478,7 +475,7 @@ pub async fn perform_initial_transaction_bootstrap(
             // Process failed signatures in batches
             for batch_start in (0..failed_signatures.len()).step_by(CONCURRENT_BATCH_SIZE) {
                 let batch_end =
-                    std::cmp::min(batch_start + CONCURRENT_BATCH_SIZE, failed_signatures.len());
+                    (batch_start + CONCURRENT_BATCH_SIZE).min(failed_signatures.len());
                 let batch = &failed_signatures[batch_start..batch_end];
 
                 let mut futures = FuturesUnordered::new();

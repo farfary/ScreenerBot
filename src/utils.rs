@@ -251,10 +251,10 @@ pub fn hex_dump_data(
     length: usize,
     log_callback: impl Fn(&str, &str),
 ) {
-    let end = std::cmp::min(start_offset + length, data.len());
+    let end = (start_offset + length).min(data.len());
 
     for chunk_start in (start_offset..end).step_by(16) {
-        let chunk_end = std::cmp::min(chunk_start + 16, end);
+        let chunk_end = (chunk_start + 16).min(end);
         let chunk = &data[chunk_start..chunk_end];
 
         // Format offset

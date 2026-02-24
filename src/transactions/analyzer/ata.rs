@@ -212,10 +212,7 @@ async fn extract_from_balance_changes(
         .and_then(|m| Some(m.post_balances.as_ref()))
         .unwrap_or(&empty_post_balances);
     // Align to minimum length to handle LUT keys present in balances
-    let min_len = std::cmp::min(
-        account_keys.len(),
-        std::cmp::min(pre_balances.len(), post_balances.len()),
-    );
+    let min_len = account_keys.len().min(pre_balances.len().min(post_balances.len()));
     let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
     let pre_balances = pre_balances
         .into_iter()
