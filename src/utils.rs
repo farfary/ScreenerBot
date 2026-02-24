@@ -219,7 +219,7 @@ pub async fn delay_with_shutdown(shutdown: &Notify, duration: Duration) {
 /// Helper function to format duration in a compact way
 pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> String {
     let duration = end.signed_duration_since(start);
-    let total_seconds = duration.num_seconds();
+    let total_seconds = duration.num_seconds().max(0);
 
     if total_seconds < 60 {
         format!("{total_seconds}s")
