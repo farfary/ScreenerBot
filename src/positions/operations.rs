@@ -1,3 +1,10 @@
+//! Position lifecycle operations.
+//!
+//! High-level commands for opening, closing, partial-closing, and DCA-ing into
+//! positions. Each operation acquires the position lock, executes the swap via
+//! the configured router, and enqueues transaction verification. Price fetching
+//! with API fallback and position persistence with retry are also handled here.
+
 use super::db as positions_db;
 use super::PENDING_VERIFICATION_SUFFIX;
 use super::{
@@ -53,6 +60,10 @@ pub enum PriceSource {
 /// Priority:
 /// 1. Pool price (real-time on-chain calculation) - always preferred
 /// 2. API price from Token database (DexScreener/GeckoTerminal) - if fresh enough
+// =============================================================================
+// PRICE RESOLUTION
+// =============================================================================
+
 /// 3. Force fetch fresh API price if stale and retry
 ///
 /// This enables trading for tokens not yet in the pool service price list
@@ -256,6 +267,10 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
     None
 }
 
+// =============================================================================
+// PERSISTENCE HELPERS
+// =============================================================================
+
 fn position_save_backoff_ms(attempt: usize) -> u64 {
     let exp = attempt.saturating_sub(1) as u32;
     let growth = 1_u64 << exp.min(12);
@@ -319,6 +334,10 @@ async fn persist_position_with_retry(position: &Position) -> i64 {
         }
     }
 }
+
+// =============================================================================
+// OPEN POSITION
+// =============================================================================
 
 /// Internal helper to open a new position with an explicit SOL size
 async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<String, String> {
@@ -658,6 +677,10 @@ pub async fn open_position_with_size(
     open_position_impl(token_mint, trade_size_sol).await
 }
 
+// =============================================================================
+// CLOSE POSITION
+// =============================================================================
+
 /// Close an existing position
 pub async fn close_position_direct(
     token_mint: &str,
@@ -953,6 +976,10 @@ pub async fn close_position_direct(
 // PARTIAL EXIT & DCA OPERATIONS
 // =============================================================================
 
+// =============================================================================
+// PARTIAL CLOSE
+// =============================================================================
+
 /// Partially close a position by selling a percentage of remaining tokens
 /// CRITICAL: This does NOT release the semaphore permit - position stays open
 pub async fn partial_close_position(
@@ -1234,6 +1261,10 @@ pub async fn partial_close_position(
     Ok(transaction_signature)
 }
 
+// =============================================================================
+// DCA (ADD TO POSITION)
+// =============================================================================
+
 /// Add to an existing position (Dollar Cost Averaging)
 /// CRITICAL: This does NOT consume a new semaphore permit - same position
 pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<String, String> {
@@ -1425,6 +1456,10 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
 
     Ok(transaction_signature)
 }
+
+// =============================================================================
+// PRICE CALCULATION HELPERS
+// =============================================================================
 
 /// Calculate weighted average entry price
 pub fn calculate_average_entry_price(
