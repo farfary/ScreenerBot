@@ -1,3 +1,5 @@
+//! Wallet cache — in-memory wallet list for fast access without database queries.
+
 use solana_sdk::signature::Keypair;
 use std::sync::Arc;
 use std::sync::LazyLock;

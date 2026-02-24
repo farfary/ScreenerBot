@@ -1,4 +1,4 @@
-// Smart priority system with activity-based throttling
+//! OHLCV fetch priorities — scoring and scheduling for token candle updates.
 
 use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};
 use chrono::Utc;

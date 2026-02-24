@@ -1,4 +1,4 @@
-// Background monitoring service
+//! OHLCV monitor service — background worker that fetches candles on schedule.
 
 use crate::config::with_config;
 use crate::events::{record_ohlcv_event, Severity};

@@ -1,4 +1,4 @@
-// Main OHLCV service implementation
+//! OHLCV service — public API for querying candle data with cache and database fallback.
 
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;

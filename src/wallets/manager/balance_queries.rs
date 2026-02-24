@@ -1,3 +1,5 @@
+//! Wallet balance queries — query stored balance data with filtering and aggregation.
+
 use std::str::FromStr;
 
 use crate::logger::{self, LogTag};

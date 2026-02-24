@@ -1,4 +1,4 @@
-// GeckoTerminal API fetcher with rate limiting and priority queue
+//! OHLCV fetcher — retrieves candlestick data from GeckoTerminal API.
 
 use crate::apis::{get_api_manager, ApiManager};
 use crate::events::{record_ohlcv_event, Severity};

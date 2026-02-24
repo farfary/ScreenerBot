@@ -1,7 +1,4 @@
-// Wallet validation module - ensures data integrity across wallet changes
-//
-// This module provides validation logic to detect wallet changes and
-// prevent data mixing from different wallets.
+//! Wallet validation — input validation for addresses, keypairs, and wallet names.
 
 use crate::logger::{self, LogTag};
 use crate::paths;

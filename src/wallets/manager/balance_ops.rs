@@ -1,3 +1,5 @@
+//! Wallet balance operations — fetch and refresh on-chain token balances via RPC.
+
 use std::collections::HashMap;
 use std::str::FromStr;
 

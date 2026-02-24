@@ -1,4 +1,4 @@
-// Pool manager for multi-pool support and failover
+//! OHLCV manager — coordinates candle fetching, caching, and priority management.
 
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};

@@ -1,3 +1,5 @@
+//! Balance snapshot database — stores historical balance snapshots for tracking.
+
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 

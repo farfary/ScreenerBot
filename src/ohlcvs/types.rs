@@ -1,4 +1,4 @@
-// Core types for OHLCV module
+//! OHLCV data types — candles, timeframes, priorities, and fetch configuration.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

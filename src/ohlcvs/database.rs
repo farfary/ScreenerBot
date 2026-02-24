@@ -1,4 +1,4 @@
-// Database layer for OHLCV module
+//! OHLCV database — SQLite persistence for candlestick data and gap tracking.
 
 use crate::database;
 use crate::events::{record_ohlcv_event, Severity};

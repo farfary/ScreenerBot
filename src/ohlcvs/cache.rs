@@ -1,3 +1,5 @@
+//! OHLCV candle cache — in-memory cache with TTL for frequently accessed candlestick data.
+
 // Three-tier caching system for OHLCV data
 //
 // INVARIANT: All cached data MUST be stored in ASC timestamp order.

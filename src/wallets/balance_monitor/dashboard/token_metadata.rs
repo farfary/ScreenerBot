@@ -1,3 +1,5 @@
+//! Token metadata for dashboard — resolves token names and symbols for display.
+
 use futures::stream::{self, StreamExt};
 use std::collections::{HashMap, HashSet};
 

@@ -1,3 +1,5 @@
+//! Balance monitor database schema — table definitions for balance tracking.
+
 // Database schema version
 pub(super) const WALLET_SCHEMA_VERSION: u32 = 3;
 

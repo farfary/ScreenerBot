@@ -1,3 +1,5 @@
+//! Wallet bulk operations — batch import, export, and multi-wallet management.
+
 use std::collections::HashSet;
 
 use super::super::bulk::{

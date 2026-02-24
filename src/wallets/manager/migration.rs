@@ -1,3 +1,5 @@
+//! Wallet migration — upgrades wallet data from legacy formats.
+
 use crate::logger::{self, LogTag};
 
 use super::WALLETS_DB;

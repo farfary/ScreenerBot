@@ -1,3 +1,5 @@
+//! Balance flow cache — tracks SOL inflow/outflow for wallet performance metrics.
+
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 

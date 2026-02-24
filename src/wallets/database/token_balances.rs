@@ -1,3 +1,5 @@
+//! Token balance database operations — store and query on-chain token balances.
+
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 use std::collections::HashMap;

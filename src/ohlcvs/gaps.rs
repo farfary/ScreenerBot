@@ -1,4 +1,4 @@
-// Gap detection and filling system
+//! OHLCV gap detection — identifies and tracks missing candle data ranges.
 
 use crate::config::with_config;
 use crate::events::{record_ohlcv_event, Severity};

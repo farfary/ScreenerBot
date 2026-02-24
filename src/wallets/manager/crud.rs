@@ -1,3 +1,5 @@
+//! Wallet CRUD — create, read, update, and delete wallet operations.
+
 use super::super::crypto::{generate_and_encrypt_keypair, import_and_encrypt, keypair_to_address};
 use super::super::types::{
     CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, UpdateWalletRequest, Wallet,

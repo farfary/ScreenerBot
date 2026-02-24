@@ -1,4 +1,4 @@
-// Timeframe aggregation logic
+//! OHLCV aggregator — combines candles from multiple timeframes and sources.
 
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};

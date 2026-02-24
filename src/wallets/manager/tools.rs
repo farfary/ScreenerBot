@@ -1,3 +1,5 @@
+//! Wallet tools — utility functions for wallet diagnostics and repair.
+
 use super::super::crypto::decrypt_to_keypair;
 use super::super::types::{WalletWithKey, WalletsSummary};
 use crate::logger::{self, LogTag};

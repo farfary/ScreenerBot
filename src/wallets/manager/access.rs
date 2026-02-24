@@ -1,3 +1,5 @@
+//! Wallet access helpers — keypair loading and address resolution.
+
 use solana_sdk::signature::Keypair;
 
 use super::super::types::Wallet;
