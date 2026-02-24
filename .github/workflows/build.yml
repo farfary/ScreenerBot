@@ -98,6 +98,24 @@ jobs:
           echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
           echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> "$GITHUB_ENV"
 
+      # macOS x64 cross-compilation needs x86_64 OpenSSL
+      - name: Install x86_64 OpenSSL (macOS cross-compile)
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: |
+          # Install x86_64 Homebrew and OpenSSL for cross-compilation
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          arch -x86_64 /usr/local/bin/brew install openssl@3
+          echo "OPENSSL_DIR=/usr/local/opt/openssl@3" >> "$GITHUB_ENV"
+          echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
+
+      # Windows needs Strawberry Perl for vendored OpenSSL build
+      - name: Install Strawberry Perl (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install strawberryperl --no-progress -y
+          echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Build Rust binary
         shell: bash
         run: |
