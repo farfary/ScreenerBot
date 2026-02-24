@@ -25,6 +25,9 @@ use crate::rpc::{get_rpc_client, RpcClientMethods};
 mod cache;
 use cache::{refresh_main_wallet_cache, MAIN_WALLET_CACHE};
 
+mod balance_constants;
+use balance_constants::{reclaimable_ata_rent, sol_topup_needed};
+
 // =============================================================================
 // GLOBAL STATE
 // =============================================================================
@@ -897,12 +900,6 @@ pub async fn upsert_token_balance(
 // BATCH WALLET OPERATIONS
 // =============================================================================
 
-/// Rent-exempt minimum for ATA (~0.00089088 SOL)
-const ATA_RENT_EXEMPT: f64 = 0.00089088;
-
-/// Minimum SOL balance to operate a wallet (for transaction fees)
-const MIN_SOL_FOR_OPERATIONS: f64 = 0.005;
-
 /// Create multiple wallets at once with a name prefix
 ///
 /// # Arguments
@@ -1013,12 +1010,7 @@ pub async fn get_wallets_with_token(
 
                 // Apply minimum balance filter
                 if ui_amount >= min_balance {
-                    let needs_sol_topup = sol_balance < MIN_SOL_FOR_OPERATIONS;
-                    let topup_amount = if needs_sol_topup {
-                        MIN_SOL_FOR_OPERATIONS - sol_balance
-                    } else {
-                        0.0
-                    };
+                    let (needs_sol_topup, topup_amount) = sol_topup_needed(sol_balance);
 
                     results.push(WalletWithTokenBalance {
                         wallet: wallet.clone(),
@@ -1137,7 +1129,7 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Stri
         }
 
         let token_count = tokens.len() as u32;
-        let reclaimable_sol = empty_ata_count as f64 * ATA_RENT_EXEMPT;
+        let reclaimable_sol = reclaimable_ata_rent(empty_ata_count);
 
         results.push(WalletBalanceSummary {
             wallet_id: wallet.id,
