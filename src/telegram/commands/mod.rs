@@ -155,7 +155,7 @@ pub async fn handle_command(
 
     logger::info(
         LogTag::Telegram,
-        &format!("Handled Telegram command: {}", command),
+        &format!("Handled Telegram command: {command}"),
     );
 
     Ok(())
@@ -302,7 +302,7 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
 
                     logger::warning(
                         LogTag::Telegram,
-                        &format!("Failed TOTP attempt for user_id={}", user_id),
+                        &format!("Failed TOTP attempt for user_id={user_id}"),
                     );
                 }
                 Err(e) => {

@@ -89,7 +89,7 @@ impl TelegramBot {
         *self.state.write().await = state;
         logger::debug(
             LogTag::Telegram,
-            &format!("Bot state changed to: {}", state_debug),
+            &format!("Bot state changed to: {state_debug}"),
         );
     }
 

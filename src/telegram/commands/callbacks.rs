@@ -205,7 +205,7 @@ pub async fn handle_callback_query(
         ["exec", "tokenbl", mint_short] => execute_token_blacklist(bot, chat_id, mint_short).await,
 
         _ => {
-            logger::debug(LogTag::Telegram, &format!("Unknown callback: {}", data));
+            logger::debug(LogTag::Telegram, &format!("Unknown callback: {data}"));
             Ok(())
         }
     }
@@ -886,7 +886,7 @@ async fn send_tokens_page(
             result
                 .rejection_reasons
                 .get(&token.mint)
-                .map(|r| format!("\n   └ ⚠️ {}", r))
+                .map(|r| format!("\n   └ ⚠️ {r}"))
                 .unwrap_or_default()
         } else {
             String::new()

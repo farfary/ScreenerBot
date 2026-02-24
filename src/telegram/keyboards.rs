@@ -143,8 +143,8 @@ pub fn position_actions(mint: &str, _symbol: &str) -> InlineKeyboardMarkup {
         ],
         // Row 3: Actions
         vec![
-            btn("🚫 Blacklist", &format!("bl:{}", m)),
-            btn("❌ Close Position", &format!("confirm:close:{}", m)),
+            btn("🚫 Blacklist", &format!("bl:{m}")),
+            btn("❌ Close Position", &format!("confirm:close:{m}")),
         ],
         // Row 4: Navigation
         vec![btn("◀️ Back", "menu:positions")],
@@ -156,8 +156,8 @@ pub fn position_actions_compact(mint: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
 
     InlineKeyboardMarkup::new(vec![vec![
-        btn("📊 Details", &format!("pos:{}", m)),
-        btn("🚫 Blacklist", &format!("bl:{}", m)),
+        btn("📊 Details", &format!("pos:{m}")),
+        btn("🚫 Blacklist", &format!("bl:{m}")),
     ]])
 }
 
@@ -168,8 +168,8 @@ pub fn confirm_close(mint: &str, _symbol: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
 
     InlineKeyboardMarkup::new(vec![vec![
-        btn("✅ Confirm Close", &format!("exec:close:{}", m)),
-        btn("❌ Cancel", &format!("cancel:close:{}", m)),
+        btn("✅ Confirm Close", &format!("exec:close:{m}")),
+        btn("❌ Cancel", &format!("cancel:close:{m}")),
     ]])
 }
 
@@ -190,7 +190,7 @@ pub fn confirm_sell(mint: &str, percent: u32) -> InlineKeyboardMarkup {
             &format!("✅ Confirm Sell {}%", percent),
             &format!("exec:sell:{}:{}", m, percent),
         ),
-        btn("❌ Cancel", &format!("pos:{}", m)),
+        btn("❌ Cancel", &format!("pos:{m}")),
     ]])
 }
 
@@ -203,7 +203,7 @@ pub fn confirm_dca(mint: &str, amount: f64) -> InlineKeyboardMarkup {
             &format!("✅ DCA {} SOL", amount),
             &format!("exec:dca:{}:{}", m, amount),
         ),
-        btn("❌ Cancel", &format!("pos:{}", m)),
+        btn("❌ Cancel", &format!("pos:{m}")),
     ]])
 }
 
@@ -221,10 +221,10 @@ pub fn confirm_blacklist(mint: &str, symbol: &str) -> InlineKeyboardMarkup {
 
     InlineKeyboardMarkup::new(vec![vec![
         btn(
-            &format!("🚫 Blacklist {}", symbol),
-            &format!("exec:bl:{}", m),
+            &format!("🚫 Blacklist {symbol}"),
+            &format!("exec:bl:{m}"),
         ),
-        btn("❌ Cancel", &format!("pos:{}", m)),
+        btn("❌ Cancel", &format!("pos:{m}")),
     ]])
 }
 
@@ -234,8 +234,8 @@ pub fn confirm_token_blacklist(mint: &str, symbol: &str) -> InlineKeyboardMarkup
 
     InlineKeyboardMarkup::new(vec![vec![
         btn(
-            &format!("🚫 Blacklist {}", symbol),
-            &format!("exec:tokenbl:{}", m),
+            &format!("🚫 Blacklist {symbol}"),
+            &format!("exec:tokenbl:{m}"),
         ),
         btn("❌ Cancel", "tokens:menu"),
     ]])
@@ -250,7 +250,7 @@ pub fn confirm_token_buy(mint: &str, symbol: &str, amount: f64) -> InlineKeyboar
             &format!("✅ Buy {} SOL", amount),
             &format!("exec:tokenbuy:{}:{}", m, amount),
         ),
-        btn("❌ Cancel", &format!("token:view:{}", m)),
+        btn("❌ Cancel", &format!("token:view:{m}")),
     ]])
 }
 
@@ -328,12 +328,12 @@ pub fn trading_controls(
 /// Buttons for position opened notification
 pub fn on_position_opened(mint: &str, signature: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
-    let solscan_url = format!("https://solscan.io/tx/{}", signature);
+    let solscan_url = format!("https://solscan.io/tx/{signature}");
 
     InlineKeyboardMarkup::new(vec![
         vec![
-            btn("📊 Details", &format!("pos:{}", m)),
-            btn("🚫 Blacklist", &format!("bl:{}", m)),
+            btn("📊 Details", &format!("pos:{m}")),
+            btn("🚫 Blacklist", &format!("bl:{m}")),
         ],
         vec![url_btn("🔗 Solscan", &solscan_url)],
     ])
@@ -342,12 +342,12 @@ pub fn on_position_opened(mint: &str, signature: &str) -> InlineKeyboardMarkup {
 /// Buttons for position closed notification
 pub fn on_position_closed(mint: &str, signature: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
-    let solscan_url = format!("https://solscan.io/tx/{}", signature);
+    let solscan_url = format!("https://solscan.io/tx/{signature}");
 
     InlineKeyboardMarkup::new(vec![
         vec![
             btn("📋 History", "cmd:history"),
-            btn("🚫 Blacklist", &format!("exec:bl:{}", m)),
+            btn("🚫 Blacklist", &format!("exec:bl:{m}")),
         ],
         vec![url_btn("🔗 Solscan", &solscan_url)],
     ])
@@ -356,12 +356,12 @@ pub fn on_position_closed(mint: &str, signature: &str) -> InlineKeyboardMarkup {
 /// Buttons for partial exit notification
 pub fn on_partial_exit(mint: &str, signature: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
-    let solscan_url = format!("https://solscan.io/tx/{}", signature);
+    let solscan_url = format!("https://solscan.io/tx/{signature}");
 
     InlineKeyboardMarkup::new(vec![
         vec![
-            btn("📊 Position", &format!("pos:{}", m)),
-            btn("Sell More", &format!("pos:{}", m)),
+            btn("📊 Position", &format!("pos:{m}")),
+            btn("Sell More", &format!("pos:{m}")),
         ],
         vec![url_btn("🔗 Solscan", &solscan_url)],
     ])
@@ -370,12 +370,12 @@ pub fn on_partial_exit(mint: &str, signature: &str) -> InlineKeyboardMarkup {
 /// Buttons for DCA notification
 pub fn on_dca_executed(mint: &str, signature: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
-    let solscan_url = format!("https://solscan.io/tx/{}", signature);
+    let solscan_url = format!("https://solscan.io/tx/{signature}");
 
     InlineKeyboardMarkup::new(vec![
         vec![
-            btn("📊 Position", &format!("pos:{}", m)),
-            btn("➕ More DCA", &format!("pos:{}", m)),
+            btn("📊 Position", &format!("pos:{m}")),
+            btn("➕ More DCA", &format!("pos:{m}")),
         ],
         vec![url_btn("🔗 Solscan", &solscan_url)],
     ])
@@ -539,7 +539,7 @@ pub fn tokens_list_keyboard(
 
     // Row 2: Actions
     rows.push(vec![
-        btn("🔄 Refresh", &format!("tokens:refresh:{}", view)),
+        btn("🔄 Refresh", &format!("tokens:refresh:{view}")),
         btn("◀️ Back", "tokens:menu"),
     ]);
 
@@ -550,16 +550,16 @@ pub fn tokens_list_keyboard(
 /// If has_position is true, shows "View Position" instead of buy buttons
 pub fn token_detail_keyboard(mint: &str, has_position: bool) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
-    let dex_url = format!("https://dexscreener.com/solana/{}", mint);
+    let dex_url = format!("https://dexscreener.com/solana/{mint}");
 
     if has_position {
         // Token already in position - show position link
         InlineKeyboardMarkup::new(vec![
             // Row 1: Position link
-            vec![btn("📊 View Position", &format!("pos:{}", m))],
+            vec![btn("📊 View Position", &format!("pos:{m}"))],
             // Row 2: Actions
             vec![
-                btn("🚫 Blacklist", &format!("token:blacklist:{}", m)),
+                btn("🚫 Blacklist", &format!("token:blacklist:{m}")),
                 url_btn("🔗 DexScreener", &dex_url),
             ],
             // Row 3: Navigation
@@ -576,7 +576,7 @@ pub fn token_detail_keyboard(mint: &str, has_position: bool) -> InlineKeyboardMa
             ],
             // Row 2: Actions
             vec![
-                btn("🚫 Blacklist", &format!("token:blacklist:{}", m)),
+                btn("🚫 Blacklist", &format!("token:blacklist:{m}")),
                 url_btn("🔗 DexScreener", &dex_url),
             ],
             // Row 3: Navigation

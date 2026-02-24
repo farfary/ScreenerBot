@@ -201,7 +201,7 @@ pub fn format_usd(amount: f64) -> String {
             }
             result.push(*c);
         }
-        format!("${}", result)
+        format!("${result}")
     }
 }
 
@@ -588,7 +588,7 @@ pub fn msg_position_detail(
 ) -> String {
     let emoji = if pnl_pct >= 0.0 { "📈" } else { "📉" };
     let dca_line = if dca_count > 0 {
-        format!("\n🔢 DCA — #{}", dca_count)
+        format!("\n🔢 DCA — #{dca_count}")
     } else {
         String::new()
     };

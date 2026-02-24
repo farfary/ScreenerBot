@@ -301,7 +301,7 @@ impl ChatEngine {
             let llm_response = self.call_llm(&messages).await?;
             let content = llm_response.content.trim();
 
-            logger::debug(LogTag::Api, &format!("LLM response: {}", content));
+            logger::debug(LogTag::Api, &format!("LLM response: {content}"));
 
             // Parse tool calls from response
             let tool_calls = self.parse_tool_calls(content);

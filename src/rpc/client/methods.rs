@@ -1102,7 +1102,7 @@ impl RpcClientMethods for RpcClient {
         if value.is_none() || value == Some(&serde_json::Value::Null) {
             return Err(parse_err(
                 "mint account",
-                &format!("Account not found: {}", mint),
+                &format!("Account not found: {mint}"),
             ));
         }
 
@@ -1168,7 +1168,7 @@ impl RpcClientMethods for RpcClient {
         if value.is_none() || value == Some(&serde_json::Value::Null) {
             return Err(parse_err(
                 "token account",
-                &format!("Account not found: {}", token_account),
+                &format!("Account not found: {token_account}"),
             ));
         }
 
@@ -1718,7 +1718,7 @@ impl RpcClientMethods for RpcClient {
         if result.is_null() {
             return Err(parse_err(
                 "transaction",
-                &format!("Transaction not found: {}", signature),
+                &format!("Transaction not found: {signature}"),
             ));
         }
 
