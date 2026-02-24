@@ -142,7 +142,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let token_count = current_wallet
         .as_ref()
         .map(|w| w.total_tokens_count as usize)
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let wallet = WalletAnalytics {
         current_balance_sol,
@@ -313,7 +313,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
 
     // Process token statistics (filtering already fetched in parallel)
     let db = crate::tokens::database::get_global_database();
-    let total_in_database = db.as_ref().and_then(|d| d.count_tokens().ok()).unwrap_or(0) as usize;
+    let total_in_database = db.as_ref().and_then(|d| d.count_tokens().ok()).unwrap_or_default() as usize;
 
     // Get filtering stats from the already fetched result
     let filtering_stats = filtering_stats_result.ok();
@@ -321,13 +321,13 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let passed_filters = filtering_stats
         .as_ref()
         .map(|s| s.passed_filtering)
-        .unwrap_or(0);
+        .unwrap_or_default();
     let with_prices = filtering_stats
         .as_ref()
         .map(|s| s.with_pool_price)
-        .unwrap_or(0);
-    let blacklisted = filtering_stats.as_ref().map(|s| s.blacklisted).unwrap_or(0);
-    let with_ohlcv = filtering_stats.as_ref().map(|s| s.with_ohlcv).unwrap_or(0);
+        .unwrap_or_default();
+    let blacklisted = filtering_stats.as_ref().map(|s| s.blacklisted).unwrap_or_default();
+    let with_ohlcv = filtering_stats.as_ref().map(|s| s.with_ohlcv).unwrap_or_default();
 
     // Calculate rejected as total - passed - blacklisted
     let rejected_filters = if total_in_database > passed_filters + blacklisted {

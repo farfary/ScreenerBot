@@ -222,7 +222,7 @@ pub fn get_failed_ata_count() -> usize {
     match get_wallet_address() {
         Ok(wallet_address) => get_failed_atas_for_wallet(&wallet_address)
             .map(|rows| rows.len())
-            .unwrap_or(0),
+            .unwrap_or_default(),
         Err(_) => 0,
     }
 }

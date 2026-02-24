@@ -245,7 +245,7 @@ async fn send_position_details(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
             let duration = (chrono::Utc::now() - pos.entry_time).num_seconds() as u64;
             let tokens = pos
                 .remaining_token_amount
-                .unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
+                .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
             let current_price = pos.current_price.unwrap_or(pos.average_entry_price);
             let current_value = tokens * current_price;
 
@@ -335,7 +335,7 @@ async fn send_confirm_sell(
         Some(pos) => {
             let tokens = pos
                 .remaining_token_amount
-                .unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
+                .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
             let msg = format!(
                 "⚠️ <b>Confirm Sell</b>\n\n\
                  Token — {}\n\
@@ -406,7 +406,7 @@ async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Res
         Some(pos) => {
             let tokens = pos
                 .remaining_token_amount
-                .unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
+                .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
             let est_receive = tokens * pos.current_price.unwrap_or(pos.average_entry_price);
             let msg = formatters::msg_confirm_close(
                 &pos.symbol,

@@ -439,7 +439,7 @@ pub fn parse_structured_solana_error(
             let instruction_error = &obj["InstructionError"];
             if let Some(array) = instruction_error.as_array() {
                 if array.len() >= 2 {
-                    let instruction_index = array[0].as_u64().unwrap_or(0) as u8;
+                    let instruction_index = array[0].as_u64().unwrap_or_default() as u8;
                     let error_detail = &array[1];
 
                     return parse_instruction_error(instruction_index, error_detail, error_value);

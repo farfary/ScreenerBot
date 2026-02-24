@@ -139,7 +139,7 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
                 .to_string();
 
             EventResponse {
-                id: e.id.unwrap_or(0),
+                id: e.id.unwrap_or_default(),
                 event_time: e.event_time.to_rfc3339(),
                 category: e.category.to_string(),
                 subtype: e.subtype,
@@ -215,7 +215,7 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
                 .unwrap_or("No message")
                 .to_string();
             EventResponse {
-                id: e.id.unwrap_or(0),
+                id: e.id.unwrap_or_default(),
                 event_time: e.event_time.to_rfc3339(),
                 category: e.category.to_string(),
                 subtype: e.subtype,
@@ -293,7 +293,7 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
                 .unwrap_or("No message")
                 .to_string();
             EventResponse {
-                id: e.id.unwrap_or(0),
+                id: e.id.unwrap_or_default(),
                 event_time: e.event_time.to_rfc3339(),
                 category: e.category.to_string(),
                 subtype: e.subtype,

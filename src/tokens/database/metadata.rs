@@ -141,7 +141,7 @@ impl TokenDatabase {
                 [],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         crate::logger::debug(
             crate::logger::LogTag::Tokens,

@@ -256,7 +256,7 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     }
 
     // Find max order to add new tabs after existing ones
-    let max_order = tabs.iter().map(|t| t.order).max().unwrap_or(0);
+    let max_order = tabs.iter().map(|t| t.order).max().unwrap_or_default();
     let mut next_order = max_order + 1;
 
     // Add any missing tabs from defaults

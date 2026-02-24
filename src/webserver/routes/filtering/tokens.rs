@@ -14,7 +14,7 @@ use super::types::{RejectedTokenEntry, RejectedTokensQuery};
 /// Get list of rejected tokens with pagination and filtering
 pub async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuery>) -> Response {
     let limit = params.limit.unwrap_or(50).min(100); // Max 100 per page
-    let offset = params.offset.unwrap_or(0);
+    let offset = params.offset.unwrap_or_default();
 
     match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset)
         .await

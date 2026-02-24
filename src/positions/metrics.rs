@@ -194,6 +194,6 @@ pub fn get_verification_metrics() -> crate::services::ServiceMetrics {
     // Try to get queue status, fallback to 0 if queue is locked
     let queue_size = super::queue::get_queue_status_sync()
         .map(|(size, _)| size)
-        .unwrap_or(0);
+        .unwrap_or_default();
     VERIFICATION_METRICS.to_service_metrics(queue_size)
 }

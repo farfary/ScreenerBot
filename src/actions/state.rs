@@ -474,7 +474,7 @@ pub async fn query_action_history(
     };
 
     let limit = filters.limit.unwrap_or(50);
-    let offset = filters.offset.unwrap_or(0);
+    let offset = filters.offset.unwrap_or_default();
     let (actions, total) = db.get_action_history(limit, offset, &filters).await?;
 
     Ok((actions, total))

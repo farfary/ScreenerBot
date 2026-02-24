@@ -156,7 +156,7 @@ impl PumpFunAmmDecoder {
         );
 
         // Extract LP supply from the pool data
-        let lp_supply = extract_lp_supply(data).unwrap_or(0);
+        let lp_supply = extract_lp_supply(data).unwrap_or_default();
 
         Some(PumpFunAmmPoolInfo {
             base_mint: pair_info.token_mint,

@@ -399,18 +399,18 @@ impl RaydiumClmmDecoder {
         // recent_epoch is at offset 1088
 
         // Skip calculating offset through rewards and jump to known positions
-        let total_fees_token_0 = Self::extract_u64_at_offset(data, 1032).unwrap_or(0);
-        let total_fees_claimed_token_0 = Self::extract_u64_at_offset(data, 1040).unwrap_or(0);
-        let total_fees_token_1 = Self::extract_u64_at_offset(data, 1048).unwrap_or(0);
-        let total_fees_claimed_token_1 = Self::extract_u64_at_offset(data, 1056).unwrap_or(0);
+        let total_fees_token_0 = Self::extract_u64_at_offset(data, 1032).unwrap_or_default();
+        let total_fees_claimed_token_0 = Self::extract_u64_at_offset(data, 1040).unwrap_or_default();
+        let total_fees_token_1 = Self::extract_u64_at_offset(data, 1048).unwrap_or_default();
+        let total_fees_claimed_token_1 = Self::extract_u64_at_offset(data, 1056).unwrap_or_default();
 
         // Fund fees should be right after
-        let fund_fees_token_0 = Self::extract_u64_at_offset(data, 1064).unwrap_or(0);
-        let fund_fees_token_1 = Self::extract_u64_at_offset(data, 1072).unwrap_or(0);
+        let fund_fees_token_0 = Self::extract_u64_at_offset(data, 1064).unwrap_or_default();
+        let fund_fees_token_1 = Self::extract_u64_at_offset(data, 1072).unwrap_or_default();
 
         // Timing information
-        let open_time = Self::extract_u64_at_offset(data, 1080).unwrap_or(0);
-        let recent_epoch = Self::extract_u64_at_offset(data, 1088).unwrap_or(0);
+        let open_time = Self::extract_u64_at_offset(data, 1080).unwrap_or_default();
+        let recent_epoch = Self::extract_u64_at_offset(data, 1088).unwrap_or_default();
 
         // For tick_array_bitmap, it should be before the fees section
         // Based on the structure, it's likely around offset 904 (after rewards)
@@ -418,7 +418,7 @@ impl RaydiumClmmDecoder {
         let bitmap_start = 904; // Estimate based on structure
         for i in 0..16 {
             tick_array_bitmap[i] =
-                Self::extract_u64_at_offset(data, bitmap_start + i * 8).unwrap_or(0);
+                Self::extract_u64_at_offset(data, bitmap_start + i * 8).unwrap_or_default();
         }
 
         // Skip padding arrays for now (not critical for functionality)

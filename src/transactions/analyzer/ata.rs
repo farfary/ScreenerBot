@@ -327,7 +327,7 @@ async fn analyze_instruction_for_ata(
     let program_id_index = instruction
         .get("programIdIndex")
         .and_then(|v| v.as_u64())
-        .unwrap_or(0) as usize;
+        .unwrap_or_default() as usize;
 
     if program_id_index >= account_keys.len() {
         return Ok(None);

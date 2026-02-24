@@ -1849,7 +1849,7 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let rent_epoch = value.get("rentEpoch").and_then(|v| v.as_u64()).unwrap_or(0);
+    let rent_epoch = value.get("rentEpoch").and_then(|v| v.as_u64()).unwrap_or_default();
 
     Ok(Some(Account {
         lamports,

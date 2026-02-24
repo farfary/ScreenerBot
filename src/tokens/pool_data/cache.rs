@@ -440,7 +440,7 @@ async fn refresh_token_pools_and_cache(
     let prev_pool_count = persisted_snapshot
         .as_ref()
         .map(|snapshot| snapshot.pools.len())
-        .unwrap_or(0);
+        .unwrap_or_default();
     let prev_canonical = persisted_snapshot
         .as_ref()
         .and_then(|snapshot| snapshot.canonical_pool_address.clone());

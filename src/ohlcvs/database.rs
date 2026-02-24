@@ -735,7 +735,7 @@ impl OhlcvDatabase {
             .query_row(&query, params![mint], |row| row.get(0))
             .optional()
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         Ok(result == 1)
     }
@@ -1139,19 +1139,19 @@ impl OhlcvDatabase {
             .query_row("SELECT COUNT(*) FROM ohlcv_candles", params![], |row| {
                 row.get(0)
             })
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let total_gaps: i64 = conn
             .query_row("SELECT COUNT(*) FROM ohlcv_gaps", params![], |row| {
                 row.get(0)
             })
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let total_pools: i64 = conn
             .query_row("SELECT COUNT(*) FROM ohlcv_pools", params![], |row| {
                 row.get(0)
             })
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let total_configs: i64 = conn
             .query_row(
@@ -1159,7 +1159,7 @@ impl OhlcvDatabase {
                 params![],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let active_configs: i64 = conn
             .query_row(
@@ -1167,11 +1167,11 @@ impl OhlcvDatabase {
                 params![],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let page_count: i64 = conn
             .query_row("PRAGMA page_count", params![], |row| row.get(0))
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let page_size: i64 = conn
             .query_row("PRAGMA page_size", params![], |row| row.get(0))

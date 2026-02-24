@@ -396,7 +396,7 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
         let rows: i64 = conn
             .query_row("SELECT COUNT(*) FROM sol_flow_cache", [], |row| row.get(0))
-            .unwrap_or(0);
+            .unwrap_or_default();
         let max_ts = self.get_flow_cache_max_ts_sync()?.map(|dt| dt.to_rfc3339());
         Ok(WalletFlowCacheStats {
             rows: rows.max(0) as u64,
@@ -885,7 +885,7 @@ impl WalletDatabase {
         // Get database file size
         let database_size = std::fs::metadata(&self.database_path)
             .map(|m| m.len())
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         Ok(WalletMonitorStats {
             total_snapshots: total_snapshots as u64,
@@ -936,7 +936,7 @@ impl WalletDatabase {
         // Get database file size
         let database_size = std::fs::metadata(&self.database_path)
             .map(|m| m.len())
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         Ok(WalletMonitorStats {
             total_snapshots: total_snapshots as u64,

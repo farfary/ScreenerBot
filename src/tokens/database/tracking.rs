@@ -213,20 +213,20 @@ fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo>
     let mint: String = row.get(0)?;
     let priority: i32 = row.get(1)?;
     let market_data_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(2)?);
-    let market_data_update_count = row.get::<_, Option<i64>>(3)?.unwrap_or(0).max(0) as u64;
+    let market_data_update_count = row.get::<_, Option<i64>>(3)?.unwrap_or_default().max(0) as u64;
     let security_data_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(4)?);
-    let security_data_update_count = row.get::<_, Option<i64>>(5)?.unwrap_or(0).max(0) as u64;
+    let security_data_update_count = row.get::<_, Option<i64>>(5)?.unwrap_or_default().max(0) as u64;
     let metadata_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(6)?);
     let decimals_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(7)?);
     let pool_price_last_calculated = ts_to_datetime(row.get::<_, Option<i64>>(8)?);
     let pool_price_last_used_pool_address: Option<String> = row.get(9)?;
     let last_error: Option<String> = row.get(10)?;
     let last_error_at = ts_to_datetime(row.get::<_, Option<i64>>(11)?);
-    let market_error_count = row.get::<_, Option<i64>>(12)?.unwrap_or(0).max(0) as u64;
+    let market_error_count = row.get::<_, Option<i64>>(12)?.unwrap_or_default().max(0) as u64;
     let market_error_type: Option<String> = row.get(13)?;
     let last_security_error: Option<String> = row.get(14)?;
     let last_security_error_at = ts_to_datetime(row.get::<_, Option<i64>>(15)?);
-    let security_error_count = row.get::<_, Option<i64>>(16)?.unwrap_or(0).max(0) as u64;
+    let security_error_count = row.get::<_, Option<i64>>(16)?.unwrap_or_default().max(0) as u64;
 
     Ok(UpdateTrackingInfo {
         mint,

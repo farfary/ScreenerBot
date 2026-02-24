@@ -334,7 +334,7 @@ impl MetricsCollector {
         let uptime = start_times
             .get(name)
             .map(|start| start.elapsed().as_secs())
-            .unwrap_or(0);
+            .unwrap_or_default();
         drop(start_times);
 
         (ServiceMetrics {
@@ -438,7 +438,7 @@ impl MetricsCollector {
             let uptime = start_times_snapshot
                 .get(name)
                 .map(|start| start.elapsed().as_secs())
-                .unwrap_or(0);
+                .unwrap_or_default();
 
             metrics.insert(
                 name,

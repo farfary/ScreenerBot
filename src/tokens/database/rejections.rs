@@ -305,7 +305,7 @@ impl TokenDatabase {
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2).unwrap_or_default(),
-                    row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                    row.get::<_, Option<i64>>(3)?.unwrap_or_default(),
                     row.get::<_, Option<String>>(4)?,
                 ))
             })
@@ -402,7 +402,7 @@ impl TokenDatabase {
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2).unwrap_or_default(),
-                    row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                    row.get::<_, Option<i64>>(3)?.unwrap_or_default(),
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;

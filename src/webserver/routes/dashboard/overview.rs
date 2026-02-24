@@ -65,7 +65,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     let win_rate = all_time_stats.win_rate;
     let closed_positions_count = positions::get_db_closed_positions_count_since(epoch_start)
         .await
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     // Get open position details
     let open_position_details: Vec<OpenPositionDetail> = open_positions

@@ -226,7 +226,7 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
 
     let total_count: usize = conn
         .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let mut authority_mint_count = 0;
     let mut authority_freeze_count = 0;

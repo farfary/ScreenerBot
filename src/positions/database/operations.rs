@@ -875,7 +875,7 @@ impl PositionsDatabase {
                 let max_dd: f64 = row.get(7)?;
 
                 let win_rate = if trade_count > 0 {
-                    (wins.unwrap_or(0) as f64 / trade_count as f64) * 100.0
+                    (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
                 } else {
                     0.0
                 };
@@ -903,7 +903,7 @@ impl PositionsDatabase {
                 let max_dd: f64 = row.get(7)?;
 
                 let win_rate = if trade_count > 0 {
-                    (wins.unwrap_or(0) as f64 / trade_count as f64) * 100.0
+                    (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
                 } else {
                     0.0
                 };
@@ -1351,7 +1351,7 @@ impl PositionsDatabase {
         // Get database file size
         let database_size = std::fs::metadata(&self.database_path)
             .map(|m| m.len())
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         Ok(PositionsDatabaseStats {
             total_positions: total_positions as u64,

@@ -418,7 +418,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         );
                 // Record event for DB guard block
                 crate::events::record_position_event(
-                    &db_pos.id.unwrap_or(0).to_string(),
+                    &db_pos.id.unwrap_or_default().to_string(),
                     &api_token.mint,
                     "open_blocked_db",
                     db_pos.entry_transaction_signature.as_deref(),
@@ -723,7 +723,7 @@ pub async fn close_position_direct(
 
             // Record structured position event
             crate::events::record_position_event(
-                &existing_position.id.unwrap_or(0).to_string(),
+                &existing_position.id.unwrap_or_default().to_string(),
                 &api_token.mint,
                 "exit_blocked",
                 existing_position.entry_transaction_signature.as_deref(),
@@ -757,7 +757,7 @@ pub async fn close_position_direct(
     // balance when it is lower than the aggregate, and log the discrepancy.
     let primary_token_balance = get_token_balance(&wallet_address, token_mint)
         .await
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let (sell_amount, multi_account_note) = if primary_token_balance == 0 && total_token_balance > 0
     {
@@ -904,7 +904,7 @@ pub async fn close_position_direct(
     let position_id = super::state::get_position_by_mint(token_mint)
         .await
         .and_then(|p| p.id)
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     // Record a position closing event (pending verification)
     crate::events::record_position_event(
@@ -1143,7 +1143,7 @@ pub async fn partial_close_position(
     let transaction_signature = swap_result.transaction_signature.clone();
 
     let expiry_height =
-        get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+        get_rpc_client().get_block_height().await.unwrap_or_default() + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
 
     let pending_partial = PendingPartialExit {
         signature: transaction_signature.clone(),

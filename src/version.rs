@@ -650,8 +650,8 @@ pub fn is_newer_version(current: &str, remote: &str) -> bool {
     let remote_parts = parse_version(remote);
 
     for i in 0..current_parts.len().max(remote_parts.len()) {
-        let c = current_parts.get(i).copied().unwrap_or(0);
-        let r = remote_parts.get(i).copied().unwrap_or(0);
+        let c = current_parts.get(i).copied().unwrap_or_default();
+        let r = remote_parts.get(i).copied().unwrap_or_default();
         if r > c {
             return true;
         }

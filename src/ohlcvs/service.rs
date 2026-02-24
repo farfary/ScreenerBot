@@ -674,10 +674,10 @@ async fn get_metrics_impl(service: &OhlcvServiceImpl) -> OhlcvMetrics {
     let db = Arc::clone(&service.db);
     let (pools_tracked, data_points_stored, gaps_detected, gaps_filled) =
         tokio::task::spawn_blocking(move || {
-            let pools = db.get_pool_count().unwrap_or(0);
-            let points = db.get_data_point_count().unwrap_or(0);
-            let gaps_det = db.get_gap_count(false).unwrap_or(0);
-            let gaps_fill = db.get_gap_count(true).unwrap_or(0);
+            let pools = db.get_pool_count().unwrap_or_default();
+            let points = db.get_data_point_count().unwrap_or_default();
+            let gaps_det = db.get_gap_count(false).unwrap_or_default();
+            let gaps_fill = db.get_gap_count(true).unwrap_or_default();
             (pools, points, gaps_det, gaps_fill)
         })
         .await

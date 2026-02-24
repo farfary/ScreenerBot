@@ -340,7 +340,7 @@ impl OhlcvMonitor {
             .backfill_in_progress
             .lock()
             .map(|set| set.len())
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let db = Arc::clone(&self.db);
 
@@ -370,10 +370,10 @@ impl OhlcvMonitor {
 
         MonitorStats {
             total_tokens,
-            critical_tokens: by_priority.get(&Priority::Critical).copied().unwrap_or(0),
-            high_tokens: by_priority.get(&Priority::High).copied().unwrap_or(0),
-            medium_tokens: by_priority.get(&Priority::Medium).copied().unwrap_or(0),
-            low_tokens: by_priority.get(&Priority::Low).copied().unwrap_or(0),
+            critical_tokens: by_priority.get(&Priority::Critical).copied().unwrap_or_default(),
+            high_tokens: by_priority.get(&Priority::High).copied().unwrap_or_default(),
+            medium_tokens: by_priority.get(&Priority::Medium).copied().unwrap_or_default(),
+            low_tokens: by_priority.get(&Priority::Low).copied().unwrap_or_default(),
             cache_hit_rate: self.cache.hit_rate(),
             api_calls_per_minute: self.fetcher.calls_per_minute(),
             queue_size: self.fetcher.queue_size(),

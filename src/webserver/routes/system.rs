@@ -532,7 +532,7 @@ async fn get_data_stats() -> Response {
     let config_path = paths::get_config_path();
     let config_size_bytes = std::fs::metadata(&config_path)
         .map(|m| m.len())
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     success_response(DataStatsResponse {
         databases,

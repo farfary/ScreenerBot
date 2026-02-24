@@ -42,7 +42,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         // Get current timestamp (use most recent candle timestamp)
-        let current_timestamp = candles.last().map(|c| c.timestamp).unwrap_or(0);
+        let current_timestamp = candles.last().map(|c| c.timestamp).unwrap_or_default();
         let lookback_timestamp = current_timestamp - lookback_seconds;
 
         // Find candle closest to lookback timestamp

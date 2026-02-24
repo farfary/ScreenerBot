@@ -155,7 +155,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
                 let remaining_balance = rpc_client
                     .get_token_balance(&wallet.wallet.address, &config.token_mint)
                     .await
-                    .unwrap_or(0);
+                    .unwrap_or_default();
 
                 if remaining_balance == 0 {
                     if let Err(e) = close_ata(&wallet.keypair, &config.token_mint, false).await {
@@ -245,7 +245,7 @@ async fn load_wallets_for_sell(config: &MultiSellConfig) -> Result<Vec<WalletWit
         let token_balance = rpc_client
             .get_token_balance(&wallet.wallet.address, &config.token_mint)
             .await
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         if token_balance > 0 {
             wallets_with_balance.push(wallet);
@@ -272,7 +272,7 @@ async fn create_sell_plans(
         let token_balance = rpc_client
             .get_token_balance(&wallet.wallet.address, &config.token_mint)
             .await
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         if token_balance == 0 {
             continue;

@@ -98,8 +98,8 @@ impl OllamaClient {
         latency_ms: f64,
     ) -> Result<ChatResponse, LlmError> {
         // Extract token counts (Ollama may not always provide them)
-        let prompt_tokens = response.prompt_eval_count.unwrap_or(0);
-        let completion_tokens = response.eval_count.unwrap_or(0);
+        let prompt_tokens = response.prompt_eval_count.unwrap_or_default();
+        let completion_tokens = response.eval_count.unwrap_or_default();
 
         // Get finish reason
         let finish_reason = response

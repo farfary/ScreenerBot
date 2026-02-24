@@ -197,7 +197,7 @@ impl TokenDatabase {
             let fetched_ts: i64 = row.get(22)?;
             let first_fetched_ts: i64 = row.get(23)?;
             let rugged_flag: Option<i64> = row.get(18)?;
-            let is_rugged = rugged_flag.unwrap_or(0) != 0;
+            let is_rugged = rugged_flag.unwrap_or_default() != 0;
             let is_mutable_flag: Option<i64> = row.get(25)?;
             let is_mutable = is_mutable_flag.map(|f| f != 0);
 

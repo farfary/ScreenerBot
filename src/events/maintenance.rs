@@ -106,7 +106,7 @@ async fn perform_maintenance() -> Result<(), String> {
     let db_size_mb = stats
         .get("db_size_bytes")
         .map(|s| s / 1024 / 1024)
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     logger::info(
         LogTag::System,

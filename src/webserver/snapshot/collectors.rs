@@ -285,7 +285,7 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
     let debug_override_count = debug_override_tokens
         .as_ref()
         .map(|tokens| tokens.len())
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let (dexs_enabled, gecko_enabled, raydium_enabled) =
         crate::pools::PoolDiscovery::get_source_config();
@@ -458,9 +458,9 @@ pub(super) async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
         }
     };
 
-    let total_events = db_stats.get("total_events").copied().unwrap_or(0);
-    let events_24h = db_stats.get("events_24h").copied().unwrap_or(0);
-    let db_size_bytes = db_stats.get("db_size_bytes").copied().unwrap_or(0);
+    let total_events = db_stats.get("total_events").copied().unwrap_or_default();
+    let events_24h = db_stats.get("events_24h").copied().unwrap_or_default();
+    let db_size_bytes = db_stats.get("db_size_bytes").copied().unwrap_or_default();
 
     // Get category counts for last 24 hours
     let category_counts = match crate::events::count_by_category(24).await {
@@ -489,7 +489,7 @@ pub(super) async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
     let recent_events = recent_events_raw
         .into_iter()
         .map(|event| EventSnapshot {
-            id: event.id.unwrap_or(0),
+            id: event.id.unwrap_or_default(),
             event_time: event.event_time.to_rfc3339(),
             category: event.category.to_string(),
             subtype: event.subtype,

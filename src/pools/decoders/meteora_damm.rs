@@ -424,15 +424,15 @@ impl MeteoraDammDecoder {
         let token_b_vault = Self::extract_pubkey_at_fixed_offset(data, 264)?;
 
         // Extract accumulated fees using empirically verified offsets
-        let protocol_a_fee = Self::extract_u64_at_offset(data, 392).unwrap_or(0);
-        let protocol_b_fee = Self::extract_u64_at_offset(data, 400).unwrap_or(0);
-        let partner_a_fee = Self::extract_u64_at_offset(data, 408).unwrap_or(0);
-        let partner_b_fee = Self::extract_u64_at_offset(data, 416).unwrap_or(0);
+        let protocol_a_fee = Self::extract_u64_at_offset(data, 392).unwrap_or_default();
+        let protocol_b_fee = Self::extract_u64_at_offset(data, 400).unwrap_or_default();
+        let partner_a_fee = Self::extract_u64_at_offset(data, 408).unwrap_or_default();
+        let partner_b_fee = Self::extract_u64_at_offset(data, 416).unwrap_or_default();
 
         // Extract liquidity - try multiple possible offsets to find the correct one
-        let liquidity_296 = Self::extract_u128_at_offset(data, 296).unwrap_or(0);
-        let liquidity_304 = Self::extract_u128_at_offset(data, 304).unwrap_or(0);
-        let liquidity_320 = Self::extract_u128_at_offset(data, 320).unwrap_or(0);
+        let liquidity_296 = Self::extract_u128_at_offset(data, 296).unwrap_or_default();
+        let liquidity_304 = Self::extract_u128_at_offset(data, 304).unwrap_or_default();
+        let liquidity_320 = Self::extract_u128_at_offset(data, 320).unwrap_or_default();
 
         // Use the first non-zero liquidity value found
         let liquidity = if liquidity_296 > 0 {
@@ -444,10 +444,10 @@ impl MeteoraDammDecoder {
         };
 
         // Extract sqrt_price - try multiple possible offsets to find the correct one
-        let sqrt_price_456 = Self::extract_u128_at_offset(data, 456).unwrap_or(0);
-        let sqrt_price_464 = Self::extract_u128_at_offset(data, 464).unwrap_or(0);
-        let sqrt_price_472 = Self::extract_u128_at_offset(data, 472).unwrap_or(0);
-        let sqrt_price_480 = Self::extract_u128_at_offset(data, 480).unwrap_or(0);
+        let sqrt_price_456 = Self::extract_u128_at_offset(data, 456).unwrap_or_default();
+        let sqrt_price_464 = Self::extract_u128_at_offset(data, 464).unwrap_or_default();
+        let sqrt_price_472 = Self::extract_u128_at_offset(data, 472).unwrap_or_default();
+        let sqrt_price_480 = Self::extract_u128_at_offset(data, 480).unwrap_or_default();
 
         // Use the first non-zero sqrt_price value found (but prefer 456 if non-zero)
         let sqrt_price = if sqrt_price_456 > 0 {
@@ -461,8 +461,8 @@ impl MeteoraDammDecoder {
         };
 
         // Extract price range for concentrated liquidity
-        let sqrt_min_price = Self::extract_u128_at_offset(data, 424).unwrap_or(0);
-        let sqrt_max_price = Self::extract_u128_at_offset(data, 440).unwrap_or(0);
+        let sqrt_min_price = Self::extract_u128_at_offset(data, 424).unwrap_or_default();
+        let sqrt_max_price = Self::extract_u128_at_offset(data, 440).unwrap_or_default();
 
         logger::debug(
             LogTag::PoolDecoder,
