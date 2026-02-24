@@ -188,7 +188,7 @@ pub fn get_param_string(condition: &Condition, param_name: &str) -> Result<Strin
     param
         .value
         .as_str()
-        .map(|s| s.to_string())
+        .map(str::to_string)
         .ok_or_else(|| format!("Parameter {} must be a string", param_name))
 }
 
@@ -211,7 +211,7 @@ pub fn get_param_string_optional(condition: &Condition, param_name: &str) -> Opt
         .parameters
         .get(param_name)
         .and_then(|param| param.value.as_str())
-        .map(|s| s.to_string())
+        .map(str::to_string)
 }
 
 /// Helper function to validate optional timeframe parameter

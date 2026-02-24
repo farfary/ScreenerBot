@@ -153,10 +153,11 @@ pub(super) fn find_largest_system_transfer_from_wallet(
                         .get("lamports")
                         .and_then(|v| v.as_u64())
                         .or_else(|| info.get("amount").and_then(|v| v.as_u64()));
-                    if lamports.is_some() && (ix_type == "transfer" || ix_type == "createAccount") {
-                        let lamports = lamports.unwrap();
-                        if best.map(|b| lamports > b).unwrap_or(true) {
-                            best = Some(lamports);
+                    if let Some(lamports) = lamports {
+                        if ix_type == "transfer" || ix_type == "createAccount" {
+                            if best.map_or(true, |b| lamports > b) {
+                                best = Some(lamports);
+                            }
                         }
                     }
                 }
@@ -420,9 +421,8 @@ pub(super) fn get_wallet_wsol_ata_addresses(
                     let account = info.get("account").and_then(|v| v.as_str());
                     let mint = info.get("mint").and_then(|v| v.as_str());
                     let wallet = info.get("wallet").and_then(|v| v.as_str());
-                    if account.is_some() && mint == Some(WSOL_MINT) && wallet == Some(wallet_key) {
-                        // Map account pubkey to index if present
-                        if let Some(acc) = account {
+                    if let Some(acc) = account {
+                        if mint == Some(WSOL_MINT) && wallet == Some(wallet_key) {
                             if let Some(index) = account_keys.iter().position(|k| k == acc) {
                                 indices.insert(index as u32);
                             }
