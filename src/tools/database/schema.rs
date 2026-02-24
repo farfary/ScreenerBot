@@ -320,7 +320,7 @@ pub fn init_tools_db() -> Result<(), String> {
         .optional()
         .map_err(|e| format!("Failed to check schema version: {e}"))?;
 
-    if current_version.is_none() || current_version.unwrap() < TOOLS_SCHEMA_VERSION {
+    if current_version.unwrap_or(0) < TOOLS_SCHEMA_VERSION {
         // Create all tables
         conn.execute_batch(SCHEMA_ATA_SESSIONS)
             .map_err(|e| format!("Failed to create ata_sessions table: {e}"))?;
