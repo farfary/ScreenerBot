@@ -105,11 +105,6 @@ impl OhlcvAggregator {
         })
     }
 
-    /// Validates aggregated data for consistency
-    pub fn validate_aggregated(data: &[Candle]) -> bool {
-        data.iter().all(|point| point.is_valid())
-    }
-
     /// Calculate expected candle count for a time range
     pub fn expected_candles(from_timestamp: i64, to_timestamp: i64, timeframe: Timeframe) -> usize {
         if to_timestamp < from_timestamp {
@@ -150,89 +145,5 @@ impl OhlcvAggregator {
         }
 
         gaps
-    }
-
-    /// Interpolates missing data points in gaps
-    pub fn interpolate_gaps(data: &[Candle], timeframe: Timeframe) -> Vec<Candle> {
-        if data.len() < 2 {
-            return data.to_vec();
-        }
-
-        // Ensure ascending order
-        let mut sorted = data.to_vec();
-        sorted.sort_by_key(|p| p.timestamp);
-
-        let mut result = Vec::new();
-        let candle_duration = timeframe.to_seconds();
-
-        for i in 0..sorted.len() {
-            result.push(sorted[i].clone());
-
-            if i < sorted.len() - 1 {
-                let curr_timestamp = sorted[i].timestamp;
-                let next_timestamp = sorted[i + 1].timestamp;
-                let expected_next = curr_timestamp + candle_duration;
-
-                // Fill gaps with forward-filled data up to but not including next existing candle
-                let mut fill_timestamp = expected_next;
-                while fill_timestamp < next_timestamp {
-                    result.push(Candle {
-                        timestamp: fill_timestamp,
-                        open: sorted[i].close,
-                        high: sorted[i].close,
-                        low: sorted[i].close,
-                        close: sorted[i].close,
-                        volume: 0.0,
-                    });
-
-                    fill_timestamp += candle_duration;
-                }
-            }
-        }
-
-        result
-    }
-
-    /// Resample data to a different timeframe (downsample only)
-    pub fn resample(
-        data: &[Candle],
-        from_timeframe: Timeframe,
-        to_timeframe: Timeframe,
-    ) -> OhlcvResult<Vec<Candle>> {
-        // Can only downsample (smaller -> larger timeframe)
-        if to_timeframe.to_seconds() < from_timeframe.to_seconds() {
-            return Err(OhlcvError::InvalidTimeframe(
-                "Cannot upsample data, only downsample supported".to_owned(),
-            ));
-        }
-
-        if from_timeframe == to_timeframe {
-            return Ok(data.to_vec());
-        }
-
-        Self::aggregate(data, from_timeframe, to_timeframe)
-    }
-
-    /// Calculate volume-weighted average price (VWAP) for a bucket
-    pub fn calculate_vwap(data: &[Candle]) -> Option<f64> {
-        if data.is_empty() {
-            return None;
-        }
-
-        let total_volume: f64 = data.iter().map(|p| p.volume).sum();
-        if total_volume == 0.0 {
-            return None;
-        }
-
-        let vwap: f64 = data
-            .iter()
-            .map(|p| {
-                let typical_price = (p.high + p.low + p.close) / 3.0;
-                typical_price * p.volume
-            })
-            .sum::<f64>()
-            / total_volume;
-
-        Some(vwap)
     }
 }

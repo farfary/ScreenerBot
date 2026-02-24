@@ -91,39 +91,6 @@ impl ServiceMetrics {
         }
         (self.total_polls as f32) / (self.uptime_seconds as f32)
     }
-
-    /// Format poll duration in human-readable format (µs, ms, s)
-    pub fn format_poll_duration(&self) -> String {
-        Self::format_nanos(self.mean_poll_duration_ns)
-    }
-
-    /// Format idle duration in human-readable format (µs, ms, s)
-    pub fn format_idle_duration(&self) -> String {
-        Self::format_nanos(self.mean_idle_duration_ns)
-    }
-
-    /// Format last recorded cycle duration
-    pub fn format_last_cycle_duration(&self) -> String {
-        Self::format_nanos(self.last_cycle_duration_ns)
-    }
-
-    /// Format average cycle duration across uptime
-    pub fn format_avg_cycle_duration(&self) -> String {
-        Self::format_nanos(self.avg_cycle_duration_ns)
-    }
-
-    /// Helper to format nanoseconds into human-readable duration
-    fn format_nanos(nanos: u64) -> String {
-        if nanos < 1_000 {
-            format!("{nanos}ns")
-        } else if nanos < 1_000_000 {
-            format!("{:.2}µs", (nanos as f64) / 1_000.0)
-        } else if nanos < 1_000_000_000 {
-            format!("{:.2}ms", (nanos as f64) / 1_000_000.0)
-        } else {
-            format!("{:.2}s", (nanos as f64) / 1_000_000_000.0)
-        }
-    }
 }
 
 /// Accumulated task metrics from intervals stream
