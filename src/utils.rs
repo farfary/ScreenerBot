@@ -92,9 +92,14 @@ pub fn sol_to_lamports(sol: f64) -> u64 {
 }
 
 /// Format mint address consistently for logs (8 chars + "...")
-/// Consolidates multiple patterns for mint addresses
+/// Format a mint address for log output (first 8 + last 4 chars)
 pub fn format_mint_for_log(mint: &str) -> String {
-    format!("{mint}...")
+    let len = mint.len();
+    if len > 12 {
+        format!("{}...{}", &mint[..8], &mint[len - 4..])
+    } else {
+        mint.to_string()
+    }
 }
 
 /// Format price with adaptive precision for Solana tokens
