@@ -84,7 +84,6 @@ pub async fn start_global_transaction_service(
                 bootstrap_stats
                     .oldest_signature
                     .as_ref()
-                    .map(|sig| sig)
                     .map_or("unknown", |v| v)
             ),
         );
