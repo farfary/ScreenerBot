@@ -463,7 +463,7 @@ fn clear_failure(mint: &str) {
 }
 
 fn is_marked_failure(mint: &str) -> bool {
-    FAILED_CACHE.get(&mint.to_string()).is_some()
+    FAILED_CACHE.contains_key(mint)
 }
 
 // ============================================================================

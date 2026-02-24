@@ -69,7 +69,7 @@ static GLOBAL_PENDING_TRANSACTIONS: LazyLock<Arc<Mutex<HashMap<String, DateTime<
 
 /// Check if signature is known globally across all managers
 pub async fn is_signature_known_globally(signature: &str) -> bool {
-    GLOBAL_KNOWN_SIGNATURES.get(signature).is_some()
+    GLOBAL_KNOWN_SIGNATURES.contains_key(signature)
 }
 
 /// Add signature to global known cache
