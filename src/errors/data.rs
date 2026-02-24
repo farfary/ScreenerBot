@@ -26,10 +26,10 @@ impl std::fmt::Display for DataError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DataError::ParseError { data_type, error } => {
-                write!(f, "Failed to parse {}: {}", data_type, error)
+                write!(f, "Failed to parse {data_type}: {error}")
             }
             DataError::InvalidAmount { amount, reason } => {
-                write!(f, "Invalid amount '{}': {}", amount, reason)
+                write!(f, "Invalid amount '{amount}': {reason}")
             }
             DataError::Generic { message } => write!(f, "{message}"),
             _ => write!(f, "{:?}", self),

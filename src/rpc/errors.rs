@@ -163,7 +163,7 @@ impl fmt::Display for RpcError {
                 }
             }
             Self::ProviderError { code, message, .. } => {
-                write!(f, "Provider error {}: {}", code, message)
+                write!(f, "Provider error {code}: {message}")
             }
             Self::Timeout { provider_id, after } => {
                 write!(f, "Timeout after {:?} from {}", after, provider_id)

@@ -249,7 +249,7 @@ impl fmt::Display for LlmError {
                 retry_after_ms,
             } => {
                 if let Some(ms) = retry_after_ms {
-                    write!(f, "[{}] Rate limited (retry after {}ms)", provider, ms)
+                    write!(f, "[{provider}] Rate limited (retry after {ms}ms)")
                 } else {
                     write!(f, "[{provider}] Rate limited")
                 }
@@ -258,19 +258,19 @@ impl fmt::Display for LlmError {
                 provider,
                 timeout_ms,
             } => {
-                write!(f, "[{}] Request timeout ({}ms)", provider, timeout_ms)
+                write!(f, "[{provider}] Request timeout ({timeout_ms}ms)")
             }
             LlmError::InvalidResponse { provider, message } => {
-                write!(f, "[{}] Invalid response: {}", provider, message)
+                write!(f, "[{provider}] Invalid response: {message}")
             }
             LlmError::AuthError { provider, message } => {
-                write!(f, "[{}] Auth error: {}", provider, message)
+                write!(f, "[{provider}] Auth error: {message}")
             }
             LlmError::NetworkError { provider, message } => {
-                write!(f, "[{}] Network error: {}", provider, message)
+                write!(f, "[{provider}] Network error: {message}")
             }
             LlmError::ParseError { provider, message } => {
-                write!(f, "[{}] Parse error: {}", provider, message)
+                write!(f, "[{provider}] Parse error: {message}")
             }
             LlmError::ApiError {
                 provider,

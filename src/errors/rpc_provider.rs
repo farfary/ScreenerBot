@@ -32,13 +32,13 @@ impl std::fmt::Display for RpcProviderError {
                 provider_name,
                 since,
             } => {
-                write!(f, "Provider {} down since {}", provider_name, since)
+                write!(f, "Provider {provider_name} down since {since}")
             }
             RpcProviderError::Generic {
                 provider_name,
                 message,
             } => {
-                write!(f, "Provider {} error: {}", provider_name, message)
+                write!(f, "Provider {provider_name} error: {message}")
             }
             _ => write!(f, "{:?}", self),
         }

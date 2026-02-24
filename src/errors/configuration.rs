@@ -13,7 +13,7 @@ impl std::fmt::Display for ConfigurationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConfigurationError::InvalidConfig { field, reason } => {
-                write!(f, "Invalid config field '{}': {}", field, reason)
+                write!(f, "Invalid config field '{field}': {reason}")
             }
             ConfigurationError::InvalidPrivateKey { error } => {
                 write!(f, "Invalid private key: {error}")

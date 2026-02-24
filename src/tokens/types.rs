@@ -648,14 +648,14 @@ impl std::fmt::Display for TokenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             TokenError::Database(msg) => write!(f, "Database error: {msg}"),
-            TokenError::Api { source, message } => write!(f, "API error ({}): {}", source, message),
+            TokenError::Api { source, message } => write!(f, "API error ({source}): {message}"),
             TokenError::RateLimit { source, message } => {
-                write!(f, "Rate limit ({}): {}", source, message)
+                write!(f, "Rate limit ({source}): {message}")
             }
             TokenError::NotFound(mint) => write!(f, "Token not found: {mint}"),
             TokenError::InvalidMint(mint) => write!(f, "Invalid mint address: {mint}"),
             TokenError::Blacklisted { mint, reason } => {
-                write!(f, "Blacklisted {}: {}", mint, reason)
+                write!(f, "Blacklisted {mint}: {reason}")
             }
             TokenError::RateLimitExceeded { source } => {
                 write!(f, "Rate limit exceeded for {source}")

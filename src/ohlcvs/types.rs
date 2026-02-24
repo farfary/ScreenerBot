@@ -585,7 +585,7 @@ impl fmt::Display for OhlcvError {
             OhlcvError::PoolNotFound(pool) => write!(f, "Pool not found: {pool}"),
             OhlcvError::InvalidTimeframe(tf) => write!(f, "Invalid timeframe: {tf}"),
             OhlcvError::DataGap { start, end } => {
-                write!(f, "Data gap detected: {} to {}", start, end)
+                write!(f, "Data gap detected: {start} to {end}")
             }
             OhlcvError::CacheError(e) => write!(f, "Cache error: {e}"),
             OhlcvError::NotFound(msg) => write!(f, "Not found: {msg}"),
