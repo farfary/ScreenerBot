@@ -1,3 +1,8 @@
+//! ScreenerBot — Core library for automated Solana DeFi trading.
+//!
+//! Provides token discovery, on-chain analysis, position management,
+//! swap execution, and a web dashboard for monitoring and control.
+
 #![allow(warnings)]
 
 pub mod actions;
