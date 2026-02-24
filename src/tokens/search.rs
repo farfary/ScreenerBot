@@ -269,8 +269,8 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
     let mut results: Vec<TokenSearchResult> = results_map.into_values().collect();
     results.sort_by(|a, b| {
         b.liquidity_usd
-            .unwrap_or(0.0)
-            .partial_cmp(&a.liquidity_usd.unwrap_or(0.0))
+            .unwrap_or_default()
+            .partial_cmp(&a.liquidity_usd.unwrap_or_default())
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     results.truncate(max_results);

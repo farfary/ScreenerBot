@@ -28,7 +28,7 @@ pub fn calculate_pool_metric(pool: &TokenPoolInfo) -> f64 {
     pool.liquidity_sol
         .or(pool.liquidity_usd)
         .or(pool.volume_h24)
-        .unwrap_or(0.0)
+        .unwrap_or_default()
 }
 
 /// Extract DEX label from pool (with fallback to source)

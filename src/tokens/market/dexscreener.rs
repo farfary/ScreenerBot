@@ -28,12 +28,12 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
         }
     }
 
-    let price_usd = parse_f64(&pool.price_usd).unwrap_or(0.0);
+    let price_usd = parse_f64(&pool.price_usd).unwrap_or_default();
 
     // Calculate price_sol based on pool type
     let price_sol = if is_sol_pair {
         // For SOL-paired pools, priceNative IS the SOL price
-        parse_f64(&pool.price_native).unwrap_or(0.0)
+        parse_f64(&pool.price_native).unwrap_or_default()
     } else {
         // For non-SOL pairs, calculate: price_sol = price_usd / sol_usd_price
         let sol_price = crate::sol_price::get_sol_price();
@@ -42,7 +42,7 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
         } else {
             // Fallback: use priceNative as-is (may be wrong but better than 0)
             // This happens when SOL price service isn't running (e.g., in debug tools)
-            parse_f64(&pool.price_native).unwrap_or(0.0)
+            parse_f64(&pool.price_native).unwrap_or_default()
         }
     };
 
