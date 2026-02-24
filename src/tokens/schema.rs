@@ -10,8 +10,6 @@
 use crate::database;
 use rusqlite::Connection;
 
-pub const SCHEMA_VERSION: i32 = 2;
-
 /// All CREATE TABLE statements
 pub const CREATE_TABLES: &[&str] = &[
     // Core token metadata
@@ -320,10 +318,6 @@ pub const ALTER_STATEMENTS: &[&str] = &[
     // Add permanent failure tracking for market data (similar to security_error_type)
     "ALTER TABLE update_tracking ADD COLUMN market_error_type TEXT",
 ];
-
-/// Performance PRAGMAs
-// Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors
-pub const PERFORMANCE_PRAGMAS: &[&str] = &[];
 
 /// Initialize database schema
 pub fn initialize_schema(conn: &Connection) -> Result<(), String> {

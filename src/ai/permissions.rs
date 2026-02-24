@@ -164,9 +164,6 @@ impl PendingConfirmation {
     }
 }
 
-/// Default timeout for confirmations (60 seconds)
-pub const DEFAULT_CONFIRMATION_TIMEOUT: i64 = 60;
-
 /// Manager for pending tool confirmations
 #[derive(Clone)]
 pub struct ConfirmationManager {

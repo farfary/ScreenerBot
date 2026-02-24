@@ -44,30 +44,6 @@ pub struct UpdateFavoriteRequest {
 }
 
 // =============================================================================
-// SCHEMA
-// =============================================================================
-
-/// SQL to create the favorites table
-pub const CREATE_FAVORITES_TABLE: &str = r#"
-    CREATE TABLE IF NOT EXISTS token_favorites (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mint TEXT NOT NULL UNIQUE,
-        name TEXT,
-        symbol TEXT,
-        logo_url TEXT,
-        notes TEXT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-"#;
-
-/// SQL to create indexes for favorites
-pub const CREATE_FAVORITES_INDEXES: &[&str] = &[
-    "CREATE INDEX IF NOT EXISTS idx_favorites_mint ON token_favorites(mint)",
-    "CREATE INDEX IF NOT EXISTS idx_favorites_created ON token_favorites(created_at DESC)",
-];
-
-// =============================================================================
 // DATABASE OPERATIONS
 // =============================================================================
 
