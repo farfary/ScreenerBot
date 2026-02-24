@@ -371,7 +371,7 @@ Trait-based router architecture supporting multiple DEX routers (GMGN, Jupiter, 
 
 Balance monitoring with historical snapshots in SQLite (`data/wallet.db`). Tracks SOL + token balances with delayed RPC calls. Background service checks every minute. Files: `balance_monitor/` (types.rs, cache.rs, dashboard.rs, database.rs, service.rs), `manager.rs` (wallet management entry point — mod declarations and init only). ATA operations in `src/ata_operations.rs` (close/cleanup ATAs, get balances). Connection pooling with r2d2. Export to CSV. Service integration.
 
-Code organization: `src/wallets/manager.rs` is a thin orchestration file (~100 LOC) — only global state, initialization, mod declarations, and re-exports. All logic lives in submodules under `src/wallets/manager/`. Similarly, `src/wallets/database.rs` is a thin struct definition (~75 LOC) — all wallet query methods are in `database/wallet_queries.rs`.
+Code organization: `src/wallets/manager.rs` is a thin orchestration file (~100 LOC) — only global state, initialization, mod declarations, and re-exports. All logic lives in submodules under `src/wallets/manager/`. Similarly, `src/wallets/database.rs` is a thin struct definition (~75 LOC) — all wallet query methods are in `database/wallet_queries.rs`. Balance monitor database methods use direct names (no `_sync` suffix) — all async duplicates have been removed.
 
 Current wallet submodules:
 - `src/wallets/manager/` — crud, access, main_wallet, cache, bulk_ops, balance_ops, balance_queries, tools, migration
