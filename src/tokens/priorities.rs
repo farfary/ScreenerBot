@@ -1,3 +1,5 @@
+//! Token priorities — scoring system for which tokens to update first.
+
 // tokens/priorities.rs
 
 use serde::{Deserialize, Serialize};

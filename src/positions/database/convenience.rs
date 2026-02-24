@@ -1,3 +1,5 @@
+//! Position database convenience functions — simplified wrappers for common queries.
+
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 

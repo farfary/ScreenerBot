@@ -1,3 +1,5 @@
+//! Token market data storage — persists price, volume, and market cap from APIs.
+
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 

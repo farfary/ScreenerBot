@@ -1,3 +1,5 @@
+//! Token update rate limiter — prevents API overload during batch token updates.
+
 use crate::apis::dexscreener::{
     RATE_LIMIT_LATEST_BOOSTS_PER_MINUTE as DEX_BOOSTS_PER_MINUTE,
     RATE_LIMIT_LATEST_PROFILES_PER_MINUTE as DEX_PROFILES_PER_MINUTE,

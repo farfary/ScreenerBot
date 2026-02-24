@@ -1,3 +1,5 @@
+//! Position data types — core Position struct, transitions, and lifecycle events.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

@@ -1,3 +1,5 @@
+//! Position helpers — utility functions for position calculations and formatting.
+
 use crate::{
     config::with_config,
     logger::{self, LogTag},

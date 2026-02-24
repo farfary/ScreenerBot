@@ -1,3 +1,5 @@
+//! Position state management — in-memory tracking of active positions and pending exits.
+
 use super::{db, types::Position};
 use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};

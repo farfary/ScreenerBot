@@ -1,3 +1,5 @@
+//! Token decimals — on-chain decimal resolution for SPL and Token-2022 mints.
+
 // tokens/decimals.rs
 // Decimals lookup with memory caching and on-chain fallback
 //

@@ -1,3 +1,5 @@
+//! Token update helpers — utility functions for token data enrichment and merging.
+
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use std::collections::HashSet;

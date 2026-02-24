@@ -1,3 +1,5 @@
+//! Token metadata storage — persists name, symbol, decimals, and URI information.
+
 use chrono::Utc;
 use rusqlite::{params, params_from_iter};
 use std::collections::HashMap;

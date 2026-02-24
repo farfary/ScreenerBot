@@ -1,3 +1,5 @@
+//! Position transitions — state machine logic for position lifecycle changes.
+
 use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone)]

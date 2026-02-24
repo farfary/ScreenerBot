@@ -1,3 +1,5 @@
+//! Token security data storage — persists rugcheck scores and safety analysis.
+
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 

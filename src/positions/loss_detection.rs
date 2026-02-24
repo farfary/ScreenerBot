@@ -1,3 +1,5 @@
+//! Loss detection — identifies positions hitting stop-loss or trailing-stop thresholds.
+
 use super::{lib::calculate_position_pnl, types::Position};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};

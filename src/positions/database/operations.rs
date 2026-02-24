@@ -1,3 +1,5 @@
+//! Position database operations — full CRUD and query methods for position records.
+
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;

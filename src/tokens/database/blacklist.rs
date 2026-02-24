@@ -1,3 +1,5 @@
+//! Token blacklist database — persists permanently blocked token addresses.
+
 use chrono::Utc;
 use rusqlite::params;
 

@@ -1,3 +1,5 @@
+//! Token database async API — async wrappers around synchronous SQLite operations.
+
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 

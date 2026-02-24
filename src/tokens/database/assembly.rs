@@ -1,3 +1,5 @@
+//! Token assembly — reconstructs full Token structs from database rows.
+
 use chrono::{DateTime, Utc};
 use rusqlite::{params, params_from_iter, types::FromSql, Row};
 use std::collections::HashMap;

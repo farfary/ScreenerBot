@@ -1,3 +1,5 @@
+//! Position verifier — confirms transaction success and updates position state accordingly.
+
 use super::{
     queue::{VerificationItem, VerificationKind},
     state::{get_mint_by_signature, get_position_by_id},

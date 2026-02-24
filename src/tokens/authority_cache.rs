@@ -1,3 +1,5 @@
+//! Token authority cache — in-memory cache for mint/freeze authority lookups.
+
 // tokens/authority_cache.rs
 // Lightweight cache for token mint authorities (freeze, mint, update)
 //

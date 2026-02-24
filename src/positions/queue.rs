@@ -1,3 +1,5 @@
+//! Position verification queue — tracks pending transaction verifications with retry logic.
+
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;

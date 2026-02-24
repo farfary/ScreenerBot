@@ -1,3 +1,5 @@
+//! Position price updater — refreshes current prices for all active positions.
+
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions::state::update_position_state;

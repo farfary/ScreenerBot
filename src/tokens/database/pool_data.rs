@@ -1,3 +1,5 @@
+//! Token pool data storage — persists liquidity pool information and reserves.
+
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 use std::collections::HashMap;

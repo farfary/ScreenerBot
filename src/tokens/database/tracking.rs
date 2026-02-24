@@ -1,3 +1,5 @@
+//! Token tracking database — stores discovery timestamps and processing state.
+
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 

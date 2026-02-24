@@ -1,3 +1,5 @@
+//! Token events — lifecycle event types for token discovery, update, and removal.
+
 // tokens/events.rs
 // Lightweight internal event bus for token updates
 

@@ -1,3 +1,5 @@
+//! Token priority database — stores and queries token processing priority levels.
+
 use rusqlite::{params, params_from_iter};
 use std::collections::HashMap;
 

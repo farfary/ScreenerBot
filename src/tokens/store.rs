@@ -1,3 +1,5 @@
+//! Token store — central in-memory store for all discovered tokens with thread-safe access.
+
 use crate::tokens::database;
 use crate::tokens::types::{DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult};
 use std::collections::HashMap;

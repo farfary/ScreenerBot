@@ -1,3 +1,5 @@
+//! Global position database singleton — shared access to the positions data store.
+
 use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 

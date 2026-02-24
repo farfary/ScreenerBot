@@ -1,3 +1,5 @@
+//! Position metrics — PnL calculations, win rates, and portfolio performance stats.
+
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -1,3 +1,5 @@
+//! Token authority database — stores mint/freeze authority and upgrade status.
+
 // tokens/database/authority.rs
 // Database operations for the authority_reputation table.
 // Supports the auto-discovery system: persists reputation scores,

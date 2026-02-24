@@ -1,3 +1,5 @@
+//! Position worker — background task that processes position lifecycle events.
+
 use super::db::initialize_positions_database;
 use super::{
     apply::apply_transition,
