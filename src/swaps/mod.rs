@@ -26,5 +26,5 @@ pub fn calculate_partial_amount(total_amount: u64, percentage: f64) -> u64 {
     }
 
     let partial = (total_amount as f64 * percentage / 100.0) as u64;
-    std::cmp::min(partial, total_amount)
+    partial.min(total_amount)
 }

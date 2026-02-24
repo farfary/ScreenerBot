@@ -170,7 +170,7 @@ impl VerificationItem {
             let frac = (((h >> 1) as f64) / ((u64::MAX >> 1) as f64)) * BACKOFF_JITTER_FRACTION;
             ((backoff_secs as f64) * frac * sign) as i64
         };
-        let backoff_with_jitter = std::cmp::max(1, backoff_secs + jitter);
+        let backoff_with_jitter = 1_i64.max(backoff_secs + jitter);
 
         Self {
             signature: self.signature.clone(),

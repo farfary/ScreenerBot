@@ -74,7 +74,7 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
     if let Some(pid) = position_id {
         if let Some(position) = get_position_by_id(pid).await {
             if let Some(token_amount) = position.token_amount {
-                let dust_threshold = std::cmp::max(token_amount / 1_000, 10);
+                let dust_threshold = (token_amount / 1_000).max(10);
                 if balance <= dust_threshold {
                     logger::debug(
                         LogTag::Positions,

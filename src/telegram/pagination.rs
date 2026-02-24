@@ -68,7 +68,7 @@ impl PaginationManager {
         };
 
         let start_idx = page * session.items_per_page;
-        let end_idx = std::cmp::min(start_idx + session.items_per_page, total_items);
+        let end_idx = (start_idx + session.items_per_page).min(total_items);
 
         if start_idx >= total_items {
             return Some((Vec::new(), total_pages, total_items));

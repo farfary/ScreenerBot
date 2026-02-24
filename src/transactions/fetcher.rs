@@ -604,7 +604,7 @@ impl BatchSignatureFetcher {
         let limit = max_signatures.unwrap_or(usize::MAX);
 
         loop {
-            let batch_limit = std::cmp::min(self.batch_size, limit - all_signatures.len());
+            let batch_limit = self.batch_size.min(limit - all_signatures.len());
             if batch_limit == 0 {
                 break;
             }
