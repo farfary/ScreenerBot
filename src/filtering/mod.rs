@@ -35,16 +35,6 @@ pub async fn fetch_stats() -> Result<FilteringStatsSnapshot, String> {
     store::get_stats().await
 }
 
-/// Retrieve the latest list of tokens that passed filtering
-pub async fn get_passed_history() -> Result<Vec<PassedToken>, String> {
-    store::get_passed_tokens().await
-}
-
-/// Retrieve the latest list of rejected tokens with reasons
-pub async fn get_rejected_history() -> Result<Vec<RejectedToken>, String> {
-    store::get_rejected_tokens().await
-}
-
 /// Access to the global filtering store (primarily for services)
 pub fn global_store() -> std::sync::Arc<store::FilteringStore> {
     store::global_store()

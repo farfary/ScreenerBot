@@ -161,10 +161,6 @@ impl ConnectivityState {
     }
 
     /// Get criticality level for an endpoint
-    pub fn get_criticality(&self, name: &str) -> Option<EndpointCriticality> {
-        self.criticality.get(name).copied()
-    }
-
     /// Get fallback strategy for an endpoint
     pub fn get_fallback(&self, name: &str) -> Option<FallbackStrategy> {
         self.fallback.get(name).and_then(|f| f.clone())
