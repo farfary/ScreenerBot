@@ -1,3 +1,9 @@
+//! Position transition effects.
+//!
+//! Applies verified or failed position transitions (entry, exit, DCA, partial-exit)
+//! to in-memory state and persists them to the database. Each transition variant
+//! updates balances, sends notifications, and logs the event.
+
 use super::db::{
     force_database_sync, save_entry_record, save_exit_record, update_position,
     update_position_price_fields,
@@ -34,6 +40,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
     let requires_db_update = transition.requires_db_update();
 
     match transition {
+        // =================================================================
+        // ENTRY
+        // =================================================================
         PositionTransition::EntryVerified {
             position_id,
             effective_entry_price,
@@ -117,6 +126,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             }
         }
 
+        // =================================================================
+        // FULL EXIT
+        // =================================================================
         PositionTransition::ExitVerified {
             position_id,
             effective_exit_price,
@@ -296,6 +308,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             }
         }
 
+        // =================================================================
+        // EXIT FAILURE / RETRY
+        // =================================================================
         PositionTransition::ExitFailedClearForRetry { position_id } => {
             // Capture old signature to purge index entry (prevent stale sig->mint mapping)
             let mut old_sig: Option<String> = None;
@@ -402,6 +417,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             }
         }
 
+        // =================================================================
+        // ORPHAN CLEANUP
+        // =================================================================
         PositionTransition::RemoveOrphanEntry { position_id } => {
             if let Ok(mint) = find_mint_by_position_id(position_id).await {
                 if remove_position(&mint).await.is_some() {
@@ -918,6 +936,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // TODO: Implement retry logic if needed
         }
 
+        // =================================================================
+        // PRICE TRACKING
+        // =================================================================
         PositionTransition::UpdatePriceTracking {
             mint,
             current_price,
