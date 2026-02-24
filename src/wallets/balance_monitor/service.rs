@@ -109,7 +109,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
             let decimals = account_info.decimals;
             let balance_ui = (account_info.balance as f64) / (10_f64).powi(decimals as i32);
 
-            token_balances.push(TokenBalance {
+            token_balances.push(SnapshotTokenBalance {
                 id: None,
                 snapshot_id: None,
                 mint: account_info.mint.clone(),
@@ -391,7 +391,7 @@ pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, String> {
 }
 
 /// Get token balances for a snapshot
-pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<TokenBalance>, String> {
+pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_balances_sync(snapshot_id),

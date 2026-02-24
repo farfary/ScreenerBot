@@ -29,7 +29,7 @@ pub use service::{
 // Re-export public types
 pub use types::{
     CachePerformanceMetrics, DailyFlowPoint, DashboardCacheFreshness, DashboardCacheMetadata,
-    DashboardDataSource, NftBalance, TokenBalance, WalletBalancePoint, WalletDashboardData,
+    DashboardDataSource, NftBalance, SnapshotTokenBalance, WalletBalancePoint, WalletDashboardData,
     WalletFlowCacheStats, WalletFlowMetrics, WalletMonitorStats, WalletNftOverview, WalletSnapshot,
     WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview,
 };

@@ -368,7 +368,7 @@ impl WalletDatabase {
     }
 
     /// Get token balances for a specific snapshot (synchronous version)
-    pub fn get_token_balances_sync(&self, snapshot_id: i64) -> Result<Vec<TokenBalance>, String> {
+    pub fn get_token_balances_sync(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -384,7 +384,7 @@ impl WalletDatabase {
 
         let balances_iter = stmt
             .query_map(params![snapshot_id], |row| {
-                Ok(TokenBalance {
+                Ok(SnapshotTokenBalance {
                     id: Some(row.get(0)?),
                     snapshot_id: Some(row.get(1)?),
                     mint: row.get(2)?,
@@ -447,7 +447,7 @@ impl WalletDatabase {
     }
 
     /// Get token balances for a specific snapshot (async version)
-    pub async fn get_token_balances(&self, snapshot_id: i64) -> Result<Vec<TokenBalance>, String> {
+    pub async fn get_token_balances(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -463,7 +463,7 @@ impl WalletDatabase {
 
         let balances_iter = stmt
             .query_map(params![snapshot_id], |row| {
-                Ok(TokenBalance {
+                Ok(SnapshotTokenBalance {
                     id: Some(row.get(0)?),
                     snapshot_id: Some(row.get(1)?),
                     mint: row.get(2)?,

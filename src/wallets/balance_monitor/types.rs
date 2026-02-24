@@ -17,13 +17,13 @@ pub struct WalletSnapshot {
     pub sol_balance_lamports: u64,
     pub total_tokens_count: u32,
     pub total_nfts_count: u32,
-    pub token_balances: Vec<TokenBalance>,
+    pub token_balances: Vec<SnapshotTokenBalance>,
     pub nft_balances: Vec<NftBalance>,
 }
 
 /// Token balance record (fungible tokens only)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TokenBalance {
+pub struct SnapshotTokenBalance {
     pub id: Option<i64>,
     pub snapshot_id: Option<i64>,
     pub mint: String,

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use crate::logger::{self, LogTag};
 
 use super::{clamp_token_limit, short_mint_label, TOKEN_METADATA_CONCURRENCY};
-use super::super::types::{TokenBalance, WalletTokenOverview};
+use super::super::types::{SnapshotTokenBalance, WalletTokenOverview};
 
 async fn fetch_token_metadata_batch(
     mints: &[String],
@@ -34,7 +34,7 @@ async fn fetch_token_metadata_batch(
 }
 
 pub(super) async fn enrich_token_overview(
-    balances: Vec<TokenBalance>,
+    balances: Vec<SnapshotTokenBalance>,
     max_tokens: usize,
 ) -> Vec<WalletTokenOverview> {
     let mut rows = Vec::with_capacity(balances.len());
