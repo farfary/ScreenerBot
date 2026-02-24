@@ -289,33 +289,6 @@ impl DexScreenerClient {
         Ok(pairs.into_iter().map(|p| p.to_pool()).collect())
     }
 
-    /// Get a single pair by chain and address
-    ///
-    /// # Arguments
-    /// * `chain_id` - Chain identifier (e.g., "solana", "ethereum")
-    /// * `pair_address` - Pair contract address
-    pub async fn get_pair(
-        &self,
-        chain_id: &str,
-        pair_address: &str,
-    ) -> Result<Option<DexScreenerPool>, String> {
-        let endpoint = format!("latest/dex/pairs/{chain_id}/{pair_address}");
-        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
-
-        logger::debug(
-            LogTag::Api,
-            &format!(
-                "[DEXSCREENER] Fetching pair: pair={}, chain={}",
-                pair_address, chain_id
-            ),
-        );
-        let data: PairResponse = self
-            .get_json(&endpoint, self.client.get(&url), &self.limiter_pair_lookup)
-            .await?;
-
-        Ok(data.pair.map(|p| p.to_pool()))
-    }
-
     /// Search for pairs by query
     ///
     /// # Arguments
