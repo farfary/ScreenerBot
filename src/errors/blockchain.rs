@@ -386,7 +386,7 @@ impl BlockchainError {
             } => {
                 format!(
                     "Transaction {} failed: blockhash expired ({}s old)",
-                    signature.as_ref().map_or("unknown", |v| v),
+                    signature.as_deref().unwrap_or("unknown"),
                     age_seconds
                 )
             }
