@@ -531,7 +531,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let data_source = Some(format!("{:?}", token.data_source));
 
     // Verified = normalized score <= 30 (low risk = safer tokens in Rugcheck)
-    let verified = security_score_normalised.map(|s| s <= 30).unwrap_or(false);
+    let verified = security_score_normalised.is_some_and(|s| s <= 30);
 
     Json(TokenDetailResponse {
         mint: token.mint.clone(),
@@ -737,7 +737,7 @@ pub async fn get_token_analysis(
         || token.security_score_normalised.is_some()
         || !token.security_risks.is_empty()
     {
-        let has_transfer_fee = token.transfer_fee_pct.map(|f| f > 0.0).unwrap_or(false);
+        let has_transfer_fee = token.transfer_fee_pct.is_some_and(|f| f > 0.0);
         // is_mutable approximated by presence of mint_authority
         let is_mutable = token.mint_authority.is_some();
 
@@ -817,7 +817,7 @@ pub async fn get_token_analysis(
                     address: p.pool_id.to_string(),
                     dex: p.program_kind.display_name().to_string(),
                     liquidity_sol,
-                    is_canonical: canonical_pool_id.map(|c| c == p.pool_id).unwrap_or(false),
+                    is_canonical: canonical_pool_id.is_some_and(|c| c == p.pool_id),
                 }
             })
             .collect();

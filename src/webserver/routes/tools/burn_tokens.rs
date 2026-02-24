@@ -140,7 +140,7 @@ pub async fn scan_burnable_tokens() -> Response {
                     true,
                     Some("Leftover from closed position".to_string()),
                 )
-            } else if has_liquidity && value_sol.map(|v| v > 0.0001).unwrap_or(false) {
+            } else if has_liquidity && value_sol.is_some_and(|v| v > 0.0001) {
                 categories.has_value += 1;
                 (
                     TokenCategory::HasValue,

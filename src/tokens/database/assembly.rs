@@ -1030,7 +1030,7 @@ pub(super) fn assemble_token(
     let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);
     let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
-    let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
+    let is_rugged = security_ref.is_some_and(|sec| sec.rugged);
     let security_risks = security_ref
         .map(|sec| sec.risks.clone())
         .unwrap_or_else(Vec::new);
@@ -1201,7 +1201,7 @@ pub(super) fn assemble_token_without_market_data(
     let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);
     let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
-    let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
+    let is_rugged = security_ref.is_some_and(|sec| sec.rugged);
     let security_risks = security_ref
         .map(|sec| sec.risks.clone())
         .unwrap_or_else(Vec::new);
