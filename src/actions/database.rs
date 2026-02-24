@@ -1,7 +1,8 @@
-/// Actions Database Module
-///
-/// High-performance SQLite database for persistent action storage.
-/// Follows EventsDatabase pattern with split read/write pools.
+//! Actions database module.
+//!
+//! High-performance SQLite database for persistent action storage.
+//! Follows EventsDatabase pattern with split read/write pools.
+
 use super::types::{Action, ActionId, ActionState, ActionStep, ActionType, StepStatus};
 use crate::database;
 use crate::logger::{self, LogTag};

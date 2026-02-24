@@ -1,8 +1,8 @@
-/// Events Maintenance and Recording Functions
-///
-/// This module provides maintenance functions and specialized event recording
-/// functions for each event category. All recording functions check the config
-/// before recording to allow per-category enable/disable control.
+//! Events maintenance and recording functions.
+//!
+//! Maintenance functions and specialized event recording for each category.
+//! All recording functions check the config before recording to allow
+//! per-category enable/disable control.
 use crate::config;
 use crate::constants::SOL_MINT;
 use crate::events::{Event, EventCategory, Severity};

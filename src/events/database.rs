@@ -1,8 +1,9 @@
-/// Events Database Module
-///
-/// High-performance SQLite database for persistent event storage.
-/// Fresh schema (no migrations), split read/write pools, batched writes,
-/// and keyset-optimized queries.
+//! Events database module.
+//!
+//! High-performance SQLite database for persistent event storage.
+//! Fresh schema (no migrations), split read/write pools, batched writes,
+//! and keyset-optimized queries.
+
 use crate::database;
 use crate::events::types::{Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
