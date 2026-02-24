@@ -392,7 +392,7 @@ impl ActionsDatabase {
         let status_str = format!("{:?}", status).to_lowercase();
         let now = Utc::now().to_rfc3339();
 
-        let metadata_str = metadata.map(|m| serde_json::to_string(&m).ok()).flatten();
+        let metadata_str = metadata.and_then(|m| serde_json::to_string(&m).ok());
 
         // Atomic UPDATE using COALESCE to prevent race conditions
         // - Set started_at if transitioning to InProgress and not already set

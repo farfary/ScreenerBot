@@ -197,7 +197,7 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
     let has_version = request
         .uri()
         .query()
-        .map_or(false, |q| q.contains("v="));
+        .is_some_and(|q| q.contains("v="));
     let mut response = next.run(request).await;
 
     let headers = response.headers_mut();

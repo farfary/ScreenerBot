@@ -577,7 +577,7 @@ pub async fn is_open_position(mint: &str) -> bool {
         let now = Utc::now();
         let mut to_remove: Vec<String> = Vec::new();
         let pending_read = PENDING_OPEN_SWAPS.read().await;
-        let is_pending = pending_read.get(mint).map_or(false, |exp| *exp > now);
+        let is_pending = pending_read.get(mint).is_some_and(|exp| *exp > now);
         drop(pending_read);
 
         // Cleanup any expired entries opportunistically
@@ -780,6 +780,6 @@ pub async fn is_token_in_cooldown(mint: &str) -> bool {
     positions.iter().any(|p| {
         p.mint == mint
             && p.transaction_exit_verified
-            && p.exit_time.map_or(false, |exit_time| exit_time > cutoff)
+            && p.exit_time.is_some_and(|exit_time| exit_time > cutoff)
     })
 }

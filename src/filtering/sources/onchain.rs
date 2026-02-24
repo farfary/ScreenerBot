@@ -34,7 +34,7 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
             && !trimmed
                 .chars()
                 .next()
-                .map_or(false, |c| c.is_ascii_alphabetic())
+                .is_some_and(|c| c.is_ascii_alphabetic())
         {
             return Err(FilterRejectionReason::OnChainSuspiciousSymbol);
         }
