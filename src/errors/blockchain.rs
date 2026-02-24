@@ -1,6 +1,8 @@
-/// Solana Blockchain Error Classifications
-/// This module provides structured error handling for Solana blockchain-specific errors
-/// replacing the current string-based error approach throughout the codebase.
+//! Solana blockchain error classifications.
+//!
+//! Structured error handling for Solana blockchain-specific errors, replacing
+//! string-based error matching throughout the codebase.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

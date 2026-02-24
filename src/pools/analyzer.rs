@@ -1,10 +1,9 @@
-/// Pool analyzer module
-///
-/// This module analyzes discovered pools to:
-/// - Classify pool types by program ID
-/// - Extract pool metadata (base/quote tokens, reserve accounts)
-/// - Validate pool structure and data
-/// - Prepare account lists for fetching
+//! Pool analyzer module.
+//!
+//! Analyzes discovered pools to classify pool types by program ID, extract pool
+//! metadata (base/quote tokens, reserve accounts), validate pool structure and
+//! data, and prepare account lists for fetching.
+
 use super::decoders::{
     meteora_damm::MeteoraDammDecoder, meteora_dbc::MeteoraDbcDecoder,
     meteora_dlmm::MeteoraDlmmDecoder, orca_whirlpool::OrcaWhirlpoolDecoder,

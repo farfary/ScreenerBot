@@ -1,7 +1,8 @@
-/// Account fetcher module
-///
-/// This module handles efficient batched fetching of pool account data from RPC.
-/// It optimizes RPC usage by batching requests and managing rate limits.
+//! Account fetcher module.
+//!
+//! Handles efficient batched fetching of pool account data from RPC.
+//! Optimizes RPC usage by batching requests and managing rate limits.
+
 use super::types::{
     account_blacklist_threshold, failure_window_secs, pool_blacklist_threshold, PoolDescriptor,
 };
