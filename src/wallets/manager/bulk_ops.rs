@@ -25,7 +25,7 @@ pub async fn bulk_import_wallets(
     };
 
     // Get existing addresses to check duplicates
-    let existing_addresses = match get_existing_addresses().await {
+    let existing_addresses = match get_existing_wallet_addresses().await {
         Ok(addrs) => addrs,
         Err(e) => {
             // If we can't get existing addresses, fail all imports
@@ -195,18 +195,13 @@ pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRo
     Ok(result)
 }
 
-/// Get all existing wallet addresses for duplicate checking
-async fn get_existing_addresses() -> Result<HashSet<String>, String> {
+/// Get existing addresses as HashSet (for duplicate checking)
+pub async fn get_existing_wallet_addresses() -> Result<HashSet<String>, String> {
     let db_guard = super::WALLETS_DB.read().await;
     let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     let wallets = db.list_wallets(true)?; // Include inactive
     Ok(wallets.into_iter().map(|w| w.address).collect())
-}
-
-/// Get existing addresses as HashSet (public for validator)
-pub async fn get_existing_wallet_addresses() -> Result<HashSet<String>, String> {
-    get_existing_addresses().await
 }
 
 /// Create multiple wallets at once with a name prefix
