@@ -143,12 +143,6 @@ pub async fn clear_partial_exit_pending(mint: &str) {
     }
 }
 
-/// Check if a mint currently has an in-flight partial exit pending
-pub async fn has_partial_exit_pending(mint: &str) -> bool {
-    let map = PENDING_PARTIAL_EXITS.read().await;
-    map.get(mint).copied().unwrap_or_default() > 0
-}
-
 /// Persist current pending DCA map to the database metadata store
 async fn persist_pending_dca_swaps() -> Result<(), String> {
     let pending: Vec<PendingDcaSwap> = {

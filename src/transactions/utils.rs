@@ -168,30 +168,6 @@ pub async fn get_pending_transaction_signatures() -> Vec<String> {
 }
 
 // =============================================================================
-// STRING AND FORMATTING UTILITIES
-// =============================================================================
-
-/// Format lamports as SOL with appropriate precision
-pub fn format_lamports_as_sol(lamports: u64) -> String {
-    let sol = (lamports as f64) / 1e9;
-    if sol < 0.001 {
-        format!("{:.6} SOL", sol)
-    } else {
-        format!("{:.3} SOL", sol)
-    }
-}
-
-/// Format change in lamports as SOL with sign
-pub fn format_lamports_change_as_sol(change_lamports: i64) -> String {
-    let sol_change = (change_lamports as f64) / 1e9;
-    if sol_change >= 0.0 {
-        format!("+{:.6} SOL", sol_change)
-    } else {
-        format!("{:.6} SOL", sol_change)
-    }
-}
-
-// =============================================================================
 // VALIDATION UTILITIES
 // =============================================================================
 

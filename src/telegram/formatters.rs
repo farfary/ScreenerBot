@@ -160,11 +160,6 @@ pub fn format_duration(seconds: u64) -> String {
     }
 }
 
-/// Format percentage
-pub fn format_percent(value: f64) -> String {
-    format!("{:.1}%", value)
-}
-
 /// Format AI reasoning block for notifications
 pub fn format_ai_reasoning(reasoning: &Option<String>) -> String {
     match reasoning {
