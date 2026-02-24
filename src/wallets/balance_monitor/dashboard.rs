@@ -454,7 +454,7 @@ pub(super) async fn compute_dashboard_payload_realtime(
         let flows = compute_flow_metrics(window_hours).await?;
         let daily_flows = compute_daily_flows(window_hours)
             .await
-            .unwrap_or_else(|_| Vec::new());
+            .unwrap_or_default();
         return Ok(WalletDashboardData {
             summary: WalletSummarySnapshot {
                 window_hours,

@@ -246,7 +246,7 @@ async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
     let ui_ready = initialization_required || ui_prereqs_ready;
     let boot_progress = task::spawn_blocking(startup::snapshot)
         .await
-        .unwrap_or_else(|_| Vec::new());
+        .unwrap_or_default();
 
     let snapshot_status = wallet::get_cached_wallet_snapshot_status();
     let wallet_snapshot_ready = snapshot_status.is_ready;

@@ -38,7 +38,7 @@ pub async fn get_trader_stats() -> Response {
             if let Some(db) = db_guard.as_ref() {
                 db.get_closed_positions_since(thirty_days_ago)
                     .await
-                    .unwrap_or_else(|_| Vec::new())
+                    .unwrap_or_default()
             } else {
                 Vec::new()
             }
