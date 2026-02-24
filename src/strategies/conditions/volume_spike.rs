@@ -44,14 +44,14 @@ impl ConditionEvaluator for VolumeSpikeCondition {
         let lookback_candles = &candles[start_idx..end_idx];
 
         if lookback_candles.is_empty() {
-            return Err("No lookback candles for volume calculation".to_string());
+            return Err("No lookback candles for volume calculation".to_owned());
         }
 
         let avg_volume: f64 =
             lookback_candles.iter().map(|c| c.volume).sum::<f64>() / lookback_candles.len() as f64;
 
         if avg_volume <= 0.0 {
-            return Err("Average volume is zero or negative".to_string());
+            return Err("Average volume is zero or negative".to_owned());
         }
 
         // Check if current volume is multiplier times the average
@@ -67,12 +67,12 @@ impl ConditionEvaluator for VolumeSpikeCondition {
 
         let lookback = get_param_f64(condition, "lookback")?;
         if lookback < 2.0 || lookback > 100.0 {
-            return Err("Lookback must be between 2 and 100".to_string());
+            return Err("Lookback must be between 2 and 100".to_owned());
         }
 
         let multiplier = get_param_f64(condition, "multiplier")?;
         if multiplier < 1.0 || multiplier > 50.0 {
-            return Err("Multiplier must be between 1.0 and 50.0".to_string());
+            return Err("Multiplier must be between 1.0 and 50.0".to_owned());
         }
 
         Ok(())

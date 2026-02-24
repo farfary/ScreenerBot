@@ -354,7 +354,7 @@ impl PositionsDatabase {
     pub async fn update_position(&self, position: &Position) -> Result<(), String> {
         let position_id = position
             .id
-            .ok_or_else(|| "Cannot update position without ID".to_string())?;
+            .ok_or_else(|| "Cannot update position without ID".to_owned())?;
 
         logger::debug(
             LogTag::Positions,
@@ -1178,7 +1178,7 @@ impl PositionsDatabase {
                 let state = state_str.parse::<PositionState>().map_err(|e| {
                     rusqlite::Error::InvalidColumnType(
                         1,
-                        "Invalid state".to_string(),
+                        "Invalid state".to_owned(),
                         rusqlite::types::Type::Text,
                     )
                 })?;
@@ -1188,7 +1188,7 @@ impl PositionsDatabase {
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             2,
-                            "Invalid datetime".to_string(),
+                            "Invalid datetime".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?
@@ -1268,7 +1268,7 @@ impl PositionsDatabase {
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             6,
-                            "Invalid datetime".to_string(),
+                            "Invalid datetime".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?
@@ -1580,7 +1580,7 @@ impl PositionsDatabase {
             .map_err(|_| {
                 rusqlite::Error::InvalidColumnType(
                     0,
-                    "Invalid snapshot_time".to_string(),
+                    "Invalid snapshot_time".to_owned(),
                     rusqlite::types::Type::Text,
                 )
             })?
@@ -1591,7 +1591,7 @@ impl PositionsDatabase {
             .map_err(|_| {
                 rusqlite::Error::InvalidColumnType(
                     0,
-                    "Invalid api_fetch_time".to_string(),
+                    "Invalid api_fetch_time".to_owned(),
                     rusqlite::types::Type::Text,
                 )
             })?
@@ -1651,7 +1651,7 @@ impl PositionsDatabase {
             .map_err(|e| {
                 rusqlite::Error::InvalidColumnType(
                     5,
-                    "Invalid entry_time".to_string(),
+                    "Invalid entry_time".to_owned(),
                     rusqlite::types::Type::Text,
                 )
             })?
@@ -1663,7 +1663,7 @@ impl PositionsDatabase {
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             7,
-                            "Invalid exit_time".to_string(),
+                            "Invalid exit_time".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?
@@ -1680,7 +1680,7 @@ impl PositionsDatabase {
                         .map_err(|e| {
                             rusqlite::Error::InvalidColumnType(
                                 27,
-                                "Invalid current_price_updated".to_string(),
+                                "Invalid current_price_updated".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?
@@ -1697,7 +1697,7 @@ impl PositionsDatabase {
                         .map_err(|e| {
                             rusqlite::Error::InvalidColumnType(
                                 29,
-                                "Invalid phantom_first_seen".to_string(),
+                                "Invalid phantom_first_seen".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?
@@ -1713,7 +1713,7 @@ impl PositionsDatabase {
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             35,
-                            "Invalid last_dca_time".to_string(),
+                            "Invalid last_dca_time".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?

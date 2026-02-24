@@ -78,7 +78,7 @@ pub async fn perform_initial_transaction_bootstrap(
     // Determine bootstrap mode using persistent bootstrap_state
     // Backfill mode: full history not completed yet → page newest→oldest using backfill_before_cursor
     // Forward incremental: once full history completed → fetch only newer than newest known
-    let mut bootstrap_mode = "FULL".to_string();
+    let mut bootstrap_mode = "FULL".to_owned();
     let mut backfill_cursor: Option<String> = None;
     let mut checkpoint_signature: Option<String> = None;
     if let Some(db) = transaction_db.as_ref() {
@@ -86,11 +86,11 @@ pub async fn perform_initial_transaction_bootstrap(
             Ok(state) => {
                 if state.full_history_completed {
                     // Forward incremental mode
-                    bootstrap_mode = "INCREMENTAL".to_string();
+                    bootstrap_mode = "INCREMENTAL".to_owned();
                     checkpoint_signature = db.get_newest_known_signature().await.unwrap_or(None);
                 } else {
                     // Backfill mode not completed
-                    bootstrap_mode = "FULL".to_string();
+                    bootstrap_mode = "FULL".to_owned();
                     backfill_cursor = state.backfill_before_cursor;
                     // In FULL/backfill mode we do NOT stop at oldest-known; we continue until chain end.
                     checkpoint_signature = None;

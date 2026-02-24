@@ -461,15 +461,15 @@ impl TokenOhlcvConfig {
     /// Get human-readable backoff time
     pub fn get_next_retry_description(&self) -> String {
         if self.consecutive_pool_failures == 0 {
-            return "immediately".to_string();
+            return "immediately".to_owned();
         }
 
         match self.consecutive_pool_failures {
-            1 => "5 minutes".to_string(),
-            2 => "15 minutes".to_string(),
-            3 => "1 hour".to_string(),
-            4 => "6 hours".to_string(),
-            _ => "24 hours".to_string(),
+            1 => "5 minutes".to_owned(),
+            2 => "15 minutes".to_owned(),
+            3 => "1 hour".to_owned(),
+            4 => "6 hours".to_owned(),
+            _ => "24 hours".to_owned(),
         }
     }
 }

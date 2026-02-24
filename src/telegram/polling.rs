@@ -31,12 +31,12 @@ pub async fn start_polling(
     let chat_id = with_config(|c| c.telegram.chat_id.clone());
 
     if bot_token.is_empty() {
-        return Err("Bot token is empty".to_string());
+        return Err("Bot token is empty".to_owned());
     }
 
     // If no chat_id, we should be in discovery mode instead
     if chat_id.is_empty() {
-        return Err("Chat ID is empty - use discovery mode first".to_string());
+        return Err("Chat ID is empty - use discovery mode first".to_owned());
     }
 
     let bot = Bot::new(bot_token);

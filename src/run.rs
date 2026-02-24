@@ -537,7 +537,7 @@ async fn wait_for_initialization_or_shutdown() -> Result<(), String> {
               LogTag::System,
               "Shutdown signal received during initialization",
             );
-            return Err("Shutdown during initialization".to_string());
+            return Err("Shutdown during initialization".to_owned());
           }
           _ = sleep(Duration::from_millis(500)) => {
             // Continue polling

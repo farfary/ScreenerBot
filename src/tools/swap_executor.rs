@@ -62,7 +62,7 @@ pub async fn execute_tool_swap(
     let enabled = registry.enabled_routers();
 
     if enabled.is_empty() {
-        return Err("No swap routers enabled".to_string());
+        return Err("No swap routers enabled".to_owned());
     }
 
     // Get quote from first enabled router (Jupiter preferred)
@@ -113,7 +113,7 @@ pub async fn tool_buy(
     let lamports = (amount_sol * 1_000_000_000.0) as u64;
 
     if lamports < 1_000_000 {
-        return Err("Amount too small (minimum 0.001 SOL)".to_string());
+        return Err("Amount too small (minimum 0.001 SOL)".to_owned());
     }
 
     logger::info(
@@ -143,7 +143,7 @@ pub async fn tool_sell(
     Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
 
     if token_amount == 0 {
-        return Err("Token amount cannot be zero".to_string());
+        return Err("Token amount cannot be zero".to_owned());
     }
 
     logger::info(
@@ -189,7 +189,7 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
         let error_text = response
             .text()
             .await
-            .unwrap_or_else(|_| "Unknown".to_string());
+            .unwrap_or_else(|_| "Unknown".to_owned());
         return Err(format!("Jupiter swap failed ({status}): {error_text}"));
     }
 

@@ -62,7 +62,7 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
 
         let count = get_param_f64(condition, "count")?;
         if count < 2.0 || count > 20.0 {
-            return Err("Count must be between 2 and 20".to_string());
+            return Err("Count must be between 2 and 20".to_owned());
         }
 
         let direction = get_param_string(condition, "direction")?;
@@ -72,10 +72,10 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
 
         let minimum_change = get_param_f64(condition, "minimum_change")?;
         if minimum_change < 0.0 {
-            return Err("Minimum change must be non-negative".to_string());
+            return Err("Minimum change must be non-negative".to_owned());
         }
         if minimum_change > 50.0 {
-            return Err("Minimum change must be 50% or less".to_string());
+            return Err("Minimum change must be 50% or less".to_owned());
         }
 
         Ok(())

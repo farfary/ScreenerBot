@@ -202,7 +202,7 @@ impl OhlcvAggregator {
         // Can only downsample (smaller -> larger timeframe)
         if to_timeframe.to_seconds() < from_timeframe.to_seconds() {
             return Err(OhlcvError::InvalidTimeframe(
-                "Cannot upsample data, only downsample supported".to_string(),
+                "Cannot upsample data, only downsample supported".to_owned(),
             ));
         }
 

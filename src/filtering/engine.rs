@@ -86,7 +86,7 @@ pub async fn compute_snapshot(
         Ok(entries) => {
             for entry in entries {
                 let info = BlacklistReasonInfo {
-                    category: "token".to_string(),
+                    category: "token".to_owned(),
                     reason: entry.reason,
                     detail: if entry.source.is_empty() {
                         None
@@ -135,7 +135,7 @@ pub async fn compute_snapshot(
                 };
 
                 let info = BlacklistReasonInfo {
-                    category: "pool".to_string(),
+                    category: "pool".to_owned(),
                     reason,
                     detail,
                 };
@@ -180,7 +180,7 @@ pub async fn compute_snapshot(
                 };
 
                 let info = BlacklistReasonInfo {
-                    category: "account".to_string(),
+                    category: "account".to_owned(),
                     reason,
                     detail: source
                         .as_ref()
@@ -214,8 +214,8 @@ pub async fn compute_snapshot(
                 .entry(token.mint.clone())
                 .or_default();
             let fallback = BlacklistReasonInfo {
-                category: "token".to_string(),
-                reason: "database".to_string(),
+                category: "token".to_owned(),
+                reason: "database".to_owned(),
                 detail: None,
             };
             if !reasons.contains(&fallback) {
@@ -661,7 +661,7 @@ impl FilteringStats {
 
     fn rejection_summary(&self) -> String {
         if self.rejection_counts.is_empty() {
-            return "-".to_string();
+            return "-".to_owned();
         }
 
         let mut parts: Vec<(FilterRejectionReason, usize)> = self

@@ -262,7 +262,7 @@ pub fn update_strategy(strategy: &Strategy) -> crate::Result<()> {
 
     if rows_affected == 0 {
         return Err(Error::Database(DatabaseError::Query {
-            operation: "update_strategy".to_string(),
+            operation: "update_strategy".to_owned(),
             message: format!("Strategy not found: {}", strategy.id),
         }));
     }
@@ -287,7 +287,7 @@ pub fn delete_strategy(strategy_id: &str) -> crate::Result<()> {
 
     if rows_affected == 0 {
         return Err(Error::Database(DatabaseError::Query {
-            operation: "delete_strategy".to_string(),
+            operation: "delete_strategy".to_owned(),
             message: format!("Strategy not found: {strategy_id}"),
         }));
     }
@@ -344,7 +344,7 @@ pub fn get_strategy(strategy_id: &str) -> crate::Result<Option<Strategy>> {
                 "EXIT" => StrategyType::Exit,
                 _ => {
                     return Err(Error::Database(DatabaseError::Query {
-                        operation: "get_strategy".to_string(),
+                        operation: "get_strategy".to_owned(),
                         message: format!("Invalid strategy type: {type_str}"),
                     }))
                 }

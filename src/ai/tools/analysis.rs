@@ -56,8 +56,8 @@ struct TokenAnalysis {
 impl Tool for AnalyzeTokenTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "analyze_token".to_string(),
-            description: "Analyze a token's security, holder distribution, liquidity, and other metrics. Provides comprehensive token analysis.".to_string(),
+            name: "analyze_token".to_owned(),
+            description: "Analyze a token's security, holder distribution, liquidity, and other metrics. Provides comprehensive token analysis.".to_owned(),
             category: ToolCategory::Analysis,
             parameters: json!({
                 "type": "object",
@@ -81,7 +81,7 @@ impl Tool for AnalyzeTokenTool {
 
         // Validate mint address format
         if !is_valid_solana_address(&params.mint_address) {
-            return ToolResult::error("Invalid mint address format".to_string());
+            return ToolResult::error("Invalid mint address format".to_owned());
         }
 
         // Get token data from database
@@ -166,8 +166,8 @@ struct MarketData {
 impl Tool for GetMarketDataTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_market_data".to_string(),
-            description: "Get current market data for a token including price, volume, market cap, and price changes.".to_string(),
+            name: "get_market_data".to_owned(),
+            description: "Get current market data for a token including price, volume, market cap, and price changes.".to_owned(),
             category: ToolCategory::Analysis,
             parameters: json!({
                 "type": "object",
@@ -261,8 +261,8 @@ struct SecurityRisk {
 impl Tool for CheckSecurityTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "check_security".to_string(),
-            description: "Run security checks on a token including freeze authority, mint authority, and known scam checks.".to_string(),
+            name: "check_security".to_owned(),
+            description: "Run security checks on a token including freeze authority, mint authority, and known scam checks.".to_owned(),
             category: ToolCategory::Analysis,
             parameters: json!({
                 "type": "object",
@@ -301,11 +301,11 @@ impl Tool for CheckSecurityTool {
             score: token.security_score.map(|s| s.to_string()),
             level: token.security_score_normalised.map(|s| {
                 if s < 30 {
-                    "Low Risk".to_string()
+                    "Low Risk".to_owned()
                 } else if s < 70 {
-                    "Medium Risk".to_string()
+                    "Medium Risk".to_owned()
                 } else {
-                    "High Risk".to_string()
+                    "High Risk".to_owned()
                 }
             }),
             risks: token

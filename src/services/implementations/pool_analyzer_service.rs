@@ -31,7 +31,7 @@ impl Service for PoolAnalyzerService {
     async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
-            &"Initializing pool analyzer service...".to_string(),
+            &"Initializing pool analyzer service...".to_owned(),
         );
         Ok(())
     }
@@ -43,14 +43,14 @@ impl Service for PoolAnalyzerService {
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(
             LogTag::PoolService,
-            &"Starting pool analyzer service...".to_string(),
+            &"Starting pool analyzer service...".to_owned(),
         );
 
         // Get the PoolAnalyzer component from global state
         let analyzer = crate::pools::get_pool_analyzer().ok_or_else(|| {
             crate::Error::Service(ServiceError::Start {
                 service: self.name().to_string(),
-                message: "PoolAnalyzer component not initialized".to_string(),
+                message: "PoolAnalyzer component not initialized".to_owned(),
             })
         })?;
 
@@ -61,7 +61,7 @@ impl Service for PoolAnalyzerService {
 
         logger::info(
             LogTag::PoolService,
-            &"Pool analyzer service started (instrumented)".to_string(),
+            &"Pool analyzer service started (instrumented)".to_owned(),
         );
 
         Ok(vec![handle])
@@ -70,7 +70,7 @@ impl Service for PoolAnalyzerService {
     async fn stop(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
-            &"Pool analyzer service stopping (via shutdown signal)".to_string(),
+            &"Pool analyzer service stopping (via shutdown signal)".to_owned(),
         );
         Ok(())
     }
@@ -79,7 +79,7 @@ impl Service for PoolAnalyzerService {
         if crate::pools::get_pool_analyzer().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("PoolAnalyzer component not available".to_string())
+            ServiceHealth::Unhealthy("PoolAnalyzer component not available".to_owned())
         }
     }
 
@@ -93,10 +93,10 @@ impl Service for PoolAnalyzerService {
             metrics.errors_total = errors;
             metrics
                 .custom_metrics
-                .insert("pools_analyzed".to_string(), pools_analyzed as f64);
+                .insert("pools_analyzed".to_owned(), pools_analyzed as f64);
             if operations > 0 {
                 metrics.custom_metrics.insert(
-                    "success_rate".to_string(),
+                    "success_rate".to_owned(),
                     (pools_analyzed as f64 / operations as f64) * 100.0,
                 );
             }

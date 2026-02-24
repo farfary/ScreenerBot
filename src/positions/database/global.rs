@@ -43,7 +43,7 @@ where
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => operation(db),
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -59,6 +59,6 @@ where
             let result = operation(db).await;
             result
         }
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }

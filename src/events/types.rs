@@ -66,21 +66,21 @@ impl EventCategory {
     /// Convert to string for database storage
     pub fn to_string(&self) -> String {
         match self {
-            EventCategory::Swap => "swap".to_string(),
-            EventCategory::Transaction => "transaction".to_string(),
-            EventCategory::Pool => "pool".to_string(),
-            EventCategory::Token => "token".to_string(),
-            EventCategory::System => "system".to_string(),
-            EventCategory::Position => "position".to_string(),
-            EventCategory::Wallet => "wallet".to_string(),
-            EventCategory::Trader => "trader".to_string(),
-            EventCategory::Ohlcv => "ohlcv".to_string(),
-            EventCategory::Rpc => "rpc".to_string(),
-            EventCategory::Api => "api".to_string(),
-            EventCategory::Security => "security".to_string(),
-            EventCategory::Connectivity => "connectivity".to_string(),
-            EventCategory::Filtering => "filtering".to_string(),
-            EventCategory::ScheduledTask => "scheduled_task".to_string(),
+            EventCategory::Swap => "swap".to_owned(),
+            EventCategory::Transaction => "transaction".to_owned(),
+            EventCategory::Pool => "pool".to_owned(),
+            EventCategory::Token => "token".to_owned(),
+            EventCategory::System => "system".to_owned(),
+            EventCategory::Position => "position".to_owned(),
+            EventCategory::Wallet => "wallet".to_owned(),
+            EventCategory::Trader => "trader".to_owned(),
+            EventCategory::Ohlcv => "ohlcv".to_owned(),
+            EventCategory::Rpc => "rpc".to_owned(),
+            EventCategory::Api => "api".to_owned(),
+            EventCategory::Security => "security".to_owned(),
+            EventCategory::Connectivity => "connectivity".to_owned(),
+            EventCategory::Filtering => "filtering".to_owned(),
+            EventCategory::ScheduledTask => "scheduled_task".to_owned(),
             EventCategory::Other(name) => name.clone(),
         }
     }
@@ -133,10 +133,10 @@ impl Severity {
     /// Convert to string for database storage
     pub fn to_string(&self) -> String {
         match self {
-            Severity::Info => "info".to_string(),
-            Severity::Warn => "warn".to_string(),
-            Severity::Error => "error".to_string(),
-            Severity::Debug => "debug".to_string(),
+            Severity::Info => "info".to_owned(),
+            Severity::Warn => "warn".to_owned(),
+            Severity::Error => "error".to_owned(),
+            Severity::Debug => "debug".to_owned(),
         }
     }
 

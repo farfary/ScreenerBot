@@ -319,7 +319,7 @@ impl TransactionDatabase {
             .map_err(|e| format!("Database health check failed: {e}"))?;
 
         if count < 5 {
-            return Err("Database schema incomplete".to_string());
+            return Err("Database schema incomplete".to_owned());
         }
 
         Ok(())
@@ -480,7 +480,7 @@ impl TransactionDatabase {
                     .map_err(|e| {
                         rusqlite::Error::InvalidColumnType(
                             0,
-                            "timestamp".to_string(),
+                            "timestamp".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?
@@ -624,21 +624,21 @@ impl TransactionDatabase {
 
         // Serialize complex fields as JSON strings
         let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
-            .unwrap_or_else(|_| "[]".to_string());
+            .unwrap_or_else(|_| "[]".to_owned());
         let token_balance_changes_json = serde_json::to_string(&transaction.token_balance_changes)
-            .unwrap_or_else(|_| "[]".to_string());
+            .unwrap_or_else(|_| "[]".to_owned());
         let token_swap_info_json = serde_json::to_string(&transaction.token_swap_info)
-            .unwrap_or_else(|_| "null".to_string());
+            .unwrap_or_else(|_| "null".to_owned());
         let swap_pnl_info_json = serde_json::to_string(&transaction.swap_pnl_info)
-            .unwrap_or_else(|_| "null".to_string());
+            .unwrap_or_else(|_| "null".to_owned());
         let ata_operations_json =
-            serde_json::to_string(&transaction.ata_operations).unwrap_or_else(|_| "[]".to_string());
+            serde_json::to_string(&transaction.ata_operations).unwrap_or_else(|_| "[]".to_owned());
         let token_transfers_json = serde_json::to_string(&transaction.token_transfers)
-            .unwrap_or_else(|_| "[]".to_string());
+            .unwrap_or_else(|_| "[]".to_owned());
         let instruction_info_json =
-            serde_json::to_string(&transaction.instructions).unwrap_or_else(|_| "[]".to_string());
+            serde_json::to_string(&transaction.instructions).unwrap_or_else(|_| "[]".to_owned());
         let cached_analysis_json = serde_json::to_string(&transaction.cached_analysis)
-            .unwrap_or_else(|_| "null".to_string());
+            .unwrap_or_else(|_| "null".to_owned());
 
         let tx_type = format!("{:?}", transaction.transaction_type);
         let dir = format!("{:?}", transaction.direction);
@@ -737,7 +737,7 @@ impl TransactionDatabase {
                     .map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             3,
-                            "timestamp".to_string(),
+                            "timestamp".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?

@@ -46,7 +46,7 @@ impl Service for AiService {
         let engine = crate::ai::try_get_ai_engine().ok_or_else(|| {
             crate::Error::Service(ServiceError::Initialize {
                 service: self.name().to_string(),
-                message: "AI engine not initialized - call init_ai_engine() first".to_string(),
+                message: "AI engine not initialized - call init_ai_engine() first".to_owned(),
             })
         })?;
         self.ai_engine = Some(engine);
@@ -62,7 +62,7 @@ impl Service for AiService {
         let engine = self.ai_engine.clone().ok_or_else(|| {
             crate::Error::Service(ServiceError::Start {
                 service: self.name().to_string(),
-                message: "AI engine not initialized".to_string(),
+                message: "AI engine not initialized".to_owned(),
             })
         })?;
 

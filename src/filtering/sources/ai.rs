@@ -102,7 +102,7 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
                 Err(FilterRejectionReason::AiRejected {
                     reason: format!("AI analysis failed: {e}"),
                     confidence: 0,
-                    provider: "unknown".to_string(),
+                    provider: "unknown".to_owned(),
                 })
             }
         }

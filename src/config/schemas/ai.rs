@@ -27,7 +27,7 @@ config_struct! {
             placeholder: "openai",
             category: "Master Control",
         })]
-        default_provider: String = "openai".to_string(),
+        default_provider: String = "openai".to_owned(),
 
         // === Filtering Section ===
         /// Enable AI-powered token filtering
@@ -224,7 +224,7 @@ config_struct! {
             placeholder: "allow",
             category: "Tool Permissions",
         })]
-        tool_permissions_analysis: String = "allow".to_string(),
+        tool_permissions_analysis: String = "allow".to_owned(),
 
         /// Tool permission for portfolio operations
         #[metadata(field_metadata! {
@@ -233,7 +233,7 @@ config_struct! {
             placeholder: "allow",
             category: "Tool Permissions",
         })]
-        tool_permissions_portfolio: String = "allow".to_string(),
+        tool_permissions_portfolio: String = "allow".to_owned(),
 
         /// Tool permission for trading operations
         #[metadata(field_metadata! {
@@ -242,7 +242,7 @@ config_struct! {
             placeholder: "ask_user",
             category: "Tool Permissions",
         })]
-        tool_permissions_trading: String = "ask_user".to_string(),
+        tool_permissions_trading: String = "ask_user".to_owned(),
 
         /// Tool permission for config operations
         #[metadata(field_metadata! {
@@ -251,7 +251,7 @@ config_struct! {
             placeholder: "ask_user",
             category: "Tool Permissions",
         })]
-        tool_permissions_config: String = "ask_user".to_string(),
+        tool_permissions_config: String = "ask_user".to_owned(),
 
         /// Tool permission for system operations
         #[metadata(field_metadata! {
@@ -260,7 +260,7 @@ config_struct! {
             placeholder: "allow",
             category: "Tool Permissions",
         })]
-        tool_permissions_system: String = "allow".to_string(),
+        tool_permissions_system: String = "allow".to_owned(),
 
         // === Event Triggers Section ===
         /// Enable AI event triggers
@@ -465,7 +465,7 @@ config_struct! {
             placeholder: "llama3.2",
             category: "Ollama Settings",
         })]
-        model: String = "llama3.2".to_string(),
+        model: String = "llama3.2".to_owned(),
 
         /// Base URL for Ollama API
         #[metadata(field_metadata! {
@@ -474,7 +474,7 @@ config_struct! {
             placeholder: "http://localhost:11434",
             category: "Ollama Settings",
         })]
-        base_url: String = "http://localhost:11434".to_string(),
+        base_url: String = "http://localhost:11434".to_owned(),
 
         /// Rate limit for Ollama (higher since it's local)
         #[metadata(field_metadata! {

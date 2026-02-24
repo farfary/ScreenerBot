@@ -21,7 +21,7 @@ config_struct! {
             impact: "low",
             category: "API",
         })]
-        partner: String = "screenerbot".to_string(),
+        partner: String = "screenerbot".to_owned(),
         #[metadata(field_metadata! {
             label: "Anti-MEV",
             hint: "Enable GMGN MEV protection",
@@ -46,7 +46,7 @@ config_struct! {
             impact: "low",
             category: "Routing",
         })]
-        default_swap_mode: String = "ExactIn".to_string(),
+        default_swap_mode: String = "ExactIn".to_owned(),
     }
 }
 
@@ -84,7 +84,7 @@ config_struct! {
             impact: "low",
             category: "Routing",
         })]
-        default_swap_mode: String = "ExactIn".to_string(),
+        default_swap_mode: String = "ExactIn".to_owned(),
         #[metadata(field_metadata! {
             label: "API Key",
             hint: "Optional. Get from portal.jup.ag for higher rate limits. Free tier: 1 req/sec. Does NOT affect swap fees.",

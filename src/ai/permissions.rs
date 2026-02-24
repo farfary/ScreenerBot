@@ -351,7 +351,7 @@ mod tests {
         let confirmation = PendingConfirmation::new(
             1,
             123,
-            "test_tool".to_string(),
+            "test_tool".to_owned(),
             serde_json::json!({"param": "value"}),
             60,
         );
@@ -368,7 +368,7 @@ mod tests {
     fn test_confirmation_manager_add_and_get() {
         let manager = ConfirmationManager::new();
         let confirmation =
-            PendingConfirmation::new(1, 123, "test_tool".to_string(), serde_json::json!({}), 60);
+            PendingConfirmation::new(1, 123, "test_tool".to_owned(), serde_json::json!({}), 60);
 
         let id = manager.add_pending(confirmation.clone());
         let retrieved = manager.get_pending(&id);
@@ -381,7 +381,7 @@ mod tests {
     fn test_confirmation_manager_confirm() {
         let manager = ConfirmationManager::new();
         let confirmation =
-            PendingConfirmation::new(1, 123, "test_tool".to_string(), serde_json::json!({}), 60);
+            PendingConfirmation::new(1, 123, "test_tool".to_owned(), serde_json::json!({}), 60);
 
         let id = manager.add_pending(confirmation);
         let confirmed = manager.confirm(&id);
@@ -394,7 +394,7 @@ mod tests {
     fn test_confirmation_manager_deny() {
         let manager = ConfirmationManager::new();
         let confirmation =
-            PendingConfirmation::new(1, 123, "test_tool".to_string(), serde_json::json!({}), 60);
+            PendingConfirmation::new(1, 123, "test_tool".to_owned(), serde_json::json!({}), 60);
 
         let id = manager.add_pending(confirmation);
         let denied = manager.deny(&id);
@@ -410,7 +410,7 @@ mod tests {
         manager.add_pending(PendingConfirmation::new(
             1,
             123,
-            "tool1".to_string(),
+            "tool1".to_owned(),
             serde_json::json!({}),
             60,
         ));
@@ -418,7 +418,7 @@ mod tests {
         manager.add_pending(PendingConfirmation::new(
             2,
             456,
-            "tool2".to_string(),
+            "tool2".to_owned(),
             serde_json::json!({}),
             60,
         ));
@@ -434,7 +434,7 @@ mod tests {
         manager.add_pending(PendingConfirmation::new(
             1,
             123,
-            "tool1".to_string(),
+            "tool1".to_owned(),
             serde_json::json!({}),
             60,
         ));
@@ -442,7 +442,7 @@ mod tests {
         manager.add_pending(PendingConfirmation::new(
             1,
             456,
-            "tool2".to_string(),
+            "tool2".to_owned(),
             serde_json::json!({}),
             60,
         ));
@@ -450,7 +450,7 @@ mod tests {
         manager.add_pending(PendingConfirmation::new(
             2,
             789,
-            "tool3".to_string(),
+            "tool3".to_owned(),
             serde_json::json!({}),
             60,
         ));
@@ -466,7 +466,7 @@ mod tests {
         manager.add_pending(PendingConfirmation::new(
             1,
             123,
-            "tool1".to_string(),
+            "tool1".to_owned(),
             serde_json::json!({}),
             60,
         ));
@@ -481,7 +481,7 @@ mod tests {
         let confirmation = PendingConfirmation::new(
             1,
             123,
-            "test_tool".to_string(),
+            "test_tool".to_owned(),
             serde_json::json!({}),
             0, // Immediate expiry
         );

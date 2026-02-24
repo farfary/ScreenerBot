@@ -831,7 +831,7 @@ impl TransactionProcessor {
             } else if self.debug_enabled {
                 logger::info(
                     LogTag::Transactions,
-                    &"Skipping swap mapping: missing direction or primary token".to_string(),
+                    &"Skipping swap mapping: missing direction or primary token".to_owned(),
                 );
             }
         }

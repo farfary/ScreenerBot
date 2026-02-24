@@ -52,8 +52,8 @@ impl Service for TokensService {
         let mut handles = Vec::new();
         let orchestrator = self.orchestrator.as_mut().ok_or_else(|| {
             crate::Error::Service(ServiceError::Start {
-                service: "tokens".to_string(),
-                message: "Tokens orchestrator not initialized".to_string(),
+                service: "tokens".to_owned(),
+                message: "Tokens orchestrator not initialized".to_owned(),
             })
         })?;
         let mut orch_handles = orchestrator.start(shutdown, monitor).await?;

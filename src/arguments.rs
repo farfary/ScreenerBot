@@ -158,7 +158,7 @@ pub fn validate_port_argument() -> Result<(), String> {
     if let Some(port_str) = get_arg_value("--port") {
         match port_str.parse::<u16>() {
             Ok(0) => {
-                return Err("Invalid port value '0': Port must be between 1 and 65535".to_string());
+                return Err("Invalid port value '0': Port must be between 1 and 65535".to_owned());
             }
             Ok(_) => {
                 // Valid port, will be used by get_port_override()
@@ -183,7 +183,7 @@ pub fn validate_port_argument() -> Result<(), String> {
 pub fn validate_host_argument() -> Result<(), String> {
     if let Some(host) = get_arg_value("--host") {
         if host.trim().is_empty() {
-            return Err("Invalid host value: Host cannot be empty".to_string());
+            return Err("Invalid host value: Host cannot be empty".to_owned());
         }
         // Additional validation could check for valid IPv4/hostname format
         Ok(())
@@ -335,35 +335,35 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
 
     // Include execution mode
     if is_reset_enabled() {
-        modes.push("reset".to_string());
+        modes.push("reset".to_owned());
     }
     if is_gui_enabled() {
-        modes.push("gui".to_string());
+        modes.push("gui".to_owned());
     }
     if is_dashboard_demo_enabled() {
-        modes.push("dashboard-demo".to_string());
+        modes.push("dashboard-demo".to_owned());
     }
 
     // Include active modifiers
     if is_force_enabled() {
-        modes.push("force".to_string());
+        modes.push("force".to_owned());
     }
     if is_cache_only_enabled() {
-        modes.push("cache-only".to_string());
+        modes.push("cache-only".to_owned());
     }
     if is_force_refresh_enabled() {
-        modes.push("force-refresh".to_string());
+        modes.push("force-refresh".to_owned());
     }
 
     // Include profiling flags
     if is_profile_cpu_enabled() {
-        modes.push("profile-cpu".to_string());
+        modes.push("profile-cpu".to_owned());
     }
     if is_profile_tokio_console_enabled() {
-        modes.push("profile-tokio-console".to_string());
+        modes.push("profile-tokio-console".to_owned());
     }
     if is_profile_tracing_enabled() {
-        modes.push("profile-tracing".to_string());
+        modes.push("profile-tracing".to_owned());
     }
 
     modes

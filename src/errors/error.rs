@@ -85,7 +85,7 @@ impl From<reqwest::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Error::Data(DataError::ParseError {
-            data_type: "JSON".to_string(),
+            data_type: "JSON".to_owned(),
             error: err.to_string(),
         })
     }
@@ -150,7 +150,7 @@ impl Error {
     /// Create a signing error.
     pub fn signing_error(message: impl Into<String>) -> Self {
         Error::Blockchain(BlockchainError::TransactionDropped {
-            signature: "unknown".to_string(),
+            signature: "unknown".to_owned(),
             reason: format!("Signing error: {}", message.into()),
             fee_paid: None,
             attempts: 1,
@@ -160,7 +160,7 @@ impl Error {
     /// Create an API/provider error.
     pub fn api_error(message: impl Into<String>) -> Self {
         Error::RpcProvider(RpcProviderError::Generic {
-            provider_name: "unknown".to_string(),
+            provider_name: "unknown".to_owned(),
             message: message.into(),
         })
     }
@@ -175,7 +175,7 @@ impl Error {
     /// Create an invalid response error.
     pub fn invalid_response(message: impl Into<String>) -> Self {
         Error::Data(DataError::InvalidFormat {
-            expected: "valid response".to_string(),
+            expected: "valid response".to_owned(),
             received: message.into(),
         })
     }
@@ -183,7 +183,7 @@ impl Error {
     /// Create a parse error.
     pub fn parse_error(message: impl Into<String>) -> Self {
         Error::Data(DataError::ParseError {
-            data_type: "unknown".to_string(),
+            data_type: "unknown".to_owned(),
             error: message.into(),
         })
     }
@@ -191,8 +191,8 @@ impl Error {
     /// Create a slippage exceeded error.
     pub fn slippage_exceeded(message: impl Into<String>) -> Self {
         Error::Data(DataError::ValidationError {
-            field: "slippage".to_string(),
-            value: "exceeded".to_string(),
+            field: "slippage".to_owned(),
+            value: "exceeded".to_owned(),
             reason: message.into(),
         })
     }
@@ -200,7 +200,7 @@ impl Error {
     /// Create an insufficient balance error.
     pub fn insufficient_balance(message: impl Into<String>) -> Self {
         Error::Blockchain(BlockchainError::InsufficientBalance {
-            pubkey: "unknown".to_string(),
+            pubkey: "unknown".to_owned(),
             required_lamports: 0,
             available_lamports: 0,
             operation: message.into(),

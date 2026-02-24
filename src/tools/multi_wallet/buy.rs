@@ -42,13 +42,13 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
     // Load and prepare wallets
     let wallets = load_wallets_for_buy(&config).await?;
     if wallets.is_empty() {
-        return Err("No wallets available for multi-buy".to_string());
+        return Err("No wallets available for multi-buy".to_owned());
     }
 
     // Create execution plans
     let plans = create_buy_plans(&config, &wallets).await?;
     if plans.is_empty() {
-        return Err("No valid buy plans could be created".to_string());
+        return Err("No valid buy plans could be created".to_owned());
     }
 
     logger::info(
@@ -105,7 +105,7 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
                     LogTag::Tools,
                     &format!("Multi-buy session {} aborted by user", &session_id[..8]),
                 );
-                result.error = Some("Operation aborted by user".to_string());
+                result.error = Some("Operation aborted by user".to_owned());
                 result.finalize();
                 return Ok(result);
             }
@@ -159,7 +159,7 @@ async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<WalletWithK
         .collect();
 
     if secondary_wallets.is_empty() {
-        return Err("No secondary wallets available. Create sub-wallets first.".to_string());
+        return Err("No secondary wallets available. Create sub-wallets first.".to_owned());
     }
 
     Ok(secondary_wallets)

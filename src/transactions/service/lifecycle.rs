@@ -41,7 +41,7 @@ pub async fn start_global_transaction_service(
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     let mut running = SERVICE_RUNNING.lock().await;
     if *running {
-        return Err("Transaction service is already running".to_string());
+        return Err("Transaction service is already running".to_owned());
     }
 
     logger::info(

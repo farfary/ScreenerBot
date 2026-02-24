@@ -64,7 +64,7 @@ impl AnthropicClient {
     /// * `enabled` - Whether the client is enabled
     pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
         if api_key.trim().is_empty() {
-            return Err("Anthropic API key cannot be empty".to_string());
+            return Err("Anthropic API key cannot be empty".to_owned());
         }
 
         Ok(Self {
@@ -101,13 +101,13 @@ impl AnthropicClient {
                 }
                 MessageRole::User => {
                     messages.push(AnthropicMessage {
-                        role: "user".to_string(),
+                        role: "user".to_owned(),
                         content: msg.content,
                     });
                 }
                 MessageRole::Assistant => {
                     messages.push(AnthropicMessage {
-                        role: "assistant".to_string(),
+                        role: "assistant".to_owned(),
                         content: msg.content,
                     });
                 }
@@ -142,8 +142,8 @@ impl AnthropicClient {
 
         if content.is_empty() {
             return Err(LlmError::InvalidResponse {
-                provider: "anthropic".to_string(),
-                message: "No text content in response".to_string(),
+                provider: "anthropic".to_owned(),
+                message: "No text content in response".to_owned(),
             });
         }
 
@@ -163,7 +163,7 @@ impl AnthropicClient {
     ) -> Result<(AnthropicResponse, f64), LlmError> {
         if !self.enabled {
             return Err(LlmError::ProviderDisabled {
-                provider: "anthropic".to_string(),
+                provider: "anthropic".to_owned(),
             });
         }
 
@@ -173,7 +173,7 @@ impl AnthropicClient {
             .acquire()
             .await
             .map_err(|e| LlmError::NetworkError {
-                provider: "anthropic".to_string(),
+                provider: "anthropic".to_owned(),
                 message: format!("Rate limiter error: {e}"),
             })?;
 
@@ -202,12 +202,12 @@ impl AnthropicClient {
         let mut response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
-                    provider: "anthropic".to_string(),
+                    provider: "anthropic".to_owned(),
                     timeout_ms: self.timeout.as_millis() as u64,
                 }
             } else {
                 LlmError::NetworkError {
-                    provider: "anthropic".to_string(),
+                    provider: "anthropic".to_owned(),
                     message: format!("Request failed: {e}"),
                 }
             }
@@ -229,15 +229,15 @@ impl AnthropicClient {
 
             return Err(match status.as_u16() {
                 401 => LlmError::AuthError {
-                    provider: "anthropic".to_string(),
-                    message: "Invalid API key".to_string(),
+                    provider: "anthropic".to_owned(),
+                    message: "Invalid API key".to_owned(),
                 },
                 429 => LlmError::RateLimited {
-                    provider: "anthropic".to_string(),
+                    provider: "anthropic".to_owned(),
                     retry_after_ms: retry_after,
                 },
                 _ => LlmError::ApiError {
-                    provider: "anthropic".to_string(),
+                    provider: "anthropic".to_owned(),
                     status_code: status.as_u16(),
                     message: error_body,
                 },
@@ -250,7 +250,7 @@ impl AnthropicClient {
                 .json::<AnthropicResponse>()
                 .await
                 .map_err(|e| LlmError::ParseError {
-                    provider: "anthropic".to_string(),
+                    provider: "anthropic".to_owned(),
                     message: format!("Failed to parse response: {e}"),
                 })?;
 
@@ -321,8 +321,8 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = AnthropicClient::new(
-            "sk-ant-test-key".to_string(),
-            Some("claude-3-opus-20240229".to_string()),
+            "sk-ant-test-key".to_owned(),
+            Some("claude-3-opus-20240229".to_owned()),
             true,
         );
         assert!(client.is_ok());
@@ -333,7 +333,7 @@ mod tests {
 
     #[test]
     fn test_client_creation_with_defaults() {
-        let client = AnthropicClient::new("sk-ant-test-key".to_string(), None, true);
+        let client = AnthropicClient::new("sk-ant-test-key".to_owned(), None, true);
         assert!(client.is_ok());
         let client = client.unwrap();
         assert_eq!(client.model, DEFAULT_MODEL);
@@ -341,13 +341,13 @@ mod tests {
 
     #[test]
     fn test_client_creation_empty_key() {
-        let client = AnthropicClient::new("".to_string(), None, true);
+        let client = AnthropicClient::new("".to_owned(), None, true);
         assert!(client.is_err());
     }
 
     #[test]
     fn test_build_anthropic_request_with_system() {
-        let client = AnthropicClient::new("sk-ant-test".to_string(), None, true).unwrap();
+        let client = AnthropicClient::new("sk-ant-test".to_owned(), None, true).unwrap();
 
         let request = ChatRequest::new(
             "claude-3-haiku-20240307",
@@ -362,7 +362,7 @@ mod tests {
         let anthropic_req = client.build_anthropic_request(request);
 
         // System message should be extracted to system field
-        assert_eq!(anthropic_req.system, Some("You are helpful".to_string()));
+        assert_eq!(anthropic_req.system, Some("You are helpful".to_owned()));
         // Only user message should be in messages array
         assert_eq!(anthropic_req.messages.len(), 1);
         assert_eq!(anthropic_req.messages[0].role, "user");
@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn test_build_anthropic_request_without_system() {
-        let client = AnthropicClient::new("sk-ant-test".to_string(), None, true).unwrap();
+        let client = AnthropicClient::new("sk-ant-test".to_owned(), None, true).unwrap();
 
         let request = ChatRequest::new(
             "claude-3-haiku-20240307",
@@ -397,7 +397,7 @@ mod tests {
 
     #[test]
     fn test_build_anthropic_request_multiple_system() {
-        let client = AnthropicClient::new("sk-ant-test".to_string(), None, true).unwrap();
+        let client = AnthropicClient::new("sk-ant-test".to_owned(), None, true).unwrap();
 
         let request = ChatRequest::new(
             "claude-3-haiku-20240307",
@@ -413,14 +413,14 @@ mod tests {
         // Multiple system messages should be combined
         assert_eq!(
             anthropic_req.system,
-            Some("You are helpful\n\nYou speak JSON".to_string())
+            Some("You are helpful\n\nYou speak JSON".to_owned())
         );
         assert_eq!(anthropic_req.messages.len(), 1);
     }
 
     #[test]
     fn test_provider() {
-        let client = AnthropicClient::new("sk-ant-test".to_string(), None, true).unwrap();
+        let client = AnthropicClient::new("sk-ant-test".to_owned(), None, true).unwrap();
         assert_eq!(client.provider(), Provider::Anthropic);
     }
 }

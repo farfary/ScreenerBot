@@ -100,7 +100,7 @@ impl Service for WebserverService {
                 ),
             );
             return Err(crate::Error::Service(crate::errors::ServiceError::Start {
-                service: "webserver".to_string(),
+                service: "webserver".to_owned(),
                 message: format!("Failed to bind webserver port: {e}"),
             }));
         }

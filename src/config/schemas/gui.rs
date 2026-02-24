@@ -37,7 +37,7 @@ config_struct! {
         enabled: bool = false,
 
         /// Password type: "pin4", "pin6", "text"
-        password_type: String = "pin6".to_string(),
+        password_type: String = "pin6".to_owned(),
 
         /// Hashed password (BLAKE3 hash, base64-encoded)
         password_hash: String = String::new(),
@@ -57,7 +57,7 @@ config_struct! {
     /// Interface customization settings
     pub struct InterfaceConfig {
         /// Theme preference (dark, light, system)
-        theme: String = "dark".to_string(),
+        theme: String = "dark".to_owned(),
 
         /// Default polling interval in milliseconds (minimum 1000)
         polling_interval_ms: u64 = 5000,
@@ -95,7 +95,7 @@ config_struct! {
         auto_start_trader: bool = false,
 
         /// Default page to show on startup
-        default_page: String = "dashboard".to_string(),
+        default_page: String = "dashboard".to_owned(),
 
         /// Check for updates on startup (disabled - for future use)
         check_updates_on_startup: bool = false,
@@ -120,11 +120,11 @@ config_struct! {
     /// Single navigation tab configuration
     pub struct TabConfig {
         /// Tab identifier (e.g., "home", "positions")
-        id: String = "".to_string(),
+        id: String = "".to_owned(),
         /// Display label
-        label: String = "".to_string(),
+        label: String = "".to_owned(),
         /// Icon class name (e.g., "icon-home")
-        icon: String = "".to_string(),
+        icon: String = "".to_owned(),
         /// Sort order (lower = first)
         order: u32 = 0,
         /// Whether tab is visible/enabled

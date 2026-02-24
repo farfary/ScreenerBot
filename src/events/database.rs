@@ -306,13 +306,13 @@ impl EventsDatabase {
             Some(cat) =>
                 (
                     "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at
-                 FROM events WHERE category = ?1 ORDER BY id DESC LIMIT ?2".to_string(),
+                 FROM events WHERE category = ?1 ORDER BY id DESC LIMIT ?2".to_owned(),
                     vec![Box::new(cat.to_string()), Box::new(limit as i64)],
                 ),
             None =>
                 (
                     "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at
-                 FROM events ORDER BY id DESC LIMIT ?1".to_string(),
+                 FROM events ORDER BY id DESC LIMIT ?1".to_owned(),
                     vec![Box::new(limit as i64)],
                 ),
         };
@@ -335,7 +335,7 @@ impl EventsDatabase {
                             .map_err(|_| {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
-                                    "event_time".to_string(),
+                                    "event_time".to_owned(),
                                     rusqlite::types::Type::Text,
                                 )
                             })?
@@ -348,7 +348,7 @@ impl EventsDatabase {
                         payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
                             rusqlite::Error::InvalidColumnType(
                                 7,
-                                "json_payload".to_string(),
+                                "json_payload".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?,
@@ -392,7 +392,7 @@ impl EventsDatabase {
                         .map_err(|_| {
                             rusqlite::Error::InvalidColumnType(
                                 1,
-                                "event_time".to_string(),
+                                "event_time".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?
@@ -405,7 +405,7 @@ impl EventsDatabase {
                     payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             7,
-                            "json_payload".to_string(),
+                            "json_payload".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?,
@@ -444,7 +444,7 @@ impl EventsDatabase {
                         .map_err(|_| {
                             rusqlite::Error::InvalidColumnType(
                                 1,
-                                "event_time".to_string(),
+                                "event_time".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?
@@ -457,7 +457,7 @@ impl EventsDatabase {
                     payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             7,
-                            "json_payload".to_string(),
+                            "json_payload".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?,
@@ -546,11 +546,11 @@ impl EventsDatabase {
         let total_events: i64 = conn
             .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
             .map_err(|e| format!("Failed to get total event count: {e}"))?;
-        stats.insert("total_events".to_string(), total_events);
+        stats.insert("total_events".to_owned(), total_events);
 
         // Database file size
         if let Ok(metadata) = std::fs::metadata(&self.database_path) {
-            stats.insert("db_size_bytes".to_string(), metadata.len() as i64);
+            stats.insert("db_size_bytes".to_owned(), metadata.len() as i64);
         }
 
         // Events in last 24 hours
@@ -563,7 +563,7 @@ impl EventsDatabase {
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get 24h event count: {e}"))?;
-        stats.insert("events_24h".to_string(), events_24h);
+        stats.insert("events_24h".to_owned(), events_24h);
 
         Ok(stats)
     }
@@ -632,7 +632,7 @@ impl EventsDatabase {
                             .map_err(|_| {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
-                                    "event_time".to_string(),
+                                    "event_time".to_owned(),
                                     rusqlite::types::Type::Text,
                                 )
                             })?
@@ -645,7 +645,7 @@ impl EventsDatabase {
                         payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
                             rusqlite::Error::InvalidColumnType(
                                 7,
-                                "json_payload".to_string(),
+                                "json_payload".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?,
@@ -727,7 +727,7 @@ impl EventsDatabase {
                             .map_err(|_| {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
-                                    "event_time".to_string(),
+                                    "event_time".to_owned(),
                                     rusqlite::types::Type::Text,
                                 )
                             })?
@@ -740,7 +740,7 @@ impl EventsDatabase {
                         payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
                             rusqlite::Error::InvalidColumnType(
                                 7,
-                                "json_payload".to_string(),
+                                "json_payload".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?,
@@ -867,7 +867,7 @@ impl EventsDatabase {
                             .map_err(|_| {
                                 rusqlite::Error::InvalidColumnType(
                                     1,
-                                    "event_time".to_string(),
+                                    "event_time".to_owned(),
                                     rusqlite::types::Type::Text,
                                 )
                             })?
@@ -880,7 +880,7 @@ impl EventsDatabase {
                         payload: serde_json::from_str(&row.get::<_, String>(7)?).map_err(|_| {
                             rusqlite::Error::InvalidColumnType(
                                 7,
-                                "json_payload".to_string(),
+                                "json_payload".to_owned(),
                                 rusqlite::types::Type::Text,
                             )
                         })?,

@@ -77,7 +77,7 @@ impl OpenRouterClient {
         site_name: Option<String>,
     ) -> Result<Self, String> {
         if api_key.trim().is_empty() {
-            return Err("OpenRouter API key cannot be empty".to_string());
+            return Err("OpenRouter API key cannot be empty".to_owned());
         }
 
         Ok(Self {
@@ -100,9 +100,9 @@ impl OpenRouterClient {
             .into_iter()
             .map(|msg| OpenRouterMessage {
                 role: match msg.role {
-                    MessageRole::System => "system".to_string(),
-                    MessageRole::User => "user".to_string(),
-                    MessageRole::Assistant => "assistant".to_string(),
+                    MessageRole::System => "system".to_owned(),
+                    MessageRole::User => "user".to_owned(),
+                    MessageRole::Assistant => "assistant".to_owned(),
                 },
                 content: msg.content,
             })
@@ -130,8 +130,8 @@ impl OpenRouterClient {
             .choices
             .first()
             .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "openrouter".to_string(),
-                message: "No choices in response".to_string(),
+                provider: "openrouter".to_owned(),
+                message: "No choices in response".to_owned(),
             })?;
 
         Ok(ChatResponse::new(
@@ -153,7 +153,7 @@ impl OpenRouterClient {
     ) -> Result<(OpenRouterResponse, f64), LlmError> {
         if !self.enabled {
             return Err(LlmError::ProviderDisabled {
-                provider: "openrouter".to_string(),
+                provider: "openrouter".to_owned(),
             });
         }
 
@@ -163,7 +163,7 @@ impl OpenRouterClient {
             .acquire()
             .await
             .map_err(|e| LlmError::NetworkError {
-                provider: "openrouter".to_string(),
+                provider: "openrouter".to_owned(),
                 message: format!("Rate limiter error: {e}"),
             })?;
 
@@ -215,12 +215,12 @@ impl OpenRouterClient {
         let mut response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
-                    provider: "openrouter".to_string(),
+                    provider: "openrouter".to_owned(),
                     timeout_ms: self.timeout.as_millis() as u64,
                 }
             } else {
                 LlmError::NetworkError {
-                    provider: "openrouter".to_string(),
+                    provider: "openrouter".to_owned(),
                     message: format!("Request failed: {e}"),
                 }
             }
@@ -242,15 +242,15 @@ impl OpenRouterClient {
 
             return Err(match status.as_u16() {
                 401 => LlmError::AuthError {
-                    provider: "openrouter".to_string(),
-                    message: "Invalid API key".to_string(),
+                    provider: "openrouter".to_owned(),
+                    message: "Invalid API key".to_owned(),
                 },
                 429 => LlmError::RateLimited {
-                    provider: "openrouter".to_string(),
+                    provider: "openrouter".to_owned(),
                     retry_after_ms: retry_after,
                 },
                 _ => LlmError::ApiError {
-                    provider: "openrouter".to_string(),
+                    provider: "openrouter".to_owned(),
                     status_code: status.as_u16(),
                     message: error_body,
                 },
@@ -263,7 +263,7 @@ impl OpenRouterClient {
                 .json::<OpenRouterResponse>()
                 .await
                 .map_err(|e| LlmError::ParseError {
-                    provider: "openrouter".to_string(),
+                    provider: "openrouter".to_owned(),
                     message: format!("Failed to parse response: {e}"),
                 })?;
 
@@ -335,8 +335,8 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = OpenRouterClient::new(
-            "sk-or-test-key".to_string(),
-            Some("openai/gpt-4o".to_string()),
+            "sk-or-test-key".to_owned(),
+            Some("openai/gpt-4o".to_owned()),
             true,
             None,
             None,
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_client_creation_with_defaults() {
-        let client = OpenRouterClient::new("sk-or-test-key".to_string(), None, true, None, None);
+        let client = OpenRouterClient::new("sk-or-test-key".to_owned(), None, true, None, None);
         assert!(client.is_ok());
         let client = client.unwrap();
         assert_eq!(client.model, DEFAULT_MODEL);
@@ -358,28 +358,28 @@ mod tests {
     #[test]
     fn test_client_creation_with_site_info() {
         let client = OpenRouterClient::new(
-            "sk-or-test-key".to_string(),
+            "sk-or-test-key".to_owned(),
             None,
             true,
-            Some("https://example.com".to_string()),
-            Some("My App".to_string()),
+            Some("https://example.com".to_owned()),
+            Some("My App".to_owned()),
         );
         assert!(client.is_ok());
         let client = client.unwrap();
-        assert_eq!(client.site_url, Some("https://example.com".to_string()));
-        assert_eq!(client.site_name, Some("My App".to_string()));
+        assert_eq!(client.site_url, Some("https://example.com".to_owned()));
+        assert_eq!(client.site_name, Some("My App".to_owned()));
     }
 
     #[test]
     fn test_client_creation_empty_key() {
-        let client = OpenRouterClient::new("".to_string(), None, true, None, None);
+        let client = OpenRouterClient::new("".to_owned(), None, true, None, None);
         assert!(client.is_err());
     }
 
     #[test]
     fn test_build_openrouter_request() {
         let client =
-            OpenRouterClient::new("sk-or-test".to_string(), None, true, None, None).unwrap();
+            OpenRouterClient::new("sk-or-test".to_owned(), None, true, None, None).unwrap();
 
         let request = ChatRequest::new(
             "openai/gpt-4o",
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn test_provider() {
         let client =
-            OpenRouterClient::new("sk-or-test".to_string(), None, true, None, None).unwrap();
+            OpenRouterClient::new("sk-or-test".to_owned(), None, true, None, None).unwrap();
         assert_eq!(client.provider(), Provider::OpenRouter);
     }
 }

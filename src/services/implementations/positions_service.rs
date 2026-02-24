@@ -40,7 +40,7 @@ impl Service for PositionsService {
             .await
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
-                    service: "positions".to_string(),
+                    service: "positions".to_owned(),
                     message: format!("Failed to start positions service: {e}"),
                 })
             })?;

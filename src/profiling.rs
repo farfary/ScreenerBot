@@ -39,13 +39,13 @@ pub fn init_profiling() {
         console_subscriber::init();
         logger::info(
             LogTag::System,
-            &"Tokio console enabled - connect with: tokio-console".to_string(),
+            &"Tokio console enabled - connect with: tokio-console".to_owned(),
         );
         logger::info(
             LogTag::System,
-            &"Install: cargo install tokio-console".to_string(),
+            &"Install: cargo install tokio-console".to_owned(),
         );
-        logger::info(LogTag::System, &"Connect: tokio-console".to_string());
+        logger::info(LogTag::System, &"Connect: tokio-console".to_owned());
         return;
     }
 
@@ -63,10 +63,10 @@ pub fn init_profiling() {
             .with_line_number(true)
             .init();
 
-        logger::info(LogTag::System, &"Tracing profiling enabled".to_string());
+        logger::info(LogTag::System, &"Tracing profiling enabled".to_owned());
         logger::info(
             LogTag::System,
-            &"View detailed traces with thread IDs and timing".to_string(),
+            &"View detailed traces with thread IDs and timing".to_owned(),
         );
         return;
     }
@@ -77,16 +77,16 @@ pub fn init_profiling() {
         let duration = get_profile_duration();
         logger::info(
             LogTag::System,
-            &"CPU profiling enabled with pprof".to_string(),
+            &"CPU profiling enabled with pprof".to_owned(),
         );
         logger::info(LogTag::System, &format!("Duration: {} seconds", duration));
         logger::info(
             LogTag::System,
-            &"Flamegraph will be generated on exit".to_string(),
+            &"Flamegraph will be generated on exit".to_owned(),
         );
         logger::info(
             LogTag::System,
-            &"Press Ctrl+C to stop and generate flamegraph".to_string(),
+            &"Press Ctrl+C to stop and generate flamegraph".to_owned(),
         );
 
         // Note: pprof profiling is initialized later in the async context

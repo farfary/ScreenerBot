@@ -105,7 +105,7 @@ impl StrategyEngine {
                         strategy.id, self.config.evaluation_timeout_ms
                     ),
                 );
-                return Err("Evaluation timeout".to_string());
+                return Err("Evaluation timeout".to_owned());
             }
         };
 
@@ -157,7 +157,7 @@ impl StrategyEngine {
                     // Evaluate condition
                     return evaluator.evaluate(condition, context).await;
                 } else {
-                    return Err("Leaf node missing condition".to_string());
+                    return Err("Leaf node missing condition".to_owned());
                 }
             }
 
@@ -165,12 +165,12 @@ impl StrategyEngine {
             if rule_tree.is_branch() {
                 let operator = rule_tree
                     .operator
-                    .ok_or_else(|| "Branch node missing operator".to_string())?;
+                    .ok_or_else(|| "Branch node missing operator".to_owned())?;
 
                 let conditions = rule_tree
                     .conditions
                     .as_ref()
-                    .ok_or_else(|| "Branch node missing conditions".to_string())?;
+                    .ok_or_else(|| "Branch node missing conditions".to_owned())?;
 
                 return match operator {
                     LogicalOperator::And => {
@@ -195,7 +195,7 @@ impl StrategyEngine {
                     }
                     LogicalOperator::Not => {
                         if conditions.len() != 1 {
-                            return Err("NOT operator must have exactly one child".to_string());
+                            return Err("NOT operator must have exactly one child".to_owned());
                         }
                         let result = self.evaluate_rule_tree(&conditions[0], context).await?;
                         Ok(!result)
@@ -203,7 +203,7 @@ impl StrategyEngine {
                 };
             }
 
-            Err("Invalid rule tree structure".to_string())
+            Err("Invalid rule tree structure".to_owned())
         })
     }
 

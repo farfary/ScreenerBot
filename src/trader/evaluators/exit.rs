@@ -108,7 +108,7 @@ pub async fn evaluate_exit_for_position(
                                 mint: fresh_position.mint.clone(),
                                 action: crate::trader::types::TradeAction::Sell,
                                 reason: crate::trader::types::TradeReason::AiExit,
-                                strategy_id: Some("ai_exit".to_string()),
+                                strategy_id: Some("ai_exit".to_owned()),
                                 timestamp: chrono::Utc::now(),
                                 priority: match result.urgency {
                                     ai_analysis::ExitUrgency::Immediate => {

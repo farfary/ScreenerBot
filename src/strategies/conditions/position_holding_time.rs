@@ -23,7 +23,7 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
         let position_data = context
             .position_data
             .as_ref()
-            .ok_or_else(|| "Position data not available".to_string())?;
+            .ok_or_else(|| "Position data not available".to_owned())?;
 
         let position_age_hours = position_data.position_age_hours;
 
@@ -41,7 +41,7 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
     fn validate(&self, condition: &Condition) -> Result<(), String> {
         let hours = get_param_f64(condition, "hours")?;
         if hours < 0.0 {
-            return Err("Hours must be non-negative".to_string());
+            return Err("Hours must be non-negative".to_owned());
         }
 
         let comparison = get_param_string(condition, "comparison")?;

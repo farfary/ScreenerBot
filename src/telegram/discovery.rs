@@ -48,12 +48,12 @@ impl DiscoveryService {
     /// and captures any incoming messages as discovered chats.
     pub async fn start(&mut self) -> Result<(), String> {
         if self.is_running() {
-            return Err("Discovery is already running".to_string());
+            return Err("Discovery is already running".to_owned());
         }
 
         let bot_token = with_config(|c| c.telegram.bot_token.clone());
         if bot_token.is_empty() {
-            return Err("Bot token is not configured".to_string());
+            return Err("Bot token is not configured".to_owned());
         }
 
         // Validate the token

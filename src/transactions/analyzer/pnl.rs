@@ -473,7 +473,7 @@ fn find_corresponding_sol_change(
     }) {
         return Ok(largest_change.change);
     } else {
-        return Err("No SOL changes found".to_string());
+        return Err("No SOL changes found".to_owned());
     }
     let largest_sol_change = balance_analysis
         .sol_changes

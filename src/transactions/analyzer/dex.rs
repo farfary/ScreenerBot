@@ -486,16 +486,16 @@ fn extract_dex_metadata(
     if let Some(dex) = detected_dex {
         match dex {
             DetectedDex::Jupiter => {
-                metadata.insert("aggregator".to_string(), "jupiter".to_string());
+                metadata.insert("aggregator".to_owned(), "jupiter".to_owned());
             }
             DetectedDex::PumpFun => {
-                metadata.insert("meme_platform".to_string(), "pumpfun".to_string());
+                metadata.insert("meme_platform".to_owned(), "pumpfun".to_owned());
             }
             DetectedDex::RaydiumCLMM => {
-                metadata.insert("amm_type".to_string(), "clmm".to_string());
+                metadata.insert("amm_type".to_owned(), "clmm".to_owned());
             }
             DetectedDex::OrcaWhirlpool => {
-                metadata.insert("amm_type".to_string(), "whirlpool".to_string());
+                metadata.insert("amm_type".to_owned(), "whirlpool".to_owned());
             }
             _ => {}
         }

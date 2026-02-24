@@ -81,7 +81,7 @@ impl Default for SolPriceData {
             price_usd: 0.0,
             last_updated: Instant::now(),
             is_valid: false,
-            source: "uninitialized".to_string(),
+            source: "uninitialized".to_owned(),
             fetch_count: 0,
             error_count: 0,
         }
@@ -174,7 +174,7 @@ pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
             *cache = SolPriceData {
                 price_usd: price,
                 last_updated: Instant::now(),
-                source: "Jupiter API (manual)".to_string(),
+                source: "Jupiter API (manual)".to_owned(),
                 is_valid: true,
                 fetch_count: cache.fetch_count + 1,
                 error_count: cache.error_count,
@@ -281,7 +281,7 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
     match fetch_sol_price_from_jupiter().await {
         Ok(price) => {
             if validate_price_change(price) {
-                update_price_cache(price, "jupiter_api".to_string(), true).await;
+                update_price_cache(price, "jupiter_api".to_owned(), true).await;
                 *consecutive_errors = 0; // Reset error counter on success
                 logger::debug(
                     LogTag::SolPrice,
@@ -422,7 +422,7 @@ pub fn get_sol_price_stats() -> String {
         is_sol_price_service_running()
       )
         }
-        Err(_) => "SOL Price Stats: Cache lock error".to_string(),
+        Err(_) => "SOL Price Stats: Cache lock error".to_owned(),
     }
 }
 
@@ -437,6 +437,6 @@ pub async fn force_refresh_sol_price() -> Result<f64, String> {
     if price > 0.0 {
         Ok(price)
     } else {
-        Err("Failed to refresh SOL price".to_string())
+        Err("Failed to refresh SOL price".to_owned())
     }
 }

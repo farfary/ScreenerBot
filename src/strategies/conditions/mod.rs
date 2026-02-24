@@ -27,7 +27,7 @@ pub fn get_candles_from_context(context: &EvaluationContext) -> Result<Vec<Candl
     let bundle = context
         .timeframe_bundle
         .as_ref()
-        .ok_or_else(|| "OHLCV data not available - bundle is None".to_string())?;
+        .ok_or_else(|| "OHLCV data not available - bundle is None".to_owned())?;
 
     // Check if timeframe exists in bundle
     let timeframe = &context.strategy_timeframe;
@@ -57,7 +57,7 @@ pub fn get_candles_for_timeframe(
     let bundle = context
         .timeframe_bundle
         .as_ref()
-        .ok_or_else(|| "OHLCV data not available - bundle is None".to_string())?;
+        .ok_or_else(|| "OHLCV data not available - bundle is None".to_owned())?;
 
     // Use condition's timeframe if provided, otherwise fallback to strategy timeframe
     let timeframe = condition_timeframe.unwrap_or(&context.strategy_timeframe);

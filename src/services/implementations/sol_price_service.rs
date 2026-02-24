@@ -39,7 +39,7 @@ impl Service for SolPriceService {
             .await
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
-                    service: "sol_price".to_string(),
+                    service: "sol_price".to_owned(),
                     message: format!("Failed to start SOL price service: {e}"),
                 })
             })?;
@@ -51,7 +51,7 @@ impl Service for SolPriceService {
     async fn health(&self) -> ServiceHealth {
         // Check if service is running
         if !crate::sol_price::is_sol_price_service_running() {
-            return ServiceHealth::Unhealthy("SOL price service is not running".to_string());
+            return ServiceHealth::Unhealthy("SOL price service is not running".to_owned());
         }
 
         // Check if we have valid cached price data
@@ -66,7 +66,7 @@ impl Service for SolPriceService {
                     ))
                 }
             }
-            None => ServiceHealth::Degraded("No SOL price data available yet".to_string()),
+            None => ServiceHealth::Degraded("No SOL price data available yet".to_owned()),
         }
     }
 }

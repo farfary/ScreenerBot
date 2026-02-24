@@ -59,7 +59,7 @@ pub fn log_price_change(
                     .join(" ")
             }
         })
-        .unwrap_or_else(|| "Unknown".to_string());
+        .unwrap_or_else(|| "Unknown".to_owned());
 
     // Line 1: Symbol, price change, and P&L
     let mut line1_parts = Vec::new();

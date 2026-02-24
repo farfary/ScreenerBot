@@ -22,7 +22,7 @@
 /// // Record events
 /// let event = Event::new(
 ///     EventCategory::Swap,
-///     Some("JupiterQuote".to_string()),
+///     Some("JupiterQuote".to_owned()),
 ///     Severity::Info,
 ///     Some(mint.to_string()),
 ///     Some(tx_signature.to_string()),
@@ -149,10 +149,10 @@ pub async fn record(event: Event) -> Result<(), String> {
             .sender
             .send(event)
             .await
-            .map_err(|_| "Event channel closed".to_string())?;
+            .map_err(|_| "Event channel closed".to_owned())?;
         Ok(())
     } else {
-        Err("Events system not initialized".to_string())
+        Err("Events system not initialized".to_owned())
     }
 }
 
@@ -174,7 +174,7 @@ pub async fn record_safe(event: Event) {
 pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>, String> {
     let db = EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+        .ok_or_else(|| "Events system not initialized".to_owned())?;
     db.get_recent_events(Some(category), limit).await
 }
 
@@ -182,7 +182,7 @@ pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>,
 pub async fn recent_all(limit: usize) -> Result<Vec<Event>, String> {
     let db = EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+        .ok_or_else(|| "Events system not initialized".to_owned())?;
     db.get_recent_events(None, limit).await
 }
 
@@ -192,7 +192,7 @@ pub async fn count_by_category(
 ) -> Result<std::collections::HashMap<String, u64>, String> {
     let db = EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+        .ok_or_else(|| "Events system not initialized".to_owned())?;
     db.get_event_counts_by_category(since_hours).await
 }
 
@@ -200,7 +200,7 @@ pub async fn count_by_category(
 pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>, String> {
     let db = EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+        .ok_or_else(|| "Events system not initialized".to_owned())?;
     db.get_events_by_reference(reference_id, limit).await
 }
 
@@ -208,7 +208,7 @@ pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>
 pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>, String> {
     let db = EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+        .ok_or_else(|| "Events system not initialized".to_owned())?;
     db.get_events_by_mint(mint, limit).await
 }
 
@@ -216,7 +216,7 @@ pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>, String> {
 pub async fn cleanup_old_events() -> Result<usize, String> {
     let db = EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?;
+        .ok_or_else(|| "Events system not initialized".to_owned())?;
     db.cleanup_old_events().await
 }
 

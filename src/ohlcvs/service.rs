@@ -488,13 +488,13 @@ async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> {
         .get_or_try_init(|| async {
             logger::info(
                 LogTag::Ohlcv,
-                &"INIT: Initializing OHLCV runtime".to_string(),
+                &"INIT: Initializing OHLCV runtime".to_owned(),
             );
 
             let db_path = crate::paths::get_ohlcvs_db_path();
             let service_impl = OhlcvServiceImpl::new(db_path)?;
 
-            logger::info(LogTag::Ohlcv, &"SUCCESS: OHLCV runtime ready".to_string());
+            logger::info(LogTag::Ohlcv, &"SUCCESS: OHLCV runtime ready".to_owned());
             Ok::<Arc<OhlcvServiceImpl>, OhlcvError>(Arc::new(service_impl))
         })
         .await?;
@@ -519,19 +519,19 @@ impl OhlcvService {
         monitor_instance.clone().start().await?;
         logger::info(
             LogTag::Ohlcv,
-            &"TASK_START: OHLCV monitoring tasks started".to_string(),
+            &"TASK_START: OHLCV monitoring tasks started".to_owned(),
         );
 
         let shutdown_task = tokio::spawn(monitor.instrument(async move {
             shutdown.notified().await;
             logger::info(
                 LogTag::Ohlcv,
-                &"TASK_STOP: Shutdown signal received for OHLCV monitoring".to_string(),
+                &"TASK_STOP: Shutdown signal received for OHLCV monitoring".to_owned(),
             );
             monitor_instance.stop().await;
             logger::info(
                 LogTag::Ohlcv,
-                &"TASK_END: OHLCV monitoring tasks stopped".to_string(),
+                &"TASK_END: OHLCV monitoring tasks stopped".to_owned(),
             );
         }));
 

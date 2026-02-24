@@ -35,7 +35,7 @@ pub async fn handle_stop_command() -> String {
     let currently_enabled = is_trader_enabled();
 
     if !currently_enabled {
-        return "✅ <b>Trading is already disabled</b>".to_string();
+        return "✅ <b>Trading is already disabled</b>".to_owned();
     }
 
     // Disable trading via config
@@ -66,7 +66,7 @@ pub async fn handle_pause_entries_command() -> String {
     ) {
         Ok(()) => {
             logger::info(LogTag::Telegram, "Entry monitor paused via Telegram");
-            "⏸️ <b>Entry Monitor Paused</b>\n\nNo new positions will be opened.\nExit monitor continues running.".to_string()
+            "⏸️ <b>Entry Monitor Paused</b>\n\nNo new positions will be opened.\nExit monitor continues running.".to_owned()
         }
         Err(e) => format!("❌ <b>Failed to pause entries</b>\n\nError: {e}"),
     }
@@ -86,7 +86,7 @@ pub async fn handle_resume_entries_command() -> String {
     ) {
         Ok(()) => {
             logger::info(LogTag::Telegram, "Entry monitor resumed via Telegram");
-            "▶️ <b>Entry Monitor Resumed</b>\n\nNow watching for entry signals.".to_string()
+            "▶️ <b>Entry Monitor Resumed</b>\n\nNow watching for entry signals.".to_owned()
         }
         Err(e) => format!("❌ <b>Failed to resume entries</b>\n\nError: {e}"),
     }
@@ -116,13 +116,13 @@ pub async fn handle_force_stop_command(bot: &Bot, chat_id: ChatId) -> Result<(),
 /// Handle /resume_trading command - Clear force stop flag
 pub async fn handle_resume_command() -> String {
     if !crate::global::is_force_stopped() {
-        return "✅ <b>Trading is not force-stopped</b>\n\nNo action needed.".to_string();
+        return "✅ <b>Trading is not force-stopped</b>\n\nNo action needed.".to_owned();
     }
 
     crate::global::set_force_stopped(false, None);
     logger::info(LogTag::Telegram, "Force stop cleared via Telegram");
 
-    "✅ <b>Trading Resumed</b>\n\nForce stop flag has been cleared.\nNormal trading operations can now resume.".to_string()
+    "✅ <b>Trading Resumed</b>\n\nForce stop flag has been cleared.\nNormal trading operations can now resume.".to_owned()
 }
 
 /// Handle /help command

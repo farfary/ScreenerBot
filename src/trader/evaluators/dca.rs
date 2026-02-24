@@ -62,7 +62,7 @@ impl DcaEvaluation {
             _ => {
                 return Ok(Self {
                     should_trigger: false,
-                    reasons: vec!["No valid current price".to_string()],
+                    reasons: vec!["No valid current price".to_owned()],
                     config: config.clone(),
                     calculations: DcaCalculations {
                         current_dca_count: position.dca_count,
@@ -81,7 +81,7 @@ impl DcaEvaluation {
         if entry_price <= 0.0 || !entry_price.is_finite() {
             return Ok(Self {
                 should_trigger: false,
-                reasons: vec!["No valid entry price".to_string()],
+                reasons: vec!["No valid entry price".to_owned()],
                 config: config.clone(),
                 calculations: DcaCalculations {
                     current_dca_count: position.dca_count,
@@ -117,7 +117,7 @@ impl DcaEvaluation {
         // Evaluate conditions
         if !config.enabled {
             should_trigger = false;
-            reasons.push("DCA disabled in config".to_string());
+            reasons.push("DCA disabled in config".to_owned());
         }
 
         if calculations.current_dca_count >= config.max_count {

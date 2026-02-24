@@ -226,7 +226,7 @@ pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String
             logger::warning(LogTag::Wallet, &error_msg);
             Err(Error::invalid_amount(
                 error_msg.clone(),
-                "No empty ATA found".to_string(),
+                "No empty ATA found".to_owned(),
             ))
         }
     }
@@ -718,14 +718,14 @@ async fn build_and_send_close_instruction(
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
         Error::invalid_amount(
             format!("Invalid wallet address: {e}"),
-            "Wallet validation failed".to_string(),
+            "Wallet validation failed".to_owned(),
         )
     })?;
 
     let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
         Error::invalid_amount(
             format!("Invalid token account: {e}"),
-            "Token account validation failed".to_string(),
+            "Token account validation failed".to_owned(),
         )
     })?;
 
@@ -768,7 +768,7 @@ async fn build_and_send_close_instruction(
         )
         .map_err(|e| {
             Error::Blockchain(crate::errors::BlockchainError::InvalidInstruction {
-                signature: "unknown".to_string(),
+                signature: "unknown".to_owned(),
                 instruction_index: 0,
                 reason: format!("Failed to build close instruction: {e}"),
             })
@@ -883,9 +883,9 @@ fn build_token_2022_close_instruction(
     // but with different program ID
     let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|e| {
         Error::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
-            signature: "unknown".to_string(),
+            signature: "unknown".to_owned(),
             account: TOKEN_2022_PROGRAM_ID.to_string(),
-            expected_owner: "Program ID".to_string(),
+            expected_owner: "Program ID".to_owned(),
             actual_owner: None,
         })
     })?;

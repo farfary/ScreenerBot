@@ -32,8 +32,8 @@ struct PositionSummary {
 impl Tool for GetPositionsTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_positions".to_string(),
-            description: "Get all current open trading positions with entry prices, current values, and unrealized P&L.".to_string(),
+            name: "get_positions".to_owned(),
+            description: "Get all current open trading positions with entry prices, current values, and unrealized P&L.".to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
                 "type": "object",
@@ -117,7 +117,7 @@ struct PositionDetails {
 impl Tool for GetPositionTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_position".to_string(),
+            name: "get_position".to_owned(),
             description: "Get detailed information about a specific position by its ID."
                 .to_string(),
             category: ToolCategory::Portfolio,
@@ -143,7 +143,7 @@ impl Tool for GetPositionTool {
 
         let position = match positions::get_position_by_id(params.position_id).await {
             Some(p) => p,
-            None => return ToolResult::error("Position not found".to_string()),
+            None => return ToolResult::error("Position not found".to_owned()),
         };
 
         let pnl = positions::calculate_position_pnl_safe(&position, position.current_price).await;
@@ -202,8 +202,8 @@ struct BalanceInfo {
 impl Tool for GetBalanceTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_balance".to_string(),
-            description: "Get the current SOL balance of the trading wallet.".to_string(),
+            name: "get_balance".to_owned(),
+            description: "Get the current SOL balance of the trading wallet.".to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
                 "type": "object",
@@ -266,8 +266,8 @@ struct PnLStats {
 impl Tool for GetPnLTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_pnl".to_string(),
-            description: "Get profit and loss statistics including total realized P&L, unrealized P&L, win rate, and trade counts.".to_string(),
+            name: "get_pnl".to_owned(),
+            description: "Get profit and loss statistics including total realized P&L, unrealized P&L, win rate, and trade counts.".to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
                 "type": "object",
@@ -290,7 +290,7 @@ impl Tool for GetPnLTool {
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
-        let period = params.period.unwrap_or_else(|| "all".to_string());
+        let period = params.period.unwrap_or_else(|| "all".to_owned());
 
         // Calculate timeframe
         let since = match period.as_str() {

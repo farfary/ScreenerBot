@@ -30,11 +30,11 @@ impl TelegramNotifier {
     /// * `Err(String)` - Failed to create notifier
     pub fn new(bot_token: &str, chat_id: &str) -> Result<Self, String> {
         if bot_token.is_empty() {
-            return Err("Bot token is empty".to_string());
+            return Err("Bot token is empty".to_owned());
         }
 
         if chat_id.is_empty() {
-            return Err("Chat ID is empty".to_string());
+            return Err("Chat ID is empty".to_owned());
         }
 
         let chat_id_parsed: i64 = chat_id
@@ -459,9 +459,9 @@ pub async fn send_test_message(message: &str) -> Result<(), String> {
         if let Some(ref notifier) = *guard {
             notifier.send_message(message).await
         } else {
-            Err("Notifier not initialized".to_string())
+            Err("Notifier not initialized".to_owned())
         }
     } else {
-        Err("Failed to acquire notifier lock".to_string())
+        Err("Failed to acquire notifier lock".to_owned())
     }
 }

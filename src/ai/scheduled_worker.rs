@@ -325,7 +325,7 @@ async fn execute_scheduled_task(
 /// Execute a chat request via the ChatEngine with panic recovery
 async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatResponse, String> {
     let engine = crate::ai::try_get_chat_engine()
-        .ok_or_else(|| "Chat engine not initialized".to_string())?;
+        .ok_or_else(|| "Chat engine not initialized".to_owned())?;
 
     // NOTE: catch_unwind has limitations with async code. It can catch panics in synchronous
     // code within the async block, but may not catch all async panics depending on executor state.
@@ -336,7 +336,7 @@ async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatRes
         .await
     {
         Ok(result) => result.map_err(|e| format!("Chat engine error: {e}")),
-        Err(_) => Err("Chat engine panicked during execution".to_string()),
+        Err(_) => Err("Chat engine panicked during execution".to_owned()),
     }
 }
 
@@ -387,7 +387,7 @@ async fn send_task_notification(
 
     let notification = Notification {
         notification_type: NotificationType::BotCommand {
-            command: "scheduled_task".to_string(),
+            command: "scheduled_task".to_owned(),
             response: message,
         },
         timestamp: chrono::Utc::now(),

@@ -56,7 +56,7 @@ impl GeminiClient {
     /// * `enabled` - Whether the client is enabled
     pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
         if api_key.trim().is_empty() {
-            return Err("Gemini API key cannot be empty".to_string());
+            return Err("Gemini API key cannot be empty".to_owned());
         }
 
         Ok(Self {
@@ -87,13 +87,13 @@ impl GeminiClient {
                 MessageRole::User => {
                     contents.push(GeminiContent {
                         parts: vec![GeminiPart { text: msg.content }],
-                        role: Some("user".to_string()),
+                        role: Some("user".to_owned()),
                     });
                 }
                 MessageRole::Assistant => {
                     contents.push(GeminiContent {
                         parts: vec![GeminiPart { text: msg.content }],
-                        role: Some("model".to_string()),
+                        role: Some("model".to_owned()),
                     });
                 }
             }
@@ -108,7 +108,7 @@ impl GeminiClient {
             generation_config = Some(GeminiGenerationConfig {
                 response_mime_type: request
                     .response_format
-                    .map(|_| "application/json".to_string()),
+                    .map(|_| "application/json".to_owned()),
                 max_output_tokens: request.max_tokens,
                 temperature: request.temperature,
             });
@@ -133,8 +133,8 @@ impl GeminiClient {
             .candidates
             .first()
             .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "gemini".to_string(),
-                message: "No candidates in response".to_string(),
+                provider: "gemini".to_owned(),
+                message: "No candidates in response".to_owned(),
             })?;
 
         // Get the first part of the content
@@ -143,8 +143,8 @@ impl GeminiClient {
             .parts
             .first()
             .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "gemini".to_string(),
-                message: "No content parts in response".to_string(),
+                provider: "gemini".to_owned(),
+                message: "No content parts in response".to_owned(),
             })?;
 
         // Extract usage metadata
@@ -158,7 +158,7 @@ impl GeminiClient {
         let finish_reason = candidate
             .finish_reason
             .clone()
-            .unwrap_or_else(|| "UNKNOWN".to_string());
+            .unwrap_or_else(|| "UNKNOWN".to_owned());
 
         Ok(ChatResponse::new(
             content.text.clone(),
@@ -177,7 +177,7 @@ impl GeminiClient {
     ) -> Result<(GeminiResponse, f64), LlmError> {
         if !self.enabled {
             return Err(LlmError::ProviderDisabled {
-                provider: "gemini".to_string(),
+                provider: "gemini".to_owned(),
             });
         }
 
@@ -187,7 +187,7 @@ impl GeminiClient {
             .acquire()
             .await
             .map_err(|e| LlmError::NetworkError {
-                provider: "gemini".to_string(),
+                provider: "gemini".to_owned(),
                 message: format!("Rate limiter error: {e}"),
             })?;
 
@@ -218,12 +218,12 @@ impl GeminiClient {
         let mut response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
-                    provider: "gemini".to_string(),
+                    provider: "gemini".to_owned(),
                     timeout_ms: self.timeout.as_millis() as u64,
                 }
             } else {
                 LlmError::NetworkError {
-                    provider: "gemini".to_string(),
+                    provider: "gemini".to_owned(),
                     message: format!("Request failed: {e}"),
                 }
             }
@@ -245,15 +245,15 @@ impl GeminiClient {
 
             return Err(match status.as_u16() {
                 401 | 403 => LlmError::AuthError {
-                    provider: "gemini".to_string(),
-                    message: "Invalid API key".to_string(),
+                    provider: "gemini".to_owned(),
+                    message: "Invalid API key".to_owned(),
                 },
                 429 => LlmError::RateLimited {
-                    provider: "gemini".to_string(),
+                    provider: "gemini".to_owned(),
                     retry_after_ms: retry_after,
                 },
                 _ => LlmError::ApiError {
-                    provider: "gemini".to_string(),
+                    provider: "gemini".to_owned(),
                     status_code: status.as_u16(),
                     message: error_body,
                 },
@@ -266,7 +266,7 @@ impl GeminiClient {
                 .json::<GeminiResponse>()
                 .await
                 .map_err(|e| LlmError::ParseError {
-                    provider: "gemini".to_string(),
+                    provider: "gemini".to_owned(),
                     message: format!("Failed to parse response: {e}"),
                 })?;
 
@@ -339,8 +339,8 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = GeminiClient::new(
-            "test-api-key".to_string(),
-            Some("gemini-1.5-pro".to_string()),
+            "test-api-key".to_owned(),
+            Some("gemini-1.5-pro".to_owned()),
             true,
         );
         assert!(client.is_ok());
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn test_client_creation_with_defaults() {
-        let client = GeminiClient::new("test-api-key".to_string(), None, true);
+        let client = GeminiClient::new("test-api-key".to_owned(), None, true);
         assert!(client.is_ok());
         let client = client.unwrap();
         assert_eq!(client.model, DEFAULT_MODEL);
@@ -359,13 +359,13 @@ mod tests {
 
     #[test]
     fn test_client_creation_empty_key() {
-        let client = GeminiClient::new("".to_string(), None, true);
+        let client = GeminiClient::new("".to_owned(), None, true);
         assert!(client.is_err());
     }
 
     #[test]
     fn test_build_gemini_request_with_system() {
-        let client = GeminiClient::new("test-key".to_string(), None, true).unwrap();
+        let client = GeminiClient::new("test-key".to_owned(), None, true).unwrap();
 
         let request = ChatRequest::new(
             "gemini-1.5-flash",
@@ -388,7 +388,7 @@ mod tests {
 
         // User message should be in contents
         assert_eq!(gemini_req.contents.len(), 1);
-        assert_eq!(gemini_req.contents[0].role, Some("user".to_string()));
+        assert_eq!(gemini_req.contents[0].role, Some("user".to_owned()));
         assert_eq!(gemini_req.contents[0].parts[0].text, "Hello");
 
         // Generation config should be set
@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn test_build_gemini_request_with_assistant() {
-        let client = GeminiClient::new("test-key".to_string(), None, true).unwrap();
+        let client = GeminiClient::new("test-key".to_owned(), None, true).unwrap();
 
         let request = ChatRequest::new(
             "gemini-1.5-flash",
@@ -415,14 +415,14 @@ mod tests {
 
         // Should have 3 contents
         assert_eq!(gemini_req.contents.len(), 3);
-        assert_eq!(gemini_req.contents[0].role, Some("user".to_string()));
-        assert_eq!(gemini_req.contents[1].role, Some("model".to_string()));
-        assert_eq!(gemini_req.contents[2].role, Some("user".to_string()));
+        assert_eq!(gemini_req.contents[0].role, Some("user".to_owned()));
+        assert_eq!(gemini_req.contents[1].role, Some("model".to_owned()));
+        assert_eq!(gemini_req.contents[2].role, Some("user".to_owned()));
     }
 
     #[test]
     fn test_build_gemini_request_json_mode() {
-        let client = GeminiClient::new("test-key".to_string(), None, true).unwrap();
+        let client = GeminiClient::new("test-key".to_owned(), None, true).unwrap();
 
         let request =
             ChatRequest::new("gemini-1.5-flash", vec![ChatMessage::user("Test")]).with_json_mode();
@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn test_provider() {
-        let client = GeminiClient::new("test-key".to_string(), None, true).unwrap();
+        let client = GeminiClient::new("test-key".to_owned(), None, true).unwrap();
         assert_eq!(client.provider(), Provider::Gemini);
     }
 }

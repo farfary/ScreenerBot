@@ -164,17 +164,17 @@ impl VerificationMetricsInternal {
         let permanent_count = self.permanent_failures.load(Ordering::Relaxed);
 
         let mut custom = std::collections::HashMap::new();
-        custom.insert("queue_size".to_string(), queue_size as f64);
-        custom.insert("entry_verified".to_string(), entries as f64);
-        custom.insert("exit_verified".to_string(), exits as f64);
-        custom.insert("dca_verified".to_string(), dcas as f64);
-        custom.insert("partial_exit_verified".to_string(), partials as f64);
-        custom.insert("verification_retries".to_string(), retry_count as f64);
+        custom.insert("queue_size".to_owned(), queue_size as f64);
+        custom.insert("entry_verified".to_owned(), entries as f64);
+        custom.insert("exit_verified".to_owned(), exits as f64);
+        custom.insert("dca_verified".to_owned(), dcas as f64);
+        custom.insert("partial_exit_verified".to_owned(), partials as f64);
+        custom.insert("verification_retries".to_owned(), retry_count as f64);
         custom.insert(
-            "verifications_abandoned".to_string(),
+            "verifications_abandoned".to_owned(),
             abandoned_count as f64,
         );
-        custom.insert("permanent_failures".to_string(), permanent_count as f64);
+        custom.insert("permanent_failures".to_owned(), permanent_count as f64);
 
         crate::services::ServiceMetrics {
             operations_total: ops,

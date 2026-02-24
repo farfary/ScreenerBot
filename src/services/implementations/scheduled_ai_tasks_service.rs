@@ -72,7 +72,7 @@ impl Service for ScheduledAiTasksService {
 
     async fn health(&self) -> ServiceHealth {
         if !with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled) {
-            return ServiceHealth::Degraded("Disabled in config".to_string());
+            return ServiceHealth::Degraded("Disabled in config".to_owned());
         }
         ServiceHealth::Healthy
     }

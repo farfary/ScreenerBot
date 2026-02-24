@@ -28,7 +28,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
 
         let current_price = context
             .current_price
-            .ok_or_else(|| "Current price not available".to_string())?;
+            .ok_or_else(|| "Current price not available".to_owned())?;
 
         // Convert time period to seconds
         let lookback_seconds = match time_unit.as_str() {
@@ -49,7 +49,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         let past_candle = candles
             .iter()
             .min_by_key(|c| (c.timestamp - lookback_timestamp).abs())
-            .ok_or_else(|| "Failed to find historical candle".to_string())?;
+            .ok_or_else(|| "Failed to find historical candle".to_owned())?;
 
         // Check if we have sufficient data
         if past_candle.timestamp > lookback_timestamp {
@@ -58,7 +58,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
                 "SECONDS" => format!("{} seconds", time_value),
                 "MINUTES" => format!("{} minutes", time_value),
                 "HOURS" => format!("{} hours", time_value),
-                _ => "unknown".to_string(),
+                _ => "unknown".to_owned(),
             };
             return Err(format!(
                 "Insufficient historical data: requested {} lookback, only {} seconds available",
@@ -87,10 +87,10 @@ impl ConditionEvaluator for PriceChangePercentCondition {
 
         let percentage = get_param_f64(condition, "percentage")?;
         if percentage < 0.1 {
-            return Err("Percentage must be at least 0.1".to_string());
+            return Err("Percentage must be at least 0.1".to_owned());
         }
         if percentage > 1000.0 {
-            return Err("Percentage must be 1000 or less".to_string());
+            return Err("Percentage must be 1000 or less".to_owned());
         }
 
         let direction = get_param_string(condition, "direction")?;
@@ -100,7 +100,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
 
         let time_value = get_param_f64(condition, "time_value")?;
         if time_value < 1.0 {
-            return Err("Time value must be at least 1".to_string());
+            return Err("Time value must be at least 1".to_owned());
         }
 
         let time_unit = get_param_string(condition, "time_unit")?;
@@ -113,21 +113,21 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             "SECONDS" => {
                 if time_value > 3600.0 {
                     return Err(
-                        "Time value for seconds must be 3600 or less (1 hour max)".to_string()
+                        "Time value for seconds must be 3600 or less (1 hour max)".to_owned()
                     );
                 }
             }
             "MINUTES" => {
                 if time_value > 1440.0 {
                     return Err(
-                        "Time value for minutes must be 1440 or less (24 hours max)".to_string()
+                        "Time value for minutes must be 1440 or less (24 hours max)".to_owned()
                     );
                 }
             }
             "HOURS" => {
                 if time_value > 720.0 {
                     return Err(
-                        "Time value for hours must be 720 or less (30 days max)".to_string()
+                        "Time value for hours must be 720 or less (30 days max)".to_owned()
                     );
                 }
             }

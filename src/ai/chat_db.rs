@@ -102,7 +102,7 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
     let pool_arc = Arc::new(pool);
     GLOBAL_CHAT_POOL
         .set(pool_arc.clone())
-        .map_err(|_| "Global chat pool already initialized".to_string())?;
+        .map_err(|_| "Global chat pool already initialized".to_owned())?;
 
     Ok(Arc::try_unwrap(pool_arc).unwrap_or_else(|arc| (*arc).clone()))
 }
@@ -680,7 +680,7 @@ mod tests {
         // Update summary
         update_session_summary(&pool, session_id, "This is a test chat").unwrap();
         let updated = get_session(&pool, session_id).unwrap().unwrap();
-        assert_eq!(updated.summary, Some("This is a test chat".to_string()));
+        assert_eq!(updated.summary, Some("This is a test chat".to_owned()));
 
         // Update title
         update_session_title(&pool, session_id, "Updated Chat").unwrap();

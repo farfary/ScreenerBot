@@ -73,7 +73,7 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
 
     CONFIG
         .set(RwLock::new(config))
-        .map_err(|_| "Config already initialized".to_string())?;
+        .map_err(|_| "Config already initialized".to_owned())?;
 
     Ok(())
 }
@@ -111,16 +111,16 @@ pub fn reload_config() -> Result<(), String> {
 pub fn validate_config(config: &Config) -> Result<(), String> {
     // Trader validation
     if config.trader.max_open_positions == 0 {
-        return Err("trader.max_open_positions must be greater than 0".to_string());
+        return Err("trader.max_open_positions must be greater than 0".to_owned());
     }
     if config.trader.trade_size_sol <= 0.0 {
-        return Err("trader.trade_size_sol must be greater than 0".to_string());
+        return Err("trader.trade_size_sol must be greater than 0".to_owned());
     }
     if !config.trader.trade_size_sol.is_finite() {
-        return Err("trader.trade_size_sol must be a finite number".to_string());
+        return Err("trader.trade_size_sol must be a finite number".to_owned());
     }
     if config.trader.entry_check_concurrency == 0 {
-        return Err("trader.entry_check_concurrency must be at least 1".to_string());
+        return Err("trader.entry_check_concurrency must be at least 1".to_owned());
     }
 
     // DCA validation
@@ -133,29 +133,29 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
         }
         if config.trader.dca_size_percentage <= 0.0 || config.trader.dca_size_percentage > 100.0 {
             return Err(
-                "trader.dca_size_percentage must be between 0 and 100 (exclusive)".to_string(),
+                "trader.dca_size_percentage must be between 0 and 100 (exclusive)".to_owned(),
             );
         }
         if config.trader.dca_max_count == 0 {
-            return Err("trader.dca_max_count must be at least 1 when DCA is enabled".to_string());
+            return Err("trader.dca_max_count must be at least 1 when DCA is enabled".to_owned());
         }
     }
 
     // ROI exit validation
     if config.trader.roi_target_percent <= 0.0 {
-        return Err("trader.roi_target_percent must be greater than 0".to_string());
+        return Err("trader.roi_target_percent must be greater than 0".to_owned());
     }
     if !config.trader.roi_target_percent.is_finite() {
-        return Err("trader.roi_target_percent must be a finite number".to_string());
+        return Err("trader.roi_target_percent must be a finite number".to_owned());
     }
 
     // Time override validation
     if config.trader.time_override_enabled {
         if config.trader.time_override_duration <= 0.0 {
-            return Err("trader.time_override_duration must be greater than 0".to_string());
+            return Err("trader.time_override_duration must be greater than 0".to_owned());
         }
         if !config.trader.time_override_duration.is_finite() {
-            return Err("trader.time_override_duration must be a finite number".to_string());
+            return Err("trader.time_override_duration must be a finite number".to_owned());
         }
 
         // Validate unit
@@ -185,7 +185,7 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
             .is_finite()
         {
             return Err(
-                "trader.time_override_loss_threshold_percent must be a finite number".to_string(),
+                "trader.time_override_loss_threshold_percent must be a finite number".to_owned(),
             );
         }
         if config.trader.time_override_loss_threshold_percent < -100.0 {
@@ -211,7 +211,7 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
             );
         }
         if !config.trader.stop_loss_threshold_pct.is_finite() {
-            return Err("trader.stop_loss_threshold_pct must be a finite number".to_string());
+            return Err("trader.stop_loss_threshold_pct must be a finite number".to_owned());
         }
     }
 
@@ -220,11 +220,11 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
         || !config.positions.profit_extra_needed_sol.is_finite()
     {
         return Err(
-            "positions.profit_extra_needed_sol must be non-negative and finite".to_string(),
+            "positions.profit_extra_needed_sol must be non-negative and finite".to_owned(),
         );
     }
     if config.positions.position_open_cooldown_secs < 0 {
-        return Err("positions.position_open_cooldown_secs cannot be negative".to_string());
+        return Err("positions.position_open_cooldown_secs cannot be negative".to_owned());
     }
 
     // Partial exit validation
@@ -232,7 +232,7 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
         if config.positions.partial_exit_default_pct < 10.0
             || config.positions.partial_exit_default_pct > 90.0
         {
-            return Err("positions.partial_exit_default_pct must be between 10 and 90".to_string());
+            return Err("positions.partial_exit_default_pct must be between 10 and 90".to_owned());
         }
     }
 
@@ -269,32 +269,32 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
     if config.swaps.slippage.quote_default_pct < 0.0
         || config.swaps.slippage.quote_default_pct > 100.0
     {
-        return Err("swaps.slippage.quote_default_pct must be between 0 and 100".to_string());
+        return Err("swaps.slippage.quote_default_pct must be between 0 and 100".to_owned());
     }
     if config.swaps.slippage.exit_profit_shortfall_pct < 0.0
         || config.swaps.slippage.exit_profit_shortfall_pct > 100.0
     {
         return Err(
-            "swaps.slippage.exit_profit_shortfall_pct must be between 0 and 100".to_string(),
+            "swaps.slippage.exit_profit_shortfall_pct must be between 0 and 100".to_owned(),
         );
     }
     if config.swaps.slippage.exit_loss_shortfall_pct < 0.0
         || config.swaps.slippage.exit_loss_shortfall_pct > 100.0
     {
-        return Err("swaps.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_string());
+        return Err("swaps.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_owned());
     }
     if config.swaps.slippage.exit_retry_steps_pct.is_empty() {
-        return Err("swaps.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_string());
+        return Err("swaps.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_owned());
     }
 
     // Router availability check - Jupiter is the primary user-configurable router
     if !config.swaps.jupiter.enabled {
-        return Err("Jupiter router must be enabled (primary swap router)".to_string());
+        return Err("Jupiter router must be enabled (primary swap router)".to_owned());
     }
 
     // RPC validation
     if config.rpc.urls.is_empty() {
-        return Err("rpc.urls cannot be empty - at least one RPC endpoint is required".to_string());
+        return Err("rpc.urls cannot be empty - at least one RPC endpoint is required".to_owned());
     }
 
     Ok(())
@@ -329,7 +329,7 @@ pub fn reload_config_from_path(path: &str) -> Result<(), String> {
         *config = new_config;
         Ok(())
     } else {
-        Err("Config not initialized. Call load_config() first.".to_string())
+        Err("Config not initialized. Call load_config() first.".to_owned())
     }
 }
 
@@ -434,8 +434,8 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
 /// use screenerbot::config::{save_config_to_file, schemas::Config};
 ///
 /// let config = Config {
-/// wallet_encrypted: "encrypted_base64".to_string(),
-/// wallet_nonce: "nonce_base64".to_string(),
+/// wallet_encrypted: "encrypted_base64".to_owned(),
+/// wallet_nonce: "nonce_base64".to_owned(),
 /// ..Default::default()
 /// };
 /// save_config_to_file(&config, "data/config.toml", true)?;
@@ -484,7 +484,7 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
             // First-time initialization
             CONFIG
                 .set(RwLock::new(config.clone()))
-                .map_err(|_| "Config already initialized".to_string())?;
+                .map_err(|_| "Config already initialized".to_owned())?;
         }
         logger::info(LogTag::System, "Config loaded into global state");
     }
@@ -546,7 +546,7 @@ fn get_wallet_keypair_from_config() -> Result<Keypair, String> {
     with_config(|cfg| {
         // Check if encrypted wallet data exists
         if cfg.wallet_encrypted.is_empty() || cfg.wallet_nonce.is_empty() {
-            return Err("Wallet not configured - encrypted private key is missing".to_string());
+            return Err("Wallet not configured - encrypted private key is missing".to_owned());
         }
 
         // Decrypt the private key

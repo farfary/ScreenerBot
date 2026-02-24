@@ -127,7 +127,7 @@ fn derive_metadata_pda(mint: &Pubkey) -> Result<Pubkey, NftMetadataError> {
 fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, NftMetadataError> {
     if *offset >= data.len() {
         return Err(NftMetadataError::DeserializationFailed(
-            "Buffer underflow reading u8".to_string(),
+            "Buffer underflow reading u8".to_owned(),
         ));
     }
     let value = data[*offset];
@@ -139,7 +139,7 @@ fn read_u8(data: &[u8], offset: &mut usize) -> Result<u8, NftMetadataError> {
 fn read_u32_le(data: &[u8], offset: &mut usize) -> Result<u32, NftMetadataError> {
     if *offset + 4 > data.len() {
         return Err(NftMetadataError::DeserializationFailed(
-            "Buffer underflow reading u32".to_string(),
+            "Buffer underflow reading u32".to_owned(),
         ));
     }
     let value = u32::from_le_bytes([
@@ -221,7 +221,7 @@ fn deserialize_metadata(data: &[u8]) -> Result<OnChainMetadata, NftMetadataError
 async fn fetch_json_metadata(uri: &str) -> Result<JsonMetadata, NftMetadataError> {
     // Skip empty URIs
     if uri.is_empty() {
-        return Err(NftMetadataError::JsonFetchFailed("Empty URI".to_string()));
+        return Err(NftMetadataError::JsonFetchFailed("Empty URI".to_owned()));
     }
 
     // Handle IPFS URIs
@@ -424,7 +424,7 @@ pub async fn fetch_nft_metadata_batch(
                             results.insert(
                                 mint,
                                 Err(NftMetadataError::AccountNotFound(
-                                    "Metadata account not found".to_string(),
+                                    "Metadata account not found".to_owned(),
                                 )),
                             );
                         }

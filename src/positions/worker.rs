@@ -416,7 +416,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                          let transition = super::transitions::PositionTransition::DcaFailed {
                            position_id,
                            dca_signature: item.signature.clone(),
-                           reason: "Verification expired".to_string(),
+                           reason: "Verification expired".to_owned(),
                          };
                          let _ = apply_transition(transition).await;
                        }

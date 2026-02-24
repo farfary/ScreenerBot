@@ -27,7 +27,7 @@ impl ConditionEvaluator for CandleSizeCondition {
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         if candles.is_empty() {
-            return Err("No candles available".to_string());
+            return Err("No candles available".to_owned());
         }
 
         // Get the most recent candle (safe - checked above)
@@ -97,10 +97,10 @@ impl ConditionEvaluator for CandleSizeCondition {
 
         let threshold = get_param_f64(condition, "threshold")?;
         if threshold < 0.0 {
-            return Err("Threshold must be non-negative".to_string());
+            return Err("Threshold must be non-negative".to_owned());
         }
         if threshold > 100.0 {
-            return Err("Threshold must be 100% or less".to_string());
+            return Err("Threshold must be 100% or less".to_owned());
         }
 
         Ok(())

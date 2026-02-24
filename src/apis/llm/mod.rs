@@ -328,7 +328,7 @@ static LLM_MANAGER: OnceCell<Arc<LlmManager>> = OnceCell::const_new();
 pub async fn init_llm_manager(manager: LlmManager) -> Result<(), String> {
     LLM_MANAGER
         .set(Arc::new(manager))
-        .map_err(|_| "LLM manager already initialized".to_string())
+        .map_err(|_| "LLM manager already initialized".to_owned())
 }
 
 /// Get the global LLM manager

@@ -36,7 +36,7 @@ struct ServiceStatus {
 impl Tool for GetStatusTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_status".to_string(),
+            name: "get_status".to_owned(),
             description:
                 "Get current system status including running services, uptime, and health checks."
                     .to_string(),
@@ -81,7 +81,7 @@ impl Tool for GetStatusTool {
                 for (name, health) in health_map {
                     service_statuses.push(ServiceStatus {
                         name: name.to_string(),
-                        status: "Running".to_string(),
+                        status: "Running".to_owned(),
                         health: format!("{:?}", health),
                     });
                 }
@@ -138,7 +138,7 @@ struct EventInfo {
 impl Tool for GetEventsTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_events".to_string(),
+            name: "get_events".to_owned(),
             description:
                 "Get recent system events and logs including trades, errors, and notifications."
                     .to_string(),
@@ -236,8 +236,8 @@ struct ForceStopParams {
 impl Tool for ForceStopTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "force_stop".to_string(),
-            description: "Emergency stop all bot services. This will halt trading and monitoring. REQUIRES USER CONFIRMATION.".to_string(),
+            name: "force_stop".to_owned(),
+            description: "Emergency stop all bot services. This will halt trading and monitoring. REQUIRES USER CONFIRMATION.".to_owned(),
             category: ToolCategory::System,
             parameters: json!({
                 "type": "object",
@@ -267,7 +267,7 @@ impl Tool for ForceStopTool {
             id: None,
             event_time: chrono::Utc::now(),
             category: events::EventCategory::System,
-            subtype: Some("ForceStop".to_string()),
+            subtype: Some("ForceStop".to_owned()),
             severity: events::Severity::Warn,
             mint: None,
             reference_id: None,

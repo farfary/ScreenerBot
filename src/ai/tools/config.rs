@@ -21,8 +21,8 @@ struct GetConfigParams {
 impl Tool for GetConfigTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "get_config".to_string(),
-            description: "Get current bot configuration settings including trading parameters, risk settings, and filters.".to_string(),
+            name: "get_config".to_owned(),
+            description: "Get current bot configuration settings including trading parameters, risk settings, and filters.".to_owned(),
             category: ToolCategory::Config,
             parameters: json!({
                 "type": "object",
@@ -119,7 +119,7 @@ struct UpdateConfigParams {
 impl Tool for UpdateConfigTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "update_config".to_string(),
+            name: "update_config".to_owned(),
             description: "Update bot configuration settings. REQUIRES USER CONFIRMATION."
                 .to_string(),
             category: ToolCategory::Config,
@@ -192,7 +192,7 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, S
         "max_open_positions" => {
             let val = value.as_u64().ok_or("Value must be a number")?;
             if val < 1 || val > 100 {
-                return Err("max_open_positions must be between 1 and 100".to_string());
+                return Err("max_open_positions must be between 1 and 100".to_owned());
             }
             crate::config::update_config_section(
                 |cfg| {
@@ -205,7 +205,7 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, S
         "trade_size_sol" => {
             let val = value.as_f64().ok_or("Value must be a number")?;
             if val < 0.001 || val > 100.0 {
-                return Err("trade_size_sol must be between 0.001 and 100.0".to_string());
+                return Err("trade_size_sol must be between 0.001 and 100.0".to_owned());
             }
             crate::config::update_config_section(
                 |cfg| {

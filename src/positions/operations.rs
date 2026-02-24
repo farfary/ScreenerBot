@@ -91,7 +91,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
                     price_sol: token.price_sol,
                     price_usd: token.price_usd,
                     confidence: 0.8, // Lower confidence for API price vs on-chain
-                    source_pool: Some("api".to_string()),
+                    source_pool: Some("api".to_owned()),
                     pool_address: token.pool_price_last_used_pool.clone().unwrap_or_default(),
                     slot: 0,
                     timestamp: Instant::now(),
@@ -117,7 +117,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
                         price_sol: fresh_token.price_sol,
                         price_usd: fresh_token.price_usd,
                         confidence: 0.8,
-                        source_pool: Some("api_fresh".to_string()),
+                        source_pool: Some("api_fresh".to_owned()),
                         pool_address: fresh_token
                             .pool_price_last_used_pool
                             .clone()
@@ -156,7 +156,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
                     price_sol: fresh_token.price_sol,
                     price_usd: fresh_token.price_usd,
                     confidence: 0.8,
-                    source_pool: Some("api_fresh".to_string()),
+                    source_pool: Some("api_fresh".to_owned()),
                     pool_address: fresh_token
                         .pool_price_last_used_pool
                         .clone()
@@ -394,7 +394,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
             }),
         )
         .await;
-        return Err("Already have open position for this token".to_string());
+        return Err("Already have open position for this token".to_owned());
     }
 
     // Extra safety: consult database for any existing open or unverified position for this mint.
@@ -443,7 +443,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
                     }),
                 )
                 .await;
-                return Err("Open position already exists in DB".to_string());
+                return Err("Open position already exists in DB".to_owned());
             }
         }
     }
@@ -513,7 +513,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         entry_time: Utc::now(),
         exit_price: None,
         exit_time: None,
-        position_type: "buy".to_string(),
+        position_type: "buy".to_owned(),
         entry_size_sol: trade_size_sol,
         total_size_sol: trade_size_sol,
         price_highest: entry_price,
@@ -526,7 +526,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         sol_received: None,
         profit_target_min: Some(5.0),
         profit_target_max: Some(20.0),
-        liquidity_tier: Some("UNKNOWN".to_string()),
+        liquidity_tier: Some("UNKNOWN".to_owned()),
         transaction_entry_verified: false,
         transaction_exit_verified: false,
         entry_fee_lamports: None,
@@ -765,7 +765,7 @@ pub async fn close_position_direct(
         // expect potential router failure; still attempt but log.
         (
             total_token_balance,
-            Some("primary_ata_empty_using_total".to_string()),
+            Some("primary_ata_empty_using_total".to_owned()),
         )
     } else if total_token_balance > primary_token_balance && primary_token_balance > 0 {
         (
@@ -782,7 +782,7 @@ pub async fn close_position_direct(
     };
 
     if sell_amount == 0 {
-        return Err("No tokens to sell".to_string());
+        return Err("No tokens to sell".to_owned());
     }
 
     logger::info(
@@ -863,7 +863,7 @@ pub async fn close_position_direct(
     }
 
     let swap_result =
-        swap_result.ok_or_else(|| last_err.unwrap_or_else(|| "Exit swap failed".to_string()))?;
+        swap_result.ok_or_else(|| last_err.unwrap_or_else(|| "Exit swap failed".to_owned()))?;
 
     let transaction_signature = swap_result.transaction_signature.clone();
 
@@ -979,13 +979,13 @@ pub async fn partial_close_position(
 
     let position_id = position
         .id
-        .ok_or_else(|| "Position has no ID".to_string())?;
+        .ok_or_else(|| "Position has no ID".to_owned())?;
 
     // Get remaining token amount
     let remaining_amount = position
         .remaining_token_amount
         .or(position.token_amount)
-        .ok_or_else(|| "Position has no token amount".to_string())?;
+        .ok_or_else(|| "Position has no token amount".to_owned())?;
 
     // NOTE: No wallet balance verification here to avoid RPC latency during critical exit.
     // The swap executor will fail gracefully if balance is insufficient.
@@ -995,7 +995,7 @@ pub async fn partial_close_position(
     let exit_amount = calculate_partial_amount(remaining_amount, exit_percentage);
 
     if exit_amount == 0 {
-        return Err("Calculated exit amount is zero".to_string());
+        return Err("Calculated exit amount is zero".to_owned());
     }
 
     logger::info(
@@ -1060,7 +1060,7 @@ pub async fn partial_close_position(
         }
     }
     let quote = quote_opt
-        .ok_or_else(|| last_err.unwrap_or_else(|| "Failed to get exit quote".to_string()))?;
+        .ok_or_else(|| last_err.unwrap_or_else(|| "Failed to get exit quote".to_owned()))?;
 
     logger::info(
         LogTag::Positions,
@@ -1246,12 +1246,12 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
 
     let position_id = position
         .id
-        .ok_or_else(|| "Position has no ID".to_string())?;
+        .ok_or_else(|| "Position has no ID".to_owned())?;
 
     // Check DCA limits from config
     let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);
     if !dca_enabled {
-        return Err("DCA is disabled in configuration".to_string());
+        return Err("DCA is disabled in configuration".to_owned());
     }
 
     let max_dca_count = with_config(|cfg| cfg.trader.dca_max_count);

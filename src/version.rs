@@ -25,7 +25,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Update server base URL - configurable via UPDATE_SERVER_URL env var
 fn get_update_server_url() -> String {
-    std::env::var("UPDATE_SERVER_URL").unwrap_or_else(|_| "https://screenerbot.io/api".to_string())
+    std::env::var("UPDATE_SERVER_URL").unwrap_or_else(|_| "https://screenerbot.io/api".to_owned())
 }
 
 /// Update check interval (6 hours)
@@ -275,7 +275,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
     if !api_response.success {
         return Err(api_response
             .error
-            .unwrap_or_else(|| "Unknown error".to_string()));
+            .unwrap_or_else(|| "Unknown error".to_owned()));
     }
 
     let check_data = api_response.data.ok_or("No data in response")?;
@@ -583,7 +583,7 @@ fn get_platform() -> &'static str {
 /// Get download directory
 fn get_download_dir() -> Result<std::path::PathBuf, String> {
     let dir = dirs::cache_dir()
-        .ok_or_else(|| "Could not determine cache directory".to_string())?
+        .ok_or_else(|| "Could not determine cache directory".to_owned())?
         .join("ScreenerBot")
         .join("updates");
 

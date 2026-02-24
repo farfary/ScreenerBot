@@ -105,7 +105,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
     let transaction = match get_transaction(&item.signature).await {
         Ok(Some(tx)) => {
             if !tx.success {
-                let error_msg = tx.error_message.unwrap_or("Unknown error".to_string());
+                let error_msg = tx.error_message.unwrap_or("Unknown error".to_owned());
                 if error_msg.contains("[PERMANENT]") {
                     return match item.kind {
                         VerificationKind::Entry => VerificationOutcome::PermanentFailure(
@@ -171,7 +171,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 TransactionStatus::Finalized | TransactionStatus::Confirmed => tx,
                 TransactionStatus::Pending => {
                     return VerificationOutcome::RetryTransient(
-                        "Transaction still pending".to_string(),
+                        "Transaction still pending".to_owned(),
                     );
                 }
                 TransactionStatus::Failed(err) => {
@@ -219,7 +219,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     if success && status == "confirmed" {
                         // Confirmed by events but transaction object not yet available → retry shortly
                         return VerificationOutcome::RetryTransient(
-                            "Transaction confirmed by events; awaiting RPC indexing".to_string(),
+                            "Transaction confirmed by events; awaiting RPC indexing".to_owned(),
                         );
                     } else if !success && status == "failed" {
                         // Failed by events → map to existing failure handling per kind
@@ -333,19 +333,19 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             }
                         } else {
                             return VerificationOutcome::RetryTransient(
-                                "Exit timeout but cannot check balance".to_string(),
+                                "Exit timeout but cannot check balance".to_owned(),
                             );
                         }
                     }
                     VerificationKind::Entry => {
                         return VerificationOutcome::RetryTransient(
-                            "Entry transaction not found (timeout)".to_string(),
+                            "Entry transaction not found (timeout)".to_owned(),
                         );
                     }
                 }
             } else {
                 return VerificationOutcome::RetryTransient(
-                    "Transaction not found (propagation)".to_string(),
+                    "Transaction not found (propagation)".to_owned(),
                 );
             }
         }
@@ -470,12 +470,12 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
     let swap_info = if let Some(pnl) = transaction.swap_pnl_info.clone() {
         pnl
     } else {
-        return VerificationOutcome::RetryTransient("No valid swap analysis".to_string());
+        return VerificationOutcome::RetryTransient("No valid swap analysis".to_owned());
     };
 
     // Verify token mint matches
     if swap_info.token_mint != item.mint {
-        return VerificationOutcome::RetryTransient("Token mint mismatch".to_string());
+        return VerificationOutcome::RetryTransient("Token mint mismatch".to_owned());
     }
 
     let position_id = item.position_id.unwrap_or_default();
@@ -487,10 +487,10 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     return VerificationOutcome::Transition(PositionTransition::DcaFailed {
                         position_id: item.position_id.unwrap_or_default(),
                         dca_signature: item.signature.clone(),
-                        reason: "Swap analysis reported non-buy for DCA".to_string(),
+                        reason: "Swap analysis reported non-buy for DCA".to_owned(),
                     });
                 }
-                return VerificationOutcome::RetryTransient("Expected Buy transaction".to_string());
+                return VerificationOutcome::RetryTransient("Expected Buy transaction".to_owned());
             }
 
             // Convert token amount to integer units with rounding
@@ -498,7 +498,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 Some(dec) => dec,
                 None => {
                     return VerificationOutcome::RetryTransient(
-                        "Token decimals not cached".to_string(),
+                        "Token decimals not cached".to_owned(),
                     );
                 }
             };
@@ -509,7 +509,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
 
             if token_amount_units == 0 {
                 return VerificationOutcome::RetryTransient(
-                    "Zero token amount detected".to_string(),
+                    "Zero token amount detected".to_owned(),
                 );
             }
 
@@ -518,7 +518,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     Some(id) => id,
                     None => {
                         return VerificationOutcome::RetryTransient(
-                            "DCA verification missing position context".to_string(),
+                            "DCA verification missing position context".to_owned(),
                         );
                     }
                 };
@@ -526,14 +526,14 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 let sol_spent = swap_info.effective_sol_spent.abs();
                 if sol_spent <= 0.0 || !sol_spent.is_finite() {
                     return VerificationOutcome::RetryTransient(
-                        "Invalid SOL spent reported for DCA".to_string(),
+                        "Invalid SOL spent reported for DCA".to_owned(),
                     );
                 }
 
                 let token_amount_float = (token_amount_units as f64) / scale;
                 if token_amount_float <= 0.0 || !token_amount_float.is_finite() {
                     return VerificationOutcome::RetryTransient(
-                        "Invalid token amount computed for DCA".to_string(),
+                        "Invalid token amount computed for DCA".to_owned(),
                     );
                 }
 
@@ -571,7 +571,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         ),
                     );
                     return VerificationOutcome::RetryTransient(
-                        "Token accounts check throttled".to_string(),
+                        "Token accounts check throttled".to_owned(),
                     );
                 }
                 if let Ok(actual_units) = get_total_token_balance(&wallet_address, &item.mint).await
@@ -614,7 +614,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         VerificationKind::Exit => {
             if swap_info.swap_type != "Sell" {
                 return VerificationOutcome::RetryTransient(
-                    "Expected Sell transaction".to_string(),
+                    "Expected Sell transaction".to_owned(),
                 );
             }
 
@@ -631,7 +631,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 units.max(0.0) as u64
             } else {
                 return VerificationOutcome::RetryTransient(
-                    "Token decimals not cached for exit".to_string(),
+                    "Token decimals not cached for exit".to_owned(),
                 );
             };
 
@@ -648,7 +648,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         ),
                     );
                     return VerificationOutcome::RetryTransient(
-                        "Token accounts check throttled".to_string(),
+                        "Token accounts check throttled".to_owned(),
                     );
                 }
                 match get_total_token_balance(&wallet_address, &item.mint).await {
@@ -752,7 +752,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         );
                         // Be conservative, retry later
                         return VerificationOutcome::RetryTransient(
-                            "Residual check failed after exit".to_string(),
+                            "Residual check failed after exit".to_owned(),
                         );
                     }
                 }

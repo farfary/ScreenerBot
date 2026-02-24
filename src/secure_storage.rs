@@ -145,7 +145,7 @@ pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<String, String> 
     // Decrypt
     let plaintext_bytes = cipher
         .decrypt(nonce, ciphertext.as_ref())
-        .map_err(|_| "Decryption failed - wrong machine or corrupted data".to_string())?;
+        .map_err(|_| "Decryption failed - wrong machine or corrupted data".to_owned())?;
 
     String::from_utf8(plaintext_bytes)
         .map_err(|e| format!("Decrypted data is not valid UTF-8: {e}"))

@@ -123,8 +123,8 @@ impl Service for ConnectivityService {
         // Move monitors out for the background task
         let checker = self.checker.take().ok_or_else(|| {
             crate::errors::Error::Service(crate::errors::ServiceError::Start {
-                service: "connectivity".to_string(),
-                message: "Checker already taken".to_string(),
+                service: "connectivity".to_owned(),
+                message: "Checker already taken".to_owned(),
             })
         })?;
         let monitors = checker.monitors;

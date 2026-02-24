@@ -15,7 +15,7 @@ config_struct! {
             impact: "high",
             category: "Data Sources",
         })]
-        preferred_market_data_source: String = "dexscreener".to_string(), // "dexscreener" or "geckoterminal"
+        preferred_market_data_source: String = "dexscreener".to_owned(), // "dexscreener" or "geckoterminal"
 
         // Multi-source validation configuration
         #[metadata(field_metadata! {

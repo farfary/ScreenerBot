@@ -31,7 +31,7 @@ impl Service for PoolCalculatorService {
     async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
-            &"Initializing pool calculator service...".to_string(),
+            &"Initializing pool calculator service...".to_owned(),
         );
         Ok(())
     }
@@ -43,14 +43,14 @@ impl Service for PoolCalculatorService {
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(
             LogTag::PoolService,
-            &"Starting pool calculator service...".to_string(),
+            &"Starting pool calculator service...".to_owned(),
         );
 
         // Get the PriceCalculator component from global state
         let calculator = crate::pools::get_price_calculator().ok_or_else(|| {
             crate::Error::Service(ServiceError::Start {
                 service: self.name().to_string(),
-                message: "PriceCalculator component not initialized".to_string(),
+                message: "PriceCalculator component not initialized".to_owned(),
             })
         })?;
 
@@ -61,7 +61,7 @@ impl Service for PoolCalculatorService {
 
         logger::info(
             LogTag::PoolService,
-            &"Pool calculator service started (instrumented)".to_string(),
+            &"Pool calculator service started (instrumented)".to_owned(),
         );
 
         Ok(vec![handle])
@@ -70,7 +70,7 @@ impl Service for PoolCalculatorService {
     async fn stop(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
-            &"Pool calculator service stopping (via shutdown signal)".to_string(),
+            &"Pool calculator service stopping (via shutdown signal)".to_owned(),
         );
         Ok(())
     }
@@ -79,7 +79,7 @@ impl Service for PoolCalculatorService {
         if crate::pools::get_price_calculator().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("PriceCalculator component not available".to_string())
+            ServiceHealth::Unhealthy("PriceCalculator component not available".to_owned())
         }
     }
 
@@ -93,10 +93,10 @@ impl Service for PoolCalculatorService {
             metrics.errors_total = errors;
             metrics
                 .custom_metrics
-                .insert("prices_calculated".to_string(), prices_calculated as f64);
+                .insert("prices_calculated".to_owned(), prices_calculated as f64);
             if operations > 0 {
                 metrics.custom_metrics.insert(
-                    "success_rate".to_string(),
+                    "success_rate".to_owned(),
                     (prices_calculated as f64 / operations as f64) * 100.0,
                 );
             }

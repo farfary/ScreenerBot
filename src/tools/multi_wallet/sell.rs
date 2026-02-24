@@ -43,13 +43,13 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
     // Load wallets with token balance
     let wallets = load_wallets_for_sell(&config).await?;
     if wallets.is_empty() {
-        return Err("No wallets found with token balance".to_string());
+        return Err("No wallets found with token balance".to_owned());
     }
 
     // Create sell plans
     let plans = create_sell_plans(&config, &wallets).await?;
     if plans.is_empty() {
-        return Err("No valid sell plans could be created".to_string());
+        return Err("No valid sell plans could be created".to_owned());
     }
 
     logger::info(
@@ -110,7 +110,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
                     LogTag::Tools,
                     &format!("Multi-sell session {} aborted by user", &session_id[..8]),
                 );
-                result.error = Some("Operation aborted by user".to_string());
+                result.error = Some("Operation aborted by user".to_owned());
                 result.finalize();
                 return Ok(result);
             }

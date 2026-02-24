@@ -67,7 +67,7 @@ pub struct GeckoTerminalClient {
 impl GeckoTerminalClient {
     pub fn new(enabled: bool, rate_limit: usize, timeout_seconds: u64) -> Result<Self, String> {
         if timeout_seconds == 0 {
-            return Err("Timeout must be greater than zero".to_string());
+            return Err("Timeout must be greater than zero".to_owned());
         }
 
         Ok(Self {
@@ -226,13 +226,13 @@ impl GeckoTerminalClient {
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            query_params.push(("include".to_string(), inc.to_string()));
+            query_params.push(("include".to_owned(), inc.to_string()));
         }
         if let Some(p) = page {
-            query_params.push(("page".to_string(), p.to_string()));
+            query_params.push(("page".to_owned(), p.to_string()));
         }
         if let Some(s) = sort {
-            query_params.push(("sort".to_string(), s.to_string()));
+            query_params.push(("sort".to_owned(), s.to_string()));
         }
 
         let builder = if query_params.is_empty() {
@@ -272,14 +272,14 @@ impl GeckoTerminalClient {
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(p) = page {
-            query_params.push(("page".to_string(), p.min(MAX_TRENDING_PAGE).to_string()));
+            query_params.push(("page".to_owned(), p.min(MAX_TRENDING_PAGE).to_string()));
         }
         if let Some(d) = duration {
-            query_params.push(("duration".to_string(), d.to_string()));
+            query_params.push(("duration".to_owned(), d.to_string()));
         }
         if let Some(includes) = include {
             if !includes.is_empty() {
-                query_params.push(("include".to_string(), includes.join(",")));
+                query_params.push(("include".to_owned(), includes.join(",")));
             }
         }
 
@@ -321,14 +321,14 @@ impl GeckoTerminalClient {
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(p) = page {
             let page_num = p.min(10).max(1);
-            query_params.push(("page".to_string(), page_num.to_string()));
+            query_params.push(("page".to_owned(), page_num.to_string()));
         }
         if let Some(s) = sort {
-            query_params.push(("sort".to_string(), s.to_string()));
+            query_params.push(("sort".to_owned(), s.to_string()));
         }
         if let Some(includes) = include {
             if !includes.is_empty() {
-                query_params.push(("include".to_string(), includes.join(",")));
+                query_params.push(("include".to_owned(), includes.join(",")));
             }
         }
 
@@ -371,14 +371,14 @@ impl GeckoTerminalClient {
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(includes) = include {
             if !includes.is_empty() {
-                query_params.push(("include".to_string(), includes.join(",")));
+                query_params.push(("include".to_owned(), includes.join(",")));
             }
         }
         if include_volume_breakdown {
-            query_params.push(("include_volume_breakdown".to_string(), "true".to_string()));
+            query_params.push(("include_volume_breakdown".to_owned(), "true".to_owned()));
         }
         if include_composition {
-            query_params.push(("include_composition".to_string(), "true".to_string()));
+            query_params.push(("include_composition".to_owned(), "true".to_owned()));
         }
 
         let builder = if query_params.is_empty() {
@@ -402,7 +402,7 @@ impl GeckoTerminalClient {
             .into_iter()
             .next()
             .map(|p| p.to_pool(pool_address))
-            .ok_or_else(|| "No pool data returned".to_string())
+            .ok_or_else(|| "No pool data returned".to_owned())
     }
 
     /// Fetch multiple pools in one call (max 30 pool addresses)
@@ -415,10 +415,10 @@ impl GeckoTerminalClient {
         include_composition: bool,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         if addresses.is_empty() {
-            return Err("At least one address is required".to_string());
+            return Err("At least one address is required".to_owned());
         }
         if addresses.len() > 30 {
-            return Err("Maximum 30 addresses allowed".to_string());
+            return Err("Maximum 30 addresses allowed".to_owned());
         }
 
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
@@ -430,14 +430,14 @@ impl GeckoTerminalClient {
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(includes) = include {
             if !includes.is_empty() {
-                query_params.push(("include".to_string(), includes.join(",")));
+                query_params.push(("include".to_owned(), includes.join(",")));
             }
         }
         if include_volume_breakdown {
-            query_params.push(("include_volume_breakdown".to_string(), "true".to_string()));
+            query_params.push(("include_volume_breakdown".to_owned(), "true".to_owned()));
         }
         if include_composition {
-            query_params.push(("include_composition".to_string(), "true".to_string()));
+            query_params.push(("include_composition".to_owned(), "true".to_owned()));
         }
 
         let builder = if query_params.is_empty() {
@@ -483,19 +483,19 @@ impl GeckoTerminalClient {
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(agg) = aggregate {
-            query_params.push(("aggregate".to_string(), agg.to_string()));
+            query_params.push(("aggregate".to_owned(), agg.to_string()));
         }
         if let Some(lim) = limit {
-            query_params.push(("limit".to_string(), lim.min(1000).to_string()));
+            query_params.push(("limit".to_owned(), lim.min(1000).to_string()));
         }
         if let Some(curr) = currency {
-            query_params.push(("currency".to_string(), curr.to_string()));
+            query_params.push(("currency".to_owned(), curr.to_string()));
         }
         if let Some(ts) = before_timestamp {
-            query_params.push(("before_timestamp".to_string(), ts.to_string()));
+            query_params.push(("before_timestamp".to_owned(), ts.to_string()));
         }
         if let Some(tok) = token {
-            query_params.push(("token".to_string(), tok.to_string()));
+            query_params.push(("token".to_owned(), tok.to_string()));
         }
 
         let builder = if query_params.is_empty() {
@@ -533,7 +533,7 @@ impl GeckoTerminalClient {
         let builder = if let Some(p) = page {
             self.client
                 .get(&url)
-                .query(&[("page".to_string(), p.to_string())])
+                .query(&[("page".to_owned(), p.to_string())])
         } else {
             self.client.get(&url)
         };
@@ -567,10 +567,10 @@ impl GeckoTerminalClient {
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            query_params.push(("include".to_string(), inc.to_string()));
+            query_params.push(("include".to_owned(), inc.to_string()));
         }
         if let Some(p) = page {
-            query_params.push(("page".to_string(), p.to_string()));
+            query_params.push(("page".to_owned(), p.to_string()));
         }
 
         let builder = if query_params.is_empty() {
@@ -609,10 +609,10 @@ impl GeckoTerminalClient {
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            query_params.push(("include".to_string(), inc.to_string()));
+            query_params.push(("include".to_owned(), inc.to_string()));
         }
         if let Some(comp) = include_composition {
-            query_params.push(("include_composition".to_string(), comp.to_string()));
+            query_params.push(("include_composition".to_owned(), comp.to_string()));
         }
 
         let builder = if query_params.is_empty() {
@@ -664,10 +664,10 @@ impl GeckoTerminalClient {
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
-            query_params.push(("include".to_string(), inc.to_string()));
+            query_params.push(("include".to_owned(), inc.to_string()));
         }
         if let Some(net) = network {
-            query_params.push(("network".to_string(), net.to_string()));
+            query_params.push(("network".to_owned(), net.to_string()));
         }
 
         let builder = if query_params.is_empty() {
@@ -701,12 +701,12 @@ impl GeckoTerminalClient {
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(min_volume) = trade_volume_in_usd_greater_than {
             query_params.push((
-                "trade_volume_in_usd_greater_than".to_string(),
+                "trade_volume_in_usd_greater_than".to_owned(),
                 min_volume.to_string(),
             ));
         }
         if let Some(tok) = token {
-            query_params.push(("token".to_string(), tok.to_string()));
+            query_params.push(("token".to_owned(), tok.to_string()));
         }
 
         let builder = if query_params.is_empty() {

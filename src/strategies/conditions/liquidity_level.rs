@@ -23,11 +23,11 @@ impl ConditionEvaluator for LiquidityLevelCondition {
         let market_data = context
             .market_data
             .as_ref()
-            .ok_or_else(|| "Market data not available".to_string())?;
+            .ok_or_else(|| "Market data not available".to_owned())?;
 
         let liquidity = market_data
             .liquidity_sol
-            .ok_or_else(|| "Liquidity data not available".to_string())?;
+            .ok_or_else(|| "Liquidity data not available".to_owned())?;
 
         let result = match comparison.as_str() {
             "GREATER_THAN" => liquidity > threshold,
@@ -43,7 +43,7 @@ impl ConditionEvaluator for LiquidityLevelCondition {
     fn validate(&self, condition: &Condition) -> Result<(), String> {
         let threshold = get_param_f64(condition, "threshold")?;
         if threshold < 0.0 {
-            return Err("Threshold must be non-negative".to_string());
+            return Err("Threshold must be non-negative".to_owned());
         }
 
         let comparison = get_param_string(condition, "comparison")?;

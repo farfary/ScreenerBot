@@ -63,25 +63,25 @@ impl MultiBuyConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
         if self.token_mint.is_empty() {
-            return Err("Token mint is required".to_string());
+            return Err("Token mint is required".to_owned());
         }
         if self.wallet_count == 0 {
-            return Err("Wallet count must be at least 1".to_string());
+            return Err("Wallet count must be at least 1".to_owned());
         }
         if self.min_amount_sol < 0.001 {
-            return Err("Minimum amount must be at least 0.001 SOL".to_string());
+            return Err("Minimum amount must be at least 0.001 SOL".to_owned());
         }
         if self.max_amount_sol < self.min_amount_sol {
-            return Err("Maximum amount must be >= minimum amount".to_string());
+            return Err("Maximum amount must be >= minimum amount".to_owned());
         }
         if self.sol_buffer < 0.005 {
-            return Err("SOL buffer must be at least 0.005 SOL".to_string());
+            return Err("SOL buffer must be at least 0.005 SOL".to_owned());
         }
         if self.concurrency == 0 {
-            return Err("Concurrency must be at least 1".to_string());
+            return Err("Concurrency must be at least 1".to_owned());
         }
         if self.slippage_bps > 5000 {
-            return Err("Slippage cannot exceed 50% (5000 bps)".to_string());
+            return Err("Slippage cannot exceed 50% (5000 bps)".to_owned());
         }
         Ok(())
     }
@@ -140,19 +140,19 @@ impl MultiSellConfig {
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
         if self.token_mint.is_empty() {
-            return Err("Token mint is required".to_string());
+            return Err("Token mint is required".to_owned());
         }
         if self.sell_percentage <= 0.0 || self.sell_percentage > 100.0 {
-            return Err("Sell percentage must be between 0 and 100".to_string());
+            return Err("Sell percentage must be between 0 and 100".to_owned());
         }
         if self.min_sol_for_fee < 0.005 {
-            return Err("Minimum SOL for fee must be at least 0.005 SOL".to_string());
+            return Err("Minimum SOL for fee must be at least 0.005 SOL".to_owned());
         }
         if self.concurrency == 0 {
-            return Err("Concurrency must be at least 1".to_string());
+            return Err("Concurrency must be at least 1".to_owned());
         }
         if self.slippage_bps > 5000 {
-            return Err("Slippage cannot exceed 50% (5000 bps)".to_string());
+            return Err("Slippage cannot exceed 50% (5000 bps)".to_owned());
         }
         Ok(())
     }
@@ -193,7 +193,7 @@ impl ConsolidateConfig {
     pub fn validate(&self) -> Result<(), String> {
         // At least one operation should be enabled
         if !self.transfer_sol && self.transfer_tokens.is_none() && !self.close_atas {
-            return Err("At least one consolidation operation must be enabled".to_string());
+            return Err("At least one consolidation operation must be enabled".to_owned());
         }
         Ok(())
     }

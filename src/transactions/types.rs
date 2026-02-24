@@ -223,18 +223,18 @@ impl Transaction {
     /// Infer instruction type from program ID
     fn infer_instruction_type(program_id: &str) -> String {
         match program_id {
-            "ComputeBudget111111111111111111111111111111" => "ComputeBudget".to_string(),
-            "11111111111111111111111111111111" => "SystemProgram".to_string(),
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => "TokenProgram".to_string(),
-            "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => "Token2022".to_string(),
-            "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" => "AssociatedTokenAccount".to_string(),
-            "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" => "JupiterV6".to_string(),
-            "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "RaydiumAMM".to_string(),
-            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "RaydiumCLMM".to_string(),
-            "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "RaydiumCPMM".to_string(),
-            "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => "OrcaWhirlpool".to_string(),
-            "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "MeteoraDLMM".to_string(),
-            _ => "Unknown".to_string(),
+            "ComputeBudget111111111111111111111111111111" => "ComputeBudget".to_owned(),
+            "11111111111111111111111111111111" => "SystemProgram".to_owned(),
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => "TokenProgram".to_owned(),
+            "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => "Token2022".to_owned(),
+            "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" => "AssociatedTokenAccount".to_owned(),
+            "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" => "JupiterV6".to_owned(),
+            "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "RaydiumAMM".to_owned(),
+            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "RaydiumCLMM".to_owned(),
+            "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "RaydiumCPMM".to_owned(),
+            "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => "OrcaWhirlpool".to_owned(),
+            "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "MeteoraDLMM".to_owned(),
+            _ => "Unknown".to_owned(),
         }
     }
 }

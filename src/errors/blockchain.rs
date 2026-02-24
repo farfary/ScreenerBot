@@ -458,7 +458,7 @@ pub fn parse_structured_solana_error(
         error_type: FailureType::Uncertain,
         instruction_index: None,
         error_code: None,
-        error_name: "UnknownError".to_string(),
+        error_name: "UnknownError".to_owned(),
         description: format!("Unknown error structure: {error_value}"),
         raw_error: error_value.clone(),
     }
@@ -511,43 +511,43 @@ fn parse_transaction_level_error(error_string: &str, raw_error: &Value) -> Solan
     let (failure_type, description) = match error_string {
         "BlockhashNotFound" => (
             FailureType::Temporary,
-            "Transaction blockhash has expired".to_string(),
+            "Transaction blockhash has expired".to_owned(),
         ),
         "AlreadyProcessed" => (
             FailureType::Permanent,
-            "Transaction has already been processed".to_string(),
+            "Transaction has already been processed".to_owned(),
         ),
         "AccountInUse" => (
             FailureType::Temporary,
-            "Account is being used by another transaction".to_string(),
+            "Account is being used by another transaction".to_owned(),
         ),
         "InsufficientFundsForFee" => (
             FailureType::Permanent,
-            "Insufficient SOL to pay transaction fee".to_string(),
+            "Insufficient SOL to pay transaction fee".to_owned(),
         ),
         "SignatureFailure" => (
             FailureType::Permanent,
-            "Transaction signature verification failed".to_string(),
+            "Transaction signature verification failed".to_owned(),
         ),
         "UnsupportedVersion" => (
             FailureType::Permanent,
-            "Transaction version is not supported".to_string(),
+            "Transaction version is not supported".to_owned(),
         ),
         "InvalidAccountIndex" => (
             FailureType::Permanent,
-            "Transaction contains invalid account reference".to_string(),
+            "Transaction contains invalid account reference".to_owned(),
         ),
         "InvalidProgramForExecution" => (
             FailureType::Permanent,
-            "Program cannot be used for execution".to_string(),
+            "Program cannot be used for execution".to_owned(),
         ),
         "SanitizeFailure" => (
             FailureType::Permanent,
-            "Transaction failed sanitization checks".to_string(),
+            "Transaction failed sanitization checks".to_owned(),
         ),
         "WouldExceedMaxBlockCostLimit" => (
             FailureType::Temporary,
-            "Transaction would exceed block cost limit".to_string(),
+            "Transaction would exceed block cost limit".to_owned(),
         ),
         _ => (
             FailureType::Uncertain,
@@ -571,104 +571,104 @@ fn classify_custom_error(code: u32) -> (FailureType, String, String) {
         // DEX Trading Errors (Permanent)
         6001 => (
             FailureType::Permanent,
-            "SlippageExceeded".to_string(),
-            "Price slippage tolerance exceeded".to_string(),
+            "SlippageExceeded".to_owned(),
+            "Price slippage tolerance exceeded".to_owned(),
         ),
         6002 => (
             FailureType::Permanent,
-            "InsufficientLiquidity".to_string(),
-            "Insufficient liquidity in pool".to_string(),
+            "InsufficientLiquidity".to_owned(),
+            "Insufficient liquidity in pool".to_owned(),
         ),
         6003 => (
             FailureType::Permanent,
-            "InvalidTokenAccount".to_string(),
-            "Invalid token account provided".to_string(),
+            "InvalidTokenAccount".to_owned(),
+            "Invalid token account provided".to_owned(),
         ),
         6004 => (
             FailureType::Permanent,
-            "InvalidPoolState".to_string(),
-            "AMM pool is in invalid state".to_string(),
+            "InvalidPoolState".to_owned(),
+            "AMM pool is in invalid state".to_owned(),
         ),
         6005 => (
             FailureType::Permanent,
-            "InvalidCalculation".to_string(),
-            "Swap calculation failed".to_string(),
+            "InvalidCalculation".to_owned(),
+            "Swap calculation failed".to_owned(),
         ),
         6006 => (
             FailureType::Temporary,
-            "PoolSuspended".to_string(),
-            "Trading pool is temporarily suspended".to_string(),
+            "PoolSuspended".to_owned(),
+            "Trading pool is temporarily suspended".to_owned(),
         ),
         6007 => (
             FailureType::Permanent,
-            "InvalidTokenMint".to_string(),
-            "Invalid token mint provided".to_string(),
+            "InvalidTokenMint".to_owned(),
+            "Invalid token mint provided".to_owned(),
         ),
         6008 => (
             FailureType::Permanent,
-            "InvalidSwapDirection".to_string(),
-            "Invalid swap direction".to_string(),
+            "InvalidSwapDirection".to_owned(),
+            "Invalid swap direction".to_owned(),
         ),
         6009 => (
             FailureType::Temporary,
-            "RouteNotFound".to_string(),
-            "No valid route found for swap".to_string(),
+            "RouteNotFound".to_owned(),
+            "No valid route found for swap".to_owned(),
         ),
         6010 => (
             FailureType::Permanent,
-            "PriceImpactTooHigh".to_string(),
-            "Price impact exceeds maximum allowed".to_string(),
+            "PriceImpactTooHigh".to_owned(),
+            "Price impact exceeds maximum allowed".to_owned(),
         ),
 
         // Orca DEX specific errors
         34 => (
             FailureType::Permanent,
-            "OrcaSlippageExceeded".to_string(),
-            "Orca slippage tolerance exceeded".to_string(),
+            "OrcaSlippageExceeded".to_owned(),
+            "Orca slippage tolerance exceeded".to_owned(),
         ),
         35 => (
             FailureType::Permanent,
-            "OrcaInvalidSwap".to_string(),
-            "Orca invalid swap parameters".to_string(),
+            "OrcaInvalidSwap".to_owned(),
+            "Orca invalid swap parameters".to_owned(),
         ),
 
         // Raydium DEX specific errors
         6000 => (
             FailureType::Permanent,
-            "RaydiumInvalidInput".to_string(),
-            "Raydium invalid input parameters".to_string(),
+            "RaydiumInvalidInput".to_owned(),
+            "Raydium invalid input parameters".to_owned(),
         ),
         6011 => (
             FailureType::Permanent,
-            "RaydiumInsufficientFunds".to_string(),
-            "Raydium insufficient funds for swap".to_string(),
+            "RaydiumInsufficientFunds".to_owned(),
+            "Raydium insufficient funds for swap".to_owned(),
         ),
 
         // SPL Token errors
         0 => (
             FailureType::Permanent,
-            "TokenInsufficientFunds".to_string(),
-            "Insufficient token balance".to_string(),
+            "TokenInsufficientFunds".to_owned(),
+            "Insufficient token balance".to_owned(),
         ),
         1 => (
             FailureType::Permanent,
-            "TokenInvalidInstruction".to_string(),
-            "Invalid token instruction".to_string(),
+            "TokenInvalidInstruction".to_owned(),
+            "Invalid token instruction".to_owned(),
         ),
         3 => (
             FailureType::Permanent,
-            "TokenOwnerMismatch".to_string(),
-            "Token account owner mismatch".to_string(),
+            "TokenOwnerMismatch".to_owned(),
+            "Token account owner mismatch".to_owned(),
         ),
         5 => (
             FailureType::Permanent,
-            "TokenInvalidAmount".to_string(),
-            "Invalid token amount".to_string(),
+            "TokenInvalidAmount".to_owned(),
+            "Invalid token amount".to_owned(),
         ),
         17 => (
             FailureType::Permanent,
-            "TokenAccountFrozen".to_string(),
-            "Token account is frozen".to_string(),
+            "TokenAccountFrozen".to_owned(),
+            "Token account is frozen".to_owned(),
         ),
 
         // Generic program errors
@@ -685,67 +685,67 @@ fn classify_builtin_error(error_name: &str) -> (FailureType, String) {
     match error_name {
         "GenericError" => (
             FailureType::Uncertain,
-            "Generic instruction error".to_string(),
+            "Generic instruction error".to_owned(),
         ),
         "InsufficientFunds" => (
             FailureType::Permanent,
-            "Insufficient lamports for operation".to_string(),
+            "Insufficient lamports for operation".to_owned(),
         ),
         "IncorrectProgramId" => (
             FailureType::Permanent,
-            "Incorrect program ID provided".to_string(),
+            "Incorrect program ID provided".to_owned(),
         ),
         "InvalidAccountData" => (
             FailureType::Permanent,
-            "Account data is invalid".to_string(),
+            "Account data is invalid".to_owned(),
         ),
         "InvalidInstructionData" => (
             FailureType::Permanent,
-            "Instruction data is invalid".to_string(),
+            "Instruction data is invalid".to_owned(),
         ),
         "ReadonlyLamportChange" => (
             FailureType::Permanent,
-            "Attempted to change lamports in readonly account".to_string(),
+            "Attempted to change lamports in readonly account".to_owned(),
         ),
         "ReadonlyDataModified" => (
             FailureType::Permanent,
-            "Attempted to modify readonly account data".to_string(),
+            "Attempted to modify readonly account data".to_owned(),
         ),
         "DuplicateAccountIndex" => (
             FailureType::Permanent,
-            "Duplicate account index in instruction".to_string(),
+            "Duplicate account index in instruction".to_owned(),
         ),
         "ExecutableModified" => (
             FailureType::Permanent,
-            "Attempted to modify executable account".to_string(),
+            "Attempted to modify executable account".to_owned(),
         ),
         "RentEpochModified" => (
             FailureType::Permanent,
-            "Attempted to modify rent epoch".to_string(),
+            "Attempted to modify rent epoch".to_owned(),
         ),
         "NotEnoughAccountKeys" => (
             FailureType::Permanent,
-            "Not enough account keys provided".to_string(),
+            "Not enough account keys provided".to_owned(),
         ),
         "AccountDataSizeChanged" => (
             FailureType::Permanent,
-            "Account data size unexpectedly changed".to_string(),
+            "Account data size unexpectedly changed".to_owned(),
         ),
         "AccountNotExecutable" => (
             FailureType::Permanent,
-            "Account is not executable".to_string(),
+            "Account is not executable".to_owned(),
         ),
         "AccountBorrowFailed" => (
             FailureType::Temporary,
-            "Failed to borrow account".to_string(),
+            "Failed to borrow account".to_owned(),
         ),
         "AccountBorrowOutstanding" => (
             FailureType::Temporary,
-            "Account has outstanding borrow".to_string(),
+            "Account has outstanding borrow".to_owned(),
         ),
         "DuplicateAccountOutOfSync" => (
             FailureType::Permanent,
-            "Duplicate account is out of sync".to_string(),
+            "Duplicate account is out of sync".to_owned(),
         ),
         _ => (
             FailureType::Uncertain,
@@ -763,7 +763,7 @@ fn create_unknown_instruction_error(
         error_type: FailureType::Uncertain,
         instruction_index: Some(instruction_index),
         error_code: None,
-        error_name: "UnknownInstructionError".to_string(),
+        error_name: "UnknownInstructionError".to_owned(),
         description: format!("Unknown instruction error at index {instruction_index}"),
         raw_error: raw_error.clone(),
     }
@@ -793,7 +793,7 @@ pub fn parse_solana_error(
         && (error_lower.contains("not found") || error_lower.contains("expired"))
     {
         return BlockchainError::BlockhashExpired {
-            blockhash: extract_blockhash(error_message).unwrap_or_else(|| "unknown".to_string()),
+            blockhash: extract_blockhash(error_message).unwrap_or_else(|| "unknown".to_owned()),
             age_seconds: 150, // Solana blockhashes expire after ~2.5 minutes
             signature: sig,
         };
@@ -802,7 +802,7 @@ pub fn parse_solana_error(
     // Account not found
     if error_lower.contains("account") && error_lower.contains("not found") {
         return BlockchainError::AccountNotFound {
-            pubkey: extract_pubkey(error_message).unwrap_or_else(|| "unknown".to_string()),
+            pubkey: extract_pubkey(error_message).unwrap_or_else(|| "unknown".to_owned()),
             context: context.to_string(),
             rpc_endpoint: None,
         };
@@ -811,8 +811,8 @@ pub fn parse_solana_error(
     // Transaction not found
     if error_lower.contains("transaction") && error_lower.contains("not found") {
         return BlockchainError::TransactionNotFound {
-            signature: sig.unwrap_or_else(|| "unknown".to_string()),
-            commitment_level: "confirmed".to_string(),
+            signature: sig.unwrap_or_else(|| "unknown".to_owned()),
+            commitment_level: "confirmed".to_owned(),
             searched_endpoints: vec![],
             age_seconds: None,
         };
@@ -822,7 +822,7 @@ pub fn parse_solana_error(
     if error_lower.contains("instructionerror") || error_lower.contains("instruction error") {
         if let Some(code) = extract_error_code(error_message) {
             return BlockchainError::InstructionError {
-                signature: sig.unwrap_or_else(|| "unknown".to_string()),
+                signature: sig.unwrap_or_else(|| "unknown".to_owned()),
                 instruction_index: 0,
                 error_code: code,
                 error_description: map_instruction_error_code(code),
@@ -844,7 +844,7 @@ pub fn parse_solana_error(
     // Insufficient funds
     if error_lower.contains("insufficient") && error_lower.contains("fund") {
         return BlockchainError::InsufficientFunds {
-            signature: sig.unwrap_or_else(|| "unknown".to_string()),
+            signature: sig.unwrap_or_else(|| "unknown".to_owned()),
             required: 0, // Will be extracted if available
             available: 0,
         };
@@ -852,7 +852,7 @@ pub fn parse_solana_error(
 
     // Default fallback for unmatched errors
     BlockchainError::TransactionDropped {
-        signature: sig.unwrap_or_else(|| "unknown".to_string()),
+        signature: sig.unwrap_or_else(|| "unknown".to_owned()),
         reason: error_message.to_string(),
         fee_paid: None,
         attempts: 1,
@@ -878,49 +878,49 @@ fn extract_error_code(error_msg: &str) -> Option<u32> {
 fn map_instruction_error_code(code: u32) -> String {
     match code {
         // Built-in Solana instruction errors
-        0x0 => "GenericError".to_string(),
-        0x1 => "InsufficientFunds".to_string(),
-        0x2 => "IncorrectProgramId".to_string(),
-        0x3 => "InvalidAccountData".to_string(),
-        0x4 => "InvalidInstructionData".to_string(),
-        0x5 => "ReadonlyLamportChange".to_string(),
-        0x6 => "ReadonlyDataModified".to_string(),
-        0x7 => "DuplicateAccountIndex".to_string(),
-        0x8 => "ExecutableModified".to_string(),
-        0x9 => "RentEpochModified".to_string(),
-        0xa => "NotEnoughAccountKeys".to_string(),
-        0xb => "AccountDataSizeChanged".to_string(),
-        0xc => "AccountNotExecutable".to_string(),
-        0xd => "AccountBorrowFailed".to_string(),
-        0xe => "AccountBorrowOutstanding".to_string(),
-        0xf => "DuplicateAccountOutOfSync".to_string(),
+        0x0 => "GenericError".to_owned(),
+        0x1 => "InsufficientFunds".to_owned(),
+        0x2 => "IncorrectProgramId".to_owned(),
+        0x3 => "InvalidAccountData".to_owned(),
+        0x4 => "InvalidInstructionData".to_owned(),
+        0x5 => "ReadonlyLamportChange".to_owned(),
+        0x6 => "ReadonlyDataModified".to_owned(),
+        0x7 => "DuplicateAccountIndex".to_owned(),
+        0x8 => "ExecutableModified".to_owned(),
+        0x9 => "RentEpochModified".to_owned(),
+        0xa => "NotEnoughAccountKeys".to_owned(),
+        0xb => "AccountDataSizeChanged".to_owned(),
+        0xc => "AccountNotExecutable".to_owned(),
+        0xd => "AccountBorrowFailed".to_owned(),
+        0xe => "AccountBorrowOutstanding".to_owned(),
+        0xf => "DuplicateAccountOutOfSync".to_owned(),
 
         // DEX Trading Errors
-        6001 => "SlippageExceeded".to_string(),
-        6002 => "InsufficientLiquidity".to_string(),
-        6003 => "InvalidTokenAccount".to_string(),
-        6004 => "InvalidPoolState".to_string(),
-        6005 => "InvalidCalculation".to_string(),
-        6006 => "PoolSuspended".to_string(),
-        6007 => "InvalidTokenMint".to_string(),
-        6008 => "InvalidSwapDirection".to_string(),
-        6009 => "RouteNotFound".to_string(),
-        6010 => "PriceImpactTooHigh".to_string(),
+        6001 => "SlippageExceeded".to_owned(),
+        6002 => "InsufficientLiquidity".to_owned(),
+        6003 => "InvalidTokenAccount".to_owned(),
+        6004 => "InvalidPoolState".to_owned(),
+        6005 => "InvalidCalculation".to_owned(),
+        6006 => "PoolSuspended".to_owned(),
+        6007 => "InvalidTokenMint".to_owned(),
+        6008 => "InvalidSwapDirection".to_owned(),
+        6009 => "RouteNotFound".to_owned(),
+        6010 => "PriceImpactTooHigh".to_owned(),
 
         // Orca DEX specific
-        34 => "OrcaSlippageExceeded".to_string(),
-        35 => "OrcaInvalidSwap".to_string(),
+        34 => "OrcaSlippageExceeded".to_owned(),
+        35 => "OrcaInvalidSwap".to_owned(),
 
         // Raydium DEX specific
-        6000 => "RaydiumInvalidInput".to_string(),
-        6011 => "RaydiumInsufficientFunds".to_string(),
+        6000 => "RaydiumInvalidInput".to_owned(),
+        6011 => "RaydiumInsufficientFunds".to_owned(),
 
         // SPL Token Program errors
-        0 => "TokenInsufficientFunds".to_string(),
-        1 => "TokenInvalidInstruction".to_string(),
-        3 => "TokenOwnerMismatch".to_string(),
-        5 => "TokenInvalidAmount".to_string(),
-        17 => "TokenAccountFrozen".to_string(),
+        0 => "TokenInsufficientFunds".to_owned(),
+        1 => "TokenInvalidInstruction".to_owned(),
+        3 => "TokenOwnerMismatch".to_owned(),
+        5 => "TokenInvalidAmount".to_owned(),
+        17 => "TokenAccountFrozen".to_owned(),
 
         _ => format!("UnknownError({})", code),
     }

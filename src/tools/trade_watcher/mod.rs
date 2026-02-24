@@ -39,14 +39,14 @@
 //!
 //! // Add a new watched token
 //! let config = WatchedTokenConfig {
-//!     mint: "TokenMint...".to_string(),
-//!     symbol: Some("TOKEN".to_string()),
-//!     pool_address: "PoolAddress...".to_string(),
-//!     pool_source: "geckoterminal".to_string(),
-//!     pool_dex: Some("raydium".to_string()),
-//!     pool_pair: Some("TOKEN/SOL".to_string()),
+//!     mint: "TokenMint...".to_owned(),
+//!     symbol: Some("TOKEN".to_owned()),
+//!     pool_address: "PoolAddress...".to_owned(),
+//!     pool_source: "geckoterminal".to_owned(),
+//!     pool_dex: Some("raydium".to_owned()),
+//!     pool_pair: Some("TOKEN/SOL".to_owned()),
 //!     pool_liquidity: Some(100000.0),
-//!     watch_type: "buy_on_sell".to_string(),
+//!     watch_type: "buy_on_sell".to_owned(),
 //!     trigger_amount_sol: Some(1.0),
 //!     action_amount_sol: Some(0.5),
 //!     slippage_bps: Some(500),

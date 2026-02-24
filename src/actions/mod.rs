@@ -21,8 +21,8 @@
 //!     let action = Action::new(
 //!         action_id.clone(),
 //!         ActionType::SwapBuy,
-//!         "token_mint".to_string(),
-//!         vec!["Step 1".to_string(), "Step 2".to_string()],
+//!         "token_mint".to_owned(),
+//!         vec!["Step 1".to_owned(), "Step 2".to_owned()],
 //!         serde_json::json!({"symbol": "TOKEN"}),
 //!     );
 //!     

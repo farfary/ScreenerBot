@@ -170,7 +170,7 @@ impl Service for TelegramService {
             // Send startup notification
             let startup_notification = Notification::bot_started(
                 crate::version::VERSION.to_string(),
-                "Normal".to_string(),
+                "Normal".to_owned(),
             );
             send_notification(startup_notification).await;
         }
@@ -185,7 +185,7 @@ impl Service for TelegramService {
 
         // Send shutdown notification if possible
         if notifier::is_enabled() {
-            let shutdown_notification = Notification::bot_stopped("Graceful shutdown".to_string());
+            let shutdown_notification = Notification::bot_stopped("Graceful shutdown".to_owned());
             send_notification(shutdown_notification).await;
         }
 
@@ -210,8 +210,8 @@ impl Service for TelegramService {
         let state = self.state.read().await.clone();
         match state {
             BotState::Connected => ServiceHealth::Healthy,
-            BotState::Discovery => ServiceHealth::Degraded("Discovery mode".to_string()),
-            BotState::Disconnected => ServiceHealth::Unhealthy("Disconnected".to_string()),
+            BotState::Discovery => ServiceHealth::Degraded("Discovery mode".to_owned()),
+            BotState::Disconnected => ServiceHealth::Unhealthy("Disconnected".to_owned()),
         }
     }
 

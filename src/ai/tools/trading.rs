@@ -48,8 +48,8 @@ struct TradeResponse {
 impl Tool for BuyTokenTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "buy_token".to_string(),
-            description: "Execute a buy order for a token. This will create a new position. REQUIRES USER CONFIRMATION.".to_string(),
+            name: "buy_token".to_owned(),
+            description: "Execute a buy order for a token. This will create a new position. REQUIRES USER CONFIRMATION.".to_owned(),
             category: ToolCategory::Trading,
             parameters: json!({
                 "type": "object",
@@ -81,12 +81,12 @@ impl Tool for BuyTokenTool {
 
         // Validate mint address format
         if !is_valid_solana_address(&params.mint_address) {
-            return ToolResult::error("Invalid mint address format".to_string());
+            return ToolResult::error("Invalid mint address format".to_owned());
         }
 
         // Validate amount
         if params.amount_sol <= 0.0 {
-            return ToolResult::error("Amount must be greater than 0".to_string());
+            return ToolResult::error("Amount must be greater than 0".to_owned());
         }
 
         let max_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
@@ -128,7 +128,7 @@ impl Tool for BuyTokenTool {
             } else {
                 format!(
                     "Buy failed: {}",
-                    result.error.unwrap_or_else(|| "Unknown error".to_string())
+                    result.error.unwrap_or_else(|| "Unknown error".to_owned())
                 )
             },
         };
@@ -162,7 +162,7 @@ struct SellTokenParams {
 impl Tool for SellTokenTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "sell_token".to_string(),
+            name: "sell_token".to_owned(),
             description: "Execute a sell order for a token position. REQUIRES USER CONFIRMATION."
                 .to_string(),
             category: ToolCategory::Trading,
@@ -198,7 +198,7 @@ impl Tool for SellTokenTool {
 
         // Validate percentage
         if params.percentage <= 0.0 || params.percentage > 100.0 {
-            return ToolResult::error("Percentage must be between 1 and 100".to_string());
+            return ToolResult::error("Percentage must be between 1 and 100".to_owned());
         }
 
         // Check if position exists
@@ -236,7 +236,7 @@ impl Tool for SellTokenTool {
             } else {
                 format!(
                     "Sell failed: {}",
-                    result.error.unwrap_or_else(|| "Unknown error".to_string())
+                    result.error.unwrap_or_else(|| "Unknown error".to_owned())
                 )
             },
         };
@@ -269,7 +269,7 @@ struct ClosePositionParams {
 impl Tool for ClosePositionTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
-            name: "close_position".to_string(),
+            name: "close_position".to_owned(),
             description: "Close an entire position (sell 100%). REQUIRES USER CONFIRMATION."
                 .to_string(),
             category: ToolCategory::Trading,
@@ -325,7 +325,7 @@ impl Tool for ClosePositionTool {
             } else {
                 format!(
                     "Close failed: {}",
-                    result.error.unwrap_or_else(|| "Unknown error".to_string())
+                    result.error.unwrap_or_else(|| "Unknown error".to_owned())
                 )
             },
         };

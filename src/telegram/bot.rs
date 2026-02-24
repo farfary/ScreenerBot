@@ -135,7 +135,7 @@ impl TelegramBot {
     pub async fn send_to_configured_chat(&self, message: &str) -> Result<(), String> {
         let chat_id_str = with_config(|c| c.telegram.chat_id.clone());
         if chat_id_str.is_empty() {
-            return Err("No chat ID configured".to_string());
+            return Err("No chat ID configured".to_owned());
         }
 
         let chat_id: i64 = chat_id_str
@@ -196,7 +196,7 @@ pub fn is_bot_initialized() -> bool {
 pub async fn send_message(chat_id: i64, message: &str) -> Result<(), String> {
     let token = with_config(|c| c.telegram.bot_token.clone());
     if token.is_empty() {
-        return Err("Bot not configured".to_string());
+        return Err("Bot not configured".to_owned());
     }
 
     let bot = Bot::new(&token);

@@ -924,7 +924,7 @@ impl ActionsDatabase {
         // running must be restored after a restart so the in-memory cache and SSE
         // stream remain consistent with the database.
         let filters = ActionFilters {
-            state: Some(vec!["in_progress".to_string()]),
+            state: Some(vec!["in_progress".to_owned()]),
             limit: Some(500),
             ..Default::default()
         };

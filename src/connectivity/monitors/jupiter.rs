@@ -30,7 +30,7 @@ impl EndpointMonitor for JupiterMonitor {
         let cfg = get_config_clone();
         if cfg.swaps.gmgn.enabled {
             Some(FallbackStrategy::UseAlternative {
-                endpoint_name: "gmgn".to_string(),
+                endpoint_name: "gmgn".to_owned(),
             })
         } else {
             None

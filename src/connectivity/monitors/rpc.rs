@@ -39,7 +39,7 @@ impl EndpointMonitor for RpcMonitor {
         let provider_health = rpc_client.get_provider_health().await;
 
         if provider_health.is_empty() {
-            return HealthCheckResult::failure("No RPC providers configured".to_string());
+            return HealthCheckResult::failure("No RPC providers configured".to_owned());
         }
 
         let total_providers = provider_health.len();

@@ -80,7 +80,7 @@ pub struct DexScreenerClient {
 impl DexScreenerClient {
     pub fn new(enabled: bool, timeout_seconds: u64) -> Result<Self, String> {
         if timeout_seconds == 0 {
-            return Err("Timeout must be greater than zero".to_string());
+            return Err("Timeout must be greater than zero".to_owned());
         }
 
         Ok(Self {
@@ -324,7 +324,7 @@ impl DexScreenerClient {
     /// Vec of matching pairs
     pub async fn search(&self, query: &str) -> Result<Vec<DexScreenerPool>, String> {
         if query.trim().is_empty() {
-            return Err("Query cannot be empty".to_string());
+            return Err("Query cannot be empty".to_owned());
         }
 
         let endpoint = "latest/dex/search";
@@ -467,13 +467,13 @@ impl DexScreenerClient {
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(chain) = chain_id {
-            query_params.push(("chainId".to_string(), chain.to_string()));
+            query_params.push(("chainId".to_owned(), chain.to_string()));
         }
         if let Some(sort) = sort_by {
-            query_params.push(("sortBy".to_string(), sort.to_string()));
+            query_params.push(("sortBy".to_owned(), sort.to_string()));
         }
         if let Some(order_val) = order {
-            query_params.push(("order".to_string(), order_val.to_string()));
+            query_params.push(("order".to_owned(), order_val.to_string()));
         }
 
         let builder = if query_params.is_empty() {

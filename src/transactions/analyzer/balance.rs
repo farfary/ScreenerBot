@@ -395,12 +395,12 @@ async fn filter_noise_transfers(
             from_account: if change.change < 0.0 {
                 change.account.clone()
             } else {
-                "unknown".to_string()
+                "unknown".to_owned()
             },
             to_account: if change.change > 0.0 {
                 change.account.clone()
             } else {
-                "unknown".to_string()
+                "unknown".to_owned()
             },
             mint: WSOL_MINT.to_string(), // SOL mint
             amount: change.change.abs(),
@@ -415,12 +415,12 @@ async fn filter_noise_transfers(
                 from_account: if change.change < 0.0 {
                     account.clone()
                 } else {
-                    "unknown".to_string()
+                    "unknown".to_owned()
                 },
                 to_account: if change.change > 0.0 {
                     account.clone()
                 } else {
-                    "unknown".to_string()
+                    "unknown".to_owned()
                 },
                 mint: change.mint.clone(),
                 amount: change.change.abs(),

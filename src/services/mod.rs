@@ -651,7 +651,7 @@ impl ServiceManager {
                 return Err(crate::Error::Service(
                     crate::errors::ServiceError::Dependency {
                         service: name.to_string(),
-                        dependency: "circular".to_string(),
+                        dependency: "circular".to_owned(),
                         message: format!("Circular dependency detected for service: {name}"),
                     },
                 ));

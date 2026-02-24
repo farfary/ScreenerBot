@@ -62,7 +62,7 @@ pub async fn handle_positions_command() -> String {
     let positions = positions::get_open_positions().await;
 
     if positions.is_empty() {
-        return "📦 <b>No Open Positions</b>\n\nWaiting for opportunities...".to_string();
+        return "📦 <b>No Open Positions</b>\n\nWaiting for opportunities...".to_owned();
     }
 
     let mut response = format!("📦 <b>Open Positions ({})</b>\n\n", positions.len());

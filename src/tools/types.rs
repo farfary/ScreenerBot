@@ -93,9 +93,9 @@ impl DelayConfig {
     /// Convert to database values
     pub fn to_db_values(&self) -> (String, i64, Option<i64>) {
         match self {
-            DelayConfig::Fixed { delay_ms } => ("fixed".to_string(), *delay_ms as i64, None),
+            DelayConfig::Fixed { delay_ms } => ("fixed".to_owned(), *delay_ms as i64, None),
             DelayConfig::Random { min_ms, max_ms } => {
-                ("random".to_string(), *min_ms as i64, Some(*max_ms as i64))
+                ("random".to_owned(), *min_ms as i64, Some(*max_ms as i64))
             }
         }
     }
@@ -168,9 +168,9 @@ impl SizingConfig {
     /// Convert to database values
     pub fn to_db_values(&self) -> (String, f64, Option<f64>) {
         match self {
-            SizingConfig::Fixed { amount_sol } => ("fixed".to_string(), *amount_sol, None),
+            SizingConfig::Fixed { amount_sol } => ("fixed".to_owned(), *amount_sol, None),
             SizingConfig::Random { min_sol, max_sol } => {
-                ("random".to_string(), *min_sol, Some(*max_sol))
+                ("random".to_owned(), *min_sol, Some(*max_sol))
             }
         }
     }
@@ -191,16 +191,16 @@ impl SizingConfig {
         match self {
             SizingConfig::Fixed { amount_sol } => {
                 if *amount_sol < 0.001 {
-                    return Err("Amount must be at least 0.001 SOL".to_string());
+                    return Err("Amount must be at least 0.001 SOL".to_owned());
                 }
                 Ok(())
             }
             SizingConfig::Random { min_sol, max_sol } => {
                 if *min_sol < 0.001 {
-                    return Err("Minimum amount must be at least 0.001 SOL".to_string());
+                    return Err("Minimum amount must be at least 0.001 SOL".to_owned());
                 }
                 if *max_sol < *min_sol {
-                    return Err("Maximum amount must be >= minimum amount".to_string());
+                    return Err("Maximum amount must be >= minimum amount".to_owned());
                 }
                 Ok(())
             }
@@ -234,9 +234,9 @@ impl WalletMode {
     /// Convert to database value
     pub fn to_db_value(&self) -> String {
         match self {
-            WalletMode::Single => "single".to_string(),
-            WalletMode::Selected => "selected".to_string(),
-            WalletMode::AutoSelect => "auto_select".to_string(),
+            WalletMode::Single => "single".to_owned(),
+            WalletMode::Selected => "selected".to_owned(),
+            WalletMode::AutoSelect => "auto_select".to_owned(),
         }
     }
 
@@ -304,8 +304,8 @@ impl DistributionStrategy {
     /// Convert to database value
     pub fn to_db_value(&self) -> String {
         match self {
-            DistributionStrategy::RoundRobin => "round_robin".to_string(),
-            DistributionStrategy::Random => "random".to_string(),
+            DistributionStrategy::RoundRobin => "round_robin".to_owned(),
+            DistributionStrategy::Random => "random".to_owned(),
             DistributionStrategy::Burst { burst_size } => format!("burst:{burst_size}"),
         }
     }

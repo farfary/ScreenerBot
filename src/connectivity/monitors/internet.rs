@@ -20,7 +20,7 @@ impl InternetMonitor {
         let dns_servers = &cfg.connectivity.internet.dns_servers;
 
         if dns_servers.is_empty() {
-            return Err("No DNS servers configured".to_string());
+            return Err("No DNS servers configured".to_owned());
         }
 
         let timeout_duration = Duration::from_secs(timeout_secs);
@@ -52,7 +52,7 @@ impl InternetMonitor {
         let http_checks = &cfg.connectivity.internet.http_checks;
 
         if http_checks.is_empty() {
-            return Err("No HTTP check endpoints configured".to_string());
+            return Err("No HTTP check endpoints configured".to_owned());
         }
 
         let client = reqwest::Client::builder()

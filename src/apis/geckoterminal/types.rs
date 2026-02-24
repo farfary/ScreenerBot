@@ -276,32 +276,32 @@ impl GeckoTerminalPoolData {
             base_token_price_usd: attrs
                 .base_token_price_usd
                 .clone()
-                .unwrap_or_else(|| "0".to_string()),
+                .unwrap_or_else(|| "0".to_owned()),
             base_token_price_native: attrs
                 .base_token_price_native_currency
                 .clone()
-                .unwrap_or_else(|| "0".to_string()),
+                .unwrap_or_else(|| "0".to_owned()),
             base_token_price_quote: attrs
                 .base_token_price_quote_token
                 .clone()
-                .unwrap_or_else(|| "0".to_string()),
+                .unwrap_or_else(|| "0".to_owned()),
             quote_token_price_usd: attrs
                 .quote_token_price_usd
                 .clone()
-                .unwrap_or_else(|| "0".to_string()),
+                .unwrap_or_else(|| "0".to_owned()),
             quote_token_price_native: attrs
                 .quote_token_price_native_currency
                 .clone()
-                .unwrap_or_else(|| "0".to_string()),
+                .unwrap_or_else(|| "0".to_owned()),
             quote_token_price_base: attrs
                 .quote_token_price_base_token
                 .clone()
-                .unwrap_or_else(|| "0".to_string()),
+                .unwrap_or_else(|| "0".to_owned()),
             token_price_usd: attrs
                 .token_price_usd
                 .clone()
                 .or_else(|| attrs.base_token_price_usd.clone())
-                .unwrap_or_else(|| "0".to_string()),
+                .unwrap_or_else(|| "0".to_owned()),
             fdv_usd: attrs.fdv_usd.as_ref().and_then(|s| parse_f64(s)),
             market_cap_usd: attrs.market_cap_usd.as_ref().and_then(|s| parse_f64(s)),
             reserve_usd: attrs.reserve_in_usd.as_ref().and_then(|s| parse_f64(s)),

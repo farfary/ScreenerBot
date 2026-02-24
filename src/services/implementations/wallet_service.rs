@@ -53,10 +53,10 @@ impl Service for WalletService {
         metrics.errors_total = errors;
         metrics
             .custom_metrics
-            .insert("snapshots_taken".to_string(), snapshots_taken as f64);
+            .insert("snapshots_taken".to_owned(), snapshots_taken as f64);
         metrics
             .custom_metrics
-            .insert("flow_syncs".to_string(), flow_syncs as f64);
+            .insert("flow_syncs".to_owned(), flow_syncs as f64);
 
         metrics
     }

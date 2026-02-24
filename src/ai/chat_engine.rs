@@ -53,7 +53,7 @@ pub async fn init_chat_engine() -> Result<(), String> {
     let engine = ChatEngine::new();
     CHAT_ENGINE
         .set(Arc::new(engine))
-        .map_err(|_| "Chat engine already initialized".to_string())
+        .map_err(|_| "Chat engine already initialized".to_owned())
 }
 
 /// Get the global chat engine
@@ -262,7 +262,7 @@ impl ChatEngine {
     pub async fn process_message(&self, request: ChatRequest) -> Result<ChatResponse, AiError> {
         // Get database pool
         let pool = chat_db::get_chat_pool()
-            .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_string()))?;
+            .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
 
         // Add user message to history
         let user_message_id =
@@ -294,7 +294,7 @@ impl ChatEngine {
                     LogTag::Api,
                     &format!("Max tool iterations ({}) reached", MAX_TOOL_ITERATIONS),
                 );
-                break "I've reached the maximum number of tool calls. Please try breaking this down into smaller requests.".to_string();
+                break "I've reached the maximum number of tool calls. Please try breaking this down into smaller requests.".to_owned();
             }
 
             // Call LLM
@@ -422,14 +422,14 @@ impl ChatEngine {
             .get_confirmation(confirmation_id)
             .await
             .ok_or_else(|| {
-                AiError::ValidationError("Confirmation not found or expired".to_string())
+                AiError::ValidationError("Confirmation not found or expired".to_owned())
             })?;
 
         // Validate session_id if provided
         if let Some(sid) = session_id {
             if state.session_id != sid {
                 return Err(AiError::ValidationError(
-                    "Confirmation does not belong to this session".to_string(),
+                    "Confirmation does not belong to this session".to_owned(),
                 ));
             }
         }
@@ -442,7 +442,7 @@ impl ChatEngine {
         // Bounds check before accessing tool_calls
         if state.current_index >= state.tool_calls.len() {
             return Err(AiError::ValidationError(
-                "Invalid confirmation state: index out of bounds".to_string(),
+                "Invalid confirmation state: index out of bounds".to_owned(),
             ));
         }
 
@@ -452,7 +452,7 @@ impl ChatEngine {
 
             return Ok(ChatResponse {
                 message_id: state.message_id,
-                content: "Tool execution was denied by user.".to_string(),
+                content: "Tool execution was denied by user.".to_owned(),
                 tool_calls: vec![ToolCallInfo {
                     tool_name: state.tool_calls[state.current_index].name.clone(),
                     input: state.tool_calls[state.current_index].arguments.clone(),
@@ -466,7 +466,7 @@ impl ChatEngine {
 
         // Get database pool
         let pool = chat_db::get_chat_pool()
-            .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_string()))?;
+            .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
 
         // Execute the approved tool
         let tool_call = &state.tool_calls[state.current_index];
@@ -497,7 +497,7 @@ impl ChatEngine {
                 .tool_registry
                 .get(&next_tool.name)
                 .map(|t| t.definition().description.clone())
-                .unwrap_or_else(|| "No description available".to_string());
+                .unwrap_or_else(|| "No description available".to_owned());
 
             // Return with next pending confirmation
             return Ok(ChatResponse {
@@ -771,7 +771,7 @@ impl ChatEngine {
         {
             Ok(result) => result.map_err(|e| AiError::LlmError(format!("LLM call failed: {e}"))),
             Err(_) => Err(AiError::LlmError(
-                "LLM call timed out after 60 seconds".to_string(),
+                "LLM call timed out after 60 seconds".to_owned(),
             )),
         }
     }
@@ -799,16 +799,16 @@ impl ChatEngine {
             } else {
                 // Default models for each provider
                 match provider {
-                    Provider::OpenAi => "gpt-4".to_string(),
-                    Provider::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
-                    Provider::Groq => "llama-3.1-70b-versatile".to_string(),
-                    Provider::DeepSeek => "deepseek-chat".to_string(),
-                    Provider::Gemini => "gemini-pro".to_string(),
-                    Provider::Ollama => "llama3.2".to_string(),
-                    Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_string(),
-                    Provider::OpenRouter => "openai/gpt-4".to_string(),
-                    Provider::Mistral => "mistral-large-latest".to_string(),
-                    Provider::Assistant => "gpt-4o".to_string(),
+                    Provider::OpenAi => "gpt-4".to_owned(),
+                    Provider::Anthropic => "claude-3-5-sonnet-20241022".to_owned(),
+                    Provider::Groq => "llama-3.1-70b-versatile".to_owned(),
+                    Provider::DeepSeek => "deepseek-chat".to_owned(),
+                    Provider::Gemini => "gemini-pro".to_owned(),
+                    Provider::Ollama => "llama3.2".to_owned(),
+                    Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_owned(),
+                    Provider::OpenRouter => "openai/gpt-4".to_owned(),
+                    Provider::Mistral => "mistral-large-latest".to_owned(),
+                    Provider::Assistant => "gpt-4o".to_owned(),
                 }
             }
         })
@@ -1078,7 +1078,7 @@ impl ChatEngine {
             pool,
             message_id,
             &tool_call.name,
-            &serde_json::to_string(&tool_call.arguments).unwrap_or_else(|_| "{}".to_string()),
+            &serde_json::to_string(&tool_call.arguments).unwrap_or_else(|_| "{}".to_owned()),
             &output_json,
             status,
         ) {
@@ -1266,7 +1266,7 @@ I'll fetch that information now.
 
         // With context
         let context = Some(ChatContext {
-            current_token: Some("So11111111111111111111111111111111111111112".to_string()),
+            current_token: Some("So11111111111111111111111111111111111111112".to_owned()),
             current_position: Some(42),
         });
 
@@ -1281,13 +1281,13 @@ I'll fetch that information now.
 
         let results = vec![
             ToolCallInfo {
-                tool_name: "get_balance".to_string(),
+                tool_name: "get_balance".to_owned(),
                 input: serde_json::json!({}),
                 output: Some(serde_json::json!({"balance": 10.5})),
                 status: ToolCallStatus::Executed,
             },
             ToolCallInfo {
-                tool_name: "invalid_tool".to_string(),
+                tool_name: "invalid_tool".to_owned(),
                 input: serde_json::json!({}),
                 output: Some(serde_json::json!({"error": "Tool not found"})),
                 status: ToolCallStatus::Failed,

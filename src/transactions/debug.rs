@@ -120,7 +120,7 @@ pub async fn debug_transaction(
     let processing_duration = step_start.elapsed();
 
     analysis_steps.push(DebugStep {
-        step_name: "Transaction Processing".to_string(),
+        step_name: "Transaction Processing".to_owned(),
         duration_ms: processing_duration.as_millis() as u64,
         success: true,
         details: format!("Processed transaction: {:?}", transaction.transaction_type),
@@ -136,7 +136,7 @@ pub async fn debug_transaction(
     let validation_duration = validation_start.elapsed();
 
     analysis_steps.push(DebugStep {
-        step_name: "Debug Validations".to_string(),
+        step_name: "Debug Validations".to_owned(),
         duration_ms: validation_duration.as_millis() as u64,
         success: true,
         details: format!("Performed {} validations", validation_results.len()),
@@ -322,18 +322,18 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
             format!("{}d", age_seconds / 86400)
         }
     } else {
-        "Unknown".to_string()
+        "Unknown".to_owned()
     };
 
     let fee_sol = transaction
         .fee_lamports
         .map(|f| format!("{:.6}", (f as f64) / 1_000_000_000.0))
-        .unwrap_or_else(|| "Unknown".to_string());
+        .unwrap_or_else(|| "Unknown".to_owned());
 
     let analysis_duration = transaction
         .analysis_duration_ms
         .map(|d| format!("{}ms", d))
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     TransactionDebugInfo {
         signature_short: transaction.signature.clone(),
@@ -359,23 +359,23 @@ async fn perform_debug_validations(
 
     // Validation 1: Basic transaction structure
     validations.push(DebugValidation {
-        validation_name: "Basic Structure".to_string(),
+        validation_name: "Basic Structure".to_owned(),
         passed: !transaction.signature.is_empty() && transaction.timestamp <= Utc::now(),
-        message: "Transaction has valid signature and timestamp".to_string(),
-        severity: "Critical".to_string(),
+        message: "Transaction has valid signature and timestamp".to_owned(),
+        severity: "Critical".to_owned(),
     });
 
     // Validation 2: Transaction success consistency
     let success_consistent = transaction.success == transaction.error_message.is_none();
     validations.push(DebugValidation {
-        validation_name: "Success Consistency".to_string(),
+        validation_name: "Success Consistency".to_owned(),
         passed: success_consistent,
         message: if success_consistent {
-            "Success status matches error presence".to_string()
+            "Success status matches error presence".to_owned()
         } else {
-            "Success status inconsistent with error presence".to_string()
+            "Success status inconsistent with error presence".to_owned()
         },
-        severity: "Warning".to_string(),
+        severity: "Warning".to_owned(),
     });
 
     // Validation 3: Fee reasonableness
@@ -384,7 +384,7 @@ async fn perform_debug_validations(
         .map(|fee| fee < 10_000_000) // Less than 0.01 SOL
         .unwrap_or(true);
     validations.push(DebugValidation {
-        validation_name: "Reasonable Fee".to_string(),
+        validation_name: "Reasonable Fee".to_owned(),
         passed: reasonable_fee,
         message: format!(
             "Transaction fee is {}",
@@ -400,14 +400,14 @@ async fn perform_debug_validations(
     // Validation 4: Analysis completeness
     let has_analysis = transaction.analysis_duration_ms.is_some();
     validations.push(DebugValidation {
-        validation_name: "Analysis Completeness".to_string(),
+        validation_name: "Analysis Completeness".to_owned(),
         passed: has_analysis,
         message: if has_analysis {
-            "Transaction has analysis timing data".to_string()
+            "Transaction has analysis timing data".to_owned()
         } else {
-            "Transaction missing analysis timing data".to_string()
+            "Transaction missing analysis timing data".to_owned()
         },
-        severity: "Info".to_string(),
+        severity: "Info".to_owned(),
     });
 
     // Validation 5: Swap transaction data completeness
@@ -417,14 +417,14 @@ async fn perform_debug_validations(
     ) {
         let has_swap_info = transaction.token_swap_info.is_some();
         validations.push(DebugValidation {
-            validation_name: "Swap Data Completeness".to_string(),
+            validation_name: "Swap Data Completeness".to_owned(),
             passed: has_swap_info,
             message: if has_swap_info {
-                "Swap transaction has complete swap information".to_string()
+                "Swap transaction has complete swap information".to_owned()
             } else {
-                "Swap transaction missing swap information".to_string()
+                "Swap transaction missing swap information".to_owned()
             },
-            severity: "Warning".to_string(),
+            severity: "Warning".to_owned(),
         });
     }
 

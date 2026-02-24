@@ -196,7 +196,7 @@ pub fn format_age_string(created_at: Option<DateTime<Utc>>) -> String {
         }
         parts.join("")
     } else {
-        "unknown".to_string()
+        "unknown".to_owned()
     }
 }
 

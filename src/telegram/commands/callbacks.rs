@@ -640,7 +640,7 @@ async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Resu
                     )
                 } else {
                     Err(crate::tokens::TokenError::Database(
-                        "Database not available".to_string(),
+                        "Database not available".to_owned(),
                     ))
                 }
             })
@@ -872,13 +872,13 @@ async fn send_tokens_page(
                     format!("${:.0}", l)
                 }
             })
-            .unwrap_or_else(|| "N/A".to_string());
+            .unwrap_or_else(|| "N/A".to_owned());
 
         // Format price
         let price = if token.price_sol > 0.0 {
             format!("{} SOL", formatters::format_price(token.price_sol))
         } else {
-            "N/A".to_string()
+            "N/A".to_owned()
         };
 
         // Add rejection reason for rejected view
@@ -976,15 +976,15 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
     let liquidity = token
         .liquidity_usd
         .map(|l| formatters::format_usd(l))
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
     let volume_24h = token
         .volume_h24
         .map(|v| formatters::format_usd(v))
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
     let price_change = token
         .price_change_h24
         .map(|c| format!("{:+.2}%", c))
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     let risk_text = token
         .security_score_normalised
@@ -998,7 +998,7 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
             };
             format!("{emoji} Risk Assessment: {s}/100")
         })
-        .unwrap_or_else(|| "⚪ Risk Assessment: Unknown".to_string());
+        .unwrap_or_else(|| "⚪ Risk Assessment: Unknown".to_owned());
 
     let position_text = if has_position {
         "✅ <b>Active Position</b>\n\n"
@@ -1151,7 +1151,7 @@ async fn execute_token_blacklist(
             crate::tokens::cleanup::blacklist_token(&mint_clone, "Blacklisted via Telegram", &db)
         } else {
             Err(crate::tokens::TokenError::Database(
-                "Database not available".to_string(),
+                "Database not available".to_owned(),
             ))
         }
     })

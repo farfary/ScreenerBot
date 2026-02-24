@@ -43,10 +43,10 @@ impl TimeUnit {
     /// Convert to string
     pub fn to_string(&self) -> String {
         match self {
-            TimeUnit::Seconds => "seconds".to_string(),
-            TimeUnit::Minutes => "minutes".to_string(),
-            TimeUnit::Hours => "hours".to_string(),
-            TimeUnit::Days => "days".to_string(),
+            TimeUnit::Seconds => "seconds".to_owned(),
+            TimeUnit::Minutes => "minutes".to_owned(),
+            TimeUnit::Hours => "hours".to_owned(),
+            TimeUnit::Days => "days".to_owned(),
         }
     }
 }
@@ -137,7 +137,7 @@ config_struct! {
             impact: "critical",
             category: "Time Override",
         })]
-        time_override_unit: String = "hours".to_string(),
+        time_override_unit: String = "hours".to_owned(),
         #[metadata(field_metadata! {
             label: "Time Override Loss %",
             hint: "Loss % to trigger time override (-40 = exit if down 40%)",

@@ -79,13 +79,13 @@ impl TelegramSessionManager {
 
         // Must be in AwaitingTotp state
         if session.state != SessionState::AwaitingTotp {
-            return Err("Not awaiting TOTP verification".to_string());
+            return Err("Not awaiting TOTP verification".to_owned());
         }
 
         // Get TOTP secret from WEBSERVER config (shared with lockscreen)
         let totp_secret = with_config(|c| c.webserver.auth_totp_secret.clone());
         if totp_secret.is_empty() {
-            return Err("2FA not configured. Enable 2FA in Security settings first.".to_string());
+            return Err("2FA not configured. Enable 2FA in Security settings first.".to_owned());
         }
 
         // Verify TOTP code

@@ -73,7 +73,7 @@ impl FilteringStore {
         match tokio::time::timeout(Duration::from_secs(30), self.try_refresh()).await {
             Ok(Ok(snapshot)) => Ok(snapshot),
             Ok(Err(err)) => Err(err),
-            Err(_) => Err("Snapshot refresh timed out after 30 seconds".to_string()),
+            Err(_) => Err("Snapshot refresh timed out after 30 seconds".to_owned()),
         }
     }
 
@@ -370,35 +370,35 @@ impl FilteringStore {
 
         // Map TokenSortKey to SQL column name
         let sort_by = match query.sort_key {
-            TokenSortKey::Symbol => Some("symbol".to_string()),
-            TokenSortKey::PriceSol => Some("price_sol".to_string()),
-            TokenSortKey::LiquidityUsd => Some("liquidity_usd".to_string()),
-            TokenSortKey::Volume24h => Some("volume_24h".to_string()),
-            TokenSortKey::Fdv => Some("fdv".to_string()),
-            TokenSortKey::MarketCap => Some("market_cap".to_string()),
-            TokenSortKey::PriceChangeH1 => Some("price_change_h1".to_string()),
-            TokenSortKey::PriceChangeH24 => Some("price_change_h24".to_string()),
-            TokenSortKey::RiskScore => Some("risk_score".to_string()),
+            TokenSortKey::Symbol => Some("symbol".to_owned()),
+            TokenSortKey::PriceSol => Some("price_sol".to_owned()),
+            TokenSortKey::LiquidityUsd => Some("liquidity_usd".to_owned()),
+            TokenSortKey::Volume24h => Some("volume_24h".to_owned()),
+            TokenSortKey::Fdv => Some("fdv".to_owned()),
+            TokenSortKey::MarketCap => Some("market_cap".to_owned()),
+            TokenSortKey::PriceChangeH1 => Some("price_change_h1".to_owned()),
+            TokenSortKey::PriceChangeH24 => Some("price_change_h24".to_owned()),
+            TokenSortKey::RiskScore => Some("risk_score".to_owned()),
             TokenSortKey::MarketDataLastFetchedAt => {
-                Some("market_data_last_fetched_at".to_string())
+                Some("market_data_last_fetched_at".to_owned())
             }
-            TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_string()),
-            TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_string()),
-            TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_string()),
+            TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_owned()),
+            TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_owned()),
+            TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_owned()),
             TokenSortKey::PoolPriceLastCalculatedAt => {
-                Some("pool_price_last_calculated_at".to_string())
+                Some("pool_price_last_calculated_at".to_owned())
             }
-            TokenSortKey::Mint => Some("mint".to_string()),
+            TokenSortKey::Mint => Some("mint".to_owned()),
             // Transaction sorts - mapped to SQL expressions in database.rs
-            TokenSortKey::Txns5m => Some("txns_5m".to_string()),
-            TokenSortKey::Txns1h => Some("txns_1h".to_string()),
-            TokenSortKey::Txns6h => Some("txns_6h".to_string()),
-            TokenSortKey::Txns24h => Some("txns_24h".to_string()),
+            TokenSortKey::Txns5m => Some("txns_5m".to_owned()),
+            TokenSortKey::Txns1h => Some("txns_1h".to_owned()),
+            TokenSortKey::Txns6h => Some("txns_6h".to_owned()),
+            TokenSortKey::Txns24h => Some("txns_24h".to_owned()),
         };
 
         let sort_direction = match query.sort_direction {
-            SortDirection::Asc => Some("asc".to_string()),
-            SortDirection::Desc => Some("desc".to_string()),
+            SortDirection::Asc => Some("asc".to_owned()),
+            SortDirection::Desc => Some("desc".to_owned()),
         };
 
         // Only load the tokens for THIS page with proper sorting
@@ -503,23 +503,23 @@ impl FilteringStore {
 
         // Sort mapping (limit to metadata/security)
         let sort_by = match query.sort_key {
-            TokenSortKey::Symbol => Some("symbol".to_string()),
-            TokenSortKey::RiskScore => Some("risk_score".to_string()),
+            TokenSortKey::Symbol => Some("symbol".to_owned()),
+            TokenSortKey::RiskScore => Some("risk_score".to_owned()),
             TokenSortKey::MarketDataLastFetchedAt => {
-                Some("market_data_last_fetched_at".to_string())
+                Some("market_data_last_fetched_at".to_owned())
             }
-            TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_string()),
-            TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_string()),
-            TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_string()),
+            TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_owned()),
+            TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_owned()),
+            TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_owned()),
             TokenSortKey::PoolPriceLastCalculatedAt => {
-                Some("pool_price_last_calculated_at".to_string())
+                Some("pool_price_last_calculated_at".to_owned())
             }
-            TokenSortKey::Mint => Some("mint".to_string()),
-            _ => Some("metadata_last_fetched_at".to_string()),
+            TokenSortKey::Mint => Some("mint".to_owned()),
+            _ => Some("metadata_last_fetched_at".to_owned()),
         };
         let sort_direction = match query.sort_direction {
-            SortDirection::Asc => Some("asc".to_string()),
-            SortDirection::Desc => Some("desc".to_string()),
+            SortDirection::Asc => Some("asc".to_owned()),
+            SortDirection::Desc => Some("desc".to_owned()),
         };
 
         let items = get_tokens_no_market_async(query.page_size, offset, sort_by, sort_direction)

@@ -174,7 +174,7 @@ impl JupiterRouter {
     /// Build route plan summary from Jupiter response
     fn build_route_plan(route_plan: &[RoutePlanStep]) -> String {
         if route_plan.is_empty() {
-            return "Direct".to_string();
+            return "Direct".to_owned();
         }
 
         let labels: Vec<String> = route_plan
@@ -183,7 +183,7 @@ impl JupiterRouter {
                 step.swap_info
                     .label
                     .clone()
-                    .unwrap_or_else(|| "Unknown".to_string())
+                    .unwrap_or_else(|| "Unknown".to_owned())
             })
             .collect();
 
@@ -269,7 +269,7 @@ impl SwapRouter for JupiterRouter {
             let error_text = response
                 .text()
                 .await
-                .unwrap_or_else(|_| "Unknown".to_string());
+                .unwrap_or_else(|_| "Unknown".to_owned());
             return Err(Error::api_error(format!(
                 "Jupiter quote failed ({}): {}",
                 status, error_text
@@ -405,7 +405,7 @@ impl SwapRouter for JupiterRouter {
             let error_text = response
                 .text()
                 .await
-                .unwrap_or_else(|_| "Unknown".to_string());
+                .unwrap_or_else(|_| "Unknown".to_owned());
             return Err(Error::api_error(format!(
                 "Jupiter swap failed ({}): {}",
                 status, error_text

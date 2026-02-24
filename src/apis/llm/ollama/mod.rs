@@ -70,16 +70,16 @@ impl OllamaClient {
             .into_iter()
             .map(|msg| OllamaMessage {
                 role: match msg.role {
-                    MessageRole::System => "system".to_string(),
-                    MessageRole::User => "user".to_string(),
-                    MessageRole::Assistant => "assistant".to_string(),
+                    MessageRole::System => "system".to_owned(),
+                    MessageRole::User => "user".to_owned(),
+                    MessageRole::Assistant => "assistant".to_owned(),
                 },
                 content: msg.content,
             })
             .collect();
 
         // Ollama uses "json" string for JSON mode, not an object!
-        let format = request.response_format.map(|_| "json".to_string());
+        let format = request.response_format.map(|_| "json".to_owned());
 
         OllamaRequest {
             model: request.model,
@@ -123,7 +123,7 @@ impl OllamaClient {
     ) -> Result<(OllamaResponse, f64), LlmError> {
         if !self.enabled {
             return Err(LlmError::ProviderDisabled {
-                provider: "ollama".to_string(),
+                provider: "ollama".to_owned(),
             });
         }
 
@@ -149,12 +149,12 @@ impl OllamaClient {
         let mut response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
-                    provider: "ollama".to_string(),
+                    provider: "ollama".to_owned(),
                     timeout_ms: self.timeout.as_millis() as u64,
                 }
             } else if e.is_connect() {
                 LlmError::NetworkError {
-                    provider: "ollama".to_string(),
+                    provider: "ollama".to_owned(),
                     message: format!(
                         "Cannot connect to Ollama at {}. Is Ollama running?",
                         self.base_url
@@ -162,7 +162,7 @@ impl OllamaClient {
                 }
             } else {
                 LlmError::NetworkError {
-                    provider: "ollama".to_string(),
+                    provider: "ollama".to_owned(),
                     message: format!("Request failed: {e}"),
                 }
             }
@@ -176,14 +176,14 @@ impl OllamaClient {
 
             return Err(match status.as_u16() {
                 404 => LlmError::InvalidResponse {
-                    provider: "ollama".to_string(),
+                    provider: "ollama".to_owned(),
                     message: format!(
                         "Model not found. Pull the model first with: ollama pull {}",
                         request.model
                     ),
                 },
                 _ => LlmError::ApiError {
-                    provider: "ollama".to_string(),
+                    provider: "ollama".to_owned(),
                     status_code: status.as_u16(),
                     message: error_body,
                 },
@@ -196,7 +196,7 @@ impl OllamaClient {
                 .json::<OllamaResponse>()
                 .await
                 .map_err(|e| LlmError::ParseError {
-                    provider: "ollama".to_string(),
+                    provider: "ollama".to_owned(),
                     message: format!("Failed to parse response: {e}"),
                 })?;
 
@@ -265,8 +265,8 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = OllamaClient::new(
-            Some("http://localhost:11434".to_string()),
-            Some("llama3.2".to_string()),
+            Some("http://localhost:11434".to_owned()),
+            Some("llama3.2".to_owned()),
             true,
         );
         assert!(client.is_ok());
@@ -319,7 +319,7 @@ mod tests {
         let ollama_req = client.build_ollama_request(request);
 
         // JSON mode should be "json" string in Ollama
-        assert_eq!(ollama_req.format, Some("json".to_string()));
+        assert_eq!(ollama_req.format, Some("json".to_owned()));
     }
 
     #[test]

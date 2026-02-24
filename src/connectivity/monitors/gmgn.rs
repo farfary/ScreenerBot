@@ -32,7 +32,7 @@ impl EndpointMonitor for GmgnMonitor {
 
     fn fallback_strategy(&self) -> Option<FallbackStrategy> {
         Some(FallbackStrategy::UseAlternative {
-            endpoint_name: "jupiter".to_string(),
+            endpoint_name: "jupiter".to_owned(),
         })
     }
 
@@ -124,7 +124,7 @@ impl EndpointMonitor for GmgnMonitor {
                 } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
                     HealthCheckResult::degraded(
                         latency,
-                        "GMGN API rate limited (HTTP 429)".to_string(),
+                        "GMGN API rate limited (HTTP 429)".to_owned(),
                     )
                 } else {
                     HealthCheckResult::failure(format!(

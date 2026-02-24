@@ -12,7 +12,7 @@ config_struct! {
             impact: "critical",
             category: "Endpoints",
         })]
-        urls: Vec<String> = vec!["https://api.mainnet-beta.solana.com".to_string()],
+        urls: Vec<String> = vec!["https://api.mainnet-beta.solana.com".to_owned()],
 
         // Provider Selection
         #[metadata(field_metadata! {
@@ -21,7 +21,7 @@ config_struct! {
             impact: "medium",
             category: "Provider Selection",
         })]
-        selection_strategy: String = "adaptive".to_string(),
+        selection_strategy: String = "adaptive".to_owned(),
 
         // Rate Limiting
         #[metadata(field_metadata! {

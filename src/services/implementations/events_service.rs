@@ -51,7 +51,7 @@ impl Service for EventsService {
         // Initialize events database and system
         crate::events::init().await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
-                service: "events".to_string(),
+                service: "events".to_owned(),
                 message: format!("Failed to initialize events system: {e}"),
             })
         })?;
@@ -92,7 +92,7 @@ impl Service for EventsService {
         if crate::events::EVENTS_DB.get().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("Events database not initialized".to_string())
+            ServiceHealth::Unhealthy("Events database not initialized".to_owned())
         }
     }
 }

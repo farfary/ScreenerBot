@@ -49,7 +49,7 @@ fn btn(text: &str, callback_data: &str) -> InlineKeyboardButton {
 fn url_btn(text: &str, url: &str) -> InlineKeyboardButton {
     match url.parse() {
         Ok(parsed_url) => InlineKeyboardButton::url(text.to_string(), parsed_url),
-        Err(_) => InlineKeyboardButton::callback(text.to_string(), "error:invalid_url".to_string()),
+        Err(_) => InlineKeyboardButton::callback(text.to_string(), "error:invalid_url".to_owned()),
     }
 }
 

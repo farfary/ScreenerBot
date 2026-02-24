@@ -242,10 +242,10 @@ async fn detect_specific_patterns(
     if patterns.is_empty() {
         patterns.push(DetectedPattern {
             pattern_type: PatternType::Normal,
-            description: "Normal trading activity".to_string(),
+            description: "Normal trading activity".to_owned(),
             confidence: 0.8,
             severity: PatternSeverity::Low,
-            evidence: vec!["No suspicious patterns detected".to_string()],
+            evidence: vec!["No suspicious patterns detected".to_owned()],
         });
     }
 
@@ -272,7 +272,7 @@ async fn detect_mev_patterns(
             severity: PatternSeverity::Medium,
             evidence: vec![
                 format!("MEV tip amount: {:.6} SOL", balance_analysis.total_tips),
-                "Above normal tip threshold".to_string(),
+                "Above normal tip threshold".to_owned(),
             ],
         });
     }
@@ -281,7 +281,7 @@ async fn detect_mev_patterns(
     if dex_analysis.program_ids.len() > 2 {
         patterns.push(DetectedPattern {
             pattern_type: PatternType::MevActivity,
-            description: "Multiple DEX interactions detected".to_string(),
+            description: "Multiple DEX interactions detected".to_owned(),
             confidence: 0.6,
             severity: PatternSeverity::Medium,
             evidence: vec![
@@ -310,7 +310,7 @@ async fn detect_wash_trading(
             if changes.len() > 2 {
                 patterns.push(DetectedPattern {
                     pattern_type: PatternType::WashTrading,
-                    description: "Multiple token changes in single account".to_string(),
+                    description: "Multiple token changes in single account".to_owned(),
                     confidence: 0.4,
                     severity: PatternSeverity::Low,
                     evidence: vec![
@@ -347,7 +347,7 @@ async fn detect_fee_anomalies(
             severity: PatternSeverity::Medium,
             evidence: vec![
                 format!("Base fee: {:.6} SOL", base_fee),
-                "Above normal fee threshold".to_string(),
+                "Above normal fee threshold".to_owned(),
             ],
         });
     }
@@ -364,7 +364,7 @@ async fn detect_fee_anomalies(
         if tip_ratio > 0.05 {
             patterns.push(DetectedPattern {
                 pattern_type: PatternType::FeeAnomaly,
-                description: "High tip-to-value ratio".to_string(),
+                description: "High tip-to-value ratio".to_owned(),
                 confidence: 0.6,
                 severity: PatternSeverity::Low,
                 evidence: vec![
@@ -415,7 +415,7 @@ async fn detect_arbitrage_patterns(
     if dex_analysis.program_ids.len() >= 2 && balance_analysis.clean_transfers.len() >= 4 {
         patterns.push(DetectedPattern {
             pattern_type: PatternType::Arbitrage,
-            description: "Potential arbitrage activity".to_string(),
+            description: "Potential arbitrage activity".to_owned(),
             confidence: 0.6,
             severity: PatternSeverity::Low,
             evidence: vec![
@@ -469,7 +469,7 @@ async fn assess_risk(
 
     if total_volume > 1000.0 {
         risk_score += 0.2;
-        risk_factors.push("High volume transaction".to_string());
+        risk_factors.push("High volume transaction".to_owned());
     }
 
     // Normalize risk score
@@ -490,10 +490,10 @@ async fn assess_risk(
 
     // Generate recommendations
     if risk_score > 0.5 {
-        recommendations.push("Monitor for additional suspicious activity".to_string());
+        recommendations.push("Monitor for additional suspicious activity".to_owned());
     }
     if balance_analysis.total_tips > 0.01 {
-        recommendations.push("Review MEV tip patterns".to_string());
+        recommendations.push("Review MEV tip patterns".to_owned());
     }
 
     Ok(RiskAssessment {

@@ -55,7 +55,7 @@ fn setup_panic_hook() {
             let location = panic_info
                 .location()
                 .map(|l| format!("{}:{}", l.file(), l.line()))
-                .unwrap_or_else(|| "unknown".to_string());
+                .unwrap_or_else(|| "unknown".to_owned());
 
             let payload = panic_info.payload();
             let panic_message = if let Some(s) = payload.downcast_ref::<&str>() {
@@ -63,7 +63,7 @@ fn setup_panic_hook() {
             } else if let Some(s) = payload.downcast_ref::<String>() {
                 s.clone()
             } else {
-                "Unknown panic".to_string()
+                "Unknown panic".to_owned()
             };
 
             // Truncate message if too long

@@ -68,7 +68,7 @@ impl GroqClient {
     /// * `enabled` - Whether the client is enabled
     pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
         if api_key.trim().is_empty() {
-            return Err("Groq API key cannot be empty".to_string());
+            return Err("Groq API key cannot be empty".to_owned());
         }
 
         Ok(Self {
@@ -89,9 +89,9 @@ impl GroqClient {
             .into_iter()
             .map(|msg| GroqMessage {
                 role: match msg.role {
-                    MessageRole::System => "system".to_string(),
-                    MessageRole::User => "user".to_string(),
-                    MessageRole::Assistant => "assistant".to_string(),
+                    MessageRole::System => "system".to_owned(),
+                    MessageRole::User => "user".to_owned(),
+                    MessageRole::Assistant => "assistant".to_owned(),
                 },
                 content: msg.content,
             })
@@ -119,8 +119,8 @@ impl GroqClient {
             .choices
             .first()
             .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "groq".to_string(),
-                message: "No choices in response".to_string(),
+                provider: "groq".to_owned(),
+                message: "No choices in response".to_owned(),
             })?;
 
         Ok(ChatResponse::new(
@@ -139,7 +139,7 @@ impl GroqClient {
     async fn execute_request(&self, request: GroqRequest) -> Result<(GroqResponse, f64), LlmError> {
         if !self.enabled {
             return Err(LlmError::ProviderDisabled {
-                provider: "groq".to_string(),
+                provider: "groq".to_owned(),
             });
         }
 
@@ -149,7 +149,7 @@ impl GroqClient {
             .acquire()
             .await
             .map_err(|e| LlmError::NetworkError {
-                provider: "groq".to_string(),
+                provider: "groq".to_owned(),
                 message: format!("Rate limiter error: {e}"),
             })?;
 
@@ -177,12 +177,12 @@ impl GroqClient {
         let mut response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
-                    provider: "groq".to_string(),
+                    provider: "groq".to_owned(),
                     timeout_ms: self.timeout.as_millis() as u64,
                 }
             } else {
                 LlmError::NetworkError {
-                    provider: "groq".to_string(),
+                    provider: "groq".to_owned(),
                     message: format!("Request failed: {e}"),
                 }
             }
@@ -205,15 +205,15 @@ impl GroqClient {
 
             return Err(match status.as_u16() {
                 401 => LlmError::AuthError {
-                    provider: "groq".to_string(),
-                    message: "Invalid API key".to_string(),
+                    provider: "groq".to_owned(),
+                    message: "Invalid API key".to_owned(),
                 },
                 429 => LlmError::RateLimited {
-                    provider: "groq".to_string(),
+                    provider: "groq".to_owned(),
                     retry_after_ms: retry_after,
                 },
                 _ => LlmError::ApiError {
-                    provider: "groq".to_string(),
+                    provider: "groq".to_owned(),
                     status_code: status.as_u16(),
                     message: error_body,
                 },
@@ -226,7 +226,7 @@ impl GroqClient {
                 .json::<GroqResponse>()
                 .await
                 .map_err(|e| LlmError::ParseError {
-                    provider: "groq".to_string(),
+                    provider: "groq".to_owned(),
                     message: format!("Failed to parse response: {e}"),
                 })?;
 
@@ -297,8 +297,8 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = GroqClient::new(
-            "gsk-test-key".to_string(),
-            Some("llama-3.3-70b-versatile".to_string()),
+            "gsk-test-key".to_owned(),
+            Some("llama-3.3-70b-versatile".to_owned()),
             true,
         );
         assert!(client.is_ok());
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn test_client_creation_with_defaults() {
-        let client = GroqClient::new("gsk-test-key".to_string(), None, true);
+        let client = GroqClient::new("gsk-test-key".to_owned(), None, true);
         assert!(client.is_ok());
         let client = client.unwrap();
         assert_eq!(client.model, DEFAULT_MODEL);
@@ -317,13 +317,13 @@ mod tests {
 
     #[test]
     fn test_client_creation_empty_key() {
-        let client = GroqClient::new("".to_string(), None, true);
+        let client = GroqClient::new("".to_owned(), None, true);
         assert!(client.is_err());
     }
 
     #[test]
     fn test_build_groq_request() {
-        let client = GroqClient::new("gsk-test".to_string(), None, true).unwrap();
+        let client = GroqClient::new("gsk-test".to_owned(), None, true).unwrap();
 
         let request = ChatRequest::new(
             "llama-3.1-8b-instant",
@@ -347,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_provider() {
-        let client = GroqClient::new("gsk-test".to_string(), None, true).unwrap();
+        let client = GroqClient::new("gsk-test".to_owned(), None, true).unwrap();
         assert_eq!(client.provider(), Provider::Groq);
     }
 }

@@ -712,7 +712,7 @@ pub fn calculate_next_run(
                 .collect();
 
             if target_weekdays.is_empty() {
-                return Err("No valid days specified".to_string());
+                return Err("No valid days specified".to_owned());
             }
 
             // Find the next matching day
@@ -732,7 +732,7 @@ pub fn calculate_next_run(
             }
 
             // Should not be reachable if target_weekdays is non-empty
-            Err("Could not calculate next weekly run time".to_string())
+            Err("Could not calculate next weekly run time".to_owned())
         }
         _ => Err(format!("Unknown schedule type: {schedule_type}")),
     }

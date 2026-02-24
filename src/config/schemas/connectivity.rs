@@ -38,14 +38,14 @@ config_struct! {
 
         /// DNS servers to check (IP addresses)
         dns_servers: Vec<String> = vec![
-            "8.8.8.8".to_string(),
-            "1.1.1.1".to_string(),
+            "8.8.8.8".to_owned(),
+            "1.1.1.1".to_owned(),
         ],
 
         /// HTTP endpoints to check for connectivity
         http_checks: Vec<String> = vec![
-            "https://www.google.com".to_string(),
-            "https://solana.com".to_string(),
+            "https://www.google.com".to_owned(),
+            "https://solana.com".to_owned(),
         ],
     }
 }

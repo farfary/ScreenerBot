@@ -134,13 +134,13 @@ pub async fn transfer_token(
         .get_account(&mint_pubkey)
         .await
         .map_err(|e| format!("Failed to get mint account: {e}"))?
-        .ok_or_else(|| "Mint account not found".to_string())?;
+        .ok_or_else(|| "Mint account not found".to_owned())?;
 
     // Parse decimals from mint data (offset 44, 1 byte for SPL Token)
     let decimals = if mint_account.data.len() >= 45 {
         mint_account.data[44]
     } else {
-        return Err("Invalid mint account data".to_string());
+        return Err("Invalid mint account data".to_owned());
     };
 
     let token_program_id = if is_token_2022 {

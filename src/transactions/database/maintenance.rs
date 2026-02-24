@@ -1067,10 +1067,10 @@ mod tests {
         sol_delta: f64,
     ) -> TransactionListRow {
         TransactionListRow {
-            signature: "sig".to_string(),
+            signature: "sig".to_owned(),
             timestamp: Utc::now(),
             slot: None,
-            status: "Finalized".to_string(),
+            status: "Finalized".to_owned(),
             success,
             direction: direction.map(|s| s.to_string()),
             transaction_type: transaction_type.map(|s| s.to_string()),
@@ -1093,7 +1093,7 @@ mod tests {
             .await
             .expect("create database");
 
-        let mut transaction = Transaction::new("test_signature".to_string());
+        let mut transaction = Transaction::new("test_signature".to_owned());
         transaction.slot = Some(12345);
         transaction.block_time = Some(1_700_000_000);
         transaction.timestamp = Utc::now();
@@ -1107,7 +1107,7 @@ mod tests {
         transaction.direction = TransactionDirection::Outgoing;
         transaction.sol_balance_change = -0.25;
         transaction.sol_balance_changes = vec![SolBalanceChange {
-            account: "wallet".to_string(),
+            account: "wallet".to_owned(),
             pre_balance: 1.0,
             post_balance: 0.75,
             change: -0.25,
@@ -1172,7 +1172,7 @@ mod tests {
         let row_buy = sample_row(Some("Buy"), Some("Outgoing"), true, None, 0.0);
 
         let filters = TransactionListFilters {
-            types: vec!["buy".to_string()],
+            types: vec!["buy".to_owned()],
             ..Default::default()
         };
 
@@ -1182,7 +1182,7 @@ mod tests {
         assert!(TransactionDatabase::row_matches_filters(&row_buy, &filters));
 
         let failed_filters = TransactionListFilters {
-            types: vec!["failed".to_string()],
+            types: vec!["failed".to_owned()],
             ..Default::default()
         };
 
@@ -1204,7 +1204,7 @@ mod tests {
         let row = sample_row(Some("Transfer"), Some("Incoming"), true, None, 0.0);
 
         let filters = TransactionListFilters {
-            direction: Some("incoming".to_string()),
+            direction: Some("incoming".to_owned()),
             ..Default::default()
         };
 
@@ -1216,7 +1216,7 @@ mod tests {
         let row = sample_row(Some("Swap"), Some("Outgoing"), true, Some("Raydium"), 0.0);
 
         let filters = TransactionListFilters {
-            router: Some("ray".to_string()),
+            router: Some("ray".to_owned()),
             ..Default::default()
         };
 

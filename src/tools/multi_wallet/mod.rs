@@ -11,7 +11,7 @@
 //!
 //! // Multi-buy across 5 wallets
 //! let config = MultiBuyConfig {
-//!     token_mint: "TokenMint...".to_string(),
+//!     token_mint: "TokenMint...".to_owned(),
 //!     wallet_count: 5,
 //!     min_amount_sol: 0.01,
 //!     max_amount_sol: 0.05,

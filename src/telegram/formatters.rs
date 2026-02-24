@@ -30,7 +30,7 @@ pub fn format_mint_display(mint: &str) -> String {
 /// - Large: 2 decimals
 pub fn format_price(price: f64) -> String {
     if price == 0.0 {
-        "0".to_string()
+        "0".to_owned()
     } else if price.abs() < 1e-9 {
         format!("{:.2e}", price)
     } else if price.abs() < 0.000001 {
@@ -536,7 +536,7 @@ pub fn msg_balance(sol_balance: f64, usd_value: f64, positions_value: f64) -> St
 pub fn msg_positions_list(positions: &[(String, f64, f64, String)]) -> String {
     // positions: [(symbol, pnl_pct, value_sol, duration)]
     if positions.is_empty() {
-        return "📦 <b>No Open Positions</b>".to_string();
+        return "📦 <b>No Open Positions</b>".to_owned();
     }
 
     let mut lines = vec![format!("📦 <b>Positions ({})</b>\n", positions.len())];
@@ -645,7 +645,7 @@ Estimated — <b>{} SOL</b>
 
 /// Format PIN prompt
 pub fn msg_pin_prompt() -> String {
-    "🔐 <b>Authentication Required</b>\n\nPlease enter your PIN:".to_string()
+    "🔐 <b>Authentication Required</b>\n\nPlease enter your PIN:".to_owned()
 }
 
 /// Format PIN success
@@ -763,7 +763,7 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
             let sign = if c >= 0.0 { "+" } else { "" };
             format!("{}{:.1}% {}", sign, c, emoji)
         })
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     let change_24h = token
         .price_change_h24
@@ -772,7 +772,7 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
             let sign = if c >= 0.0 { "+" } else { "" };
             format!("{}{:.1}% {}", sign, c, emoji)
         })
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     // Liquidity formatting
     let liquidity = token
@@ -786,7 +786,7 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
                 format!("${:.0}", l)
             }
         })
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     // Volume formatting (use volume_h24)
     let volume = token
@@ -800,7 +800,7 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
                 format!("${:.0}", v)
             }
         })
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     // Market cap formatting
     let mcap = token
@@ -814,7 +814,7 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
                 format!("${:.0}", m)
             }
         })
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     // Security score (use security_score_normalised - 0-100, HIGHER = MORE RISKY)
     let security = token
@@ -828,7 +828,7 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
             };
             format!("{emoji} {label} ({s})")
         })
-        .unwrap_or_else(|| "❓ Unknown".to_string());
+        .unwrap_or_else(|| "❓ Unknown".to_owned());
 
     // Token age (blockchain_created_at is Option<DateTime<Utc>>)
     let age = token
@@ -844,24 +844,24 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
                 format!("{}m", duration.num_minutes())
             }
         })
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     // Holders (use total_holders)
     let holders = token
         .total_holders
         .map(|h| h.to_string())
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     // Transactions (use helper methods)
     let txns_1h = token
         .txns_1h_total()
         .map(|t| t.to_string())
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     let txns_24h = token
         .txns_24h_total()
         .map(|t| t.to_string())
-        .unwrap_or_else(|| "N/A".to_string());
+        .unwrap_or_else(|| "N/A".to_owned());
 
     // Blacklist status
     let blacklist_status = if token.is_blacklisted {

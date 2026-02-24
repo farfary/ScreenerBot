@@ -18,7 +18,7 @@ pub async fn load_all_positions() -> Result<Vec<Position>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_positions(None, None).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -57,7 +57,7 @@ pub async fn save_position(position: &Position) -> Result<i64, String> {
                 Ok(new_id)
             }
         }
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -66,7 +66,7 @@ pub async fn delete_position_by_id(id: i64) -> Result<bool, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.delete_position(id).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -104,7 +104,7 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
             }
             result
         }
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -112,7 +112,7 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
 pub async fn update_position_price_fields(position: &Position) -> Result<(), String> {
     let position_id = position
         .id
-        .ok_or_else(|| "Cannot update price fields without position ID".to_string())?;
+        .ok_or_else(|| "Cannot update price fields without position ID".to_owned())?;
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -126,7 +126,7 @@ pub async fn update_position_price_fields(position: &Position) -> Result<(), Str
             )
             .await
         }
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -150,7 +150,7 @@ pub async fn force_database_sync() -> Result<(), String> {
             }
             result
         }
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -158,7 +158,7 @@ pub async fn set_metadata(key: &str, value: &str) -> Result<(), String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.set_metadata_value(key, value),
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -166,7 +166,7 @@ pub async fn get_metadata(key: &str) -> Result<Option<String>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_metadata_value(key),
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -175,7 +175,7 @@ pub async fn get_open_positions() -> Result<Vec<Position>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_open_positions().await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -184,7 +184,7 @@ pub async fn get_closed_positions() -> Result<Vec<Position>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_closed_positions().await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -193,7 +193,7 @@ pub async fn get_closed_positions_since(since: DateTime<Utc>) -> Result<Vec<Posi
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_closed_positions_since(since).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -202,7 +202,7 @@ pub async fn get_closed_positions_count_since(since: DateTime<Utc>) -> Result<i6
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.count_closed_positions_since(since).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -214,7 +214,7 @@ pub async fn get_period_trading_stats(
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_period_trading_stats(period_start, period_end).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -223,7 +223,7 @@ pub async fn get_position_by_mint(mint: &str) -> Result<Option<Position>, String
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_position_by_mint(mint).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -232,7 +232,7 @@ pub async fn get_position_by_id(id: i64) -> Result<Option<Position>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_position_by_id(id).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -268,7 +268,7 @@ pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String
             }
             result
         }
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -277,7 +277,7 @@ pub async fn get_token_snapshots(position_id: i64) -> Result<Vec<TokenSnapshot>,
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_snapshots(position_id).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -289,7 +289,7 @@ pub async fn get_token_snapshot(
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_snapshot(position_id, snapshot_type).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 
@@ -301,7 +301,7 @@ pub async fn get_recent_closed_positions_for_mint(
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_recent_closed_positions_for_mint(mint, limit).await,
-        None => Err("Positions database not initialized".to_string()),
+        None => Err("Positions database not initialized".to_owned()),
     }
 }
 

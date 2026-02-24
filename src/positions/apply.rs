@@ -259,7 +259,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     let exit_reason = position
                                         .closed_reason
                                         .clone()
-                                        .unwrap_or_else(|| "exit".to_string());
+                                        .unwrap_or_else(|| "exit".to_owned());
                                     // Use position.pnl and position.pnl_percent which were set in the state update above
                                     let final_pnl_sol = position.pnl.unwrap_or(0.0);
                                     let final_pnl_pct = position.pnl_percent.unwrap_or(0.0);
@@ -305,7 +305,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 }
                 pos.exit_transaction_signature = None;
                 pos.transaction_exit_verified = false;
-                pos.closed_reason = Some("exit_retry_pending".to_string());
+                pos.closed_reason = Some("exit_retry_pending".to_owned());
             })
             .await;
 
@@ -345,7 +345,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 pos.synthetic_exit = true;
                 pos.transaction_exit_verified = true;
                 pos.exit_time = Some(exit_time);
-                pos.closed_reason = Some("synthetic_exit_permanent_failure".to_string());
+                pos.closed_reason = Some("synthetic_exit_permanent_failure".to_owned());
             })
             .await;
 

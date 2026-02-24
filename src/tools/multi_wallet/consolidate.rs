@@ -179,7 +179,7 @@ async fn transfer_token_to_main(
             return Some(WalletOpResult::failure(
                 wallet_id,
                 wallet_address,
-                "Invalid mint address".to_string(),
+                "Invalid mint address".to_owned(),
             ))
         }
     };

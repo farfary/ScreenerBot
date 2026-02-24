@@ -23,7 +23,7 @@ impl TransactionProcessor {
         // Import the global database (avoiding multiple instances for now)
         let database = crate::transactions::database::get_transaction_database()
             .await
-            .ok_or_else(|| "Transaction database not initialized".to_string())?;
+            .ok_or_else(|| "Transaction database not initialized".to_owned())?;
 
         // Step 1: Handle cache-only mode - only try cache, never fetch from RPC
         if self.cache_only {
@@ -147,10 +147,10 @@ impl TransactionProcessor {
                     if let Some(instructions_array) = instructions.as_array() {
                         format!("{} instructions found", instructions_array.len())
                     } else {
-                        "instructions field not an array".to_string()
+                        "instructions field not an array".to_owned()
                     }
                 } else {
-                    "no instructions field found".to_string()
+                    "no instructions field found".to_owned()
                 };
 
             logger::info(
@@ -198,10 +198,10 @@ impl TransactionProcessor {
                     if let Some(keys_array) = account_keys.as_array() {
                         format!("{} account keys", keys_array.len())
                     } else {
-                        "accountKeys field not an array".to_string()
+                        "accountKeys field not an array".to_owned()
                     }
                 } else {
-                    "no accountKeys field found".to_string()
+                    "no accountKeys field found".to_owned()
                 };
 
             logger::info(

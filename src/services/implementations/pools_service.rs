@@ -36,7 +36,7 @@ impl Service for PoolsService {
             .await
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Initialize {
-                    service: "pools".to_string(),
+                    service: "pools".to_owned(),
                     message: format!("Failed to initialize pool components: {:?}", e),
                 })
             })?;
@@ -74,7 +74,7 @@ impl Service for PoolsService {
         // Stop pool service gracefully
         crate::pools::stop_pool_service(5).await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Stop {
-                service: "pools".to_string(),
+                service: "pools".to_owned(),
                 message: format!("Failed to stop pool service: {:?}", e),
             })
         })?;
@@ -86,7 +86,7 @@ impl Service for PoolsService {
         if crate::pools::is_pool_service_running() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("Pool service not running".to_string())
+            ServiceHealth::Unhealthy("Pool service not running".to_owned())
         }
     }
 }

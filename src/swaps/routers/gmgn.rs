@@ -227,7 +227,7 @@ impl GmgnRouter {
                                         return Ok(data);
                                     } else {
                                         last_error = Some(Error::invalid_response(
-                                            "GMGN API returned empty data".to_string(),
+                                            "GMGN API returned empty data".to_owned(),
                                         ));
                                     }
                                 } else {
@@ -263,7 +263,7 @@ impl GmgnRouter {
         }
 
         Err(last_error
-            .unwrap_or_else(|| Error::api_error("All GMGN retry attempts failed".to_string())))
+            .unwrap_or_else(|| Error::api_error("All GMGN retry attempts failed".to_owned())))
     }
 
     async fn execute_gmgn_swap_internal(
@@ -407,7 +407,7 @@ impl SwapRouter for GmgnRouter {
             price_impact_pct: price_impact,
             fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
             slippage_bps: (request.slippage_pct * 100.0) as u16,
-            route_plan: "GMGN Anti-MEV".to_string(),
+            route_plan: "GMGN Anti-MEV".to_owned(),
             wallet_address: request.wallet_address.clone(),
             swap_mode: request.swap_mode,
             execution_data,

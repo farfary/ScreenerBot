@@ -21,7 +21,7 @@ pub async fn init_ai_engine() -> Result<(), String> {
     let engine = AiEngine::new();
     AI_ENGINE
         .set(Arc::new(engine))
-        .map_err(|_| "AI engine already initialized".to_string())
+        .map_err(|_| "AI engine already initialized".to_owned())
 }
 
 /// Get the global AI engine
@@ -150,16 +150,16 @@ impl AiEngine {
             } else {
                 // Default models for each provider
                 match provider {
-                    Provider::OpenAi => "gpt-4".to_string(),
-                    Provider::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
-                    Provider::Groq => "llama-3.1-70b-versatile".to_string(),
-                    Provider::DeepSeek => "deepseek-chat".to_string(),
-                    Provider::Gemini => "gemini-pro".to_string(),
-                    Provider::Ollama => "llama3.2".to_string(),
-                    Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_string(),
-                    Provider::OpenRouter => "openai/gpt-4".to_string(),
-                    Provider::Mistral => "mistral-large-latest".to_string(),
-                    Provider::Assistant => "gpt-4o".to_string(),
+                    Provider::OpenAi => "gpt-4".to_owned(),
+                    Provider::Anthropic => "claude-3-5-sonnet-20241022".to_owned(),
+                    Provider::Groq => "llama-3.1-70b-versatile".to_owned(),
+                    Provider::DeepSeek => "deepseek-chat".to_owned(),
+                    Provider::Gemini => "gemini-pro".to_owned(),
+                    Provider::Ollama => "llama3.2".to_owned(),
+                    Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_owned(),
+                    Provider::OpenRouter => "openai/gpt-4".to_owned(),
+                    Provider::Mistral => "mistral-large-latest".to_owned(),
+                    Provider::Assistant => "gpt-4o".to_owned(),
                 }
             }
         })
@@ -176,8 +176,8 @@ impl AiEngine {
         use crate::ai::schemas::FilterAction;
 
         let decision = match filter.decision {
-            FilterAction::Pass => "pass".to_string(),
-            FilterAction::Reject => "reject".to_string(),
+            FilterAction::Pass => "pass".to_owned(),
+            FilterAction::Reject => "reject".to_owned(),
         };
 
         let risk_level = match filter.risk_level.to_lowercase().as_str() {
@@ -381,9 +381,9 @@ impl AiEngine {
         use crate::ai::schemas::TradeAction;
 
         let decision = match trade.decision {
-            TradeAction::Buy => "buy".to_string(),
-            TradeAction::Sell => "sell".to_string(),
-            TradeAction::Hold => "hold".to_string(),
+            TradeAction::Buy => "buy".to_owned(),
+            TradeAction::Sell => "sell".to_owned(),
+            TradeAction::Hold => "hold".to_owned(),
         };
 
         let risk_level = match trade.risk_level.to_lowercase().as_str() {

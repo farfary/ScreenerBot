@@ -58,7 +58,7 @@ impl Service for TraderService {
     async fn initialize(&mut self) -> crate::Result<()> {
         crate::trader::init_trader_system().await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
-                service: "trader".to_string(),
+                service: "trader".to_owned(),
                 message: e,
             })
         })?;

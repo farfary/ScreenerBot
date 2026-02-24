@@ -32,7 +32,7 @@ config_struct! {
             category: "General",
             placeholder: "127.0.0.1",
         })]
-        host: String = "127.0.0.1".to_string(),
+        host: String = "127.0.0.1".to_owned(),
 
         /// Enable password authentication for headless mode
         #[metadata(field_metadata! {

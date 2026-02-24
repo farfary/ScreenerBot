@@ -31,7 +31,7 @@ impl Service for PoolFetcherService {
     async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
-            &"Initializing pool fetcher service...".to_string(),
+            &"Initializing pool fetcher service...".to_owned(),
         );
         Ok(())
     }
@@ -43,14 +43,14 @@ impl Service for PoolFetcherService {
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(
             LogTag::PoolService,
-            &"Starting pool fetcher service...".to_string(),
+            &"Starting pool fetcher service...".to_owned(),
         );
 
         // Get the AccountFetcher component from global state
         let fetcher = crate::pools::get_account_fetcher().ok_or_else(|| {
             crate::Error::Service(ServiceError::Start {
                 service: self.name().to_string(),
-                message: "AccountFetcher component not initialized".to_string(),
+                message: "AccountFetcher component not initialized".to_owned(),
             })
         })?;
 
@@ -61,7 +61,7 @@ impl Service for PoolFetcherService {
 
         logger::info(
             LogTag::PoolService,
-            &"Pool fetcher service started (instrumented)".to_string(),
+            &"Pool fetcher service started (instrumented)".to_owned(),
         );
 
         Ok(vec![handle])
@@ -70,7 +70,7 @@ impl Service for PoolFetcherService {
     async fn stop(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
-            &"Pool fetcher service stopping (via shutdown signal)".to_string(),
+            &"Pool fetcher service stopping (via shutdown signal)".to_owned(),
         );
         Ok(())
     }
@@ -79,7 +79,7 @@ impl Service for PoolFetcherService {
         if crate::pools::get_account_fetcher().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("AccountFetcher component not available".to_string())
+            ServiceHealth::Unhealthy("AccountFetcher component not available".to_owned())
         }
     }
 
@@ -93,19 +93,19 @@ impl Service for PoolFetcherService {
             metrics.errors_total = errors;
             metrics
                 .custom_metrics
-                .insert("accounts_fetched".to_string(), accounts_fetched as f64);
+                .insert("accounts_fetched".to_owned(), accounts_fetched as f64);
             metrics
                 .custom_metrics
-                .insert("rpc_batches".to_string(), rpc_batches as f64);
+                .insert("rpc_batches".to_owned(), rpc_batches as f64);
             if operations > 0 {
                 metrics.custom_metrics.insert(
-                    "avg_accounts_per_cycle".to_string(),
+                    "avg_accounts_per_cycle".to_owned(),
                     accounts_fetched as f64 / operations as f64,
                 );
             }
             if rpc_batches > 0 {
                 metrics.custom_metrics.insert(
-                    "avg_accounts_per_batch".to_string(),
+                    "avg_accounts_per_batch".to_owned(),
                     accounts_fetched as f64 / rpc_batches as f64,
                 );
             }

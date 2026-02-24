@@ -243,7 +243,7 @@ async fn perform_comprehensive_verification(
             description: transaction
                 .error_message
                 .clone()
-                .unwrap_or_else(|| "Transaction failed without specific error".to_string()),
+                .unwrap_or_else(|| "Transaction failed without specific error".to_owned()),
             severity: IssueSeverity::Critical,
         });
         confidence_score = 0.0;
@@ -268,7 +268,7 @@ async fn perform_comprehensive_verification(
     {
         issues.push(VerificationIssue {
             issue_type: IssueType::InsufficientData,
-            description: "Missing swap information for buy/sell transaction".to_string(),
+            description: "Missing swap information for buy/sell transaction".to_owned(),
             severity: IssueSeverity::Warning,
         });
         confidence_score *= 0.7;
@@ -360,7 +360,7 @@ async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<St
         if let Some(fee) = transaction.fee_lamports {
             if fee > 100_000 {
                 // > 0.0001 SOL
-                patterns.push("failed_high_fee".to_string());
+                patterns.push("failed_high_fee".to_owned());
             }
         }
     }
@@ -369,20 +369,20 @@ async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<St
     if let Some(fee) = transaction.fee_lamports {
         if fee > 1_000_000 {
             // > 0.001 SOL
-            patterns.push("unusually_high_fee".to_string());
+            patterns.push("unusually_high_fee".to_owned());
         }
     }
 
     // Pattern 3: Complex transaction (many instructions) for simple swap
     if transaction.instructions_count > 20 {
-        patterns.push("complex_for_swap".to_string());
+        patterns.push("complex_for_swap".to_owned());
     }
 
     // Pattern 4: Very recent transaction (might be pending)
     if let Some(block_time) = transaction.block_time {
         let age_minutes = (Utc::now().timestamp() - block_time) / 60;
         if age_minutes < 1 {
-            patterns.push("very_recent".to_string());
+            patterns.push("very_recent".to_owned());
         }
     }
 

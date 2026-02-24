@@ -121,9 +121,9 @@ impl SolanaWebSocketClient {
         // Subscribe to logs for the wallet address to catch all transactions
         // This method catches both incoming and outgoing transactions
         let subscribe_message = AccountSubscribe {
-            jsonrpc: "2.0".to_string(),
+            jsonrpc: "2.0".to_owned(),
             id: 1,
-            method: "logsSubscribe".to_string(),
+            method: "logsSubscribe".to_owned(),
             params: vec![
                 serde_json::json!({
                   "mentions": [self.wallet_address]
@@ -257,7 +257,7 @@ impl SolanaWebSocketClient {
                       LogTag::Websocket,
                       "Failed to send signature to processor - channel closed"
                     );
-                                        return Err("Transaction channel closed".to_string());
+                                        return Err("Transaction channel closed".to_owned());
                                     }
 
                                     return Ok(());
@@ -287,7 +287,7 @@ impl SolanaWebSocketClient {
 
     /// Get the default Solana WebSocket URL (mainnet)
     pub fn get_default_ws_url() -> String {
-        "wss://api.mainnet-beta.solana.com/".to_string()
+        "wss://api.mainnet-beta.solana.com/".to_owned()
     }
 
     /// Get Helius WebSocket URL with API key

@@ -37,7 +37,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
 
         let current_price = context
             .current_price
-            .ok_or_else(|| "Current price not available".to_string())?;
+            .ok_or_else(|| "Current price not available".to_owned())?;
 
         // Get lookback candles (excluding current)
         let end_idx = candles.len().saturating_sub(1);
@@ -45,7 +45,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
         let lookback_candles = &candles[start_idx..end_idx];
 
         if lookback_candles.is_empty() {
-            return Err("No lookback candles available".to_string());
+            return Err("No lookback candles available".to_owned());
         }
 
         // Find highest high and lowest low in lookback period
@@ -81,7 +81,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
 
         let lookback = get_param_f64(condition, "lookback")?;
         if lookback < 2.0 || lookback > 100.0 {
-            return Err("Lookback must be between 2 and 100".to_string());
+            return Err("Lookback must be between 2 and 100".to_owned());
         }
 
         let direction = get_param_string(condition, "direction")?;
@@ -91,7 +91,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
 
         let confirmation = get_param_f64(condition, "confirmation")?;
         if confirmation < 0.0 || confirmation > 20.0 {
-            return Err("Confirmation must be between 0 and 20%".to_string());
+            return Err("Confirmation must be between 0 and 20%".to_owned());
         }
 
         Ok(())

@@ -87,7 +87,7 @@ pub async fn start_maintenance_task() {
 async fn perform_maintenance() -> Result<(), String> {
     let db = crate::events::EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?
+        .ok_or_else(|| "Events system not initialized".to_owned())?
         .clone();
 
     // Cleanup old events
@@ -206,7 +206,7 @@ pub async fn record_swap_event(
 
     let event = Event::new(
         EventCategory::Swap,
-        Some("swap".to_string()),
+        Some("swap".to_owned()),
         severity,
         mint,
         Some(signature.to_string()),
@@ -317,16 +317,16 @@ pub async fn record_position_event_flexible(
         Value::Null => Map::new(),
         other => {
             let mut map = Map::new();
-            map.insert("details".to_string(), other);
+            map.insert("details".to_owned(), other);
             map
         }
     };
 
     payload_obj
-        .entry("subtype".to_string())
+        .entry("subtype".to_owned())
         .or_insert_with(|| Value::String(subtype.to_string()));
     payload_obj
-        .entry("event_time".to_string())
+        .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
 
     let event = Event::new(
@@ -532,19 +532,19 @@ pub async fn record_ohlcv_event(
         Value::Null => Map::new(),
         other => {
             let mut map = Map::new();
-            map.insert("details".to_string(), other);
+            map.insert("details".to_owned(), other);
             map
         }
     };
 
     payload_obj
-        .entry("subtype".to_string())
+        .entry("subtype".to_owned())
         .or_insert_with(|| Value::String(subtype.to_string()));
     payload_obj
-        .entry("event_time".to_string())
+        .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
-        .entry("message".to_string())
+        .entry("message".to_owned())
         .or_insert_with(|| Value::String(format!("OHLCV event: {subtype}")));
 
     let event = Event::new(
@@ -580,19 +580,19 @@ pub async fn record_filtering_event(
         Value::Null => Map::new(),
         other => {
             let mut map = Map::new();
-            map.insert("details".to_string(), other);
+            map.insert("details".to_owned(), other);
             map
         }
     };
 
     payload_obj
-        .entry("subtype".to_string())
+        .entry("subtype".to_owned())
         .or_insert_with(|| Value::String(subtype.to_string()));
     payload_obj
-        .entry("event_time".to_string())
+        .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
-        .entry("message".to_string())
+        .entry("message".to_owned())
         .or_insert_with(|| Value::String(format!("Filtering event: {subtype}")));
 
     let event = Event::new(
@@ -628,19 +628,19 @@ pub async fn record_trader_event(
         Value::Null => Map::new(),
         other => {
             let mut map = Map::new();
-            map.insert("details".to_string(), other);
+            map.insert("details".to_owned(), other);
             map
         }
     };
 
     payload_obj
-        .entry("subtype".to_string())
+        .entry("subtype".to_owned())
         .or_insert_with(|| Value::String(subtype.to_string()));
     payload_obj
-        .entry("event_time".to_string())
+        .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
-        .entry("message".to_string())
+        .entry("message".to_owned())
         .or_insert_with(|| Value::String(format!("Trader event: {subtype}")));
 
     let event = Event::new(
@@ -670,22 +670,22 @@ pub async fn record_rpc_event(method: &str, action: &str, severity: Severity, pa
         Value::Null => Map::new(),
         other => {
             let mut map = Map::new();
-            map.insert("details".to_string(), other);
+            map.insert("details".to_owned(), other);
             map
         }
     };
 
     payload_obj
-        .entry("method".to_string())
+        .entry("method".to_owned())
         .or_insert_with(|| Value::String(method.to_string()));
     payload_obj
-        .entry("action".to_string())
+        .entry("action".to_owned())
         .or_insert_with(|| Value::String(action.to_string()));
     payload_obj
-        .entry("event_time".to_string())
+        .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
-        .entry("message".to_string())
+        .entry("message".to_owned())
         .or_insert_with(|| Value::String(format!("RPC {method} - {action}")));
 
     let event = Event::new(
@@ -715,22 +715,22 @@ pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, 
         Value::Null => Map::new(),
         other => {
             let mut map = Map::new();
-            map.insert("details".to_string(), other);
+            map.insert("details".to_owned(), other);
             map
         }
     };
 
     payload_obj
-        .entry("api".to_string())
+        .entry("api".to_owned())
         .or_insert_with(|| Value::String(api_name.to_string()));
     payload_obj
-        .entry("action".to_string())
+        .entry("action".to_owned())
         .or_insert_with(|| Value::String(action.to_string()));
     payload_obj
-        .entry("event_time".to_string())
+        .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
-        .entry("message".to_string())
+        .entry("message".to_owned())
         .or_insert_with(|| Value::String(format!("{api_name} - {action}")));
 
     let event = Event::new(
@@ -784,7 +784,7 @@ pub fn record_scheduled_task_event(title: &str, description: &str, severity: Sev
 pub async fn get_events_summary(hours: u64) -> Result<HashMap<String, serde_json::Value>, String> {
     let db = crate::events::EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?
+        .ok_or_else(|| "Events system not initialized".to_owned())?
         .clone();
 
     // Get counts by category
@@ -812,10 +812,10 @@ pub async fn get_events_summary(hours: u64) -> Result<HashMap<String, serde_json
         .collect::<Vec<_>>();
 
     let mut summary = HashMap::new();
-    summary.insert("counts_by_category".to_string(), json!(counts));
-    summary.insert("database_stats".to_string(), json!(stats));
-    summary.insert("recent_errors".to_string(), json!(recent_errors));
-    summary.insert("time_range_hours".to_string(), json!(hours));
+    summary.insert("counts_by_category".to_owned(), json!(counts));
+    summary.insert("database_stats".to_owned(), json!(stats));
+    summary.insert("recent_errors".to_owned(), json!(recent_errors));
+    summary.insert("time_range_hours".to_owned(), json!(hours));
 
     Ok(summary)
 }
@@ -830,7 +830,7 @@ pub async fn search_events(
 ) -> Result<Vec<Event>, String> {
     let db = crate::events::EVENTS_DB
         .get()
-        .ok_or_else(|| "Events system not initialized".to_string())?
+        .ok_or_else(|| "Events system not initialized".to_owned())?
         .clone();
 
     if let Some(ref_id) = reference_id {

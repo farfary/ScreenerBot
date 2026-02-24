@@ -40,13 +40,13 @@ async fn get_db() -> Option<Arc<tokio::sync::RwLock<Option<ActionsDatabase>>>> {
 pub async fn sync_from_db() -> Result<(), String> {
     let db_arc = match get_db().await {
         Some(db) => db,
-        None => return Err("Database not initialized".to_string()),
+        None => return Err("Database not initialized".to_owned()),
     };
 
     let db_lock = db_arc.read().await;
     let db = match db_lock.as_ref() {
         Some(db) => db,
-        None => return Err("Database not initialized".to_string()),
+        None => return Err("Database not initialized".to_owned()),
     };
 
     let actions = db.get_recent_incomplete_actions().await?;
@@ -201,7 +201,7 @@ pub async fn update_step(
         }
         StepStatus::Failed => {
             let step_name = action_clone.steps[step_index].name.clone();
-            let error_msg = error.unwrap_or_else(|| "Unknown error".to_string());
+            let error_msg = error.unwrap_or_else(|| "Unknown error".to_owned());
             ActionUpdate::step_failed(&action_clone, step_index, step_name, error_msg)
         }
         _ => return true, // No broadcast for Pending/Skipped
@@ -464,13 +464,13 @@ pub async fn query_action_history(
 ) -> Result<(Vec<Action>, usize), String> {
     let db_arc = match get_db().await {
         Some(db) => db,
-        None => return Err("Database not initialized".to_string()),
+        None => return Err("Database not initialized".to_owned()),
     };
 
     let db_lock = db_arc.read().await;
     let db = match db_lock.as_ref() {
         Some(db) => db,
-        None => return Err("Database not initialized".to_string()),
+        None => return Err("Database not initialized".to_owned()),
     };
 
     let limit = filters.limit.unwrap_or(50);

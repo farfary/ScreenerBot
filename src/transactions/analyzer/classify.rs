@@ -551,7 +551,7 @@ async fn detect_liquidity_patterns(
                     patterns.push(FlowPattern {
                         pattern_type: PatternType::LiquidityAdd,
                         from_token: token.clone(),
-                        to_token: "LP_TOKEN".to_string(),
+                        to_token: "LP_TOKEN".to_owned(),
                         amount: amount.abs(),
                         confidence: 0.7,
                     });
@@ -561,7 +561,7 @@ async fn detect_liquidity_patterns(
                 for (token, amount) in &node.token_changes {
                     patterns.push(FlowPattern {
                         pattern_type: PatternType::LiquidityRemove,
-                        from_token: "LP_TOKEN".to_string(),
+                        from_token: "LP_TOKEN".to_owned(),
                         to_token: token.clone(),
                         amount: amount.abs(),
                         confidence: 0.7,

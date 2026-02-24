@@ -129,14 +129,14 @@ impl ResponseFormat {
     /// JSON object mode
     pub fn json_object() -> Self {
         Self {
-            type_: "json_object".to_string(),
+            type_: "json_object".to_owned(),
         }
     }
 
     /// Text mode (default)
     pub fn text() -> Self {
         Self {
-            type_: "text".to_string(),
+            type_: "text".to_owned(),
         }
     }
 }

@@ -71,7 +71,7 @@ impl DeepSeekClient {
     /// * `enabled` - Whether the client is enabled
     pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
         if api_key.trim().is_empty() {
-            return Err("DeepSeek API key cannot be empty".to_string());
+            return Err("DeepSeek API key cannot be empty".to_owned());
         }
 
         Ok(Self {
@@ -92,9 +92,9 @@ impl DeepSeekClient {
             .into_iter()
             .map(|msg| DeepSeekMessage {
                 role: match msg.role {
-                    MessageRole::System => "system".to_string(),
-                    MessageRole::User => "user".to_string(),
-                    MessageRole::Assistant => "assistant".to_string(),
+                    MessageRole::System => "system".to_owned(),
+                    MessageRole::User => "user".to_owned(),
+                    MessageRole::Assistant => "assistant".to_owned(),
                 },
                 content: msg.content,
             })
@@ -122,8 +122,8 @@ impl DeepSeekClient {
             .choices
             .first()
             .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "deepseek".to_string(),
-                message: "No choices in response".to_string(),
+                provider: "deepseek".to_owned(),
+                message: "No choices in response".to_owned(),
             })?;
 
         Ok(ChatResponse::new(
@@ -145,7 +145,7 @@ impl DeepSeekClient {
     ) -> Result<(DeepSeekResponse, f64), LlmError> {
         if !self.enabled {
             return Err(LlmError::ProviderDisabled {
-                provider: "deepseek".to_string(),
+                provider: "deepseek".to_owned(),
             });
         }
 
@@ -155,7 +155,7 @@ impl DeepSeekClient {
             .acquire()
             .await
             .map_err(|e| LlmError::NetworkError {
-                provider: "deepseek".to_string(),
+                provider: "deepseek".to_owned(),
                 message: format!("Rate limiter error: {e}"),
             })?;
 
@@ -186,12 +186,12 @@ impl DeepSeekClient {
         let mut response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
-                    provider: "deepseek".to_string(),
+                    provider: "deepseek".to_owned(),
                     timeout_ms: self.timeout.as_millis() as u64,
                 }
             } else {
                 LlmError::NetworkError {
-                    provider: "deepseek".to_string(),
+                    provider: "deepseek".to_owned(),
                     message: format!("Request failed: {e}"),
                 }
             }
@@ -213,15 +213,15 @@ impl DeepSeekClient {
 
             return Err(match status.as_u16() {
                 401 => LlmError::AuthError {
-                    provider: "deepseek".to_string(),
-                    message: "Invalid API key".to_string(),
+                    provider: "deepseek".to_owned(),
+                    message: "Invalid API key".to_owned(),
                 },
                 429 => LlmError::RateLimited {
-                    provider: "deepseek".to_string(),
+                    provider: "deepseek".to_owned(),
                     retry_after_ms: retry_after,
                 },
                 _ => LlmError::ApiError {
-                    provider: "deepseek".to_string(),
+                    provider: "deepseek".to_owned(),
                     status_code: status.as_u16(),
                     message: error_body,
                 },
@@ -234,7 +234,7 @@ impl DeepSeekClient {
                 .json::<DeepSeekResponse>()
                 .await
                 .map_err(|e| LlmError::ParseError {
-                    provider: "deepseek".to_string(),
+                    provider: "deepseek".to_owned(),
                     message: format!("Failed to parse response: {e}"),
                 })?;
 
@@ -305,8 +305,8 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = DeepSeekClient::new(
-            "sk-test-key".to_string(),
-            Some("deepseek-reasoner".to_string()),
+            "sk-test-key".to_owned(),
+            Some("deepseek-reasoner".to_owned()),
             true,
         );
         assert!(client.is_ok());
@@ -317,7 +317,7 @@ mod tests {
 
     #[test]
     fn test_client_creation_with_defaults() {
-        let client = DeepSeekClient::new("sk-test-key".to_string(), None, true);
+        let client = DeepSeekClient::new("sk-test-key".to_owned(), None, true);
         assert!(client.is_ok());
         let client = client.unwrap();
         assert_eq!(client.model, DEFAULT_MODEL);
@@ -325,13 +325,13 @@ mod tests {
 
     #[test]
     fn test_client_creation_empty_key() {
-        let client = DeepSeekClient::new("".to_string(), None, true);
+        let client = DeepSeekClient::new("".to_owned(), None, true);
         assert!(client.is_err());
     }
 
     #[test]
     fn test_build_deepseek_request() {
-        let client = DeepSeekClient::new("sk-test".to_string(), None, true).unwrap();
+        let client = DeepSeekClient::new("sk-test".to_owned(), None, true).unwrap();
 
         let request = ChatRequest::new(
             "deepseek-chat",
@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn test_provider() {
-        let client = DeepSeekClient::new("sk-test".to_string(), None, true).unwrap();
+        let client = DeepSeekClient::new("sk-test".to_owned(), None, true).unwrap();
         assert_eq!(client.provider(), Provider::DeepSeek);
     }
 }

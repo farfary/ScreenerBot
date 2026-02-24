@@ -285,15 +285,15 @@ impl TransactionsManager {
         let fallback = self.rpc_fallback_fetched.load(Ordering::Relaxed);
 
         let mut custom = std::collections::HashMap::new();
-        custom.insert("websocket_received".to_string(), ws as f64);
-        custom.insert("bootstrap_fetched".to_string(), bootstrap as f64);
-        custom.insert("rpc_fallback_fetched".to_string(), fallback as f64);
+        custom.insert("websocket_received".to_owned(), ws as f64);
+        custom.insert("bootstrap_fetched".to_owned(), bootstrap as f64);
+        custom.insert("rpc_fallback_fetched".to_owned(), fallback as f64);
         custom.insert(
-            "known_signatures".to_string(),
+            "known_signatures".to_owned(),
             self.known_signatures.len() as f64,
         );
         custom.insert(
-            "pending_transactions".to_string(),
+            "pending_transactions".to_owned(),
             self.pending_transactions.len() as f64,
         );
 

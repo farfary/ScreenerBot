@@ -47,7 +47,7 @@ impl Service for PoolDiscoveryService {
         let discovery = crate::pools::get_pool_discovery().ok_or_else(|| {
             crate::Error::Service(ServiceError::Start {
                 service: self.name().to_string(),
-                message: "PoolDiscovery component not initialized".to_string(),
+                message: "PoolDiscovery component not initialized".to_owned(),
             })
         })?;
 
@@ -76,7 +76,7 @@ impl Service for PoolDiscoveryService {
         if crate::pools::get_pool_discovery().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("PoolDiscovery component not available".to_string())
+            ServiceHealth::Unhealthy("PoolDiscovery component not available".to_owned())
         }
     }
 
@@ -90,10 +90,10 @@ impl Service for PoolDiscoveryService {
             metrics.errors_total = errors;
             metrics
                 .custom_metrics
-                .insert("pools_discovered".to_string(), pools_discovered as f64);
+                .insert("pools_discovered".to_owned(), pools_discovered as f64);
             if operations > 0 {
                 metrics.custom_metrics.insert(
-                    "avg_pools_per_cycle".to_string(),
+                    "avg_pools_per_cycle".to_owned(),
                     pools_discovered as f64 / operations as f64,
                 );
             }

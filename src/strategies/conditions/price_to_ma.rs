@@ -41,7 +41,7 @@ impl ConditionEvaluator for PriceToMaCondition {
 
         let current_price = context
             .current_price
-            .ok_or_else(|| "Current price not available".to_string())?;
+            .ok_or_else(|| "Current price not available".to_owned())?;
 
         // Calculate percentage distance from MA
         let distance_pct = ((current_price - ma) / ma) * 100.0;
@@ -62,18 +62,18 @@ impl ConditionEvaluator for PriceToMaCondition {
 
         let period = get_param_f64(condition, "period")?;
         if period < 2.0 {
-            return Err("Period must be at least 2".to_string());
+            return Err("Period must be at least 2".to_owned());
         }
         if period > 200.0 {
-            return Err("Period must be 200 or less".to_string());
+            return Err("Period must be 200 or less".to_owned());
         }
 
         let distance = get_param_f64(condition, "distance")?;
         if distance < 0.0 {
-            return Err("Distance must be non-negative".to_string());
+            return Err("Distance must be non-negative".to_owned());
         }
         if distance > 100.0 {
-            return Err("Distance must be 100% or less".to_string());
+            return Err("Distance must be 100% or less".to_owned());
         }
 
         let position = get_param_string(condition, "position")?;

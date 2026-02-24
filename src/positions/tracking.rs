@@ -103,8 +103,8 @@ pub async fn update_position_tracking(mint: &str, current_price: f64) -> bool {
                 "Price update for {}: current={:.8}, high={}, low={}",
                 mint,
                 current_price,
-                new_highest.map_or("unchanged".to_string(), |h| format!("{:.8}", h)),
-                new_lowest.map_or("unchanged".to_string(), |l| format!("{:.8}", l))
+                new_highest.map_or("unchanged".to_owned(), |h| format!("{:.8}", h)),
+                new_lowest.map_or("unchanged".to_owned(), |l| format!("{:.8}", l))
             ),
         );
 

@@ -143,7 +143,7 @@ impl ConnectivityState {
                 self.health.insert(
                     name,
                     EndpointHealth::Unhealthy {
-                        reason: error.unwrap_or_else(|| "Unknown error".to_string()),
+                        reason: error.unwrap_or_else(|| "Unknown error".to_owned()),
                         last_check: now,
                         last_success,
                         consecutive_failures: *failures,

@@ -38,7 +38,7 @@ impl Service for OhlcvService {
             .await
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Initialize {
-                    service: "ohlcv".to_string(),
+                    service: "ohlcv".to_owned(),
                     message: format!("Failed to initialize OHLCV service: {e}"),
                 })
             })?;
@@ -54,7 +54,7 @@ impl Service for OhlcvService {
             .await
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
-                    service: "ohlcv".to_string(),
+                    service: "ohlcv".to_owned(),
                     message: format!("Failed to start OHLCV runtime: {e}"),
                 })
             })?;
@@ -67,12 +67,12 @@ impl Service for OhlcvService {
 
         tokio::select! {
           _ = autop_shutdown.notified() => {
-            logger::info(LogTag::Ohlcv, &"AUTO_POPULATE_EXIT: Shutdown received before OHLCV auto-populate".to_string());
+            logger::info(LogTag::Ohlcv, &"AUTO_POPULATE_EXIT: Shutdown received before OHLCV auto-populate".to_owned());
             return;
           }
           _ = sleep(Duration::from_secs(5)) => {}
         }
-        logger::debug(LogTag::Ohlcv, &"AUTO_POPULATE: Adding open positions to OHLCV monitoring...".to_string());
+        logger::debug(LogTag::Ohlcv, &"AUTO_POPULATE: Adding open positions to OHLCV monitoring...".to_owned());
 
         let open_positions = crate::positions::get_open_positions().await;
         for position in &open_positions {
@@ -118,37 +118,37 @@ impl Service for OhlcvService {
 
         // Map OHLCV metrics to custom metrics
         service_metrics.custom_metrics.insert(
-            "tokens_monitored".to_string(),
+            "tokens_monitored".to_owned(),
             ohlcv_metrics.tokens_monitored as f64,
         );
         service_metrics.custom_metrics.insert(
-            "pools_tracked".to_string(),
+            "pools_tracked".to_owned(),
             ohlcv_metrics.pools_tracked as f64,
         );
         service_metrics.custom_metrics.insert(
-            "api_calls_per_minute".to_string(),
+            "api_calls_per_minute".to_owned(),
             ohlcv_metrics.api_calls_per_minute,
         );
         service_metrics
             .custom_metrics
-            .insert("cache_hit_rate".to_string(), ohlcv_metrics.cache_hit_rate);
+            .insert("cache_hit_rate".to_owned(), ohlcv_metrics.cache_hit_rate);
         service_metrics.custom_metrics.insert(
-            "average_fetch_latency_ms".to_string(),
+            "average_fetch_latency_ms".to_owned(),
             ohlcv_metrics.average_fetch_latency_ms,
         );
         service_metrics.custom_metrics.insert(
-            "gaps_detected".to_string(),
+            "gaps_detected".to_owned(),
             ohlcv_metrics.gaps_detected as f64,
         );
         service_metrics
             .custom_metrics
-            .insert("gaps_filled".to_string(), ohlcv_metrics.gaps_filled as f64);
+            .insert("gaps_filled".to_owned(), ohlcv_metrics.gaps_filled as f64);
         service_metrics.custom_metrics.insert(
-            "data_points_stored".to_string(),
+            "data_points_stored".to_owned(),
             ohlcv_metrics.data_points_stored as f64,
         );
         service_metrics.custom_metrics.insert(
-            "database_size_mb".to_string(),
+            "database_size_mb".to_owned(),
             ohlcv_metrics.database_size_mb,
         );
 

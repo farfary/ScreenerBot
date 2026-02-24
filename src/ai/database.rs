@@ -90,7 +90,7 @@ pub fn init_ai_database() -> Result<Connection, String> {
     // Store in global
     GLOBAL_AI_DB
         .set(Arc::new(Mutex::new(conn)))
-        .map_err(|_| "Global AI database already initialized".to_string())?;
+        .map_err(|_| "Global AI database already initialized".to_owned())?;
 
     // Return a new connection for immediate use
     let new_conn =
@@ -681,14 +681,14 @@ mod tests {
 
         let record = DecisionRecord {
             id: 0, // Will be set by database
-            mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(),
-            symbol: Some("USDC".to_string()),
-            decision: "PASS".to_string(),
+            mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_owned(),
+            symbol: Some("USDC".to_owned()),
+            decision: "PASS".to_owned(),
             confidence: 85,
-            reasoning: Some("Good liquidity and holder distribution".to_string()),
-            risk_level: Some("LOW".to_string()),
-            provider: "openai".to_string(),
-            model: Some("gpt-4".to_string()),
+            reasoning: Some("Good liquidity and holder distribution".to_owned()),
+            risk_level: Some("LOW".to_owned()),
+            provider: "openai".to_owned(),
+            model: Some("gpt-4".to_owned()),
             tokens_used: 1500,
             latency_ms: 234.5,
             cached: false,
