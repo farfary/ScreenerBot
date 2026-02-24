@@ -361,10 +361,8 @@ pub async fn start_websocket_monitoring(
                     reconnect_attempts += 1;
 
                     // Exponential backoff: 2^attempt seconds, capped at max_reconnect_delay
-                    let delay_seconds = std::cmp::min(
-                        (2u64).pow(std::cmp::min(reconnect_attempts, 6)), // Cap at 2^6 = 64, but we'll limit to max_reconnect_delay
-                        max_reconnect_delay,
-                    );
+                    let delay_seconds = (2u64).pow(reconnect_attempts.min(6)) // Cap at 2^6 = 64, but we'll limit to max_reconnect_delay
+                        .min(max_reconnect_delay);
 
                     logger::info(
                         LogTag::Websocket,

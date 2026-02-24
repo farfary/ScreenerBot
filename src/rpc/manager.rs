@@ -439,10 +439,8 @@ impl RpcManager {
 
                     // Exponential backoff
                     if retry < self.max_retries {
-                        let delay = std::cmp::min(
-                            self.retry_delay_base * 2u32.pow(retry),
-                            self.retry_delay_max,
-                        );
+                        let delay = (self.retry_delay_base * 2u32.pow(retry))
+                            .min(self.retry_delay_max);
                         tokio::time::sleep(delay).await;
                     }
                 }

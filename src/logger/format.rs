@@ -352,7 +352,7 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
 
         let break_point = if char_count < remaining.chars().count() {
             let search_start_chars = char_count;
-            let search_end_chars = std::cmp::min(char_count + 15, remaining.chars().count());
+            let search_end_chars = (char_count + 15).min(remaining.chars().count());
 
             let search_start_bytes = remaining
                 .char_indices()
@@ -373,8 +373,7 @@ fn break_long_word(word: &str, max_width: usize) -> Vec<String> {
                 ];
 
                 if let Some(pos) = search_slice.find(&break_chars[..]) {
-                    let actual_pos = search_start_bytes + pos + 1;
-                    let actual_pos = std::cmp::min(actual_pos, remaining.len());
+                    let actual_pos = (search_start_bytes + pos + 1).min(remaining.len());
 
                     let mut boundary = actual_pos;
                     for (byte_idx, _) in remaining.char_indices() {
