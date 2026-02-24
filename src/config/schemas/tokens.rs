@@ -1,3 +1,5 @@
+//! Token discovery, sources, and data provider configuration.
+
 use crate::config_struct;
 use crate::field_metadata;
 

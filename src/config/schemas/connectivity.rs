@@ -1,3 +1,5 @@
+//! External service connectivity and health check configuration.
+
 use crate::config_struct;
 
 // ============================================================================

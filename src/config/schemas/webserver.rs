@@ -1,3 +1,5 @@
+//! Web dashboard server and API endpoint configuration.
+
 // Webserver configuration schema
 
 use crate::config_struct;

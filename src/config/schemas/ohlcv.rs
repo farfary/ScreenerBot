@@ -1,3 +1,5 @@
+//! OHLCV candlestick data fetching, caching, and gap detection configuration.
+
 use crate::config_struct;
 use crate::field_metadata;
 

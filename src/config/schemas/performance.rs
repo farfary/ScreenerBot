@@ -1,3 +1,5 @@
+//! Runtime performance tuning — thread pools, batch sizes, and concurrency limits.
+
 use crate::config_struct;
 use crate::field_metadata;
 

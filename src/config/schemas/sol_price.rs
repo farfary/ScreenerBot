@@ -1,3 +1,5 @@
+//! SOL/USD price feed source and refresh interval configuration.
+
 use crate::config_struct;
 
 // ============================================================================

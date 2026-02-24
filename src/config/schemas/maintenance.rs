@@ -1,3 +1,5 @@
+//! Database maintenance, cleanup, and retention policy configuration.
+
 use crate::config_struct;
 use crate::field_metadata;
 

@@ -1,3 +1,5 @@
+//! System monitoring, metrics, and health check configuration.
+
 use crate::config_struct;
 
 // ============================================================================

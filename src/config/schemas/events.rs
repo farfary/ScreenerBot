@@ -1,3 +1,5 @@
+//! Event logging and notification delivery configuration.
+
 use crate::config_struct;
 use crate::field_metadata;
 

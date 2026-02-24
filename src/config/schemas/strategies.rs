@@ -1,3 +1,5 @@
+//! Trading strategy conditions and template configuration.
+
 use crate::config_struct;
 use crate::field_metadata;
 

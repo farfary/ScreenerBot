@@ -1,3 +1,5 @@
+//! Token filtering rules and safety check configuration.
+
 use crate::config_struct;
 use crate::field_metadata;
 

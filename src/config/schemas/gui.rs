@@ -1,3 +1,5 @@
+//! GUI appearance and display preference configuration.
+
 // GUI configuration schema
 
 use crate::config_struct;

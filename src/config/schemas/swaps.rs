@@ -1,3 +1,5 @@
+//! Swap router, slippage, and DEX aggregator configuration.
+
 use crate::config_struct;
 use crate::field_metadata;
 
