@@ -150,7 +150,7 @@ impl TogetherClient {
             .await
             .map_err(|e| LlmError::NetworkError {
                 provider: "together".to_string(),
-                message: format!("Rate limiter error: {}", e),
+                message: format!("Rate limiter error: {e}"),
             })?;
 
         let url = format!("{}{}", TOGETHER_BASE_URL, ENDPOINT_CHAT);
@@ -186,7 +186,7 @@ impl TogetherClient {
             } else {
                 LlmError::NetworkError {
                     provider: "together".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -229,7 +229,7 @@ impl TogetherClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "together".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((together_response, elapsed))

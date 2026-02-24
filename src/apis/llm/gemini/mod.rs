@@ -188,7 +188,7 @@ impl GeminiClient {
             .await
             .map_err(|e| LlmError::NetworkError {
                 provider: "gemini".to_string(),
-                message: format!("Rate limiter error: {}", e),
+                message: format!("Rate limiter error: {e}"),
             })?;
 
         // Build URL with model and API key as query parameter
@@ -224,7 +224,7 @@ impl GeminiClient {
             } else {
                 LlmError::NetworkError {
                     provider: "gemini".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -267,7 +267,7 @@ impl GeminiClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "gemini".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((gemini_response, elapsed))

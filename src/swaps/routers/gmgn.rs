@@ -386,7 +386,7 @@ impl SwapRouter for GmgnRouter {
             .quote
             .out_amount
             .parse::<u64>()
-            .map_err(|e| Error::parse_error(format!("Failed to parse output_amount: {}", e)))?;
+            .map_err(|e| Error::parse_error(format!("Failed to parse output_amount: {e}")))?;
 
         let price_impact = swap_data
             .quote
@@ -395,7 +395,7 @@ impl SwapRouter for GmgnRouter {
             .unwrap_or_default();
 
         let execution_data = serde_json::to_vec(&swap_data)
-            .map_err(|e| Error::internal_error(format!("Swap data serialization failed: {}", e)))?;
+            .map_err(|e| Error::internal_error(format!("Swap data serialization failed: {e}")))?;
 
         Ok(Quote {
             router_id: self.id().to_string(),
@@ -418,7 +418,7 @@ impl SwapRouter for GmgnRouter {
         let start = Instant::now();
 
         let swap_data: SwapData = serde_json::from_slice(&quote.execution_data).map_err(|e| {
-            Error::internal_error(format!("Swap data deserialization failed: {}", e))
+            Error::internal_error(format!("Swap data deserialization failed: {e}"))
         })?;
 
         let signature = self

@@ -174,7 +174,7 @@ impl AnthropicClient {
             .await
             .map_err(|e| LlmError::NetworkError {
                 provider: "anthropic".to_string(),
-                message: format!("Rate limiter error: {}", e),
+                message: format!("Rate limiter error: {e}"),
             })?;
 
         let url = format!("{}{}", ANTHROPIC_BASE_URL, ENDPOINT_MESSAGES);
@@ -208,7 +208,7 @@ impl AnthropicClient {
             } else {
                 LlmError::NetworkError {
                     provider: "anthropic".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -251,7 +251,7 @@ impl AnthropicClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "anthropic".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((anthropic_response, elapsed))

@@ -697,7 +697,7 @@ impl RpcClientMethods for RpcClient {
     ) -> crate::Result<Signature> {
         // Serialize transaction
         let tx_bytes = bincode::serialize(transaction)
-            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {}", e)))?;
+            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {e}")))?;
         let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
 
         let params = serde_json::json!([
@@ -1204,7 +1204,7 @@ impl RpcClientMethods for RpcClient {
 
         // Try Token-2022 ATA
         let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
-            .map_err(|e| parse_err("pubkey", &format!("Invalid Token-2022 program ID: {}", e)))?;
+            .map_err(|e| parse_err("pubkey", &format!("Invalid Token-2022 program ID: {e}")))?;
         let token_2022_ata = Self::get_associated_token_address_with_program(
             &wallet_pubkey,
             &mint_pubkey,
@@ -1227,7 +1227,7 @@ impl RpcClientMethods for RpcClient {
 
         // Serialize the transaction
         let serialized = bincode::serialize(transaction)
-            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {}", e)))?;
+            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {e}")))?;
 
         // Encode to base64
         let transaction_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized);
@@ -1650,7 +1650,7 @@ impl RpcClientMethods for RpcClient {
         // Load main wallet keypair from config
         let keypair = crate::config::get_wallet_keypair().map_err(|e| {
             crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
-                message: format!("Failed to load wallet keypair: {}", e),
+                message: format!("Failed to load wallet keypair: {e}"),
             })
         })?;
 
@@ -1668,7 +1668,7 @@ impl RpcClientMethods for RpcClient {
         // Load main wallet keypair from config
         let keypair = crate::config::get_wallet_keypair().map_err(|e| {
             crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
-                message: format!("Failed to load wallet keypair: {}", e),
+                message: format!("Failed to load wallet keypair: {e}"),
             })
         })?;
 

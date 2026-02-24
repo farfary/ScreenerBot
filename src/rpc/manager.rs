@@ -135,7 +135,7 @@ impl RpcManager {
             .tcp_nodelay(true)
             .build()
             .map_err(|e| {
-                crate::Error::network_error(format!("Failed to create HTTP client: {}", e))
+                crate::Error::network_error(format!("Failed to create HTTP client: {e}"))
             })?;
 
         // Create provider configs
@@ -488,7 +488,7 @@ impl RpcManager {
         // Parse JSON-RPC response
         let json: serde_json::Value =
             serde_json::from_str(&body).map_err(|e| RpcError::InvalidResponse {
-                message: format!("Invalid JSON: {}", e),
+                message: format!("Invalid JSON: {e}"),
             })?;
 
         // Check for JSON-RPC error
