@@ -2,6 +2,7 @@
 
 use crate::webserver::embeds;
 use axum::{
+    extract::Path,
     http::{header as http_header, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -40,7 +41,7 @@ fn serve_js(content: &str) -> Response {
 }
 
 /// Serve core JavaScript modules
-pub async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+pub async fn get_core_script(Path(file): Path<String>) -> Response {
     let content = match file.as_str() {
         "lifecycle.js" => Some(embeds::CORE_LIFECYCLE),
         "app_state.js" => Some(embeds::CORE_APP_STATE),
@@ -72,7 +73,7 @@ pub async fn get_core_script(axum::extract::Path(file): axum::extract::Path<Stri
 }
 
 /// Serve page JavaScript modules
-pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+pub async fn get_page_script(Path(file): Path<String>) -> Response {
     let file = file.strip_prefix('/').unwrap_or(&file);
     let content = match file {
         "home.js" => Some(embeds::HOME_PAGE_SCRIPT),
@@ -123,7 +124,7 @@ pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<Stri
 }
 
 /// Serve UI component JavaScript modules
-pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+pub async fn get_ui_script(Path(file): Path<String>) -> Response {
     let file = file.strip_prefix('/').unwrap_or(&file);
     let content = match file {
         "data_table.js" => Some(embeds::DATA_TABLE_UI),
@@ -192,7 +193,7 @@ pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String
 }
 
 /// Serve static assets (logos, icons)
-pub async fn get_asset(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+pub async fn get_asset(Path(file): Path<String>) -> Response {
     match file.as_str() {
         "logo.svg" => (
             StatusCode::OK,
@@ -217,7 +218,7 @@ pub async fn get_asset(axum::extract::Path(file): axum::extract::Path<String>) -
 }
 
 /// Serve AI provider logos
-pub async fn get_provider_logo(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+pub async fn get_provider_logo(Path(file): Path<String>) -> Response {
     let content_type = [(http_header::CONTENT_TYPE, "image/png")];
     match file.as_str() {
         "openai.png" => (StatusCode::OK, content_type, embeds::PROVIDER_OPENAI).into_response(),
@@ -238,7 +239,7 @@ pub async fn get_provider_logo(axum::extract::Path(file): axum::extract::Path<St
 }
 
 /// Serve fonts (Lucide icons, JetBrains Mono, Orbitron)
-pub async fn get_font(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+pub async fn get_font(Path(file): Path<String>) -> Response {
     match file.as_str() {
         // Lucide icon font
         "lucide.woff2" => (

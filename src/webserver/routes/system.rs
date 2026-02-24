@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::Response,
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use chrono::Utc;
 use serde::Serialize;
@@ -417,7 +417,7 @@ pub struct OpenUrlResponse {
 }
 
 /// POST /api/system/open-url - Open a URL in the system's default browser
-async fn open_url(axum::Json(request): axum::Json<OpenUrlRequest>) -> Response {
+async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
     let url = request.url.trim();
 
     if url.is_empty() {
@@ -463,7 +463,7 @@ pub struct ExitAppResponse {
 
 /// POST /api/system/exit - Exit the application
 /// Used for "Install & Restart" to close the app after opening the installer
-async fn exit_app(axum::Json(request): axum::Json<ExitAppRequest>) -> Response {
+async fn exit_app(Json(request): Json<ExitAppRequest>) -> Response {
     logger::info(
         LogTag::System,
         &format!("Exit requested via API with delay: {}ms", request.delay_ms),
