@@ -238,7 +238,7 @@ impl RpcManager {
             .filter(|p| {
                 p.enabled
                     && !excluded.contains(&p.id)
-                    && states.get(&p.id).map(|s| s.is_healthy()).unwrap_or(true)
+                    && states.get(&p.id).is_none_or(|s| s.is_healthy())
             })
             .collect();
 

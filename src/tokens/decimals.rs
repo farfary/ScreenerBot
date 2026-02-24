@@ -383,7 +383,7 @@ async fn get_from_db(mint: &str) -> Option<u8> {
     match join_result {
         Ok(Some(token)) => token
             .decimals
-            .and_then(|value| if value > 0 { Some(value) } else { None }),
+            .and_then(|value| (value > 0).then_some(value)),
         Ok(None) => None,
         Err(_) => None,
     }
@@ -404,7 +404,7 @@ async fn get_from_rugcheck(mint: &str) -> Option<u8> {
     match join_result {
         Ok(Some(data)) => data
             .token_decimals
-            .and_then(|value| if value > 0 { Some(value) } else { None }),
+            .and_then(|value| (value > 0).then_some(value)),
         Ok(None) => None,
         Err(_) => None,
     }

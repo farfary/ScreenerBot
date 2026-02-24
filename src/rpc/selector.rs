@@ -74,7 +74,7 @@ impl ProviderSelector for RoundRobinSelector {
             .filter(|p| {
                 p.enabled
                     && !excluded.contains(&p.id)
-                    && states.get(&p.id).map(|s| s.is_healthy()).unwrap_or(true)
+                    && states.get(&p.id).is_none_or(|s| s.is_healthy())
             })
             .collect();
 
@@ -127,7 +127,7 @@ impl ProviderSelector for PrioritySelector {
             .filter(|p| {
                 p.enabled
                     && !excluded.contains(&p.id)
-                    && states.get(&p.id).map(|s| s.is_healthy()).unwrap_or(true)
+                    && states.get(&p.id).is_none_or(|s| s.is_healthy())
             })
             .min_by_key(|p| p.priority)
     }
@@ -169,7 +169,7 @@ impl ProviderSelector for LatencySelector {
             .filter(|p| {
                 p.enabled
                     && !excluded.contains(&p.id)
-                    && states.get(&p.id).map(|s| s.is_healthy()).unwrap_or(true)
+                    && states.get(&p.id).is_none_or(|s| s.is_healthy())
             })
             .min_by(|a, b| {
                 let lat_a = states
@@ -254,7 +254,7 @@ impl ProviderSelector for AdaptiveSelector {
             .filter(|p| {
                 p.enabled
                     && !excluded.contains(&p.id)
-                    && states.get(&p.id).map(|s| s.is_healthy()).unwrap_or(true)
+                    && states.get(&p.id).is_none_or(|s| s.is_healthy())
             })
             .max_by(|a, b| {
                 let score_a = Self::score(states.get(&a.id), a.priority);

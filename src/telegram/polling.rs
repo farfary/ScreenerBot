@@ -72,7 +72,7 @@ pub async fn start_polling(
 async fn poll_updates(bot: &Bot) {
     // Get offset - start from last processed + 1 to get new updates only
     let offset = LAST_UPDATE_ID.load(Ordering::SeqCst);
-    let offset_param = if offset > 0 { Some(offset) } else { None };
+    let offset_param = (offset > 0).then_some(offset);
 
     // Use getUpdates with offset and timeout for proper long polling
     let mut request = bot.get_updates().timeout(30);

@@ -85,7 +85,7 @@ impl FieldMetadata {
             docs,
             default,
             children: None,
-            hidden: if extras.hidden { Some(true) } else { None },
+            hidden: extras.hidden.then_some(true),
         }
     }
 }
