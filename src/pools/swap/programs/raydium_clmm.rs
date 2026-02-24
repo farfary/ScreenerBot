@@ -236,21 +236,21 @@ impl RaydiumClmmSwap {
         // Get associated token accounts with correct program
         let wsol_ata = spl_associated_token_account::get_associated_token_address(
             &wallet_pubkey,
-            &Pubkey::from_str(SOL_MINT).unwrap(),
+            &Pubkey::from_str(SOL_MINT).expect("invalid SOL_MINT constant"),
         );
 
-        let token_ata = if token_program_id == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap() {
+        let token_ata = if token_program_id == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant") {
             // Token-2022 ATA
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &wallet_pubkey,
-                &Pubkey::from_str(token_mint).unwrap(),
+                &Pubkey::from_str(token_mint).expect("invalid pubkey string"),
                 &token_program_id,
             )
         } else {
             // Legacy SPL token ATA
             spl_associated_token_account::get_associated_token_address(
                 &wallet_pubkey,
-                &Pubkey::from_str(token_mint).unwrap(),
+                &Pubkey::from_str(token_mint).expect("invalid pubkey string"),
             )
         };
 
@@ -260,7 +260,7 @@ impl RaydiumClmmSwap {
                 spl_associated_token_account::instruction::create_associated_token_account(
                     &wallet_pubkey,
                     &wallet_pubkey,
-                    &Pubkey::from_str(SOL_MINT).unwrap(),
+                    &Pubkey::from_str(SOL_MINT).expect("invalid SOL_MINT constant"),
                     &spl_token::id(),
                 );
             instructions.push(create_wsol_ix);
@@ -271,7 +271,7 @@ impl RaydiumClmmSwap {
                 spl_associated_token_account::instruction::create_associated_token_account(
                     &wallet_pubkey,
                     &wallet_pubkey,
-                    &Pubkey::from_str(token_mint).unwrap(),
+                    &Pubkey::from_str(token_mint).expect("invalid pubkey string"),
                     &token_program_id,
                 );
             instructions.push(create_token_ix);
@@ -346,11 +346,11 @@ impl RaydiumClmmSwap {
             .map_err(|e| SwapError::TransactionError(format!("Invalid observation_key: {e}")))?;
 
         // Get mint addresses
-        let wsol_mint = Pubkey::from_str(SOL_MINT).unwrap();
+        let wsol_mint = Pubkey::from_str(SOL_MINT).expect("invalid SOL_MINT constant");
         let token_mint = if is_token_0_sol {
-            Pubkey::from_str(&pool_info.token_mint_1).unwrap()
+            Pubkey::from_str(&pool_info.token_mint_1).expect("invalid pubkey string")
         } else {
-            Pubkey::from_str(&pool_info.token_mint_0).unwrap()
+            Pubkey::from_str(&pool_info.token_mint_0).expect("invalid pubkey string")
         };
 
         // Token vaults
@@ -411,13 +411,13 @@ impl RaydiumClmmSwap {
             AccountMeta::new(observation_key, false),          // observation_state
             AccountMeta::new_readonly(spl_token::id(), false), // token_program
             AccountMeta::new_readonly(spl_token_2022::id(), false), // token_program_2022
-            AccountMeta::new_readonly(Pubkey::from_str(MEMO_PROGRAM_ID).unwrap(), false), // memo_program
+            AccountMeta::new_readonly(Pubkey::from_str(MEMO_PROGRAM_ID).expect("invalid pubkey string"), false), // memo_program
             AccountMeta::new_readonly(input_mint, false), // input_vault_mint
             AccountMeta::new_readonly(output_mint, false), // output_vault_mint
         ];
 
         Ok(Instruction {
-            program_id: Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).unwrap(),
+            program_id: Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).expect("invalid pubkey string"),
             accounts,
             data: instruction_data,
         })
@@ -449,8 +449,8 @@ impl RaydiumClmmSwap {
             })?;
 
         // Check the owner to determine if it's Token-2022 or legacy SPL Token
-        if mint_account.owner == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap() {
-            Ok(Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap())
+        if mint_account.owner == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant") {
+            Ok(Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant"))
         } else {
             Ok(spl_token::id()) // Default to legacy SPL Token
         }

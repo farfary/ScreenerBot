@@ -185,19 +185,19 @@ impl RaydiumCpmmSwap {
         // Get associated token accounts
         let wsol_ata = spl_associated_token_account::get_associated_token_address(
             &wallet_pubkey,
-            &Pubkey::from_str(SOL_MINT).unwrap(),
+            &Pubkey::from_str(SOL_MINT).expect("invalid SOL_MINT constant"),
         );
 
         let token_ata = if token_program == TOKEN_2022_PROGRAM_ID {
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &wallet_pubkey,
-                &Pubkey::from_str(token_mint).unwrap(),
-                &Pubkey::from_str(token_program).unwrap(),
+                &Pubkey::from_str(token_mint).expect("invalid pubkey string"),
+                &Pubkey::from_str(token_program).expect("invalid pubkey string"),
             )
         } else {
             spl_associated_token_account::get_associated_token_address(
                 &wallet_pubkey,
-                &Pubkey::from_str(token_mint).unwrap(),
+                &Pubkey::from_str(token_mint).expect("invalid pubkey string"),
             )
         };
 
@@ -207,19 +207,19 @@ impl RaydiumCpmmSwap {
                 spl_associated_token_account::instruction::create_associated_token_account(
                     &wallet_pubkey,
                     &wallet_pubkey,
-                    &Pubkey::from_str(SOL_MINT).unwrap(),
+                    &Pubkey::from_str(SOL_MINT).expect("invalid SOL_MINT constant"),
                     &spl_token::id(),
                 ),
             );
         }
 
         if !Self::account_exists(&token_ata).await? {
-            let token_program_id = Pubkey::from_str(token_program).unwrap();
+            let token_program_id = Pubkey::from_str(token_program).expect("invalid pubkey string");
             instructions.push(
                 spl_associated_token_account::instruction::create_associated_token_account(
                     &wallet_pubkey,
                     &wallet_pubkey,
-                    &Pubkey::from_str(token_mint).unwrap(),
+                    &Pubkey::from_str(token_mint).expect("invalid pubkey string"),
                     &token_program_id,
                 ),
             );
@@ -310,12 +310,12 @@ impl RaydiumCpmmSwap {
                 (
                     *wsol_ata,                                             // SOL account
                     *token_ata,                                            // Token account
-                    Pubkey::from_str(&pool_info.token_0_vault).unwrap(),   // SOL vault
-                    Pubkey::from_str(&pool_info.token_1_vault).unwrap(),   // Token vault
-                    Pubkey::from_str(&pool_info.token_0_mint).unwrap(),    // SOL mint
-                    Pubkey::from_str(&pool_info.token_1_mint).unwrap(),    // Token mint
-                    Pubkey::from_str(&pool_info.token_0_program).unwrap(), // SOL program
-                    Pubkey::from_str(&pool_info.token_1_program).unwrap(), // Token program
+                    Pubkey::from_str(&pool_info.token_0_vault).expect("invalid pubkey string"),   // SOL vault
+                    Pubkey::from_str(&pool_info.token_1_vault).expect("invalid pubkey string"),   // Token vault
+                    Pubkey::from_str(&pool_info.token_0_mint).expect("invalid pubkey string"),    // SOL mint
+                    Pubkey::from_str(&pool_info.token_1_mint).expect("invalid pubkey string"),    // Token mint
+                    Pubkey::from_str(&pool_info.token_0_program).expect("invalid pubkey string"), // SOL program
+                    Pubkey::from_str(&pool_info.token_1_program).expect("invalid pubkey string"), // Token program
                 )
             }
             SwapDirection::Sell => {
@@ -323,12 +323,12 @@ impl RaydiumCpmmSwap {
                 (
                     *token_ata,                                            // Token account
                     *wsol_ata,                                             // SOL account
-                    Pubkey::from_str(&pool_info.token_1_vault).unwrap(),   // Token vault
-                    Pubkey::from_str(&pool_info.token_0_vault).unwrap(),   // SOL vault
-                    Pubkey::from_str(&pool_info.token_1_mint).unwrap(),    // Token mint
-                    Pubkey::from_str(&pool_info.token_0_mint).unwrap(),    // SOL mint
-                    Pubkey::from_str(&pool_info.token_1_program).unwrap(), // Token program
-                    Pubkey::from_str(&pool_info.token_0_program).unwrap(), // SOL program
+                    Pubkey::from_str(&pool_info.token_1_vault).expect("invalid pubkey string"),   // Token vault
+                    Pubkey::from_str(&pool_info.token_0_vault).expect("invalid pubkey string"),   // SOL vault
+                    Pubkey::from_str(&pool_info.token_1_mint).expect("invalid pubkey string"),    // Token mint
+                    Pubkey::from_str(&pool_info.token_0_mint).expect("invalid pubkey string"),    // SOL mint
+                    Pubkey::from_str(&pool_info.token_1_program).expect("invalid pubkey string"), // Token program
+                    Pubkey::from_str(&pool_info.token_0_program).expect("invalid pubkey string"), // SOL program
                 )
             }
         };
@@ -336,13 +336,13 @@ impl RaydiumCpmmSwap {
         // Authority PDA (derived from "vault_and_lp_mint_auth_seed"seed)
         let authority = Pubkey::find_program_address(
             &[b"vault_and_lp_mint_auth_seed"],
-            &Pubkey::from_str(RAYDIUM_CPMM_PROGRAM_ID).unwrap(),
+            &Pubkey::from_str(RAYDIUM_CPMM_PROGRAM_ID).expect("invalid pubkey string"),
         )
         .0;
 
-        let pool_pubkey = Pubkey::from_str(&pool_info.pool_id).unwrap();
-        let amm_config = Pubkey::from_str(&pool_info.amm_config).unwrap();
-        let observation_key = Pubkey::from_str(&pool_info.observation_key).unwrap();
+        let pool_pubkey = Pubkey::from_str(&pool_info.pool_id).expect("invalid pubkey string");
+        let amm_config = Pubkey::from_str(&pool_info.amm_config).expect("invalid pubkey string");
+        let observation_key = Pubkey::from_str(&pool_info.observation_key).expect("invalid pubkey string");
 
         // Build accounts according to Raydium CPMM swap instruction format
         let accounts = vec![
@@ -362,7 +362,7 @@ impl RaydiumCpmmSwap {
         ];
 
         Ok(Instruction {
-            program_id: Pubkey::from_str(RAYDIUM_CPMM_PROGRAM_ID).unwrap(),
+            program_id: Pubkey::from_str(RAYDIUM_CPMM_PROGRAM_ID).expect("invalid pubkey string"),
             accounts,
             data: instruction_data,
         })

@@ -144,7 +144,7 @@ pub async fn transfer_token(
     };
 
     let token_program_id = if is_token_2022 {
-        Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap()
+        Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant")
     } else {
         spl_token::id()
     };
@@ -446,7 +446,7 @@ pub async fn close_ata(
     let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {e}"))?;
 
     let token_program_id = if is_token_2022 {
-        Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap()
+        Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant")
     } else {
         spl_token::id()
     };

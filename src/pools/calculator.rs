@@ -326,7 +326,7 @@ impl PriceCalculator {
 
         // Determine which token we're calculating price for (the non-SOL token)
         // Note: Discovery stage already ensures one side is SOL, so this should always succeed
-        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).unwrap();
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).expect("invalid SOL_MINT constant");
         let (target_mint, _sol_is_base) = if pool_descriptor.base_mint == sol_mint_pubkey {
             (pool_descriptor.quote_mint, true)
         } else {
