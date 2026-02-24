@@ -1,3 +1,5 @@
+//! Transaction database operations — CRUD methods for transaction records.
+//
 // Core database operations and implementation
 
 use chrono::{DateTime, Utc};

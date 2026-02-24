@@ -1,3 +1,5 @@
+//! Balance analysis — extracts SOL and token balance changes from transaction metadata.
+//
 // Balance analysis module - SOL and SPL token balance change extraction
 //
 // This module implements the industry-standard approach used by DexScreener,

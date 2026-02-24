@@ -1,3 +1,5 @@
+//! Transaction debug utilities — detailed logging and inspection for troubleshooting.
+//
 // Debug utilities and diagnostics for the transactions module
 //
 // This module provides comprehensive debugging tools, diagnostics, and troubleshooting

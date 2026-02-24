@@ -1,3 +1,5 @@
+//! Transaction classification — categorizes transactions by type (swap, transfer, etc.).
+//
 // Transaction classification module - Graph-based flow analysis
 //
 // This module implements the sophisticated classification system used by

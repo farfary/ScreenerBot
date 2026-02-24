@@ -1,3 +1,5 @@
+//! Transaction service lifecycle — manages service start, stop, and graceful shutdown.
+//
 // Service lifecycle management - start/stop/status and global state
 
 use std::sync::{Arc, LazyLock};

@@ -1,3 +1,5 @@
+//! Transaction service processing — handles incoming WebSocket messages and dispatches analysis.
+//
 // Main service loop and periodic processing tasks
 
 use chrono::Utc;

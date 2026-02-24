@@ -1,3 +1,5 @@
+//! Transaction service WebSocket — establishes and maintains WebSocket subscriptions.
+//
 // WebSocket integration for real-time transaction notifications
 
 use chrono::Utc;

@@ -1,3 +1,5 @@
+//! Transaction processor helpers — utility functions for instruction parsing and validation.
+//
 // Transaction processing pipeline - Helper functions
 //
 // This module contains standalone utility functions used by the transaction

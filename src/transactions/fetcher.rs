@@ -1,3 +1,5 @@
+//! Transaction fetcher — retrieves transaction data from Solana RPC nodes.
+//
 // RPC fetching and batch operations for the transactions module
 //
 // This module handles all blockchain data retrieval operations including

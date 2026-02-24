@@ -1,3 +1,5 @@
+//! Transaction WebSocket — low-level WebSocket connection management for Solana subscriptions.
+
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

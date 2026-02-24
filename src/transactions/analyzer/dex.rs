@@ -1,3 +1,5 @@
+//! DEX analysis — identifies swap instructions and extracts trade details from DEX programs.
+//
 // DEX detection module - Router and DEX identification system
 //
 // This module implements the industry-standard DEX detection approach used by

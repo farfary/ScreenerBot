@@ -1,3 +1,5 @@
+//! Global transaction database singleton — shared access to the transaction data store.
+//
 // Global database instance management
 
 use std::sync::Arc;

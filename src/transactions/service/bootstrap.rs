@@ -1,3 +1,5 @@
+//! Transaction service bootstrap — initialization and startup of the transaction monitoring service.
+//
 // Startup bootstrap logic - initial transaction history loading
 
 use chrono::Utc;

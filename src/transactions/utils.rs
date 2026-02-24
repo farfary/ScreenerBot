@@ -1,3 +1,5 @@
+//! Transaction utilities — helper functions for signature formatting and data conversion.
+//
 // Utility functions and constants for the transactions module
 //
 // This module provides shared utility functions, constants, and helper code

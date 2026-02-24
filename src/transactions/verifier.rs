@@ -1,3 +1,5 @@
+//! Transaction verifier — confirms transaction finality and signature status on-chain.
+//
 // Transaction verification for positions integration
 //
 // This module provides transaction verification functionality specifically

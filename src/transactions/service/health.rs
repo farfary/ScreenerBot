@@ -1,3 +1,5 @@
+//! Transaction service health — monitors WebSocket connection health and triggers reconnection.
+//
 // Health monitoring and metrics tracking
 
 use chrono::{DateTime, Utc};

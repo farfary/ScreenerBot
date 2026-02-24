@@ -1,3 +1,5 @@
+//! ATA analysis — detects associated token account creation and closure in transactions.
+//
 // ATA operations analysis module - Associated Token Account lifecycle tracking
 //
 // This module analyzes ATA (Associated Token Account) operations including

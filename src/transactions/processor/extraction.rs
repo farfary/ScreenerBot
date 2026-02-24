@@ -1,3 +1,5 @@
+//! Transaction processor extraction — extracts structured data from raw transaction bytes.
+//
 // Transaction processing pipeline - Data extraction methods
 //
 // This module contains methods for extracting data from RPC responses,

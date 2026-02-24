@@ -1,3 +1,5 @@
+//! Transaction types — core data structures for transaction representation and analysis results.
+//
 // =============================================================================
 // CORE DATA STRUCTURES
 // =============================================================================

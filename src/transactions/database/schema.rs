@@ -1,3 +1,5 @@
+//! Transaction database schema — table definitions and migration logic.
+//
 // Database schema definitions and constants
 
 use std::sync::atomic::AtomicBool;

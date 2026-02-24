@@ -1,3 +1,5 @@
+//! Transaction database types — row structs for SQLite serialization.
+//
 // Type definitions for database operations
 
 use chrono::{DateTime, Utc};

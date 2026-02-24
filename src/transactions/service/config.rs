@@ -1,3 +1,5 @@
+//! Transaction service configuration — runtime settings for connection management and retries.
+//
 // Service configuration, constants, and deferred retry queue
 
 use chrono::{DateTime, Utc};

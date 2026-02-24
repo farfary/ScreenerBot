@@ -1,3 +1,5 @@
+//! Transaction pattern detection — recognizes common on-chain patterns like MEV and arbitrage.
+//
 // Pattern detection module - Suspicious activity and anomaly detection
 //
 // This module implements pattern recognition for detecting unusual transaction

@@ -1,3 +1,5 @@
+//! Transaction manager — coordinates the full transaction processing pipeline.
+//
 // TransactionsManager - Core manager struct for transaction monitoring and coordination
 //
 // This module contains the main TransactionsManager struct that coordinates

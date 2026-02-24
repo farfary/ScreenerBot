@@ -1,3 +1,5 @@
+//! PnL analysis — calculates profit and loss from swap transaction data.
+//
 // P&L calculation module - Profit/loss analysis with fee adjustments
 //
 // This module implements the DexScreener standard for P&L calculations,

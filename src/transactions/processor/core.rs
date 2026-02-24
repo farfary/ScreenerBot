@@ -1,3 +1,5 @@
+//! Transaction processor core — main processing loop that decodes and analyzes transactions.
+//
 // Transaction processing pipeline - Core processor struct and main pipeline
 //
 // This module contains the TransactionProcessor struct and its main

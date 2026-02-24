@@ -1,3 +1,5 @@
+//! Transaction processor analysis — high-level analysis pipeline for processed transactions.
+//
 // Transaction processing pipeline - Transaction analysis methods
 //
 // This module contains methods for analyzing and classifying transactions,
