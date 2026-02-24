@@ -424,7 +424,7 @@ impl PriceCalculator {
         }
 
         // Ensure confidence is between 0.0 and 1.0
-        confidence.max(0.0).min(1.0)
+        confidence.clamp(0.0, 1.0)
     }
 
     /// Public interface: Request calculation for a pool
@@ -482,7 +482,7 @@ impl PriceCalculator {
         if price_result.sol_reserves < 1.0 {
             confidence *= 0.5;
         }
-        price_result.confidence = confidence.max(0.0).min(1.0);
+        price_result.confidence = confidence.clamp(0.0, 1.0);
 
         Some(price_result)
     }

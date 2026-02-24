@@ -697,7 +697,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                     ) {
                                         (Some(expected), Some(requested)) if expected > 0 => {
                                             let ratio = exit_amount as f64 / expected as f64;
-                                            (requested * ratio).max(0.0).min(100.0)
+                                            (requested * ratio).clamp(0.0, 100.0)
                                         }
                                         (Some(expected), _) if expected > 0 => {
                                             ((exit_amount as f64 / expected as f64) * 100.0)
