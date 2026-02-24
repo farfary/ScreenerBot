@@ -39,7 +39,6 @@ pub use ata_cleanup::{
     close_ata,
     // Backward compatibility aliases
     get_ata_cleanup_statistics,
-    get_ata_cleanup_stats,
     get_ata_status,
     get_cleanup_stats,
     get_failed_ata_count,

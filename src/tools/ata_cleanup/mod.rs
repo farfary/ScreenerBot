@@ -40,6 +40,5 @@ pub use operations::{
 pub use service::{start_ata_cleanup_service, trigger_immediate_cleanup};
 
 // Backward compatibility aliases
-pub use get_ata_status as get_ata_cleanup_stats;
 pub use get_cleanup_stats as get_ata_cleanup_statistics;
 pub use trigger_immediate_cleanup as trigger_immediate_ata_cleanup;
