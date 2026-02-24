@@ -81,7 +81,7 @@ pub fn get_failed_atas_for_wallet(wallet_address: &str) -> Result<Vec<FailedAtaR
         match row {
             Ok(Ok(ata)) => atas.push(ata),
             Ok(Err(e)) => return Err(e),
-            Err(e) => return Err(format!("Failed to read row: {}", e)),
+            Err(e) => return Err(format!("Failed to read row: {e}")),
         }
     }
 

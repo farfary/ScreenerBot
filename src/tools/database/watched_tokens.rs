@@ -66,7 +66,7 @@ pub fn get_watched_tokens() -> Result<Vec<WatchedToken>, String> {
         match row {
             Ok(Ok(token)) => tokens.push(token),
             Ok(Err(e)) => return Err(e),
-            Err(e) => return Err(format!("Failed to read row: {}", e)),
+            Err(e) => return Err(format!("Failed to read row: {e}")),
         }
     }
 
@@ -100,7 +100,7 @@ pub fn get_active_watched_tokens() -> Result<Vec<WatchedToken>, String> {
         match row {
             Ok(Ok(token)) => tokens.push(token),
             Ok(Err(e)) => return Err(e),
-            Err(e) => return Err(format!("Failed to read row: {}", e)),
+            Err(e) => return Err(format!("Failed to read row: {e}")),
         }
     }
 

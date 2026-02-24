@@ -239,7 +239,7 @@ pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
     for row in rows {
         match row {
             Ok(op) => ops.push(op),
-            Err(e) => return Err(format!("Failed to read row: {}", e)),
+            Err(e) => return Err(format!("Failed to read row: {e}")),
         }
     }
 
@@ -282,7 +282,7 @@ pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
     for row in rows {
         match row {
             Ok(session) => sessions.push(session),
-            Err(e) => return Err(format!("Failed to read row: {}", e)),
+            Err(e) => return Err(format!("Failed to read row: {e}")),
         }
     }
 

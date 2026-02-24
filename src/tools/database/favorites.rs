@@ -77,7 +77,7 @@ pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow
             match row {
                 Ok(Ok(fav)) => favorites.push(fav),
                 Ok(Err(e)) => return Err(e),
-                Err(e) => return Err(format!("Failed to read row: {}", e)),
+                Err(e) => return Err(format!("Failed to read row: {e}")),
             }
         }
     } else {
@@ -100,7 +100,7 @@ pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow
             match row {
                 Ok(Ok(fav)) => favorites.push(fav),
                 Ok(Err(e)) => return Err(e),
-                Err(e) => return Err(format!("Failed to read row: {}", e)),
+                Err(e) => return Err(format!("Failed to read row: {e}")),
             }
         }
     }

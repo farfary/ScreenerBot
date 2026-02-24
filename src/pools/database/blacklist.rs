@@ -270,7 +270,7 @@ impl PoolsDatabase {
           .map_err(|e| format!("Failed to query blacklist_accounts: {}", e))?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {}", e))?);
+          records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {e}"))?);
         }
       } else {
         let mut stmt = conn
@@ -298,7 +298,7 @@ impl PoolsDatabase {
           .map_err(|e| format!("Failed to query blacklist_accounts: {}", e))?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {}", e))?);
+          records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {e}"))?);
         }
       }
 
@@ -350,7 +350,7 @@ impl PoolsDatabase {
           .map_err(|e| format!("Failed to query blacklist_pools: {}", e))?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {}", e))?);
+          records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {e}"))?);
         }
       } else {
         let mut stmt = conn
@@ -377,7 +377,7 @@ impl PoolsDatabase {
           .map_err(|e| format!("Failed to query blacklist_pools: {}", e))?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {}", e))?);
+          records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {e}"))?);
         }
       }
 
