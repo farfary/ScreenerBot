@@ -163,7 +163,7 @@ pub fn init_strategies_db() -> crate::Result<()> {
         )
         .optional()?;
 
-    if current_version.is_none() || current_version.unwrap() < STRATEGIES_SCHEMA_VERSION {
+    if current_version.unwrap_or(0) < STRATEGIES_SCHEMA_VERSION {
         // Create all tables
         conn.execute_batch(SCHEMA_STRATEGIES)?;
         conn.execute_batch(SCHEMA_STRATEGY_PERFORMANCE)?;
