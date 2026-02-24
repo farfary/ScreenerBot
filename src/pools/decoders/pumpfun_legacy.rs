@@ -1,14 +1,15 @@
-/// PumpFun Legacy decoder for PumpFun bonding curves
-///
-/// Handles bonding curve accounts (NOT AMM pools). Bonding curves:
-/// - Program: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
-/// - Account sizes: 256 bytes (original) or 150 bytes (migrated/partial)
-/// - Discriminator: 17 b7 f8 37 60 d8 ac 60
-/// - Layout: reserves stored directly (no vault accounts)
-/// - Token mint: provided by caller (from discovery phase)
-///
-/// Note: Migrated bonding curves (150 bytes) still contain all reserve data
-/// at the same offsets, just with truncated trailing data.
+//! PumpFun Legacy decoder for PumpFun bonding curves
+//!
+//! Handles bonding curve accounts (NOT AMM pools). Bonding curves:
+//! - Program: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+//! - Account sizes: 256 bytes (original) or 150 bytes (migrated/partial)
+//! - Discriminator: 17 b7 f8 37 60 d8 ac 60
+//! - Layout: reserves stored directly (no vault accounts)
+//! - Token mint: provided by caller (from discovery phase)
+//!
+//! Note: Migrated bonding curves (150 bytes) still contain all reserve data
+//! at the same offsets, just with truncated trailing data.
+
 use super::{AccountData, PoolDecoder};
 use crate::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};

@@ -1,6 +1,6 @@
-/// Filesystem / OS I/O error classifications.
-///
-/// Keep errors `Clone` by storing messages as strings.
+//! Filesystem / OS I/O error classifications.
+//!
+//! Keep errors `Clone` by storing messages as strings.
 
 #[derive(Debug, Clone)]
 pub enum IoError {

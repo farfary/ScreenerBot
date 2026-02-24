@@ -1,4 +1,5 @@
-/// DeFiLlama API response types
+//! DeFiLlama API response types
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

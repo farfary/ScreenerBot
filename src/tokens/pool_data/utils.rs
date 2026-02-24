@@ -1,4 +1,5 @@
-/// Utility functions for pool operations
+//! Utility functions for pool operations
+
 use crate::tokens::types::TokenPoolInfo;
 
 /// Parse f64 from string (handles empty/invalid strings)

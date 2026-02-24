@@ -1,6 +1,6 @@
-/// Service lifecycle errors (ServiceManager, startup/shutdown, dependencies).
-///
-/// Keep errors `Clone` by storing messages as strings.
+//! Service lifecycle errors (ServiceManager, startup/shutdown, dependencies).
+//!
+//! Keep errors `Clone` by storing messages as strings.
 
 #[derive(Debug, Clone)]
 pub enum ServiceError {

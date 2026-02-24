@@ -1,4 +1,5 @@
-/// API statistics tracking
+//! API statistics tracking
+
 use crate::events::{record_api_event, Severity};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

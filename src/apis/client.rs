@@ -1,4 +1,5 @@
-/// Base HTTP client with rate limiting
+//! Base HTTP client with rate limiting
+
 use reqwest::Client;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

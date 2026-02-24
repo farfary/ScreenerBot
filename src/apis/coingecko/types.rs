@@ -1,4 +1,5 @@
-/// CoinGecko API response types
+//! CoinGecko API response types
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

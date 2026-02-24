@@ -1,5 +1,6 @@
-/// Common swap structures and types used across different swap modules
-/// This module contains shared data structures for swap operations
+//! Common swap structures and types used across different swap modules
+//! This module contains shared data structures for swap operations
+
 use serde::{Deserialize, Deserializer};
 
 /// Router types for swap operations

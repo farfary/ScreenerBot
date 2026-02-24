@@ -1,4 +1,5 @@
-/// Format uptime duration into human-readable string
+//! Format uptime duration into human-readable string
+
 pub fn format_uptime(seconds: u64) -> String {
     let days = seconds / 86400;
     let hours = (seconds % 86400) / 3600;

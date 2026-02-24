@@ -1,8 +1,9 @@
-/// Moonit AMM pool decoder
-///
-/// This module handles decoding Moonit AMM pools which use a bonding curve model.
-/// Moonit pools are derived as PDAs with seeds ["token", mint_address] and contain
-/// a CurveAccount structure with pricing information.
+//! Moonit AMM pool decoder
+//!
+//! This module handles decoding Moonit AMM pools which use a bonding curve model.
+//! Moonit pools are derived as PDAs with seeds ["token", mint_address] and contain
+//! a CurveAccount structure with pricing information.
+
 use super::super::utils::{is_sol_mint, read_pubkey_struct_at_offset, read_token_account_amount};
 use super::{AccountData, PoolDecoder};
 use crate::constants::{SOL_DECIMALS, SOL_MINT};

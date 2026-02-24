@@ -1,5 +1,6 @@
-/// Raydium Router Implementation (Stub)
-/// Placeholder for future Raydium direct swap support
+//! Raydium Router Implementation (Stub)
+//! Placeholder for future Raydium direct swap support
+
 use crate::config::with_config;
 use crate::swaps::router::{Quote, QuoteRequest, SwapResult, SwapRouter};
 use crate::tokens::Token;

@@ -1,5 +1,6 @@
-/// Token favorites system
-/// Allows users to save tokens to a favorites list with optional notes
+//! Token favorites system
+//! Allows users to save tokens to a favorites list with optional notes
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;

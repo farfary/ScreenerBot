@@ -1,24 +1,25 @@
-/// DeepSeek API client (raw HTTP via reqwest)
-///
-/// DeepSeek uses OpenAI-compatible format, making integration straightforward.
-///
-/// API Documentation: https://api-docs.deepseek.com/
-///
-/// Endpoints:
-/// - POST https://api.deepseek.com/chat/completions
-///
-/// Models:
-/// - "deepseek-chat" - General chat model
-/// - "deepseek-reasoner" - Advanced reasoning model
-///
-/// Pricing:
-/// - FREE TIER: ~500K tokens/day
-/// - Very cheap paid pricing after free tier
-///
-/// Features:
-/// - OpenAI-compatible API format
-/// - JSON mode support via response_format
-/// - Bearer token authentication
+//! DeepSeek API client (raw HTTP via reqwest)
+//!
+//! DeepSeek uses OpenAI-compatible format, making integration straightforward.
+//!
+//! API Documentation: https://api-docs.deepseek.com/
+//!
+//! Endpoints:
+//! - POST https://api.deepseek.com/chat/completions
+//!
+//! Models:
+//! - "deepseek-chat" - General chat model
+//! - "deepseek-reasoner" - Advanced reasoning model
+//!
+//! Pricing:
+//! - FREE TIER: ~500K tokens/day
+//! - Very cheap paid pricing after free tier
+//!
+//! Features:
+//! - OpenAI-compatible API format
+//! - JSON mode support via response_format
+//! - Bearer token authentication
+
 pub mod types;
 
 pub use self::types::{

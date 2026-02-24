@@ -1,14 +1,15 @@
-/// Centralized storage for filtered token lists
-///
-/// This module stores the results from the filtering system for consumption by other services.
-/// It provides a single source of truth for which tokens have passed filtering, been rejected,
-/// or are blacklisted.
-///
-/// Architecture:
-/// - Filtering engine computes snapshot and stores results here
-/// - Pool service gets passed tokens from here
-/// - Dashboard gets stats from here
-/// - Trader gets available tokens from here
+//! Centralized storage for filtered token lists
+//!
+//! This module stores the results from the filtering system for consumption by other services.
+//! It provides a single source of truth for which tokens have passed filtering, been rejected,
+//! or are blacklisted.
+//!
+//! Architecture:
+//! - Filtering engine computes snapshot and stores results here
+//! - Pool service gets passed tokens from here
+//! - Dashboard gets stats from here
+//! - Trader gets available tokens from here
+
 use chrono::{DateTime, Utc};
 use std::sync::LazyLock;
 use std::sync::RwLock;

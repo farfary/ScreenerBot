@@ -1,6 +1,7 @@
-/// Webserver utility functions
-///
-/// Helper functions for common webserver operations
+//! Webserver utility functions
+//!
+//! Helper functions for common webserver operations
+
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},

@@ -1,7 +1,8 @@
-/// OpenAI API request/response types
-///
-/// These types match the OpenAI Chat Completions API format exactly.
-/// API Documentation: https://platform.openai.com/docs/api-reference/chat/create
+//! OpenAI API request/response types
+//!
+//! These types match the OpenAI Chat Completions API format exactly.
+//! API Documentation: https://platform.openai.com/docs/api-reference/chat/create
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

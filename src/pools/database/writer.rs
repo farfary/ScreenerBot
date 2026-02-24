@@ -1,4 +1,5 @@
-/// Background writer task for async database writes
+//! Background writer task for async database writes
+
 use super::super::types::PriceResult;
 use super::types::DbPriceResult;
 use crate::logger::{self, LogTag};

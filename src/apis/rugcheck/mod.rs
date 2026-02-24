@@ -1,12 +1,13 @@
-/// Rugcheck API client for token security analysis
-///
-/// API Documentation: https://api.rugcheck.xyz/
-///
-/// Endpoints implemented:
-/// 1. /v1/tokens/{mint}/report - Get security report for a token
-/// 2. /v1/tokens/{mint}/report/summary - Get summary security report
-/// 3. /v1/stats/summary - Get global platform statistics
-/// 4. /v1/tokens/{mints}/batch - Get multiple token reports (batch)
+//! Rugcheck API client for token security analysis
+//!
+//! API Documentation: https://api.rugcheck.xyz/
+//!
+//! Endpoints implemented:
+//! 1. /v1/tokens/{mint}/report - Get security report for a token
+//! 2. /v1/tokens/{mint}/report/summary - Get summary security report
+//! 3. /v1/stats/summary - Get global platform statistics
+//! 4. /v1/tokens/{mints}/batch - Get multiple token reports (batch)
+
 pub mod types;
 
 // Re-export types for external use

@@ -1,11 +1,11 @@
-/// Internal/invariant errors.
-///
-/// This is the place for:
-/// - task join failures (unexpected panics)
-/// - timeouts/cancellation glue errors
-/// - violated invariants ("should never happen")
-///
-/// Keep errors `Clone` by storing messages as strings.
+//! Internal/invariant errors.
+//!
+//! This is the place for:
+//! - task join failures (unexpected panics)
+//! - timeouts/cancellation glue errors
+//! - violated invariants ("should never happen")
+//!
+//! Keep errors `Clone` by storing messages as strings.
 
 #[derive(Debug, Clone)]
 pub enum InternalError {

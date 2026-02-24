@@ -1,9 +1,10 @@
-/// CoinGecko API client
-///
-/// API Documentation: https://docs.coingecko.com/reference/introduction
-///
-/// Endpoints implemented:
-/// 1. /api/v3/coins/list?include_platform=true - Get all coins with platform addresses
+//! CoinGecko API client
+//!
+//! API Documentation: https://docs.coingecko.com/reference/introduction
+//!
+//! Endpoints implemented:
+//! 1. /api/v3/coins/list?include_platform=true - Get all coins with platform addresses
+
 pub mod types;
 
 use self::types::CoinGeckoCoin;

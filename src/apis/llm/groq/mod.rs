@@ -1,21 +1,22 @@
-/// Groq API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://console.groq.com/docs/api-reference
-///
-/// Groq uses an OpenAI-compatible API, so the implementation is very similar.
-///
-/// Endpoints:
-/// - POST https://api.groq.com/openai/v1/chat/completions
-///
-/// Free Tier Rate Limits:
-/// - 30 requests per minute
-/// - 14,400 requests per day
-/// - 6,000 tokens per minute
-///
-/// Models:
-/// - llama-3.1-8b-instant (fast, small)
-/// - mixtral-8x7b-32768 (good balance)
-/// - llama-3.3-70b-versatile (most capable)
+//! Groq API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://console.groq.com/docs/api-reference
+//!
+//! Groq uses an OpenAI-compatible API, so the implementation is very similar.
+//!
+//! Endpoints:
+//! - POST https://api.groq.com/openai/v1/chat/completions
+//!
+//! Free Tier Rate Limits:
+//! - 30 requests per minute
+//! - 14,400 requests per day
+//! - 6,000 tokens per minute
+//!
+//! Models:
+//! - llama-3.1-8b-instant (fast, small)
+//! - mixtral-8x7b-32768 (good balance)
+//! - llama-3.3-70b-versatile (most capable)
+
 pub mod types;
 
 pub use self::types::{

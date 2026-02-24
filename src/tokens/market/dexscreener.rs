@@ -1,12 +1,13 @@
-/// DexScreener market data fetching and caching
-///
-/// Flow: API -> Parse -> Database -> Store cache
-/// Updates: Every 30 seconds for active tokens
-///
-/// Architecture:
-/// - Uses /tokens/v1 batch endpoint (up to 30 tokens per request)
-/// - Returns ONE best pool per token (DexScreener picks most liquid)
-/// - No pool filtering logic (trust DexScreener API)
+//! DexScreener market data fetching and caching
+//!
+//! Flow: API -> Parse -> Database -> Store cache
+//! Updates: Every 30 seconds for active tokens
+//!
+//! Architecture:
+//! - Uses /tokens/v1 batch endpoint (up to 30 tokens per request)
+//! - Returns ONE best pool per token (DexScreener picks most liquid)
+//! - No pool filtering logic (trust DexScreener API)
+
 use crate::apis::dexscreener::DexScreenerPool;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;

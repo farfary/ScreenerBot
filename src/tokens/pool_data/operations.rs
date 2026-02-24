@@ -1,4 +1,5 @@
-/// Pool operations - merging, deduplication, canonical selection
+//! Pool operations - merging, deduplication, canonical selection
+
 use crate::tokens::types::{TokenPoolInfo, TokenPoolSources};
 use std::cmp::Ordering;
 use std::collections::{hash_map::Entry, HashMap};

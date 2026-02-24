@@ -1,7 +1,8 @@
-/// Log tag definitions for module categorization
-///
-/// This is moved from logger.rs to keep the module organized.
-/// Tags identify which part of the system is logging.
+//! Log tag definitions for module categorization
+//!
+//! This is moved from logger.rs to keep the module organized.
+//! Tags identify which part of the system is logging.
+
 use colored::*;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

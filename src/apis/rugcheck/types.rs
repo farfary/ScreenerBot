@@ -1,4 +1,5 @@
-/// Rugcheck API response types
+//! Rugcheck API response types
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Deserializer, Serialize};
 

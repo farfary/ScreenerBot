@@ -1,18 +1,19 @@
-/// Together AI API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://docs.together.ai/reference/chat-completions
-///
-/// Together AI provides OpenAI-compatible endpoints with fast inference
-/// for open-source models like Llama, Mixtral, and more.
-///
-/// Endpoints:
-/// - POST https://api.together.xyz/v1/chat/completions
-///
-/// Features:
-/// - OpenAI-compatible API format
-/// - Fast inference on open-source models
-/// - JSON mode support via response_format
-/// - Free $1 credit on signup
+//! Together AI API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://docs.together.ai/reference/chat-completions
+//!
+//! Together AI provides OpenAI-compatible endpoints with fast inference
+//! for open-source models like Llama, Mixtral, and more.
+//!
+//! Endpoints:
+//! - POST https://api.together.xyz/v1/chat/completions
+//!
+//! Features:
+//! - OpenAI-compatible API format
+//! - Fast inference on open-source models
+//! - JSON mode support via response_format
+//! - Free $1 credit on signup
+
 pub mod types;
 
 pub use self::types::{

@@ -1,4 +1,5 @@
-/// Wallet monitoring and caching configuration
+//! Wallet monitoring and caching configuration
+
 use crate::config_struct;
 use crate::field_metadata;
 

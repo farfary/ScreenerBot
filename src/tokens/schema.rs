@@ -1,11 +1,12 @@
-/// Database schema for tokens system
-/// Clean slate implementation (no migrations/ALTER fallbacks)
-///
-/// TIMESTAMP NAMING CONVENTION: {what}_{when}_{action}_at
-/// - {what}: Specific data type (market_data, security_data, metadata, pool_price, etc.)
-/// - {when}: last / first / blockchain
-/// - {action}: fetched / calculated / updated / created / discovered
-/// - _at: Suffix for all timestamps (consistent)
+//! Database schema for tokens system
+//! Clean slate implementation (no migrations/ALTER fallbacks)
+//!
+//! TIMESTAMP NAMING CONVENTION: {what}_{when}_{action}_at
+//! - {what}: Specific data type (market_data, security_data, metadata, pool_price, etc.)
+//! - {when}: last / first / blockchain
+//! - {action}: fetched / calculated / updated / created / discovered
+//! - _at: Suffix for all timestamps (consistent)
+
 use crate::database;
 use rusqlite::Connection;
 

@@ -1,4 +1,5 @@
-/// API conversion functions - transform external API types to TokenPoolInfo
+//! API conversion functions - transform external API types to TokenPoolInfo
+
 use crate::apis::dexscreener::types::DexScreenerPool;
 use crate::apis::geckoterminal::types::GeckoTerminalPool;
 use crate::pools::utils::is_sol_mint;

@@ -1,4 +1,5 @@
-/// RPC endpoint configuration
+//! RPC endpoint configuration
+
 use crate::config_struct;
 use crate::field_metadata;
 

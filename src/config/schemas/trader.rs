@@ -1,4 +1,5 @@
-/// Trading system configuration
+//! Trading system configuration
+
 use crate::config_struct;
 use crate::field_metadata;
 use serde::{Deserialize, Serialize};

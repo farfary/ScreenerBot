@@ -1,7 +1,8 @@
-/// Anthropic API request/response types
-///
-/// These types match the Anthropic Messages API format exactly.
-/// API Documentation: https://docs.anthropic.com/en/api/messages
+//! Anthropic API request/response types
+//!
+//! These types match the Anthropic Messages API format exactly.
+//! API Documentation: https://docs.anthropic.com/en/api/messages
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

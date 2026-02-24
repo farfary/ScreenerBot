@@ -1,4 +1,5 @@
-/// API fetching functions - retrieve pool data from external sources
+//! API fetching functions - retrieve pool data from external sources
+
 use crate::apis::dexscreener::types::DexScreenerPool;
 use crate::apis::geckoterminal::types::GeckoTerminalPool;
 use crate::apis::manager::get_api_manager;

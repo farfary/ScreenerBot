@@ -1,9 +1,10 @@
-/// Ollama API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://github.com/ollama/ollama/blob/main/docs/api.md
-///
-/// Endpoints:
-/// - POST http://localhost:11434/api/chat
+//! Ollama API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://github.com/ollama/ollama/blob/main/docs/api.md
+//!
+//! Endpoints:
+//! - POST http://localhost:11434/api/chat
+
 pub mod types;
 
 pub use self::types::{OllamaMessage, OllamaRequest, OllamaResponse, OllamaResponseMessage};

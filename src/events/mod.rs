@@ -1,46 +1,47 @@
-/// Events Module - Persistent Event Recording System
-///
-/// This module provides a comprehensive event recording system that captures all bot activities
-/// in a structured, queryable format. Events are stored in a dedicated SQLite database
-/// separate from logging to enable analytics, debugging, and historical analysis.
-///
-/// ## Features:
-/// - **Non-blocking recording**: Uses async channels to avoid blocking hot paths
-/// - **Categorized events**: Organized by system component (swap, pool, transaction, etc.)
-/// - **Structured data**: JSON payloads with typed metadata for flexible queries
-/// - **High performance**: Connection pooling and batched writes
-/// - **Maintenance**: Automatic cleanup of old events
-///
-/// ## Usage:
-/// ```rust
-/// use screenerbot::events::{self, Event, EventCategory, Severity};
-/// use serde_json::json;
-///
-/// // Initialize at startup
-/// events::init().await?;
-///
-/// // Record events
-/// let event = Event::new(
-///     EventCategory::Swap,
-///     Some("JupiterQuote".to_owned()),
-///     Severity::Info,
-///     Some(mint.to_string()),
-///     Some(tx_signature.to_string()),
-///     json!({
-///         "amount_in": amount_in,
-///         "amount_out": amount_out,
-///         "slippage": slippage_bps
-///     })
-/// );
-/// events::record(event).await?;
-///
-/// // Query events
-/// let recent_swaps = events::recent(EventCategory::Swap, 100).await?;
-/// ```
-///
-/// ## Integration:
-/// Events complement but do not replace the logging system. Logs are for real-time
-/// monitoring and debugging; events are for persistent analysis and metrics.
+//! Events Module - Persistent Event Recording System
+//!
+//! This module provides a comprehensive event recording system that captures all bot activities
+//! in a structured, queryable format. Events are stored in a dedicated SQLite database
+//! separate from logging to enable analytics, debugging, and historical analysis.
+//!
+//! ## Features:
+//! - **Non-blocking recording**: Uses async channels to avoid blocking hot paths
+//! - **Categorized events**: Organized by system component (swap, pool, transaction, etc.)
+//! - **Structured data**: JSON payloads with typed metadata for flexible queries
+//! - **High performance**: Connection pooling and batched writes
+//! - **Maintenance**: Automatic cleanup of old events
+//!
+//! ## Usage:
+//! ```rust
+//! use screenerbot::events::{self, Event, EventCategory, Severity};
+//! use serde_json::json;
+//!
+//! // Initialize at startup
+//! events::init().await?;
+//!
+//! // Record events
+//! let event = Event::new(
+//!     EventCategory::Swap,
+//!     Some("JupiterQuote".to_owned()),
+//!     Severity::Info,
+//!     Some(mint.to_string()),
+//!     Some(tx_signature.to_string()),
+//!     json!({
+//!         "amount_in": amount_in,
+//!         "amount_out": amount_out,
+//!         "slippage": slippage_bps
+//!     })
+//! );
+//! events::record(event).await?;
+//!
+//! // Query events
+//! let recent_swaps = events::recent(EventCategory::Swap, 100).await?;
+//! ```
+//!
+//! ## Integration:
+//! Events complement but do not replace the logging system. Logs are for real-time
+//! monitoring and debugging; events are for persistent analysis and metrics.
+
 pub mod database;
 pub use database as db;
 pub mod maintenance;

@@ -1,7 +1,8 @@
-/// Core LLM API types
-///
-/// Unified request/response types for all LLM providers.
-/// Individual providers transform these to/from their specific API formats.
+//! Core LLM API types
+//!
+//! Unified request/response types for all LLM providers.
+//! Individual providers transform these to/from their specific API formats.
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

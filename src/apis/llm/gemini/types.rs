@@ -1,7 +1,8 @@
-/// Google Gemini API request/response types
-///
-/// These types match the Gemini API format exactly.
-/// API Documentation: https://ai.google.dev/api/rest
+//! Google Gemini API request/response types
+//!
+//! These types match the Gemini API format exactly.
+//! API Documentation: https://ai.google.dev/api/rest
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

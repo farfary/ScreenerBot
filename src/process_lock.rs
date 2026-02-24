@@ -1,18 +1,19 @@
-/// Process Lock Module
-///
-/// Prevents multiple instances of ScreenerBot from running simultaneously using file-based locking.
-///
-/// **Implementation:**
-/// - Uses fslock for advisory file locking (cross-platform)
-/// - Lock file: `data/.screenerbot.lock`
-/// - RAII pattern: Lock held for entire bot lifetime, automatically released on drop
-/// - OS automatically releases lock if process crashes (no stale locks)
-///
-/// **Usage:**
-/// ```rust
-/// let _lock = ProcessLock::acquire()?;
-/// // Lock held until _lock is dropped (end of scope)
-/// ```
+//! Process Lock Module
+//!
+//! Prevents multiple instances of ScreenerBot from running simultaneously using file-based locking.
+//!
+//! **Implementation:**
+//! - Uses fslock for advisory file locking (cross-platform)
+//! - Lock file: `data/.screenerbot.lock`
+//! - RAII pattern: Lock held for entire bot lifetime, automatically released on drop
+//! - OS automatically releases lock if process crashes (no stale locks)
+//!
+//! **Usage:**
+//! ```rust
+//! let _lock = ProcessLock::acquire()?;
+//! // Lock held until _lock is dropped (end of scope)
+//! ```
+
 use crate::logger::{self, LogTag};
 use fslock::LockFile;
 use std::path::PathBuf;

@@ -1,8 +1,9 @@
-/// Public API for the pools module
-///
-/// This module provides the clean public interface for the pools system.
-/// Only these functions should be used by other modules - all internal
-/// implementation details are hidden.
+//! Public API for the pools module
+//!
+//! This module provides the clean public interface for the pools system.
+//! Only these functions should be used by other modules - all internal
+//! implementation details are hidden.
+
 use super::cache;
 use super::db;
 use super::service;

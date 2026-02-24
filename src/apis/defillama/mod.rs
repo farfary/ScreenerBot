@@ -1,10 +1,11 @@
-/// DeFiLlama API client
-///
-/// API Documentation: https://defillama.com/docs/api
-///
-/// Endpoints implemented:
-/// 1. /protocols - Get all DeFi protocols
-/// 2. /prices/current/solana:{mint} - Get current token price
+//! DeFiLlama API client
+//!
+//! API Documentation: https://defillama.com/docs/api
+//!
+//! Endpoints implemented:
+//! 1. /protocols - Get all DeFi protocols
+//! 2. /prices/current/solana:{mint} - Get current token price
+
 pub mod types;
 
 use self::types::{DefiLlamaPriceResponse, DefiLlamaProtocol};

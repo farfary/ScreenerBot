@@ -1,8 +1,8 @@
-/// Program IDs for transaction analysis and router detection
-///
-/// This module contains all program IDs needed for analyzing transactions
-/// and detecting which platform/router was used for swaps. This is separate
-/// from the pools module to maintain clean separation of concerns.
+//! Program IDs for transaction analysis and router detection
+//!
+//! This module contains all program IDs needed for analyzing transactions
+//! and detecting which platform/router was used for swaps. This is separate
+//! from the pools module to maintain clean separation of concerns.
 
 // =============================================================================
 // DEX AGGREGATOR PROGRAM IDS

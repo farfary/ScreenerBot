@@ -1,9 +1,10 @@
-/// OpenAI API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://platform.openai.com/docs/api-reference/chat
-///
-/// Endpoints:
-/// - POST https://api.openai.com/v1/chat/completions
+//! OpenAI API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://platform.openai.com/docs/api-reference/chat
+//!
+//! Endpoints:
+//! - POST https://api.openai.com/v1/chat/completions
+
 pub mod types;
 
 pub use self::types::{

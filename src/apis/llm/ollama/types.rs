@@ -1,7 +1,8 @@
-/// Ollama API request/response types
-///
-/// These types match the Ollama Chat API format.
-/// API Documentation: https://github.com/ollama/ollama/blob/main/docs/api.md
+//! Ollama API request/response types
+//!
+//! These types match the Ollama Chat API format.
+//! API Documentation: https://github.com/ollama/ollama/blob/main/docs/api.md
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

@@ -1,9 +1,10 @@
-/// Runtime logger configuration system
-///
-/// This module manages the logger's runtime state, including:
-/// - Which log levels to show
-/// - Which modules have debug mode enabled (from --debug-<module> flags)
-/// - Output settings (console, file, colors)
+//! Runtime logger configuration system
+//!
+//! This module manages the logger's runtime state, including:
+//! - Which log levels to show
+//! - Which modules have debug mode enabled (from --debug-<module> flags)
+//! - Output settings (console, file, colors)
+
 use super::levels::LogLevel;
 use super::tags::LogTag;
 use std::collections::{HashMap, HashSet};

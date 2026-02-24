@@ -1,4 +1,5 @@
-/// Database structures and conversion utilities
+//! Database structures and conversion utilities
+
 use super::super::types::PriceResult;
 use chrono::{DateTime, Utc};
 use rusqlite::Row;

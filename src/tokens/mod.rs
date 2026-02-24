@@ -1,18 +1,19 @@
-/// New unified token data system with clean architecture
-///
-/// Architecture:
-/// - database/: Split database module (10 focused submodules)
-/// - schema.rs: Database schema definition (6 tables, 12 indexes)
-/// - market/: Market data fetchers (DexScreener, GeckoTerminal)
-/// - security/: Security data fetchers (Rugcheck)
-/// - updates.rs: Priority-based background updates with rate limiting
-/// - cleanup.rs: Automatic blacklist management
-/// - store.rs: Centralized storage for filtered token lists
-/// - service.rs: ServiceManager integration
-/// - decimals.rs: Decimals lookup with caching
-/// - types.rs: Core domain types
-///
-/// Note: API clients in crate::apis module
+//! New unified token data system with clean architecture
+//!
+//! Architecture:
+//! - database/: Split database module (10 focused submodules)
+//! - schema.rs: Database schema definition (6 tables, 12 indexes)
+//! - market/: Market data fetchers (DexScreener, GeckoTerminal)
+//! - security/: Security data fetchers (Rugcheck)
+//! - updates.rs: Priority-based background updates with rate limiting
+//! - cleanup.rs: Automatic blacklist management
+//! - store.rs: Centralized storage for filtered token lists
+//! - service.rs: ServiceManager integration
+//! - decimals.rs: Decimals lookup with caching
+//! - types.rs: Core domain types
+//!
+//! Note: API clients in crate::apis module
+
 pub mod authority_cache;
 pub mod cleanup;
 pub mod database;

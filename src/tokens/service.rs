@@ -1,12 +1,13 @@
-/// Token service - ServiceManager integration
-///
-/// Orchestrates all token system background tasks:
-/// - Database initialization
-/// - Cache setup  
-/// - Update loops (priority-based)
-/// - Cleanup tasks
-///
-/// This service coordinates the new architecture with proper lifecycle management.
+//! Token service - ServiceManager integration
+//!
+//! Orchestrates all token system background tasks:
+//! - Database initialization
+//! - Cache setup  
+//! - Update loops (priority-based)
+//! - Cleanup tasks
+//!
+//! This service coordinates the new architecture with proper lifecycle management.
+
 use crate::global::TOKENS_SYSTEM_READY;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};

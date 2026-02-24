@@ -1,4 +1,5 @@
-/// Pool service configuration
+//! Pool service configuration
+
 use crate::config_struct;
 use crate::field_metadata;
 

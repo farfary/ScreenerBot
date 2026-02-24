@@ -1,4 +1,5 @@
-/// Jupiter API response types
+//! Jupiter API response types
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

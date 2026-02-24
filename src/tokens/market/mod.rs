@@ -1,8 +1,9 @@
-/// Market data fetching from multiple sources
-///
-/// Each module handles one API source:
-/// - dexscreener: DexScreener API (30s updates, batch endpoint)
-/// - geckoterminal: GeckoTerminal API (60s updates, batch endpoint)
+//! Market data fetching from multiple sources
+//!
+//! Each module handles one API source:
+//! - dexscreener: DexScreener API (30s updates, batch endpoint)
+//! - geckoterminal: GeckoTerminal API (60s updates, batch endpoint)
+
 pub mod dexscreener;
 pub mod geckoterminal;
 

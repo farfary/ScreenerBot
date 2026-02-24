@@ -1,5 +1,6 @@
-/// Router Implementations Module
-/// Exports all swap router implementations
+//! Router Implementations Module
+//! Exports all swap router implementations
+
 mod gmgn;
 mod jupiter;
 mod raydium;

@@ -1,4 +1,5 @@
-/// Position management configuration
+//! Position management configuration
+
 use crate::config_struct;
 use crate::field_metadata;
 

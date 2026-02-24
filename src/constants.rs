@@ -1,8 +1,8 @@
-/// Global constants used across ScreenerBot
-///
-/// This module contains system-wide constants that are not configurable
-/// and are used across multiple modules. Single source of truth for all
-/// blockchain addresses, program IDs, and system-wide configuration.
+//! Global constants used across ScreenerBot
+//!
+//! This module contains system-wide constants that are not configurable
+//! and are used across multiple modules. Single source of truth for all
+//! blockchain addresses, program IDs, and system-wide configuration.
 
 // ============================================================================
 // SOLANA BLOCKCHAIN & TOKEN CONSTANTS

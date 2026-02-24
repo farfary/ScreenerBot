@@ -1,7 +1,7 @@
-/// Configuration macros for zero-repetition config definitions
-///
-/// This module provides the `config_struct!` macro that allows defining
-/// configuration structures with embedded defaults in a single declaration.
+//! Configuration macros for zero-repetition config definitions
+//!
+//! This module provides the `config_struct!` macro that allows defining
+//! configuration structures with embedded defaults in a single declaration.
 
 /// Define a configuration struct with embedded defaults
 ///

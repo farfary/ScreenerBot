@@ -1,7 +1,8 @@
-/// Program-specific swap implementations
-///
-/// This module contains the actual swap logic for different DEX programs.
-/// Each program has its own module with a standardized interface.
+//! Program-specific swap implementations
+//!
+//! This module contains the actual swap logic for different DEX programs.
+//! Each program has its own module with a standardized interface.
+
 use crate::pools::swap::types::{SwapError, SwapRequest, SwapResult};
 use crate::pools::AccountData;
 

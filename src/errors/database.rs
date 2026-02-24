@@ -1,6 +1,6 @@
-/// Database-related error classifications.
-///
-/// Note: Keep errors `Clone` by storing messages as strings (do not store raw rusqlite errors).
+//! Database-related error classifications.
+//!
+//! Note: Keep errors `Clone` by storing messages as strings (do not store raw rusqlite errors).
 
 #[derive(Debug, Clone)]
 pub enum DatabaseError {

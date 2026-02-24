@@ -1,4 +1,5 @@
-/// Reason label to human-readable display mapping
+//! Reason label to human-readable display mapping
+
 pub fn get_rejection_display_label(reason: &str) -> String {
     match reason {
         "no_decimals" => "No decimals in database",

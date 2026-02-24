@@ -1,7 +1,8 @@
-/// Swap executor - Low-level transaction execution
-///
-/// This module handles the actual execution of swap transactions,
-/// including transaction signing and broadcasting.
+//! Swap executor - Low-level transaction execution
+//!
+//! This module handles the actual execution of swap transactions,
+//! including transaction signing and broadcasting.
+
 use super::types::{SwapError, SwapParams, SwapResult};
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};

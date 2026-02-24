@@ -1,11 +1,12 @@
-/// Cleanup logic - Blacklist management and database maintenance
-///
-/// Automatically blacklists tokens based on permanent token characteristics:
-/// - mint_authority present (can mint unlimited tokens)
-/// - freeze_authority present (can freeze user accounts)
-///
-/// NOTE: Liquidity and security scores are FILTERING criteria, not blacklist criteria.
-/// Blacklist is for tokens that should NEVER be traded due to fundamental risks.
+//! Cleanup logic - Blacklist management and database maintenance
+//!
+//! Automatically blacklists tokens based on permanent token characteristics:
+//! - mint_authority present (can mint unlimited tokens)
+//! - freeze_authority present (can freeze user accounts)
+//!
+//! NOTE: Liquidity and security scores are FILTERING criteria, not blacklist criteria.
+//! Blacklist is for tokens that should NEVER be traded due to fundamental risks.
+
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;

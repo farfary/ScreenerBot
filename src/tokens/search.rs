@@ -1,10 +1,11 @@
-/// Token search functionality using DexScreener and GeckoTerminal APIs
-///
-/// Provides unified search across multiple data sources with deduplication.
-/// DexScreener supports direct search, GeckoTerminal requires mint-based lookup.
-///
-/// When tokens are found via external APIs, they are automatically added to the
-/// local database for future lookups and analysis.
+//! Token search functionality using DexScreener and GeckoTerminal APIs
+//!
+//! Provides unified search across multiple data sources with deduplication.
+//! DexScreener supports direct search, GeckoTerminal requires mint-based lookup.
+//!
+//! When tokens are found via external APIs, they are automatically added to the
+//! local database for future lookups and analysis.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

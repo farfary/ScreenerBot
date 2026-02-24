@@ -1,6 +1,7 @@
-/// Webserver middleware
-///
-/// Request interceptors for authentication, validation, gating, and cache control
+//! Webserver middleware
+//!
+//! Request interceptors for authentication, validation, gating, and cache control
+
 use axum::{
     body::Body,
     extract::Request,

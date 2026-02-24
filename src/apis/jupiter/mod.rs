@@ -1,12 +1,13 @@
-/// Jupiter API client for token discovery
-///
-/// API Documentation: https://station.jup.ag/docs/apis/general-api
-///
-/// Endpoints implemented:
-/// 1. /tokens/v2/recent - Recent tokens
-/// 2. /tokens/v2/toporganicscore/{interval} - Top organic score tokens
-/// 3. /tokens/v2/toptraded/{interval} - Top traded tokens
-/// 4. /tokens/v2/toptrending/{interval} - Top trending tokens
+//! Jupiter API client for token discovery
+//!
+//! API Documentation: https://station.jup.ag/docs/apis/general-api
+//!
+//! Endpoints implemented:
+//! 1. /tokens/v2/recent - Recent tokens
+//! 2. /tokens/v2/toporganicscore/{interval} - Top organic score tokens
+//! 3. /tokens/v2/toptraded/{interval} - Top traded tokens
+//! 4. /tokens/v2/toptrending/{interval} - Top trending tokens
+
 pub mod types;
 
 use self::types::JupiterToken;

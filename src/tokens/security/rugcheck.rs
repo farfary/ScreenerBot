@@ -1,7 +1,8 @@
-/// Rugcheck security data fetching and caching
-///
-/// Flow: API -> Parse -> Database -> Store cache
-/// Updates: Every 30 minutes (security data is relatively stable)
+//! Rugcheck security data fetching and caching
+//!
+//! Flow: API -> Parse -> Database -> Store cache
+//! Updates: Every 30 minutes (security data is relatively stable)
+
 use crate::apis::rugcheck::RugcheckInfo;
 use crate::events::record_security_event;
 use crate::logger::{self, LogTag};

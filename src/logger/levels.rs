@@ -1,7 +1,7 @@
-/// Log level definitions for structured logging
-///
-/// Levels are ordered by severity (Error < Warning < Info < Debug < Verbose)
-/// This allows filtering by minimum level threshold.
+//! Log level definitions for structured logging
+//!
+//! Levels are ordered by severity (Error < Warning < Info < Debug < Verbose)
+//! This allows filtering by minimum level threshold.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {

@@ -1,17 +1,18 @@
-/// Centralized API clients for external data sources
-///
-/// Global singleton pattern ensures:
-/// - Single instance of each API client across the entire bot
-/// - True global rate limiting per API (not per-instance)
-/// - Centralized stats tracking for all API calls
-///
-/// Usage:
-/// ```rust
-/// use crate::apis::get_api_manager;
-///
-/// let apis = get_api_manager();
-/// apis.dexscreener.fetch_token_pools(mint).await?;
-/// ```
+//! Centralized API clients for external data sources
+//!
+//! Global singleton pattern ensures:
+//! - Single instance of each API client across the entire bot
+//! - True global rate limiting per API (not per-instance)
+//! - Centralized stats tracking for all API calls
+//!
+//! Usage:
+//! ```rust
+//! use crate::apis::get_api_manager;
+//!
+//! let apis = get_api_manager();
+//! apis.dexscreener.fetch_token_pools(mint).await?;
+//! ```
+
 // Base utilities
 pub mod client;
 pub mod manager;

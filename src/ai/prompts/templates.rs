@@ -1,4 +1,5 @@
-/// Get the system prompt for token filtering
+//! Get the system prompt for token filtering
+
 pub fn get_filter_prompt() -> &'static str {
     r#"You are a Solana memecoin filtering expert. Analyze the provided token data and determine if it should PASS or REJECT filtering.
 

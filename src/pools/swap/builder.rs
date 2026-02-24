@@ -1,8 +1,9 @@
-/// Swap builder - High-level interface for creating swaps
-///
-/// This module provides a builder pattern interface for creating swap operations.
-/// It handles validation, parameter calculation, and delegates to appropriate
-/// program-specific implementations.
+//! Swap builder - High-level interface for creating swaps
+//!
+//! This module provides a builder pattern interface for creating swap operations.
+//! It handles validation, parameter calculation, and delegates to appropriate
+//! program-specific implementations.
+
 use super::programs::raydium_clmm::RaydiumClmmSwap;
 use super::programs::raydium_cpmm::RaydiumCpmmSwap;
 use super::programs::ProgramSwap;

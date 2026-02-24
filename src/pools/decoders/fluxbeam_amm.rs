@@ -1,7 +1,8 @@
-/// FluxBeam AMM pool decoder
-///
-/// Handles decoding FluxBeam Automated Market Maker pools. Extracts pool account data,
-/// processes vault information, and calculates token prices.
+//! FluxBeam AMM pool decoder
+//!
+//! Handles decoding FluxBeam Automated Market Maker pools. Extracts pool account data,
+//! processes vault information, and calculates token prices.
+
 use super::super::utils::is_sol_mint;
 use super::{AccountData, PoolDecoder};
 

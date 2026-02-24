@@ -1,5 +1,6 @@
-/// Global API manager singleton - ensures single instance of all API clients across the bot
-/// This provides centralized rate limiting and stats tracking per API
+//! Global API manager singleton - ensures single instance of all API clients across the bot
+//! This provides centralized rate limiting and stats tracking per API
+
 use std::sync::{Arc, LazyLock};
 
 use crate::config::get_config_clone;

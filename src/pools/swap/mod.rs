@@ -1,15 +1,16 @@
-/// Direct swap module for pools
-///
-/// This module provides direct swap functionality that integrates with the centralized
-/// decoder system. It supports multiple DEX programs through a modular architecture.
-///
-/// Features:
-/// - Modular program-specific swap implementations
-/// - Integration with centralized decoders
-/// - Automatic token account management
-/// - WSOL wrapping/unwrapping
-/// - Slippage protection
-/// - Real-time pool state fetching
+//! Direct swap module for pools
+//!
+//! This module provides direct swap functionality that integrates with the centralized
+//! decoder system. It supports multiple DEX programs through a modular architecture.
+//!
+//! Features:
+//! - Modular program-specific swap implementations
+//! - Integration with centralized decoders
+//! - Automatic token account management
+//! - WSOL wrapping/unwrapping
+//! - Slippage protection
+//! - Real-time pool state fetching
+
 pub mod builder;
 pub mod executor;
 pub mod programs;

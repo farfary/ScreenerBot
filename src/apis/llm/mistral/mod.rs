@@ -1,16 +1,17 @@
-/// Mistral AI API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://docs.mistral.ai/api/
-///
-/// Endpoints:
-/// - POST https://api.mistral.ai/v1/chat/completions
-///
-/// Mistral AI uses OpenAI-compatible API format, making integration straightforward.
-/// Popular models:
-/// - mistral-small-latest: Fast and efficient for simple tasks
-/// - mistral-medium-latest: Balanced performance
-/// - mistral-large-latest: Best performance for complex tasks
-/// - codestral-latest: Optimized for code generation
+//! Mistral AI API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://docs.mistral.ai/api/
+//!
+//! Endpoints:
+//! - POST https://api.mistral.ai/v1/chat/completions
+//!
+//! Mistral AI uses OpenAI-compatible API format, making integration straightforward.
+//! Popular models:
+//! - mistral-small-latest: Fast and efficient for simple tasks
+//! - mistral-medium-latest: Balanced performance
+//! - mistral-large-latest: Best performance for complex tasks
+//! - codestral-latest: Optimized for code generation
+
 pub mod types;
 
 pub use self::types::{

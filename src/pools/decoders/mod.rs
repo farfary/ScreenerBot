@@ -1,7 +1,8 @@
-/// Pool decoders module
-///
-/// This module contains program-specific decoders for different DEX pool types.
-/// Each decoder knows how to parse the account data for its specific pool format.
+//! Pool decoders module
+//!
+//! This module contains program-specific decoders for different DEX pool types.
+//! Each decoder knows how to parse the account data for its specific pool format.
+
 pub mod fluxbeam_amm;
 pub mod meteora_damm;
 pub mod meteora_dbc;

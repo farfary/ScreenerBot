@@ -1,12 +1,13 @@
-/// GeckoTerminal market data fetching and caching
-///
-/// Flow: API -> Parse -> Database -> Store cache
-/// Updates: Every 60 seconds for active tokens
-///
-/// Architecture:
-/// - Uses /networks/{net}/tokens/multi/{addresses} batch endpoint (up to 30 tokens per request)
-/// - Returns aggregated token data (price, volume, market cap, etc.)
-/// - No pool filtering logic (uses aggregated metrics from API)
+//! GeckoTerminal market data fetching and caching
+//!
+//! Flow: API -> Parse -> Database -> Store cache
+//! Updates: Every 60 seconds for active tokens
+//!
+//! Architecture:
+//! - Uses /networks/{net}/tokens/multi/{addresses} batch endpoint (up to 30 tokens per request)
+//! - Returns aggregated token data (price, volume, market cap, etc.)
+//! - No pool filtering logic (uses aggregated metrics from API)
+
 use crate::apis::geckoterminal::{GeckoTerminalPool, GeckoTerminalTokenInfoResponse};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;

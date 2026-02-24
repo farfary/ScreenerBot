@@ -1,7 +1,7 @@
-/// Static demo data for dashboard showcase
-///
-/// This module contains all hardcoded constants and token arrays
-/// used in demo mode for realistic screenshots and marketing materials.
+//! Static demo data for dashboard showcase
+//!
+//! This module contains all hardcoded constants and token arrays
+//! used in demo mode for realistic screenshots and marketing materials.
 
 // =============================================================================
 // DEMO CONSTANTS - Realistic showcase values

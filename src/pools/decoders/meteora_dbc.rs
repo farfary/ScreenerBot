@@ -1,19 +1,20 @@
-/// Meteora Dynamic Bonding Curve (DBC) decoder
-///
-/// Program ID: METEORA_DBC_PROGRAM_ID (dbcij3LW...)
-///
-/// The DBC pool account stores:
-/// - base_mint (Pubkey)
-/// - base_vault (Pubkey)
-/// - quote_vault (Pubkey)
-/// - base_reserve (u64)
-/// - quote_reserve (u64)
-/// - protocol_base_fee (u64)
-/// - protocol_quote_fee (u64)
-/// - partner_base_fee (u64)
-/// - partner_quote_fee (u64)
-/// - sqrt_price (u128)
-/// ... plus metadata. We compute price from live vault balances minus fees.
+//! Meteora Dynamic Bonding Curve (DBC) decoder
+//!
+//! Program ID: METEORA_DBC_PROGRAM_ID (dbcij3LW...)
+//!
+//! The DBC pool account stores:
+//! - base_mint (Pubkey)
+//! - base_vault (Pubkey)
+//! - quote_vault (Pubkey)
+//! - base_reserve (u64)
+//! - quote_reserve (u64)
+//! - protocol_base_fee (u64)
+//! - protocol_quote_fee (u64)
+//! - partner_base_fee (u64)
+//! - partner_quote_fee (u64)
+//! - sqrt_price (u128)
+//! ... plus metadata. We compute price from live vault balances minus fees.
+
 use super::{AccountData, PoolDecoder};
 use crate::constants::{METEORA_DBC_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
