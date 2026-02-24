@@ -76,7 +76,7 @@ impl Tool for AnalyzeTokenTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: AnalyzeTokenParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Validate mint address format
@@ -93,7 +93,7 @@ impl Tool for AnalyzeTokenTool {
                     params.mint_address
                 ));
             }
-            Err(e) => return ToolResult::error(format!("Database error: {}", e)),
+            Err(e) => return ToolResult::error(format!("Database error: {e}")),
         };
 
         // Build analysis response
@@ -130,7 +130,7 @@ impl Tool for AnalyzeTokenTool {
 
         match serde_json::to_value(analysis) {
             Ok(v) => ToolResult::success(v),
-            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            Err(e) => ToolResult::error(format!("Serialization error: {e}")),
         }
     }
 }
@@ -186,13 +186,13 @@ impl Tool for GetMarketDataTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: GetMarketDataParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Request immediate update to get fresh market data
         let update_result = match tokens::request_immediate_update(&params.mint_address).await {
             Ok(r) => r,
-            Err(e) => return ToolResult::error(format!("Failed to fetch market data: {}", e)),
+            Err(e) => return ToolResult::error(format!("Failed to fetch market data: {e}")),
         };
 
         // Get the updated token data
@@ -204,7 +204,7 @@ impl Tool for GetMarketDataTool {
                     params.mint_address
                 ));
             }
-            Err(e) => return ToolResult::error(format!("Database error: {}", e)),
+            Err(e) => return ToolResult::error(format!("Database error: {e}")),
         };
 
         let market_data = MarketData {
@@ -222,7 +222,7 @@ impl Tool for GetMarketDataTool {
 
         match serde_json::to_value(market_data) {
             Ok(v) => ToolResult::success(v),
-            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            Err(e) => ToolResult::error(format!("Serialization error: {e}")),
         }
     }
 }
@@ -281,7 +281,7 @@ impl Tool for CheckSecurityTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: CheckSecurityParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Request immediate update to get fresh security data
@@ -293,7 +293,7 @@ impl Tool for CheckSecurityTool {
             Ok(None) => {
                 return ToolResult::error(format!("Token {} not found", params.mint_address));
             }
-            Err(e) => return ToolResult::error(format!("Database error: {}", e)),
+            Err(e) => return ToolResult::error(format!("Database error: {e}")),
         };
 
         let security_data = SecurityData {
@@ -325,7 +325,7 @@ impl Tool for CheckSecurityTool {
 
         match serde_json::to_value(security_data) {
             Ok(v) => ToolResult::success(v),
-            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            Err(e) => ToolResult::error(format!("Serialization error: {e}")),
         }
     }
 }

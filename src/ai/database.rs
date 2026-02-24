@@ -77,7 +77,7 @@ pub fn init_ai_database() -> Result<Connection, String> {
 
     // Apply centralized PRAGMA configuration
     database::configure_connection(&conn, database::AI_DB)
-        .map_err(|e| format!("Failed to configure connection: {}", e))?;
+        .map_err(|e| format!("Failed to configure connection: {e}"))?;
 
     // Create schema
     initialize_schema(&conn)?;
@@ -94,11 +94,11 @@ pub fn init_ai_database() -> Result<Connection, String> {
 
     // Return a new connection for immediate use
     let new_conn =
-        Connection::open(&db_path).map_err(|e| format!("Failed to reopen AI database: {}", e))?;
+        Connection::open(&db_path).map_err(|e| format!("Failed to reopen AI database: {e}"))?;
 
     // Apply centralized PRAGMA configuration to new connection
     database::configure_connection(&new_conn, database::AI_DB)
-        .map_err(|e| format!("Failed to configure connection: {}", e))?;
+        .map_err(|e| format!("Failed to configure connection: {e}"))?;
 
     Ok(new_conn)
 }
@@ -124,7 +124,7 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_instructions table: {}", e))?;
+    .map_err(|e| format!("Failed to create ai_instructions table: {e}"))?;
 
     // Decision history table
     conn.execute(
@@ -145,20 +145,20 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_decision_history table: {}", e))?;
+    .map_err(|e| format!("Failed to create ai_decision_history table: {e}"))?;
 
     // Indexes for decision history
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_decisions_mint ON ai_decision_history(mint)",
         [],
     )
-    .map_err(|e| format!("Failed to create mint index: {}", e))?;
+    .map_err(|e| format!("Failed to create mint index: {e}"))?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_decisions_created ON ai_decision_history(created_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create created_at index: {}", e))?;
+    .map_err(|e| format!("Failed to create created_at index: {e}"))?;
 
     Ok(())
 }
@@ -175,7 +175,7 @@ pub fn list_instructions(db: &Connection) -> Result<Vec<Instruction>, String> {
              FROM ai_instructions 
              ORDER BY priority DESC, name ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let instructions = stmt
         .query_map([], |row| {
@@ -190,9 +190,9 @@ pub fn list_instructions(db: &Connection) -> Result<Vec<Instruction>, String> {
                 updated_at: row.get(7)?,
             })
         })
-        .map_err(|e| format!("Failed to query instructions: {}", e))?
+        .map_err(|e| format!("Failed to query instructions: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect instructions: {}", e))?;
+        .map_err(|e| format!("Failed to collect instructions: {e}"))?;
 
     Ok(instructions)
 }
@@ -205,7 +205,7 @@ pub fn get_instruction(db: &Connection, id: i64) -> Result<Option<Instruction>, 
              FROM ai_instructions 
              WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let instruction = stmt
         .query_row(params![id], |row| {
@@ -221,7 +221,7 @@ pub fn get_instruction(db: &Connection, id: i64) -> Result<Option<Instruction>, 
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query instruction: {}", e))?;
+        .map_err(|e| format!("Failed to query instruction: {e}"))?;
 
     Ok(instruction)
 }
@@ -240,7 +240,7 @@ pub fn create_instruction(
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![name, content, category, &now, &now],
     )
-    .map_err(|e| format!("Failed to insert instruction: {}", e))?;
+    .map_err(|e| format!("Failed to insert instruction: {e}"))?;
 
     let id = db.last_insert_rowid();
     Ok(id)
@@ -299,7 +299,7 @@ pub fn update_instruction(
     let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
 
     db.execute(&sql, params_refs.as_slice())
-        .map_err(|e| format!("Failed to update instruction: {}", e))?;
+        .map_err(|e| format!("Failed to update instruction: {e}"))?;
 
     Ok(())
 }
@@ -307,7 +307,7 @@ pub fn update_instruction(
 /// Delete an instruction by ID
 pub fn delete_instruction(db: &Connection, id: i64) -> Result<(), String> {
     db.execute("DELETE FROM ai_instructions WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete instruction: {}", e))?;
+        .map_err(|e| format!("Failed to delete instruction: {e}"))?;
 
     Ok(())
 }
@@ -317,12 +317,12 @@ pub fn delete_instruction(db: &Connection, id: i64) -> Result<(), String> {
 pub fn reorder_instructions(db: &Connection, ids: &[i64]) -> Result<(), String> {
     let tx = db
         .unchecked_transaction()
-        .map_err(|e| format!("Failed to start transaction: {}", e))?;
+        .map_err(|e| format!("Failed to start transaction: {e}"))?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let mut stmt = tx
         .prepare("UPDATE ai_instructions SET priority = ?1, updated_at = ?2 WHERE id = ?3")
-        .map_err(|e| format!("Failed to prepare update statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare update statement: {e}"))?;
 
     for (index, id) in ids.iter().enumerate() {
         let priority = (ids.len() - index) as i32; // Reverse: first = highest priority
@@ -332,7 +332,7 @@ pub fn reorder_instructions(db: &Connection, ids: &[i64]) -> Result<(), String> 
 
     drop(stmt);
     tx.commit()
-        .map_err(|e| format!("Failed to commit reorder transaction: {}", e))?;
+        .map_err(|e| format!("Failed to commit reorder transaction: {e}"))?;
 
     Ok(())
 }
@@ -365,7 +365,7 @@ pub fn record_decision(db: &Connection, record: &DecisionRecord) -> Result<i64, 
             &now,
         ],
     )
-    .map_err(|e| format!("Failed to insert decision record: {}", e))?;
+    .map_err(|e| format!("Failed to insert decision record: {e}"))?;
 
     let id = db.last_insert_rowid();
     Ok(id)
@@ -385,7 +385,7 @@ pub fn list_decisions(
              ORDER BY created_at DESC 
              LIMIT ?1 OFFSET ?2",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let decisions = stmt
         .query_map(params![limit, offset], |row| {
@@ -405,9 +405,9 @@ pub fn list_decisions(
                 created_at: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query decisions: {}", e))?
+        .map_err(|e| format!("Failed to query decisions: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect decisions: {}", e))?;
+        .map_err(|e| format!("Failed to collect decisions: {e}"))?;
 
     Ok(decisions)
 }
@@ -421,7 +421,7 @@ pub fn get_decision(db: &Connection, id: i64) -> Result<Option<DecisionRecord>, 
              FROM ai_decision_history 
              WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let decision = stmt
         .query_row(params![id], |row| {
@@ -442,7 +442,7 @@ pub fn get_decision(db: &Connection, id: i64) -> Result<Option<DecisionRecord>, 
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query decision: {}", e))?;
+        .map_err(|e| format!("Failed to query decision: {e}"))?;
 
     Ok(decision)
 }
@@ -462,7 +462,7 @@ pub fn list_decisions_for_mint(
              ORDER BY created_at DESC 
              LIMIT ?2",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let decisions = stmt
         .query_map(params![mint, limit], |row| {
@@ -482,9 +482,9 @@ pub fn list_decisions_for_mint(
                 created_at: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query decisions for mint: {}", e))?
+        .map_err(|e| format!("Failed to query decisions for mint: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect decisions: {}", e))?;
+        .map_err(|e| format!("Failed to collect decisions: {e}"))?;
 
     Ok(decisions)
 }
@@ -505,7 +505,7 @@ pub fn list_decisions_for_mint_paginated(
              ORDER BY created_at DESC 
              LIMIT ?2 OFFSET ?3",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let decisions = stmt
         .query_map(params![mint, limit, offset], |row| {
@@ -525,9 +525,9 @@ pub fn list_decisions_for_mint_paginated(
                 created_at: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query decisions for mint: {}", e))?
+        .map_err(|e| format!("Failed to query decisions for mint: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect decisions: {}", e))?;
+        .map_err(|e| format!("Failed to collect decisions: {e}"))?;
 
     Ok(decisions)
 }
@@ -542,7 +542,7 @@ pub fn clear_old_decisions(db: &Connection, days: i64) -> Result<usize, String> 
             "DELETE FROM ai_decision_history WHERE created_at < ?1",
             params![cutoff_str],
         )
-        .map_err(|e| format!("Failed to delete old decisions: {}", e))?;
+        .map_err(|e| format!("Failed to delete old decisions: {e}"))?;
 
     Ok(affected)
 }
@@ -611,7 +611,7 @@ where
     let db = get_ai_database().ok_or("AI database not initialized")?;
     let conn = db
         .lock()
-        .map_err(|e| format!("Failed to lock AI database: {}", e))?;
+        .map_err(|e| format!("Failed to lock AI database: {e}"))?;
     f(&conn)
 }
 

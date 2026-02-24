@@ -20,7 +20,7 @@ pub async fn send_main_menu(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboards::main_menu())
         .await
-        .map_err(|e| format!("Failed to send menu: {}", e))?;
+        .map_err(|e| format!("Failed to send menu: {e}"))?;
 
     Ok(())
 }
@@ -38,7 +38,7 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<(), Strin
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboard)
         .await
-        .map_err(|e| format!("Failed to send positions: {}", e))?;
+        .map_err(|e| format!("Failed to send positions: {e}"))?;
         return Ok(());
     }
 
@@ -77,7 +77,7 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<(), Strin
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboard)
         .await
-        .map_err(|e| format!("Failed to send positions: {}", e))?;
+        .map_err(|e| format!("Failed to send positions: {e}"))?;
 
     Ok(())
 }
@@ -91,7 +91,7 @@ pub async fn send_settings_menu(bot: &Bot, chat_id: ChatId) -> Result<(), String
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboards::settings_menu())
         .await
-        .map_err(|e| format!("Failed to send settings: {}", e))?;
+        .map_err(|e| format!("Failed to send settings: {e}"))?;
 
     Ok(())
 }

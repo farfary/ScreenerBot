@@ -58,7 +58,7 @@ impl ActionsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(write_manager)
-            .map_err(|e| format!("Failed to create actions write pool: {}", e))?;
+            .map_err(|e| format!("Failed to create actions write pool: {e}"))?;
 
         // Create read pool
         let read_pool = Pool::builder()
@@ -68,7 +68,7 @@ impl ActionsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(read_manager)
-            .map_err(|e| format!("Failed to create actions read pool: {}", e))?;
+            .map_err(|e| format!("Failed to create actions read pool: {e}"))?;
 
         let mut db = ActionsDatabase {
             write_pool,
@@ -111,7 +111,7 @@ impl ActionsDatabase {
             "#,
             [],
         )
-        .map_err(|e| format!("Failed to create actions table: {}", e))?;
+        .map_err(|e| format!("Failed to create actions table: {e}"))?;
 
         // Create action steps table
         conn.execute(
@@ -134,50 +134,50 @@ impl ActionsDatabase {
             "#,
             [],
         )
-        .map_err(|e| format!("Failed to create action_steps table: {}", e))?;
+        .map_err(|e| format!("Failed to create action_steps table: {e}"))?;
 
         // Create indexes for performance
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_action_type ON actions(action_type)",
             [],
         )
-        .map_err(|e| format!("Failed to create action_type index: {}", e))?;
+        .map_err(|e| format!("Failed to create action_type index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_entity_id ON actions(entity_id)",
             [],
         )
-        .map_err(|e| format!("Failed to create entity_id index: {}", e))?;
+        .map_err(|e| format!("Failed to create entity_id index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_state ON actions(state)",
             [],
         )
-        .map_err(|e| format!("Failed to create state index: {}", e))?;
+        .map_err(|e| format!("Failed to create state index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_started_at ON actions(started_at DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create started_at index: {}", e))?;
+        .map_err(|e| format!("Failed to create started_at index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_wallet_address ON actions(wallet_address)",
             [],
         )
-        .map_err(|e| format!("Failed to create wallet_address index: {}", e))?;
+        .map_err(|e| format!("Failed to create wallet_address index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_completed_at ON actions(completed_at DESC) WHERE completed_at IS NOT NULL",
             [],
         )
-        .map_err(|e| format!("Failed to create completed_at index: {}", e))?;
+        .map_err(|e| format!("Failed to create completed_at index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_action_steps_action_id ON action_steps(action_id)",
             [],
         )
-        .map_err(|e| format!("Failed to create action_steps index: {}", e))?;
+        .map_err(|e| format!("Failed to create action_steps index: {e}"))?;
 
         logger::info(LogTag::System, "Actions database schema initialized");
 
@@ -188,14 +188,14 @@ impl ActionsDatabase {
     fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.write_pool
             .get()
-            .map_err(|e| format!("Failed to get write connection: {}", e))
+            .map_err(|e| format!("Failed to get write connection: {e}"))
     }
 
     /// Get a read connection from the pool
     fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.read_pool
             .get()
-            .map_err(|e| format!("Failed to get read connection: {}", e))
+            .map_err(|e| format!("Failed to get read connection: {e}"))
     }
 
     /// Insert a new action into the database
@@ -203,7 +203,7 @@ impl ActionsDatabase {
         let mut conn = self.get_write_connection()?;
 
         let wallet_address =
-            get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
+            get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
         let action_type_str = format!("{:?}", action.action_type).to_lowercase();
         let state_str = match &action.state {
             ActionState::InProgress { .. } => "in_progress",
@@ -212,15 +212,15 @@ impl ActionsDatabase {
             ActionState::Cancelled => "cancelled",
         };
         let state_data = serde_json::to_string(&action.state)
-            .map_err(|e| format!("Failed to serialize state: {}", e))?;
+            .map_err(|e| format!("Failed to serialize state: {e}"))?;
         let metadata = serde_json::to_string(&action.metadata)
-            .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+            .map_err(|e| format!("Failed to serialize metadata: {e}"))?;
         let now = Utc::now().to_rfc3339();
 
         // Use transaction to ensure atomicity of action + steps insertion
         let tx = conn
             .transaction()
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
         tx.execute(
             r#"
@@ -246,7 +246,7 @@ impl ActionsDatabase {
                 now,
             ],
         )
-        .map_err(|e| format!("Failed to insert action: {}", e))?;
+        .map_err(|e| format!("Failed to insert action: {e}"))?;
 
         // Insert all steps within the same transaction
         for (index, step) in action.steps.iter().enumerate() {
@@ -254,7 +254,7 @@ impl ActionsDatabase {
         }
 
         tx.commit()
-            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
 
         Ok(())
     }
@@ -269,7 +269,7 @@ impl ActionsDatabase {
     ) -> Result<(), String> {
         let status_str = format!("{:?}", step.status).to_lowercase();
         let metadata = serde_json::to_string(&step.metadata)
-            .map_err(|e| format!("Failed to serialize step metadata: {}", e))?;
+            .map_err(|e| format!("Failed to serialize step metadata: {e}"))?;
 
         tx.execute(
             r#"
@@ -293,7 +293,7 @@ impl ActionsDatabase {
                 metadata,
             ],
         )
-        .map_err(|e| format!("Failed to insert step: {}", e))?;
+        .map_err(|e| format!("Failed to insert step: {e}"))?;
 
         Ok(())
     }
@@ -308,7 +308,7 @@ impl ActionsDatabase {
     ) -> Result<(), String> {
         let status_str = format!("{:?}", step.status).to_lowercase();
         let metadata = serde_json::to_string(&step.metadata)
-            .map_err(|e| format!("Failed to serialize step metadata: {}", e))?;
+            .map_err(|e| format!("Failed to serialize step metadata: {e}"))?;
 
         conn.execute(
             r#"
@@ -332,7 +332,7 @@ impl ActionsDatabase {
                 metadata,
             ],
         )
-        .map_err(|e| format!("Failed to insert step: {}", e))?;
+        .map_err(|e| format!("Failed to insert step: {e}"))?;
 
         Ok(())
     }
@@ -354,7 +354,7 @@ impl ActionsDatabase {
             ActionState::Cancelled => "cancelled",
         };
         let state_data = serde_json::to_string(&state)
-            .map_err(|e| format!("Failed to serialize state: {}", e))?;
+            .map_err(|e| format!("Failed to serialize state: {e}"))?;
         let now = Utc::now().to_rfc3339();
 
         conn.execute(
@@ -373,7 +373,7 @@ impl ActionsDatabase {
                 action_id,
             ],
         )
-        .map_err(|e| format!("Failed to update action state: {}", e))?;
+        .map_err(|e| format!("Failed to update action state: {e}"))?;
 
         Ok(())
     }
@@ -429,7 +429,7 @@ impl ActionsDatabase {
                 step_index as i64,
             ],
         )
-        .map_err(|e| format!("Failed to update step: {}", e))?;
+        .map_err(|e| format!("Failed to update step: {e}"))?;
 
         // Validate that the step was found and updated
         if affected == 0 {
@@ -480,7 +480,7 @@ impl ActionsDatabase {
                 },
             )
             .optional()
-            .map_err(|e| format!("Failed to query action: {}", e))?;
+            .map_err(|e| format!("Failed to query action: {e}"))?;
 
         if action_row.is_none() {
             return Ok(None);
@@ -503,11 +503,11 @@ impl ActionsDatabase {
 
         // Parse state
         let state: ActionState = serde_json::from_str(&state_data)
-            .map_err(|e| format!("Failed to parse state: {}", e))?;
+            .map_err(|e| format!("Failed to parse state: {e}"))?;
 
         // Parse timestamps
         let started_at = DateTime::parse_from_rfc3339(&started_at_str)
-            .map_err(|e| format!("Failed to parse started_at: {}", e))?
+            .map_err(|e| format!("Failed to parse started_at: {e}"))?
             .with_timezone(&Utc);
 
         let completed_at = if let Some(s) = completed_at_str {
@@ -520,7 +520,7 @@ impl ActionsDatabase {
 
         // Parse metadata
         let metadata: serde_json::Value = serde_json::from_str(&metadata_str)
-            .map_err(|e| format!("Failed to parse metadata: {}", e))?;
+            .map_err(|e| format!("Failed to parse metadata: {e}"))?;
 
         // Get steps
         let mut stmt = conn
@@ -532,7 +532,7 @@ impl ActionsDatabase {
                 ORDER BY step_index ASC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare step query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare step query: {e}"))?;
 
         let steps = stmt
             .query_map(params![action_id], |row| {
@@ -564,9 +564,9 @@ impl ActionsDatabase {
                     metadata,
                 })
             })
-            .map_err(|e| format!("Failed to query steps: {}", e))?
+            .map_err(|e| format!("Failed to query steps: {e}"))?
             .collect::<Result<Vec<ActionStep>, _>>()
-            .map_err(|e| format!("Failed to collect steps: {}", e))?;
+            .map_err(|e| format!("Failed to collect steps: {e}"))?;
 
         let current_step_index = match &state {
             ActionState::InProgress {
@@ -646,7 +646,7 @@ impl ActionsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare query: {e}"))?;
 
         let params_refs: Vec<&dyn rusqlite::ToSql> =
             params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
@@ -674,9 +674,9 @@ impl ActionsDatabase {
                     row.get(7)?, // metadata
                 ))
             })
-            .map_err(|e| format!("Failed to query actions: {}", e))?
+            .map_err(|e| format!("Failed to query actions: {e}"))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect actions: {}", e))?;
+            .map_err(|e| format!("Failed to collect actions: {e}"))?;
 
         if actions_data.is_empty() {
             return Ok(Vec::new());
@@ -700,7 +700,7 @@ impl ActionsDatabase {
 
         let mut steps_stmt = conn
             .prepare(&steps_query)
-            .map_err(|e| format!("Failed to prepare steps query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare steps query: {e}"))?;
 
         let action_id_refs: Vec<&dyn rusqlite::ToSql> = action_ids
             .iter()
@@ -741,9 +741,9 @@ impl ActionsDatabase {
                     },
                 ))
             })
-            .map_err(|e| format!("Failed to query steps: {}", e))?
+            .map_err(|e| format!("Failed to query steps: {e}"))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect steps: {}", e))?;
+            .map_err(|e| format!("Failed to collect steps: {e}"))?;
 
         // Build a map of action_id -> Vec<ActionStep>
         let mut steps_map: HashMap<String, Vec<ActionStep>> = HashMap::new();
@@ -861,7 +861,7 @@ impl ActionsDatabase {
 
             let total: i64 = conn
                 .query_row(&count_query, &params_refs[..], |row| row.get(0))
-                .map_err(|e| format!("Failed to count actions: {}", e))?;
+                .map_err(|e| format!("Failed to count actions: {e}"))?;
 
             total as usize
         };
@@ -886,24 +886,24 @@ impl ActionsDatabase {
         // Use transaction to ensure both deletes succeed or both roll back
         let tx = conn
             .transaction()
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
         let deleted = tx
             .execute(
                 "DELETE FROM actions WHERE completed_at < ?1 AND completed_at IS NOT NULL",
                 params![cutoff_str],
             )
-            .map_err(|e| format!("Failed to cleanup old actions: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup old actions: {e}"))?;
 
         // Cleanup orphaned steps
         tx.execute(
             "DELETE FROM action_steps WHERE action_id NOT IN (SELECT id FROM actions)",
             [],
         )
-        .map_err(|e| format!("Failed to cleanup orphaned steps: {}", e))?;
+        .map_err(|e| format!("Failed to cleanup orphaned steps: {e}"))?;
 
         tx.commit()
-            .map_err(|e| format!("Failed to commit cleanup transaction: {}", e))?;
+            .map_err(|e| format!("Failed to commit cleanup transaction: {e}"))?;
 
         if deleted > 0 {
             logger::info(

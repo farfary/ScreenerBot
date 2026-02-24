@@ -8,5 +8,5 @@ pub use trade_decision::{TradeAction, TradeDecision, TradeFactor};
 
 /// Validate JSON response against expected schema
 pub fn validate_json_response<T: serde::de::DeserializeOwned>(json_str: &str) -> Result<T, String> {
-    serde_json::from_str(json_str).map_err(|e| format!("Failed to parse AI response: {}", e))
+    serde_json::from_str(json_str).map_err(|e| format!("Failed to parse AI response: {e}"))
 }

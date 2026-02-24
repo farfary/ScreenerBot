@@ -24,7 +24,7 @@ pub async fn handle_callback_query(
     // Always answer callback query first to remove loading indicator
     bot.answer_callback_query(&query.id)
         .await
-        .map_err(|e| format!("Failed to answer callback: {}", e))?;
+        .map_err(|e| format!("Failed to answer callback: {e}"))?;
 
     let data = query.data.as_deref().unwrap_or("");
     let parts: Vec<&str> = data.split(':').collect();
@@ -83,11 +83,11 @@ pub async fn handle_callback_query(
                         })
                         .reply_markup(keyboard)
                         .await
-                        .map_err(|e| format!("Failed to update pagination: {}", e))?;
+                        .map_err(|e| format!("Failed to update pagination: {e}"))?;
                 } else {
                     bot.send_message(chat_id, "⚠️ Pagination session expired.")
                         .await
-                        .map_err(|e| format!("Failed to send expiry message: {}", e))?;
+                        .map_err(|e| format!("Failed to send expiry message: {e}"))?;
                 }
             }
             Ok(())
@@ -226,7 +226,7 @@ async fn send_with_keyboard(
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboard)
         .await
-        .map_err(|e| format!("Failed to send: {}", e))?;
+        .map_err(|e| format!("Failed to send: {e}"))?;
     Ok(())
 }
 
@@ -284,7 +284,7 @@ async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
         Err(e) => {
             logger::warning(
                 LogTag::Telegram,
-                &format!("Failed to get closed positions: {}", e),
+                &format!("Failed to get closed positions: {e}"),
             );
             Vec::new()
         }
@@ -523,7 +523,7 @@ async fn execute_sell(
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
                 Err(e) => {
-                    let msg = format!("❌ <b>Sell Failed</b>\n\nError: {}", e);
+                    let msg = format!("❌ <b>Sell Failed</b>\n\nError: {e}");
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
             }
@@ -565,7 +565,7 @@ async fn execute_dca(
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
                 Err(e) => {
-                    let msg = format!("❌ <b>DCA Failed</b>\n\nError: {}", e);
+                    let msg = format!("❌ <b>DCA Failed</b>\n\nError: {e}");
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
             }
@@ -647,9 +647,9 @@ async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Resu
             .await;
 
             if let Err(e) = blacklist_result {
-                logger::warning(LogTag::Telegram, &format!("Failed to blacklist: {}", e));
+                logger::warning(LogTag::Telegram, &format!("Failed to blacklist: {e}"));
             } else if let Ok(Err(e)) = blacklist_result {
-                logger::warning(LogTag::Telegram, &format!("Failed to blacklist: {}", e));
+                logger::warning(LogTag::Telegram, &format!("Failed to blacklist: {e}"));
             }
 
             let msg = format!(
@@ -768,7 +768,7 @@ pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<(), String> 
     let stats = match crate::filtering::fetch_stats().await {
         Ok(s) => s,
         Err(e) => {
-            let msg = format!("❌ Failed to fetch stats: {}", e);
+            let msg = format!("❌ Failed to fetch stats: {e}");
             return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
         }
     };
@@ -824,7 +824,7 @@ async fn send_tokens_page(
     let result = match crate::filtering::query_tokens(query).await {
         Ok(r) => r,
         Err(e) => {
-            let msg = format!("❌ Failed to fetch tokens: {}", e);
+            let msg = format!("❌ Failed to fetch tokens: {e}");
             return send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await;
         }
     };
@@ -909,7 +909,7 @@ async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
     let stats = match crate::filtering::fetch_stats().await {
         Ok(s) => s,
         Err(e) => {
-            let msg = format!("❌ Failed to fetch stats: {}", e);
+            let msg = format!("❌ Failed to fetch stats: {e}");
             return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
         }
     };
@@ -1170,17 +1170,17 @@ async fn execute_token_blacklist(
         Ok(Err(e)) => {
             logger::warning(
                 LogTag::Telegram,
-                &format!("Failed to blacklist token: {}", e),
+                &format!("Failed to blacklist token: {e}"),
             );
-            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {}", e);
+            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {e}");
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
         Err(e) => {
             logger::warning(
                 LogTag::Telegram,
-                &format!("Failed to blacklist token: {}", e),
+                &format!("Failed to blacklist token: {e}"),
             );
-            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {}", e);
+            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {e}");
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
     }
@@ -1212,7 +1212,7 @@ async fn execute_token_buy(
     bot.send_message(chat_id, &msg)
         .parse_mode(ParseMode::Html)
         .await
-        .map_err(|e| format!("Failed to send: {}", e))?;
+        .map_err(|e| format!("Failed to send: {e}"))?;
 
     // Execute the buy via manual trading system
     match manual_add(&token.mint, amount).await {

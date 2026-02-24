@@ -106,7 +106,7 @@ pub async fn handle_command(
                 .parse_mode(ParseMode::Html)
                 .reply_markup(keyboards::main_reply_keyboard())
                 .await
-                .map_err(|e| format!("Failed to send start response: {}", e))?;
+                .map_err(|e| format!("Failed to send start response: {e}"))?;
 
             logger::info(
                 LogTag::Telegram,
@@ -151,7 +151,7 @@ pub async fn handle_command(
     bot.send_message(chat_id, &response)
         .parse_mode(ParseMode::Html)
         .await
-        .map_err(|e| format!("Failed to send response: {}", e))?;
+        .map_err(|e| format!("Failed to send response: {e}"))?;
 
     logger::info(
         LogTag::Telegram,
@@ -307,7 +307,7 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
                 }
                 Err(e) => {
                     let _ = bot
-                        .send_message(chat_id, format!("🔒 {}", e))
+                        .send_message(chat_id, format!("🔒 {e}"))
                         .parse_mode(ParseMode::Html)
                         .await;
                 }

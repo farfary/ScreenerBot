@@ -267,7 +267,7 @@ impl ChatEngine {
         // Add user message to history
         let user_message_id =
             chat_db::add_message(&pool, request.session_id, "user", &request.message, None)
-                .map_err(|e| AiError::ParseError(format!("Failed to save user message: {}", e)))?;
+                .map_err(|e| AiError::ParseError(format!("Failed to save user message: {e}")))?;
 
         logger::debug(
             LogTag::Api,
@@ -279,7 +279,7 @@ impl ChatEngine {
 
         // Load conversation history
         let history = chat_db::get_messages(&pool, request.session_id)
-            .map_err(|e| AiError::ParseError(format!("Failed to load history: {}", e)))?;
+            .map_err(|e| AiError::ParseError(format!("Failed to load history: {e}")))?;
 
         // Build messages for LLM (system + history)
         let mut messages = self.build_messages(&history, &request.context)?;
@@ -376,7 +376,7 @@ impl ChatEngine {
                 Err(e) => {
                     logger::warning(
                         LogTag::Api,
-                        &format!("Failed to serialize tool calls: {}", e),
+                        &format!("Failed to serialize tool calls: {e}"),
                     );
                     None
                 }
@@ -390,7 +390,7 @@ impl ChatEngine {
             &final_content,
             tool_calls_json.as_deref(),
         )
-        .map_err(|e| AiError::ParseError(format!("Failed to save assistant message: {}", e)))?;
+        .map_err(|e| AiError::ParseError(format!("Failed to save assistant message: {e}")))?;
 
         logger::info(
             LogTag::Api,
@@ -769,7 +769,7 @@ impl ChatEngine {
         )
         .await
         {
-            Ok(result) => result.map_err(|e| AiError::LlmError(format!("LLM call failed: {}", e))),
+            Ok(result) => result.map_err(|e| AiError::LlmError(format!("LLM call failed: {e}"))),
             Err(_) => Err(AiError::LlmError(
                 "LLM call timed out after 60 seconds".to_string(),
             )),
@@ -855,7 +855,7 @@ impl ChatEngine {
                     Err(e) => {
                         logger::warning(
                             LogTag::Api,
-                            &format!("Failed to parse JSON from code block: {}", e),
+                            &format!("Failed to parse JSON from code block: {e}"),
                         );
                     }
                 }
@@ -1068,7 +1068,7 @@ impl ChatEngine {
             Err(e) => {
                 logger::error(
                     LogTag::Api,
-                    &format!("Failed to serialize tool result: {}", e),
+                    &format!("Failed to serialize tool result: {e}"),
                 );
                 serde_json::json!({"error": "Failed to serialize result"}).to_string()
             }
@@ -1084,7 +1084,7 @@ impl ChatEngine {
         ) {
             logger::warning(
                 LogTag::Api,
-                &format!("Failed to record tool execution: {}", e),
+                &format!("Failed to record tool execution: {e}"),
             );
         }
 

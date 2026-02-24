@@ -100,7 +100,7 @@ impl Tool for GetStatusTool {
 
         match serde_json::to_value(status) {
             Ok(v) => ToolResult::success(v),
-            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            Err(e) => ToolResult::error(format!("Serialization error: {e}")),
         }
     }
 }
@@ -167,7 +167,7 @@ impl Tool for GetEventsTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: GetEventsParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Validate limit
@@ -256,7 +256,7 @@ impl Tool for ForceStopTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: ForceStopParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Set force stop flag

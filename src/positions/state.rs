@@ -155,7 +155,7 @@ async fn persist_pending_dca_swaps() -> Result<(), String> {
     };
 
     let serialized = serde_json::to_string(&pending)
-        .map_err(|e| format!("Failed to serialize pending DCA swaps: {}", e))?;
+        .map_err(|e| format!("Failed to serialize pending DCA swaps: {e}"))?;
 
     db::set_metadata(PENDING_DCA_METADATA_KEY, &serialized).await
 }
@@ -211,7 +211,7 @@ pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>, String
 
     let entries: Vec<PendingDcaSwap> = match raw {
         Some(payload) if !payload.is_empty() => serde_json::from_str(&payload)
-            .map_err(|e| format!("Failed to deserialize pending DCA metadata payload: {}", e))?,
+            .map_err(|e| format!("Failed to deserialize pending DCA metadata payload: {e}"))?,
         _ => Vec::new(),
     };
 
@@ -233,7 +233,7 @@ async fn persist_pending_partial_exits() -> Result<(), String> {
     };
 
     let serialized = serde_json::to_string(&pending)
-        .map_err(|e| format!("Failed to serialize pending partial exits: {}", e))?;
+        .map_err(|e| format!("Failed to serialize pending partial exits: {e}"))?;
 
     db::set_metadata(PENDING_PARTIAL_EXIT_METADATA_KEY, &serialized).await
 }
@@ -295,7 +295,7 @@ pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>
 
     let entries: Vec<PendingPartialExit> = match raw {
         Some(payload) if !payload.is_empty() => serde_json::from_str(&payload)
-            .map_err(|e| format!("Failed to deserialize pending partial exit payload: {}", e))?,
+            .map_err(|e| format!("Failed to deserialize pending partial exit payload: {e}"))?,
         _ => Vec::new(),
     };
 

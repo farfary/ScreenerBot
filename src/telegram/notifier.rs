@@ -78,7 +78,7 @@ impl TelegramNotifier {
                     })
                     .reply_markup(keyboard)
                     .await
-                    .map_err(|e| format!("Failed to send pagination message: {}", e))?;
+                    .map_err(|e| format!("Failed to send pagination message: {e}"))?;
 
                 logger::info(LogTag::Telegram, "Sent paginated token notification");
                 return Ok(());
@@ -95,7 +95,7 @@ impl TelegramNotifier {
             .send_message(self.chat_id, message)
             .parse_mode(ParseMode::Html)
             .await
-            .map_err(|e| format!("Failed to send Telegram message: {}", e))?;
+            .map_err(|e| format!("Failed to send Telegram message: {e}"))?;
 
         logger::debug(
             LogTag::Telegram,
@@ -118,7 +118,7 @@ impl TelegramNotifier {
             .parse_mode(ParseMode::Html)
             .reply_markup(keyboard)
             .await
-            .map_err(|e| format!("Failed to send Telegram message with buttons: {}", e))?;
+            .map_err(|e| format!("Failed to send Telegram message with buttons: {e}"))?;
 
         Ok(())
     }
@@ -134,7 +134,7 @@ impl TelegramNotifier {
             .parse_mode(ParseMode::Html)
             .reply_markup(keyboard)
             .await
-            .map_err(|e| format!("Failed to send Telegram message with keyboard: {}", e))?;
+            .map_err(|e| format!("Failed to send Telegram message with keyboard: {e}"))?;
 
         Ok(())
     }
@@ -349,7 +349,7 @@ pub fn init_notifier() -> Result<(), String> {
         Err(e) => {
             logger::warning(
                 LogTag::Telegram,
-                &format!("Failed to initialize notifier: {}", e),
+                &format!("Failed to initialize notifier: {e}"),
             );
             // Don't return error - allow bot to run without notifications
             Ok(())
@@ -402,7 +402,7 @@ pub async fn send_notification(notification: Notification) {
     if let Err(e) = notifier.send(&notification).await {
         logger::error(
             LogTag::Telegram,
-            &format!("Failed to send notification: {}", e),
+            &format!("Failed to send notification: {e}"),
         );
     }
 }

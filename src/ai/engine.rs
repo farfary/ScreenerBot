@@ -470,7 +470,7 @@ impl AiEngine {
             // Log but don't fail the operation
             crate::logger::debug(
                 crate::logger::LogTag::Filtering,
-                &format!("Failed to record AI decision in history: {}", e),
+                &format!("Failed to record AI decision in history: {e}"),
             );
         }
     }

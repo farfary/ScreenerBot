@@ -51,7 +51,7 @@ pub async fn handle_stop_command() -> String {
                 .to_string()
         }
         Err(e) => {
-            format!("❌ <b>Failed to disable trading</b>\n\nError: {}", e)
+            format!("❌ <b>Failed to disable trading</b>\n\nError: {e}")
         }
     }
 }
@@ -68,7 +68,7 @@ pub async fn handle_pause_entries_command() -> String {
             logger::info(LogTag::Telegram, "Entry monitor paused via Telegram");
             "⏸️ <b>Entry Monitor Paused</b>\n\nNo new positions will be opened.\nExit monitor continues running.".to_string()
         }
-        Err(e) => format!("❌ <b>Failed to pause entries</b>\n\nError: {}", e),
+        Err(e) => format!("❌ <b>Failed to pause entries</b>\n\nError: {e}"),
     }
 }
 
@@ -88,7 +88,7 @@ pub async fn handle_resume_entries_command() -> String {
             logger::info(LogTag::Telegram, "Entry monitor resumed via Telegram");
             "▶️ <b>Entry Monitor Resumed</b>\n\nNow watching for entry signals.".to_string()
         }
-        Err(e) => format!("❌ <b>Failed to resume entries</b>\n\nError: {}", e),
+        Err(e) => format!("❌ <b>Failed to resume entries</b>\n\nError: {e}"),
     }
 }
 
@@ -108,7 +108,7 @@ pub async fn handle_force_stop_command(bot: &Bot, chat_id: ChatId) -> Result<(),
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboard)
         .await
-        .map_err(|e| format!("Failed to send force stop confirmation: {}", e))?;
+        .map_err(|e| format!("Failed to send force stop confirmation: {e}"))?;
 
     Ok(())
 }
@@ -196,7 +196,7 @@ pub async fn handle_login_command(bot: &Bot, chat_id: ChatId, user_id: i64) -> R
         }
         Err(e) => {
             let _ = bot
-                .send_message(chat_id, format!("❌ {}", e))
+                .send_message(chat_id, format!("❌ {e}"))
                 .parse_mode(ParseMode::Html)
                 .await;
         }

@@ -162,7 +162,7 @@ pub fn initialize_scheduled_tables(conn: &rusqlite::Connection) -> Result<(), St
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_scheduled_tasks table: {}", e))?;
+    .map_err(|e| format!("Failed to create ai_scheduled_tasks table: {e}"))?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ai_task_runs (
@@ -183,7 +183,7 @@ pub fn initialize_scheduled_tables(conn: &rusqlite::Connection) -> Result<(), St
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_task_runs table: {}", e))?;
+    .map_err(|e| format!("Failed to create ai_task_runs table: {e}"))?;
 
     // Indexes
     conn.execute(
@@ -191,21 +191,21 @@ pub fn initialize_scheduled_tables(conn: &rusqlite::Connection) -> Result<(), St
          ON ai_scheduled_tasks(enabled, next_run_at)",
         [],
     )
-    .map_err(|e| format!("Failed to create scheduled tasks index: {}", e))?;
+    .map_err(|e| format!("Failed to create scheduled tasks index: {e}"))?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_task_runs_task 
          ON ai_task_runs(task_id, started_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create task runs index: {}", e))?;
+    .map_err(|e| format!("Failed to create task runs index: {e}"))?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_task_runs_status 
          ON ai_task_runs(status, started_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create task runs status index: {}", e))?;
+    .map_err(|e| format!("Failed to create task runs status index: {e}"))?;
 
     Ok(())
 }
@@ -224,7 +224,7 @@ pub fn create_task(
 ) -> Result<i64, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
     let tool_perms = tool_permissions.unwrap_or("read_only");
     let prio = priority.unwrap_or("low");
@@ -248,7 +248,7 @@ pub fn create_task(
             &now
         ],
     )
-    .map_err(|e| format!("Failed to create scheduled task: {}", e))?;
+    .map_err(|e| format!("Failed to create scheduled task: {e}"))?;
 
     Ok(conn.last_insert_rowid())
 }
@@ -257,7 +257,7 @@ pub fn create_task(
 pub fn list_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledTask>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -268,7 +268,7 @@ pub fn list_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledT
              FROM ai_scheduled_tasks
              ORDER BY enabled DESC, created_at DESC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let tasks = stmt
         .query_map([], |row| {
@@ -295,9 +295,9 @@ pub fn list_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledT
                 updated_at: row.get(19)?,
             })
         })
-        .map_err(|e| format!("Failed to query tasks: {}", e))?
+        .map_err(|e| format!("Failed to query tasks: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect tasks: {}", e))?;
+        .map_err(|e| format!("Failed to collect tasks: {e}"))?;
 
     Ok(tasks)
 }
@@ -309,7 +309,7 @@ pub fn get_task(
 ) -> Result<Option<ScheduledTask>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -319,7 +319,7 @@ pub fn get_task(
                     run_count, error_count, created_at, updated_at
              FROM ai_scheduled_tasks WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let task = stmt
         .query_row(params![id], |row| {
@@ -347,7 +347,7 @@ pub fn get_task(
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query task: {}", e))?;
+        .map_err(|e| format!("Failed to query task: {e}"))?;
 
     Ok(task)
 }
@@ -371,7 +371,7 @@ pub fn update_task(
 ) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let mut updates = Vec::new();
@@ -441,7 +441,7 @@ pub fn update_task(
 
     let params_refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
     conn.execute(&sql, params_refs.as_slice())
-        .map_err(|e| format!("Failed to update task: {}", e))?;
+        .map_err(|e| format!("Failed to update task: {e}"))?;
 
     // Recalculate next_run_at if schedule changed
     if schedule_type.is_some() || schedule_value.is_some() {
@@ -452,7 +452,7 @@ pub fn update_task(
                         "UPDATE ai_scheduled_tasks SET next_run_at = ? WHERE id = ?",
                         params![&next, id],
                     )
-                    .map_err(|e| format!("Failed to update next_run_at: {}", e))?;
+                    .map_err(|e| format!("Failed to update next_run_at: {e}"))?;
                 }
                 Err(e) => {
                     // Log warning but keep task - next_run_at stays at old value
@@ -475,20 +475,20 @@ pub fn update_task(
 pub fn delete_task(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     conn.execute_batch("BEGIN TRANSACTION")
-        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        .map_err(|e| format!("Failed to begin transaction: {e}"))?;
     if let Err(e) = conn.execute("DELETE FROM ai_task_runs WHERE task_id = ?1", params![id]) {
         let _ = conn.execute_batch("ROLLBACK");
-        return Err(format!("Failed to delete task runs: {}", e));
+        return Err(format!("Failed to delete task runs: {e}"));
     }
     if let Err(e) = conn.execute("DELETE FROM ai_scheduled_tasks WHERE id = ?1", params![id]) {
         let _ = conn.execute_batch("ROLLBACK");
-        return Err(format!("Failed to delete task: {}", e));
+        return Err(format!("Failed to delete task: {e}"));
     }
     conn.execute_batch("COMMIT")
-        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+        .map_err(|e| format!("Failed to commit transaction: {e}"))?;
 
     Ok(())
 }
@@ -501,7 +501,7 @@ pub fn toggle_task(
 ) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let next_run = if enabled {
@@ -519,7 +519,7 @@ pub fn toggle_task(
         "UPDATE ai_scheduled_tasks SET enabled = ?1, next_run_at = ?2, updated_at = ?3 WHERE id = ?4",
         params![enabled as i32, next_run, &now, id],
     )
-    .map_err(|e| format!("Failed to toggle task: {}", e))?;
+    .map_err(|e| format!("Failed to toggle task: {e}"))?;
 
     Ok(())
 }
@@ -530,13 +530,13 @@ pub fn toggle_task(
 pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledTask>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     // Use a transaction to atomically select and mark tasks as picked up
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("Failed to start transaction: {}", e))?;
+        .map_err(|e| format!("Failed to start transaction: {e}"))?;
 
     let mut stmt = tx
         .prepare(
@@ -548,7 +548,7 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
              WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?1
              ORDER BY next_run_at ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let tasks = stmt
         .query_map(params![&now], |row| {
@@ -575,9 +575,9 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
                 updated_at: row.get(19)?,
             })
         })
-        .map_err(|e| format!("Failed to query due tasks: {}", e))?
+        .map_err(|e| format!("Failed to query due tasks: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect due tasks: {}", e))?;
+        .map_err(|e| format!("Failed to collect due tasks: {e}"))?;
 
     // Mark picked-up tasks so another cycle won't grab them
     let task_ids: Vec<i64> = tasks.iter().map(|t| t.id).collect();
@@ -586,14 +586,14 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
             "UPDATE ai_scheduled_tasks SET next_run_at = NULL WHERE id = ?1",
             params![task_id],
         )
-        .map_err(|e| format!("Failed to mark task as picked: {}", e))?;
+        .map_err(|e| format!("Failed to mark task as picked: {e}"))?;
     }
 
     // Need to drop the statement before committing
     drop(stmt);
 
     tx.commit()
-        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+        .map_err(|e| format!("Failed to commit transaction: {e}"))?;
 
     Ok(tasks)
 }
@@ -606,7 +606,7 @@ pub fn update_task_after_run(
 ) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     // Get the task to calculate next run
@@ -620,14 +620,14 @@ pub fn update_task_after_run(
              run_count = run_count + 1, updated_at = ?3 WHERE id = ?4",
             params![&now, &next_run, &now, id],
         )
-        .map_err(|e| format!("Failed to update task after success: {}", e))?;
+        .map_err(|e| format!("Failed to update task after success: {e}"))?;
     } else {
         conn.execute(
             "UPDATE ai_scheduled_tasks SET last_run_at = ?1, next_run_at = ?2, 
              run_count = run_count + 1, error_count = error_count + 1, updated_at = ?3 WHERE id = ?4",
             params![&now, &next_run, &now, id],
         )
-        .map_err(|e| format!("Failed to update task after failure: {}", e))?;
+        .map_err(|e| format!("Failed to update task after failure: {e}"))?;
     }
 
     Ok(())
@@ -748,14 +748,14 @@ pub fn record_run_start(
 ) -> Result<i64, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
         "INSERT INTO ai_task_runs (task_id, status, started_at, session_id) VALUES (?1, ?2, ?3, ?4)",
         params![task_id, RunStatus::Running.as_str(), &now, session_id],
     )
-    .map_err(|e| format!("Failed to record run start: {}", e))?;
+    .map_err(|e| format!("Failed to record run start: {e}"))?;
 
     Ok(conn.last_insert_rowid())
 }
@@ -775,7 +775,7 @@ pub fn record_run_complete(
 ) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
@@ -795,7 +795,7 @@ pub fn record_run_complete(
             run_id
         ],
     )
-    .map_err(|e| format!("Failed to record run completion: {}", e))?;
+    .map_err(|e| format!("Failed to record run completion: {e}"))?;
 
     Ok(())
 }
@@ -808,7 +808,7 @@ pub fn list_runs_for_task(
 ) -> Result<Vec<TaskRun>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     // Clamp limit to reasonable bounds
     let limit = limit.min(100).max(1);
@@ -822,7 +822,7 @@ pub fn list_runs_for_task(
              ORDER BY started_at DESC
              LIMIT ?2",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let runs = stmt
         .query_map(params![task_id, limit], |row| {
@@ -842,9 +842,9 @@ pub fn list_runs_for_task(
                 session_id: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query runs: {}", e))?
+        .map_err(|e| format!("Failed to query runs: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect runs: {}", e))?;
+        .map_err(|e| format!("Failed to collect runs: {e}"))?;
 
     Ok(runs)
 }
@@ -856,7 +856,7 @@ pub fn list_recent_runs(
 ) -> Result<Vec<TaskRun>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     // Clamp limit to reasonable bounds
     let limit = limit.min(100).max(1);
@@ -869,7 +869,7 @@ pub fn list_recent_runs(
              ORDER BY started_at DESC
              LIMIT ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let runs = stmt
         .query_map(params![limit], |row| {
@@ -889,9 +889,9 @@ pub fn list_recent_runs(
                 session_id: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query recent runs: {}", e))?
+        .map_err(|e| format!("Failed to query recent runs: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect recent runs: {}", e))?;
+        .map_err(|e| format!("Failed to collect recent runs: {e}"))?;
 
     Ok(runs)
 }
@@ -903,7 +903,7 @@ pub fn get_run(
 ) -> Result<Option<TaskRun>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -911,7 +911,7 @@ pub fn get_run(
                     ai_response, tool_calls, tokens_used, provider, model, error_message, session_id
              FROM ai_task_runs WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let run = stmt
         .query_row(params![run_id], |row| {
@@ -932,7 +932,7 @@ pub fn get_run(
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query run: {}", e))?;
+        .map_err(|e| format!("Failed to query run: {e}"))?;
 
     Ok(run)
 }
@@ -943,7 +943,7 @@ pub fn get_automation_stats(
 ) -> Result<AutomationStats, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let total_tasks: i64 = conn
         .query_row("SELECT COUNT(*) FROM ai_scheduled_tasks", [], |row| {
@@ -1034,14 +1034,14 @@ pub fn cleanup_old_runs(
 ) -> Result<usize, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let deleted = conn
         .execute(
             "DELETE FROM ai_task_runs WHERE started_at < datetime('now', ?1)",
             params![format!("-{} days", keep_days)],
         )
-        .map_err(|e| format!("Failed to cleanup old runs: {}", e))?;
+        .map_err(|e| format!("Failed to cleanup old runs: {e}"))?;
 
     Ok(deleted)
 }

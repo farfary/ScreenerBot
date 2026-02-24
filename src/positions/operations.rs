@@ -324,7 +324,7 @@ async fn persist_position_with_retry(position: &Position) -> i64 {
 async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<String, String> {
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {}", e))?
+        .map_err(|e| format!("Failed to get token: {e}"))?
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
     // Get price with fallback to API when pool price unavailable
@@ -467,7 +467,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
 
     // Execute swap
     let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
 
     // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
     super::state::set_pending_open(&api_token.mint, super::state::PENDING_OPEN_TTL_SECS).await;
@@ -495,11 +495,11 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
 
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
         .await
-        .map_err(|e| format!("Quote failed: {}", e))?;
+        .map_err(|e| format!("Quote failed: {e}"))?;
 
     let swap_result = execute_swap_with_fallback(&api_token, quote)
         .await
-        .map_err(|e| format!("Swap failed: {}", e))?;
+        .map_err(|e| format!("Swap failed: {e}"))?;
 
     let transaction_signature = swap_result.transaction_signature;
 
@@ -665,7 +665,7 @@ pub async fn close_position_direct(
 ) -> Result<String, String> {
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {}", e))?
+        .map_err(|e| format!("Failed to get token: {e}"))?
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
     // Get price with fallback to API when pool price unavailable
@@ -744,11 +744,11 @@ pub async fn close_position_direct(
 
     // Get TOTAL token balance across ALL accounts (CRITICAL FOR COMPLETE LIQUIDATION)
     let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
 
     let total_token_balance = get_total_token_balance(&wallet_address, token_mint)
         .await
-        .map_err(|e| format!("Failed to get total token balance: {}", e))?;
+        .map_err(|e| format!("Failed to get total token balance: {e}"))?;
 
     // Fetch primary (associated) token account balance separately. This is the balance most
     // swap routes will actually spend from. When multiple token accounts exist, passing the
@@ -1023,7 +1023,7 @@ pub async fn partial_close_position(
     // Get API token for swap
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {}", e))?
+        .map_err(|e| format!("Failed to get token: {e}"))?
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
     // Get quote for partial exit
@@ -1136,7 +1136,7 @@ pub async fn partial_close_position(
             )
             .await;
 
-            return Err(format!("Partial exit swap failed: {}", e));
+            return Err(format!("Partial exit swap failed: {e}"));
         }
     };
 
@@ -1206,7 +1206,7 @@ pub async fn partial_close_position(
             );
         }
         super::state::clear_partial_exit_pending(token_mint).await;
-        return Err(format!("Failed to apply partial exit transition: {}", e));
+        return Err(format!("Failed to apply partial exit transition: {e}"));
     }
 
     // Enqueue for verification with partial exit flag
@@ -1301,7 +1301,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     // Get API token for swap
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {}", e))?
+        .map_err(|e| format!("Failed to get token: {e}"))?
         .ok_or_else(|| format!("Token not found: {}", token_mint))?;
 
     // Get quote for DCA entry
@@ -1317,7 +1317,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     };
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
         .await
-        .map_err(|e| format!("Failed to get DCA quote: {}", e))?;
+        .map_err(|e| format!("Failed to get DCA quote: {e}"))?;
 
     logger::info(
         LogTag::Positions,
@@ -1331,7 +1331,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     // Execute swap
     let swap_result = execute_swap_with_fallback(&api_token, quote)
         .await
-        .map_err(|e| format!("DCA swap failed: {}", e))?;
+        .map_err(|e| format!("DCA swap failed: {e}"))?;
 
     let transaction_signature = swap_result.transaction_signature.clone();
 
@@ -1361,7 +1361,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
                     position_id, token_mint, e
                 ),
             );
-            format!("Failed to persist pending DCA metadata: {}", e)
+            format!("Failed to persist pending DCA metadata: {e}")
         })?;
 
     // Get price with fallback to API for DCA transition
@@ -1397,7 +1397,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
                 err
             })
             .ok();
-        return Err(format!("Failed to apply DCA transition: {}", e));
+        return Err(format!("Failed to apply DCA transition: {e}"));
     }
 
     // Enqueue for verification

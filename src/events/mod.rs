@@ -106,7 +106,7 @@ pub async fn init() -> Result<(), String> {
     let db = Arc::new(
         EventsDatabase::new()
             .await
-            .map_err(|e| format!("Failed to initialize events database: {}", e))?,
+            .map_err(|e| format!("Failed to initialize events database: {e}"))?,
     );
     let _ = EVENTS_DB.set(db.clone());
 
@@ -166,7 +166,7 @@ pub async fn record_safe(event: Event) {
     }
 
     if let Err(e) = record(event).await {
-        logger::warning(LogTag::System, &format!("Failed to record event: {}", e));
+        logger::warning(LogTag::System, &format!("Failed to record event: {e}"));
     }
 }
 
@@ -327,7 +327,7 @@ async fn write_batch(db: &EventsDatabase, batch: &mut Vec<Event>) {
     if let Err(e) = db.insert_events(batch.as_mut_slice()).await {
         logger::error(
             LogTag::System,
-            &format!("Failed to write event batch: {}", e),
+            &format!("Failed to write event batch: {e}"),
         );
     }
 

@@ -374,7 +374,7 @@ async fn fetch_and_create_token_snapshot(
     // Read token from the unified tokens store
     let token = crate::tokens::get_full_token_async(mint)
         .await
-        .map_err(|e| format!("Failed to get token: {}", e))?
+        .map_err(|e| format!("Failed to get token: {e}"))?
         .ok_or_else(|| format!("Token not found in store: {}", mint))?;
 
     // Compute freshness based on last price update vs now
@@ -639,7 +639,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
                             position.symbol, position_id, e
                         ),
                     );
-                    return Err(format!("Database cleanup failed: {}", e));
+                    return Err(format!("Database cleanup failed: {e}"));
                 }
             }
         }

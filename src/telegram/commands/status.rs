@@ -114,12 +114,12 @@ pub async fn handle_positions_command() -> String {
 pub async fn handle_balance_command() -> String {
     let wallet_address = match crate::utils::get_wallet_address() {
         Ok(addr) => addr,
-        Err(e) => return format!("❌ {}", e),
+        Err(e) => return format!("❌ {e}"),
     };
 
     let sol_balance = match get_sol_balance(&wallet_address).await {
         Ok(balance) => balance,
-        Err(e) => return format!("❌ {}", e),
+        Err(e) => return format!("❌ {e}"),
     };
 
     let sol_price_usd = sol_price::get_sol_price();

@@ -77,7 +77,7 @@ pub async fn start_maintenance_task() {
             }
 
             if let Err(e) = perform_maintenance().await {
-                logger::info(LogTag::System, &format!("Events maintenance failed: {}", e));
+                logger::info(LogTag::System, &format!("Events maintenance failed: {e}"));
             }
         }
     });

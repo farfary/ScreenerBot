@@ -509,7 +509,7 @@ pub fn spawn_cleanup_task() {
                         Err(e) => {
                             logger::warning(
                                 LogTag::System,
-                                &format!("Actions cleanup failed: {}", e),
+                                &format!("Actions cleanup failed: {e}"),
                             );
                         }
                         _ => {}

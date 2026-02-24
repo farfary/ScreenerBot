@@ -71,9 +71,9 @@ impl TelegramBot {
             Err(e) => {
                 logger::error(
                     LogTag::Telegram,
-                    &format!("Failed to validate bot token: {}", e),
+                    &format!("Failed to validate bot token: {e}"),
                 );
-                Err(format!("Invalid bot token: {}", e))
+                Err(format!("Invalid bot token: {e}"))
             }
         }
     }
@@ -126,7 +126,7 @@ impl TelegramBot {
         bot.send_message(ChatId(chat_id), message)
             .parse_mode(ParseMode::Html)
             .await
-            .map_err(|e| format!("Failed to send message: {}", e))?;
+            .map_err(|e| format!("Failed to send message: {e}"))?;
 
         Ok(())
     }
@@ -140,7 +140,7 @@ impl TelegramBot {
 
         let chat_id: i64 = chat_id_str
             .parse()
-            .map_err(|e| format!("Invalid chat ID: {}", e))?;
+            .map_err(|e| format!("Invalid chat ID: {e}"))?;
 
         self.send_message(chat_id, message).await
     }
@@ -203,7 +203,7 @@ pub async fn send_message(chat_id: i64, message: &str) -> Result<(), String> {
     bot.send_message(ChatId(chat_id), message)
         .parse_mode(ParseMode::Html)
         .await
-        .map_err(|e| format!("Failed to send message: {}", e))?;
+        .map_err(|e| format!("Failed to send message: {e}"))?;
 
     Ok(())
 }

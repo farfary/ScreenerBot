@@ -70,7 +70,7 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
     // Ensure data directory exists
     if let Some(parent) = db_path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create data directory: {}", e))?;
+            .map_err(|e| format!("Failed to create data directory: {e}"))?;
     }
 
     // Create connection manager with centralized configuration
@@ -83,13 +83,13 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
         .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
         .max_lifetime(None) // SQLite: no connection recycling
         .build(manager)
-        .map_err(|e| format!("Failed to create connection pool: {}", e))?;
+        .map_err(|e| format!("Failed to create connection pool: {e}"))?;
 
     // Initialize schema using a connection from the pool
     {
         let conn = pool
             .get()
-            .map_err(|e| format!("Failed to get connection from pool: {}", e))?;
+            .map_err(|e| format!("Failed to get connection from pool: {e}"))?;
         initialize_schema(&conn)?;
     }
 
@@ -125,7 +125,7 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create chat_sessions table: {}", e))?;
+    .map_err(|e| format!("Failed to create chat_sessions table: {e}"))?;
 
     // Chat messages table
     conn.execute(
@@ -140,7 +140,7 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create chat_messages table: {}", e))?;
+    .map_err(|e| format!("Failed to create chat_messages table: {e}"))?;
 
     // Tool executions table
     conn.execute(
@@ -156,26 +156,26 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create tool_executions table: {}", e))?;
+    .map_err(|e| format!("Failed to create tool_executions table: {e}"))?;
 
     // Indexes for better query performance
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_messages_session ON chat_messages(session_id, created_at)",
         [],
     )
-    .map_err(|e| format!("Failed to create messages index: {}", e))?;
+    .map_err(|e| format!("Failed to create messages index: {e}"))?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_executions_message ON tool_executions(message_id)",
         [],
     )
-    .map_err(|e| format!("Failed to create executions index: {}", e))?;
+    .map_err(|e| format!("Failed to create executions index: {e}"))?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON chat_sessions(updated_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create sessions index: {}", e))?;
+    .map_err(|e| format!("Failed to create sessions index: {e}"))?;
 
     // Add is_hidden column if not exists (for scheduled task sessions)
     let _ = conn.execute(
@@ -197,14 +197,14 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
 pub fn create_session(pool: &Pool<SqliteConnectionManager>, title: &str) -> Result<i64, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
         "INSERT INTO chat_sessions (title, created_at, updated_at) VALUES (?1, ?2, ?3)",
         params![title, &now, &now],
     )
-    .map_err(|e| format!("Failed to insert session: {}", e))?;
+    .map_err(|e| format!("Failed to insert session: {e}"))?;
 
     let id = conn.last_insert_rowid();
     Ok(id)
@@ -217,14 +217,14 @@ pub fn create_hidden_session(
 ) -> Result<i64, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
         "INSERT INTO chat_sessions (title, is_hidden, created_at, updated_at) VALUES (?1, 1, ?2, ?3)",
         params![title, &now, &now],
     )
-    .map_err(|e| format!("Failed to insert hidden session: {}", e))?;
+    .map_err(|e| format!("Failed to insert hidden session: {e}"))?;
 
     let id = conn.last_insert_rowid();
     Ok(id)
@@ -234,7 +234,7 @@ pub fn create_hidden_session(
 pub fn get_sessions(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ChatSession>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -246,7 +246,7 @@ pub fn get_sessions(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ChatSess
              GROUP BY s.id 
              ORDER BY s.updated_at DESC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let sessions = stmt
         .query_map([], |row| {
@@ -259,9 +259,9 @@ pub fn get_sessions(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ChatSess
                 updated_at: row.get(5)?,
             })
         })
-        .map_err(|e| format!("Failed to query sessions: {}", e))?
+        .map_err(|e| format!("Failed to query sessions: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect sessions: {}", e))?;
+        .map_err(|e| format!("Failed to collect sessions: {e}"))?;
 
     Ok(sessions)
 }
@@ -273,7 +273,7 @@ pub fn get_session(
 ) -> Result<Option<ChatSession>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -284,7 +284,7 @@ pub fn get_session(
              WHERE s.id = ?1 AND s.is_hidden = 0
              GROUP BY s.id",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let session = stmt
         .query_row(params![id], |row| {
@@ -298,7 +298,7 @@ pub fn get_session(
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query session: {}", e))?;
+        .map_err(|e| format!("Failed to query session: {e}"))?;
 
     Ok(session)
 }
@@ -311,14 +311,14 @@ pub fn update_session_summary(
 ) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
         "UPDATE chat_sessions SET summary = ?1, updated_at = ?2 WHERE id = ?3",
         params![summary, &now, id],
     )
-    .map_err(|e| format!("Failed to update session summary: {}", e))?;
+    .map_err(|e| format!("Failed to update session summary: {e}"))?;
 
     Ok(())
 }
@@ -331,14 +331,14 @@ pub fn update_session_title(
 ) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
         "UPDATE chat_sessions SET title = ?1, updated_at = ?2 WHERE id = ?3",
         params![title, &now, id],
     )
-    .map_err(|e| format!("Failed to update session title: {}", e))?;
+    .map_err(|e| format!("Failed to update session title: {e}"))?;
 
     Ok(())
 }
@@ -347,14 +347,14 @@ pub fn update_session_title(
 pub fn touch_session(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
         "UPDATE chat_sessions SET updated_at = ?1 WHERE id = ?2",
         params![&now, id],
     )
-    .map_err(|e| format!("Failed to touch session: {}", e))?;
+    .map_err(|e| format!("Failed to touch session: {e}"))?;
 
     Ok(())
 }
@@ -363,10 +363,10 @@ pub fn touch_session(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<()
 pub fn delete_session(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     conn.execute("DELETE FROM chat_sessions WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete session: {}", e))?;
+        .map_err(|e| format!("Failed to delete session: {e}"))?;
 
     Ok(())
 }
@@ -378,14 +378,14 @@ pub fn cleanup_hidden_sessions(
 ) -> Result<usize, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(older_than_days)).to_rfc3339();
 
     // Use transaction to ensure both deletes happen atomically
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("Failed to start transaction: {}", e))?;
+        .map_err(|e| format!("Failed to start transaction: {e}"))?;
 
     // Delete messages from old hidden sessions first
     tx.execute(
@@ -394,7 +394,7 @@ pub fn cleanup_hidden_sessions(
         )",
         params![cutoff],
     )
-    .map_err(|e| format!("Failed to delete hidden session messages: {}", e))?;
+    .map_err(|e| format!("Failed to delete hidden session messages: {e}"))?;
 
     // Delete the hidden sessions
     let deleted = tx
@@ -402,10 +402,10 @@ pub fn cleanup_hidden_sessions(
             "DELETE FROM chat_sessions WHERE is_hidden = 1 AND created_at < ?1",
             params![cutoff],
         )
-        .map_err(|e| format!("Failed to delete hidden sessions: {}", e))?;
+        .map_err(|e| format!("Failed to delete hidden sessions: {e}"))?;
 
     tx.commit()
-        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+        .map_err(|e| format!("Failed to commit transaction: {e}"))?;
 
     Ok(deleted)
 }
@@ -424,19 +424,19 @@ pub fn add_message(
 ) -> Result<i64, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+        .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
     tx.execute(
         "INSERT INTO chat_messages (session_id, role, content, tool_calls, created_at) 
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![session_id, role, content, tool_calls, &now],
     )
-    .map_err(|e| format!("Failed to insert message: {}", e))?;
+    .map_err(|e| format!("Failed to insert message: {e}"))?;
 
     let message_id = tx.last_insert_rowid();
 
@@ -445,10 +445,10 @@ pub fn add_message(
         "UPDATE chat_sessions SET updated_at = ?1 WHERE id = ?2",
         params![&now, session_id],
     )
-    .map_err(|e| format!("Failed to update session timestamp: {}", e))?;
+    .map_err(|e| format!("Failed to update session timestamp: {e}"))?;
 
     tx.commit()
-        .map_err(|e| format!("Failed to commit message transaction: {}", e))?;
+        .map_err(|e| format!("Failed to commit message transaction: {e}"))?;
 
     Ok(message_id)
 }
@@ -460,7 +460,7 @@ pub fn get_messages(
 ) -> Result<Vec<ChatMessage>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -469,7 +469,7 @@ pub fn get_messages(
              WHERE session_id = ?1 
              ORDER BY created_at ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let messages = stmt
         .query_map(params![session_id], |row| {
@@ -482,9 +482,9 @@ pub fn get_messages(
                 created_at: row.get(5)?,
             })
         })
-        .map_err(|e| format!("Failed to query messages: {}", e))?
+        .map_err(|e| format!("Failed to query messages: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect messages: {}", e))?;
+        .map_err(|e| format!("Failed to collect messages: {e}"))?;
 
     Ok(messages)
 }
@@ -496,7 +496,7 @@ pub fn get_message(
 ) -> Result<Option<ChatMessage>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -504,7 +504,7 @@ pub fn get_message(
              FROM chat_messages 
              WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let message = stmt
         .query_row(params![id], |row| {
@@ -518,7 +518,7 @@ pub fn get_message(
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query message: {}", e))?;
+        .map_err(|e| format!("Failed to query message: {e}"))?;
 
     Ok(message)
 }
@@ -527,10 +527,10 @@ pub fn get_message(
 pub fn delete_message(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     conn.execute("DELETE FROM chat_messages WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete message: {}", e))?;
+        .map_err(|e| format!("Failed to delete message: {e}"))?;
 
     Ok(())
 }
@@ -550,7 +550,7 @@ pub fn add_tool_execution(
 ) -> Result<i64, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
@@ -559,7 +559,7 @@ pub fn add_tool_execution(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![message_id, tool_name, tool_input, tool_output, status, &now],
     )
-    .map_err(|e| format!("Failed to insert tool execution: {}", e))?;
+    .map_err(|e| format!("Failed to insert tool execution: {e}"))?;
 
     let id = conn.last_insert_rowid();
     Ok(id)
@@ -572,7 +572,7 @@ pub fn get_tool_executions(
 ) -> Result<Vec<ToolExecution>, String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let mut stmt = conn
         .prepare(
@@ -581,7 +581,7 @@ pub fn get_tool_executions(
              WHERE message_id = ?1 
              ORDER BY created_at ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let executions = stmt
         .query_map(params![message_id], |row| {
@@ -595,9 +595,9 @@ pub fn get_tool_executions(
                 created_at: row.get(6)?,
             })
         })
-        .map_err(|e| format!("Failed to query tool executions: {}", e))?
+        .map_err(|e| format!("Failed to query tool executions: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect tool executions: {}", e))?;
+        .map_err(|e| format!("Failed to collect tool executions: {e}"))?;
 
     Ok(executions)
 }
@@ -611,13 +611,13 @@ pub fn update_tool_execution(
 ) -> Result<(), String> {
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     conn.execute(
         "UPDATE tool_executions SET tool_output = ?1, status = ?2 WHERE id = ?3",
         params![tool_output, status, id],
     )
-    .map_err(|e| format!("Failed to update tool execution: {}", e))?;
+    .map_err(|e| format!("Failed to update tool execution: {e}"))?;
 
     Ok(())
 }
@@ -634,7 +634,7 @@ where
     let pool = get_chat_pool().ok_or("Chat database pool not initialized")?;
     let conn = pool
         .get()
-        .map_err(|e| format!("Failed to get connection from pool: {}", e))?;
+        .map_err(|e| format!("Failed to get connection from pool: {e}"))?;
     f(&*conn)
 }
 

@@ -110,7 +110,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             }
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {}", e));
+                            return Err(format!("Failed to update database: {e}"));
                         }
                     }
                 }
@@ -288,7 +288,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 }
                             }
                             Err(e) => {
-                                return Err(format!("Failed to update database: {}", e));
+                                return Err(format!("Failed to update database: {e}"));
                             }
                         }
                     }
@@ -330,7 +330,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             effects.db_updated = true;
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {}", e));
+                            return Err(format!("Failed to update database: {e}"));
                         }
                     }
                 }
@@ -395,7 +395,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             }
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {}", e));
+                            return Err(format!("Failed to update database: {e}"));
                         }
                     }
                 }
@@ -652,7 +652,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // IMPORTANT: Do NOT release semaphore permit - position still open!
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {}", e));
+                            return Err(format!("Failed to update database: {e}"));
                         }
                     }
                 }
@@ -873,7 +873,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // IMPORTANT: Do NOT consume another semaphore permit - same position!
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {}", e));
+                            return Err(format!("Failed to update database: {e}"));
                         }
                     }
                 }

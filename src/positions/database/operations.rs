@@ -37,7 +37,7 @@ impl PositionsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create positions connection pool: {}", e))?;
+            .map_err(|e| format!("Failed to create positions connection pool: {e}"))?;
 
         let mut db = PositionsDatabase {
             pool,
@@ -65,25 +65,25 @@ impl PositionsDatabase {
 
         // Create all tables
         conn.execute(SCHEMA_POSITIONS, [])
-            .map_err(|e| format!("Failed to create positions table: {}", e))?;
+            .map_err(|e| format!("Failed to create positions table: {e}"))?;
 
         conn.execute(SCHEMA_POSITION_STATES, [])
-            .map_err(|e| format!("Failed to create position_states table: {}", e))?;
+            .map_err(|e| format!("Failed to create position_states table: {e}"))?;
 
         conn.execute(SCHEMA_POSITION_EXITS, [])
-            .map_err(|e| format!("Failed to create position_exits table: {}", e))?;
+            .map_err(|e| format!("Failed to create position_exits table: {e}"))?;
 
         conn.execute(SCHEMA_POSITION_ENTRIES, [])
-            .map_err(|e| format!("Failed to create position_entries table: {}", e))?;
+            .map_err(|e| format!("Failed to create position_entries table: {e}"))?;
 
         conn.execute(SCHEMA_POSITION_TRACKING, [])
-            .map_err(|e| format!("Failed to create position_tracking table: {}", e))?;
+            .map_err(|e| format!("Failed to create position_tracking table: {e}"))?;
 
         conn.execute(SCHEMA_POSITION_METADATA, [])
-            .map_err(|e| format!("Failed to create position_metadata table: {}", e))?;
+            .map_err(|e| format!("Failed to create position_metadata table: {e}"))?;
 
         conn.execute(SCHEMA_TOKEN_SNAPSHOTS, [])
-            .map_err(|e| format!("Failed to create token_snapshots table: {}", e))?;
+            .map_err(|e| format!("Failed to create token_snapshots table: {e}"))?;
 
         // Migrate existing database to add PnL fields if needed
         // Check if migration is needed by attempting to add columns
@@ -110,9 +110,9 @@ impl PositionsDatabase {
                     // Real error - this is critical and should be logged
                     crate::logger::error(
                         crate::logger::LogTag::Positions,
-                        &format!("CRITICAL: Failed to migrate PnL columns: {}", e),
+                        &format!("CRITICAL: Failed to migrate PnL columns: {e}"),
                     );
-                    return Err(format!("Database migration failed: {}", e));
+                    return Err(format!("Database migration failed: {e}"));
                 }
             }
         }
@@ -120,7 +120,7 @@ impl PositionsDatabase {
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {
             conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create positions index: {}", e))?;
+                .map_err(|e| format!("Failed to create positions index: {e}"))?;
         }
 
         // Set schema version
@@ -128,16 +128,16 @@ impl PositionsDatabase {
             "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
             params![self.schema_version.to_string()],
         )
-        .map_err(|e| format!("Failed to set positions schema version: {}", e))?;
+        .map_err(|e| format!("Failed to set positions schema version: {e}"))?;
 
         // Store current wallet address in metadata
         let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
         conn.execute(
             "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('current_wallet', ?1)",
             params![wallet_address],
         )
-        .map_err(|e| format!("Failed to set current_wallet in metadata: {}", e))?;
+        .map_err(|e| format!("Failed to set current_wallet in metadata: {e}"))?;
 
         // Run migrations for existing positions (one-time data migration)
         self.run_data_migrations(&conn, log_initialization)?;
@@ -236,7 +236,7 @@ impl PositionsDatabase {
     fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.pool
             .get()
-            .map_err(|e| format!("Failed to get positions database connection: {}", e))
+            .map_err(|e| format!("Failed to get positions database connection: {e}"))
     }
 
     /// Insert new position and return the assigned ID
@@ -320,7 +320,7 @@ impl PositionsDatabase {
                 ],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("Failed to insert position: {}", e))?;
+            .map_err(|e| format!("Failed to insert position: {e}"))?;
 
         // Record initial state as Open
         self.record_state_change(position_id, PositionState::Open, Some("Position created"))
@@ -434,7 +434,7 @@ impl PositionsDatabase {
                     position.last_dca_time.map(|t| t.to_rfc3339())
                 ],
             )
-            .map_err(|e| format!("Failed to update position: {}", e))?;
+            .map_err(|e| format!("Failed to update position: {e}"))?;
 
         if rows_affected == 0 {
             return Err(format!("Position with ID {} not found", position_id));
@@ -495,7 +495,7 @@ impl PositionsDatabase {
                     price_lowest
                 ],
             )
-            .map_err(|e| format!("Failed to update position prices: {}", e))?;
+            .map_err(|e| format!("Failed to update position prices: {e}"))?;
 
         if rows_affected == 0 {
             return Err(format!(
@@ -516,11 +516,11 @@ impl PositionsDatabase {
         // Use prepare and query since PRAGMA wal_checkpoint returns results
         let mut stmt = conn
             .prepare("PRAGMA wal_checkpoint(FULL);")
-            .map_err(|e| format!("Failed to prepare WAL checkpoint: {}", e))?;
+            .map_err(|e| format!("Failed to prepare WAL checkpoint: {e}"))?;
 
         let _result = stmt
             .query([])
-            .map_err(|e| format!("Failed to execute WAL checkpoint: {}", e))?;
+            .map_err(|e| format!("Failed to execute WAL checkpoint: {e}"))?;
 
         Ok(())
     }
@@ -576,7 +576,7 @@ impl PositionsDatabase {
                 self.row_to_position(row)
             })
             .optional()
-            .map_err(|e| format!("Failed to get position by ID: {}", e))?;
+            .map_err(|e| format!("Failed to get position by ID: {e}"))?;
 
         Ok(result)
     }
@@ -595,7 +595,7 @@ impl PositionsDatabase {
                 self.row_to_position(row)
             })
             .optional()
-            .map_err(|e| format!("Failed to get position by mint: {}", e))?;
+            .map_err(|e| format!("Failed to get position by mint: {e}"))?;
 
         Ok(result)
     }
@@ -627,7 +627,7 @@ impl PositionsDatabase {
                 |row| self.row_to_position(row),
             )
             .optional()
-            .map_err(|e| format!("Failed to get position by entry signature: {}", e))?;
+            .map_err(|e| format!("Failed to get position by entry signature: {e}"))?;
 
         Ok(result)
     }
@@ -650,7 +650,7 @@ impl PositionsDatabase {
                 self.row_to_position(row)
             })
             .optional()
-            .map_err(|e| format!("Failed to get position by exit signature: {}", e))?;
+            .map_err(|e| format!("Failed to get position by exit signature: {e}"))?;
 
         Ok(result)
     }
@@ -677,16 +677,16 @@ impl PositionsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare positions query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare positions query: {e}"))?;
 
         let position_iter = stmt
             .query_map([], |row| self.row_to_position(row))
-            .map_err(|e| format!("Failed to execute positions query: {}", e))?;
+            .map_err(|e| format!("Failed to execute positions query: {e}"))?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
             positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
         }
 
         Ok(positions)
@@ -704,16 +704,16 @@ impl PositionsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare open positions query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare open positions query: {e}"))?;
 
         let position_iter = stmt
             .query_map(params![wallet_address], |row| self.row_to_position(row))
-            .map_err(|e| format!("Failed to execute open positions query: {}", e))?;
+            .map_err(|e| format!("Failed to execute open positions query: {e}"))?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
             positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
         }
 
         Ok(positions)
@@ -731,16 +731,16 @@ impl PositionsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare closed positions query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare closed positions query: {e}"))?;
 
         let position_iter = stmt
             .query_map(params![wallet_address], |row| self.row_to_position(row))
-            .map_err(|e| format!("Failed to execute closed positions query: {}", e))?;
+            .map_err(|e| format!("Failed to execute closed positions query: {e}"))?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
             positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
         }
 
         Ok(positions)
@@ -761,19 +761,19 @@ impl PositionsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare closed positions since query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare closed positions since query: {e}"))?;
 
         let since_str = since.to_rfc3339();
         let position_iter = stmt
             .query_map(params![wallet_address, since_str], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute closed positions since query: {}", e))?;
+            .map_err(|e| format!("Failed to execute closed positions since query: {e}"))?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
             positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
         }
 
         Ok(positions)
@@ -795,12 +795,12 @@ impl PositionsDatabase {
        AND datetime(exit_time) >= datetime(?2)
       "#,
             )
-            .map_err(|e| format!("Failed to prepare closed position count query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare closed position count query: {e}"))?;
 
         let since_str = since.to_rfc3339();
         let count: i64 = stmt
             .query_row(params![wallet_address, since_str], |row| row.get(0))
-            .map_err(|e| format!("Failed to execute closed position count query: {}", e))?;
+            .map_err(|e| format!("Failed to execute closed position count query: {e}"))?;
 
         Ok(count)
     }
@@ -890,7 +890,7 @@ impl PositionsDatabase {
                     win_rate,
                 })
             })
-            .map_err(|e| format!("Failed to execute period stats query: {}", e))?
+            .map_err(|e| format!("Failed to execute period stats query: {e}"))?
         } else {
             conn.query_row(query, params![wallet_address, start_str], |row| {
                 let trade_count: i64 = row.get(0)?;
@@ -918,7 +918,7 @@ impl PositionsDatabase {
                     win_rate,
                 })
             })
-            .map_err(|e| format!("Failed to execute period stats query: {}", e))?
+            .map_err(|e| format!("Failed to execute period stats query: {e}"))?
         };
 
         Ok(stats)
@@ -941,13 +941,13 @@ impl PositionsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare recent closed positions query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare recent closed positions query: {e}"))?;
 
         let rows = stmt
             .query_map(params![wallet_address, mint, limit as i64], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute recent closed positions query: {}", e))?;
+            .map_err(|e| format!("Failed to execute recent closed positions query: {e}"))?;
 
         let mut positions = Vec::new();
         for row in rows {
@@ -979,7 +979,7 @@ impl PositionsDatabase {
       LIMIT ?3
       "#,
             )
-            .map_err(|e| format!("Failed to prepare recent closed exit prices query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare recent closed exit prices query: {e}"))?;
 
         let mut out: Vec<(Option<f64>, Option<f64>)> = Vec::new();
         let rows = stmt
@@ -988,7 +988,7 @@ impl PositionsDatabase {
                 let eff_exit_p: Option<f64> = row.get(1).ok();
                 Ok((exit_p, eff_exit_p))
             })
-            .map_err(|e| format!("Failed to execute recent closed exit prices query: {}", e))?;
+            .map_err(|e| format!("Failed to execute recent closed exit prices query: {e}"))?;
         for r in rows {
             if let Ok(v) = r {
                 out.push(v);
@@ -1032,16 +1032,16 @@ impl PositionsDatabase {
       ORDER BY p.entry_time DESC
       "#
       )
-      .map_err(|e| format!("Failed to prepare positions by state query: {}", e))?;
+      .map_err(|e| format!("Failed to prepare positions by state query: {e}"))?;
 
         let position_iter = stmt
             .query_map(params![state.to_string()], |row| self.row_to_position(row))
-            .map_err(|e| format!("Failed to execute positions by state query: {}", e))?;
+            .map_err(|e| format!("Failed to execute positions by state query: {e}"))?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
             positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
         }
 
         Ok(positions)
@@ -1070,16 +1070,16 @@ impl PositionsDatabase {
       ORDER BY entry_time DESC
       "#,
             )
-            .map_err(|e| format!("Failed to prepare unverified positions query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare unverified positions query: {e}"))?;
 
         let position_iter = stmt
             .query_map([], |row| self.row_to_position(row))
-            .map_err(|e| format!("Failed to execute unverified positions query: {}", e))?;
+            .map_err(|e| format!("Failed to execute unverified positions query: {e}"))?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
             positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
         }
 
         Ok(positions)
@@ -1091,7 +1091,7 @@ impl PositionsDatabase {
 
         let rows_affected = conn
             .execute("DELETE FROM positions WHERE id = ?1", params![id])
-            .map_err(|e| format!("Failed to delete position: {}", e))?;
+            .map_err(|e| format!("Failed to delete position: {e}"))?;
 
         Ok(rows_affected > 0)
     }
@@ -1108,7 +1108,7 @@ impl PositionsDatabase {
                 "DELETE FROM positions WHERE entry_transaction_signature = ?1",
                 params![signature],
             )
-            .map_err(|e| format!("Failed to delete position by entry signature: {}", e))?;
+            .map_err(|e| format!("Failed to delete position by entry signature: {e}"))?;
 
         if rows_affected > 0 {
             logger::info(
@@ -1146,7 +1146,7 @@ impl PositionsDatabase {
       "INSERT INTO position_states (position_id, state, changed_at, reason) VALUES (?1, ?2, ?3, ?4)",
       params![position_id, state.to_string(), changed_at, reason],
     )
-    .map_err(|e| format!("Failed to record state change: {}", e))?;
+    .map_err(|e| format!("Failed to record state change: {e}"))?;
 
         logger::debug(
             LogTag::Positions,
@@ -1170,7 +1170,7 @@ impl PositionsDatabase {
       .prepare(
         "SELECT position_id, state, changed_at, reason FROM position_states WHERE position_id = ?1 ORDER BY changed_at DESC"
       )
-      .map_err(|e| format!("Failed to prepare state history query: {}", e))?;
+      .map_err(|e| format!("Failed to prepare state history query: {e}"))?;
 
         let history_iter = stmt
             .query_map(params![position_id], |row| {
@@ -1201,12 +1201,12 @@ impl PositionsDatabase {
                     reason: row.get(3)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute state history query: {}", e))?;
+            .map_err(|e| format!("Failed to execute state history query: {e}"))?;
 
         let mut history = Vec::new();
         for history_result in history_iter {
             history.push(
-                history_result.map_err(|e| format!("Failed to parse state history row: {}", e))?,
+                history_result.map_err(|e| format!("Failed to parse state history row: {e}"))?,
             );
         }
 
@@ -1236,7 +1236,7 @@ impl PositionsDatabase {
           tracking.tracked_at.to_rfc3339()
         ]
       )
-      .map_err(|e| format!("Failed to record position tracking: {}", e))?;
+      .map_err(|e| format!("Failed to record position tracking: {e}"))?;
 
         Ok(())
     }
@@ -1259,7 +1259,7 @@ impl PositionsDatabase {
       LIMIT ?2
       "#,
             )
-            .map_err(|e| format!("Failed to prepare tracking query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare tracking query: {e}"))?;
 
         let tracking_iter = stmt
             .query_map(params![position_id, limit], |row| {
@@ -1284,12 +1284,12 @@ impl PositionsDatabase {
                     tracked_at,
                 })
             })
-            .map_err(|e| format!("Failed to execute tracking query: {}", e))?;
+            .map_err(|e| format!("Failed to execute tracking query: {e}"))?;
 
         let mut tracking_data = Vec::new();
         for tracking_result in tracking_iter {
             tracking_data
-                .push(tracking_result.map_err(|e| format!("Failed to parse tracking row: {}", e))?);
+                .push(tracking_result.map_err(|e| format!("Failed to parse tracking row: {e}"))?);
         }
 
         Ok(tracking_data)
@@ -1306,7 +1306,7 @@ impl PositionsDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count total positions: {}", e))?;
+            .map_err(|e| format!("Failed to count total positions: {e}"))?;
 
         let open_positions: i64 = conn
       .query_row(
@@ -1314,7 +1314,7 @@ impl PositionsDatabase {
         params![wallet_address],
         |row| row.get(0),
       )
-      .map_err(|e| format!("Failed to count open positions: {}", e))?;
+      .map_err(|e| format!("Failed to count open positions: {e}"))?;
 
         let closed_positions: i64 = conn
       .query_row(
@@ -1322,7 +1322,7 @@ impl PositionsDatabase {
         params![wallet_address],
         |row| row.get(0),
       )
-      .map_err(|e| format!("Failed to count closed positions: {}", e))?;
+      .map_err(|e| format!("Failed to count closed positions: {e}"))?;
 
         let phantom_positions: i64 = conn
       .query_row(
@@ -1330,7 +1330,7 @@ impl PositionsDatabase {
         params![wallet_address],
         |row| row.get(0),
       )
-      .map_err(|e| format!("Failed to count phantom positions: {}", e))?;
+      .map_err(|e| format!("Failed to count phantom positions: {e}"))?;
 
         let total_state_history: i64 = conn
             .query_row(
@@ -1338,7 +1338,7 @@ impl PositionsDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count state history: {}", e))?;
+            .map_err(|e| format!("Failed to count state history: {e}"))?;
 
         let total_tracking_records: i64 = conn
             .query_row(
@@ -1346,7 +1346,7 @@ impl PositionsDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count tracking records: {}", e))?;
+            .map_err(|e| format!("Failed to count tracking records: {e}"))?;
 
         // Get database file size
         let database_size = std::fs::metadata(&self.database_path)
@@ -1374,7 +1374,7 @@ impl PositionsDatabase {
 
         let conn = self.get_connection()?;
         conn.execute("VACUUM", [])
-            .map_err(|e| format!("Failed to vacuum positions database: {}", e))?;
+            .map_err(|e| format!("Failed to vacuum positions database: {e}"))?;
 
         logger::info(
             LogTag::Positions,
@@ -1392,7 +1392,7 @@ impl PositionsDatabase {
 
         let conn = self.get_connection()?;
         conn.execute("ANALYZE", [])
-            .map_err(|e| format!("Failed to analyze positions database: {}", e))?;
+            .map_err(|e| format!("Failed to analyze positions database: {e}"))?;
 
         logger::info(
             LogTag::Positions,
@@ -1479,7 +1479,7 @@ impl PositionsDatabase {
           snapshot.data_freshness_score
         ]
       )
-      .map_err(|e| format!("Failed to insert token snapshot: {}", e))?;
+      .map_err(|e| format!("Failed to insert token snapshot: {e}"))?;
 
         let snapshot_id = conn.last_insert_rowid();
 
@@ -1518,17 +1518,17 @@ impl PositionsDatabase {
       ORDER BY snapshot_time ASC
       "#,
             )
-            .map_err(|e| format!("Failed to prepare token snapshots query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare token snapshots query: {e}"))?;
 
         let snapshot_iter = stmt
             .query_map(params![position_id], |row| self.row_to_token_snapshot(row))
-            .map_err(|e| format!("Failed to execute token snapshots query: {}", e))?;
+            .map_err(|e| format!("Failed to execute token snapshots query: {e}"))?;
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
             snapshots.push(
                 snapshot_result
-                    .map_err(|e| format!("Failed to parse token snapshot row: {}", e))?,
+                    .map_err(|e| format!("Failed to parse token snapshot row: {e}"))?,
             );
         }
 
@@ -1561,14 +1561,14 @@ impl PositionsDatabase {
       LIMIT 1
       "#,
             )
-            .map_err(|e| format!("Failed to prepare token snapshot query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare token snapshot query: {e}"))?;
 
         let result = stmt
             .query_row(params![position_id, snapshot_type], |row| {
                 self.row_to_token_snapshot(row)
             })
             .optional()
-            .map_err(|e| format!("Failed to execute token snapshot query: {}", e))?;
+            .map_err(|e| format!("Failed to execute token snapshot query: {e}"))?;
 
         Ok(result)
     }

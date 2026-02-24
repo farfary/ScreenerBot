@@ -350,7 +350,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
         }
         Err(e) => {
-            let error_msg = format!("Error getting transaction: {}", e);
+            let error_msg = format!("Error getting transaction: {e}");
 
             // Event-aware fallback: if events show a decisive outcome, act accordingly
             if let Ok(events) = crate::events::search_events(
@@ -748,7 +748,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     Err(e) => {
                         logger::warning(
                             LogTag::Positions,
-                            &format!("Could not verify residual balance after exit: {}", e),
+                            &format!("Could not verify residual balance after exit: {e}"),
                         );
                         // Be conservative, retry later
                         return VerificationOutcome::RetryTransient(

@@ -58,7 +58,7 @@ impl EventsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(write_manager)
-            .map_err(|e| format!("Failed to create events write pool: {}", e))?;
+            .map_err(|e| format!("Failed to create events write pool: {e}"))?;
 
         // Create read pool
         let read_pool = Pool::builder()
@@ -68,7 +68,7 @@ impl EventsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(read_manager)
-            .map_err(|e| format!("Failed to create events read pool: {}", e))?;
+            .map_err(|e| format!("Failed to create events read pool: {e}"))?;
 
         let mut db = EventsDatabase {
             write_pool,
@@ -108,7 +108,7 @@ impl EventsDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create events table: {}", e))?;
+        .map_err(|e| format!("Failed to create events table: {e}"))?;
 
         // Create optimized indexes
         conn.execute(
@@ -116,35 +116,35 @@ impl EventsDatabase {
              ON events(category, event_time DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create category-time index: {}", e))?;
+        .map_err(|e| format!("Failed to create category-time index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_reference_id 
              ON events(reference_id)",
             [],
         )
-        .map_err(|e| format!("Failed to create reference_id index: {}", e))?;
+        .map_err(|e| format!("Failed to create reference_id index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_mint 
              ON events(mint)",
             [],
         )
-        .map_err(|e| format!("Failed to create mint index: {}", e))?;
+        .map_err(|e| format!("Failed to create mint index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_severity_time 
              ON events(severity, event_time DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create severity-time index: {}", e))?;
+        .map_err(|e| format!("Failed to create severity-time index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_created_at 
              ON events(created_at)",
             [],
         )
-        .map_err(|e| format!("Failed to create created_at index: {}", e))?;
+        .map_err(|e| format!("Failed to create created_at index: {e}"))?;
 
         // Keyset and composite indexes for pagination and filters
         conn.execute(
@@ -152,21 +152,21 @@ impl EventsDatabase {
              ON events(id DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create id desc index: {}", e))?;
+        .map_err(|e| format!("Failed to create id desc index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_category_severity_id 
              ON events(category, severity, id DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create category-severity-id index: {}", e))?;
+        .map_err(|e| format!("Failed to create category-severity-id index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_mint_id 
              ON events(mint, id DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create mint-id index: {}", e))?;
+        .map_err(|e| format!("Failed to create mint-id index: {e}"))?;
 
         Ok(())
     }
@@ -175,14 +175,14 @@ impl EventsDatabase {
     fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.write_pool
             .get()
-            .map_err(|e| format!("Failed to get events write connection: {}", e))
+            .map_err(|e| format!("Failed to get events write connection: {e}"))
     }
 
     /// Get read connection from pool
     fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.read_pool
             .get()
-            .map_err(|e| format!("Failed to get events read connection: {}", e))
+            .map_err(|e| format!("Failed to get events read connection: {e}"))
     }
 
     /// Insert a single event
@@ -193,7 +193,7 @@ impl EventsDatabase {
         let category_str = event.category.to_string();
         let severity_str = event.severity.to_string();
         let payload_str = serde_json::to_string(&event.payload)
-            .map_err(|e| format!("Failed to serialize event payload: {}", e))?;
+            .map_err(|e| format!("Failed to serialize event payload: {e}"))?;
         let message_short: Option<String> = event
             .payload
             .get("message")
@@ -223,7 +223,7 @@ impl EventsDatabase {
                     payload_str
                 ],
             )
-            .map_err(|e| format!("Failed to insert event: {}", e))?;
+            .map_err(|e| format!("Failed to insert event: {e}"))?;
 
         Ok(conn.last_insert_rowid())
     }
@@ -238,7 +238,7 @@ impl EventsDatabase {
 
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| format!("Failed to start transaction: {}", e))?;
+            .map_err(|e| format!("Failed to start transaction: {e}"))?;
 
         {
             let mut stmt = tx
@@ -248,14 +248,14 @@ impl EventsDatabase {
                         mint, reference_id, message_short, json_payload
                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 )
-                .map_err(|e| format!("Failed to prepare insert statement: {}", e))?;
+                .map_err(|e| format!("Failed to prepare insert statement: {e}"))?;
 
             for event in events.iter_mut() {
                 let event_time_str = event.event_time.to_rfc3339();
                 let category_str = event.category.to_string();
                 let severity_str = event.severity.to_string();
                 let payload_str = serde_json::to_string(&event.payload)
-                    .map_err(|e| format!("Failed to serialize event payload: {}", e))?;
+                    .map_err(|e| format!("Failed to serialize event payload: {e}"))?;
                 let message_short: Option<String> = event
                     .payload
                     .get("message")
@@ -278,7 +278,7 @@ impl EventsDatabase {
                     message_short,
                     payload_str
                 ])
-                .map_err(|e| format!("Failed to execute insert: {}", e))?;
+                .map_err(|e| format!("Failed to execute insert: {e}"))?;
 
                 let inserted_id = tx.last_insert_rowid();
                 event.id = Some(inserted_id);
@@ -289,7 +289,7 @@ impl EventsDatabase {
         }
 
         tx.commit()
-            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
 
         Ok(())
     }
@@ -319,7 +319,7 @@ impl EventsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare select statement: {e}"))?;
 
         let event_iter = stmt
             .query_map(
@@ -359,11 +359,11 @@ impl EventsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute query: {}", e))?;
+            .map_err(|e| format!("Failed to execute query: {e}"))?;
 
         let mut events = Vec::new();
         for event_result in event_iter {
-            events.push(event_result.map_err(|e| format!("Failed to parse event row: {}", e))?);
+            events.push(event_result.map_err(|e| format!("Failed to parse event row: {e}"))?);
         }
 
         Ok(events)
@@ -382,7 +382,7 @@ impl EventsDatabase {
                 "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at
               FROM events WHERE reference_id = ?1 ORDER BY id DESC LIMIT ?2"
             )
-            .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare select statement: {e}"))?;
 
         let event_iter = stmt
             .query_map(params![reference_id, limit as i64], |row| {
@@ -415,11 +415,11 @@ impl EventsDatabase {
                         .map(|dt| dt.with_timezone(&Utc)),
                 })
             })
-            .map_err(|e| format!("Failed to execute query: {}", e))?;
+            .map_err(|e| format!("Failed to execute query: {e}"))?;
 
         let mut events = Vec::new();
         for event_result in event_iter {
-            events.push(event_result.map_err(|e| format!("Failed to parse event row: {}", e))?);
+            events.push(event_result.map_err(|e| format!("Failed to parse event row: {e}"))?);
         }
 
         Ok(events)
@@ -434,7 +434,7 @@ impl EventsDatabase {
                 "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at
               FROM events WHERE mint = ?1 ORDER BY id DESC LIMIT ?2"
             )
-            .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare select statement: {e}"))?;
 
         let event_iter = stmt
             .query_map(params![mint, limit as i64], |row| {
@@ -467,11 +467,11 @@ impl EventsDatabase {
                         .map(|dt| dt.with_timezone(&Utc)),
                 })
             })
-            .map_err(|e| format!("Failed to execute query: {}", e))?;
+            .map_err(|e| format!("Failed to execute query: {e}"))?;
 
         let mut events = Vec::new();
         for event_result in event_iter {
-            events.push(event_result.map_err(|e| format!("Failed to parse event row: {}", e))?);
+            events.push(event_result.map_err(|e| format!("Failed to parse event row: {e}"))?);
         }
 
         Ok(events)
@@ -494,18 +494,18 @@ impl EventsDatabase {
                  WHERE event_time >= ?1 
                  GROUP BY category",
             )
-            .map_err(|e| format!("Failed to prepare count query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare count query: {e}"))?;
 
         let count_iter = stmt
             .query_map(params![cutoff_str], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
             })
-            .map_err(|e| format!("Failed to execute count query: {}", e))?;
+            .map_err(|e| format!("Failed to execute count query: {e}"))?;
 
         let mut counts = HashMap::new();
         for count_result in count_iter {
             let (category, count) =
-                count_result.map_err(|e| format!("Failed to parse count row: {}", e))?;
+                count_result.map_err(|e| format!("Failed to parse count row: {e}"))?;
             counts.insert(category, count);
         }
 
@@ -524,7 +524,7 @@ impl EventsDatabase {
                 "DELETE FROM events WHERE event_time < ?1",
                 params![cutoff_str],
             )
-            .map_err(|e| format!("Failed to delete old events: {}", e))?;
+            .map_err(|e| format!("Failed to delete old events: {e}"))?;
 
         if deleted_count > 0 {
             logger::info(
@@ -545,7 +545,7 @@ impl EventsDatabase {
         // Total event count
         let total_events: i64 = conn
             .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
-            .map_err(|e| format!("Failed to get total event count: {}", e))?;
+            .map_err(|e| format!("Failed to get total event count: {e}"))?;
         stats.insert("total_events".to_string(), total_events);
 
         // Database file size
@@ -562,7 +562,7 @@ impl EventsDatabase {
                 params![cutoff_24h_str],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get 24h event count: {}", e))?;
+            .map_err(|e| format!("Failed to get 24h event count: {e}"))?;
         stats.insert("events_24h".to_string(), events_24h);
 
         Ok(stats)
@@ -618,7 +618,7 @@ impl EventsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare since query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare since query: {e}"))?;
         let rows = stmt
             .query_map(
                 bind.iter()
@@ -656,11 +656,11 @@ impl EventsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute since query: {}", e))?;
+            .map_err(|e| format!("Failed to execute since query: {e}"))?;
 
         let mut events = Vec::new();
         for r in rows {
-            events.push(r.map_err(|e| format!("Failed to parse row: {}", e))?);
+            events.push(r.map_err(|e| format!("Failed to parse row: {e}"))?);
         }
         Ok(events)
     }
@@ -713,7 +713,7 @@ impl EventsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare before query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare before query: {e}"))?;
         let rows = stmt
             .query_map(
                 bind.iter()
@@ -751,11 +751,11 @@ impl EventsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute before query: {}", e))?;
+            .map_err(|e| format!("Failed to execute before query: {e}"))?;
 
         let mut events = Vec::new();
         for r in rows {
-            events.push(r.map_err(|e| format!("Failed to parse row: {}", e))?);
+            events.push(r.map_err(|e| format!("Failed to parse row: {e}"))?);
         }
         Ok(events)
     }
@@ -853,7 +853,7 @@ impl EventsDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare head query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare head query: {e}"))?;
         let rows = stmt
             .query_map(
                 bind.iter()
@@ -891,12 +891,12 @@ impl EventsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute head query: {}", e))?;
+            .map_err(|e| format!("Failed to execute head query: {e}"))?;
 
         let mut events = Vec::new();
         let mut max_id: i64 = 0;
         for r in rows {
-            let e = r.map_err(|e| format!("Failed to parse row: {}", e))?;
+            let e = r.map_err(|e| format!("Failed to parse row: {e}"))?;
             if let Some(id) = e.id {
                 if id > max_id {
                     max_id = id;
@@ -1002,7 +1002,7 @@ impl EventsDatabase {
                     .as_slice(),
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count filtered events: {}", e))?;
+            .map_err(|e| format!("Failed to count filtered events: {e}"))?;
 
         Ok(count)
     }

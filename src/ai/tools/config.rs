@@ -42,7 +42,7 @@ impl Tool for GetConfigTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: GetConfigParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         let config = get_config_clone();
@@ -148,7 +148,7 @@ impl Tool for UpdateConfigTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: UpdateConfigParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Update config based on section and key

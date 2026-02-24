@@ -138,7 +138,7 @@ impl Tool for GetPositionTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: GetPositionParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         let position = match positions::get_position_by_id(params.position_id).await {
@@ -181,7 +181,7 @@ impl Tool for GetPositionTool {
 
         match serde_json::to_value(details) {
             Ok(v) => ToolResult::success(v),
-            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            Err(e) => ToolResult::error(format!("Serialization error: {e}")),
         }
     }
 }
@@ -217,12 +217,12 @@ impl Tool for GetBalanceTool {
     async fn execute(&self, _params: serde_json::Value) -> ToolResult {
         let wallet_address = match crate::utils::get_wallet_address() {
             Ok(addr) => addr,
-            Err(e) => return ToolResult::error(format!("Failed to get wallet address: {}", e)),
+            Err(e) => return ToolResult::error(format!("Failed to get wallet address: {e}")),
         };
 
         let balance = match get_sol_balance(&wallet_address).await {
             Ok(b) => b,
-            Err(e) => return ToolResult::error(format!("Failed to get balance: {}", e)),
+            Err(e) => return ToolResult::error(format!("Failed to get balance: {e}")),
         };
 
         let info = BalanceInfo {
@@ -232,7 +232,7 @@ impl Tool for GetBalanceTool {
 
         match serde_json::to_value(info) {
             Ok(v) => ToolResult::success(v),
-            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            Err(e) => ToolResult::error(format!("Serialization error: {e}")),
         }
     }
 }
@@ -287,7 +287,7 @@ impl Tool for GetPnLTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: GetPnLParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         let period = params.period.unwrap_or_else(|| "all".to_string());
@@ -306,7 +306,7 @@ impl Tool for GetPnLTool {
             since.unwrap_or_else(|| chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0).unwrap());
         let stats = match positions::get_period_trading_stats(start_time, None).await {
             Ok(s) => s,
-            Err(e) => return ToolResult::error(format!("Failed to get trading stats: {}", e)),
+            Err(e) => return ToolResult::error(format!("Failed to get trading stats: {e}")),
         };
 
         // Calculate unrealized P&L from open positions
@@ -337,7 +337,7 @@ impl Tool for GetPnLTool {
 
         match serde_json::to_value(pnl_stats) {
             Ok(v) => ToolResult::success(v),
-            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            Err(e) => ToolResult::error(format!("Serialization error: {e}")),
         }
     }
 }

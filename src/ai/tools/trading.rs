@@ -76,7 +76,7 @@ impl Tool for BuyTokenTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: BuyTokenParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Validate mint address format
@@ -109,7 +109,7 @@ impl Tool for BuyTokenTool {
         let result = match manual::manual_buy(&params.mint_address, params.amount_sol).await {
             Ok(r) => r,
             Err(e) => {
-                return ToolResult::error(format!("Buy failed: {}", e));
+                return ToolResult::error(format!("Buy failed: {e}"));
             }
         };
 
@@ -136,7 +136,7 @@ impl Tool for BuyTokenTool {
         if response.success {
             match serde_json::to_value(response) {
                 Ok(v) => ToolResult::success(v),
-                Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+                Err(e) => ToolResult::error(format!("Serialization error: {e}")),
             }
         } else {
             ToolResult::error(response.message)
@@ -193,7 +193,7 @@ impl Tool for SellTokenTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: SellTokenParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Validate percentage
@@ -214,7 +214,7 @@ impl Tool for SellTokenTool {
         {
             Ok(r) => r,
             Err(e) => {
-                return ToolResult::error(format!("Sell failed: {}", e));
+                return ToolResult::error(format!("Sell failed: {e}"));
             }
         };
 
@@ -244,7 +244,7 @@ impl Tool for SellTokenTool {
         if response.success {
             match serde_json::to_value(response) {
                 Ok(v) => ToolResult::success(v),
-                Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+                Err(e) => ToolResult::error(format!("Serialization error: {e}")),
             }
         } else {
             ToolResult::error(response.message)
@@ -294,7 +294,7 @@ impl Tool for ClosePositionTool {
     async fn execute(&self, params: serde_json::Value) -> ToolResult {
         let params: ClosePositionParams = match serde_json::from_value(params) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
         // Get position
@@ -309,7 +309,7 @@ impl Tool for ClosePositionTool {
         let result = match manual::manual_sell(&position.mint, Some(100.0)).await {
             Ok(r) => r,
             Err(e) => {
-                return ToolResult::error(format!("Close position failed: {}", e));
+                return ToolResult::error(format!("Close position failed: {e}"));
             }
         };
 
@@ -333,7 +333,7 @@ impl Tool for ClosePositionTool {
         if response.success {
             match serde_json::to_value(response) {
                 Ok(v) => ToolResult::success(v),
-                Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+                Err(e) => ToolResult::error(format!("Serialization error: {e}")),
             }
         } else {
             ToolResult::error(response.message)

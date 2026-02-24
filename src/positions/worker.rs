@@ -33,7 +33,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
     // Initialize database
     initialize_positions_database()
         .await
-        .map_err(|e| format!("Failed to initialize positions database: {}", e))?;
+        .map_err(|e| format!("Failed to initialize positions database: {e}"))?;
 
     // Load existing positions from database
     match crate::positions::load_all_positions().await {
@@ -119,7 +119,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         Err(e) => {
             logger::warning(
                 LogTag::Positions,
-                &format!("Failed to load positions from database: {}", e),
+                &format!("Failed to load positions from database: {e}"),
             );
         }
     }

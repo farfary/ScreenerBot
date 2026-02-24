@@ -164,7 +164,7 @@ async fn poll_updates(bot: &Bot) {
                         if let Err(e) = handle_callback_query(bot, chat_id, user_id, query).await {
                             logger::error(
                                 LogTag::Telegram,
-                                &format!("Error handling callback: {}", e),
+                                &format!("Error handling callback: {e}"),
                             );
                         }
                     }
@@ -178,7 +178,7 @@ async fn poll_updates(bot: &Bot) {
             // Log error but don't spam - connection issues are normal
             logger::debug(
                 LogTag::Telegram,
-                &format!("Error fetching Telegram updates: {}", e),
+                &format!("Error fetching Telegram updates: {e}"),
             );
         }
     }

@@ -41,7 +41,7 @@ pub async fn scheduler_worker(
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("Failed to clean up hidden sessions: {}", e),
+                    &format!("Failed to clean up hidden sessions: {e}"),
                 );
             }
             _ => {}
@@ -103,7 +103,7 @@ pub async fn scheduler_worker(
                     // No due tasks
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to check due tasks: {}", e));
+                    logger::warning(LogTag::System, &format!("Failed to check due tasks: {e}"));
                 }
             }
         }
@@ -143,14 +143,14 @@ async fn execute_scheduled_task(
     );
     let session_id = chat_db::create_hidden_session(pool, &session_title).map_err(|e| {
         crate::Error::Service(ServiceError::Generic {
-            message: format!("Failed to create session: {}", e),
+            message: format!("Failed to create session: {e}"),
         })
     })?;
 
     // Record run start
     let run_id = scheduled_db::record_run_start(pool, task.id, Some(session_id)).map_err(|e| {
         crate::Error::Service(ServiceError::Generic {
-            message: format!("Failed to record run start: {}", e),
+            message: format!("Failed to record run start: {e}"),
         })
     })?;
 
@@ -203,14 +203,14 @@ async fn execute_scheduled_task(
             )
             .map_err(|e| {
                 crate::Error::Service(ServiceError::Generic {
-                    message: format!("Failed to record run completion: {}", e),
+                    message: format!("Failed to record run completion: {e}"),
                 })
             })?;
 
             // Update task counters
             scheduled_db::update_task_after_run(pool, task.id, true).map_err(|e| {
                 crate::Error::Service(ServiceError::Generic {
-                    message: format!("Failed to update task: {}", e),
+                    message: format!("Failed to update task: {e}"),
                 })
             })?;
 
@@ -247,7 +247,7 @@ async fn execute_scheduled_task(
             ) {
                 logger::warning(
                     LogTag::System,
-                    &format!("Failed to record run completion: {}", e),
+                    &format!("Failed to record run completion: {e}"),
                 );
             }
 
@@ -255,7 +255,7 @@ async fn execute_scheduled_task(
             if let Err(e) = scheduled_db::update_task_after_run(pool, task.id, false) {
                 logger::warning(
                     LogTag::System,
-                    &format!("Failed to update task after run: {}", e),
+                    &format!("Failed to update task after run: {e}"),
                 );
             }
 
@@ -293,14 +293,14 @@ async fn execute_scheduled_task(
             ) {
                 logger::warning(
                     LogTag::System,
-                    &format!("Failed to record run completion: {}", e),
+                    &format!("Failed to record run completion: {e}"),
                 );
             }
 
             if let Err(e) = scheduled_db::update_task_after_run(pool, task.id, false) {
                 logger::warning(
                     LogTag::System,
-                    &format!("Failed to update task after run: {}", e),
+                    &format!("Failed to update task after run: {e}"),
                 );
             }
 
@@ -335,7 +335,7 @@ async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatRes
         .catch_unwind()
         .await
     {
-        Ok(result) => result.map_err(|e| format!("Chat engine error: {}", e)),
+        Ok(result) => result.map_err(|e| format!("Chat engine error: {e}")),
         Err(_) => Err("Chat engine panicked during execution".to_string()),
     }
 }

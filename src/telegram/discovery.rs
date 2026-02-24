@@ -70,7 +70,7 @@ impl DiscoveryService {
                 );
             }
             Err(e) => {
-                return Err(format!("Invalid bot token: {}", e));
+                return Err(format!("Invalid bot token: {e}"));
             }
         }
 
@@ -272,7 +272,7 @@ async fn discovery_poll(bot: &Bot, offset: &Arc<AtomicI64>) {
             // Log error but don't stop polling
             logger::debug(
                 LogTag::Telegram,
-                &format!("Discovery poll error (will retry): {}", e),
+                &format!("Discovery poll error (will retry): {e}"),
             );
             // Brief pause before retry
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;

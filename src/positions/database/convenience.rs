@@ -145,7 +145,7 @@ pub async fn force_database_sync() -> Result<(), String> {
                 ),
                 Err(e) => logger::debug(
                     LogTag::Positions,
-                    &format!("Database synchronization failed: {}", e),
+                    &format!("Database synchronization failed: {e}"),
                 ),
             }
             result
@@ -327,7 +327,7 @@ pub async fn save_exit_record(
     let conn = db
         .pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
@@ -348,7 +348,7 @@ pub async fn save_exit_record(
       fees_lamports.map(|f| f as i64),
     ],
   )
-  .map_err(|e| format!("Failed to save exit record: {}", e))?;
+  .map_err(|e| format!("Failed to save exit record: {e}"))?;
 
     logger::info(
         LogTag::Positions,
@@ -371,7 +371,7 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
     let conn = db
         .pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
@@ -381,7 +381,7 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
        transaction_signature, is_partial, percentage, fees_lamports 
        FROM position_exits WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp DESC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let records = stmt
         .query_map(params![position_id, wallet_address], |row| {
@@ -400,9 +400,9 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
                 fees_lamports: row.get::<_, Option<i64>>(9)?.map(|f| f as u64),
             })
         })
-        .map_err(|e| format!("Failed to query exit records: {}", e))?
+        .map_err(|e| format!("Failed to query exit records: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect exit records: {}", e))?;
+        .map_err(|e| format!("Failed to collect exit records: {e}"))?;
 
     Ok(records)
 }
@@ -426,7 +426,7 @@ pub async fn save_entry_record(
     let conn = db
         .pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
@@ -446,7 +446,7 @@ pub async fn save_entry_record(
       fees_lamports.map(|f| f as i64),
     ],
   )
-  .map_err(|e| format!("Failed to save entry record: {}", e))?;
+  .map_err(|e| format!("Failed to save entry record: {e}"))?;
 
     logger::info(
         LogTag::Positions,
@@ -469,7 +469,7 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
     let conn = db
         .pool
         .get()
-        .map_err(|e| format!("Failed to get connection: {}", e))?;
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
@@ -479,7 +479,7 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
        transaction_signature, is_dca, fees_lamports 
        FROM position_entries WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let records = stmt
         .query_map(params![position_id, wallet_address], |row| {
@@ -497,9 +497,9 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
                 fees_lamports: row.get::<_, Option<i64>>(8)?.map(|f| f as u64),
             })
         })
-        .map_err(|e| format!("Failed to query entry records: {}", e))?
+        .map_err(|e| format!("Failed to query entry records: {e}"))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect entry records: {}", e))?;
+        .map_err(|e| format!("Failed to collect entry records: {e}"))?;
 
     Ok(records)
 }
