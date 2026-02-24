@@ -102,7 +102,7 @@ impl TransactionProcessor {
                     .account_lifecycle
                     .created_accounts
                     .iter()
-                    .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
+                    .filter(|acc| acc.mint.as_deref() == Some(SOL_MINT))
                     .count() as u32,
                 wsol_ata_closures: 0, // ClosedAccount doesn't have mint info, calculate from operations instead
                 total_rent_spent: analysis.ata.rent_summary.total_rent_paid,
@@ -152,7 +152,7 @@ impl TransactionProcessor {
                     .account_lifecycle
                     .created_accounts
                     .iter()
-                    .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
+                    .filter(|acc| acc.mint.as_deref() == Some(SOL_MINT))
                     .map(|acc| acc.rent_paid)
                     .sum(),
                 wsol_rent_recovered: analysis
@@ -169,7 +169,7 @@ impl TransactionProcessor {
                         .account_lifecycle
                         .created_accounts
                         .iter()
-                        .filter(|acc| acc.mint.as_ref() == Some(&SOL_MINT.to_string()))
+                        .filter(|acc| acc.mint.as_deref() == Some(SOL_MINT))
                         .map(|acc| acc.rent_paid)
                         .sum();
                     let recovered: f64 = analysis
@@ -205,7 +205,7 @@ impl TransactionProcessor {
             account_address: op.account_address.clone(),
             token_mint: op.mint.clone().unwrap_or_default(),
             rent_amount: op.rent_amount,
-            is_wsol: op.mint.as_ref() == Some(&SOL_MINT.to_string()),
+            is_wsol: op.mint.as_deref() == Some(SOL_MINT),
             mint: op.mint.clone().unwrap_or_default(),
             rent_cost_sol: Some(op.rent_amount),
           }
