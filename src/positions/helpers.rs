@@ -309,8 +309,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 /// Calculate total fees for a position
 pub fn calculate_position_total_fees(position: &Position) -> f64 {
     // Sum entry and exit fees in SOL (excluding ATA rent from trading costs)
-    let entry_fees_sol = lamports_to_sol(position.entry_fee_lamports.unwrap_or(0));
-    let exit_fees_sol = lamports_to_sol(position.exit_fee_lamports.unwrap_or(0));
+    let entry_fees_sol = lamports_to_sol(position.entry_fee_lamports.unwrap_or_default());
+    let exit_fees_sol = lamports_to_sol(position.exit_fee_lamports.unwrap_or_default());
     entry_fees_sol + exit_fees_sol
 }
 
@@ -698,11 +698,11 @@ pub async fn calculate_split_pnl(
     // Calculate realized P&L from partial exits
     let realized_pnl_sol = if position.total_exited_amount > 0 {
         if let Some(avg_exit_price) = position.average_exit_price {
-            let sol_received = position.sol_received.unwrap_or(0.0);
+            let sol_received = position.sol_received.unwrap_or_default();
             let exit_portion =
                 position.total_exited_amount as f64 / (position.token_amount.unwrap_or(1) as f64);
             let invested_in_exited = position.total_size_sol * exit_portion;
-            let exit_fees = lamports_to_sol(position.exit_fee_lamports.unwrap_or(0));
+            let exit_fees = lamports_to_sol(position.exit_fee_lamports.unwrap_or_default());
             sol_received - invested_in_exited - exit_fees
         } else {
             0.0
@@ -721,7 +721,7 @@ pub async fn calculate_split_pnl(
                     remaining as f64 / (position.token_amount.unwrap_or(1) as f64);
                 let invested_in_remaining = position.total_size_sol * remaining_portion;
                 let entry_fees_portion =
-                    lamports_to_sol(position.entry_fee_lamports.unwrap_or(0)) * remaining_portion;
+                    lamports_to_sol(position.entry_fee_lamports.unwrap_or_default()) * remaining_portion;
                 current_value - invested_in_remaining - entry_fees_portion
             } else {
                 0.0

@@ -52,7 +52,7 @@ pub async fn get_trader_stats() -> Response {
     // Calculate win rate (using pnl_percent for closed positions)
     let winners = recent_closed
         .iter()
-        .filter(|p| p.pnl_percent.unwrap_or(0.0) > 0.0)
+        .filter(|p| p.pnl_percent.unwrap_or_default() > 0.0)
         .count();
     let win_rate_pct = if total_trades > 0 {
         (winners as f64 / total_trades as f64) * 100.0

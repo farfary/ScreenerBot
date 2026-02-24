@@ -298,7 +298,7 @@ async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Respon
     let has_data = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None)
         .await
         .map(|d| !d.is_empty())
-        .unwrap_or(false);
+        .unwrap_or_default();
 
     // Check which timeframes have data
     let mut timeframes_available = Vec::new();

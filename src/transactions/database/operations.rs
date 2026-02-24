@@ -785,7 +785,7 @@ impl TransactionDatabase {
                     .unwrap_or_default();
 
                 // Use sol_delta from the dedicated column (index 24) for the aggregate change
-                let sol_delta: f64 = row.get::<_, Option<f64>>(24)?.unwrap_or(0.0);
+                let sol_delta: f64 = row.get::<_, Option<f64>>(24)?.unwrap_or_default();
 
                 let token_balance_changes_json: Option<String> = row.get(15)?;
                 let token_balance_changes: Vec<TokenBalanceChange> = token_balance_changes_json
@@ -829,7 +829,7 @@ impl TransactionDatabase {
                     .as_ref()
                     .and_then(|json| serde_json::from_str(json).ok());
 
-                let fee_sol: f64 = row.get::<_, Option<f64>>(23)?.unwrap_or(0.0);
+                let fee_sol: f64 = row.get::<_, Option<f64>>(23)?.unwrap_or_default();
 
                 let mut tx = Transaction {
                     signature: row.get(0)?,
@@ -844,8 +844,8 @@ impl TransactionDatabase {
                     fee_sol,
                     fee_lamports: row.get(7)?,
                     compute_units_consumed: row.get(8)?,
-                    instructions_count: row.get(9).unwrap_or(0),
-                    accounts_count: row.get(10).unwrap_or(0),
+                    instructions_count: row.get(9).unwrap_or_default(),
+                    accounts_count: row.get(10).unwrap_or_default(),
                     sol_balance_change: sol_delta,
                     sol_balance_changes,
                     token_transfers,

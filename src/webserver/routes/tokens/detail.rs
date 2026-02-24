@@ -179,7 +179,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                     .collect(),
                 is_canonical: canonical_pool_id
                     .map(|canonical| canonical == pool.pool_id)
-                    .unwrap_or(false),
+                    .unwrap_or_default(),
                 last_updated_unix,
             }
         })

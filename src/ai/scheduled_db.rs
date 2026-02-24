@@ -693,8 +693,8 @@ pub fn calculate_next_run(
             let days_str = parts[0];
             let time_str = if parts.len() > 1 { parts[1] } else { "00:00" };
             let time_parts: Vec<&str> = time_str.splitn(2, ':').collect();
-            let hour: u32 = time_parts.first().unwrap_or(&"0").parse().unwrap_or(0);
-            let minute: u32 = time_parts.get(1).unwrap_or(&"0").parse().unwrap_or(0);
+            let hour: u32 = time_parts.first().unwrap_or(&"0").parse().unwrap_or_default();
+            let minute: u32 = time_parts.get(1).unwrap_or(&"0").parse().unwrap_or_default();
 
             let day_names: Vec<&str> = days_str.split(',').map(|s| s.trim()).collect();
             let target_weekdays: Vec<chrono::Weekday> = day_names
@@ -949,7 +949,7 @@ pub fn get_automation_stats(
         .query_row("SELECT COUNT(*) FROM ai_scheduled_tasks", [], |row| {
             row.get(0)
         })
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let active_tasks: i64 = conn
         .query_row(
@@ -957,11 +957,11 @@ pub fn get_automation_stats(
             [],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let total_runs: i64 = conn
         .query_row("SELECT COUNT(*) FROM ai_task_runs", [], |row| row.get(0))
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let successful_runs: i64 = conn
         .query_row(
@@ -969,7 +969,7 @@ pub fn get_automation_stats(
             [],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let failed_runs: i64 = conn
         .query_row(
@@ -977,7 +977,7 @@ pub fn get_automation_stats(
             [],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let avg_duration: f64 = conn
         .query_row(
@@ -985,7 +985,7 @@ pub fn get_automation_stats(
             [],
             |row| row.get(0),
         )
-        .unwrap_or(0.0);
+        .unwrap_or_default();
 
     // Runs in last 24 hours
     let runs_today: i64 = conn
@@ -994,7 +994,7 @@ pub fn get_automation_stats(
             [],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .unwrap_or_default();
 
     let success_rate = if total_runs > 0 {
         (successful_runs as f64 / total_runs as f64) * 100.0

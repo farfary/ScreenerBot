@@ -336,7 +336,7 @@ async fn detect_fee_anomalies(
         .meta
         .as_ref()
         .map(|m| (m.fee as f64) / 1_000_000_000.0)
-        .unwrap_or(0.0);
+        .unwrap_or_default();
 
     // Check for unusually high fees
     if base_fee > 0.01 {

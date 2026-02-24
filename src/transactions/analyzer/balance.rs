@@ -321,8 +321,8 @@ async fn extract_token_balance_changes(
         let pre_amount = pre_map.get(&(account_index, mint.clone()));
         let post_amount = post_map.get(&(account_index, mint.clone()));
 
-        let pre_ui = pre_amount.and_then(|a| a.ui_amount).unwrap_or(0.0);
-        let post_ui = post_amount.and_then(|a| a.ui_amount).unwrap_or(0.0);
+        let pre_ui = pre_amount.and_then(|a| a.ui_amount).unwrap_or_default();
+        let post_ui = post_amount.and_then(|a| a.ui_amount).unwrap_or_default();
 
         if (pre_ui - post_ui).abs() > f64::EPSILON {
             let change = post_ui - pre_ui;

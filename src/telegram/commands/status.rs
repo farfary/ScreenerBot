@@ -71,8 +71,8 @@ pub async fn handle_positions_command() -> String {
     let mut total_pnl = 0.0;
 
     for (i, pos) in positions.iter().take(10).enumerate() {
-        let pnl_pct = pos.unrealized_pnl_percent.unwrap_or(0.0);
-        let pnl_sol = pos.unrealized_pnl.unwrap_or(0.0);
+        let pnl_pct = pos.unrealized_pnl_percent.unwrap_or_default();
+        let pnl_sol = pos.unrealized_pnl.unwrap_or_default();
         let pnl_emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };
         let sign = if pnl_pct >= 0.0 { "+" } else { "" };
         let symbol = if pos.symbol.len() > 6 {
@@ -146,7 +146,7 @@ pub async fn handle_stats_command() -> String {
 
     for pos in &positions {
         total_invested += pos.total_size_sol;
-        total_pnl += pos.unrealized_pnl.unwrap_or(0.0);
+        total_pnl += pos.unrealized_pnl.unwrap_or_default();
     }
 
     let pnl_emoji = if total_pnl >= 0.0 { "🟢" } else { "🔴" };

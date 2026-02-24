@@ -50,7 +50,7 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<(), Strin
             (
                 p.symbol.clone(),
                 p.mint.clone(),
-                p.unrealized_pnl_percent.unwrap_or(0.0),
+                p.unrealized_pnl_percent.unwrap_or_default(),
             )
         })
         .collect();
@@ -59,7 +59,7 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<(), Strin
 
     let mut message = format!("📊 <b>Positions ({})</b>\n\n", positions.len());
     for (i, pos) in positions.iter().take(10).enumerate() {
-        let pnl_pct = pos.unrealized_pnl_percent.unwrap_or(0.0);
+        let pnl_pct = pos.unrealized_pnl_percent.unwrap_or_default();
         let emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };
         let sign = if pnl_pct >= 0.0 { "+" } else { "" };
         message.push_str(&format!(

@@ -267,7 +267,7 @@ async fn calculate_fee_breakdown(
             .as_ref()
             .and_then(|m| m.compute_units_consumed)
             .or(cu_limit)
-            .unwrap_or(0);
+            .unwrap_or_default();
         let prio_lamports = price_micro.saturating_mul(units) / 1_000_000; // micro-lamports -> lamports
         priority_fee = (prio_lamports as f64) / 1_000_000_000.0;
         // Recompute base fee from total meta.fee if available
@@ -485,7 +485,7 @@ fn find_corresponding_sol_change(
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
         .map(|change| change.change)
-        .unwrap_or(0.0);
+        .unwrap_or_default();
 
     Ok(largest_sol_change)
 }

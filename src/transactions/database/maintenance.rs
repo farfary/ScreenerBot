@@ -33,7 +33,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let processed_count: i64 = conn
             .query_row(
@@ -41,7 +41,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let known_count: i64 = conn
             .query_row(
@@ -49,13 +49,13 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let retries_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| {
                 row.get(0)
             })
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let pending_count: i64 = conn
             .query_row(
@@ -63,12 +63,12 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         // Get database file size
         let database_size = std::fs::metadata(&self.database_path)
             .map(|metadata| metadata.len())
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         Ok(DatabaseStats {
             total_raw_transactions: raw_count as u64,
@@ -134,7 +134,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let processed_count: i64 = conn
             .query_row(
@@ -142,7 +142,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let orphaned: i64 = conn
             .query_row(
@@ -150,7 +150,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0)
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         let missing: i64 = raw_count - processed_count;
 
@@ -160,7 +160,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .unwrap_or(0);
+            .unwrap_or_default();
 
         // Check schema version
         let schema_version_correct = conn
@@ -172,7 +172,7 @@ impl TransactionDatabase {
                     Ok(version_str == self.schema_version.to_string())
                 },
             )
-            .unwrap_or(false);
+            .unwrap_or_default();
 
         Ok(IntegrityReport {
             raw_transactions_count: raw_count as u64,
@@ -339,7 +339,7 @@ impl TransactionDatabase {
         }
 
         // Apply success filter
-        if filters.only_confirmed.unwrap_or(false) {
+        if filters.only_confirmed.unwrap_or_default() {
             query.push_str(" AND r.status IN ('Confirmed', 'Finalized')");
         }
 
@@ -413,15 +413,15 @@ impl TransactionDatabase {
                         None
                     }
                 });
-                let instructions_count = row.get::<_, Option<i64>>(6)?.unwrap_or(0).max(0) as usize;
+                let instructions_count = row.get::<_, Option<i64>>(6)?.unwrap_or_default().max(0) as usize;
 
                 let transaction_type: Option<String> = row.get(7)?;
                 let direction: Option<String> = row.get(8)?;
                 let token_swap_info_json: Option<String> = row.get(9)?;
                 let token_transfers_json: Option<String> = row.get(10)?;
                 let ata_operations_json: Option<String> = row.get(11)?;
-                let fee_sol = row.get::<_, Option<f64>>(12)?.unwrap_or(0.0);
-                let sol_delta = row.get::<_, Option<f64>>(13)?.unwrap_or(0.0);
+                let fee_sol = row.get::<_, Option<f64>>(12)?.unwrap_or_default();
+                let sol_delta = row.get::<_, Option<f64>>(13)?.unwrap_or_default();
 
                 let swap_info: Option<TokenSwapInfo> = token_swap_info_json
                     .as_ref()
@@ -436,7 +436,7 @@ impl TransactionDatabase {
                 let ata_rents = ata_operations
                     .as_ref()
                     .map(|ops| ops.iter().map(|op| op.rent_amount).sum())
-                    .unwrap_or(0.0);
+                    .unwrap_or_default();
 
                 let mut token_mint = swap_info
                     .as_ref()
@@ -926,7 +926,7 @@ impl TransactionDatabase {
             let sol_delta: f64 = row
                 .get::<_, Option<f64>>(2)
                 .unwrap_or(Some(0.0))
-                .unwrap_or(0.0);
+                .unwrap_or_default();
             results.push(WalletFlowExportRow {
                 signature,
                 timestamp,
@@ -968,7 +968,7 @@ impl TransactionDatabase {
             }
         }
 
-        if filters.only_confirmed.unwrap_or(false) {
+        if filters.only_confirmed.unwrap_or_default() {
             query.push_str(" AND r.status IN ('Confirmed', 'Finalized')");
         }
 
@@ -1154,7 +1154,7 @@ mod tests {
             .query_row(
                 "SELECT sol_delta FROM processed_transactions WHERE signature = ?1",
                 [transaction.signature.as_str()],
-                |row| Ok(row.get::<_, Option<f64>>(0)?.unwrap_or(0.0)),
+                |row| Ok(row.get::<_, Option<f64>>(0)?.unwrap_or_default()),
             )
             .expect("query processed sol_delta");
         assert!((stored_delta - transaction.sol_balance_change).abs() < 1e-9);

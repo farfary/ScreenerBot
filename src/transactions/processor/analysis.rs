@@ -362,7 +362,7 @@ impl TransactionProcessor {
                             } else {
                                 // For pure swap calculation, use the change amount before fees are applied
                                 // The CSV amount represents the intended swap input, not wallet change
-                                let sol_abs = sol_change_wallet.unwrap_or(0.0).abs();
+                                let sol_abs = sol_change_wallet.unwrap_or_default().abs();
                                 let fb = &analysis.pnl.fee_breakdown;
                                 // Add back transaction fees to get the original intended swap amount
                                 let sol_for_swap =
@@ -474,7 +474,7 @@ impl TransactionProcessor {
                             }
                         }
 
-                        let token_abs = token_ui_change.unwrap_or(0.0).abs();
+                        let token_abs = token_ui_change.unwrap_or_default().abs();
                         output_ui = token_abs;
                         let scale = (10f64).powi(token_decimals as i32);
                         output_raw = (token_abs * scale).round().clamp(0.0, u64::MAX as f64) as u64;
@@ -484,7 +484,7 @@ impl TransactionProcessor {
                         input_mint = primary_mint.clone();
                         output_mint = WSOL_MINT.to_string();
 
-                        let token_abs = token_ui_change.unwrap_or(0.0).abs();
+                        let token_abs = token_ui_change.unwrap_or_default().abs();
                         input_ui = token_abs;
                         let scale = (10f64).powi(token_decimals as i32);
                         input_raw = (token_abs * scale).round().clamp(0.0, u64::MAX as f64) as u64;
@@ -550,7 +550,7 @@ impl TransactionProcessor {
 
                         // Fallback to wallet-based calculation if no intermediary flows found
                         if sol_from_swap == 0.0 {
-                            let sol_abs = sol_change_wallet.unwrap_or(0.0).abs();
+                            let sol_abs = sol_change_wallet.unwrap_or_default().abs();
                             let fb = &analysis.pnl.fee_breakdown;
                             let mut tips = fb.mev_tips;
                             let scanned = detect_mev_tips_from_instructions_light(&tx_data);
@@ -625,7 +625,7 @@ impl TransactionProcessor {
                             .clone()
                             .unwrap_or_default();
 
-                        let token_abs = token_ui_change.unwrap_or(0.0).abs();
+                        let token_abs = token_ui_change.unwrap_or_default().abs();
                         input_ui = token_abs;
                         let scale_in = (10f64).powi(token_decimals as i32);
                         input_raw =
@@ -743,12 +743,12 @@ impl TransactionProcessor {
                                 .ata_analysis
                                 .as_ref()
                                 .map(|a| a.total_ata_creations)
-                                .unwrap_or(0),
+                                .unwrap_or_default(),
                             ata_closed_count: transaction
                                 .ata_analysis
                                 .as_ref()
                                 .map(|a| a.total_ata_closures)
-                                .unwrap_or(0),
+                                .unwrap_or_default(),
                             slot: transaction.slot,
                             status: status_str.to_string(),
                             // Legacy fields for debug tools
