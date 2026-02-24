@@ -162,7 +162,7 @@ impl TokenDatabase {
             placeholders
         );
 
-        let mint_refs: Vec<&str> = mints.iter().map(|mint| mint.as_str()).collect();
+        let mint_refs: Vec<&str> = mints.iter().map(String::as_str).collect();
 
         let mut stmt = conn
             .prepare(&query)

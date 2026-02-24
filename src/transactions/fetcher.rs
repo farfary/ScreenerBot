@@ -219,7 +219,7 @@ impl TransactionFetcher {
                 "Fetching {} signatures for wallet: {} (before={})",
                 limit,
                 &wallet_pubkey.to_string(),
-                before.unwrap_or_else(|| "latest")
+                before.unwrap_or("latest")
             ),
         );
 
