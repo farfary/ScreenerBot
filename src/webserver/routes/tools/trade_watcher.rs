@@ -1,9 +1,6 @@
 //! Trade watcher handlers
 
-use axum::extract::Path;
-use axum::response::Response;
-use axum::routing::delete;
-use axum::Json;
+use axum::{extract::Path, http::StatusCode, response::Response, routing::delete, Json};
 
 use crate::logger::{self, LogTag};
 use crate::tools::database::{
@@ -47,7 +44,7 @@ pub async fn search_pools_handler(Path(mint): Path<String>) -> Response {
                 ),
             );
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "POOL_SEARCH_ERROR",
                 &e,
                 Some(&mint),
@@ -61,7 +58,7 @@ pub async fn get_watched_tokens_handler() -> Response {
     match get_watched_tokens() {
         Ok(tokens) => success_response(serde_json::json!({ "tokens": tokens })),
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             &e,
             None,
@@ -110,7 +107,7 @@ pub async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) 
                 &format!("[TRADE_WATCHER] Failed to add watched token: {e}"),
             );
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
                 &e,
                 None,
@@ -143,7 +140,7 @@ pub async fn delete_watched_token_handler(Path(id): Path<i64>) -> Response {
                 ),
             );
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
                 &e,
                 None,

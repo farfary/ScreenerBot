@@ -3,6 +3,7 @@
 //! Provides REST API endpoints for managing lockscreen password and settings.
 
 use axum::{
+    http::StatusCode,
     response::Response,
     routing::{get, post},
     Json, Router,
@@ -14,7 +15,6 @@ use crate::config;
 use crate::secure_storage::{generate_password_salt, hash_password, verify_password};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
-use axum::http::StatusCode;
 
 // =============================================================================
 // RESPONSE TYPES (inline per ScreenerBot convention)

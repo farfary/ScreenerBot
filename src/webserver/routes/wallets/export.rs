@@ -5,7 +5,7 @@
 use axum::{
     body::Body,
     extract::Query,
-    http::header,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -28,7 +28,7 @@ use super::utils::escape_csv_field;
 pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoResponse {
     if query.format != "csv" {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_FORMAT",
             "Only CSV format is currently supported",
             None,
@@ -41,7 +41,7 @@ pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoRe
         Ok(w) => w,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
                 "Failed to list wallets",
                 Some(&e),
@@ -85,7 +85,7 @@ pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoRe
     );
 
     (
-        axum::http::StatusCode::OK,
+        StatusCode::OK,
         [
             (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
             (
@@ -108,7 +108,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
 
     if request.confirmation != REQUIRED_CONFIRMATION {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "CONFIRMATION_REQUIRED",
             &format!(
                 "You must confirm by providing: \"{}\"",
@@ -121,7 +121,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
 
     if request.wallet_ids.is_empty() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "NO_WALLETS",
             "No wallet IDs provided",
             None,
@@ -144,7 +144,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to export wallets: {e}"));
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "EXPORT_ERROR",
                 "Failed to export wallets",
                 Some(&e),
@@ -158,7 +158,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
         Ok(w) => w,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
                 "Failed to list wallets",
                 Some(&e),
@@ -189,7 +189,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
 
     if filtered_exports.is_empty() {
         return error_response(
-            axum::http::StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             "NO_MATCHING_WALLETS",
             "No wallets found matching the provided IDs",
             None,
@@ -230,7 +230,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
     );
 
     (
-        axum::http::StatusCode::OK,
+        StatusCode::OK,
         [
             (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
             (

@@ -2,8 +2,7 @@
 //!
 //! Handles wallet summary, consolidation, and ATA cleanup operations.
 
-use axum::response::Response;
-use axum::Json;
+use axum::{http::StatusCode, response::Response, Json};
 
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
@@ -24,7 +23,7 @@ pub async fn get_wallets_summary() -> Response {
         Ok(w) => w,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallets",
                 Some(&e),
@@ -95,7 +94,7 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
     // Validate config
     if let Err(e) = config.validate() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_CONFIG",
             &e,
             None,
@@ -126,7 +125,7 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
             })
         }
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "CONSOLIDATION_FAILED",
             "Failed to consolidate wallets",
             Some(&e),
@@ -177,7 +176,7 @@ pub async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupReque
             })
         }
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "CLEANUP_FAILED",
             "Failed to cleanup ATAs",
             Some(&e),

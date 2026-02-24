@@ -2,8 +2,7 @@
 //!
 //! Endpoints for importing and exporting configuration files.
 
-use axum::http::StatusCode;
-use axum::{response::Response, Json};
+use axum::{http::StatusCode, response::Response, Json};
 
 use crate::config;
 use crate::webserver::utils::{error_response, success_response};

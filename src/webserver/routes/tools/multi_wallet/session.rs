@@ -2,7 +2,7 @@
 //!
 //! Provides global session state tracking and management utilities for multi-wallet operations.
 
-use axum::response::Response;
+use axum::{http::StatusCode, response::Response};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
@@ -137,7 +137,7 @@ pub async fn get_session_status(id: &str, expected_type: &str) -> Response {
         Some(session) => {
             if session.operation_type != expected_type {
                 return error_response(
-                    axum::http::StatusCode::BAD_REQUEST,
+                    StatusCode::BAD_REQUEST,
                     "TYPE_MISMATCH",
                     &format!(
                         "Session is {} not {}",
@@ -168,7 +168,7 @@ pub async fn get_session_status(id: &str, expected_type: &str) -> Response {
             })
         }
         None => error_response(
-            axum::http::StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             "SESSION_NOT_FOUND",
             "Session not found",
             Some(id),
@@ -187,7 +187,7 @@ pub async fn abort_session(id: &str) -> Response {
                 SessionStatus::Completed | SessionStatus::Failed | SessionStatus::Aborted
             ) {
                 return error_response(
-                    axum::http::StatusCode::BAD_REQUEST,
+                    StatusCode::BAD_REQUEST,
                     "SESSION_COMPLETE",
                     "Session is already complete",
                     None,
@@ -209,7 +209,7 @@ pub async fn abort_session(id: &str) -> Response {
             }))
         }
         None => error_response(
-            axum::http::StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             "SESSION_NOT_FOUND",
             "Session not found",
             Some(id),

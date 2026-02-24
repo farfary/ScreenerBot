@@ -2,7 +2,7 @@
 //!
 //! Handles file parsing, preview generation, and batch wallet imports.
 
-use axum::{extract::Multipart, response::Response, Json};
+use axum::{extract::Multipart, http::StatusCode, response::Response, Json};
 use uuid::Uuid;
 
 use crate::logger::{self, LogTag};
@@ -43,7 +43,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
                 Ok(bytes) => {
                     if bytes.len() > MAX_FILE_SIZE {
                         return error_response(
-                            axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+                            StatusCode::PAYLOAD_TOO_LARGE,
                             "FILE_TOO_LARGE",
                             &format!(
                                 "File exceeds maximum size of {}MB",
@@ -56,7 +56,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
                 }
                 Err(e) => {
                     return error_response(
-                        axum::http::StatusCode::BAD_REQUEST,
+                        StatusCode::BAD_REQUEST,
                         "READ_ERROR",
                         "Failed to read uploaded file",
                         Some(&e.to_string()),
@@ -71,7 +71,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
         Some(data) => data,
         None => {
             return error_response(
-                axum::http::StatusCode::BAD_REQUEST,
+                StatusCode::BAD_REQUEST,
                 "NO_FILE",
                 "No file uploaded. Use 'file' field in multipart form",
                 None,
@@ -89,7 +89,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
                 Ok(s) => s,
                 Err(e) => {
                     return error_response(
-                        axum::http::StatusCode::BAD_REQUEST,
+                        StatusCode::BAD_REQUEST,
                         "INVALID_ENCODING",
                         "CSV file must be UTF-8 encoded",
                         Some(&e.to_string()),
@@ -101,7 +101,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
                 Ok(data) => data,
                 Err(e) => {
                     return error_response(
-                        axum::http::StatusCode::BAD_REQUEST,
+                        StatusCode::BAD_REQUEST,
                         "PARSE_ERROR",
                         "Failed to parse CSV file",
                         Some(&e),
@@ -113,7 +113,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
             Ok(data) => data,
             Err(e) => {
                 return error_response(
-                    axum::http::StatusCode::BAD_REQUEST,
+                    StatusCode::BAD_REQUEST,
                     "PARSE_ERROR",
                     "Failed to parse Excel file",
                     Some(&e),
@@ -122,7 +122,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
         },
         _ => {
             return error_response(
-                axum::http::StatusCode::BAD_REQUEST,
+                StatusCode::BAD_REQUEST,
                 "INVALID_FORMAT",
                 "Unsupported file format. Use .csv, .xlsx, or .xls",
                 None,
@@ -132,7 +132,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
 
     if rows.is_empty() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "EMPTY_FILE",
             "File contains no data rows",
             None,
@@ -147,7 +147,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
         Ok(addrs) => addrs,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
                 "Failed to check existing wallets",
                 Some(&e),
@@ -200,7 +200,7 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
     if !mapping.is_valid() {
         let missing = mapping.missing_columns();
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_MAPPING",
             &format!("Missing required columns: {}", missing.join(", ")),
             None,
@@ -217,7 +217,7 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
         Some(data) => data,
         None => {
             return error_response(
-                axum::http::StatusCode::NOT_FOUND,
+                StatusCode::NOT_FOUND,
                 "SESSION_NOT_FOUND",
                 "Import session not found or expired. Please upload the file again",
                 None,
@@ -230,7 +230,7 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
         Ok(addrs) => addrs,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
                 "Failed to check existing wallets",
                 Some(&e),
@@ -250,7 +250,7 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
         }
 
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "NO_VALID_ROWS",
             "No valid rows to import",
             None,

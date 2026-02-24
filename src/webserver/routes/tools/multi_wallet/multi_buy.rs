@@ -2,9 +2,7 @@
 //!
 //! Handles preview, start, status, and abort for multi-buy operations.
 
-use axum::extract::Path;
-use axum::response::Response;
-use axum::Json;
+use axum::{extract::Path, http::StatusCode, response::Response, Json};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
@@ -43,7 +41,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     // Validate token mint
     if Pubkey::from_str(&request.token_mint).is_err() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_MINT",
             "Invalid token mint address",
             None,
@@ -55,7 +53,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
         Ok(Some(w)) => w,
         Ok(None) => {
             return error_response(
-                axum::http::StatusCode::BAD_REQUEST,
+                StatusCode::BAD_REQUEST,
                 "NO_MAIN_WALLET",
                 "No main wallet configured",
                 None,
@@ -63,7 +61,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
         }
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get main wallet",
                 Some(&e),
@@ -77,7 +75,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
         Ok(sol) => sol,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "RPC_ERROR",
                 "Failed to get wallet balance",
                 Some(&e.to_string()),
@@ -93,7 +91,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
             .collect::<Vec<_>>(),
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallets",
                 Some(&e),
@@ -182,7 +180,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
     // Check for concurrent sessions
     if has_active_multi_wallet_session().await {
         return error_response(
-            axum::http::StatusCode::CONFLICT,
+            StatusCode::CONFLICT,
             "SESSION_ACTIVE",
             "Another multi-wallet operation is already in progress",
             None,
@@ -195,7 +193,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
     // Validate token mint
     if Pubkey::from_str(&request.token_mint).is_err() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_MINT",
             "Invalid token mint address",
             None,
@@ -237,7 +235,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
     // Validate config
     if let Err(e) = config.validate() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_CONFIG",
             &e,
             None,

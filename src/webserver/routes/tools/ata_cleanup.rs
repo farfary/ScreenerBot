@@ -1,7 +1,6 @@
 //! ATA cleanup and wallet generator handlers
 
-use axum::response::Response;
-use axum::Json;
+use axum::{http::StatusCode, response::Response, Json};
 use solana_sdk::signer::Signer;
 
 use crate::logger::{self, LogTag};
@@ -29,7 +28,7 @@ pub async fn scan_atas() -> Response {
                 &format!("Failed to get wallet address: {e}"),
             );
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallet",
                 Some(&e.to_string()),
@@ -46,7 +45,7 @@ pub async fn scan_atas() -> Response {
                 &format!("Failed to get token accounts: {e}"),
             );
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "SCAN_ERROR",
                 "Failed to scan accounts",
                 Some(&e.to_string()),
@@ -128,7 +127,7 @@ pub async fn cleanup_atas() -> Response {
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("ATA cleanup failed: {e}"));
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "CLEANUP_ERROR",
                 "Cleanup failed",
                 Some(&e.to_string()),
@@ -149,7 +148,7 @@ pub async fn clear_ata_cache() -> Response {
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to clear ATA cache: {e}"));
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "CACHE_ERROR",
                 "Failed to clear cache",
                 Some(&e.to_string()),

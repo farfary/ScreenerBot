@@ -1,8 +1,6 @@
 //! Tool favorites handlers
 
-use axum::extract::Path;
-use axum::response::Response;
-use axum::Json;
+use axum::{extract::Path, http::StatusCode, response::Response, Json};
 
 use crate::logger::{self, LogTag};
 use crate::tools::database::{
@@ -29,7 +27,7 @@ pub async fn get_favorites_list(
             success_response(ToolFavoritesListResponse { favorites, total })
         }
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to get favorites",
             Some(&e),
@@ -43,7 +41,7 @@ pub async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Respon
     let valid_types = ["buy_multi", "sell_multi", "token_watch"];
     if !valid_types.contains(&request.tool_type.as_str()) {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_TOOL_TYPE",
             "Invalid tool type",
             Some(&format!("Must be one of: {:?}", valid_types)),
@@ -71,7 +69,7 @@ pub async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Respon
             success_response(serde_json::json!({ "id": id, "success": true }))
         }
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to add favorite",
             Some(&e),
@@ -92,13 +90,13 @@ pub async fn update_favorite(
     ) {
         Ok(true) => success_response(serde_json::json!({ "success": true })),
         Ok(false) => error_response(
-            axum::http::StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             "NOT_FOUND",
             "Favorite not found",
             None,
         ),
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to update favorite",
             Some(&e),
@@ -114,13 +112,13 @@ pub async fn delete_favorite(Path(id): Path<i64>) -> Response {
             success_response(serde_json::json!({ "success": true }))
         }
         Ok(false) => error_response(
-            axum::http::StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             "NOT_FOUND",
             "Favorite not found",
             None,
         ),
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to delete favorite",
             Some(&e),
@@ -133,7 +131,7 @@ pub async fn mark_favorite_used(Path(id): Path<i64>) -> Response {
     match increment_tool_favorite_use(id) {
         Ok(()) => success_response(serde_json::json!({ "success": true })),
         Err(e) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to update use count",
             Some(&e),

@@ -1,7 +1,6 @@
 //! Burn tokens handlers
 
-use axum::response::Response;
-use axum::Json;
+use axum::{http::StatusCode, response::Response, Json};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signer::Signer;
 use solana_sdk::transaction::Transaction;
@@ -38,7 +37,7 @@ pub async fn scan_burnable_tokens() -> Response {
                 &format!("Failed to get wallet address: {e}"),
             );
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallet address",
                 Some(&e.to_string()),
@@ -55,7 +54,7 @@ pub async fn scan_burnable_tokens() -> Response {
                 &format!("Failed to get token accounts: {e}"),
             );
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "SCAN_ERROR",
                 "Failed to scan token accounts",
                 Some(&e.to_string()),
@@ -231,7 +230,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
 
     if request.mints.is_empty() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "NO_TOKENS",
             "No tokens selected for burning",
             None,
@@ -243,7 +242,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         Ok(addr) => addr,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallet address",
                 Some(&e.to_string()),
@@ -255,7 +254,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         Ok(kp) => kp,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "KEYPAIR_ERROR",
                 "Failed to load wallet keypair",
                 Some(&e.to_string()),
@@ -273,7 +272,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         Ok(accounts) => accounts,
         Err(e) => {
             return error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "SCAN_ERROR",
                 "Failed to get token accounts",
                 Some(&e.to_string()),

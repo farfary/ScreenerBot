@@ -4,6 +4,7 @@
 
 use axum::{
     extract::{Path, Query},
+    http::StatusCode,
     response::Response,
     Json,
 };
@@ -30,7 +31,7 @@ pub async fn list_wallets(Query(query): Query<ListWalletsQuery>) -> Response {
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to list wallets: {e}"));
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
                 "Failed to list wallets",
                 Some(&e),
@@ -44,7 +45,7 @@ pub async fn create_wallet(Json(request): Json<CreateWalletRequest>) -> Response
     // Validate name
     if request.name.trim().is_empty() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_NAME",
             "Wallet name cannot be empty",
             None,
@@ -59,7 +60,7 @@ pub async fn create_wallet(Json(request): Json<CreateWalletRequest>) -> Response
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to create wallet: {e}"));
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "CREATE_ERROR",
                 "Failed to create wallet",
                 Some(&e),
@@ -73,7 +74,7 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
     // Validate name
     if request.name.trim().is_empty() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_NAME",
             "Wallet name cannot be empty",
             None,
@@ -83,7 +84,7 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
     // Validate private key is provided
     if request.private_key.trim().is_empty() {
         return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
+            StatusCode::BAD_REQUEST,
             "INVALID_KEY",
             "Private key cannot be empty",
             None,
@@ -101,19 +102,19 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
             // Check for specific error types
             let (status, code, msg) = if e.contains("already exists") {
                 (
-                    axum::http::StatusCode::CONFLICT,
+                    StatusCode::CONFLICT,
                     "DUPLICATE",
                     "Wallet already exists",
                 )
             } else if e.contains("Invalid") {
                 (
-                    axum::http::StatusCode::BAD_REQUEST,
+                    StatusCode::BAD_REQUEST,
                     "INVALID_KEY",
                     "Invalid private key format",
                 )
             } else {
                 (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    StatusCode::INTERNAL_SERVER_ERROR,
                     "IMPORT_ERROR",
                     "Failed to import wallet",
                 )
@@ -131,7 +132,7 @@ pub async fn get_summary() -> Response {
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to get summary: {e}"));
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "SUMMARY_ERROR",
                 "Failed to get wallets summary",
                 Some(&e),
@@ -145,7 +146,7 @@ pub async fn get_main_wallet() -> Response {
     match wallets::get_main_wallet().await {
         Ok(Some(wallet)) => success_response(wallet),
         Ok(None) => error_response(
-            axum::http::StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             "NO_MAIN_WALLET",
             "No main wallet configured",
             None,
@@ -153,7 +154,7 @@ pub async fn get_main_wallet() -> Response {
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to get main wallet: {e}"));
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "MAIN_WALLET_ERROR",
                 "Failed to get main wallet",
                 Some(&e),
@@ -167,7 +168,7 @@ pub async fn get_wallet(Path(id): Path<i64>) -> Response {
     match wallets::get_wallet(id).await {
         Ok(Some(wallet)) => success_response(wallet),
         Ok(None) => error_response(
-            axum::http::StatusCode::NOT_FOUND,
+            StatusCode::NOT_FOUND,
             "NOT_FOUND",
             "Wallet not found",
             None,
@@ -178,7 +179,7 @@ pub async fn get_wallet(Path(id): Path<i64>) -> Response {
                 &format!("Failed to get wallet {id}: {e}"),
             );
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "GET_ERROR",
                 "Failed to get wallet",
                 Some(&e),
@@ -200,7 +201,7 @@ pub async fn update_wallet(
                 &format!("Failed to update wallet {id}: {e}"),
             );
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "UPDATE_ERROR",
                 "Failed to update wallet",
                 Some(&e),
@@ -222,10 +223,10 @@ pub async fn delete_wallet(Path(id): Path<i64>) -> Response {
             );
 
             let (status, code) = if e.contains("main wallet") {
-                (axum::http::StatusCode::BAD_REQUEST, "MAIN_WALLET")
+                (StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
                 (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    StatusCode::INTERNAL_SERVER_ERROR,
                     "DELETE_ERROR",
                 )
             };
@@ -245,7 +246,7 @@ pub async fn export_wallet(Path(id): Path<i64>) -> Response {
                 &format!("Failed to export wallet {id}: {e}"),
             );
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "EXPORT_ERROR",
                 "Failed to export wallet",
                 Some(&e),
@@ -267,7 +268,7 @@ pub async fn set_main_wallet(Path(id): Path<i64>) -> Response {
                 &format!("Failed to set main wallet {id}: {e}"),
             );
             error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,
                 "SET_MAIN_ERROR",
                 "Failed to set main wallet",
                 Some(&e),
@@ -289,10 +290,10 @@ pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
             );
 
             let (status, code) = if e.contains("main wallet") {
-                (axum::http::StatusCode::BAD_REQUEST, "MAIN_WALLET")
+                (StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
                 (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    StatusCode::INTERNAL_SERVER_ERROR,
                     "ARCHIVE_ERROR",
                 )
             };
@@ -315,10 +316,10 @@ pub async fn restore_wallet(Path(id): Path<i64>) -> Response {
             );
 
             let (status, code) = if e.contains("not archived") {
-                (axum::http::StatusCode::BAD_REQUEST, "NOT_ARCHIVED")
+                (StatusCode::BAD_REQUEST, "NOT_ARCHIVED")
             } else {
                 (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    StatusCode::INTERNAL_SERVER_ERROR,
                     "RESTORE_ERROR",
                 )
             };

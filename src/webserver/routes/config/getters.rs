@@ -2,8 +2,7 @@
 //!
 //! GET endpoints for viewing config sections, plus generic PATCH handler.
 
-use axum::http::StatusCode;
-use axum::{response::Response, Json};
+use axum::{http::StatusCode, response::Response, Json};
 
 use crate::config;
 use crate::config::metadata::collect_config_metadata;
