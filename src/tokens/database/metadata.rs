@@ -283,7 +283,7 @@ impl TokenDatabase {
             TokenError::Database(format!("Failed to prepare batch token info query: {}", e))
         })?;
 
-        let mint_refs: Vec<&str> = mints.iter().map(|s| s.as_str()).collect();
+        let mint_refs: Vec<&str> = mints.iter().map(String::as_str).collect();
 
         let rows = stmt
             .query_map(params_from_iter(mint_refs), |row| {

@@ -548,8 +548,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
         positions
             .iter()
             .find(|p| {
-                p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-                    || p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+                p.entry_transaction_signature.as_deref() == Some(signature)
+                    || p.exit_transaction_signature.as_deref() == Some(signature)
             })
             .map(|p| p.mint.clone())
     };
@@ -572,8 +572,8 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
 
         // Find position with matching entry or exit signature
         let position_index = positions.iter().position(|p| {
-            p.entry_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
-                || p.exit_transaction_signature.as_ref().map(|s| s.as_str()) == Some(signature)
+            p.entry_transaction_signature.as_deref() == Some(signature)
+                || p.exit_transaction_signature.as_deref() == Some(signature)
         });
 
         if let Some(index) = position_index {
