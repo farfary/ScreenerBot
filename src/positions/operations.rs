@@ -1054,7 +1054,8 @@ pub async fn partial_close_position(
         .ok_or_else(|| format!("Token not found: {token_mint}"))?;
 
     // Get quote for partial exit
-    let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address =
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
     let slippage_exit_retry_steps =
         with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
     // Slippage retry loop for partial exit
@@ -1104,7 +1105,7 @@ pub async fn partial_close_position(
     // Execute swap with retry on different slippage levels
     let mut swap_result = execute_swap_with_fallback(&api_token, quote)
         .await
-        .map_err(|e| e.to_string());
+        .map_err(|e| format!("Swap failed: {e}"));
     if swap_result.is_err() {
         for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
             let quote_request = QuoteRequest {
@@ -1336,7 +1337,8 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
         .ok_or_else(|| format!("Token not found: {token_mint}"))?;
 
     // Get quote for DCA entry
-    let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address =
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
     let slippage = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
     let quote_request = QuoteRequest {
         input_mint: SOL_MINT.to_string(),
