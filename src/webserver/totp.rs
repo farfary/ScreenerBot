@@ -74,19 +74,6 @@ pub fn verify_totp(secret: &str, code: &str) -> Result<bool, String> {
     Ok(totp.check(code, time))
 }
 
-/// Generate the current TOTP code (for testing/debugging only)
-#[allow(dead_code)]
-pub fn generate_current_code(secret: &str) -> Result<String, String> {
-    let totp = create_totp(secret, "user", "ScreenerBot")?;
-
-    let time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Time error: {e}"))?
-        .as_secs();
-
-    Ok(totp.generate(time))
-}
-
 /// Generate a QR code as a data URL (data:image/svg+xml;base64,...)
 ///
 /// The QR code encodes the otpauth:// URI for easy setup with authenticator apps.

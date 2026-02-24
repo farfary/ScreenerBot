@@ -380,18 +380,6 @@ pub fn home_content() -> String {
     render_page(HOME_PAGE)
 }
 
-pub fn splash_content() -> String {
-    render_page(SPLASH_PAGE)
-}
-
-pub fn onboarding_content() -> String {
-    render_page(ONBOARDING_PAGE)
-}
-
-pub fn setup_content() -> String {
-    render_page(SETUP_PAGE)
-}
-
 pub fn login_content() -> String {
     render_page(LOGIN_PAGE)
 }
