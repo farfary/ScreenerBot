@@ -1,6 +1,5 @@
 //! Wallet validation — input validation for addresses, keypairs, and wallet names.
 
-use crate::logger::{self, LogTag};
 use crate::paths;
 use crate::utils::get_wallet_address;
 use rusqlite::{Connection, OptionalExtension};
@@ -110,35 +109,5 @@ impl WalletValidator {
         paths::get_transactions_db_path().exists()
             || paths::get_positions_db_path().exists()
             || paths::get_wallet_db_path().exists()
-    }
-
-    /// Clean all databases (delete files)
-    pub async fn clean_all_databases() -> Result<(), String> {
-        // Get all database paths with their WAL and SHM files
-        let mut dbs = Vec::new();
-        dbs.extend(paths::get_db_with_wal_files(
-            paths::get_transactions_db_path(),
-        ));
-        dbs.extend(paths::get_db_with_wal_files(paths::get_positions_db_path()));
-        dbs.extend(paths::get_db_with_wal_files(paths::get_wallet_db_path()));
-
-        let mut deleted_count = 0;
-        for db_path in &dbs {
-            if db_path.exists() {
-                std::fs::remove_file(db_path)
-                    .map_err(|e| format!("Failed to remove {}: {}", db_path.display(), e))?;
-                logger::info(LogTag::System, &format!("Deleted {}", db_path.display()));
-                deleted_count += 1;
-            }
-        }
-
-        if deleted_count > 0 {
-            logger::info(
-                LogTag::System,
-                &format!("Cleaned {deleted_count} database files"),
-            );
-        }
-
-        Ok(())
     }
 }
