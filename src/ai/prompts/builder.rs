@@ -95,9 +95,13 @@ impl PromptBuilder {
 
                 let mut combined = formatted.join("\n\n");
 
-                // Limit total instruction content length
+                // Limit total instruction content length (UTF-8 safe)
                 if combined.len() > MAX_INSTRUCTION_CONTENT_LENGTH {
-                    combined.truncate(MAX_INSTRUCTION_CONTENT_LENGTH);
+                    let mut end = MAX_INSTRUCTION_CONTENT_LENGTH;
+                    while end > 0 && !combined.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    combined.truncate(end);
                     combined.push_str("\n\n[WARNING: Instructions truncated due to length limit]");
                 }
 

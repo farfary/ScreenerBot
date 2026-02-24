@@ -199,11 +199,16 @@ impl EventsDatabase {
             .get("message")
             .and_then(|v| v.as_str())
             .map(|s| {
-                let mut m = s.to_string();
-                if m.len() > 240 {
-                    m.truncate(240);
+                if s.len() > 240 {
+                    // Find a valid UTF-8 boundary at or before 240 bytes
+                    let mut end = 240;
+                    while end > 0 && !s.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    s[..end].to_string()
+                } else {
+                    s.to_string()
                 }
-                m
             });
 
         let id = conn
@@ -261,11 +266,15 @@ impl EventsDatabase {
                     .get("message")
                     .and_then(|v| v.as_str())
                     .map(|s| {
-                        let mut m = s.to_string();
-                        if m.len() > 240 {
-                            m.truncate(240);
+                        if s.len() > 240 {
+                            let mut end = 240;
+                            while end > 0 && !s.is_char_boundary(end) {
+                                end -= 1;
+                            }
+                            s[..end].to_string()
+                        } else {
+                            s.to_string()
                         }
-                        m
                     });
 
                 stmt.execute(params![
