@@ -112,7 +112,7 @@ pub fn parse_excel(
 fn cell_to_string(cell: &Data) -> String {
     match cell {
         Data::Empty => String::new(),
-        Data::String(s) => s.trim().to_string(),
+        Data::String(s) => s.trim().to_owned(),
         Data::Float(f) => {
             // Handle integers stored as floats
             if f.fract() == 0.0 && *f >= i64::MIN as f64 && *f <= i64::MAX as f64 {

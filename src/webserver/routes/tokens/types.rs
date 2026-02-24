@@ -526,7 +526,7 @@ pub(super) fn normalize_optional_text(value: Option<String>) -> Option<String> {
 }
 
 pub(super) fn normalize_search(value: String) -> Option<String> {
-    let trimmed = value.trim().to_string();
+    let trimmed = value.trim().to_owned();
     if trimmed.is_empty() {
         None
     } else {
@@ -536,7 +536,7 @@ pub(super) fn normalize_search(value: String) -> Option<String> {
 
 pub(super) fn normalize_choice(value: Option<String>) -> Option<String> {
     value.and_then(|raw| {
-        let trimmed = raw.trim().to_string();
+        let trimmed = raw.trim().to_owned();
         if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("all") {
             None
         } else {

@@ -451,7 +451,7 @@ async fn enrich_billboard_token(token: BillboardToken) -> EnrichedBillboardToken
             security_score: db_token.security_score,
             security_score_normalised: db_token.security_score_normalised,
             is_in_database: true,
-            data_source: Some(db_token.data_source.as_str().to_string()),
+            data_source: Some(db_token.data_source.as_str().to_owned()),
         },
         Ok(None) | Err(_) => {
             // Token not in database - return base with no enrichment

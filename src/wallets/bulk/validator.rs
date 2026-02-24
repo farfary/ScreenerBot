@@ -33,7 +33,7 @@ pub fn validate_row(
     let name = mapping
         .name_col
         .and_then(|idx| row.get(idx))
-        .map(|s| s.trim().to_string())
+        .map(|s| s.trim().to_owned())
         .unwrap_or_default();
 
     if name.is_empty() {
@@ -44,7 +44,7 @@ pub fn validate_row(
     let private_key = mapping
         .private_key_col
         .and_then(|idx| row.get(idx))
-        .map(|s| s.trim().to_string())
+        .map(|s| s.trim().to_owned())
         .unwrap_or_default();
 
     if private_key.is_empty() {
@@ -185,13 +185,13 @@ pub fn extract_valid_rows(
             let private_key = mapping
                 .private_key_col
                 .and_then(|col| row.get(col))
-                .map(|s| s.trim().to_string())
+                .map(|s| s.trim().to_owned())
                 .unwrap_or_default();
 
             let notes = mapping
                 .notes_col
                 .and_then(|col| row.get(col))
-                .map(|s| s.trim().to_string())
+                .map(|s| s.trim().to_owned())
                 .filter(|s| !s.is_empty());
 
             seen_addresses.insert(address);

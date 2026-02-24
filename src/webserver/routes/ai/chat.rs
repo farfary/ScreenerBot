@@ -366,7 +366,7 @@ pub async fn summarize_chat_session(
 
     match llm_manager.call(provider, request).await {
         Ok(response) => {
-            let summary = response.content.trim().to_string();
+            let summary = response.content.trim().to_owned();
 
             // Save summary to session
             if let Err(e) = chat_db::update_session_summary(&pool, id, &summary) {

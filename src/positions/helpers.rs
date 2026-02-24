@@ -399,7 +399,7 @@ async fn fetch_and_create_token_snapshot(
     let price_sol = Some(token.price_sol);
     let price_usd = Some(token.price_usd);
     let price_native = token.price_native.parse::<f64>().ok();
-    let dex_id = Some(token.data_source.as_str().to_string());
+    let dex_id = Some(token.data_source.as_str().to_owned());
     let pair_address = None;
     let pair_url = None;
     let fdv = token.fdv;

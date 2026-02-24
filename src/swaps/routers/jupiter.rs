@@ -237,7 +237,7 @@ impl SwapRouter for JupiterRouter {
             output_mint: request.output_mint.clone(),
             amount: request.input_amount.to_string(),
             slippage_bps,
-            swap_mode: Some(request.swap_mode.as_str().to_string()),
+            swap_mode: Some(request.swap_mode.as_str().to_owned()),
             platform_fee_bps,
         };
 

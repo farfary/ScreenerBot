@@ -213,7 +213,7 @@ async fn get_ohlcv_data_handler(
             let response = OhlcvDataResponse {
                 mint: mint.clone(),
                 pool_address: params.pool,
-                timeframe: timeframe.as_str().to_string(),
+                timeframe: timeframe.as_str().to_owned(),
                 count: data.len(),
                 data,
             };
@@ -277,7 +277,7 @@ async fn get_gaps_handler(
 
             let response = GapsResponse {
                 mint,
-                timeframe: timeframe.as_str().to_string(),
+                timeframe: timeframe.as_str().to_owned(),
                 total_gaps: gaps.len(),
                 gaps,
             };
@@ -305,7 +305,7 @@ async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Respon
     for tf in Timeframe::all() {
         if let Ok(data) = get_ohlcv_data(&mint, tf, None, 1, None, None).await {
             if !data.is_empty() {
-                timeframes_available.push(tf.as_str().to_string());
+                timeframes_available.push(tf.as_str().to_owned());
             }
         }
     }

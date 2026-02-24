@@ -345,7 +345,7 @@ pub async fn compute_snapshot(
             Err(reason) => {
                 // Clone reason since it's used multiple times and no longer Copy
                 let reason_label = reason.label();
-                let reason_source = reason.source().as_str().to_string();
+                let reason_source = reason.source().as_str().to_owned();
 
                 stats.record_rejection(reason);
                 rejected_mints.push(token.mint.clone());
