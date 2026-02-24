@@ -16,8 +16,8 @@ pub mod types;
 
 // Re-export types for external use
 pub use self::types::{
-    ChainInfo, DexScreenerPairRaw, DexScreenerPool, PairResponse, PairsResponse, TokenBoostLatest,
-    TokenBoostTop, TokenInfo, TokenOrder, TokenProfile,
+    DexScreenerPairRaw, DexScreenerPool, PairsResponse, TokenBoostLatest, TokenBoostTop,
+    TokenInfo, TokenOrder, TokenProfile,
 };
 
 use crate::apis::client::RateLimiter;
@@ -54,7 +54,6 @@ pub const RATE_LIMIT_LATEST_BOOSTS_PER_MINUTE: usize = 60;
 pub const RATE_LIMIT_TOP_BOOSTS_PER_MINUTE: usize = 60;
 pub const RATE_LIMIT_TOKEN_ORDERS_PER_MINUTE: usize = 60;
 pub const RATE_LIMIT_TOKEN_INFO_PER_MINUTE: usize = 60;
-pub const RATE_LIMIT_SUPPORTED_CHAINS_PER_MINUTE: usize = 60;
 
 // ============================================================================
 // CLIENT IMPLEMENTATION
@@ -75,7 +74,6 @@ pub struct DexScreenerClient {
     limiter_top_boosts: RateLimiter,
     limiter_token_orders: RateLimiter,
     limiter_token_info: RateLimiter,
-    limiter_supported_chains: RateLimiter,
 }
 
 impl DexScreenerClient {
@@ -98,7 +96,6 @@ impl DexScreenerClient {
             limiter_top_boosts: RateLimiter::new(RATE_LIMIT_TOP_BOOSTS_PER_MINUTE),
             limiter_token_orders: RateLimiter::new(RATE_LIMIT_TOKEN_ORDERS_PER_MINUTE),
             limiter_token_info: RateLimiter::new(RATE_LIMIT_TOKEN_INFO_PER_MINUTE),
-            limiter_supported_chains: RateLimiter::new(RATE_LIMIT_SUPPORTED_CHAINS_PER_MINUTE),
         })
     }
 
@@ -590,21 +587,6 @@ impl DexScreenerClient {
 
         self.get_json(&endpoint, self.client.get(&url), &self.limiter_token_orders)
             .await
-    }
-
-    /// Get supported chains
-    pub async fn get_supported_chains(&self) -> Result<Vec<ChainInfo>, String> {
-        let endpoint = "chains/v1";
-        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
-
-        logger::debug(LogTag::Api, "[DEXSCREENER] Fetching supported chains");
-
-        self.get_json(
-            endpoint,
-            self.client.get(&url),
-            &self.limiter_supported_chains,
-        )
-        .await
     }
 
     /// Legacy method for backward compatibility - redirects to fetch_token_pools

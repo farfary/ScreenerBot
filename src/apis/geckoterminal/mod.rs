@@ -20,8 +20,8 @@ pub mod types;
 
 // Re-export types for external use
 pub use self::types::{
-    GeckoTerminalDexesResponse, GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse,
-    GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
+    GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse, GeckoTerminalResponse,
+    GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
     GeckoTerminalTradesResponse,
 };
 
