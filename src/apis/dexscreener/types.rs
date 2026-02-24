@@ -129,6 +129,11 @@ impl Default for DexScreenerPool {
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
+pub struct PairResponse {
+    pub pair: Option<DexScreenerPairRaw>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct PairsResponse {
     pub pairs: Vec<DexScreenerPairRaw>,
 }
@@ -236,6 +241,12 @@ pub struct TokenOrder {
     pub amount: f64,
     pub created_at: i64,
     pub expires_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ChainInfo {
+    pub id: String,
+    pub name: String,
 }
 
 // ============================================================================

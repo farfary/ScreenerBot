@@ -9,6 +9,7 @@ pub use detection::{derive_websocket_url, detect_provider_kind, generate_provide
 use crate::rpc::errors::RpcError;
 use crate::rpc::types::{ProviderKind, ProviderState, RpcMethod};
 use async_trait::async_trait;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Trait for RPC provider implementations
@@ -45,3 +46,6 @@ pub trait RpcProvider: Send + Sync {
     /// Health probe - returns latency in ms
     async fn probe_health(&self) -> Result<u64, RpcError>;
 }
+
+/// Type alias for provider references
+pub type ProviderRef = Arc<dyn RpcProvider>;

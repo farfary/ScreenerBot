@@ -20,8 +20,8 @@ pub mod types;
 
 // Re-export types for external use
 pub use self::types::{
-    GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse, GeckoTerminalResponse,
-    GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
+    GeckoTerminalDexesResponse, GeckoTerminalPool, GeckoTerminalRecentlyUpdatedResponse,
+    GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
     GeckoTerminalTradesResponse,
 };
 
@@ -307,6 +307,163 @@ impl GeckoTerminalClient {
             .collect())
     }
 
+    /// Get top pools by network
+    pub async fn fetch_top_pools_by_network(
+        &self,
+        network: Option<&str>,
+        include: Option<Vec<&str>>,
+        page: Option<u32>,
+        sort: Option<&str>,
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let endpoint = format!("networks/{network_id}/pools");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
+
+        let mut query_params: Vec<(String, String)> = Vec::new();
+        if let Some(p) = page {
+            let page_num = p.clamp(1, 10);
+            query_params.push(("page".to_owned(), page_num.to_string()));
+        }
+        if let Some(s) = sort {
+            query_params.push(("sort".to_owned(), s.to_string()));
+        }
+        if let Some(includes) = include {
+            if !includes.is_empty() {
+                query_params.push(("include".to_owned(), includes.join(",")));
+            }
+        }
+
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
+
+        logger::debug(
+            LogTag::Api,
+            &format!(
+                "[GECKOTERMINAL] Fetching top pools: network={}, page={:?}, sort={:?}",
+                network_id, page, sort
+            ),
+        );
+
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+
+        Ok(api_response
+            .data
+            .into_iter()
+            .map(|p| p.to_pool("top_pools"))
+            .collect())
+    }
+
+    /// Get specific pool data by address
+    pub async fn fetch_pool_by_address(
+        &self,
+        network: Option<&str>,
+        pool_address: &str,
+        include: Option<Vec<&str>>,
+        include_volume_breakdown: bool,
+        include_composition: bool,
+    ) -> Result<GeckoTerminalPool, String> {
+        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let endpoint = format!("networks/{network_id}/pools/{pool_address}");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
+
+        let mut query_params: Vec<(String, String)> = Vec::new();
+        if let Some(includes) = include {
+            if !includes.is_empty() {
+                query_params.push(("include".to_owned(), includes.join(",")));
+            }
+        }
+        if include_volume_breakdown {
+            query_params.push(("include_volume_breakdown".to_owned(), "true".to_owned()));
+        }
+        if include_composition {
+            query_params.push(("include_composition".to_owned(), "true".to_owned()));
+        }
+
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
+
+        logger::debug(
+            LogTag::Api,
+            &format!(
+                "[GECKOTERMINAL] Fetching pool: network={}, address={}",
+                network_id, pool_address
+            ),
+        );
+
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+
+        api_response
+            .data
+            .into_iter()
+            .next()
+            .map(|p| p.to_pool(pool_address))
+            .ok_or_else(|| "No pool data returned".to_owned())
+    }
+
+    /// Fetch multiple pools in one call (max 30 pool addresses)
+    pub async fn fetch_pools_multi(
+        &self,
+        network: Option<&str>,
+        addresses: Vec<&str>,
+        include: Option<Vec<&str>>,
+        include_volume_breakdown: bool,
+        include_composition: bool,
+    ) -> Result<Vec<GeckoTerminalPool>, String> {
+        if addresses.is_empty() {
+            return Err("At least one address is required".to_owned());
+        }
+        if addresses.len() > 30 {
+            return Err("Maximum 30 addresses allowed".to_owned());
+        }
+
+        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let address_count = addresses.len();
+        let addresses_str = addresses.join(",");
+        let endpoint = format!("networks/{network_id}/pools/multi/{addresses_str}");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
+
+        let mut query_params: Vec<(String, String)> = Vec::new();
+        if let Some(includes) = include {
+            if !includes.is_empty() {
+                query_params.push(("include".to_owned(), includes.join(",")));
+            }
+        }
+        if include_volume_breakdown {
+            query_params.push(("include_volume_breakdown".to_owned(), "true".to_owned()));
+        }
+        if include_composition {
+            query_params.push(("include_composition".to_owned(), "true".to_owned()));
+        }
+
+        let builder = if query_params.is_empty() {
+            self.client.get(&url)
+        } else {
+            self.client.get(&url).query(&query_params)
+        };
+
+        logger::debug(
+            LogTag::Api,
+            &format!(
+                "[GECKOTERMINAL] Fetching multi pools: network={}, count={}",
+                network_id, address_count
+            ),
+        );
+
+        let api_response: GeckoTerminalResponse = self.get_json(&endpoint, builder).await?;
+
+        Ok(api_response
+            .data
+            .into_iter()
+            .map(|p| p.to_pool("multi"))
+            .collect())
+    }
+
     /// Fetch OHLCV candlestick data for a pool
     pub async fn fetch_ohlcv(
         &self,
@@ -363,6 +520,40 @@ impl GeckoTerminalClient {
             base_token: ohlcv_response.meta.base,
             quote_token: ohlcv_response.meta.quote,
         })
+    }
+
+    /// Get supported DEX list for a network
+    pub async fn fetch_dexes_by_network(
+        &self,
+        network: &str,
+        page: Option<u32>,
+    ) -> Result<Vec<(String, String)>, String> {
+        let endpoint = format!("networks/{network}/dexes");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
+
+        let builder = if let Some(p) = page {
+            self.client
+                .get(&url)
+                .query(&[("page".to_owned(), p.to_string())])
+        } else {
+            self.client.get(&url)
+        };
+
+        logger::debug(
+            LogTag::Api,
+            &format!(
+                "[GECKOTERMINAL] Fetching DEXes: network={}, page={:?}",
+                network, page
+            ),
+        );
+
+        let dex_response: GeckoTerminalDexesResponse = self.get_json(&endpoint, builder).await?;
+
+        Ok(dex_response
+            .data
+            .into_iter()
+            .map(|d| (d.id, d.attributes.name))
+            .collect())
     }
 
     /// Fetch latest newly created pools on a network
@@ -441,6 +632,26 @@ impl GeckoTerminalClient {
         );
 
         self.get_json(&endpoint, builder).await
+    }
+
+    /// Fetch token metadata for a single address
+    pub async fn fetch_token_info(
+        &self,
+        network: &str,
+        address: &str,
+    ) -> Result<GeckoTerminalTokenInfoResponse, String> {
+        let endpoint = format!("networks/{network}/tokens/{address}/info");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
+
+        logger::debug(
+            LogTag::Api,
+            &format!(
+                "[GECKOTERMINAL] Fetching token info: network={}, address={}",
+                network, address
+            ),
+        );
+
+        self.get_json(&endpoint, self.client.get(&url)).await
     }
 
     /// Fetch recently updated tokens (global endpoint)
