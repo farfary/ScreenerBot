@@ -230,7 +230,7 @@ async fn execute_scheduled_task(
             Ok(())
         }
         Ok(Err(e)) => {
-            let error_msg = format!("{}", e);
+            let error_msg = e.to_string();
 
             // Record failed run
             if let Err(e) = scheduled_db::record_run_complete(
