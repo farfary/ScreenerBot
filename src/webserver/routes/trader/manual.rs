@@ -111,7 +111,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
                 effective_price_sol: tr.executed_price_sol,
                 size_sol: tr.executed_size_sol,
                 position_id: tr.position_id,
-                message: "Manual buy executed".to_string(),
+                message: "Manual buy executed".to_owned(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             };
             success_response(resp)
@@ -215,7 +215,7 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
                 effective_price_sol: tr.executed_price_sol,
                 size_sol: tr.executed_size_sol,
                 position_id: tr.position_id,
-                message: "Added to position".to_string(),
+                message: "Added to position".to_owned(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             };
             success_response(resp)
@@ -332,7 +332,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
                 size_sol: tr.executed_size_sol,
                 position_id: tr.position_id,
                 message: if pct.unwrap_or(100.0) == 100.0 {
-                    "Full position closed".to_string()
+                    "Full position closed".to_owned()
                 } else {
                     format!("Partial position closed ({}%)", pct.unwrap_or(100.0))
                 },

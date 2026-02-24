@@ -253,7 +253,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
                 result: SessionResult::new(session_id.clone()),
                 status: SessionStatus::Pending,
                 abort_flag: abort_flag.clone(),
-                operation_type: "multi_buy".to_string(),
+                operation_type: "multi_buy".to_owned(),
                 token_mint: token_mint.clone(),
                 started_at: chrono::Utc::now(),
             },
@@ -299,7 +299,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
 
     success_response(SessionStartResponse {
         session_id,
-        message: "Multi-buy session started".to_string(),
+        message: "Multi-buy session started".to_owned(),
     })
 }
 

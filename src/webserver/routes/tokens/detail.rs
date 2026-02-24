@@ -45,8 +45,8 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
             );
             return Json(TokenDetailResponse {
                 mint: mint.clone(),
-                symbol: "NOT_FOUND".to_string(),
-                name: Some("Token not in cache".to_string()),
+                symbol: "NOT_FOUND".to_owned(),
+                name: Some("Token not in cache".to_owned()),
                 description: None,
                 logo_url: None,
                 header_image_url: None,
@@ -490,7 +490,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
             ))
         }
         (Some(true), None) => {
-            Some("Token flagged as rugged. Investigate before trading.".to_string())
+            Some("Token flagged as rugged. Investigate before trading.".to_owned())
         }
         (_, Some(score)) if score <= 30 => {
             let safety = 100 - score;

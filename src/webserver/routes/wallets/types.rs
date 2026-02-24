@@ -129,5 +129,5 @@ pub struct ExportQuery {
 }
 
 fn default_csv_format() -> String {
-    "csv".to_string()
+    "csv".to_owned()
 }

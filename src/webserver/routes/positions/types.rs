@@ -330,31 +330,31 @@ fn map_token_transfers(
 
 fn describe_transaction_status(status: &TransactionStatus) -> String {
     match status {
-        TransactionStatus::Pending => "Pending".to_string(),
-        TransactionStatus::Confirmed => "Confirmed".to_string(),
-        TransactionStatus::Finalized => "Finalized".to_string(),
+        TransactionStatus::Pending => "Pending".to_owned(),
+        TransactionStatus::Confirmed => "Confirmed".to_owned(),
+        TransactionStatus::Finalized => "Finalized".to_owned(),
         TransactionStatus::Failed(err) => format!("Failed: {err}"),
     }
 }
 
 fn describe_transaction_direction(direction: &TransactionDirection) -> String {
     match direction {
-        TransactionDirection::Incoming => "Incoming".to_string(),
-        TransactionDirection::Outgoing => "Outgoing".to_string(),
-        TransactionDirection::Internal => "Internal".to_string(),
-        TransactionDirection::Unknown => "Unknown".to_string(),
+        TransactionDirection::Incoming => "Incoming".to_owned(),
+        TransactionDirection::Outgoing => "Outgoing".to_owned(),
+        TransactionDirection::Internal => "Internal".to_owned(),
+        TransactionDirection::Unknown => "Unknown".to_owned(),
     }
 }
 
 fn describe_transaction_type(transaction_type: &TransactionType) -> String {
     match transaction_type {
-        TransactionType::Buy => "Buy".to_string(),
-        TransactionType::Sell => "Sell".to_string(),
-        TransactionType::Transfer => "Transfer".to_string(),
-        TransactionType::Compute => "Compute".to_string(),
-        TransactionType::AtaOperation => "ATA Operation".to_string(),
-        TransactionType::Failed => "Failed".to_string(),
-        TransactionType::Unknown => "Unknown".to_string(),
+        TransactionType::Buy => "Buy".to_owned(),
+        TransactionType::Sell => "Sell".to_owned(),
+        TransactionType::Transfer => "Transfer".to_owned(),
+        TransactionType::Compute => "Compute".to_owned(),
+        TransactionType::AtaOperation => "ATA Operation".to_owned(),
+        TransactionType::Failed => "Failed".to_owned(),
+        TransactionType::Unknown => "Unknown".to_owned(),
         TransactionType::SwapSolToToken { router, .. } => {
             format!("Swap SOL→Token ({})", router)
         }
@@ -364,7 +364,7 @@ fn describe_transaction_type(transaction_type: &TransactionType) -> String {
         TransactionType::SwapTokenToToken { router, .. } => {
             format!("Swap Token→Token ({})", router)
         }
-        TransactionType::SolTransfer { .. } => "SOL Transfer".to_string(),
+        TransactionType::SolTransfer { .. } => "SOL Transfer".to_owned(),
         TransactionType::TokenTransfer { mint, amount, .. } => {
             format!("Token Transfer {} ({:.4})", mint, amount)
         }

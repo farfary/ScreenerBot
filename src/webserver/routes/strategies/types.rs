@@ -142,7 +142,7 @@ fn default_priority() -> i32 {
 }
 
 fn default_timeframe() -> String {
-    "5m".to_string()
+    "5m".to_owned()
 }
 
 /// Query parameters for strategy list

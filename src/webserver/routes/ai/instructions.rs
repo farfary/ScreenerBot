@@ -85,7 +85,7 @@ pub async fn create_instruction(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<CreateInstructionRequest>,
 ) -> Response {
-    let category = req.category.unwrap_or_else(|| "general".to_string());
+    let category = req.category.unwrap_or_else(|| "general".to_owned());
 
     match db::with_ai_db(|conn| db::create_instruction(conn, &req.name, &req.content, &category)) {
         Ok(id) => {

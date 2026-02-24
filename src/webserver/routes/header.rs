@@ -244,13 +244,13 @@ async fn calculate_system_health() -> SystemHeaderInfo {
 
     // Check core services readiness
     if !are_core_services_ready() {
-        unhealthy_services.push("Core Services".to_string());
+        unhealthy_services.push("Core Services".to_owned());
         critical_degraded = true;
     }
 
     // Check critical endpoints
     if !are_critical_endpoints_healthy().await {
-        unhealthy_services.push("Critical Endpoints".to_string());
+        unhealthy_services.push("Critical Endpoints".to_owned());
         critical_degraded = true;
     }
 

@@ -167,7 +167,7 @@ async fn fetch_from_website() -> Result<Vec<BillboardToken>, String> {
         .map_err(|e| format!("Failed to parse billboard: {e}"))?;
 
     if !wrapper.success {
-        return Err("Billboard API returned success=false".to_string());
+        return Err("Billboard API returned success=false".to_owned());
     }
 
     Ok(wrapper.tokens)
@@ -298,7 +298,7 @@ async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>, String> {
                 name: t
                     .description
                     .clone()
-                    .unwrap_or_else(|| "Unknown".to_string()),
+                    .unwrap_or_else(|| "Unknown".to_owned()),
                 symbol: t
                     .description
                     .as_ref()

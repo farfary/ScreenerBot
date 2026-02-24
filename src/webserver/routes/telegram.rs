@@ -203,7 +203,7 @@ async fn get_settings(State(_state): State<Arc<AppState>>) -> Response {
             if config.bot_token.len() > 10 {
                 format!("{}...", &config.bot_token[..10])
             } else {
-                "***".to_string()
+                "***".to_owned()
             }
         },
         chat_id: config.chat_id.clone(),
@@ -389,7 +389,7 @@ async fn send_test_message(
     match crate::telegram::TelegramNotifier::new(&bot_token, &chat_id) {
         Ok(notifier) => {
             let message = req.message.unwrap_or_else(|| {
-                "🔔 <b>Test Message</b>\n\nTelegram integration is working!".to_string()
+                "🔔 <b>Test Message</b>\n\nTelegram integration is working!".to_owned()
             });
 
             match notifier.send_message(&message).await {

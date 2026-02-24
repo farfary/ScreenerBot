@@ -136,7 +136,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                                     .get(name)
                                     .cloned()
                                     .unwrap_or(ServiceHealth::Unhealthy(
-                                        "Health status unavailable".to_string(),
+                                        "Health status unavailable".to_owned(),
                                     ));
                             let metrics = metrics_map
                                 .get(name)

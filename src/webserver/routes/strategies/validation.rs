@@ -61,7 +61,7 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
 
     let now = Utc::now();
     let strategy = Strategy {
-        id: "validation-check".to_string(),
+        id: "validation-check".to_owned(),
         name: request.name,
         description: request.description,
         strategy_type,

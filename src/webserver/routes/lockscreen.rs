@@ -239,7 +239,7 @@ async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
 
     success_response(SuccessResponse {
         success: true,
-        message: "Password set successfully".to_string(),
+        message: "Password set successfully".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }
@@ -294,7 +294,7 @@ async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Response {
 
     success_response(SuccessResponse {
         success: true,
-        message: "Password cleared and lockscreen disabled".to_string(),
+        message: "Password cleared and lockscreen disabled".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }
@@ -341,7 +341,7 @@ async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> Response {
 
     success_response(SuccessResponse {
         success: true,
-        message: "Settings updated successfully".to_string(),
+        message: "Settings updated successfully".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }
@@ -355,30 +355,30 @@ fn validate_password_format(password: &str, password_type: &str) -> Result<(), S
     match password_type {
         "pin4" => {
             if password.len() != 4 {
-                return Err("PIN must be exactly 4 digits".to_string());
+                return Err("PIN must be exactly 4 digits".to_owned());
             }
             if !password.chars().all(|c| c.is_ascii_digit()) {
-                return Err("PIN must contain only digits".to_string());
+                return Err("PIN must contain only digits".to_owned());
             }
         }
         "pin6" => {
             if password.len() != 6 {
-                return Err("PIN must be exactly 6 digits".to_string());
+                return Err("PIN must be exactly 6 digits".to_owned());
             }
             if !password.chars().all(|c| c.is_ascii_digit()) {
-                return Err("PIN must contain only digits".to_string());
+                return Err("PIN must contain only digits".to_owned());
             }
         }
         "text" => {
             if password.len() < 4 {
-                return Err("Password must be at least 4 characters".to_string());
+                return Err("Password must be at least 4 characters".to_owned());
             }
             if password.len() > 128 {
-                return Err("Password must be at most 128 characters".to_string());
+                return Err("Password must be at most 128 characters".to_owned());
             }
         }
         _ => {
-            return Err("Invalid password type".to_string());
+            return Err("Invalid password type".to_owned());
         }
     }
     Ok(())

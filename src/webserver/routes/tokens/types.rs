@@ -364,13 +364,13 @@ pub struct TokenListQuery {
 }
 
 pub(super) fn default_view() -> String {
-    "pool".to_string()
+    "pool".to_owned()
 }
 pub(super) fn default_sort_by() -> String {
-    "liquidity_usd".to_string()
+    "liquidity_usd".to_owned()
 }
 pub(super) fn default_sort_dir() -> String {
-    "desc".to_string()
+    "desc".to_owned()
 }
 pub(super) fn default_page() -> usize {
     1
@@ -393,7 +393,7 @@ pub(super) fn default_ohlcv_limit() -> u32 {
 }
 
 pub(super) fn default_ohlcv_timeframe() -> String {
-    "1m".to_string()
+    "1m".to_owned()
 }
 
 /// Filter request body
@@ -481,7 +481,7 @@ pub struct AddBlacklistRequest {
 }
 
 pub(super) fn default_blacklist_reason() -> String {
-    "Manual blacklist via UI".to_string()
+    "Manual blacklist via UI".to_owned()
 }
 
 /// Response for blacklist operations

@@ -45,7 +45,7 @@ pub async fn start_trader_handler() -> Response {
 
             let response = TraderControlResponse {
                 success: true,
-                message: "Trader started successfully".to_string(),
+                message: "Trader started successfully".to_owned(),
                 status,
             };
 
@@ -85,7 +85,7 @@ pub async fn stop_trader_handler() -> Response {
 
             let response = TraderControlResponse {
                 success: true,
-                message: "Trader stopped successfully".to_string(),
+                message: "Trader stopped successfully".to_owned(),
                 status,
             };
 
@@ -99,11 +99,11 @@ pub async fn stop_trader_handler() -> Response {
                 ),
                 TraderControlError::AlreadyStopped => (
                     StatusCode::BAD_REQUEST,
-                    "Trader is already stopped".to_string(),
+                    "Trader is already stopped".to_owned(),
                 ),
                 TraderControlError::AlreadyRunning => (
                     StatusCode::BAD_REQUEST,
-                    "Trader is already running".to_string(),
+                    "Trader is already running".to_owned(),
                 ),
             };
 
@@ -122,7 +122,7 @@ pub async fn force_stop_handler(
 ) -> Response {
     let reason = payload
         .reason
-        .unwrap_or_else(|| "Manual force stop".to_string());
+        .unwrap_or_else(|| "Manual force stop".to_owned());
     crate::global::set_force_stopped(true, Some(&reason));
 
     // Also disable trader in config to ensure it stays stopped

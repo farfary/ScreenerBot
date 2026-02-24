@@ -291,13 +291,13 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
         crate::pools::PoolDiscovery::get_source_config();
     let mut sources_enabled = Vec::new();
     if dexs_enabled {
-        sources_enabled.push("DexScreener".to_string());
+        sources_enabled.push("DexScreener".to_owned());
     }
     if gecko_enabled {
-        sources_enabled.push("GeckoTerminal".to_string());
+        sources_enabled.push("GeckoTerminal".to_owned());
     }
     if raydium_enabled {
-        sources_enabled.push("Raydium".to_string());
+        sources_enabled.push("Raydium".to_owned());
     }
 
     let discovery_snapshot = PoolDiscoverySnapshot {

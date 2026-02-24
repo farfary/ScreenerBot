@@ -40,7 +40,7 @@ impl From<EndpointHealth> for EndpointHealthResponse {
                 latency_ms,
                 last_check,
             } => Self {
-                status: "healthy".to_string(),
+                status: "healthy".to_owned(),
                 latency_ms: Some(latency_ms),
                 message: None,
                 last_check: Some(last_check.to_rfc3339()),
@@ -52,7 +52,7 @@ impl From<EndpointHealth> for EndpointHealthResponse {
                 reason,
                 last_check,
             } => Self {
-                status: "degraded".to_string(),
+                status: "degraded".to_owned(),
                 latency_ms: Some(latency_ms),
                 message: Some(reason),
                 last_check: Some(last_check.to_rfc3339()),
@@ -65,7 +65,7 @@ impl From<EndpointHealth> for EndpointHealthResponse {
                 last_success,
                 consecutive_failures,
             } => Self {
-                status: "unhealthy".to_string(),
+                status: "unhealthy".to_owned(),
                 latency_ms: None,
                 message: Some(reason),
                 last_check: Some(last_check.to_rfc3339()),
@@ -73,9 +73,9 @@ impl From<EndpointHealth> for EndpointHealthResponse {
                 consecutive_failures: Some(consecutive_failures),
             },
             EndpointHealth::Unknown => Self {
-                status: "unknown".to_string(),
+                status: "unknown".to_owned(),
                 latency_ms: None,
-                message: Some("Not checked yet".to_string()),
+                message: Some("Not checked yet".to_owned()),
                 last_check: None,
                 last_success: None,
                 consecutive_failures: None,

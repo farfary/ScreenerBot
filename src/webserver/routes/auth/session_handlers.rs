@@ -174,7 +174,7 @@ pub async fn logout(headers: HeaderMap) -> Response {
 
     let response_body = LogoutResponse {
         success: true,
-        message: "Logged out successfully".to_string(),
+        message: "Logged out successfully".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     };
 

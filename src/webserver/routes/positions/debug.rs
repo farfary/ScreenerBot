@@ -314,12 +314,12 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
                 price_result
                     .source_pool
                     .as_ref()
-                    .unwrap_or(&"Unknown".to_string())
+                    .unwrap_or(&"Unknown".to_owned())
             ),
             dex_name: price_result
                 .source_pool
                 .as_ref()
-                .unwrap_or(&"Unknown".to_string())
+                .unwrap_or(&"Unknown".to_owned())
                 .clone(),
             sol_reserves: price_result.sol_reserves,
             token_reserves: price_result.token_reserves,

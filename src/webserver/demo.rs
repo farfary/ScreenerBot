@@ -122,11 +122,11 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         avg_position_size_sol: DEMO_INVESTED_SOL / DEMO_OPEN_POSITIONS as f64,
         avg_hold_duration_mins: 47,
         best_performer: Some(PositionPerformer {
-            symbol: "BONK".to_string(),
+            symbol: "BONK".to_owned(),
             pnl_percent: 23.5,
         }),
         worst_performer: Some(PositionPerformer {
-            symbol: "MEME".to_string(),
+            symbol: "MEME".to_owned(),
             pnl_percent: -8.2,
         }),
         dca_count: 1,
@@ -135,7 +135,7 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
     let uptime_secs = 3 * 24 * 3600 + 7 * 3600 + 23 * 60 + 45; // 3d 7h 23m 45s
     let system = SystemMetrics {
         uptime_seconds: uptime_secs,
-        uptime_formatted: "3d 7h 23m 45s".to_string(),
+        uptime_formatted: "3d 7h 23m 45s".to_owned(),
         memory_mb: DEMO_MEMORY_MB,
         memory_percent: 2.4,
         cpu_percent: DEMO_CPU_PERCENT,
@@ -218,7 +218,7 @@ pub fn get_demo_dashboard_overview() -> DashboardOverview {
             transactions_system: true,
         },
         uptime_seconds: uptime_secs,
-        uptime_formatted: "3d 7h 23m 45s".to_string(),
+        uptime_formatted: "3d 7h 23m 45s".to_owned(),
         memory_mb: DEMO_MEMORY_MB,
         cpu_percent: DEMO_CPU_PERCENT,
         active_threads: 24,
@@ -231,10 +231,10 @@ pub fn get_demo_dashboard_overview() -> DashboardOverview {
     };
 
     let mut by_reason = HashMap::new();
-    by_reason.insert("Manual".to_string(), 47);
-    by_reason.insert("MintAuthority".to_string(), 523);
-    by_reason.insert("FreezeAuthority".to_string(), 412);
-    by_reason.insert("NonAuthority::RugPull".to_string(), 271);
+    by_reason.insert("Manual".to_owned(), 47);
+    by_reason.insert("MintAuthority".to_owned(), 523);
+    by_reason.insert("FreezeAuthority".to_owned(), 412);
+    by_reason.insert("NonAuthority::RugPull".to_owned(), 271);
 
     let blacklist = BlacklistInfo {
         total_blacklisted: DEMO_BLACKLISTED,
@@ -284,7 +284,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 entry_time: entry_time.timestamp(),
                 exit_price: None,
                 exit_time: None,
-                position_type: "long".to_string(),
+                position_type: "long".to_owned(),
                 entry_size_sol: *size,
                 total_size_sol: *size,
                 price_highest: current * 1.05,
@@ -297,7 +297,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 sol_received: None,
                 profit_target_min: Some(15.0),
                 profit_target_max: Some(50.0),
-                liquidity_tier: Some("high".to_string()),
+                liquidity_tier: Some("high".to_owned()),
                 transaction_entry_verified: true,
                 transaction_exit_verified: false,
                 entry_fee_lamports: Some(5000),
@@ -342,7 +342,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 entry_time: entry_time.timestamp(),
                 exit_price: Some(*exit),
                 exit_time: Some(exit_time.timestamp()),
-                position_type: "long".to_string(),
+                position_type: "long".to_owned(),
                 entry_size_sol: *size,
                 total_size_sol: *size,
                 price_highest: exit * 1.02,
@@ -355,7 +355,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 sol_received: Some(size + pnl),
                 profit_target_min: Some(15.0),
                 profit_target_max: Some(50.0),
-                liquidity_tier: Some("high".to_string()),
+                liquidity_tier: Some("high".to_owned()),
                 transaction_entry_verified: true,
                 transaction_exit_verified: true,
                 entry_fee_lamports: Some(5000),
@@ -401,35 +401,35 @@ pub fn get_demo_wallet_current() -> WalletCurrentResponse {
     // Include demo token balances with real token data
     let token_balances = vec![
         TokenBalanceInfo {
-            mint: "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".to_string(), // TRUMP
+            mint: "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".to_owned(), // TRUMP
             balance: 125_340_000,
             balance_ui: 125.34,
             decimals: 6,
             is_token_2022: false,
         },
         TokenBalanceInfo {
-            mint: "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5".to_string(), // MEW
+            mint: "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5".to_owned(), // MEW
             balance: 2_345_000_000,
             balance_ui: 2345.0,
             decimals: 6,
             is_token_2022: false,
         },
         TokenBalanceInfo {
-            mint: "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump".to_string(), // Fartcoin
+            mint: "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump".to_owned(), // Fartcoin
             balance: 847_000_000,
             balance_ui: 847.0,
             decimals: 6,
             is_token_2022: false,
         },
         TokenBalanceInfo {
-            mint: "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82".to_string(), // BOME
+            mint: "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82".to_owned(), // BOME
             balance: 1_234_000_000,
             balance_ui: 1234.0,
             decimals: 6,
             is_token_2022: false,
         },
         TokenBalanceInfo {
-            mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), // USDC
+            mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_owned(), // USDC
             balance: 125_340_000,
             balance_ui: 125.34,
             decimals: 6,
@@ -457,22 +457,22 @@ pub fn get_demo_trader_stats() -> TraderStatsResponse {
         best_trade_pct: 92.5,
         exit_breakdown: vec![
             ExitBreakdown {
-                exit_type: "trailing_stop".to_string(),
+                exit_type: "trailing_stop".to_owned(),
                 count: 42,
                 avg_profit_pct: 31.8,
             },
             ExitBreakdown {
-                exit_type: "take_profit".to_string(),
+                exit_type: "take_profit".to_owned(),
                 count: 38,
                 avg_profit_pct: 45.2,
             },
             ExitBreakdown {
-                exit_type: "stop_loss".to_string(),
+                exit_type: "stop_loss".to_owned(),
                 count: 18,
                 avg_profit_pct: -18.5,
             },
             ExitBreakdown {
-                exit_type: "manual".to_string(),
+                exit_type: "manual".to_owned(),
                 count: 10,
                 avg_profit_pct: 34.7,
             },
@@ -543,36 +543,36 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
 pub fn get_demo_wallet_tokens() -> WalletTokensResponse {
     let tokens = vec![
         WalletTokenHolding {
-            mint: "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".to_string(),
-            symbol: Some("TRUMP".to_string()),
-            name: Some("Official Trump".to_string()),
+            mint: "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".to_owned(),
+            symbol: Some("TRUMP".to_owned()),
+            name: Some("Official Trump".to_owned()),
             balance: 125_340_000,
             ui_amount: 125.34,
             decimals: 6,
             is_token_2022: false,
         },
         WalletTokenHolding {
-            mint: "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5".to_string(),
-            symbol: Some("MEW".to_string()),
-            name: Some("cat in a dogs world".to_string()),
+            mint: "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5".to_owned(),
+            symbol: Some("MEW".to_owned()),
+            name: Some("cat in a dogs world".to_owned()),
             balance: 2_345_000_000,
             ui_amount: 2345.0,
             decimals: 6,
             is_token_2022: false,
         },
         WalletTokenHolding {
-            mint: "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump".to_string(),
-            symbol: Some("Fartcoin".to_string()),
-            name: Some("Fartcoin".to_string()),
+            mint: "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump".to_owned(),
+            symbol: Some("Fartcoin".to_owned()),
+            name: Some("Fartcoin".to_owned()),
             balance: 847_000_000,
             ui_amount: 847.0,
             decimals: 6,
             is_token_2022: false,
         },
         WalletTokenHolding {
-            mint: "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82".to_string(),
-            symbol: Some("BOME".to_string()),
-            name: Some("BOOK OF MEME".to_string()),
+            mint: "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82".to_owned(),
+            symbol: Some("BOME".to_owned()),
+            name: Some("BOOK OF MEME".to_owned()),
             balance: 1_234_000_000,
             ui_amount: 1234.0,
             decimals: 6,

@@ -349,10 +349,10 @@ pub struct CreateAutomationTaskRequest {
 }
 
 fn default_read_only() -> String {
-    "readonly".to_string()
+    "readonly".to_owned()
 }
 fn default_low() -> String {
-    "low".to_string()
+    "low".to_owned()
 }
 fn default_true() -> bool {
     true

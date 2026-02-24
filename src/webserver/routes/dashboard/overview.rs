@@ -167,15 +167,15 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
         match get_blacklist_summary(&db) {
             Ok(summary) => {
                 let mut by_reason = std::collections::HashMap::new();
-                by_reason.insert("Manual".to_string(), summary.manual_count);
-                by_reason.insert("MintAuthority".to_string(), summary.authority_mint_count);
+                by_reason.insert("Manual".to_owned(), summary.manual_count);
+                by_reason.insert("MintAuthority".to_owned(), summary.authority_mint_count);
                 by_reason.insert(
-                    "FreezeAuthority".to_string(),
+                    "FreezeAuthority".to_owned(),
                     summary.authority_freeze_count,
                 );
                 if summary.non_authority_auto_count > 0 {
                     by_reason.insert(
-                        "NonAuthorityAuto".to_string(),
+                        "NonAuthorityAuto".to_owned(),
                         summary.non_authority_auto_count,
                     );
                     for (reason, count) in summary.non_authority_breakdown.iter() {

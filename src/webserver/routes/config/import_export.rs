@@ -87,19 +87,19 @@ fn has_nested_field(value: &serde_json::Value, path: &str) -> bool {
 /// Helper to get section label for display
 fn get_section_label(section: &str) -> String {
     match section {
-        "rpc" => "RPC".to_string(),
-        "trader" => "Auto Trader".to_string(),
-        "positions" => "Positions".to_string(),
-        "filtering" => "Filtering".to_string(),
-        "swaps" => "Swaps".to_string(),
-        "tokens" => "Tokens".to_string(),
-        "sol_price" => "SOL Price".to_string(),
-        "events" => "Events".to_string(),
-        "services" => "Services".to_string(),
-        "monitoring" => "Monitoring".to_string(),
-        "ohlcv" => "OHLCV".to_string(),
-        "gui" => "GUI".to_string(),
-        "telegram" => "Telegram".to_string(),
+        "rpc" => "RPC".to_owned(),
+        "trader" => "Auto Trader".to_owned(),
+        "positions" => "Positions".to_owned(),
+        "filtering" => "Filtering".to_owned(),
+        "swaps" => "Swaps".to_owned(),
+        "tokens" => "Tokens".to_owned(),
+        "sol_price" => "SOL Price".to_owned(),
+        "events" => "Events".to_owned(),
+        "services" => "Services".to_owned(),
+        "monitoring" => "Monitoring".to_owned(),
+        "ohlcv" => "OHLCV".to_owned(),
+        "gui" => "GUI".to_owned(),
+        "telegram" => "Telegram".to_owned(),
         _ => section.to_string(),
     }
 }
@@ -284,7 +284,7 @@ pub async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response
     // Add metadata if requested
     if request.include_metadata {
         export_obj.insert(
-            "timestamp".to_string(),
+            "timestamp".to_owned(),
             serde_json::Value::String(chrono::Utc::now().to_rfc3339()),
         );
     }

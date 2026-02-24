@@ -127,7 +127,7 @@ pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Respo
 
             success_response(SetPasswordResponse {
                 success: true,
-                message: "Two-factor authentication enabled successfully".to_string(),
+                message: "Two-factor authentication enabled successfully".to_owned(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             })
         }
@@ -185,7 +185,7 @@ pub async fn totp_disable(Json(req): Json<TotpDisableRequest>) -> Response {
 
     success_response(SetPasswordResponse {
         success: true,
-        message: "Two-factor authentication disabled".to_string(),
+        message: "Two-factor authentication disabled".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }

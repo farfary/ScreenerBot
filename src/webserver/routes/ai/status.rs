@@ -52,8 +52,8 @@ pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
 
     // Add Ollama separately (different config type)
     providers.push(ProviderStatus {
-        id: "ollama".to_string(),
-        name: "Ollama (Local)".to_string(),
+        id: "ollama".to_owned(),
+        name: "Ollama (Local)".to_owned(),
         enabled: config.providers.ollama.enabled,
         has_api_key: true, // Ollama doesn't need API key
         model: config.providers.ollama.model.clone(),
@@ -62,8 +62,8 @@ pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
 
     // Add Assistant (OAuth-based, no API key)
     providers.push(ProviderStatus {
-        id: "Assistant".to_string(),
-        name: "an LLM provider".to_string(),
+        id: "Assistant".to_owned(),
+        name: "an LLM provider".to_owned(),
         enabled: config.providers.Assistant.enabled,
         has_api_key: crate::apis::llm::Assistant::is_authenticated(),
         model: config.providers.Assistant.model.clone(),

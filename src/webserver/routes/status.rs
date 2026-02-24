@@ -37,7 +37,7 @@ async fn health_check() -> Response {
     logger::debug(LogTag::Webserver, "Health check endpoint called");
 
     let response = HealthResponse {
-        status: "ok".to_string(),
+        status: "ok".to_owned(),
         timestamp: Utc::now(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     };

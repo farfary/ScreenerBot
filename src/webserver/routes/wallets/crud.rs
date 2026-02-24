@@ -213,7 +213,7 @@ pub async fn update_wallet(
 pub async fn delete_wallet(Path(id): Path<i64>) -> Response {
     match wallets::delete_wallet(id).await {
         Ok(()) => success_response(DeleteResponse {
-            message: "Wallet deleted successfully".to_string(),
+            message: "Wallet deleted successfully".to_owned(),
         }),
         Err(e) => {
             logger::error(
@@ -280,7 +280,7 @@ pub async fn set_main_wallet(Path(id): Path<i64>) -> Response {
 pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
     match wallets::archive_wallet(id).await {
         Ok(()) => success_response(DeleteResponse {
-            message: "Wallet archived successfully".to_string(),
+            message: "Wallet archived successfully".to_owned(),
         }),
         Err(e) => {
             logger::error(
@@ -306,7 +306,7 @@ pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
 pub async fn restore_wallet(Path(id): Path<i64>) -> Response {
     match wallets::restore_wallet(id).await {
         Ok(()) => success_response(DeleteResponse {
-            message: "Wallet restored successfully".to_string(),
+            message: "Wallet restored successfully".to_owned(),
         }),
         Err(e) => {
             logger::error(

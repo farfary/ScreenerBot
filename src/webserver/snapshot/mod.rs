@@ -37,7 +37,7 @@ static SYSTEM_METRICS_CACHE: LazyLock<RwLock<Option<CachedSystemMetrics>>> =
 /// Gather current status snapshot (aggregates data from multiple sources)
 pub async fn gather_status_snapshot() -> StatusSnapshot {
     let trading_enabled = config::with_config(|cfg| cfg.trader.enabled);
-    let trader_mode = "Normal".to_string();
+    let trader_mode = "Normal".to_owned();
     let trader_running = is_trader_running();
 
     let day_start_naive = Utc::now()

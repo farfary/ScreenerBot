@@ -205,7 +205,7 @@ async fn install_update() -> Response {
     match version::open_update(&path) {
         Ok(_) => success_response(InstallResponse {
             opened: true,
-            message: "Update installer opened. Please complete the installation.".to_string(),
+            message: "Update installer opened. Please complete the installation.".to_owned(),
         }),
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,

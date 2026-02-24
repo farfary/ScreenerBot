@@ -71,10 +71,10 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             let security = token_data.as_ref().map(|token| {
                 // Rugcheck normalized score: 0-100, LOWER = SAFER, HIGHER = RISKIER
                 let risk_level = match token.security_score_normalised {
-                    Some(score) if score <= 20 => "low".to_string(),
-                    Some(score) if score <= 50 => "medium".to_string(),
-                    Some(_) => "high".to_string(),
-                    None => "unknown".to_string(),
+                    Some(score) if score <= 20 => "low".to_owned(),
+                    Some(score) if score <= 50 => "medium".to_owned(),
+                    Some(_) => "high".to_owned(),
+                    None => "unknown".to_owned(),
                 };
 
                 let top_risks: Vec<String> = token
@@ -186,7 +186,7 @@ fn build_execution_rows(position: &positions::Position) -> Vec<PositionExecution
     let mut rows = Vec::with_capacity(2);
 
     rows.push(PositionExecutionRow {
-        kind: "entry".to_string(),
+        kind: "entry".to_owned(),
         timestamp: Some(position.entry_time.timestamp()),
         price_sol: Some(position.entry_price),
         effective_price_sol: position.effective_entry_price,
@@ -203,7 +203,7 @@ fn build_execution_rows(position: &positions::Position) -> Vec<PositionExecution
 
     let mut exit_notes: Vec<String> = Vec::new();
     if position.synthetic_exit {
-        exit_notes.push("Synthetic exit".to_string());
+        exit_notes.push("Synthetic exit".to_owned());
     }
     if let Some(reason) = &position.closed_reason {
         if !reason.is_empty() {
@@ -211,11 +211,11 @@ fn build_execution_rows(position: &positions::Position) -> Vec<PositionExecution
         }
     }
     if !position.transaction_exit_verified && position.exit_time.is_none() {
-        exit_notes.push("Exit pending".to_string());
+        exit_notes.push("Exit pending".to_owned());
     }
 
     rows.push(PositionExecutionRow {
-        kind: "exit".to_string(),
+        kind: "exit".to_owned(),
         timestamp: position.exit_time.map(|dt| dt.timestamp()),
         price_sol: position.exit_price,
         effective_price_sol: position.effective_exit_price,
@@ -260,7 +260,7 @@ async fn fetch_transaction_summary(
             Ok(None) => PositionTransactionSummary::missing(
                 kind,
                 Some(sig),
-                Some("Transaction not available in cache".to_string()),
+                Some("Transaction not available in cache".to_owned()),
             ),
             Err(err) => {
                 logger::info(
@@ -272,9 +272,9 @@ async fn fetch_transaction_summary(
         },
         None => {
             let note = if kind == "exit" && position.synthetic_exit {
-                "Synthetic exit - no signature".to_string()
+                "Synthetic exit - no signature".to_owned()
             } else {
-                "Signature not recorded".to_string()
+                "Signature not recorded".to_owned()
             };
             PositionTransactionSummary::missing(kind, None, Some(note))
         }

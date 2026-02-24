@@ -72,15 +72,15 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
     match get_blacklist_summary(&db) {
         Ok(summary) => {
             let mut by_reason = std::collections::HashMap::new();
-            by_reason.insert("MintAuthority".to_string(), summary.authority_mint_count);
+            by_reason.insert("MintAuthority".to_owned(), summary.authority_mint_count);
             by_reason.insert(
-                "FreezeAuthority".to_string(),
+                "FreezeAuthority".to_owned(),
                 summary.authority_freeze_count,
             );
-            by_reason.insert("Manual".to_string(), summary.manual_count);
+            by_reason.insert("Manual".to_owned(), summary.manual_count);
             if summary.non_authority_auto_count > 0 {
                 by_reason.insert(
-                    "NonAuthorityAuto".to_string(),
+                    "NonAuthorityAuto".to_owned(),
                     summary.non_authority_auto_count,
                 );
                 for (reason, count) in summary.non_authority_breakdown.iter() {
@@ -150,10 +150,10 @@ fn map_account_record(record: BlacklistedAccountRecord) -> AccountBlacklistEntry
 
 fn format_unix(value: i64) -> String {
     if value <= 0 {
-        return "n/a".to_string();
+        return "n/a".to_owned();
     }
     match chrono::NaiveDateTime::from_timestamp_opt(value, 0) {
         Some(naive) => chrono::DateTime::<chrono::Utc>::from_utc(naive, chrono::Utc).to_rfc3339(),
-        None => "n/a".to_string(),
+        None => "n/a".to_owned(),
     }
 }

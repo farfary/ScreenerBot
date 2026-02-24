@@ -95,7 +95,7 @@ pub async fn get_trader_stats() -> Response {
         let exit_type = pos
             .closed_reason
             .clone()
-            .unwrap_or_else(|| "unknown".to_string());
+            .unwrap_or_else(|| "unknown".to_owned());
         let entry = exit_stats.entry(exit_type).or_insert((0, Vec::new()));
         entry.0 += 1;
         if let Some(pnl_pct) = pos.pnl_percent {
@@ -178,11 +178,11 @@ pub async fn get_trailing_stop_preview(
                 )
             } else {
                 // Position not found, use simulation
-                (None, "SIMULATED".to_string(), 0.001, 0.00119, 0.00123)
+                (None, "SIMULATED".to_owned(), 0.001, 0.00119, 0.00123)
             }
         } else {
             // No position_id, use simulation
-            (None, "SIMULATED".to_string(), 0.001, 0.00119, 0.00123)
+            (None, "SIMULATED".to_owned(), 0.001, 0.00119, 0.00123)
         };
 
     // Calculate current profit
@@ -381,10 +381,10 @@ pub async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Respon
 pub fn get_all_templates() -> Vec<Template> {
     vec![
         Template {
-            id: "conservative".to_string(),
-            name: "Conservative".to_string(),
-            description: "Low risk, secure profits early".to_string(),
-            trading_style: "conservative".to_string(),
+            id: "conservative".to_owned(),
+            name: "Conservative".to_owned(),
+            description: "Low risk, secure profits early".to_owned(),
+            trading_style: "conservative".to_owned(),
             config: TemplateConfig {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 5.0,
@@ -393,15 +393,15 @@ pub fn get_all_templates() -> Vec<Template> {
                 roi_target_pct: 10.0,
                 time_override_enabled: true,
                 time_override_duration: 3.0,
-                time_override_unit: "days".to_string(),
+                time_override_unit: "days".to_owned(),
                 time_override_loss_threshold_pct: -20.0,
             },
         },
         Template {
-            id: "balanced".to_string(),
-            name: "Balanced".to_string(),
-            description: "Balanced risk/reward".to_string(),
-            trading_style: "balanced".to_string(),
+            id: "balanced".to_owned(),
+            name: "Balanced".to_owned(),
+            description: "Balanced risk/reward".to_owned(),
+            trading_style: "balanced".to_owned(),
             config: TemplateConfig {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 10.0,
@@ -410,15 +410,15 @@ pub fn get_all_templates() -> Vec<Template> {
                 roi_target_pct: 20.0,
                 time_override_enabled: true,
                 time_override_duration: 7.0,
-                time_override_unit: "days".to_string(),
+                time_override_unit: "days".to_owned(),
                 time_override_loss_threshold_pct: -40.0,
             },
         },
         Template {
-            id: "aggressive".to_string(),
-            name: "Aggressive".to_string(),
-            description: "High risk, chase large gains".to_string(),
-            trading_style: "aggressive".to_string(),
+            id: "aggressive".to_owned(),
+            name: "Aggressive".to_owned(),
+            description: "High risk, chase large gains".to_owned(),
+            trading_style: "aggressive".to_owned(),
             config: TemplateConfig {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 15.0,
@@ -427,15 +427,15 @@ pub fn get_all_templates() -> Vec<Template> {
                 roi_target_pct: 50.0,
                 time_override_enabled: true,
                 time_override_duration: 14.0,
-                time_override_unit: "days".to_string(),
+                time_override_unit: "days".to_owned(),
                 time_override_loss_threshold_pct: -60.0,
             },
         },
         Template {
-            id: "day_trade".to_string(),
-            name: "Day Trade".to_string(),
-            description: "Quick exits, tight stops".to_string(),
-            trading_style: "day_trade".to_string(),
+            id: "day_trade".to_owned(),
+            name: "Day Trade".to_owned(),
+            description: "Quick exits, tight stops".to_owned(),
+            trading_style: "day_trade".to_owned(),
             config: TemplateConfig {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 5.0,
@@ -444,7 +444,7 @@ pub fn get_all_templates() -> Vec<Template> {
                 roi_target_pct: 5.0,
                 time_override_enabled: true,
                 time_override_duration: 4.0,
-                time_override_unit: "hours".to_string(),
+                time_override_unit: "hours".to_owned(),
                 time_override_loss_threshold_pct: -15.0,
             },
         },

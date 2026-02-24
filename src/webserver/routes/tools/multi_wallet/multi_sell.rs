@@ -86,7 +86,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
             token_to_sell: 0.0,
             estimated_sol: None,
             can_proceed: false,
-            warning: Some("No secondary wallets found".to_string()),
+            warning: Some("No secondary wallets found".to_owned()),
             wallets: vec![],
         });
     }
@@ -136,7 +136,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     let token_to_sell = total_token_balance * (request.sell_percentage / 100.0);
     let can_proceed = !wallets_with_balance.is_empty();
     let warning = if !can_proceed {
-        Some("No wallets have token balance".to_string())
+        Some("No wallets have token balance".to_owned())
     } else {
         None
     };
@@ -238,7 +238,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
                 result: SessionResult::new(session_id.clone()),
                 status: SessionStatus::Pending,
                 abort_flag: abort_flag.clone(),
-                operation_type: "multi_sell".to_string(),
+                operation_type: "multi_sell".to_owned(),
                 token_mint: token_mint.clone(),
                 started_at: chrono::Utc::now(),
             },
@@ -288,7 +288,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
 
     success_response(SessionStartResponse {
         session_id,
-        message: "Multi-sell session started".to_string(),
+        message: "Multi-sell session started".to_owned(),
     })
 }
 

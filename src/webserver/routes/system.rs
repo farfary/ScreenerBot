@@ -201,7 +201,7 @@ async fn reboot_system() -> Response {
 
     let response = RebootResponse {
         success: true,
-        message: "System reboot initiated. Process will restart shortly.".to_string(),
+        message: "System reboot initiated. Process will restart shortly.".to_owned(),
     };
 
     success_response(response)
@@ -386,7 +386,7 @@ async fn open_data_directory() -> Response {
     match paths::open_directory_in_file_manager(&data_dir) {
         Ok(_) => success_response(OpenPathResponse {
             opened: true,
-            message: "Data folder opened in your file manager".to_string(),
+            message: "Data folder opened in your file manager".to_owned(),
             path: data_dir.display().to_string(),
         }),
         Err(err) => error_response(
@@ -430,7 +430,7 @@ async fn open_url(axum::Json(request): axum::Json<OpenUrlRequest>) -> Response {
     match paths::open_url_in_browser(url) {
         Ok(_) => success_response(OpenUrlResponse {
             opened: true,
-            message: "URL opened in your default browser".to_string(),
+            message: "URL opened in your default browser".to_owned(),
             url: url.to_string(),
         }),
         Err(err) => error_response(

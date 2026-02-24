@@ -114,15 +114,15 @@ async fn initialization_status() -> Response {
     let (required, reason) = if !config_exists {
         (
             true,
-            "Configuration file does not exist. Initial setup required.".to_string(),
+            "Configuration file does not exist. Initial setup required.".to_owned(),
         )
     } else if !initialization_complete {
         (
             true,
-            "Initialization in progress or incomplete.".to_string(),
+            "Initialization in progress or incomplete.".to_owned(),
         )
     } else {
-        (false, "System fully initialized.".to_string())
+        (false, "System fully initialized.".to_owned())
     };
 
     let response = InitializationStatusResponse {
@@ -187,9 +187,9 @@ async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -
 
     // Validate RPC URLs count
     if request.rpc_urls.is_empty() {
-        errors.push("At least one RPC URL is required".to_string());
+        errors.push("At least one RPC URL is required".to_owned());
     } else if request.rpc_urls.len() > 10 {
-        errors.push("Maximum 10 RPC URLs allowed".to_string());
+        errors.push("Maximum 10 RPC URLs allowed".to_owned());
     }
 
     // Validate wallet private key
@@ -253,7 +253,7 @@ async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -
     }
 
     if successful_rpcs.is_empty() && !rpc_test_results.is_empty() {
-        errors.push("All RPC endpoints failed connection tests".to_string());
+        errors.push("All RPC endpoints failed connection tests".to_owned());
     } else if !failed_rpcs.is_empty() {
         warnings.push(format!(
             "{} of {} RPC endpoint(s) failed - will only use working endpoints",
@@ -325,7 +325,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
 
     // Step 2: Test RPC endpoints
     if request.rpc_urls.is_empty() {
-        errors.push("At least one RPC URL is required".to_string());
+        errors.push("At least one RPC URL is required".to_owned());
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_CREDENTIALS",
@@ -345,7 +345,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         .collect();
 
     if working_rpc_urls.is_empty() {
-        errors.push("No working RPC endpoints found".to_string());
+        errors.push("No working RPC endpoints found".to_owned());
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_CREDENTIALS",
@@ -531,20 +531,20 @@ async fn initialization_progress() -> Response {
 
     let (step, status, message) = if !initialization_complete {
         (
-            "pre-initialization".to_string(),
-            "waiting".to_string(),
-            "Awaiting user credentials".to_string(),
+            "pre-initialization".to_owned(),
+            "waiting".to_owned(),
+            "Awaiting user credentials".to_owned(),
         )
     } else if services_total == 0 {
         (
-            "services-startup".to_string(),
-            "idle".to_string(),
-            "No enabled services registered".to_string(),
+            "services-startup".to_owned(),
+            "idle".to_owned(),
+            "No enabled services registered".to_owned(),
         )
     } else if services_started < services_total {
         (
-            "services-startup".to_string(),
-            "starting".to_string(),
+            "services-startup".to_owned(),
+            "starting".to_owned(),
             format!(
                 "Starting services ({} / {})...",
                 services_started, services_total
@@ -552,9 +552,9 @@ async fn initialization_progress() -> Response {
         )
     } else {
         (
-            "services-startup".to_string(),
-            "complete".to_string(),
-            "All services initialized".to_string(),
+            "services-startup".to_owned(),
+            "complete".to_owned(),
+            "All services initialized".to_owned(),
         )
     };
 
@@ -597,7 +597,7 @@ fn parse_wallet_private_key(private_key: &str) -> Result<Keypair, String> {
         }
     }
 
-    Err("Invalid private key format. Must be base58 string or JSON array of 64 bytes".to_string())
+    Err("Invalid private key format. Must be base58 string or JSON array of 64 bytes".to_owned())
 }
 
 /// Start remaining services after initialization
@@ -609,12 +609,12 @@ async fn start_remaining_services() -> Result<services::ServiceStartupReport, St
 
     let manager_ref = services::get_service_manager()
         .await
-        .ok_or("ServiceManager not available".to_string())?;
+        .ok_or("ServiceManager not available".to_owned())?;
 
     let mut manager_guard = manager_ref.write().await;
     let manager = manager_guard
         .as_mut()
-        .ok_or("ServiceManager not initialized".to_string())?;
+        .ok_or("ServiceManager not initialized".to_owned())?;
 
     // Start newly enabled services
     let report = manager

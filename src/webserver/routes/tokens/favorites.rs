@@ -100,7 +100,7 @@ pub async fn remove_favorite(
                 Ok(Json(FavoriteResponse {
                     success: true,
                     favorite: None,
-                    message: Some("Favorite removed".to_string()),
+                    message: Some("Favorite removed".to_owned()),
                 }))
             } else {
                 logger::debug(

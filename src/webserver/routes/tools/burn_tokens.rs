@@ -128,23 +128,23 @@ pub async fn scan_burnable_tokens() -> Response {
                 categories.open_positions += 1;
                 (
                     TokenCategory::OpenPosition,
-                    "Open Position".to_string(),
+                    "Open Position".to_owned(),
                     false,
-                    Some("Cannot burn tokens from open positions".to_string()),
+                    Some("Cannot burn tokens from open positions".to_owned()),
                 )
             } else if closed_position_mints.contains(&account.mint) {
                 categories.closed_positions += 1;
                 (
                     TokenCategory::ClosedPosition,
-                    "Closed Position".to_string(),
+                    "Closed Position".to_owned(),
                     true,
-                    Some("Leftover from closed position".to_string()),
+                    Some("Leftover from closed position".to_owned()),
                 )
             } else if has_liquidity && value_sol.is_some_and(|v| v > 0.0001) {
                 categories.has_value += 1;
                 (
                     TokenCategory::HasValue,
-                    "Has Value".to_string(),
+                    "Has Value".to_owned(),
                     true,
                     Some(format!("Worth ~{:.6} SOL", value_sol.unwrap_or_default())),
                 )
@@ -152,7 +152,7 @@ pub async fn scan_burnable_tokens() -> Response {
                 categories.zero_liquidity += 1;
                 (
                     TokenCategory::ZeroLiquidity,
-                    "Zero Liquidity".to_string(),
+                    "Zero Liquidity".to_owned(),
                     true,
                     None,
                 )
@@ -300,7 +300,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 mint: mint.clone(),
                 success: false,
                 signature: None,
-                error: Some("Cannot burn SOL".to_string()),
+                error: Some("Cannot burn SOL".to_owned()),
             });
             failed += 1;
             continue;
@@ -312,7 +312,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 mint: mint.clone(),
                 success: false,
                 signature: None,
-                error: Some("Cannot burn tokens from open positions".to_string()),
+                error: Some("Cannot burn tokens from open positions".to_owned()),
             });
             failed += 1;
             continue;
@@ -326,7 +326,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some("Token account not found".to_string()),
+                    error: Some("Token account not found".to_owned()),
                 });
                 failed += 1;
                 continue;
@@ -339,7 +339,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 mint: mint.clone(),
                 success: false,
                 signature: None,
-                error: Some("Token balance is already zero".to_string()),
+                error: Some("Token balance is already zero".to_owned()),
             });
             failed += 1;
             continue;

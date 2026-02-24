@@ -257,7 +257,7 @@ pub async fn focus_token(
         mint,
         focused: true,
         ohlcv_priority_updated: ohlcv_updated,
-        message: Some("Token focused for priority data fetching".to_string()),
+        message: Some("Token focused for priority data fetching".to_owned()),
     }))
 }
 
@@ -316,7 +316,7 @@ pub async fn unfocus_token(
         mint,
         focused: false,
         ohlcv_priority_updated: ohlcv_updated,
-        message: Some("Token unfocused".to_string()),
+        message: Some("Token unfocused".to_owned()),
     }))
 }
 
@@ -332,7 +332,7 @@ pub async fn get_token_dexscreener(
     let mint_clone = mint.clone();
     let data = tokio::task::spawn_blocking(move || {
         let db = crate::tokens::get_global_database()
-            .ok_or_else(|| "Token database not initialized".to_string())?;
+            .ok_or_else(|| "Token database not initialized".to_owned())?;
         db.get_dexscreener_data(&mint_clone)
             .map_err(|e| format!("Database error: {e}"))
     })
@@ -350,7 +350,7 @@ pub async fn get_token_dexscreener(
                     dexscreener_data.price_sol,
                     dexscreener_data
                         .liquidity_usd
-                        .map_or("N/A".to_string(), |v| format!("{:.2}", v)),
+                        .map_or("N/A".to_owned(), |v| format!("{:.2}", v)),
                     dexscreener_data
                         .market_data_last_fetched_at
                         .format("%Y-%m-%d %H:%M:%S")

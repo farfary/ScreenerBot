@@ -17,7 +17,7 @@ pub async fn add_to_blacklist(
 ) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
     let reason = request
         .map(|r| r.reason)
-        .unwrap_or_else(|| "Manual blacklist via UI".to_string());
+        .unwrap_or_else(|| "Manual blacklist via UI".to_owned());
 
     logger::debug(
         LogTag::Webserver,
@@ -122,7 +122,7 @@ pub async fn remove_from_blacklist(
                 success: true,
                 mint,
                 is_blacklisted: false,
-                message: Some("Token removed from blacklist".to_string()),
+                message: Some("Token removed from blacklist".to_owned()),
             }))
         }
         Ok(Err(e)) => {

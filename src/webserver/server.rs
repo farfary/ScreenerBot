@@ -71,7 +71,7 @@ async fn find_available_port() -> Result<u16, String> {
         }
     }
 
-    Err("Could not find an available port after 100 attempts".to_string())
+    Err("Could not find an available port after 100 attempts".to_owned())
 }
 
 /// Start the webserver
