@@ -1,3 +1,5 @@
+//! Internet connectivity monitor — basic reachability check via DNS/HTTP.
+
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};

@@ -1,3 +1,5 @@
+//! Connectivity data types — endpoint health status, criticality levels, and fallback strategies.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

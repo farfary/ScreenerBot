@@ -1,3 +1,5 @@
+//! Endpoint monitor trait — defines the interface for health check implementations.
+
 use super::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
 use async_trait::async_trait;
 

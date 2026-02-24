@@ -1,3 +1,5 @@
+//! Connectivity state management — tracks and aggregates endpoint health across services.
+
 use super::types::{EndpointCriticality, EndpointHealth, FallbackStrategy};
 use chrono::Utc;
 use std::collections::HashMap;

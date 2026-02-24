@@ -1,3 +1,5 @@
+//! Jupiter API health monitor — checks swap endpoint availability.
+
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
