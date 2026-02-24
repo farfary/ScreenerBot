@@ -609,12 +609,12 @@ async fn start_remaining_services() -> Result<services::ServiceStartupReport, St
 
     let manager_ref = services::get_service_manager()
         .await
-        .ok_or("ServiceManager not available".to_owned())?;
+        .ok_or_else(|| "ServiceManager not available".to_owned())?;
 
     let mut manager_guard = manager_ref.write().await;
     let manager = manager_guard
         .as_mut()
-        .ok_or("ServiceManager not initialized".to_owned())?;
+        .ok_or_else(|| "ServiceManager not initialized".to_owned())?;
 
     // Start newly enabled services
     let report = manager
