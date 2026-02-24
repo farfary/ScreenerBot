@@ -142,7 +142,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
         Some(rpc_stats) => {
             let rpc_uptime = chrono::Utc::now()
                 .signed_duration_since(rpc_stats.startup_time)
-                .num_seconds() as u64;
+                .num_seconds().max(0) as u64;
             let recent_calls_per_second = rpc_stats.calls_per_minute_recent(5) / 60.0;
             let fallback_cps = rpc_stats.calls_per_second();
             RpcInfo {

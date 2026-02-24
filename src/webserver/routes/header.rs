@@ -145,7 +145,7 @@ async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         let recent_cpm = stats.calls_per_minute_recent(5);
         let uptime_secs = chrono::Utc::now()
             .signed_duration_since(stats.startup_time)
-            .num_seconds() as u64;
+            .num_seconds().max(0) as u64;
         let fallback_cpm = (stats.total_calls() as f64 / uptime_secs.max(1) as f64) * 60.0;
 
         RpcHeaderInfo {

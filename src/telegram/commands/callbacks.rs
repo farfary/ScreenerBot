@@ -242,7 +242,7 @@ async fn send_position_details(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
 
     match position {
         Some(pos) => {
-            let duration = (chrono::Utc::now() - pos.entry_time).num_seconds() as u64;
+            let duration = (chrono::Utc::now() - pos.entry_time).num_seconds().max(0) as u64;
             let tokens = pos
                 .remaining_token_amount
                 .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
