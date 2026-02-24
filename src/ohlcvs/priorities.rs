@@ -64,7 +64,7 @@ impl PriorityManager {
 
     /// Get recommended action for a token
     pub fn get_recommended_action(config: &TokenOhlcvConfig) -> RecommendedAction {
-        let hours_inactive = (Utc::now() - config.last_activity).num_hours() as f64;
+        let hours_inactive = (Utc::now() - config.last_activity).num_hours().max(0) as f64;
 
         // Critical priority - always fetch
         if config.priority == Priority::Critical {
