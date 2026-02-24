@@ -1,0 +1,384 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.110)'
+        required: true
+        type: string
+      create_release:
+        description: 'Create GitHub Release with artifacts'
+        required: false
+        type: boolean
+        default: false
+
+# Cancel in-progress runs for the same workflow
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ===========================================================================
+  # Build Rust binaries for all platforms
+  # ===========================================================================
+
+  build-rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS
+          - os: macos-14
+            target: aarch64-apple-darwin
+            platform: macOS
+            arch: arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            platform: macOS
+            arch: x64
+
+          # Linux (native x64 + cross-compile arm64)
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: Linux
+            arch: x64
+          - os: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+            platform: Linux
+            arch: arm64
+            cross: true
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: Windows
+            arch: x64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            platform: Windows
+            arch: arm64
+
+    runs-on: ${{ matrix.os }}
+    name: Rust · ${{ matrix.platform }} ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-${{ matrix.target }}-
+
+      # Linux arm64 cross-compilation setup
+      - name: Install cross-compilation tools (Linux arm64)
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Set cross-compilation env (Linux arm64)
+        if: matrix.cross
+        run: |
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> "$GITHUB_ENV"
+
+      - name: Build Rust binary
+        run: cargo build --release --target ${{ matrix.target }} --bin screenerbot
+
+      - name: Determine binary name
+        id: binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "Windows" ]; then
+            echo "name=screenerbot.exe" >> "$GITHUB_OUTPUT"
+            echo "path=target/${{ matrix.target }}/release/screenerbot.exe" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=screenerbot" >> "$GITHUB_OUTPUT"
+            echo "path=target/${{ matrix.target }}/release/screenerbot" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Rust binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ steps.binary.outputs.path }}
+          retention-days: 7
+
+      # Also upload headless tarball for Linux
+      - name: Package headless binary (Linux)
+        if: matrix.platform == 'Linux'
+        shell: bash
+        run: |
+          mkdir -p headless-pkg
+          cp "${{ steps.binary.outputs.path }}" headless-pkg/screenerbot
+          chmod +x headless-pkg/screenerbot
+          tar -czf "ScreenerBot-${{ inputs.version }}-Linux-${{ matrix.arch }}-headless.tar.gz" -C headless-pkg screenerbot
+
+      - name: Upload headless tarball (Linux)
+        if: matrix.platform == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: headless-Linux-${{ matrix.arch }}
+          path: "ScreenerBot-${{ inputs.version }}-Linux-${{ matrix.arch }}-headless.tar.gz"
+          retention-days: 7
+
+  # ===========================================================================
+  # Package Electron app for macOS
+  # ===========================================================================
+
+  package-macos:
+    needs: build-rust
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            arch: arm64
+            rust-artifact: rust-macOS-arm64
+          - os: macos-13
+            arch: x64
+            rust-artifact: rust-macOS-x64
+    runs-on: ${{ matrix.os }}
+    name: Package · macOS ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download Rust binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.rust-artifact }}
+          path: target/release/
+
+      - name: Make binary executable
+        run: chmod +x target/release/screenerbot
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build Electron app
+        working-directory: electron
+        run: npx electron-forge make -- --arch=${{ matrix.arch == 'arm64' && 'arm64' || 'x64' }}
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find electron/out/make -name "*.dmg" -exec cp {} dist/ \;
+          find electron/out/make -name "*.zip" -exec cp {} dist/ \;
+          # Rename to standard naming convention
+          cd dist
+          for f in *.dmg; do
+            [ -f "$f" ] && mv "$f" "ScreenerBot-${{ inputs.version }}-macOS-${{ matrix.arch }}.dmg" 2>/dev/null || true
+          done
+          for f in *.zip; do
+            [ -f "$f" ] && mv "$f" "ScreenerBot-${{ inputs.version }}-macOS-${{ matrix.arch }}.zip" 2>/dev/null || true
+          done
+          ls -la
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-macOS-${{ matrix.arch }}
+          path: dist/*
+          retention-days: 7
+
+  # ===========================================================================
+  # Package Electron app for Linux
+  # ===========================================================================
+
+  package-linux:
+    needs: build-rust
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            rust-artifact: rust-Linux-x64
+            electron-arch: x64
+          - arch: arm64
+            rust-artifact: rust-Linux-arm64
+            electron-arch: arm64
+    runs-on: ubuntu-22.04
+    name: Package · Linux ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download Rust binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.rust-artifact }}
+          path: target/release/
+
+      - name: Make binary executable
+        run: chmod +x target/release/screenerbot
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg fakeroot
+
+      # arm64 electron packaging requires additional setup
+      - name: Install arm64 packaging dependencies
+        if: matrix.arch == 'arm64'
+        run: |
+          sudo dpkg --add-architecture arm64
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build Electron app
+        working-directory: electron
+        run: npx electron-forge make --arch=${{ matrix.electron-arch }}
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find electron/out/make -name "*.deb" -exec cp {} dist/ \;
+          find electron/out/make -name "*.zip" -exec cp {} dist/ \;
+          # Rename to standard naming convention
+          cd dist
+          for f in *.deb; do
+            [ -f "$f" ] && mv "$f" "ScreenerBot-${{ inputs.version }}-Linux-${{ matrix.arch }}.deb" 2>/dev/null || true
+          done
+          for f in *.zip; do
+            [ -f "$f" ] && mv "$f" "ScreenerBot-${{ inputs.version }}-Linux-${{ matrix.arch }}.zip" 2>/dev/null || true
+          done
+          ls -la
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-Linux-${{ matrix.arch }}
+          path: dist/*
+          retention-days: 7
+
+  # ===========================================================================
+  # Package Electron app for Windows
+  # ===========================================================================
+
+  package-windows:
+    needs: build-rust
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            rust-artifact: rust-Windows-x64
+            electron-arch: x64
+          - arch: arm64
+            rust-artifact: rust-Windows-arm64
+            electron-arch: arm64
+    runs-on: windows-latest
+    name: Package · Windows ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download Rust binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.rust-artifact }}
+          path: target/release/
+
+      - name: Install Electron dependencies
+        working-directory: electron
+        run: npm ci
+
+      - name: Build Electron app
+        working-directory: electron
+        run: npx electron-forge make --arch=${{ matrix.electron-arch }}
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find electron/out/make -name "*.msi" -exec cp {} dist/ \; 2>/dev/null || true
+          find electron/out/make -name "*.zip" -exec cp {} dist/ \;
+          # Rename to standard naming convention
+          cd dist
+          for f in *.msi; do
+            [ -f "$f" ] && mv "$f" "ScreenerBot-${{ inputs.version }}-Windows-${{ matrix.arch }}.msi" 2>/dev/null || true
+          done
+          for f in *.zip; do
+            [ -f "$f" ] && mv "$f" "ScreenerBot-${{ inputs.version }}-Windows-${{ matrix.arch }}.zip" 2>/dev/null || true
+          done
+          ls -la
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-Windows-${{ matrix.arch }}
+          path: dist/*
+          retention-days: 7
+
+  # ===========================================================================
+  # Create GitHub Release (optional)
+  # ===========================================================================
+
+  release:
+    if: inputs.create_release
+    needs: [package-macos, package-linux, package-windows, build-rust]
+    runs-on: ubuntu-latest
+    name: Create Release
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Organize release files
+        run: |
+          mkdir -p release
+          # Copy all packaged artifacts
+          find artifacts/package-* -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.deb" -o -name "*.msi" \) -exec cp {} release/ \;
+          # Copy headless tarballs
+          find artifacts/headless-* -type f -name "*.tar.gz" -exec cp {} release/ \;
+          echo "Release artifacts:"
+          ls -la release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ScreenerBot ${{ inputs.version }}
+          draft: true
+          generate_release_notes: true
+          files: release/*

@@ -76,7 +76,8 @@ Bot/
 _backup/
 
 # Assistant/agent instructions (private)
-.github/
+.github/*
+!.github/workflows/
 Assistant-session-*.md
 .folderinfo
 
