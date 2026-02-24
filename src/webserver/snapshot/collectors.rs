@@ -253,7 +253,7 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
         let mut program_counts: HashMap<String, usize> = HashMap::new();
         for descriptor in guard.values() {
             let label = descriptor.program_kind.display_name().to_string();
-            *program_counts.entry(label).or_insert(0) += 1;
+            *program_counts.entry(label).or_default() += 1;
         }
 
         let mut program_distribution: Vec<PoolProgramCount> = program_counts

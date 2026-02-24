@@ -51,8 +51,8 @@ impl ConnectivityState {
         fallback: Option<FallbackStrategy>,
     ) {
         self.health.entry(name).or_insert(EndpointHealth::Unknown);
-        self.failures.entry(name).or_insert(0);
-        self.successes.entry(name).or_insert(0);
+        self.failures.entry(name).or_default();
+        self.successes.entry(name).or_default();
 
         let should_update_criticality = self
             .criticality
@@ -89,7 +89,7 @@ impl ConnectivityState {
 
         if healthy {
             // Increment success counter
-            let successes = self.successes.entry(name).or_insert(0);
+            let successes = self.successes.entry(name).or_default();
             *successes += 1;
 
             // Check if we've recovered
@@ -124,7 +124,7 @@ impl ConnectivityState {
             }
         } else {
             // Increment failure counter
-            let failures = self.failures.entry(name).or_insert(0);
+            let failures = self.failures.entry(name).or_default();
             *failures += 1;
 
             // Reset success counter

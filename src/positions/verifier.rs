@@ -656,7 +656,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         // PARTIAL EXIT: Verify expected amount was sold, balance check is informational
                         if item.is_partial_exit {
                             if let Some(expected) = item.expected_exit_amount {
-                                let tolerance = std::cmp::max(expected / 1000, 10); // 0.1% tolerance or 10 units
+                                let tolerance = (expected / 1000).max(10); // 0.1% tolerance or 10 units
                                 if exit_amount < expected.saturating_sub(tolerance)
                                     || exit_amount > expected + tolerance
                                 {

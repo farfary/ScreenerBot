@@ -125,7 +125,7 @@ impl Drop for PositionLockGuard {
 /// Mark that a partial exit is pending for a mint (increments count)
 pub async fn mark_partial_exit_pending(mint: &str) {
     let mut map = PENDING_PARTIAL_EXITS.write().await;
-    let counter = map.entry(mint.to_string()).or_insert(0);
+    let counter = map.entry(mint.to_string()).or_default();
     *counter = counter.saturating_add(1);
 }
 
@@ -311,7 +311,7 @@ pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>
         let mut counters = PENDING_PARTIAL_EXITS.write().await;
         counters.clear();
         for entry in &entries {
-            let counter = counters.entry(entry.mint.clone()).or_insert(0);
+            let counter = counters.entry(entry.mint.clone()).or_default();
             *counter = counter.saturating_add(1);
         }
     }

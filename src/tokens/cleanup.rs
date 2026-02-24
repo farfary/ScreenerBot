@@ -262,7 +262,7 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
                 authority_freeze_count += 1;
             } else {
                 non_authority_auto_count += 1;
-                *non_authority_breakdown.entry(reason).or_insert(0) += 1;
+                *non_authority_breakdown.entry(reason).or_default() += 1;
             }
         }
     }

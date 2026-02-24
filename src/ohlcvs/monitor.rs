@@ -1616,7 +1616,7 @@ fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity) {
 fn count_by_priority(configs: &HashMap<String, TokenOhlcvConfig>) -> HashMap<Priority, usize> {
     let mut counts = HashMap::new();
     for config in configs.values() {
-        *counts.entry(config.priority).or_insert(0) += 1;
+        *counts.entry(config.priority).or_default() += 1;
     }
     counts
 }

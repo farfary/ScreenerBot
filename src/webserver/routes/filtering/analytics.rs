@@ -76,7 +76,7 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     || reason == "gecko_data_missing"
                     || reason == "rug_data_missing"
                 {
-                    *data_quality_counts.entry(reason.clone()).or_insert(0) += count;
+                    *data_quality_counts.entry(reason.clone()).or_default() += count;
                 }
             }
 

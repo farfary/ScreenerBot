@@ -88,7 +88,7 @@ pub async fn get_rejection_stats() -> Response {
                 .into_iter()
                 .map(|(reason, source, count)| {
                     total_rejected += count;
-                    *by_source.entry(source.clone()).or_insert(0) += count;
+                    *by_source.entry(source.clone()).or_default() += count;
                     RejectionStatEntry {
                         display_label: get_rejection_display_label(&reason).to_string(),
                         category: get_rejection_category(&reason).to_string(),

@@ -486,7 +486,7 @@ pub fn generate_verification_report(
     let mut issue_counts = HashMap::new();
     for result in results.values() {
         for issue in &result.issues {
-            *issue_counts.entry(issue.issue_type.clone()).or_insert(0) += 1;
+            *issue_counts.entry(issue.issue_type.clone()).or_default() += 1;
         }
     }
 
