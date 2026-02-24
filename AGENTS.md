@@ -991,3 +991,8 @@ cargo fmt --check          # Check Rust formatting
 - Maintain a single `docs/` directory as the only location for documentation.
 - Each feature must have exactly one dedicated document.
 - Always look for duplicated files, logic, helpers, or documentation and consolidate.
+- Every `.rs` file MUST start with a `//!` module-level doc comment (NOT `///` which documents the next item).
+- Guard `chrono::Duration::num_seconds()` with `.max(0)` before casting to `u64` — negative durations from clock skew wrap to huge values.
+- Use `.round()` before `as u16`/`as u64` for float-to-integer conversions — truncation loses precision.
+- Use `is_char_boundary()` loop for `String::truncate()` on user-facing data — UTF-8 multi-byte chars cause panics.
+- Centralize utility functions in `src/utils.rs` — never duplicate `lamports_to_sol`/`sol_to_lamports` in submodules.
