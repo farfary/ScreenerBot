@@ -1,18 +1,19 @@
-/// OpenRouter API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://openrouter.ai/docs
-///
-/// OpenRouter is a unified gateway to 100+ LLM models including:
-/// - OpenAI models (gpt-4o, gpt-4-turbo, etc.)
-/// - Anthropic Claude models
-/// - Google Gemini models
-/// - Meta Llama models
-/// - And many more
-///
-/// The API is OpenAI-compatible with optional site identification headers.
-///
-/// Endpoints:
-/// - POST https://openrouter.ai/api/v1/chat/completions
+//! OpenRouter API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://openrouter.ai/docs
+//!
+//! OpenRouter is a unified gateway to 100+ LLM models including:
+//! - OpenAI models (gpt-4o, gpt-4-turbo, etc.)
+//! - Anthropic Claude models
+//! - Google Gemini models
+//! - Meta Llama models
+//! - And many more
+//!
+//! The API is OpenAI-compatible with optional site identification headers.
+//!
+//! Endpoints:
+//! - POST https://openrouter.ai/api/v1/chat/completions
+
 pub mod types;
 
 pub use self::types::{

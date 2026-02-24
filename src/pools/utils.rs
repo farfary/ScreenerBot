@@ -1,10 +1,11 @@
-/// Pool utilities for consistent SOL detection and vault pairing across analyzer and decoders
-///
-/// This module provides centralized logic for:
-/// - Detecting SOL mints (wrapped and native forms)
-/// - Determining token pair orientation (TOKEN/SOL vs SOL/TOKEN)
-/// - Pairing vaults correctly based on mint types
-/// - Handling all possible base/quote token combinations
+//! Pool utilities for consistent SOL detection and vault pairing across analyzer and decoders
+//!
+//! This module provides centralized logic for:
+//! - Detecting SOL mints (wrapped and native forms)
+//! - Determining token pair orientation (TOKEN/SOL vs SOL/TOKEN)
+//! - Pairing vaults correctly based on mint types
+//! - Handling all possible base/quote token combinations
+
 use crate::constants::{SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT, USDT_MINT};
 use crate::logger::{self, LogTag};
 use solana_sdk::pubkey::Pubkey;

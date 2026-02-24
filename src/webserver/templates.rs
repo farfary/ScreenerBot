@@ -1,7 +1,8 @@
-/// HTML template rendering for the webserver dashboard
-///
-/// This module provides functions to render HTML pages by combining templates with dynamic data.
-/// All embedded assets (HTML, CSS, JS) are imported from the `embeds` module.
+//! HTML template rendering for the webserver dashboard
+//!
+//! This module provides functions to render HTML pages by combining templates with dynamic data.
+//! All embedded assets (HTML, CSS, JS) are imported from the `embeds` module.
+
 use crate::{arguments, version};
 
 // Import all embedded assets from the embeds module

@@ -1,12 +1,12 @@
-/// Embedded static assets for the webserver
-///
-/// All HTML templates, CSS, JavaScript, fonts, and images are embedded at compile time
-/// using `include_str!` and `include_bytes!` macros. This module is separated from
-/// `templates.rs` to keep rendering logic distinct from asset declarations.
-///
-/// Constants use `pub(super)` visibility so they're accessible within the webserver
-/// module but not publicly exposed. Public constants (marked `pub`) are exposed
-/// for use by routes like `asset_serving.rs`.
+//! Embedded static assets for the webserver
+//!
+//! All HTML templates, CSS, JavaScript, fonts, and images are embedded at compile time
+//! using `include_str!` and `include_bytes!` macros. This module is separated from
+//! `templates.rs` to keep rendering logic distinct from asset declarations.
+//!
+//! Constants use `pub(super)` visibility so they're accessible within the webserver
+//! module but not publicly exposed. Public constants (marked `pub`) are exposed
+//! for use by routes like `asset_serving.rs`.
 
 // HTML base template
 pub(super) const BASE_TEMPLATE: &str = include_str!("templates/base.html");

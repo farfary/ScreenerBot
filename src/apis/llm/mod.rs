@@ -1,17 +1,18 @@
-/// LLM Provider Module
-///
-/// Unified interface for multiple LLM providers:
-/// - OpenAI (GPT-3.5, GPT-4, GPT-4-turbo)
-/// - Anthropic (Claude 3 family)
-/// - Groq (Fast inference)
-/// - DeepSeek (Reasoning models)
-/// - Google Gemini
-/// - Ollama (Local models)
-/// - Together AI
-/// - OpenRouter (Multi-provider gateway)
-/// - Mistral AI
-///
-/// All providers use raw HTTP via reqwest with shared rate limiting and stats.
+//! LLM Provider Module
+//!
+//! Unified interface for multiple LLM providers:
+//! - OpenAI (GPT-3.5, GPT-4, GPT-4-turbo)
+//! - Anthropic (Claude 3 family)
+//! - Groq (Fast inference)
+//! - DeepSeek (Reasoning models)
+//! - Google Gemini
+//! - Ollama (Local models)
+//! - Together AI
+//! - OpenRouter (Multi-provider gateway)
+//! - Mistral AI
+//!
+//! All providers use raw HTTP via reqwest with shared rate limiting and stats.
+
 pub mod anthropic;
 pub mod Assistant;
 pub mod deepseek;

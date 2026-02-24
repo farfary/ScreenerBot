@@ -1,7 +1,8 @@
-/// Event Types and Data Structures
-///
-/// Defines the core types used by the events system for categorizing
-/// and structuring event data.
+//! Event Types and Data Structures
+//!
+//! Defines the core types used by the events system for categorizing
+//! and structuring event data.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

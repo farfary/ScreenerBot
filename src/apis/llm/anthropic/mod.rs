@@ -1,16 +1,17 @@
-/// Anthropic API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://docs.anthropic.com/en/api/messages
-///
-/// Endpoints:
-/// - POST https://api.anthropic.com/v1/messages
-///
-/// IMPORTANT DIFFERENCES FROM OPENAI:
-/// - Uses `x-api-key` header instead of `Authorization: Bearer`
-/// - Requires `anthropic-version: 2023-06-01` header
-/// - System prompt is a SEPARATE field, NOT in messages array
-/// - Response content is an ARRAY of objects, not a string
-/// - max_tokens is REQUIRED (not optional)
+//! Anthropic API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://docs.anthropic.com/en/api/messages
+//!
+//! Endpoints:
+//! - POST https://api.anthropic.com/v1/messages
+//!
+//! IMPORTANT DIFFERENCES FROM OPENAI:
+//! - Uses `x-api-key` header instead of `Authorization: Bearer`
+//! - Requires `anthropic-version: 2023-06-01` header
+//! - System prompt is a SEPARATE field, NOT in messages array
+//! - Response content is an ARRAY of objects, not a string
+//! - max_tokens is REQUIRED (not optional)
+
 pub mod types;
 
 pub use self::types::{

@@ -1,16 +1,17 @@
-/// Axum webserver implementation
-///
-/// Main server lifecycle management including startup, shutdown, and graceful termination.
-///
-/// Security features (GUI mode):
-/// - Dynamic port selection to avoid conflicts
-/// - Security token validation for all requests
-/// - Binding to 127.0.0.1 only (localhost, no external access)
-///
-/// Headless/CLI mode:
-/// - Uses port from config (default 8080)
-/// - Uses host from config (default 127.0.0.1, use 0.0.0.0 for remote access)
-/// - No security token required (accessible via browser)
+//! Axum webserver implementation
+//!
+//! Main server lifecycle management including startup, shutdown, and graceful termination.
+//!
+//! Security features (GUI mode):
+//! - Dynamic port selection to avoid conflicts
+//! - Security token validation for all requests
+//! - Binding to 127.0.0.1 only (localhost, no external access)
+//!
+//! Headless/CLI mode:
+//! - Uses port from config (default 8080)
+//! - Uses host from config (default 127.0.0.1, use 0.0.0.0 for remote access)
+//! - No security token required (accessible via browser)
+
 use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;

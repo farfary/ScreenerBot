@@ -1,8 +1,9 @@
-/// Orca Whirlpool decoder
-///
-/// This decoder handles Orca Whirlpool concentrated liquidity pools.
-/// Based on the official Orca Whirlpool program structure from
-/// https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/state/whirlpool.rs
+//! Orca Whirlpool decoder
+//!
+//! This decoder handles Orca Whirlpool concentrated liquidity pools.
+//! Based on the official Orca Whirlpool program structure from
+//! https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/state/whirlpool.rs
+
 use super::{AccountData, PoolDecoder};
 use crate::constants::{ORCA_WHIRLPOOL_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};

@@ -1,15 +1,16 @@
-/// SOL Price Service
-///
-/// Provides real-time SOL price data from Jupiter API for accurate USD conversions
-/// and trading calculations. This service runs as a background task and maintains
-/// cached SOL price data for the entire bot ecosystem.
-///
-/// **Key Features:**
-/// - Real-time SOL price fetching from Jupiter API
-/// - Automatic price caching and refresh cycles
-/// - Graceful shutdown handling
-/// - Error resilience with fallback mechanisms
-/// - Thread-safe price access for concurrent operations
+//! SOL Price Service
+//!
+//! Provides real-time SOL price data from Jupiter API for accurate USD conversions
+//! and trading calculations. This service runs as a background task and maintains
+//! cached SOL price data for the entire bot ecosystem.
+//!
+//! **Key Features:**
+//! - Real-time SOL price fetching from Jupiter API
+//! - Automatic price caching and refresh cycles
+//! - Graceful shutdown handling
+//! - Error resilience with fallback mechanisms
+//! - Thread-safe price access for concurrent operations
+
 use crate::logger::{self, LogTag};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

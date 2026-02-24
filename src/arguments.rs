@@ -1,32 +1,32 @@
-/// Centralized argument handling system for ScreenerBot
-///
-/// This module provides a unified interface for command-line argument parsing.
-///
-/// ## Argument Types
-///
-/// **Execution Modes** (mutually exclusive - choose one):
-/// - `--reset`: Reset database state
-/// - `--clean-wallet-data`: Clean all wallet-specific databases
-/// - `--help`: Show help information
-///
-/// **Display Modes**:
-/// - `--gui`: Launch with desktop GUI window (requires 'gui' feature)
-///
-/// **Modifiers**:
-/// - `--force`: Skip confirmation prompts (works with: --reset)
-/// - `--cache-only`: Use cached data only (works with debug tools)
-/// - `--force-refresh`: Force refresh from RPC (works with debug tools)
-///
-/// **Profiling Flags** (performance analysis):
-/// - `--profile-cpu`: Enable CPU profiling with flamegraph
-/// - `--profile-tokio-console`: Enable tokio-console for async profiling
-/// - `--profile-tracing`: Enable detailed tracing
-/// - `--profile-duration <seconds>`: Set profiling duration (default: 60)
-///
-/// **Debug Flags** (controlled by logger system):
-/// - `--debug-<module>`: Enable debug logging for specific module
-/// - `--verbose-<module>`: Enable verbose logging for specific module
-///
+//! Centralized argument handling system for ScreenerBot
+//!
+//! This module provides a unified interface for command-line argument parsing.
+//!
+//! ## Argument Types
+//!
+//! **Execution Modes** (mutually exclusive - choose one):
+//! - `--reset`: Reset database state
+//! - `--clean-wallet-data`: Clean all wallet-specific databases
+//! - `--help`: Show help information
+//!
+//! **Display Modes**:
+//! - `--gui`: Launch with desktop GUI window (requires 'gui' feature)
+//!
+//! **Modifiers**:
+//! - `--force`: Skip confirmation prompts (works with: --reset)
+//! - `--cache-only`: Use cached data only (works with debug tools)
+//! - `--force-refresh`: Force refresh from RPC (works with debug tools)
+//!
+//! **Profiling Flags** (performance analysis):
+//! - `--profile-cpu`: Enable CPU profiling with flamegraph
+//! - `--profile-tokio-console`: Enable tokio-console for async profiling
+//! - `--profile-tracing`: Enable detailed tracing
+//! - `--profile-duration <seconds>`: Set profiling duration (default: 60)
+//!
+//! **Debug Flags** (controlled by logger system):
+//! - `--debug-<module>`: Enable debug logging for specific module
+//! - `--verbose-<module>`: Enable verbose logging for specific module
+
 use crate::logger::{self, LogTag};
 use std::env;
 use std::sync::LazyLock;

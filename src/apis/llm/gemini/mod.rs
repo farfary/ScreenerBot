@@ -1,9 +1,10 @@
-/// Google Gemini API client (raw HTTP via reqwest)
-///
-/// API Documentation: https://ai.google.dev/api/rest
-///
-/// Endpoints:
-/// - POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+//! Google Gemini API client (raw HTTP via reqwest)
+//!
+//! API Documentation: https://ai.google.dev/api/rest
+//!
+//! Endpoints:
+//! - POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
+
 pub mod types;
 
 pub use self::types::{

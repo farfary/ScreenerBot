@@ -1,4 +1,5 @@
-/// GMGN Router - Self-contained implementation with direct API integration
+//! GMGN Router - Self-contained implementation with direct API integration
+
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};

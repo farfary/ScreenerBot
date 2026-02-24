@@ -1,5 +1,6 @@
-/// Jupiter Router Implementation
-/// Uses api.jup.ag with referral fees for revenue and optional user API key for rate limits
+//! Jupiter Router Implementation
+//! Uses api.jup.ag with referral fees for revenue and optional user API key for rate limits
+
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::rpc::RpcClientMethods;

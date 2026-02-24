@@ -1,8 +1,9 @@
-/// Meteora DLMM decoder
-///
-/// This decoder handles Meteora Dynamic Liquidity Market Maker (DLMM) pools.
-/// DLMM uses a different account structure from CPMM with token reserves stored
-/// in separate vault accounts.
+//! Meteora DLMM decoder
+//!
+//! This decoder handles Meteora Dynamic Liquidity Market Maker (DLMM) pools.
+//! DLMM uses a different account structure from CPMM with token reserves stored
+//! in separate vault accounts.
+
 use super::super::utils::is_sol_mint;
 use super::{AccountData, PoolDecoder};
 use crate::constants::{METEORA_DLMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};

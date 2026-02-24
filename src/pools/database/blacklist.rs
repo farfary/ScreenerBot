@@ -1,4 +1,5 @@
-/// Blacklist operations for accounts and pools
+//! Blacklist operations for accounts and pools
+
 use super::operations::PoolsDatabase;
 use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord};
 

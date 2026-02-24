@@ -1,7 +1,8 @@
-/// Raydium CPMM swap implementation
-///
-/// This module implements direct swaps for Raydium Constant Product Market Maker pools.
-/// It integrates with the centralized Raydium CPMM decoder and provides both buy and sell operations.
+//! Raydium CPMM swap implementation
+//!
+//! This module implements direct swaps for Raydium Constant Product Market Maker pools.
+//! It integrates with the centralized Raydium CPMM decoder and provides both buy and sell operations.
+
 use super::ProgramSwap;
 use crate::constants::{
     RAYDIUM_CPMM_PROGRAM_ID, SOL_MINT, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,

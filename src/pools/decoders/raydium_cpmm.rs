@@ -1,7 +1,8 @@
-/// Raydium CPMM pool decoder
-///
-/// This module handles decoding Raydium Constant Product Market Maker pools.
-/// Extracts reserve data and calculates token prices.
+//! Raydium CPMM pool decoder
+//!
+//! This module handles decoding Raydium Constant Product Market Maker pools.
+//! Extracts reserve data and calculates token prices.
+
 use super::{AccountData, PoolDecoder};
 
 use crate::constants::{RAYDIUM_CPMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
