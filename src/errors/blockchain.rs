@@ -7,7 +7,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
-use tokio::time::Duration;
 
 /// Classification of blockchain error handling strategy
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,16 +30,6 @@ pub struct SolanaTransactionError {
     pub raw_error: Value,
 }
 
-impl SolanaTransactionError {
-    /// Get human-readable error type name
-    pub fn error_type_name(&self) -> &'static str {
-        match self.error_type {
-            FailureType::Permanent => "PERMANENT",
-            FailureType::Temporary => "TEMPORARY",
-            FailureType::Uncertain => "UNCERTAIN",
-        }
-    }
-}
 
 /// Primary Solana blockchain error classification
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -334,26 +323,6 @@ impl BlockchainError {
                 max_attempts: 3,
                 exponential_backoff: true,
             },
-        }
-    }
-
-    /// Estimate recovery time for this error
-    pub fn estimated_recovery_time(&self) -> Option<Duration> {
-        match self {
-            BlockchainError::BlockhashExpired { .. } => Some(Duration::from_secs(30)),
-            BlockchainError::NetworkCongested {
-                estimated_delay_seconds,
-                ..
-            } => Some(Duration::from_secs(*estimated_delay_seconds)),
-            BlockchainError::CommitmentTooLow {
-                estimated_wait_seconds,
-                ..
-            } => Some(Duration::from_secs(*estimated_wait_seconds)),
-            BlockchainError::TransactionDropped { .. } => Some(Duration::from_secs(60)),
-            BlockchainError::ValidatorBehind { lag_minutes, .. } => {
-                Some(Duration::from_secs(*lag_minutes * 60))
-            }
-            _ => None,
         }
     }
 

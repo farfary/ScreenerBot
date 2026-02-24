@@ -1,7 +1,5 @@
 //! Database row types and structures
 
-use super::super::types::ToolStatus;
-
 // =============================================================================
 // ATA CACHE TYPES
 // =============================================================================
@@ -138,18 +136,6 @@ impl MwSessionRow {
             created_at: row.get(21).map_err(|e| e.to_string())?,
             updated_at: row.get(22).map_err(|e| e.to_string())?,
         })
-    }
-
-    /// Parse status from row data
-    pub fn get_status(&self) -> ToolStatus {
-        match self.status.as_str() {
-            "pending" => ToolStatus::Ready,
-            "running" => ToolStatus::Running,
-            "completed" => ToolStatus::Completed,
-            "failed" => ToolStatus::Failed,
-            "aborted" => ToolStatus::Aborted,
-            _ => ToolStatus::Ready,
-        }
     }
 }
 

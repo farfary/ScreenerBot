@@ -34,18 +34,6 @@ impl LogLevel {
             LogLevel::Verbose => "",
         }
     }
-
-    /// Parse from string (case-insensitive)
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_uppercase().as_str() {
-            "ERROR" => Some(LogLevel::Error),
-            "WARNING" | "WARN" => Some(LogLevel::Warning),
-            "INFO" => Some(LogLevel::Info),
-            "DEBUG" => Some(LogLevel::Debug),
-            "VERBOSE" | "TRACE" => Some(LogLevel::Verbose),
-            _ => None,
-        }
-    }
 }
 
 impl std::fmt::Display for LogLevel {

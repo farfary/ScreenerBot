@@ -66,11 +66,6 @@ pub fn try_get_rpc_client() -> Option<&'static RpcClient> {
     RPC_CLIENT.get()
 }
 
-/// Check if RPC client is initialized
-pub fn is_rpc_initialized() -> bool {
-    RPC_CLIENT.get().is_some()
-}
-
 /// Get the underlying RpcManager (for advanced usage)
 pub fn get_manager() -> Option<Arc<RpcManager>> {
     get_rpc_manager()

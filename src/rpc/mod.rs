@@ -158,7 +158,7 @@ pub use utils::{
 // Re-exports - Global Access Layer (get_rpc_client, etc.)
 // ============================================================================
 
-pub use global::{get_rpc_client, init_rpc_client, is_rpc_initialized, try_get_rpc_client};
+pub use global::{get_rpc_client, init_rpc_client, try_get_rpc_client};
 
 // ============================================================================
 // Re-exports - Client Type
