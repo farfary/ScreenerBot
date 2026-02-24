@@ -1,6 +1,6 @@
 //! Trailing stop preview, templates, and trader statistics
 
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{extract::Query, http::StatusCode, response::Response, Json};
 
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
@@ -140,7 +140,7 @@ pub async fn get_trader_stats() -> Response {
 
 /// GET /api/trader/preview-trailing-stop - Preview trailing stop for a position
 pub async fn get_trailing_stop_preview(
-    axum::extract::Query(query): axum::extract::Query<TrailingStopPreviewQuery>,
+    Query(query): Query<TrailingStopPreviewQuery>,
 ) -> Response {
     use crate::pools::get_pool_price;
 

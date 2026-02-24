@@ -1,6 +1,6 @@
 //! Manual trading operations
 
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{extract::Query, http::StatusCode, response::Response, Json};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
@@ -357,7 +357,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 /// For BUY: requires amount_sol (SOL to spend), returns tokens received
 /// For SELL: requires amount_tokens (tokens to sell), returns SOL received
 pub async fn quote_preview_handler(
-    axum::extract::Query(req): axum::extract::Query<QuotePreviewRequest>,
+    Query(req): Query<QuotePreviewRequest>,
 ) -> Response {
     use crate::constants::SOL_MINT;
     use crate::swaps::operations::get_best_quote;

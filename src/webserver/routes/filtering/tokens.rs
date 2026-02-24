@@ -1,6 +1,6 @@
 //! Filtering tokens route — lists tokens with their current filter evaluation results.
 
-use axum::{extract::Query, http::StatusCode, response::Response};
+use axum::{body::Body, extract::Query, http::StatusCode, response::Response};
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -118,7 +118,7 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
                             "Content-Disposition",
                             format!("attachment; filename=\"{}\"", filename),
                         )
-                        .body(axum::body::Body::from(data))
+                        .body(Body::from(data))
                         .unwrap_or_else(|_| {
                             error_response(
                                 StatusCode::INTERNAL_SERVER_ERROR,

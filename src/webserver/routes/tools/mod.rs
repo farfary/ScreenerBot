@@ -2,7 +2,7 @@
 
 use axum::{
     response::Response,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post},
     Router,
 };
 use std::sync::Arc;
@@ -78,8 +78,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Tool Favorites
         .route("/favorites", get(get_favorites_list))
         .route("/favorites", post(add_favorite))
-        .route("/favorites/:id", axum::routing::patch(update_favorite))
-        .route("/favorites/:id", axum::routing::delete(delete_favorite))
+        .route("/favorites/:id", patch(update_favorite))
+        .route("/favorites/:id", delete(delete_favorite))
         .route("/favorites/:id/use", post(mark_favorite_used))
         // Trade Watcher
         .route("/search-pools/:mint", get(search_pools_handler))

@@ -1,6 +1,7 @@
 //! Web API route registration, static asset serving, and top-level request handlers.
 use crate::webserver::{state::AppState, templates};
 use axum::{
+    extract::Path as AxumPath,
     http::{header as http_header, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::get,
@@ -225,7 +226,7 @@ fn api_routes() -> Router<Arc<AppState>> {
 }
 
 /// SPA page content handler - returns just the content HTML (not full template)
-async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>) -> Html<String> {
+async fn get_page_content(AxumPath(page): AxumPath<String>) -> Html<String> {
     let content = match page.as_str() {
         "home" => templates::home_content(),
         "tokens" => templates::tokens_content(),
