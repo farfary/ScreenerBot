@@ -1,3 +1,5 @@
+//! AI data types — chat messages, tool calls, and LLM request/response structures.
+
 use serde::{Deserialize, Serialize};
 
 /// AI evaluation priority levels

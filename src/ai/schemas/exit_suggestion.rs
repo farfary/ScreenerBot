@@ -1,3 +1,5 @@
+//! Exit suggestion schema — structured AI output for position exit recommendations.
+
 use serde::{Deserialize, Serialize};
 
 /// AI exit suggestion schema

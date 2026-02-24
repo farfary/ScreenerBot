@@ -1,3 +1,5 @@
+//! AI response cache — memoizes LLM responses to reduce API calls and latency.
+
 use crate::ai::types::{AiDecision, Priority};
 use std::time::Duration;
 

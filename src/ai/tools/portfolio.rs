@@ -1,3 +1,5 @@
+//! AI portfolio tools — position and balance queries for the AI assistant.
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;

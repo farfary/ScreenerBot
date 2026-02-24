@@ -1,3 +1,5 @@
+//! Trade decision schema — structured AI output for buy/sell trade decisions.
+
 use serde::{Deserialize, Serialize};
 
 /// AI trade decision schema

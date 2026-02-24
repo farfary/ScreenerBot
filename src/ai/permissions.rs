@@ -1,3 +1,5 @@
+//! AI permissions — rate limiting and access control for AI tool execution.
+
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

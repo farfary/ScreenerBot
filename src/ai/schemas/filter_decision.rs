@@ -1,3 +1,5 @@
+//! Filter decision schema — structured AI output for token filtering recommendations.
+
 use serde::{Deserialize, Serialize};
 
 /// AI filter decision schema

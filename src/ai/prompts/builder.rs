@@ -1,3 +1,5 @@
+//! Prompt builder — constructs system and user prompts for LLM interactions.
+
 use crate::ai::db::{list_instructions, with_ai_db};
 use crate::ai::types::EvaluationContext;
 
