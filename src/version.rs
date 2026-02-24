@@ -252,7 +252,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
         LogTag::System,
         &format!("Checking for updates at: {}", server_url),
     );
-    logger::debug(LogTag::System, &format!("Update check URL: {}", url));
+    logger::debug(LogTag::System, &format!("Update check URL: {url}"));
 
     let client = reqwest::Client::new();
     let response = client
@@ -512,7 +512,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
 
 /// Open the downloaded update for installation
 pub fn open_update(path: &str) -> Result<(), String> {
-    logger::info(LogTag::System, &format!("Opening update: {}", path));
+    logger::info(LogTag::System, &format!("Opening update: {path}"));
 
     #[cfg(target_os = "macos")]
     {

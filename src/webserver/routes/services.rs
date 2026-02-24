@@ -295,7 +295,7 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
 async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
     logger::info(
         LogTag::Webserver,
-        &format!("Fetching service details for: {}", name),
+        &format!("Fetching service details for: {name}"),
     );
 
     let overview = gather_services_overview_snapshot().await;

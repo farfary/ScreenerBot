@@ -236,7 +236,7 @@ pub async fn start_server(
 
     logger::debug(
         LogTag::Webserver,
-        &format!("Webserver listening on http://{}", addr),
+        &format!("Webserver listening on http://{addr}"),
     );
     logger::debug(
         LogTag::Webserver,
@@ -397,7 +397,7 @@ pub async fn test_port_binding(
         Ok(listener) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("[TEST-BIND] ✅ Bind SUCCESSFUL for {}", addr),
+                &format!("[TEST-BIND] ✅ Bind SUCCESSFUL for {addr}"),
             );
             drop(listener);
             logger::debug(
@@ -409,7 +409,7 @@ pub async fn test_port_binding(
             );
             logger::debug(
                 LogTag::System,
-                &format!("Pre-flight port check passed for {}", addr),
+                &format!("Pre-flight port check passed for {addr}"),
             );
             Ok(())
         }

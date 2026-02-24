@@ -284,7 +284,7 @@ pub fn notification_settings(
 ) -> InlineKeyboardMarkup {
     let toggle = |enabled: bool, name: &str, key: &str| -> InlineKeyboardButton {
         let emoji = if enabled { "🟢" } else { "⚪" };
-        btn(&format!("{} {}", emoji, name), &format!("toggle:{}", key))
+        btn(&format!("{} {}", emoji, name), &format!("toggle:{key}"))
     };
 
     InlineKeyboardMarkup::new(vec![
@@ -309,7 +309,7 @@ pub fn trading_controls(
 ) -> InlineKeyboardMarkup {
     let toggle = |enabled: bool, name: &str, key: &str| -> InlineKeyboardButton {
         let emoji = if enabled { "🟢" } else { "🔴" };
-        btn(&format!("{} {}", emoji, name), &format!("toggle:{}", key))
+        btn(&format!("{} {}", emoji, name), &format!("toggle:{key}"))
     };
 
     InlineKeyboardMarkup::new(vec![

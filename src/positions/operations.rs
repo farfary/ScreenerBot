@@ -847,9 +847,9 @@ pub async fn close_position_direct(
                     && multi_account_note.is_none()
                     && total_token_balance > sell_amount
                 {
-                    format!("Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {}", msg)
+                    format!("Swap failed (insufficient funds) - aggregated balance mismatch; consider consolidating ATAs: {msg}")
                 } else {
-                    format!("Swap failed: {}", msg)
+                    format!("Swap failed: {msg}")
                 };
                 last_err = Some(format!(
                     "{} (step {} slippage {}%)",

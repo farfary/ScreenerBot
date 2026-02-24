@@ -23,7 +23,7 @@ pub struct RpcEndpointTestResult {
 /// Uses 10s timeout to accommodate TLS initialization on cold starts.
 /// Returns detailed test results including latency.
 pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
-    logger::debug(LogTag::Rpc, &format!("Testing RPC endpoint: {}", url));
+    logger::debug(LogTag::Rpc, &format!("Testing RPC endpoint: {url}"));
 
     // Check if URL contains known premium RPC provider domains
     let is_premium = url.contains("helius")

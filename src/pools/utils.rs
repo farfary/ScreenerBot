@@ -41,7 +41,7 @@ impl TokenPairInfo {
     pub fn invalid(reason: String) -> Self {
         logger::debug(
             LogTag::PoolService,
-            &format!("Invalid token pair: {}", reason),
+            &format!("Invalid token pair: {reason}"),
         );
 
         Self {

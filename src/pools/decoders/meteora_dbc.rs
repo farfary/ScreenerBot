@@ -209,7 +209,7 @@ fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
     // Primary: read from known offset (Anchor discriminator +8 bytes)
     if data.len() >= 296 {
         if let Ok(val) = read_u128_le(&data[280..296]) {
-            logger::debug(LogTag::Pool, &format!("Found sqrt_price: {}", val));
+            logger::debug(LogTag::Pool, &format!("Found sqrt_price: {val}"));
             return Some(val);
         }
     }

@@ -215,7 +215,7 @@ impl ServiceManager {
         for (name, service) in self.services.iter() {
             logger::debug(
                 LogTag::System,
-                &format!("Checking is_enabled() for service: {}", name),
+                &format!("Checking is_enabled() for service: {name}"),
             );
             if service.is_enabled() {
                 enabled_services.push(*name);
@@ -652,7 +652,7 @@ impl ServiceManager {
                     crate::errors::ServiceError::Dependency {
                         service: name.to_string(),
                         dependency: "circular".to_string(),
-                        message: format!("Circular dependency detected for service: {}", name),
+                        message: format!("Circular dependency detected for service: {name}"),
                     },
                 ));
             }

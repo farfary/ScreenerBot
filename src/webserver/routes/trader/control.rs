@@ -140,7 +140,7 @@ pub async fn force_stop_handler(
         );
     }
 
-    logger::warning(LogTag::Trader, &format!("FORCE STOP activated: {}", reason));
+    logger::warning(LogTag::Trader, &format!("FORCE STOP activated: {reason}"));
     success_response(crate::global::get_force_stop_status())
 }
 

@@ -187,7 +187,7 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, S
                 },
                 true,
             )?;
-            Ok(format!("Updated trader enabled to {}", val))
+            Ok(format!("Updated trader enabled to {val}"))
         }
         "max_open_positions" => {
             let val = value.as_u64().ok_or("Value must be a number")?;
@@ -200,7 +200,7 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, S
                 },
                 true,
             )?;
-            Ok(format!("Updated max_open_positions to {}", val))
+            Ok(format!("Updated max_open_positions to {val}"))
         }
         "trade_size_sol" => {
             let val = value.as_f64().ok_or("Value must be a number")?;
@@ -213,9 +213,9 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, S
                 },
                 true,
             )?;
-            Ok(format!("Updated trade_size_sol to {}", val))
+            Ok(format!("Updated trade_size_sol to {val}"))
         }
-        _ => Err(format!("Unknown trader config key: {}", key)),
+        _ => Err(format!("Unknown trader config key: {key}")),
     }
 }
 
@@ -229,7 +229,7 @@ fn update_filters_config(key: &str, value: serde_json::Value) -> Result<String, 
                 },
                 true,
             )?;
-            Ok(format!("Updated age filtering enabled to {}", val))
+            Ok(format!("Updated age filtering enabled to {val}"))
         }
         "cooldown_enabled" => {
             let val = value.as_bool().ok_or("Value must be true or false")?;
@@ -239,9 +239,9 @@ fn update_filters_config(key: &str, value: serde_json::Value) -> Result<String, 
                 },
                 true,
             )?;
-            Ok(format!("Updated cooldown filtering enabled to {}", val))
+            Ok(format!("Updated cooldown filtering enabled to {val}"))
         }
-        _ => Err(format!("Unknown filters config key: {}", key)),
+        _ => Err(format!("Unknown filters config key: {key}")),
     }
 }
 
@@ -255,9 +255,9 @@ fn update_telegram_config(key: &str, value: serde_json::Value) -> Result<String,
                 },
                 true,
             )?;
-            Ok(format!("Updated telegram enabled to {}", val))
+            Ok(format!("Updated telegram enabled to {val}"))
         }
-        _ => Err(format!("Unknown telegram config key: {}", key)),
+        _ => Err(format!("Unknown telegram config key: {key}")),
     }
 }
 
@@ -271,8 +271,8 @@ fn update_ai_config(key: &str, value: serde_json::Value) -> Result<String, Strin
                 },
                 true,
             )?;
-            Ok(format!("Updated AI enabled to {}", val))
+            Ok(format!("Updated AI enabled to {val}"))
         }
-        _ => Err(format!("Unknown AI config key: {}", key)),
+        _ => Err(format!("Unknown AI config key: {key}")),
     }
 }

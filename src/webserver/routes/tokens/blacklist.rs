@@ -54,7 +54,7 @@ pub async fn add_to_blacklist(
                 success: true,
                 mint,
                 is_blacklisted: true,
-                message: Some(format!("Token blacklisted: {}", reason)),
+                message: Some(format!("Token blacklisted: {reason}")),
             }))
         }
         Ok(Err(e)) => {

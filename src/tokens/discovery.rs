@@ -68,7 +68,7 @@ pub fn start_discovery_loop(
                                 if last_skip_reason.as_ref() != Some(&reason) {
                                     logger::info(
                                         LogTag::Tokens,
-                                        &format!("[DISCOVERY] Skipping discovery loop: {}", reason),
+                                        &format!("[DISCOVERY] Skipping discovery loop: {reason}"),
                                     );
                                     last_skip_reason = Some(reason);
                                 }

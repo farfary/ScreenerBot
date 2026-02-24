@@ -367,7 +367,7 @@ pub fn open_url_in_browser(url: &str) -> Result<(), String> {
         ));
     }
 
-    logger::info(LogTag::System, &format!("Opening URL in browser: {}", url));
+    logger::info(LogTag::System, &format!("Opening URL in browser: {url}"));
 
     #[cfg(target_os = "macos")]
     {

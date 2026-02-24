@@ -141,7 +141,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             StatusCode::NOT_FOUND,
             "POSITION_NOT_FOUND",
             "Position not found",
-            Some(&format!("No position found for key {}", key)),
+            Some(&format!("No position found for key {key}")),
         ),
         Err(err) => {
             logger::info(
