@@ -44,7 +44,7 @@ pub async fn initialize_cache() {
 
 /// Get current price for a token
 pub fn get_price(mint: &str) -> Option<PriceResult> {
-    PRICE_CACHE.get(mint).map(|entry| entry.clone())
+    PRICE_CACHE.get(mint).map(|entry| entry.value().clone())
 }
 
 /// Update price for a token
