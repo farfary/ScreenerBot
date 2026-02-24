@@ -44,7 +44,7 @@ impl PoolPriorityManager {
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Failed to load priorities for pool tokens: {}", e),
+                    &format!("Failed to load priorities for pool tokens: {e}"),
                 );
                 return;
             }
@@ -141,7 +141,7 @@ impl PoolPriorityManager {
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Failed to load priorities for demotion candidates: {}", e),
+                    &format!("Failed to load priorities for demotion candidates: {e}"),
                 );
                 return;
             }
@@ -229,9 +229,9 @@ pub async fn update_token(
                 successes.push("DexScreener".to_string());
             }
             Ok(None) => failures.push(format!("DexScreener: Token not listed")),
-            Err(e) => failures.push(format!("DexScreener: {}", e)),
+            Err(e) => failures.push(format!("DexScreener: {e}")),
         },
-        Err(e) => failures.push(format!("DexScreener rate limit: {}", e)),
+        Err(e) => failures.push(format!("DexScreener rate limit: {e}")),
     }
 
     // Update tracking timestamp for market data
@@ -371,7 +371,7 @@ pub async fn update_tokens_batch(
                 None,
             ),
             Err(e) => {
-                let msg = format!("DexScreener batch failed: {}", e);
+                let msg = format!("DexScreener batch failed: {e}");
                 logger::error(LogTag::Tokens, &msg);
                 (HashMap::new(), Some(msg))
             }
@@ -432,7 +432,7 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to load tokens without security data: {}", e),
+                &format!("Failed to load tokens without security data: {e}"),
             );
             return;
         }
@@ -489,7 +489,7 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
             }
         },
         Err(e) => {
-            logger::error(LogTag::Tokens, &format!("Rugcheck rate limit: {}", e));
+            logger::error(LogTag::Tokens, &format!("Rugcheck rate limit: {e}"));
         }
     }
 
@@ -586,21 +586,21 @@ pub async fn force_update_token(
     match dex_result {
         Ok(Some(_)) => successes.push("DexScreener".to_string()),
         Ok(None) => failures.push("DexScreener: Token not listed".to_string()),
-        Err(e) => failures.push(format!("DexScreener: {}", e)),
+        Err(e) => failures.push(format!("DexScreener: {e}")),
     }
 
     // Process GeckoTerminal result
     match gecko_result {
         Ok(Some(_)) => successes.push("GeckoTerminal".to_string()),
         Ok(None) => failures.push("GeckoTerminal: Token not listed".to_string()),
-        Err(e) => failures.push(format!("GeckoTerminal: {}", e)),
+        Err(e) => failures.push(format!("GeckoTerminal: {e}")),
     }
 
     // Process Rugcheck result
     match rug_result {
         Ok(Some(_)) => successes.push("Rugcheck".to_string()),
         Ok(None) => failures.push("Rugcheck: No security data available".to_string()),
-        Err(e) => failures.push(format!("Rugcheck: {}", e)),
+        Err(e) => failures.push(format!("Rugcheck: {e}")),
     }
 
     // Update tracking timestamp if any market data source succeeded

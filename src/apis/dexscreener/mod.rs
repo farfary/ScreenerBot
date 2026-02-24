@@ -132,7 +132,7 @@ impl DexScreenerClient {
         let guard = limiter
             .acquire()
             .await
-            .map_err(|e| format!("Rate limiter error: {}", e))?;
+            .map_err(|e| format!("Rate limiter error: {e}"))?;
 
         let start = Instant::now();
         let response_result = builder.timeout(self.timeout).send().await;

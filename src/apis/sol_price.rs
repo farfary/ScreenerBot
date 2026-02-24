@@ -137,7 +137,7 @@ pub fn get_sol_price() -> f64 {
         Err(e) => {
             logger::error(
                 LogTag::SolPrice,
-                &format!("Failed to read SOL price cache: {}", e),
+                &format!("Failed to read SOL price cache: {e}"),
             );
             0.0
         }
@@ -151,7 +151,7 @@ pub fn get_sol_price_info() -> Option<SolPriceData> {
         Err(e) => {
             logger::error(
                 LogTag::SolPrice,
-                &format!("Failed to read SOL price info: {}", e),
+                &format!("Failed to read SOL price info: {e}"),
             );
             None
         }
@@ -181,7 +181,7 @@ pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
             };
             Ok(price)
         }
-        Err(e) => Err(format!("Failed to update cache: {}", e)),
+        Err(e) => Err(format!("Failed to update cache: {e}")),
     }
 }
 
@@ -327,7 +327,7 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| format!("Request failed: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!("HTTP error: {}", response.status()));
@@ -336,7 +336,7 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
     let price_response: JupiterPriceResponse = response
         .json()
         .await
-        .map_err(|e| format!("JSON parsing failed: {}", e))?;
+        .map_err(|e| format!("JSON parsing failed: {e}"))?;
 
     // Extract SOL price directly from the response
     let sol_price = price_response.sol.usd_price;

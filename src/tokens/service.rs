@@ -61,7 +61,7 @@ impl Service for TokensServiceNew {
         let db = TokenDatabase::new(&db_path.to_string_lossy()).map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
                 service: "tokens_new".to_string(),
-                message: format!("Failed to create database: {}", e),
+                message: format!("Failed to create database: {e}"),
             })
         })?;
 
@@ -71,7 +71,7 @@ impl Service for TokensServiceNew {
         crate::tokens::database::init_global_database(db_arc.clone()).map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
                 service: "tokens_new".to_string(),
-                message: format!("Failed to init global database: {}", e),
+                message: format!("Failed to init global database: {e}"),
             })
         })?;
 
@@ -86,13 +86,13 @@ impl Service for TokensServiceNew {
                 .map_err(|e| {
                     crate::Error::Service(crate::errors::ServiceError::Initialize {
                         service: "tokens_new".to_string(),
-                        message: format!("Failed to spawn decimals preload task: {}", e),
+                        message: format!("Failed to spawn decimals preload task: {e}"),
                     })
                 })?
                 .map_err(|e| {
                     crate::Error::Service(crate::errors::ServiceError::Initialize {
                         service: "tokens_new".to_string(),
-                        message: format!("Failed to fetch decimals from database: {}", e),
+                        message: format!("Failed to fetch decimals from database: {e}"),
                     })
                 })?;
 
@@ -131,13 +131,13 @@ impl Service for TokensServiceNew {
                 Ok(Err(e)) => {
                     logger::warning(
                         LogTag::Tokens,
-                        &format!("Failed to load blocked authorities: {}", e),
+                        &format!("Failed to load blocked authorities: {e}"),
                     );
                 }
                 Err(e) => {
                     logger::warning(
                         LogTag::Tokens,
-                        &format!("Failed to spawn authority load task: {}", e),
+                        &format!("Failed to spawn authority load task: {e}"),
                     );
                 }
             }
@@ -247,13 +247,13 @@ impl Service for TokensServiceNew {
                     Ok(Err(e)) => {
                         logger::warning(
                             LogTag::Filtering,
-                            &format!("Authority discovery error: {}", e),
+                            &format!("Authority discovery error: {e}"),
                         );
                     }
                     Err(e) => {
                         logger::warning(
                             LogTag::Filtering,
-                            &format!("Authority discovery task panic: {}", e),
+                            &format!("Authority discovery task panic: {e}"),
                         );
                     }
                 }

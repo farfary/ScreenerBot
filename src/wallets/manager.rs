@@ -96,7 +96,7 @@ async fn migrate_from_config() -> Result<(), String> {
 
     // Decrypt to get address
     let keypair = decrypt_to_keypair(&encrypted, &nonce)
-        .map_err(|e| format!("Failed to decrypt config wallet: {}", e))?;
+        .map_err(|e| format!("Failed to decrypt config wallet: {e}"))?;
     let address = keypair_to_address(&keypair);
 
     // Insert as main wallet
@@ -160,7 +160,7 @@ pub async fn get_main_keypair() -> Result<Keypair, String> {
             // Clone the keypair bytes and reconstruct
             let bytes = cached.keypair.to_bytes();
             return Keypair::from_bytes(&bytes)
-                .map_err(|e| format!("Failed to clone keypair: {}", e));
+                .map_err(|e| format!("Failed to clone keypair: {e}"));
         }
     }
 
@@ -170,7 +170,7 @@ pub async fn get_main_keypair() -> Result<Keypair, String> {
     let cache = MAIN_WALLET_CACHE.read().await;
     if let Some(cached) = cache.as_ref() {
         let bytes = cached.keypair.to_bytes();
-        return Keypair::from_bytes(&bytes).map_err(|e| format!("Failed to clone keypair: {}", e));
+        return Keypair::from_bytes(&bytes).map_err(|e| format!("Failed to clone keypair: {e}"));
     }
 
     Err("No main wallet configured".to_string())
@@ -617,7 +617,7 @@ pub async fn bulk_import_wallets(
                     name: row.name.clone(),
                     address: None,
                     success: false,
-                    error: Some(format!("Failed to check existing wallets: {}", e)),
+                    error: Some(format!("Failed to check existing wallets: {e}")),
                 });
                 result.failed_count += 1;
             }
@@ -637,7 +637,7 @@ pub async fn bulk_import_wallets(
                     name: row.name.clone(),
                     address: None,
                     success: false,
-                    error: Some(format!("Invalid private key: {}", e)),
+                    error: Some(format!("Invalid private key: {e}")),
                 });
                 result.failed_count += 1;
                 continue;
@@ -716,7 +716,7 @@ pub async fn bulk_import_wallets(
                 if let Err(e) = set_main_wallet(id).await {
                     logger::warning(
                         LogTag::Wallet,
-                        &format!("Failed to set first imported wallet as main: {}", e),
+                        &format!("Failed to set first imported wallet as main: {e}"),
                     );
                 }
             }
@@ -804,13 +804,13 @@ pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, String> {
     let wallet = get_wallet(wallet_id).await?.ok_or("Wallet not found")?;
 
     let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet.address)
-        .map_err(|e| format!("Invalid wallet address: {}", e))?;
+        .map_err(|e| format!("Invalid wallet address: {e}"))?;
 
     let rpc_client = get_rpc_client();
     let token_accounts = rpc_client
         .get_all_token_accounts(&wallet_pubkey)
         .await
-        .map_err(|e| format!("Failed to fetch token accounts: {}", e))?;
+        .map_err(|e| format!("Failed to fetch token accounts: {e}"))?;
 
     // Convert to TokenBalance structs
     let now = chrono::Utc::now();

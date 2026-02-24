@@ -192,7 +192,7 @@ impl WalletDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create wallet connection pool: {}", e))?;
+            .map_err(|e| format!("Failed to create wallet connection pool: {e}"))?;
 
         let mut db = WalletDatabase {
             pool,
@@ -213,23 +213,23 @@ impl WalletDatabase {
 
         // Create all tables
         conn.execute(SCHEMA_WALLET_SNAPSHOTS, [])
-            .map_err(|e| format!("Failed to create wallet_snapshots table: {}", e))?;
+            .map_err(|e| format!("Failed to create wallet_snapshots table: {e}"))?;
 
         conn.execute(SCHEMA_TOKEN_BALANCES, [])
-            .map_err(|e| format!("Failed to create token_balances table: {}", e))?;
+            .map_err(|e| format!("Failed to create token_balances table: {e}"))?;
 
         conn.execute(SCHEMA_NFT_BALANCES, [])
-            .map_err(|e| format!("Failed to create nft_balances table: {}", e))?;
+            .map_err(|e| format!("Failed to create nft_balances table: {e}"))?;
 
         conn.execute(SCHEMA_WALLET_METADATA, [])
-            .map_err(|e| format!("Failed to create wallet_metadata table: {}", e))?;
+            .map_err(|e| format!("Failed to create wallet_metadata table: {e}"))?;
 
         // Flow cache tables
         conn.execute(SCHEMA_SOL_FLOW_CACHE, [])
-            .map_err(|e| format!("Failed to create sol_flow_cache table: {}", e))?;
+            .map_err(|e| format!("Failed to create sol_flow_cache table: {e}"))?;
 
         conn.execute(SCHEMA_WALLET_DASHBOARD_METRICS, [])
-            .map_err(|e| format!("Failed to create wallet_dashboard_metrics table: {}", e))?;
+            .map_err(|e| format!("Failed to create wallet_dashboard_metrics table: {e}"))?;
 
         // Migrate existing schema if needed (add missing columns)
         conn.execute(
@@ -241,16 +241,16 @@ impl WalletDatabase {
         // Create all indexes
         for index_sql in WALLET_INDEXES {
             conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create wallet index: {}", e))?;
+                .map_err(|e| format!("Failed to create wallet index: {e}"))?;
         }
         for index_sql in FLOW_CACHE_INDEXES {
             conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create flow cache index: {}", e))?;
+                .map_err(|e| format!("Failed to create flow cache index: {e}"))?;
         }
 
         for index_sql in DASHBOARD_METRICS_INDEXES {
             conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create dashboard metrics index: {}", e))?;
+                .map_err(|e| format!("Failed to create dashboard metrics index: {e}"))?;
         }
 
         // Set schema version
@@ -258,16 +258,16 @@ impl WalletDatabase {
             "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('schema_version', ?1)",
             params![self.schema_version.to_string()],
         )
-        .map_err(|e| format!("Failed to set wallet schema version: {}", e))?;
+        .map_err(|e| format!("Failed to set wallet schema version: {e}"))?;
 
         // Store current wallet address in metadata
         let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
         conn.execute(
             "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('current_wallet', ?1)",
             params![wallet_address],
         )
-        .map_err(|e| format!("Failed to set current_wallet in metadata: {}", e))?;
+        .map_err(|e| format!("Failed to set current_wallet in metadata: {e}"))?;
 
         logger::debug(
             LogTag::Wallet,
@@ -281,7 +281,7 @@ impl WalletDatabase {
     fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.pool
             .get()
-            .map_err(|e| format!("Failed to get wallet database connection: {}", e))
+            .map_err(|e| format!("Failed to get wallet database connection: {e}"))
     }
 
     /// Aggregate pre-cached SOL flows for a given time window
@@ -309,7 +309,7 @@ impl WalletDatabase {
             params_vec.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare cached flow aggregation query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare cached flow aggregation query: {e}"))?;
         let (inflow, outflow, count) = stmt
             .query_row(params_refs.as_slice(), |row| {
                 let inflow = row.get::<_, Option<f64>>(0)?.unwrap_or(0.0);
@@ -317,7 +317,7 @@ impl WalletDatabase {
                 let count = row.get::<_, i64>(2)?.max(0) as usize;
                 Ok((inflow, outflow, count))
             })
-            .map_err(|e| format!("Failed to aggregate cached SOL flows: {}", e))?;
+            .map_err(|e| format!("Failed to aggregate cached SOL flows: {e}"))?;
         Ok((inflow, outflow, count))
     }
 
@@ -332,20 +332,20 @@ impl WalletDatabase {
         let mut conn = self.get_connection()?;
         let tx = conn
             .transaction()
-            .map_err(|e| format!("Failed to start flow cache transaction: {}", e))?;
+            .map_err(|e| format!("Failed to start flow cache transaction: {e}"))?;
         {
             let mut stmt = tx
                 .prepare(
                     "INSERT OR REPLACE INTO sol_flow_cache(signature, timestamp, sol_delta) VALUES (?1, ?2, ?3)",
                 )
-                .map_err(|e| format!("Failed to prepare flow cache upsert: {}", e))?;
+                .map_err(|e| format!("Failed to prepare flow cache upsert: {e}"))?;
             for (sig, ts, delta) in rows.iter() {
                 stmt.execute(params![sig, ts.to_rfc3339(), *delta])
-                    .map_err(|e| format!("Failed to upsert flow row: {}", e))?;
+                    .map_err(|e| format!("Failed to upsert flow row: {e}"))?;
             }
         }
         tx.commit()
-            .map_err(|e| format!("Failed to commit flow cache upserts: {}", e))?;
+            .map_err(|e| format!("Failed to commit flow cache upserts: {e}"))?;
         Ok(rows.len())
     }
 
@@ -354,16 +354,16 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
         let mut stmt = conn
             .prepare("SELECT MAX(timestamp) FROM sol_flow_cache")
-            .map_err(|e| format!("Failed to prepare max timestamp query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare max timestamp query: {e}"))?;
         let ts: Option<String> = stmt
             .query_row([], |row| row.get(0))
             .optional()
-            .map_err(|e| format!("Failed to query max timestamp: {}", e))?
+            .map_err(|e| format!("Failed to query max timestamp: {e}"))?
             .flatten();
         if let Some(ts) = ts {
             let parsed = DateTime::parse_from_rfc3339(&ts)
                 .map(|dt| dt.with_timezone(&Utc))
-                .map_err(|e| format!("Failed to parse cached max timestamp: {}", e))?;
+                .map_err(|e| format!("Failed to parse cached max timestamp: {e}"))?;
             Ok(Some(parsed))
         } else {
             Ok(None)
@@ -375,16 +375,16 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
         let mut stmt = conn
             .prepare("SELECT MIN(timestamp) FROM sol_flow_cache")
-            .map_err(|e| format!("Failed to prepare min timestamp query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare min timestamp query: {e}"))?;
         let ts: Option<String> = stmt
             .query_row([], |row| row.get(0))
             .optional()
-            .map_err(|e| format!("Failed to query min timestamp: {}", e))?
+            .map_err(|e| format!("Failed to query min timestamp: {e}"))?
             .flatten();
         if let Some(ts) = ts {
             let parsed = DateTime::parse_from_rfc3339(&ts)
                 .map(|dt| dt.with_timezone(&Utc))
-                .map_err(|e| format!("Failed to parse cached min timestamp: {}", e))?;
+                .map_err(|e| format!("Failed to parse cached min timestamp: {e}"))?;
             Ok(Some(parsed))
         } else {
             Ok(None)
@@ -416,7 +416,7 @@ impl WalletDatabase {
                     last_processed_timestamp, last_processed_signature, window_start \
                  FROM wallet_dashboard_metrics WHERE window_key = ?1",
             )
-            .map_err(|e| format!("Failed to prepare dashboard metrics query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare dashboard metrics query: {e}"))?;
 
         let result = stmt
             .query_row(params![window_key], |row| {
@@ -471,7 +471,7 @@ impl WalletDatabase {
                 })
             })
             .optional()
-            .map_err(|e| format!("Failed to fetch dashboard metrics: {}", e))?;
+            .map_err(|e| format!("Failed to fetch dashboard metrics: {e}"))?;
 
         Ok(result)
     }
@@ -504,7 +504,7 @@ impl WalletDatabase {
                 metrics.window_start.as_ref().map(|ts| ts.to_rfc3339()),
             ],
         )
-        .map_err(|e| format!("Failed to upsert dashboard metrics: {}", e))?;
+        .map_err(|e| format!("Failed to upsert dashboard metrics: {e}"))?;
         Ok(())
     }
 
@@ -514,7 +514,7 @@ impl WalletDatabase {
             "DELETE FROM wallet_dashboard_metrics WHERE window_key = ?1",
             params![window_key],
         )
-        .map_err(|e| format!("Failed to invalidate dashboard metrics: {}", e))?;
+        .map_err(|e| format!("Failed to invalidate dashboard metrics: {e}"))?;
         Ok(())
     }
 
@@ -525,7 +525,7 @@ impl WalletDatabase {
                 "DELETE FROM wallet_dashboard_metrics WHERE valid_until < datetime('now')",
                 [],
             )
-            .map_err(|e| format!("Failed to cleanup dashboard metrics: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup dashboard metrics: {e}"))?;
         Ok(deleted.max(0) as u64)
     }
 
@@ -551,7 +551,7 @@ impl WalletDatabase {
                 ],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("Failed to insert wallet snapshot: {}", e))?;
+            .map_err(|e| format!("Failed to insert wallet snapshot: {e}"))?;
 
         // Insert token balances
         for token_balance in &snapshot.token_balances {
@@ -570,7 +570,7 @@ impl WalletDatabase {
                     token_balance.is_token_2022
                 ],
             )
-            .map_err(|e| format!("Failed to insert token balance: {}", e))?;
+            .map_err(|e| format!("Failed to insert token balance: {e}"))?;
         }
 
         // Insert NFT balances
@@ -591,7 +591,7 @@ impl WalletDatabase {
                     nft_balance.is_token_2022
                 ],
             )
-            .map_err(|e| format!("Failed to insert NFT balance: {}", e))?;
+            .map_err(|e| format!("Failed to insert NFT balance: {e}"))?;
         }
 
         logger::debug(
@@ -632,7 +632,7 @@ impl WalletDatabase {
                 ],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("Failed to insert wallet snapshot: {}", e))?;
+            .map_err(|e| format!("Failed to insert wallet snapshot: {e}"))?;
 
         // Insert token balances
         for token_balance in &snapshot.token_balances {
@@ -651,7 +651,7 @@ impl WalletDatabase {
                     token_balance.is_token_2022
                 ],
             )
-            .map_err(|e| format!("Failed to insert token balance: {}", e))?;
+            .map_err(|e| format!("Failed to insert token balance: {e}"))?;
         }
 
         // Insert NFT balances
@@ -672,7 +672,7 @@ impl WalletDatabase {
                     nft_balance.is_token_2022
                 ],
             )
-            .map_err(|e| format!("Failed to insert NFT balance: {}", e))?;
+            .map_err(|e| format!("Failed to insert NFT balance: {e}"))?;
         }
 
         logger::debug(
@@ -712,7 +712,7 @@ impl WalletDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to query balance at time: {}", e))?;
+            .map_err(|e| format!("Failed to query balance at time: {e}"))?;
 
         Ok(result)
     }
@@ -733,7 +733,7 @@ impl WalletDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to fetch latest wallet snapshot time: {}", e))?;
+            .map_err(|e| format!("Failed to fetch latest wallet snapshot time: {e}"))?;
 
         if let Some(ts_str) = snapshot_time_str {
             let timestamp = DateTime::parse_from_rfc3339(&ts_str)
@@ -758,7 +758,7 @@ impl WalletDatabase {
             LIMIT ?1
             "#
             )
-            .map_err(|e| format!("Failed to prepare snapshots query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare snapshots query: {e}"))?;
 
         let snapshot_iter = stmt
             .query_map(params![limit], |row| {
@@ -785,12 +785,12 @@ impl WalletDatabase {
                     nft_balances: Vec::new(),   // Loaded separately if needed
                 })
             })
-            .map_err(|e| format!("Failed to execute snapshots query: {}", e))?;
+            .map_err(|e| format!("Failed to execute snapshots query: {e}"))?;
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
             snapshots
-                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {}", e))?);
+                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {e}"))?);
         }
 
         Ok(snapshots)
@@ -809,7 +809,7 @@ impl WalletDatabase {
             LIMIT ?1
             "#
             )
-            .map_err(|e| format!("Failed to prepare snapshots query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare snapshots query: {e}"))?;
 
         let snapshot_iter = stmt
             .query_map(params![limit], |row| {
@@ -836,12 +836,12 @@ impl WalletDatabase {
                     nft_balances: Vec::new(),   // Loaded separately if needed
                 })
             })
-            .map_err(|e| format!("Failed to execute snapshots query: {}", e))?;
+            .map_err(|e| format!("Failed to execute snapshots query: {e}"))?;
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
             snapshots
-                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {}", e))?);
+                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {e}"))?);
         }
 
         Ok(snapshots)
@@ -855,7 +855,7 @@ impl WalletDatabase {
             .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| {
                 row.get(0)
             })
-            .map_err(|e| format!("Failed to count snapshots: {}", e))?;
+            .map_err(|e| format!("Failed to count snapshots: {e}"))?;
 
         // Get latest snapshot info
         let latest_info: Option<(String, String, f64, i64)> = conn
@@ -870,12 +870,12 @@ impl WalletDatabase {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
-            .map_err(|e| format!("Failed to get latest snapshot: {}", e))?;
+            .map_err(|e| format!("Failed to get latest snapshot: {e}"))?;
 
         let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) =
             if let Some((addr, time_str, balance, count)) = latest_info {
                 let time = DateTime::parse_from_rfc3339(&time_str)
-                    .map_err(|e| format!("Failed to parse latest snapshot time: {}", e))?
+                    .map_err(|e| format!("Failed to parse latest snapshot time: {e}"))?
                     .with_timezone(&Utc);
                 (addr, Some(time), Some(balance), Some(count as u32))
             } else {
@@ -906,7 +906,7 @@ impl WalletDatabase {
             .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| {
                 row.get(0)
             })
-            .map_err(|e| format!("Failed to count snapshots: {}", e))?;
+            .map_err(|e| format!("Failed to count snapshots: {e}"))?;
 
         // Get latest snapshot info
         let latest_info: Option<(String, String, f64, i64)> = conn
@@ -921,12 +921,12 @@ impl WalletDatabase {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
-            .map_err(|e| format!("Failed to get latest snapshot: {}", e))?;
+            .map_err(|e| format!("Failed to get latest snapshot: {e}"))?;
 
         let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) =
             if let Some((addr, time_str, balance, count)) = latest_info {
                 let time = DateTime::parse_from_rfc3339(&time_str)
-                    .map_err(|e| format!("Failed to parse latest snapshot time: {}", e))?
+                    .map_err(|e| format!("Failed to parse latest snapshot time: {e}"))?
                     .with_timezone(&Utc);
                 (addr, Some(time), Some(balance), Some(count as u32))
             } else {
@@ -962,7 +962,7 @@ impl WalletDatabase {
             ORDER BY balance_ui DESC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare token balances query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare token balances query: {e}"))?;
 
         let balances_iter = stmt
             .query_map(params![snapshot_id], |row| {
@@ -976,12 +976,12 @@ impl WalletDatabase {
                     is_token_2022: row.get(6)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute token balances query: {}", e))?;
+            .map_err(|e| format!("Failed to execute token balances query: {e}"))?;
 
         let mut balances = Vec::new();
         for balance_result in balances_iter {
             balances.push(
-                balance_result.map_err(|e| format!("Failed to parse token balance row: {}", e))?,
+                balance_result.map_err(|e| format!("Failed to parse token balance row: {e}"))?,
             );
         }
 
@@ -1001,7 +1001,7 @@ impl WalletDatabase {
             ORDER BY name ASC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare nft balances query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare nft balances query: {e}"))?;
 
         let balances_iter = stmt
             .query_map(params![snapshot_id], |row| {
@@ -1016,12 +1016,12 @@ impl WalletDatabase {
                     is_token_2022: row.get(7)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute nft balances query: {}", e))?;
+            .map_err(|e| format!("Failed to execute nft balances query: {e}"))?;
 
         let mut balances = Vec::new();
         for balance_result in balances_iter {
             balances.push(
-                balance_result.map_err(|e| format!("Failed to parse nft balance row: {}", e))?,
+                balance_result.map_err(|e| format!("Failed to parse nft balance row: {e}"))?,
             );
         }
 
@@ -1041,7 +1041,7 @@ impl WalletDatabase {
             ORDER BY balance_ui DESC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare token balances query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare token balances query: {e}"))?;
 
         let balances_iter = stmt
             .query_map(params![snapshot_id], |row| {
@@ -1055,12 +1055,12 @@ impl WalletDatabase {
                     is_token_2022: row.get(6)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute token balances query: {}", e))?;
+            .map_err(|e| format!("Failed to execute token balances query: {e}"))?;
 
         let mut balances = Vec::new();
         for balance_result in balances_iter {
             balances.push(
-                balance_result.map_err(|e| format!("Failed to parse token balance row: {}", e))?,
+                balance_result.map_err(|e| format!("Failed to parse token balance row: {e}"))?,
             );
         }
 
@@ -1083,7 +1083,7 @@ impl WalletDatabase {
             "#,
                 [],
             )
-            .map_err(|e| format!("Failed to cleanup old snapshots: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup old snapshots: {e}"))?;
 
         if deleted_count > 0 {
             logger::info(
@@ -1111,7 +1111,7 @@ impl WalletDatabase {
             "#,
                 [],
             )
-            .map_err(|e| format!("Failed to cleanup old snapshots: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup old snapshots: {e}"))?;
 
         if deleted_count > 0 {
             logger::info(

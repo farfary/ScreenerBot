@@ -141,7 +141,7 @@ impl OpenAiClient {
             .await
             .map_err(|e| LlmError::NetworkError {
                 provider: "openai".to_string(),
-                message: format!("Rate limiter error: {}", e),
+                message: format!("Rate limiter error: {e}"),
             })?;
 
         let url = format!("{}{}", OPENAI_BASE_URL, ENDPOINT_CHAT);
@@ -174,7 +174,7 @@ impl OpenAiClient {
             } else {
                 LlmError::NetworkError {
                     provider: "openai".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -217,7 +217,7 @@ impl OpenAiClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "openai".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((openai_response, elapsed))

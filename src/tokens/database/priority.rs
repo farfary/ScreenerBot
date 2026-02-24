@@ -11,7 +11,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
@@ -22,15 +22,15 @@ impl TokenDatabase {
                  ORDER BY market_data_last_updated_at ASC NULLS FIRST 
                  LIMIT ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mints = stmt
             .query_map(params![priority, limit], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         mints
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
     }
 
     /// Get oldest non-blacklisted tokens (excludes permanently failed market data tokens)
@@ -39,7 +39,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
@@ -51,15 +51,15 @@ impl TokenDatabase {
              ORDER BY COALESCE(u.market_data_last_updated_at, 0) ASC
              LIMIT ?1",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mints = stmt
             .query_map(params![limit], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         mints
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
     }
 
     /// Update priority for a token
@@ -77,13 +77,13 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         conn.execute(
             "UPDATE update_tracking SET priority = ?1 WHERE mint = ?2",
             params![priority, mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to update priority: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to update priority: {e}")))?;
 
         Ok(())
     }
@@ -105,17 +105,17 @@ impl TokenDatabase {
         let mut conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let tx = conn
             .transaction()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;
         {
             let mut stmt = tx
                 .prepare_cached("UPDATE update_tracking SET priority = ?1 WHERE mint = ?2")
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for mint in mints {
                 match stmt.execute(params![priority, mint]) {
@@ -131,7 +131,7 @@ impl TokenDatabase {
         }
 
         tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
 
         Ok(updated)
     }
@@ -147,7 +147,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut placeholders = String::new();
         for (idx, _) in mints.iter().enumerate() {
@@ -166,7 +166,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let rows = stmt
             .query_map(params_from_iter(mint_refs.into_iter()), |row| {
@@ -174,12 +174,12 @@ impl TokenDatabase {
                 let priority: i32 = row.get(1)?;
                 Ok((mint, priority))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let mut result = HashMap::new();
         for row in rows {
             let (mint, priority) =
-                row.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+                row.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
             result.insert(mint, priority);
         }
 
@@ -190,13 +190,13 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
                 "SELECT priority, COUNT(*) FROM update_tracking GROUP BY priority ORDER BY priority DESC",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -204,21 +204,21 @@ impl TokenDatabase {
                 let count: i64 = row.get(1)?;
                 Ok((priority, count.max(0) as u64))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect priority summary: {}", e)))
+            .map_err(|e| TokenError::Database(format!("Failed to collect priority summary: {e}")))
     }
 
     pub fn get_priority(&self, mint: &str) -> TokenResult<Priority> {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare("SELECT priority FROM update_tracking WHERE mint = ?1")
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let priority: i32 = stmt
             .query_row(params![mint], |row| row.get(0))

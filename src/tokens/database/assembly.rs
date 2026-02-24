@@ -133,7 +133,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         // Map sort_by to SQL column with table prefix
         let order_column = match sort_by {
@@ -243,7 +243,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         // Parse row data
         let tokens_iter = stmt
@@ -404,7 +404,7 @@ impl TokenDatabase {
                     is_mutable,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let mut tokens = Vec::new();
         for row_result in tokens_iter {
@@ -478,7 +478,7 @@ impl TokenDatabase {
                 last_rejection_at,
                 update_authority,
                 is_mutable,
-            ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+            ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
 
             // Parse all timestamps
             let first_discovered_dt =

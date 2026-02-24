@@ -150,7 +150,7 @@ impl GroqClient {
             .await
             .map_err(|e| LlmError::NetworkError {
                 provider: "groq".to_string(),
-                message: format!("Rate limiter error: {}", e),
+                message: format!("Rate limiter error: {e}"),
             })?;
 
         let url = format!("{}{}", GROQ_BASE_URL, ENDPOINT_CHAT);
@@ -183,7 +183,7 @@ impl GroqClient {
             } else {
                 LlmError::NetworkError {
                     provider: "groq".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -227,7 +227,7 @@ impl GroqClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "groq".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((groq_response, elapsed))

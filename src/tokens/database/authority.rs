@@ -13,15 +13,15 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
 
         let mut stmt = conn
             .prepare("SELECT address FROM authority_reputation WHERE is_blocked = 1")
-            .map_err(|e| TokenError::Database(format!("Prepare error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Prepare error: {e}")))?;
 
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|e| TokenError::Database(format!("Query error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query error: {e}")))?;
 
         let mut addresses = Vec::new();
         for row in rows {
@@ -46,7 +46,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
 
         let now = chrono::Utc::now().timestamp();
         conn.execute(
@@ -71,7 +71,7 @@ impl TokenDatabase {
                 now,
             ],
         )
-        .map_err(|e| TokenError::Database(format!("Upsert error: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Upsert error: {e}")))?;
 
         Ok(())
     }
@@ -81,7 +81,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
 
         let count: u32 = conn
             .query_row(
@@ -89,7 +89,7 @@ impl TokenDatabase {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| TokenError::Database(format!("Query error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query error: {e}")))?;
 
         Ok(count)
     }
@@ -107,7 +107,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
 
         let now = chrono::Utc::now().timestamp();
         let mut newly_blocked = 0u32;
@@ -155,7 +155,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(sql)
-            .map_err(|e| TokenError::Database(format!("Prepare discovery SQL error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Prepare discovery SQL error: {e}")))?;
 
         let rows = stmt
             .query_map(rusqlite::params![min_tokens], |row| {
@@ -166,7 +166,7 @@ impl TokenDatabase {
                     row.get::<_, u32>(3)?,    // flagged_tokens
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query discovery error: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query discovery error: {e}")))?;
 
         for row in rows {
             if let Ok((authority, authority_type, total, flagged)) = row {
@@ -199,7 +199,7 @@ impl TokenDatabase {
                         now,
                     ],
                 )
-                .map_err(|e| TokenError::Database(format!("Upsert discovery error: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Upsert discovery error: {e}")))?;
 
                 if should_block {
                     newly_blocked += 1;

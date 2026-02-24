@@ -16,11 +16,11 @@ impl TokenDatabase {
         let mut conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let tx = conn
             .transaction()
-            .map_err(|e| TokenError::Database(format!("Failed to start transaction: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to start transaction: {e}")))?;
 
         // Query existing first_seen_ts values BEFORE delete to preserve them
         let mut existing_first_seen: HashMap<String, i64> = HashMap::new();
@@ -29,14 +29,14 @@ impl TokenDatabase {
                 .prepare(
                     "SELECT pool_address, pool_data_first_seen_at FROM token_pools WHERE mint = ?1",
                 )
-                .map_err(|e| TokenError::Database(format!("Failed to prepare query: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
 
             let rows = stmt
                 .query_map(params![&snapshot.mint], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
                 })
                 .map_err(|e| {
-                    TokenError::Database(format!("Failed to query existing pools: {}", e))
+                    TokenError::Database(format!("Failed to query existing pools: {e}"))
                 })?;
 
             for row in rows {
@@ -50,11 +50,11 @@ impl TokenDatabase {
             "DELETE FROM token_pools WHERE mint = ?1",
             params![&snapshot.mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to clear token pools: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to clear token pools: {e}")))?;
 
         for pool in snapshot.pools.iter() {
             let sources_json = serde_json::to_string(&pool.sources).map_err(|e| {
-                TokenError::Database(format!("Failed to serialize pool sources: {}", e))
+                TokenError::Database(format!("Failed to serialize pool sources: {e}"))
             })?;
 
             // Use preserved first_seen_ts or fall back to current timestamp
@@ -89,11 +89,11 @@ impl TokenDatabase {
                     first_seen_ts,
                 ],
             )
-            .map_err(|e| TokenError::Database(format!("Failed to insert token pool: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to insert token pool: {e}")))?;
         }
 
         tx.commit().map_err(|e| {
-            TokenError::Database(format!("Failed to commit pool transaction: {}", e))
+            TokenError::Database(format!("Failed to commit pool transaction: {e}"))
         })?;
 
         Ok(())
@@ -104,7 +104,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
@@ -114,17 +114,17 @@ impl TokenDatabase {
                         pool_data_last_fetched_at, pool_data_first_seen_at
                  FROM token_pools WHERE mint = ?1",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mut rows = stmt
             .query(params![mint])
-            .map_err(|e| TokenError::Database(format!("Failed to query pools: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to query pools: {e}")))?;
 
         let mut pools: Vec<TokenPoolInfo> = Vec::new();
 
         while let Some(row) = rows
             .next()
-            .map_err(|e| TokenError::Database(format!("Failed to read row: {}", e)))?
+            .map_err(|e| TokenError::Database(format!("Failed to read row: {e}")))?
         {
             let sources_json: Option<String> = read_row_value(&row, 12, "sources_json")?;
             let sources = match sources_json {
@@ -193,7 +193,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
@@ -203,11 +203,11 @@ impl TokenDatabase {
                         pool_data_last_fetched_at, pool_data_first_seen_at
                  FROM token_pools ORDER BY mint",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mut rows = stmt
             .query([])
-            .map_err(|e| TokenError::Database(format!("Failed to query pools: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to query pools: {e}")))?;
 
         let mut snapshots: Vec<TokenPoolsSnapshot> = Vec::new();
         let mut current_mint: Option<String> = None;
@@ -215,7 +215,7 @@ impl TokenDatabase {
 
         while let Some(row) = rows
             .next()
-            .map_err(|e| TokenError::Database(format!("Failed to read row: {}", e)))?
+            .map_err(|e| TokenError::Database(format!("Failed to read row: {e}")))?
         {
             let mint: String = read_row_value(&row, 0, "mint")?;
             if current_mint.as_ref() != Some(&mint) && !current_pools.is_empty() {

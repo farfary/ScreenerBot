@@ -156,7 +156,7 @@ impl DeepSeekClient {
             .await
             .map_err(|e| LlmError::NetworkError {
                 provider: "deepseek".to_string(),
-                message: format!("Rate limiter error: {}", e),
+                message: format!("Rate limiter error: {e}"),
             })?;
 
         let url = format!("{}{}", DEEPSEEK_BASE_URL, ENDPOINT_CHAT);
@@ -192,7 +192,7 @@ impl DeepSeekClient {
             } else {
                 LlmError::NetworkError {
                     provider: "deepseek".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -235,7 +235,7 @@ impl DeepSeekClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "deepseek".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((deepseek_response, elapsed))

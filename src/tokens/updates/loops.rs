@@ -188,7 +188,7 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to load uninitialized tokens: {}", e),
+                &format!("Failed to load uninitialized tokens: {e}"),
             );
             return;
         }
@@ -242,7 +242,7 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Batch error during seeding: {}", e),
+                    &format!("Batch error during seeding: {e}"),
                 );
             }
         }
@@ -264,7 +264,7 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get open position tokens: {}", e),
+                &format!("Failed to get open position tokens: {e}"),
             );
             return;
         }
@@ -321,7 +321,7 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Batch error for open position tokens: {}", e),
+                    &format!("Batch error for open position tokens: {e}"),
                 );
             }
         }
@@ -343,7 +343,7 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get pool-tracked tokens: {}", e),
+                &format!("Failed to get pool-tracked tokens: {e}"),
             );
             return;
         }
@@ -419,7 +419,7 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Batch error for pool priority tokens: {}", e),
+                    &format!("Batch error for pool priority tokens: {e}"),
                 );
             }
         }
@@ -441,7 +441,7 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get filter-passed tokens: {}", e),
+                &format!("Failed to get filter-passed tokens: {e}"),
             );
             return;
         }
@@ -496,7 +496,7 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Batch error for passed priority tokens: {}", e),
+                    &format!("Batch error for passed priority tokens: {e}"),
                 );
             }
         }
@@ -519,7 +519,7 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get background tokens: {}", e),
+                &format!("Failed to get background tokens: {e}"),
             );
             return;
         }
@@ -559,7 +559,7 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Batch error for low priority tokens: {}", e),
+                &format!("Batch error for low priority tokens: {e}"),
             );
         }
     }

@@ -328,12 +328,12 @@ pub const PERFORMANCE_PRAGMAS: &[&str] = &[];
 pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     // Apply centralized PRAGMA configuration
     database::configure_connection(conn, database::TOKENS_DB)
-        .map_err(|e| format!("Failed to configure connection: {}", e))?;
+        .map_err(|e| format!("Failed to configure connection: {e}"))?;
 
     // Create tables
     for statement in CREATE_TABLES {
         conn.execute(statement, [])
-            .map_err(|e| format!("Failed to create table: {}", e))?;
+            .map_err(|e| format!("Failed to create table: {e}"))?;
     }
 
     // Apply ALTER statements BEFORE indexes (for existing databases - columns must exist before indexes)
@@ -345,7 +345,7 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     // Create indexes (after ALTERs so new columns exist)
     for statement in CREATE_INDEXES {
         conn.execute(statement, [])
-            .map_err(|e| format!("Failed to create index: {}", e))?;
+            .map_err(|e| format!("Failed to create index: {e}"))?;
     }
 
     Ok(())

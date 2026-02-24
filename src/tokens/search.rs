@@ -188,7 +188,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                 Err(e) => {
                     logger::debug(
                         LogTag::Api,
-                        &format!("DexScreener mint lookup failed: {}", e),
+                        &format!("DexScreener mint lookup failed: {e}"),
                     );
                 }
             }
@@ -219,7 +219,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                 Err(e) => {
                     logger::debug(
                         LogTag::Api,
-                        &format!("GeckoTerminal mint lookup failed: {}", e),
+                        &format!("GeckoTerminal mint lookup failed: {e}"),
                     );
                 }
             }
@@ -259,7 +259,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                     }
                 }
                 Err(e) => {
-                    logger::debug(LogTag::Api, &format!("DexScreener search failed: {}", e));
+                    logger::debug(LogTag::Api, &format!("DexScreener search failed: {e}"));
                 }
             }
         }

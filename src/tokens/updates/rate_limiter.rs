@@ -86,7 +86,7 @@ impl RateLimitCoordinator {
             .await
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Batch".to_string(),
-                message: format!("Failed to acquire permit: {}", e),
+                message: format!("Failed to acquire permit: {e}"),
             })
     }
 
@@ -99,7 +99,7 @@ impl RateLimitCoordinator {
             .await
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Profiles".to_string(),
-                message: format!("Failed to acquire permit: {}", e),
+                message: format!("Failed to acquire permit: {e}"),
             })
     }
 
@@ -112,7 +112,7 @@ impl RateLimitCoordinator {
             .await
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Boosts".to_string(),
-                message: format!("Failed to acquire permit: {}", e),
+                message: format!("Failed to acquire permit: {e}"),
             })
     }
 
@@ -125,7 +125,7 @@ impl RateLimitCoordinator {
             .await
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Pools".to_string(),
-                message: format!("Failed to acquire permit: {}", e),
+                message: format!("Failed to acquire permit: {e}"),
             })
     }
 
@@ -137,7 +137,7 @@ impl RateLimitCoordinator {
             .await
             .map_err(|e| TokenError::RateLimit {
                 source: "GeckoTerminal".to_string(),
-                message: format!("Failed to acquire permit: {}", e),
+                message: format!("Failed to acquire permit: {e}"),
             })
     }
 
@@ -149,7 +149,7 @@ impl RateLimitCoordinator {
             .await
             .map_err(|e| TokenError::RateLimit {
                 source: "Rugcheck".to_string(),
-                message: format!("Failed to acquire permit: {}", e),
+                message: format!("Failed to acquire permit: {e}"),
             })
     }
 

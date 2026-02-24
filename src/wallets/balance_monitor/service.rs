@@ -57,7 +57,7 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
 async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     // Get wallet address
     let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
 
     let rpc_client = get_rpc_client();
     let snapshot_time = Utc::now();
@@ -74,7 +74,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     let sol_balance = rpc_client
         .get_sol_balance(&wallet_address)
         .await
-        .map_err(|e| format!("Failed to get SOL balance: {}", e))?;
+        .map_err(|e| format!("Failed to get SOL balance: {e}"))?;
 
     let sol_balance_lamports = crate::utils::sol_to_lamports(sol_balance);
 
@@ -85,7 +85,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     let token_accounts = rpc_client
         .get_all_token_accounts_str(&wallet_address)
         .await
-        .map_err(|e| format!("Failed to get token accounts: {}", e))?;
+        .map_err(|e| format!("Failed to get token accounts: {e}"))?;
 
     // Separate fungible tokens and NFTs
     let mut token_balances = Vec::new();
@@ -198,7 +198,7 @@ pub async fn start_wallet_monitoring_service(
             if let Err(e) = initialize_wallet_database().await {
                 logger::error(
                     LogTag::Wallet,
-                    &format!("Failed to initialize wallet database: {}", e)
+                    &format!("Failed to initialize wallet database: {e}")
                 );
                 return;
             }
@@ -259,7 +259,7 @@ pub async fn start_wallet_monitoring_service(
                                             );
                                         }
                                         Err(e) => {
-                                            logger::error(LogTag::Wallet, &format!("Failed to save wallet snapshot: {}", e));
+                                            logger::error(LogTag::Wallet, &format!("Failed to save wallet snapshot: {e}"));
                                         }
                                     }
                                 }
@@ -270,7 +270,7 @@ pub async fn start_wallet_monitoring_service(
                         }
                         Err(e) => {
                             increment_errors();
-                            logger::error(LogTag::Wallet, &format!("Failed to collect wallet snapshot: {}", e));
+                            logger::error(LogTag::Wallet, &format!("Failed to collect wallet snapshot: {e}"));
                         }
                     }
 
@@ -283,7 +283,7 @@ pub async fn start_wallet_monitoring_service(
                         match db_guard.as_ref() {
                             Some(db) => {
                                 if let Err(e) = db.cleanup_old_snapshots_sync() {
-                                    logger::warning(LogTag::Wallet, &format!("Failed to cleanup old snapshots: {}", e));
+                                    logger::warning(LogTag::Wallet, &format!("Failed to cleanup old snapshots: {e}"));
                                 }
                                 if let Err(e) = db.cleanup_expired_metrics() {
                                     logger::warning(LogTag::Wallet, &format!(
@@ -321,7 +321,7 @@ pub async fn start_wallet_monitoring_service(
                         match tx_db.export_processed_for_wallet_flow(start_ts, batch_size).await {
                             Ok(rows) => rows,
                             Err(e) => {
-                                logger::error(LogTag::Wallet, &format!("Failed to export processed rows: {}", e));
+                                logger::error(LogTag::Wallet, &format!("Failed to export processed rows: {e}"));
                                 Vec::new()
                             }
                         }
@@ -338,7 +338,7 @@ pub async fn start_wallet_monitoring_service(
                     if let Some(wallet_db) = db_guard.as_ref() {
                         if let Err(e) = wallet_db.upsert_flow_rows_sync(&mapped) {
                             increment_errors();
-                            logger::error(LogTag::Wallet, &format!("Failed to upsert flow cache rows: {}", e));
+                            logger::error(LogTag::Wallet, &format!("Failed to upsert flow cache rows: {e}"));
                         } else {
                             increment_flow_syncs();
                             logger::debug(LogTag::Wallet, &format!("Upserted {} flow cache rows", mapped.len()));

@@ -35,7 +35,7 @@ static GLOBAL_DB: Mutex<Option<Arc<TokenDatabase>>> = Mutex::new(None);
 pub fn init_global_database(db: Arc<TokenDatabase>) -> Result<(), String> {
     let mut guard = GLOBAL_DB
         .lock()
-        .map_err(|e| format!("Lock poisoned: {}", e))?;
+        .map_err(|e| format!("Lock poisoned: {e}"))?;
     *guard = Some(db);
     Ok(())
 }
@@ -70,7 +70,7 @@ impl TokenDatabase {
     /// Create new database instance
     pub fn new(path: &str) -> TokenResult<Self> {
         let conn = Connection::open(path)
-            .map_err(|e| TokenError::Database(format!("Failed to open database: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to open database: {e}")))?;
 
         // Initialize schema
         crate::tokens::schema::initialize_schema(&conn).map_err(|e| TokenError::Database(e))?;

@@ -10,7 +10,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let now = Utc::now().timestamp();
 
@@ -19,7 +19,7 @@ impl TokenDatabase {
              VALUES (?1, ?2, ?3, ?4)",
             params![mint, reason, source, now],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to add to blacklist: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to add to blacklist: {e}")))?;
 
         Ok(())
     }
@@ -29,7 +29,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
@@ -38,7 +38,7 @@ impl TokenDatabase {
                  ORDER BY added_at DESC",
             )
             .map_err(|e| {
-                TokenError::Database(format!("Failed to prepare blacklist query: {}", e))
+                TokenError::Database(format!("Failed to prepare blacklist query: {e}"))
             })?;
 
         let rows = stmt
@@ -50,12 +50,12 @@ impl TokenDatabase {
                     added_at: row.get(3)?,
                 })
             })
-            .map_err(|e| TokenError::Database(format!("Failed to query blacklist: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to query blacklist: {e}")))?;
 
         let mut records = Vec::new();
         for row in rows {
             records.push(row.map_err(|e| {
-                TokenError::Database(format!("Failed to read blacklist row: {}", e))
+                TokenError::Database(format!("Failed to read blacklist row: {e}"))
             })?);
         }
 
@@ -67,15 +67,15 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare("SELECT 1 FROM blacklist WHERE mint = ?1")
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let exists = stmt
             .exists(params![mint])
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         Ok(exists)
     }
@@ -85,10 +85,10 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         conn.execute("DELETE FROM blacklist WHERE mint = ?1", params![mint])
-            .map_err(|e| TokenError::Database(format!("Failed to remove from blacklist: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to remove from blacklist: {e}")))?;
 
         Ok(())
     }
@@ -98,18 +98,18 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare("SELECT reason, source FROM blacklist WHERE mint = ?1")
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let result = stmt.query_row(params![mint], |row| Ok((row.get(0)?, row.get(1)?)));
 
         match result {
             Ok(data) => Ok(Some(data)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
+            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
         }
     }
 }

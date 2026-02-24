@@ -148,7 +148,7 @@ impl MistralClient {
             .await
             .map_err(|e| LlmError::NetworkError {
                 provider: "mistral".to_string(),
-                message: format!("Rate limiter error: {}", e),
+                message: format!("Rate limiter error: {e}"),
             })?;
 
         let url = format!("{}{}", MISTRAL_BASE_URL, ENDPOINT_CHAT);
@@ -184,7 +184,7 @@ impl MistralClient {
             } else {
                 LlmError::NetworkError {
                     provider: "mistral".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -227,7 +227,7 @@ impl MistralClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "mistral".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((mistral_response, elapsed))

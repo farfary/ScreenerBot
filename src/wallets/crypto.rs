@@ -52,7 +52,7 @@ fn parse_array_format(private_key: &str) -> Result<Keypair, String> {
 
     let bytes: Result<Vec<u8>, _> = inner.split(',').map(|s| s.trim().parse::<u8>()).collect();
 
-    let bytes = bytes.map_err(|e| format!("Invalid array format: {}", e))?;
+    let bytes = bytes.map_err(|e| format!("Invalid array format: {e}"))?;
 
     if bytes.len() != 64 {
         return Err(format!(
@@ -61,14 +61,14 @@ fn parse_array_format(private_key: &str) -> Result<Keypair, String> {
         ));
     }
 
-    Keypair::from_bytes(&bytes).map_err(|e| format!("Invalid keypair bytes: {}", e))
+    Keypair::from_bytes(&bytes).map_err(|e| format!("Invalid keypair bytes: {e}"))
 }
 
 /// Parse private key from base58 format
 fn parse_base58_format(private_key: &str) -> Result<Keypair, String> {
     let decoded = bs58::decode(private_key)
         .into_vec()
-        .map_err(|e| format!("Invalid base58 encoding: {}", e))?;
+        .map_err(|e| format!("Invalid base58 encoding: {e}"))?;
 
     if decoded.len() != 64 {
         return Err(format!(
@@ -77,7 +77,7 @@ fn parse_base58_format(private_key: &str) -> Result<Keypair, String> {
         ));
     }
 
-    Keypair::from_bytes(&decoded).map_err(|e| format!("Invalid keypair bytes: {}", e))
+    Keypair::from_bytes(&decoded).map_err(|e| format!("Invalid keypair bytes: {e}"))
 }
 
 /// Import a private key and return encrypted data
@@ -116,7 +116,7 @@ pub fn validate_address(address: &str) -> Result<(), String> {
     use solana_sdk::pubkey::Pubkey;
     use std::str::FromStr;
 
-    Pubkey::from_str(address).map_err(|e| format!("Invalid Solana address: {}", e))?;
+    Pubkey::from_str(address).map_err(|e| format!("Invalid Solana address: {e}"))?;
     Ok(())
 }
 

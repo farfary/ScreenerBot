@@ -18,7 +18,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         conn.execute(
             "UPDATE update_tracking SET 
@@ -28,7 +28,7 @@ impl TokenDatabase {
              WHERE mint = ?4",
             params![reason, source, rejected_at, mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to update rejection status: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to update rejection status: {e}")))?;
 
         Ok(())
     }
@@ -38,7 +38,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         conn.execute(
             "UPDATE update_tracking SET 
@@ -48,7 +48,7 @@ impl TokenDatabase {
              WHERE mint = ?1",
             params![mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to clear rejection status: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to clear rejection status: {e}")))?;
 
         Ok(())
     }
@@ -64,11 +64,11 @@ impl TokenDatabase {
         let mut conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let tx = conn
             .transaction()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;
         {
@@ -80,7 +80,7 @@ impl TokenDatabase {
                         last_rejection_at = NULL 
                      WHERE mint = ?1",
                 )
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for mint in mints {
                 match stmt.execute(params![mint]) {
@@ -97,7 +97,7 @@ impl TokenDatabase {
         }
 
         tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
 
         Ok(updated)
     }
@@ -116,11 +116,11 @@ impl TokenDatabase {
         let mut conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let tx = conn
             .transaction()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;
         {
@@ -132,7 +132,7 @@ impl TokenDatabase {
                         last_rejection_at = ?3 
                      WHERE mint = ?4",
                 )
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for (mint, reason, source, rejected_at) in updates {
                 match stmt.execute(params![reason, source, rejected_at, mint]) {
@@ -148,7 +148,7 @@ impl TokenDatabase {
         }
 
         tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
 
         Ok(updated)
     }
@@ -166,11 +166,11 @@ impl TokenDatabase {
         let mut conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let tx = conn
             .transaction()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;
         {
@@ -182,7 +182,7 @@ impl TokenDatabase {
                          rejection_count = rejection_count + 1,
                          last_seen = ?4",
                 )
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for (reason, source, timestamp) in stats {
                 // Round timestamp to hour bucket
@@ -192,7 +192,7 @@ impl TokenDatabase {
                     Err(e) => {
                         logger::warning(
                             LogTag::Tokens,
-                            &format!("batch_upsert_rejection_stats error: {}", e),
+                            &format!("batch_upsert_rejection_stats error: {e}"),
                         );
                     }
                 }
@@ -200,7 +200,7 @@ impl TokenDatabase {
         }
 
         tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
 
         Ok(updated)
     }
@@ -223,7 +223,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         // Build query with optional time filters on last_rejection_at
         let mut query = "SELECT 
@@ -246,7 +246,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         // Bind parameters
         let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
@@ -265,7 +265,7 @@ impl TokenDatabase {
                     row.get::<_, i64>(2)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -286,7 +286,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let query = "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at, t.symbol 
                      FROM update_tracking ut 
@@ -296,7 +296,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let limit_i64 = limit as i64;
         let rows = stmt
@@ -309,11 +309,11 @@ impl TokenDatabase {
                     row.get::<_, Option<String>>(4)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let mut results = Vec::new();
         for row in rows {
-            results.push(row.map_err(|e| TokenError::Database(format!("Row failed: {}", e)))?);
+            results.push(row.map_err(|e| TokenError::Database(format!("Row failed: {e}")))?);
         }
 
         Ok(results)
@@ -330,7 +330,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut query = if search_filter.is_some() {
             "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at 
@@ -374,7 +374,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         // Build params dynamically - only include params that are in the query
         let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
@@ -405,7 +405,7 @@ impl TokenDatabase {
                     row.get::<_, Option<i64>>(3)?.unwrap_or(0),
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -429,13 +429,13 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         conn.execute(
             "INSERT INTO rejection_history (mint, reason, source, rejected_at) VALUES (?1, ?2, ?3, ?4)",
             params![mint, reason, source, rejected_at],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to insert rejection history: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to insert rejection history: {e}")))?;
 
         Ok(())
     }
@@ -450,7 +450,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         // If no time range specified, fall back to current rejection stats (update_tracking table)
         if start_time.is_none() && end_time.is_none() {
@@ -472,7 +472,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
         if let Some(ref start) = start_time {
@@ -490,7 +490,7 @@ impl TokenDatabase {
                     row.get::<_, i64>(2)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -509,7 +509,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 60 * 60);
 
@@ -519,7 +519,7 @@ impl TokenDatabase {
                 params![cutoff],
             )
             .map_err(|e| {
-                TokenError::Database(format!("Failed to cleanup rejection history: {}", e))
+                TokenError::Database(format!("Failed to cleanup rejection history: {e}"))
             })?;
 
         Ok(deleted)
@@ -537,7 +537,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         // Round timestamp to hour bucket
         let bucket_hour = (timestamp / 3600) * 3600;
@@ -550,7 +550,7 @@ impl TokenDatabase {
                  last_seen = ?4",
             params![bucket_hour, reason, source, timestamp],
         )
-        .map_err(|e| TokenError::Database(format!("Upsert rejection stat failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Upsert rejection stat failed: {e}")))?;
 
         Ok(())
     }
@@ -565,7 +565,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut query =
             "SELECT reason, source, SUM(rejection_count) as total FROM rejection_stats WHERE 1=1"
@@ -582,7 +582,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
         let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
         if let Some(ref start) = start_time {
@@ -600,7 +600,7 @@ impl TokenDatabase {
                     row.get::<_, i64>(2)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -617,7 +617,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 3600);
 
@@ -626,7 +626,7 @@ impl TokenDatabase {
                 "DELETE FROM rejection_stats WHERE bucket_hour < ?1",
                 params![cutoff],
             )
-            .map_err(|e| TokenError::Database(format!("Delete rejection stats failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Delete rejection stats failed: {e}")))?;
 
         Ok(deleted)
     }

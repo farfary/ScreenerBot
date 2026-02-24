@@ -102,7 +102,7 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
         let (inflow, outflow, tx_count) = tx_db
             .aggregate_sol_flows_since(epoch, None)
             .await
-            .map_err(|e| format!("Failed to aggregate all-time SOL flows: {}", e))?;
+            .map_err(|e| format!("Failed to aggregate all-time SOL flows: {e}"))?;
         logger::debug(
             LogTag::Wallet,
             &format!(
@@ -149,7 +149,7 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
                 }
             }
             Err(e) => {
-                logger::debug(LogTag::Wallet, &format!("Cache aggregation failed: {}", e));
+                logger::debug(LogTag::Wallet, &format!("Cache aggregation failed: {e}"));
             }
         }
     }
@@ -166,7 +166,7 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
     let (inflow, outflow, tx_count) = tx_db
         .aggregate_sol_flows_since(window_start, None)
         .await
-        .map_err(|e| format!("Failed to aggregate SOL flows: {}", e))?;
+        .map_err(|e| format!("Failed to aggregate SOL flows: {e}"))?;
 
     logger::debug(
         LogTag::Wallet,
@@ -200,7 +200,7 @@ async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, S
     let daily_data = tx_db
         .aggregate_daily_flows(window_start, None)
         .await
-        .map_err(|e| format!("Failed to aggregate daily flows: {}", e))?;
+        .map_err(|e| format!("Failed to aggregate daily flows: {e}"))?;
 
     // Convert to DailyFlowPoint with timestamps
     let mut result: Vec<DailyFlowPoint> = daily_data
@@ -548,7 +548,7 @@ pub(super) async fn compute_dashboard_payload_realtime(
     let daily_flows = compute_daily_flows(window_hours).await.unwrap_or_else(|e| {
         logger::warning(
             LogTag::Wallet,
-            &format!("Failed to compute daily flows: {}", e),
+            &format!("Failed to compute daily flows: {e}"),
         );
         Vec::new()
     });

@@ -265,7 +265,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     }
 
     // Parse mint address
-    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {}", e))?;
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {e}"))?;
 
     // Get RPC client
     let rpc_client = get_rpc_client();
@@ -292,7 +292,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     // Check if it's an SPL Token mint
     if account.owner == spl_token::id() {
         let mint_data = SplMint::unpack(&account.data)
-            .map_err(|e| format!("Failed to unpack SPL Token mint: {}", e))?;
+            .map_err(|e| format!("Failed to unpack SPL Token mint: {e}"))?;
 
         // Cache authority data as side effect (zero extra RPC cost)
         cache_authorities_from_spl_mint(mint, &mint_data);
@@ -423,8 +423,8 @@ async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
     // Use spawn_blocking for synchronous database access
     tokio::task::spawn_blocking(move || db.upsert_token(&mint, None, None, Some(decimals)))
         .await
-        .map_err(|e| format!("Task join error: {}", e))?
-        .map_err(|e| format!("Database error: {}", e))
+        .map_err(|e| format!("Task join error: {e}"))?
+        .map_err(|e| format!("Database error: {e}"))
 }
 
 fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {

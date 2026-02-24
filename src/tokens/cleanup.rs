@@ -172,7 +172,7 @@ pub fn start_cleanup_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> Join
                         Err(e) => {
                             logger::error(
                                 LogTag::Tokens,
-                                &format!("[CLEANUP] Scan failed: {}", e),
+                                &format!("[CLEANUP] Scan failed: {e}"),
                             );
                         }
                     }
@@ -222,7 +222,7 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
     let conn = db.connection();
     let conn = conn
         .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     let total_count: usize = conn
         .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
@@ -237,7 +237,7 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
 
     let mut stmt = conn
         .prepare("SELECT reason, source FROM blacklist")
-        .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
     let reasons = stmt
         .query_map([], |row| {
@@ -245,7 +245,7 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
             let source: String = row.get(1)?;
             Ok((reason, source))
         })
-        .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
     for reason_result in reasons {
         if let Ok((reason, source)) = reason_result {

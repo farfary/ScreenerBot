@@ -69,11 +69,11 @@ pub const CREATE_FAVORITES_INDEXES: &[&str] = &[
 /// Initialize favorites schema (called from database initialization)
 pub fn initialize_favorites_schema(conn: &Connection) -> Result<(), String> {
     conn.execute(CREATE_FAVORITES_TABLE, [])
-        .map_err(|e| format!("Failed to create token_favorites table: {}", e))?;
+        .map_err(|e| format!("Failed to create token_favorites table: {e}"))?;
 
     for statement in CREATE_FAVORITES_INDEXES {
         conn.execute(statement, [])
-            .map_err(|e| format!("Failed to create favorites index: {}", e))?;
+            .map_err(|e| format!("Failed to create favorites index: {e}"))?;
     }
 
     Ok(())
@@ -90,7 +90,7 @@ pub fn add_favorite(
 ) -> TokenResult<FavoriteToken> {
     let conn = conn
         .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     conn.execute(
         r#"
@@ -111,7 +111,7 @@ pub fn add_favorite(
             request.notes
         ],
     )
-    .map_err(|e| TokenError::Database(format!("Failed to add favorite: {}", e)))?;
+    .map_err(|e| TokenError::Database(format!("Failed to add favorite: {e}")))?;
 
     // Fetch the newly created/updated favorite
     get_favorite_internal(&conn, &request.mint)?
@@ -122,11 +122,11 @@ pub fn add_favorite(
 pub fn remove_favorite(conn: &Mutex<Connection>, mint: &str) -> TokenResult<bool> {
     let conn = conn
         .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     let rows_affected = conn
         .execute("DELETE FROM token_favorites WHERE mint = ?1", params![mint])
-        .map_err(|e| TokenError::Database(format!("Failed to remove favorite: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to remove favorite: {e}")))?;
 
     Ok(rows_affected > 0)
 }
@@ -135,7 +135,7 @@ pub fn remove_favorite(conn: &Mutex<Connection>, mint: &str) -> TokenResult<bool
 pub fn get_favorites(conn: &Mutex<Connection>) -> TokenResult<Vec<FavoriteToken>> {
     let conn = conn
         .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     let mut stmt = conn
         .prepare(
@@ -145,7 +145,7 @@ pub fn get_favorites(conn: &Mutex<Connection>) -> TokenResult<Vec<FavoriteToken>
             ORDER BY created_at DESC
             "#,
         )
-        .map_err(|e| TokenError::Database(format!("Failed to prepare query: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
 
     let favorites = stmt
         .query_map([], |row| {
@@ -160,9 +160,9 @@ pub fn get_favorites(conn: &Mutex<Connection>) -> TokenResult<Vec<FavoriteToken>
                 updated_at: row.get(7)?,
             })
         })
-        .map_err(|e| TokenError::Database(format!("Failed to query favorites: {}", e)))?
+        .map_err(|e| TokenError::Database(format!("Failed to query favorites: {e}")))?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| TokenError::Database(format!("Failed to collect favorites: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to collect favorites: {e}")))?;
 
     Ok(favorites)
 }
@@ -177,7 +177,7 @@ fn get_favorite_internal(conn: &Connection, mint: &str) -> TokenResult<Option<Fa
             WHERE mint = ?1
             "#,
         )
-        .map_err(|e| TokenError::Database(format!("Failed to prepare query: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
 
     let favorite = stmt
         .query_row(params![mint], |row| {
@@ -193,7 +193,7 @@ fn get_favorite_internal(conn: &Connection, mint: &str) -> TokenResult<Option<Fa
             })
         })
         .optional()
-        .map_err(|e| TokenError::Database(format!("Failed to query favorite: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to query favorite: {e}")))?;
 
     Ok(favorite)
 }
@@ -202,7 +202,7 @@ fn get_favorite_internal(conn: &Connection, mint: &str) -> TokenResult<Option<Fa
 pub fn get_favorite(conn: &Mutex<Connection>, mint: &str) -> TokenResult<Option<FavoriteToken>> {
     let conn = conn
         .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     get_favorite_internal(&conn, mint)
 }
@@ -215,7 +215,7 @@ pub fn update_favorite(
 ) -> TokenResult<Option<FavoriteToken>> {
     let conn = conn
         .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     // Build dynamic update query based on provided fields
     let mut updates = Vec::new();
@@ -250,7 +250,7 @@ pub fn update_favorite(
     let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
 
     conn.execute(&sql, params.as_slice())
-        .map_err(|e| TokenError::Database(format!("Failed to update favorite: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to update favorite: {e}")))?;
 
     get_favorite_internal(&conn, mint)
 }
@@ -273,11 +273,11 @@ pub fn is_favorite(conn: &Mutex<Connection>, mint: &str) -> bool {
 pub fn get_favorites_count(conn: &Mutex<Connection>) -> TokenResult<usize> {
     let conn = conn
         .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM token_favorites", [], |row| row.get(0))
-        .map_err(|e| TokenError::Database(format!("Failed to count favorites: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to count favorites: {e}")))?;
 
     Ok(count as usize)
 }
@@ -293,7 +293,7 @@ pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<Favo
 
     tokio::task::spawn_blocking(move || add_favorite(&db.connection(), &request))
         .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {}", e)))?
+        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Remove a favorite (async wrapper)
@@ -303,7 +303,7 @@ pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
 
     tokio::task::spawn_blocking(move || remove_favorite(&db.connection(), &mint))
         .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {}", e)))?
+        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Get all favorites (async wrapper)
@@ -313,7 +313,7 @@ pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
 
     tokio::task::spawn_blocking(move || get_favorites(&db.connection()))
         .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {}", e)))?
+        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Get a single favorite (async wrapper)
@@ -323,7 +323,7 @@ pub async fn get_favorite_async(mint: String) -> TokenResult<Option<FavoriteToke
 
     tokio::task::spawn_blocking(move || get_favorite(&db.connection(), &mint))
         .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {}", e)))?
+        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Update a favorite (async wrapper)
@@ -336,7 +336,7 @@ pub async fn update_favorite_async(
 
     tokio::task::spawn_blocking(move || update_favorite(&db.connection(), &mint, &request))
         .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {}", e)))?
+        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Check if a token is in favorites (async wrapper)
@@ -357,5 +357,5 @@ pub async fn get_favorites_count_async() -> TokenResult<usize> {
 
     tokio::task::spawn_blocking(move || get_favorites_count(&db.connection()))
         .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {}", e)))?
+        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }

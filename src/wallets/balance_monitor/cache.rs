@@ -132,10 +132,10 @@ fn compress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
     encoder
         .write_all(raw)
-        .map_err(|e| format!("Failed to write compressed payload: {}", e))?;
+        .map_err(|e| format!("Failed to write compressed payload: {e}"))?;
     encoder
         .finish()
-        .map_err(|e| format!("Failed to finalize compression: {}", e))
+        .map_err(|e| format!("Failed to finalize compression: {e}"))
 }
 
 fn decompress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
@@ -143,7 +143,7 @@ fn decompress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     let mut buffer = Vec::new();
     decoder
         .read_to_end(&mut buffer)
-        .map_err(|e| format!("Failed to decompress payload: {}", e))?;
+        .map_err(|e| format!("Failed to decompress payload: {e}"))?;
     Ok(buffer)
 }
 
@@ -153,14 +153,14 @@ pub(super) fn serialize_dashboard_payload(
     let mut sanitized = payload.clone();
     sanitized.cache_metadata = None;
     let json = serde_json::to_vec(&sanitized)
-        .map_err(|e| format!("Failed to serialize dashboard payload: {}", e))?;
+        .map_err(|e| format!("Failed to serialize dashboard payload: {e}"))?;
     compress_bytes(&json)
 }
 
 pub(super) fn deserialize_dashboard_payload(raw: &[u8]) -> Result<WalletDashboardData, String> {
     let json_bytes = decompress_bytes(raw)?;
     serde_json::from_slice::<WalletDashboardData>(&json_bytes)
-        .map_err(|e| format!("Failed to deserialize dashboard payload: {}", e))
+        .map_err(|e| format!("Failed to deserialize dashboard payload: {e}"))
 }
 
 // =============================================================================

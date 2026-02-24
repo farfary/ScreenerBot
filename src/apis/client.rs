@@ -35,7 +35,7 @@ impl RateLimiter {
             .clone()
             .acquire_owned()
             .await
-            .map_err(|e| format!("Failed to acquire rate limiter permit: {}", e))?;
+            .map_err(|e| format!("Failed to acquire rate limiter permit: {e}"))?;
 
         if !self.min_interval.is_zero() {
             let mut last = self.last_request.lock().await;
@@ -85,7 +85,7 @@ impl HttpClient {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
-            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+            .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
         Ok(Self {
             client,

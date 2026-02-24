@@ -12,18 +12,18 @@ impl TokenDatabase {
         let mut conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let risks_json = serde_json::to_string(&data.risks)
-            .map_err(|e| TokenError::Database(format!("Failed to serialize risks: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to serialize risks: {e}")))?;
         let holders_json = serde_json::to_string(&data.top_holders)
-            .map_err(|e| TokenError::Database(format!("Failed to serialize holders: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to serialize holders: {e}")))?;
         let markets_json = data
             .markets
             .as_ref()
             .map(|m| serde_json::to_string(m))
             .transpose()
-            .map_err(|e| TokenError::Database(format!("Failed to serialize markets: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to serialize markets: {e}")))?;
 
         let rugged_flag = if data.rugged { 1 } else { 0 };
 
@@ -143,7 +143,7 @@ impl TokenDatabase {
                 first_fetched_ts,
             ],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {e}")))?;
 
         // Update in-memory cache
         store::store_rugcheck(mint, data);
@@ -155,7 +155,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
@@ -188,7 +188,7 @@ impl TokenDatabase {
                     is_mutable
                  FROM security_rugcheck WHERE mint = ?1",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let result = stmt.query_row(params![mint], |row| {
             let risks_json: String = row.get(19)?;
@@ -244,7 +244,7 @@ impl TokenDatabase {
         match result {
             Ok(data) => Ok(Some(data)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
+            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
         }
     }
 
@@ -252,7 +252,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let now = Utc::now().timestamp();
 
@@ -291,15 +291,15 @@ impl TokenDatabase {
                  t.first_discovered_at ASC
              LIMIT ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mints = stmt
             .query_map(params![now, limit], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         mints
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
     }
 
     /// Record a failed market update attempt with error type tracking
@@ -313,7 +313,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let now = Utc::now().timestamp();
 
@@ -328,7 +328,7 @@ impl TokenDatabase {
             params![now, mint],
         )
         .map_err(|e| {
-            TokenError::Database(format!("Failed to mark security data updated: {}", e))
+            TokenError::Database(format!("Failed to mark security data updated: {e}"))
         })?;
 
         Ok(())
@@ -343,7 +343,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let now = Utc::now().timestamp();
 
@@ -356,7 +356,7 @@ impl TokenDatabase {
              WHERE mint = ?4",
             params![message, now, error_type, mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to record security error: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to record security error: {e}")))?;
 
         Ok(())
     }
@@ -366,7 +366,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         conn.execute(
             "UPDATE update_tracking SET 
@@ -377,7 +377,7 @@ impl TokenDatabase {
              WHERE mint = ?1",
             params![mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to clear security error: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to clear security error: {e}")))?;
 
         Ok(())
     }

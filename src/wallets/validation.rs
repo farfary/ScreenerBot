@@ -29,7 +29,7 @@ impl WalletValidator {
     /// Check if wallet changed across all systems
     pub async fn validate_wallet_consistency() -> Result<WalletValidationResult, String> {
         let current_wallet = get_wallet_address()
-            .map_err(|e| format!("Failed to get current wallet address: {}", e))?;
+            .map_err(|e| format!("Failed to get current wallet address: {e}"))?;
 
         let mut mismatches: Vec<(String, String)> = Vec::new();
 

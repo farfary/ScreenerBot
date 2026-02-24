@@ -10,7 +10,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let now = Utc::now().timestamp();
 
@@ -18,7 +18,7 @@ impl TokenDatabase {
             "UPDATE update_tracking SET metadata_last_updated_at = ?1 WHERE mint = ?2",
             params![now, mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to mark metadata updated: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to mark metadata updated: {e}")))?;
 
         Ok(())
     }
@@ -29,7 +29,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let now = Utc::now().timestamp();
 
@@ -37,7 +37,7 @@ impl TokenDatabase {
             "UPDATE update_tracking SET decimals_last_updated_at = ?1 WHERE mint = ?2",
             params![now, mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to mark decimals updated: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to mark decimals updated: {e}")))?;
 
         Ok(())
     }
@@ -48,7 +48,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let now = Utc::now().timestamp();
 
@@ -60,7 +60,7 @@ impl TokenDatabase {
             params![now, pool_address, mint],
         )
         .map_err(|e| {
-            TokenError::Database(format!("Failed to mark pool price calculated: {}", e))
+            TokenError::Database(format!("Failed to mark pool price calculated: {e}"))
         })?;
 
         Ok(())
@@ -74,11 +74,11 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Failed to count tokens: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to count tokens: {e}")))?;
 
         Ok(count.max(0) as u64)
     }
@@ -88,11 +88,11 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM update_tracking", [], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Failed to count tracked tokens: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to count tracked tokens: {e}")))?;
 
         Ok(count.max(0) as u64)
     }
@@ -102,12 +102,12 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
             .map_err(|e| {
-                TokenError::Database(format!("Failed to count blacklisted tokens: {}", e))
+                TokenError::Database(format!("Failed to count blacklisted tokens: {e}"))
             })?;
 
         Ok(count.max(0) as u64)
@@ -118,7 +118,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let mut stmt = conn
             .prepare(
@@ -132,14 +132,14 @@ impl TokenDatabase {
                  FROM update_tracking
                  WHERE mint = ?1",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let result = stmt.query_row(params![mint], |row| map_tracking_row(row));
 
         match result {
             Ok(info) => Ok(Some(info)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
+            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
         }
     }
 
@@ -152,7 +152,7 @@ impl TokenDatabase {
         let conn = self
             .conn
             .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
         let records = if let Some(priority) = priority {
             let mut stmt = conn
@@ -170,14 +170,14 @@ impl TokenDatabase {
                      ORDER BY COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?2",
                 )
-                .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
             let rows = stmt
                 .query_map(params![priority, limit as i64], |row| map_tracking_row(row))
-                .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
-                TokenError::Database(format!("Failed to collect tracking entries: {}", e))
+                TokenError::Database(format!("Failed to collect tracking entries: {e}"))
             })?
         } else {
             let mut stmt = conn
@@ -194,14 +194,14 @@ impl TokenDatabase {
                      ORDER BY priority DESC, COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?1",
                 )
-                .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
             let rows = stmt
                 .query_map(params![limit as i64], |row| map_tracking_row(row))
-                .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+                .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
-                TokenError::Database(format!("Failed to collect tracking entries: {}", e))
+                TokenError::Database(format!("Failed to collect tracking entries: {e}"))
             })?
         };
 

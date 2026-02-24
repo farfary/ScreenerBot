@@ -163,7 +163,7 @@ impl OllamaClient {
             } else {
                 LlmError::NetworkError {
                     provider: "ollama".to_string(),
-                    message: format!("Request failed: {}", e),
+                    message: format!("Request failed: {e}"),
                 }
             }
         })?;
@@ -197,7 +197,7 @@ impl OllamaClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "ollama".to_string(),
-                    message: format!("Failed to parse response: {}", e),
+                    message: format!("Failed to parse response: {e}"),
                 })?;
 
         Ok((ollama_response, elapsed))
