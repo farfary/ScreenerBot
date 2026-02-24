@@ -1,30 +1,10 @@
-//! Shared utility functions — formatting, parsing, safe lock wrappers, and conversions.
+//! Shared utility functions — formatting, parsing, and conversions.
 
-use crate::constants::TOKEN_2022_PROGRAM_ID;
-use crate::errors::blockchain::{parse_structured_solana_error, BlockchainError};
-use crate::errors::parse_solana_error;
-use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::Error;
-use chrono::{DateTime, Utc};
 use solana_sdk::pubkey::Pubkey;
-use std::fs;
 use std::str::FromStr;
-use std::sync::RwLock;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::Notify;
-
-/// Safe signature formatting that shows first 8 and last 4 chars, or full string if short
-pub fn safe_format_signature(s: &str) -> String {
-    let char_count = s.chars().count();
-    if char_count > 12 {
-        let first_8: String = s.chars().take(8).collect();
-        let last_4: String = s.chars().skip(char_count - 4).collect();
-        format!("{first_8}...{last_4}")
-    } else {
-        s.to_string()
-    }
-}
 
 // =============================================================================
 // SOLANA-SPECIFIC UTILITIES (Consolidated from multiple files)
@@ -33,46 +13,6 @@ pub fn safe_format_signature(s: &str) -> String {
 /// Parse a pubkey string with consistent error formatting
 pub fn parse_pubkey_safe(address: &str) -> Result<Pubkey, String> {
     Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{address}': {e}"))
-}
-
-/// Read a pubkey from byte data at specified offset with bounds checking
-pub fn read_pubkey_from_data(data: &[u8], offset: usize) -> Option<String> {
-    if offset + 32 > data.len() {
-        return None;
-    }
-
-    let pubkey_bytes = &data[offset..offset + 32];
-    match Pubkey::try_from(pubkey_bytes) {
-        Ok(pubkey) => {
-            // Basic sanity check - reject all-zeros or all-ones
-            if pubkey_bytes.iter().all(|&b| b == 0) || pubkey_bytes.iter().all(|&b| b == 255) {
-                None
-            } else {
-                Some(pubkey.to_string())
-            }
-        }
-        Err(_) => None,
-    }
-}
-
-/// Read a u64 from byte data at specified offset with little-endian byte order
-pub fn read_u64_from_data(data: &[u8], offset: usize) -> Option<u64> {
-    if offset + 8 > data.len() {
-        return None;
-    }
-
-    let bytes: [u8; 8] = data[offset..offset + 8].try_into().ok()?;
-    Some(u64::from_le_bytes(bytes))
-}
-
-/// Read a u32 from byte data at specified offset with little-endian byte order
-pub fn read_u32_from_data(data: &[u8], offset: usize) -> Option<u32> {
-    if offset + 4 > data.len() {
-        return None;
-    }
-
-    let bytes: [u8; 4] = data[offset..offset + 4].try_into().ok()?;
-    Some(u32::from_le_bytes(bytes))
 }
 
 /// SOL lamports conversion functions
@@ -157,45 +97,6 @@ pub fn get_wallet_address() -> crate::Result<String> {
     })
 }
 
-/// Format a duration (from Option<DateTime<Utc>>) as a human-readable age string (y d h m s)
-pub fn format_age_string(created_at: Option<DateTime<Utc>>) -> String {
-    if let Some(dt) = created_at {
-        let now = Utc::now();
-        let mut seconds = if now > dt {
-            (now - dt).num_seconds()
-        } else {
-            0
-        };
-        let years = seconds / 31_536_000; // 365*24*60*60
-        seconds %= 31_536_000;
-        let days = seconds / 86_400;
-        seconds %= 86_400;
-        let hours = seconds / 3_600;
-        seconds %= 3_600;
-        let minutes = seconds / 60;
-        seconds %= 60;
-        let mut parts = Vec::new();
-        if years > 0 {
-            parts.push(format!("{years}y"));
-        }
-        if days > 0 {
-            parts.push(format!("{days}d"));
-        }
-        if hours > 0 {
-            parts.push(format!("{hours}h"));
-        }
-        if minutes > 0 {
-            parts.push(format!("{minutes}m"));
-        }
-        if seconds > 0 || parts.is_empty() {
-            parts.push(format!("{seconds}s"));
-        }
-        parts.join("")
-    } else {
-        "unknown".to_owned()
-    }
-}
-
 /// Waits for either shutdown signal or delay. Returns true if shutdown was triggered.
 pub async fn check_shutdown_or_delay(shutdown: &Notify, duration: Duration) -> bool {
     tokio::select! {
@@ -212,79 +113,6 @@ pub async fn delay_with_shutdown(shutdown: &Notify, duration: Duration) {
     }
 }
 
-/// Helper function to format duration in a compact way
-pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> String {
-    let duration = end.signed_duration_since(start);
-    let total_seconds = duration.num_seconds().max(0);
-
-    if total_seconds < 60 {
-        format!("{total_seconds}s")
-    } else if total_seconds < 3600 {
-        format!("{}m", total_seconds / 60)
-    } else if total_seconds < 86400 {
-        let hours = total_seconds / 3600;
-        let minutes = (total_seconds % 3600) / 60;
-        if minutes > 0 {
-            format!("{hours}h{minutes}m")
-        } else {
-            format!("{hours}h")
-        }
-    } else {
-        let days = total_seconds / 86400;
-        let hours = (total_seconds % 86400) / 3600;
-        if hours > 0 {
-            format!("{days}d{hours}h")
-        } else {
-            format!("{days}d")
-        }
-    }
-}
-
-/// Utility function for hex dump debugging - prints data in hex format with ASCII representation
-pub fn hex_dump_data(
-    data: &[u8],
-    start_offset: usize,
-    length: usize,
-    log_callback: impl Fn(&str, &str),
-) {
-    let end = (start_offset + length).min(data.len());
-
-    for chunk_start in (start_offset..end).step_by(16) {
-        let chunk_end = (chunk_start + 16).min(end);
-        let chunk = &data[chunk_start..chunk_end];
-
-        // Format offset
-        let offset_str = format!("{:08X}", chunk_start);
-
-        // Format hex bytes
-        let hex_str = chunk
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join("");
-
-        // Pad hex string to consistent width (48 chars for 16 bytes)
-        let hex_padded = format!("{:<48}", hex_str);
-
-        // Format ASCII representation
-        let ascii_str: String = chunk
-            .iter()
-            .map(|&b| {
-                if b.is_ascii_graphic() || b == b' ' {
-                    b as char
-                } else {
-                    '.'
-                }
-            })
-            .collect();
-
-        log_callback(
-            "DEBUG",
-            &format!("{offset_str}: {hex_padded} |{ascii_str}|"),
-        );
-    }
-}
-
 // =============================================================================
 // ATA (ASSOCIATED TOKEN ACCOUNT) OPERATIONS
 // =============================================================================
@@ -296,46 +124,3 @@ pub use crate::ata_operations::{
     close_token_account_with_context, get_all_token_accounts, get_sol_balance, get_token_balance,
     get_total_token_balance,
 };
-
-// =============================================================================
-// UTILITY FUNCTIONS MOVED FROM TRADER.RS
-// =============================================================================
-
-/// Safe wrapper for RwLock read operations that logs poison errors instead of panicking
-pub fn safe_read_lock<'a, T>(
-    lock: &'a std::sync::RwLock<T>,
-    operation: &str,
-) -> Option<std::sync::RwLockReadGuard<'a, T>> {
-    match lock.read() {
-        Ok(guard) => Some(guard),
-        Err(e) => {
-            logger::error(
-                LogTag::Trader,
-                &format!("RwLock read poisoned during {operation}: {e}"),
-            );
-            None
-        }
-    }
-}
-
-/// Safe wrapper for RwLock write operations that logs poison errors instead of panicking
-pub fn safe_write_lock<'a, T>(
-    lock: &'a std::sync::RwLock<T>,
-    operation: &str,
-) -> Option<std::sync::RwLockWriteGuard<'a, T>> {
-    match lock.write() {
-        Ok(guard) => Some(guard),
-        Err(e) => {
-            logger::error(
-                LogTag::Trader,
-                &format!("RwLock write poisoned during {operation}: {e}"),
-            );
-            None
-        }
-    }
-}
-
-/// Helper function for conditional debug trader logs
-pub fn debug_trader_log(log_type: &str, message: &str) {
-    logger::debug(LogTag::Trader, &format!("{log_type}: {message}"));
-}
