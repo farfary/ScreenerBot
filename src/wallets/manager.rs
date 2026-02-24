@@ -1019,7 +1019,7 @@ pub async fn get_wallets_with_token(
 ) -> Result<Vec<WalletWithTokenBalance>, String> {
     let wallets = list_active_wallets().await?;
     let rpc_client = get_rpc_client();
-    let min_balance = min_balance.unwrap_or(0.0);
+    let min_balance = min_balance.unwrap_or_default();
 
     let mut results = Vec::new();
 
@@ -1033,7 +1033,7 @@ pub async fn get_wallets_with_token(
         let sol_balance = rpc_client
             .get_sol_balance(&wallet.address)
             .await
-            .unwrap_or(0.0);
+            .unwrap_or_default();
 
         // Get all token accounts for this wallet
         let token_accounts = match rpc_client.get_all_token_accounts(&wallet_pubkey).await {
@@ -1120,7 +1120,7 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Stri
         let sol_balance = rpc_client
             .get_sol_balance(&wallet.address)
             .await
-            .unwrap_or(0.0);
+            .unwrap_or_default();
 
         // Get all token accounts for this wallet
         let token_accounts = match rpc_client.get_all_token_accounts(&wallet_pubkey).await {

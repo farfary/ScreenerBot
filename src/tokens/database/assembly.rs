@@ -540,8 +540,8 @@ impl TokenDatabase {
                         g_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
                             .unwrap_or(metadata_last_fetched_dt),
-                        g_price_usd.unwrap_or(0.0),
-                        g_price_sol.unwrap_or(0.0),
+                        g_price_usd.unwrap_or_default(),
+                        g_price_sol.unwrap_or_default(),
                         g_price_native.unwrap_or_else(|| "0".to_owned()),
                         g_change_5m,
                         g_change_1h,
@@ -569,8 +569,8 @@ impl TokenDatabase {
                         d_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
                             .unwrap_or(metadata_last_fetched_dt),
-                        d_price_usd.unwrap_or(0.0),
-                        d_price_sol.unwrap_or(0.0),
+                        d_price_usd.unwrap_or_default(),
+                        d_price_sol.unwrap_or_default(),
                         d_price_native.unwrap_or_else(|| "0".to_owned()),
                         d_change_5m,
                         d_change_1h,
@@ -631,8 +631,8 @@ impl TokenDatabase {
                         d_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
                             .unwrap_or(metadata_last_fetched_dt),
-                        d_price_usd.unwrap_or(0.0),
-                        d_price_sol.unwrap_or(0.0),
+                        d_price_usd.unwrap_or_default(),
+                        d_price_sol.unwrap_or_default(),
                         d_price_native.unwrap_or_else(|| "0".to_owned()),
                         d_change_5m,
                         d_change_1h,
@@ -660,8 +660,8 @@ impl TokenDatabase {
                         g_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
                             .unwrap_or(metadata_last_fetched_dt),
-                        g_price_usd.unwrap_or(0.0),
-                        g_price_sol.unwrap_or(0.0),
+                        g_price_usd.unwrap_or_default(),
+                        g_price_sol.unwrap_or_default(),
                         g_price_native.unwrap_or_else(|| "0".to_owned()),
                         g_change_5m,
                         g_change_1h,

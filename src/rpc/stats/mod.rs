@@ -235,7 +235,7 @@ impl StatsManager {
                 } else {
                     100.0
                 },
-                avg_latency_ms: self.db.get_avg_latency(&self.session_id).unwrap_or(0.0),
+                avg_latency_ms: self.db.get_avg_latency(&self.session_id).unwrap_or_default(),
                 provider_count,
                 healthy_provider_count: healthy_count,
                 calls_last_minute,

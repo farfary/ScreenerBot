@@ -100,8 +100,8 @@ pub fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
             let metric_b = calculate_pool_metric(b);
             match metric_a.partial_cmp(&metric_b).unwrap_or(Ordering::Equal) {
                 Ordering::Equal => {
-                    let vol_a = a.volume_h24.unwrap_or(0.0);
-                    let vol_b = b.volume_h24.unwrap_or(0.0);
+                    let vol_a = a.volume_h24.unwrap_or_default();
+                    let vol_b = b.volume_h24.unwrap_or_default();
                     vol_a.partial_cmp(&vol_b).unwrap_or(Ordering::Equal)
                 }
                 ordering => ordering,

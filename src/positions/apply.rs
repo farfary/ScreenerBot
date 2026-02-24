@@ -261,12 +261,12 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                         .clone()
                                         .unwrap_or_else(|| "exit".to_owned());
                                     // Use position.pnl and position.pnl_percent which were set in the state update above
-                                    let final_pnl_sol = position.pnl.unwrap_or(0.0);
-                                    let final_pnl_pct = position.pnl_percent.unwrap_or(0.0);
+                                    let final_pnl_sol = position.pnl.unwrap_or_default();
+                                    let final_pnl_pct = position.pnl_percent.unwrap_or_default();
                                     let entry_price = position.average_entry_price;
-                                    let exit_price = position.effective_exit_price.unwrap_or(0.0);
+                                    let exit_price = position.effective_exit_price.unwrap_or_default();
                                     let invested = position.total_size_sol;
-                                    let received = position.sol_received.unwrap_or(0.0);
+                                    let received = position.sol_received.unwrap_or_default();
                                     let duration_secs = position
                                         .exit_time
                                         .map(|exit| {
@@ -521,7 +521,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 pos.partial_exit_count += 1;
 
                 // Update SOL received (cumulative)
-                pos.sol_received = Some(pos.sol_received.unwrap_or(0.0) + sol_received);
+                pos.sol_received = Some(pos.sol_received.unwrap_or_default() + sol_received);
 
                 // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
             })

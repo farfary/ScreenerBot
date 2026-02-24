@@ -106,7 +106,7 @@ pub async fn fetch_geckoterminal_data_batch(
             .price_usd
             .as_ref()
             .and_then(|s| s.parse::<f64>().ok())
-            .unwrap_or(0.0);
+            .unwrap_or_default();
         let sol_price = crate::sol_price::get_sol_price();
         let price_sol = if sol_price > 0.0 {
             price_usd / sol_price

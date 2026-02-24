@@ -593,7 +593,7 @@ impl RpcClientMethods for RpcClient {
             .get("value")
             .and_then(|v| v.get("uiAmount"))
             .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+            .unwrap_or_default();
 
         Ok(ui_amount)
     }

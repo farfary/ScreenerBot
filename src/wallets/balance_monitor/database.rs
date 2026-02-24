@@ -312,8 +312,8 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to prepare cached flow aggregation query: {e}"))?;
         let (inflow, outflow, count) = stmt
             .query_row(params_refs.as_slice(), |row| {
-                let inflow = row.get::<_, Option<f64>>(0)?.unwrap_or(0.0);
-                let outflow = row.get::<_, Option<f64>>(1)?.unwrap_or(0.0);
+                let inflow = row.get::<_, Option<f64>>(0)?.unwrap_or_default();
+                let outflow = row.get::<_, Option<f64>>(1)?.unwrap_or_default();
                 let count = row.get::<_, i64>(2)?.max(0) as usize;
                 Ok((inflow, outflow, count))
             })

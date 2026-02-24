@@ -536,7 +536,7 @@ impl RpcStatsDatabase {
             params![session_id],
             |row| row.get::<_, Option<f64>>(0),
         )
-        .map(|v| v.unwrap_or(0.0))
+        .map(|v| v.unwrap_or_default())
         .map_err(Into::into)
     }
 }

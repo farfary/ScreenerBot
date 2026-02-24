@@ -342,8 +342,8 @@ impl TokenDatabase {
 
             Ok(DexScreenerData {
                 // Some historical rows may have NULLs; treat missing numeric/text values as defaults
-                price_usd: row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
-                price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
+                price_usd: row.get::<_, Option<f64>>(0)?.unwrap_or_default(),
+                price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or_default(),
                 price_native: row
                     .get::<_, Option<String>>(2)?
                     .unwrap_or_else(|| "0".to_owned()),
@@ -484,8 +484,8 @@ impl TokenDatabase {
 
             Ok(GeckoTerminalData {
                 // Some historical rows may have NULLs; treat missing numeric/text values as defaults
-                price_usd: row.get::<_, Option<f64>>(0)?.unwrap_or(0.0),
-                price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
+                price_usd: row.get::<_, Option<f64>>(0)?.unwrap_or_default(),
+                price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or_default(),
                 price_native: row
                     .get::<_, Option<String>>(2)?
                     .unwrap_or_else(|| "0".to_owned()),
