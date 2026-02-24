@@ -296,7 +296,7 @@ impl PoolManager {
             let preview: Vec<&str> = removed_addresses
                 .iter()
                 .take(3)
-                .map(|s| s.as_str())
+                .map(String::as_str)
                 .collect();
             let suffix = if removed_addresses.len() > 3 {
                 format!(" (+{} more)", removed_addresses.len() - 3)

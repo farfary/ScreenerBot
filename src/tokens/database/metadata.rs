@@ -224,7 +224,7 @@ impl TokenDatabase {
             .iter()
             .chain(mints.iter())
             .chain(mints.iter())
-            .map(|s| s.as_str())
+            .map(String::as_str)
             .collect();
 
         let rows = stmt

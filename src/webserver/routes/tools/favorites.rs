@@ -21,7 +21,7 @@ use super::types::*;
 pub async fn get_favorites_list(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
-    let tool_type = params.get("tool_type").map(|s| s.as_str());
+    let tool_type = params.get("tool_type").map(String::as_str);
 
     match get_tool_favorites(tool_type) {
         Ok(favorites) => {

@@ -233,7 +233,7 @@ pub async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response
         Some(sections) if !sections.is_empty() => sections
             .iter()
             .filter(|s| CONFIG_SECTIONS.contains(&s.as_str()))
-            .map(|s| s.as_str())
+            .map(String::as_str)
             .collect(),
         _ => CONFIG_SECTIONS.to_vec(),
     };
