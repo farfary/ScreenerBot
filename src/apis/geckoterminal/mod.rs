@@ -124,10 +124,10 @@ impl GeckoTerminalClient {
                     .record_error_with_event(
                         "GeckoTerminal",
                         endpoint,
-                        format!("Request failed: {}", err),
+                        format!("Request failed: {err}"),
                     )
                     .await;
-                Err(format!("Request failed: {}", err))
+                Err(format!("Request failed: {err}"))
             }
         }
     }
@@ -171,10 +171,10 @@ impl GeckoTerminalClient {
                     .record_error_with_event(
                         "GeckoTerminal",
                         endpoint,
-                        format!("Parse error: {}", err),
+                        format!("Parse error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to parse response: {}", err))
+                Err(format!("Failed to parse response: {err}"))
             }
         }
     }

@@ -105,7 +105,7 @@ pub async fn compute_snapshot(
         Err(err) => {
             logger::warning(
                 LogTag::Filtering,
-                &format!("failed_to_load_token_blacklist err={}", err),
+                &format!("failed_to_load_token_blacklist err={err}"),
             );
         }
     }
@@ -149,7 +149,7 @@ pub async fn compute_snapshot(
         Err(err) => {
             logger::warning(
                 LogTag::Filtering,
-                &format!("failed_to_load_pool_blacklist err={}", err),
+                &format!("failed_to_load_pool_blacklist err={err}"),
             );
         }
     }
@@ -197,7 +197,7 @@ pub async fn compute_snapshot(
         Err(err) => {
             logger::warning(
                 LogTag::Filtering,
-                &format!("failed_to_load_account_blacklist err={}", err),
+                &format!("failed_to_load_account_blacklist err={err}"),
             );
         }
     }
@@ -238,7 +238,7 @@ pub async fn compute_snapshot(
         match crate::ohlcvs::get_mints_with_data(&candidate_mints).await {
             Ok(set) => set,
             Err(err) => {
-                logger::warning(LogTag::Filtering, &format!("error={}", err));
+                logger::warning(LogTag::Filtering, &format!("error={err}"));
                 HashSet::new()
             }
         };

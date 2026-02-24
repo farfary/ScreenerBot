@@ -31,13 +31,13 @@ pub async fn get_stats() -> Response {
         Err(err) => {
             logger::info(
                 LogTag::Filtering,
-                &format!("Failed to fetch filtering stats: {}", err),
+                &format!("Failed to fetch filtering stats: {err}"),
             );
 
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "STATS_FETCH_FAILED",
-                &format!("Failed to fetch filtering statistics: {}", err),
+                &format!("Failed to fetch filtering statistics: {err}"),
                 None,
             )
         }
@@ -63,13 +63,13 @@ pub async fn trigger_refresh() -> Response {
         Err(err) => {
             logger::info(
                 LogTag::Filtering,
-                &format!("Filtering refresh failed: {}", err),
+                &format!("Filtering refresh failed: {err}"),
             );
 
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "FILTERING_REFRESH_FAILED",
-                &format!("Failed to rebuild filtering snapshot: {}", err),
+                &format!("Failed to rebuild filtering snapshot: {err}"),
                 None,
             )
         }

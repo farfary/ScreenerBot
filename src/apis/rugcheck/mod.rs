@@ -90,7 +90,7 @@ impl RugcheckClient {
                     .record_error_with_event(
                         "Rugcheck",
                         endpoint,
-                        format!("Rate limiter acquire failed: {}", err),
+                        format!("Rate limiter acquire failed: {err}"),
                     )
                     .await;
                 return Err(ApiError::RateLimitExceeded);
@@ -111,7 +111,7 @@ impl RugcheckClient {
                     .record_error_with_event(
                         "Rugcheck",
                         endpoint,
-                        format!("Request failed: {}", err),
+                        format!("Request failed: {err}"),
                     )
                     .await;
                 Err(ApiError::NetworkError(err.to_string()))
@@ -157,7 +157,7 @@ impl RugcheckClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event("Rugcheck", endpoint, format!("Parse error: {}", err))
+                    .record_error_with_event("Rugcheck", endpoint, format!("Parse error: {err}"))
                     .await;
                 Err(ApiError::InvalidResponse(err.to_string()))
             }

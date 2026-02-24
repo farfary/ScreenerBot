@@ -186,7 +186,7 @@ impl Tool for GetEventsTool {
                 // Filter by severity instead
                 let all_events = match events::recent_all(limit).await {
                     Ok(e) => e,
-                    Err(err) => return ToolResult::error(format!("Failed to get events: {}", err)),
+                    Err(err) => return ToolResult::error(format!("Failed to get events: {err}")),
                 };
                 Ok(all_events
                     .into_iter()
@@ -199,7 +199,7 @@ impl Tool for GetEventsTool {
 
         let events = match events {
             Ok(e) => e,
-            Err(err) => return ToolResult::error(format!("Failed to get events: {}", err)),
+            Err(err) => return ToolResult::error(format!("Failed to get events: {err}")),
         };
 
         // Convert to serializable format

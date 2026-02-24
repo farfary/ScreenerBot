@@ -42,7 +42,7 @@ pub(crate) async fn get_tokens_list(
         Err(err) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Failed to load tokens list via filtering service: {}", err),
+                &format!("Failed to load tokens list via filtering service: {err}"),
             );
 
             Json(TokenListResponse {
@@ -97,7 +97,7 @@ pub async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> 
         Err(err) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Failed to load token stats via filtering service: {}", err),
+                &format!("Failed to load token stats via filtering service: {err}"),
             );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
@@ -124,7 +124,7 @@ pub async fn filter_tokens(
         Err(err) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Filtering query failed: {}", err),
+                &format!("Filtering query failed: {err}"),
             );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }

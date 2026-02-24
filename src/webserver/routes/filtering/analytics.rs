@@ -269,12 +269,12 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
         (Err(err), _, _) => {
             logger::warning(
                 LogTag::Filtering,
-                &format!("Failed to fetch filtering stats for analytics: {}", err),
+                &format!("Failed to fetch filtering stats for analytics: {err}"),
             );
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "ANALYTICS_FAILED",
-                &format!("Failed to fetch analytics: {}", err),
+                &format!("Failed to fetch analytics: {err}"),
                 None,
             )
         }

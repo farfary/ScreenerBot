@@ -151,7 +151,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         Err(err) => {
             logger::error(
                 LogTag::Positions,
-                &format!("Failed to rehydrate pending DCA swaps: {}", err),
+                &format!("Failed to rehydrate pending DCA swaps: {err}"),
             );
         }
     }
@@ -185,7 +185,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
         Err(err) => {
             logger::error(
                 LogTag::Positions,
-                &format!("Failed to rehydrate pending partial exits: {}", err),
+                &format!("Failed to rehydrate pending partial exits: {err}"),
             );
         }
     }

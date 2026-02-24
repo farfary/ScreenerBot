@@ -133,7 +133,7 @@ pub fn start_discovery_loop(
                         Err(err) => {
                             logger::error(
                                 LogTag::Tokens,
-                                &format!("[DISCOVERY] Run failed: {}", err),
+                                &format!("[DISCOVERY] Run failed: {err}"),
                             );
 
                             // Record discovery error

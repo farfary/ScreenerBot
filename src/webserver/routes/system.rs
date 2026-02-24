@@ -168,7 +168,7 @@ async fn reboot_system() -> Response {
             // If exec returns, it failed
             logger::error(
                 LogTag::Webserver,
-                &format!("Failed to exec new process: {}", error),
+                &format!("Failed to exec new process: {error}"),
             );
             std::process::exit(1);
         }

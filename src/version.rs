@@ -636,7 +636,7 @@ fn set_download_error_sync(error: &str) {
         // Not in async context - just log the error
         logger::warning(
             LogTag::System,
-            &format!("Download error (state not updated): {}", error),
+            &format!("Download error (state not updated): {error}"),
         );
     }
 }

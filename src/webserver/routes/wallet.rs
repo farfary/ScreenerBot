@@ -114,7 +114,7 @@ async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
         Err(err) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to get wallet status for tokens: {}", err),
+                &format!("Failed to get wallet status for tokens: {err}"),
             );
             return Json(WalletTokensResponse { tokens: vec![] });
         }

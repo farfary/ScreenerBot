@@ -333,7 +333,7 @@ fn describe_transaction_status(status: &TransactionStatus) -> String {
         TransactionStatus::Pending => "Pending".to_string(),
         TransactionStatus::Confirmed => "Confirmed".to_string(),
         TransactionStatus::Finalized => "Finalized".to_string(),
-        TransactionStatus::Failed(err) => format!("Failed: {}", err),
+        TransactionStatus::Failed(err) => format!("Failed: {err}"),
     }
 }
 

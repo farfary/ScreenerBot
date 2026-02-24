@@ -92,7 +92,7 @@ impl FilteringStore {
         if let Err(ref err) = result {
             logger::warning(
                 LogTag::Filtering,
-                &format!("Background refresh failed: {}", err),
+                &format!("Background refresh failed: {err}"),
             );
         }
 

@@ -147,10 +147,10 @@ impl DexScreenerClient {
                     .record_error_with_event(
                         "DexScreener",
                         endpoint,
-                        format!("Request failed: {}", err),
+                        format!("Request failed: {err}"),
                     )
                     .await;
-                Err(format!("Request failed: {}", err))
+                Err(format!("Request failed: {err}"))
             }
         }
     }
@@ -195,10 +195,10 @@ impl DexScreenerClient {
                     .record_error_with_event(
                         "DexScreener",
                         endpoint,
-                        format!("Parse error: {}", err),
+                        format!("Parse error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to parse response: {}", err))
+                Err(format!("Failed to parse response: {err}"))
             }
         }
     }
@@ -384,10 +384,10 @@ impl DexScreenerClient {
                     .record_error_with_event(
                         "DexScreener",
                         endpoint,
-                        format!("Parse error: {}", err),
+                        format!("Parse error: {err}"),
                     )
                     .await;
-                return Err(format!("Failed to parse response: {}", err));
+                return Err(format!("Failed to parse response: {err}"));
             }
         };
 
@@ -402,10 +402,10 @@ impl DexScreenerClient {
                     .record_error_with_event(
                         "DexScreener",
                         endpoint,
-                        format!("Conversion error: {}", err),
+                        format!("Conversion error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to decode token profiles: {}", err))
+                Err(format!("Failed to decode token profiles: {err}"))
             }
         }
     }
@@ -525,10 +525,10 @@ impl DexScreenerClient {
                     .record_error_with_event(
                         "DexScreener",
                         endpoint,
-                        format!("Parse error: {}", err),
+                        format!("Parse error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to parse response: {}", err))
+                Err(format!("Failed to parse response: {err}"))
             }
         }
     }
@@ -583,10 +583,10 @@ impl DexScreenerClient {
                     .record_error_with_event(
                         "DexScreener",
                         &endpoint,
-                        format!("Parse error: {}", err),
+                        format!("Parse error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to parse response: {}", err))
+                Err(format!("Failed to parse response: {err}"))
             }
         }
     }

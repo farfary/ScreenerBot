@@ -53,7 +53,7 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
                 url: url.to_string(),
                 success: false,
                 latency_ms: 0,
-                error: Some(format!("Failed to create HTTP client: {}", e)),
+                error: Some(format!("Failed to create HTTP client: {e}")),
                 is_mainnet: None,
                 version: None,
                 is_premium,
@@ -75,7 +75,7 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
                 url: url.to_string(),
                 success: false,
                 latency_ms: latency,
-                error: Some(format!("Request failed: {}", e)),
+                error: Some(format!("Request failed: {e}")),
                 is_mainnet: None,
                 version: None,
                 is_premium,
@@ -105,7 +105,7 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
                 url: url.to_string(),
                 success: false,
                 latency_ms: latency,
-                error: Some(format!("Failed to parse response: {}", e)),
+                error: Some(format!("Failed to parse response: {e}")),
                 is_mainnet: None,
                 version: None,
                 is_premium,
@@ -165,7 +165,7 @@ pub async fn validate_mainnet(url: &str) -> Result<bool, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("Failed to create client: {}", e))?;
+        .map_err(|e| format!("Failed to create client: {e}"))?;
 
     let response = client
         .post(url)
@@ -173,7 +173,7 @@ pub async fn validate_mainnet(url: &str) -> Result<bool, String> {
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| format!("Request failed: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!("HTTP error: {}", response.status()));
@@ -182,7 +182,7 @@ pub async fn validate_mainnet(url: &str) -> Result<bool, String> {
     let body: serde_json::Value = response
         .json()
         .await
-        .map_err(|e| format!("Parse error: {}", e))?;
+        .map_err(|e| format!("Parse error: {e}"))?;
 
     let genesis_hash = body
         .get("result")
@@ -203,7 +203,7 @@ pub async fn get_rpc_version(url: &str) -> Result<String, String> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
-        .map_err(|e| format!("Failed to create client: {}", e))?;
+        .map_err(|e| format!("Failed to create client: {e}"))?;
 
     let response = client
         .post(url)
@@ -211,7 +211,7 @@ pub async fn get_rpc_version(url: &str) -> Result<String, String> {
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Request failed: {}", e))?;
+        .map_err(|e| format!("Request failed: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!("HTTP error: {}", response.status()));
@@ -220,7 +220,7 @@ pub async fn get_rpc_version(url: &str) -> Result<String, String> {
     let body: serde_json::Value = response
         .json()
         .await
-        .map_err(|e| format!("Parse error: {}", e))?;
+        .map_err(|e| format!("Parse error: {e}"))?;
 
     let version = body
         .get("result")

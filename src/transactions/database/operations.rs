@@ -289,7 +289,7 @@ impl TransactionDatabase {
             Err(err) => {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Failed to parse sol_balance_change payload: {}", err),
+                    &format!("Failed to parse sol_balance_change payload: {err}"),
                 );
                 0.0
             }

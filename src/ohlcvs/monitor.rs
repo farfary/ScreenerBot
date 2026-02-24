@@ -355,7 +355,7 @@ impl OhlcvMonitor {
             Ok(Err(err)) => {
                 logger::warning(
                     LogTag::Ohlcv,
-                    &format!("Failed to collect gap stats: {}", err),
+                    &format!("Failed to collect gap stats: {err}"),
                 );
                 (0, 0, Vec::new())
             }

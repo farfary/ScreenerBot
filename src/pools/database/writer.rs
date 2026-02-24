@@ -138,7 +138,7 @@ async fn flush_write_buffer(
             buffer.extend(entries.into_iter());
             logger::error(
                 LogTag::PoolCache,
-                &format!("Failed to persist price history batch: {}", err),
+                &format!("Failed to persist price history batch: {err}"),
             );
         }
         Err(join_err) => {

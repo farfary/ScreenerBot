@@ -237,7 +237,7 @@ impl From<reqwest::Error> for RpcError {
             }
         } else if err.is_connect() {
             Self::Network {
-                message: format!("Connection failed: {}", err),
+                message: format!("Connection failed: {err}"),
                 is_timeout: false,
             }
         } else {

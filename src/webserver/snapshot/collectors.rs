@@ -156,7 +156,7 @@ pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
                     Err(err) => {
                         logger::warning(
                             LogTag::Webserver,
-                            &format!("Failed to load wallet token balances: {}", err),
+                            &format!("Failed to load wallet token balances: {err}"),
                         );
                     }
                 }
@@ -175,7 +175,7 @@ pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
         Err(err) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load current wallet snapshot: {}", err),
+                &format!("Failed to load current wallet snapshot: {err}"),
             );
             None
         }
@@ -595,7 +595,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             Err(err) => {
                 logger::warning(
                     LogTag::Webserver,
-                    &format!("Failed to load transactions database stats: {}", err),
+                    &format!("Failed to load transactions database stats: {err}"),
                 );
             }
         }
@@ -618,7 +618,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             Ok(count) => stats.successful_transactions_count = count,
             Err(err) => logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load successful transaction count: {}", err),
+                &format!("Failed to load successful transaction count: {err}"),
             ),
         }
 
@@ -626,7 +626,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             Ok(count) => stats.failed_transactions_count = count,
             Err(err) => logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load failed transaction count: {}", err),
+                &format!("Failed to load failed transaction count: {err}"),
             ),
         }
 
@@ -639,7 +639,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             }
             Err(err) => logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load transactions bootstrap state: {}", err),
+                &format!("Failed to load transactions bootstrap state: {err}"),
             ),
         }
 
@@ -647,7 +647,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             Ok(sig) => newest_signature = sig,
             Err(err) => logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load newest known signature: {}", err),
+                &format!("Failed to load newest known signature: {err}"),
             ),
         }
 
@@ -655,7 +655,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             Ok(sig) => oldest_signature = sig,
             Err(err) => logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load oldest known signature: {}", err),
+                &format!("Failed to load oldest known signature: {err}"),
             ),
         }
     }
