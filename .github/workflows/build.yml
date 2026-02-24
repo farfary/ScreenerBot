@@ -108,21 +108,14 @@ jobs:
           echo "OPENSSL_DIR=/usr/local/opt/openssl@3" >> "$GITHUB_ENV"
           echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
 
-      # Windows needs Strawberry Perl for vendored OpenSSL build
-      - name: Install Strawberry Perl (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install strawberryperl --no-progress -y
-          echo "C:\Strawberry\perl\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Build Rust binary
         shell: bash
         run: |
           FEATURES=""
-          # Disable jemalloc on Windows (not supported on MSVC)
           if [ "${{ matrix.platform }}" = "Windows" ]; then
             FEATURES="--no-default-features"
+            # Use Strawberry Perl for vendored OpenSSL build (Git Bash's perl lacks modules)
+            export PATH="/c/Strawberry/perl/bin:$PATH"
           fi
           cargo build --release --target ${{ matrix.target }} --bin screenerbot $FEATURES
 
