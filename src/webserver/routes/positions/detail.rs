@@ -265,7 +265,7 @@ async fn fetch_transaction_summary(
             Err(err) => {
                 logger::info(
                     LogTag::Webserver,
-                    &format!("Failed to load {} transaction {}: {}", kind, sig, err),
+                    &format!("Failed to load {kind} transaction {sig}: {err}"),
                 );
                 PositionTransactionSummary::missing(kind, Some(sig), Some(err))
             }

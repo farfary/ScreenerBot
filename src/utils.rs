@@ -284,7 +284,7 @@ pub fn hex_dump_data(
 
         log_callback(
             "DEBUG",
-            &format!("{}: {} |{}|", offset_str, hex_padded, ascii_str),
+            &format!("{offset_str}: {hex_padded} |{ascii_str}|"),
         );
     }
 }

@@ -51,7 +51,7 @@ pub fn format_duration(seconds: u64) -> String {
     if days > 0 {
         format!("{}d {}h {}m {}s", days, hours, minutes, secs)
     } else if hours > 0 {
-        format!("{}h {}m {}s", hours, minutes, secs)
+        format!("{hours}h {minutes}m {secs}s")
     } else if minutes > 0 {
         format!("{minutes}m {secs}s")
     } else {

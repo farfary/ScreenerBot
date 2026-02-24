@@ -87,7 +87,7 @@ impl TokenDatabase {
                     WHERE d.mint IS NULL AND g.mint IS NULL";
 
         let query = if limit == 0 {
-            format!("{} ORDER BY {} {}", base, order_column, direction)
+            format!("{base} ORDER BY {order_column} {direction}")
         } else {
             format!(
                 "{} ORDER BY {} {} LIMIT {} OFFSET {}",

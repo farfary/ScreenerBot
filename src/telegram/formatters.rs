@@ -826,7 +826,7 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
                 31..=60 => ("🟡", "Medium"),
                 _ => ("🔴", "High Risk"),
             };
-            format!("{} {} ({})", emoji, label, s)
+            format!("{emoji} {label} ({s})")
         })
         .unwrap_or_else(|| "❓ Unknown".to_string());
 

@@ -53,7 +53,7 @@ pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
     let log_type_str = format_log_type(log_type);
 
     // Build the base log line
-    let base_line = format!("{}[{}] [{}] ", prefix, tag_str, log_type_str);
+    let base_line = format!("{prefix}[{tag_str}] [{log_type_str}] ");
 
     let base_length = strip_ansi_codes(&base_line)
         .len()

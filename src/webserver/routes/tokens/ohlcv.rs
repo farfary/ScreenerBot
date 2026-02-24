@@ -80,7 +80,7 @@ pub async fn get_token_ohlcv(
         Err(e) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("mint={} timeframe={} no_data error={}", mint, timeframe, e),
+                &format!("mint={mint} timeframe={timeframe} no_data error={e}"),
             );
             // Return empty array for tokens without OHLCV data yet
             Vec::new()

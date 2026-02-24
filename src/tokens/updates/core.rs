@@ -483,7 +483,7 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
 
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Rugcheck error ({}) for {}: {}", error_type, mint, e),
+                    &format!("Rugcheck error ({error_type}) for {mint}: {e}"),
                 );
                 let _ = db.record_security_error(mint, &e.to_string(), error_type);
             }
