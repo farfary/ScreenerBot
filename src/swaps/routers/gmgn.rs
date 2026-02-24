@@ -407,7 +407,7 @@ impl SwapRouter for GmgnRouter {
             output_amount,
             price_impact_pct: price_impact,
             fee_lamports: swap_data.raw_tx.prioritization_fee_lamports,
-            slippage_bps: (request.slippage_pct * 100.0) as u16,
+            slippage_bps: ((request.slippage_pct * 100.0).round() as u16).max(1),
             route_plan: "GMGN Anti-MEV".to_owned(),
             wallet_address: request.wallet_address.clone(),
             swap_mode: request.swap_mode,
