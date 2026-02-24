@@ -17,14 +17,29 @@ mod database;
 mod service;
 mod types;
 
-// Re-export public API functions
-pub use database::get_wallet_service_metrics;
+// Re-export public API
 pub use service::{
-    clear_dashboard_api_cache, get_balance_at_time, get_current_wallet_status,
-    get_dashboard_cache_metrics, get_flow_cache_stats, get_recent_wallet_snapshots,
-    get_snapshot_nft_balances, get_snapshot_token_balances, get_wallet_monitor_stats,
-    initialize_wallet_database, refresh_dashboard_cache, start_wallet_monitoring_service,
+    // Initialization & background service
+    initialize_wallet_database,
+    start_wallet_monitoring_service,
+    // Snapshot queries
+    get_recent_wallet_snapshots,
+    get_snapshot_token_balances,
+    get_snapshot_nft_balances,
+    get_current_wallet_status,
+    get_balance_at_time,
+    // Monitoring stats
+    get_wallet_monitor_stats,
+    get_flow_cache_stats,
+    // Dashboard cache management
+    refresh_dashboard_cache,
+    get_dashboard_cache_metrics,
+    clear_dashboard_api_cache,
 };
+
+pub use database::get_wallet_service_metrics;
+pub use dashboard::get_wallet_dashboard_data;
+pub use cache::get_cached_wallet_snapshot_status;
 
 // Re-export public types
 pub use types::{
@@ -33,9 +48,3 @@ pub use types::{
     WalletFlowCacheStats, WalletFlowMetrics, WalletMonitorStats, WalletNftOverview, WalletSnapshot,
     WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview,
 };
-
-// Re-export dashboard API
-pub use dashboard::get_wallet_dashboard_data;
-
-// Re-export cache status function
-pub use cache::get_cached_wallet_snapshot_status;
