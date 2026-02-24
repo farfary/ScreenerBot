@@ -18,7 +18,7 @@ pub async fn run_bot() -> Result<(), String> {
 
     // 1. Ensure all required directories exist (safety backup, already done in main.rs)
     crate::paths::ensure_all_directories()
-        .map_err(|e| format!("Failed to create required directories: {}", e))?;
+        .map_err(|e| format!("Failed to create required directories: {e}"))?;
 
     // 2. Acquire process lock to prevent multiple instances
     let process_lock = ProcessLock::acquire()?;
@@ -37,7 +37,7 @@ pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> 
 
     // 1. Ensure all required directories exist (safety backup, already done in main.rs)
     crate::paths::ensure_all_directories()
-        .map_err(|e| format!("Failed to create required directories: {}", e))?;
+        .map_err(|e| format!("Failed to create required directories: {e}"))?;
 
     // Lock already acquired, run bot directly
     run_bot_internal(process_lock).await
@@ -57,7 +57,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
     if let Err(e) = crate::arguments::validate_port_argument() {
         logger::error(
             LogTag::System,
-            &format!("Argument validation failed: {}", e),
+            &format!("Argument validation failed: {e}"),
         );
         return Err(e);
     }
@@ -65,7 +65,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
     if let Err(e) = crate::arguments::validate_host_argument() {
         logger::error(
             LogTag::System,
-            &format!("Argument validation failed: {}", e),
+            &format!("Argument validation failed: {e}"),
         );
         return Err(e);
     }
@@ -181,14 +181,14 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
         // 4. Load configuration (if not already loaded by main.rs)
         if !crate::config::is_config_initialized() {
-            crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+            crate::config::load_config().map_err(|e| format!("Failed to load config: {e}"))?;
             logger::info(LogTag::System, "Configuration loaded successfully");
         }
 
         // 5. Initialize wallets module (migrates from config.toml if needed)
         crate::wallets::initialize()
             .await
-            .map_err(|e| format!("Failed to initialize wallets: {}", e))?;
+            .map_err(|e| format!("Failed to initialize wallets: {e}"))?;
 
         logger::info(LogTag::System, "Wallets module initialized");
 
@@ -238,21 +238,21 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         // 7. Initialize strategy system
         crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
             .await
-            .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
+            .map_err(|e| format!("Failed to initialize strategy system: {e}"))?;
 
         logger::info(LogTag::System, "Strategy system initialized successfully");
 
         // 8. Initialize actions database
         crate::actions::init_database()
             .await
-            .map_err(|e| format!("Failed to initialize actions database: {}", e))?;
+            .map_err(|e| format!("Failed to initialize actions database: {e}"))?;
 
         logger::info(LogTag::System, "Actions database initialized successfully");
 
         // Sync recent incomplete actions from database to memory
         crate::actions::sync_from_db()
             .await
-            .map_err(|e| format!("Failed to sync actions from database: {}", e))?;
+            .map_err(|e| format!("Failed to sync actions from database: {e}"))?;
 
         // Start periodic cleanup of old completed actions (30-day retention)
         crate::actions::spawn_cleanup_task();
@@ -290,13 +290,13 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
             crate::ai::init_ai_engine()
                 .await
-                .map_err(|e| format!("Failed to initialize AI engine: {}", e))?;
+                .map_err(|e| format!("Failed to initialize AI engine: {e}"))?;
             logger::info(LogTag::System, "AI engine initialized successfully");
 
             // Initialize AI chat engine
             crate::ai::init_chat_engine()
                 .await
-                .map_err(|e| format!("Failed to initialize AI chat engine: {}", e))?;
+                .map_err(|e| format!("Failed to initialize AI chat engine: {e}"))?;
             logger::info(LogTag::System, "AI chat engine initialized successfully");
 
             // Initialize LLM manager with configured providers
@@ -436,11 +436,11 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
         use tokio::signal::unix::{signal, SignalKind};
 
         let mut sigint =
-            signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {}", e))?;
+            signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {e}"))?;
         let mut sigterm = signal(SignalKind::terminate())
-            .map_err(|e| format!("Failed to bind SIGTERM: {}", e))?;
+            .map_err(|e| format!("Failed to bind SIGTERM: {e}"))?;
         let mut sigquit =
-            signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {}", e))?;
+            signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {e}"))?;
 
         tokio::select! {
             _ = sigint.recv() => "SIGINT",
@@ -454,7 +454,7 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
         // On Windows, ctrl_c() handles Ctrl+C and Ctrl+Break
         tokio::signal::ctrl_c()
             .await
-            .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
+            .map_err(|e| format!("Failed to listen for shutdown signal: {e}"))?;
         "CTRL_C"
     };
 
@@ -582,7 +582,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize OpenRouter: {}", e),
+                        &format!("Failed to initialize OpenRouter: {e}"),
                     );
                 }
             }
@@ -604,7 +604,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize OpenAI: {}", e),
+                        &format!("Failed to initialize OpenAI: {e}"),
                     );
                 }
             }
@@ -626,7 +626,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize Anthropic: {}", e),
+                        &format!("Failed to initialize Anthropic: {e}"),
                     );
                 }
             }
@@ -646,7 +646,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Groq");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize Groq: {}", e));
+                    logger::warning(LogTag::System, &format!("Failed to initialize Groq: {e}"));
                 }
             }
         }
@@ -667,7 +667,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize DeepSeek: {}", e),
+                        &format!("Failed to initialize DeepSeek: {e}"),
                     );
                 }
             }
@@ -689,7 +689,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize Gemini: {}", e),
+                        &format!("Failed to initialize Gemini: {e}"),
                     );
                 }
             }
@@ -712,7 +712,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize Ollama: {}", e),
+                        &format!("Failed to initialize Ollama: {e}"),
                     );
                 }
             }
@@ -734,7 +734,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize Together: {}", e),
+                        &format!("Failed to initialize Together: {e}"),
                     );
                 }
             }
@@ -756,7 +756,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 Err(e) => {
                     logger::warning(
                         LogTag::System,
-                        &format!("Failed to initialize Mistral: {}", e),
+                        &format!("Failed to initialize Mistral: {e}"),
                     );
                 }
             }
@@ -778,7 +778,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
 
     init_llm_manager(llm_manager)
         .await
-        .map_err(|e| format!("Failed to initialize LLM manager: {}", e))?;
+        .map_err(|e| format!("Failed to initialize LLM manager: {e}"))?;
 
     if enabled_providers.is_empty() {
         logger::info(

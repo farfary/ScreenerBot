@@ -70,7 +70,7 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
     if !funding_needed.is_empty() {
         let main_keypair = wallets::get_main_keypair()
             .await
-            .map_err(|e| format!("Failed to get main wallet keypair: {}", e))?;
+            .map_err(|e| format!("Failed to get main wallet keypair: {e}"))?;
 
         logger::info(
             LogTag::Tools,

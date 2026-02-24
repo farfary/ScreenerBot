@@ -291,7 +291,7 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
 pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, String> {
     DB_POOL
         .get()
-        .map_err(|e| format!("Failed to get tools database connection: {}", e))
+        .map_err(|e| format!("Failed to get tools database connection: {e}"))
 }
 
 // =============================================================================
@@ -308,7 +308,7 @@ pub fn init_tools_db() -> Result<(), String> {
 
     // Create version table first
     conn.execute_batch(SCHEMA_VERSION_TABLE)
-        .map_err(|e| format!("Failed to create version table: {}", e))?;
+        .map_err(|e| format!("Failed to create version table: {e}"))?;
 
     // Check current schema version
     let current_version: Option<u32> = conn
@@ -318,37 +318,37 @@ pub fn init_tools_db() -> Result<(), String> {
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| format!("Failed to check schema version: {}", e))?;
+        .map_err(|e| format!("Failed to check schema version: {e}"))?;
 
     if current_version.is_none() || current_version.unwrap() < TOOLS_SCHEMA_VERSION {
         // Create all tables
         conn.execute_batch(SCHEMA_ATA_SESSIONS)
-            .map_err(|e| format!("Failed to create ata_sessions table: {}", e))?;
+            .map_err(|e| format!("Failed to create ata_sessions table: {e}"))?;
 
         conn.execute_batch(SCHEMA_ATA_CLOSURES)
-            .map_err(|e| format!("Failed to create ata_closures table: {}", e))?;
+            .map_err(|e| format!("Failed to create ata_closures table: {e}"))?;
 
         conn.execute_batch(SCHEMA_ATA_FAILED_CACHE)
-            .map_err(|e| format!("Failed to create ata_failed_cache table: {}", e))?;
+            .map_err(|e| format!("Failed to create ata_failed_cache table: {e}"))?;
 
         conn.execute_batch(SCHEMA_TOOL_FAVORITES)
-            .map_err(|e| format!("Failed to create tool_favorites table: {}", e))?;
+            .map_err(|e| format!("Failed to create tool_favorites table: {e}"))?;
 
         conn.execute_batch(SCHEMA_MW_SESSIONS)
-            .map_err(|e| format!("Failed to create mw_sessions table: {}", e))?;
+            .map_err(|e| format!("Failed to create mw_sessions table: {e}"))?;
 
         conn.execute_batch(SCHEMA_MW_WALLET_OPS)
-            .map_err(|e| format!("Failed to create mw_wallet_ops table: {}", e))?;
+            .map_err(|e| format!("Failed to create mw_wallet_ops table: {e}"))?;
 
         conn.execute_batch(SCHEMA_WATCHED_TOKENS)
-            .map_err(|e| format!("Failed to create watched_tokens table: {}", e))?;
+            .map_err(|e| format!("Failed to create watched_tokens table: {e}"))?;
 
         // Update version
         conn.execute(
             "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
             params![TOOLS_SCHEMA_VERSION, Utc::now().to_rfc3339()],
         )
-        .map_err(|e| format!("Failed to update schema version: {}", e))?;
+        .map_err(|e| format!("Failed to update schema version: {e}"))?;
 
         logger::info(
             LogTag::System,

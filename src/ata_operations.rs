@@ -717,14 +717,14 @@ async fn build_and_send_close_instruction(
 
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
         Error::invalid_amount(
-            format!("Invalid wallet address: {}", e),
+            format!("Invalid wallet address: {e}"),
             "Wallet validation failed".to_string(),
         )
     })?;
 
     let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
         Error::invalid_amount(
-            format!("Invalid token account: {}", e),
+            format!("Invalid token account: {e}"),
             "Token account validation failed".to_string(),
         )
     })?;
@@ -737,7 +737,7 @@ async fn build_and_send_close_instruction(
 
     let keypair = crate::config::get_wallet_keypair().map_err(|e| {
         Error::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-            error: format!("Failed to load wallet keypair: {}", e),
+            error: format!("Failed to load wallet keypair: {e}"),
         })
     })?;
 
@@ -770,7 +770,7 @@ async fn build_and_send_close_instruction(
             Error::Blockchain(crate::errors::BlockchainError::InvalidInstruction {
                 signature: "unknown".to_string(),
                 instruction_index: 0,
-                reason: format!("Failed to build close instruction: {}", e),
+                reason: format!("Failed to build close instruction: {e}"),
             })
         })?
     };

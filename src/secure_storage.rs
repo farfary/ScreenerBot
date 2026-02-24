@@ -29,7 +29,7 @@ pub struct EncryptedData {
 fn get_machine_id() -> Result<String, String> {
     #[cfg(not(target_os = "android"))]
     {
-        machine_uid::get().map_err(|e| format!("Failed to get machine ID: {}", e))
+        machine_uid::get().map_err(|e| format!("Failed to get machine ID: {e}"))
     }
 
     #[cfg(target_os = "android")]
@@ -45,7 +45,7 @@ fn get_machine_id() -> Result<String, String> {
 
         if id_file.exists() {
             std::fs::read_to_string(&id_file)
-                .map_err(|e| format!("Failed to read device ID: {}", e))
+                .map_err(|e| format!("Failed to read device ID: {e}"))
         } else {
             // Generate a new UUID for this installation
             let new_id = uuid::Uuid::new_v4().to_string();
@@ -56,7 +56,7 @@ fn get_machine_id() -> Result<String, String> {
             }
 
             std::fs::write(&id_file, &new_id)
-                .map_err(|e| format!("Failed to write device ID: {}", e))?;
+                .map_err(|e| format!("Failed to write device ID: {e}"))?;
 
             Ok(new_id)
         }
@@ -93,7 +93,7 @@ pub fn encrypt_private_key(plaintext: &str) -> Result<EncryptedData, String> {
 
     // Create cipher
     let cipher =
-        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {e}"))?;
 
     // Generate random 12-byte nonce
     let nonce_bytes: [u8; 12] = rand::random();
@@ -102,7 +102,7 @@ pub fn encrypt_private_key(plaintext: &str) -> Result<EncryptedData, String> {
     // Encrypt
     let ciphertext = cipher
         .encrypt(nonce, plaintext.as_bytes())
-        .map_err(|e| format!("Encryption failed: {}", e))?;
+        .map_err(|e| format!("Encryption failed: {e}"))?;
 
     Ok(EncryptedData {
         ciphertext: BASE64.encode(&ciphertext),
@@ -123,11 +123,11 @@ pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<String, String> 
     // Decode base64
     let ciphertext = BASE64
         .decode(&encrypted.ciphertext)
-        .map_err(|e| format!("Failed to decode ciphertext: {}", e))?;
+        .map_err(|e| format!("Failed to decode ciphertext: {e}"))?;
 
     let nonce_bytes = BASE64
         .decode(&encrypted.nonce)
-        .map_err(|e| format!("Failed to decode nonce: {}", e))?;
+        .map_err(|e| format!("Failed to decode nonce: {e}"))?;
 
     if nonce_bytes.len() != 12 {
         return Err(format!(
@@ -140,7 +140,7 @@ pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<String, String> 
 
     // Create cipher
     let cipher =
-        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {e}"))?;
 
     // Decrypt
     let plaintext_bytes = cipher
@@ -148,7 +148,7 @@ pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<String, String> 
         .map_err(|_| "Decryption failed - wrong machine or corrupted data".to_string())?;
 
     String::from_utf8(plaintext_bytes)
-        .map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e))
+        .map_err(|e| format!("Decrypted data is not valid UTF-8: {e}"))
 }
 
 /// Check if encrypted wallet data is present and valid
@@ -185,7 +185,7 @@ pub fn generate_password_salt() -> String {
 pub fn hash_password(password: &str, salt: &str) -> Result<String, String> {
     let salt_bytes = BASE64
         .decode(salt)
-        .map_err(|e| format!("Invalid salt encoding: {}", e))?;
+        .map_err(|e| format!("Invalid salt encoding: {e}"))?;
 
     // Derive a key from salt for keyed hashing
     let mut key = [0u8; 32];

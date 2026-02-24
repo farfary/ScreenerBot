@@ -70,7 +70,7 @@ pub async fn execute_tool_swap(
     let quote = router
         .get_quote(&quote_request)
         .await
-        .map_err(|e| format!("Failed to get quote: {}", e))?;
+        .map_err(|e| format!("Failed to get quote: {e}"))?;
 
     logger::debug(
         LogTag::Tools,
@@ -107,7 +107,7 @@ pub async fn tool_buy(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
     // Validate token mint
-    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {}", e))?;
+    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
 
     // Convert SOL to lamports
     let lamports = (amount_sol * 1_000_000_000.0) as u64;
@@ -140,7 +140,7 @@ pub async fn tool_sell(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
     // Validate token mint
-    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {}", e))?;
+    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
 
     if token_amount == 0 {
         return Err("Token amount cannot be zero".to_string());
@@ -163,7 +163,7 @@ pub async fn tool_sell(
 async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<String, String> {
     // Deserialize quote response from execution_data
     let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
-        .map_err(|e| format!("Quote deserialization failed: {}", e))?;
+        .map_err(|e| format!("Quote deserialization failed: {e}"))?;
 
     // Build swap request for Jupiter API
     let swap_req = serde_json::json!({
@@ -182,7 +182,7 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
         .json(&swap_req)
         .send()
         .await
-        .map_err(|e| format!("Jupiter swap request failed: {}", e))?;
+        .map_err(|e| format!("Jupiter swap request failed: {e}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -202,14 +202,14 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
     let swap_response: JupiterSwapResponse = response
         .json()
         .await
-        .map_err(|e| format!("Jupiter swap response parse failed: {}", e))?;
+        .map_err(|e| format!("Jupiter swap response parse failed: {e}"))?;
 
     // Sign and send using the provided keypair
     let rpc_client = get_rpc_client();
     let signature = rpc_client
         .sign_send_and_confirm_with_keypair(&swap_response.swap_transaction, keypair)
         .await
-        .map_err(|e| format!("Transaction failed: {}", e))?;
+        .map_err(|e| format!("Transaction failed: {e}"))?;
 
     Ok(signature.to_string())
 }

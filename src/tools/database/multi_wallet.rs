@@ -38,7 +38,7 @@ pub fn create_mw_session(config: &MwSessionConfig) -> Result<String, String> {
             config.sol_buffer,
         ],
     )
-    .map_err(|e| format!("Failed to create MW session: {}", e))?;
+    .map_err(|e| format!("Failed to create MW session: {e}"))?;
 
     Ok(session_id)
 }
@@ -68,7 +68,7 @@ pub fn get_mw_session(session_id: &str) -> Result<MwSessionRow, String> {
             })
         },
     )
-    .map_err(|e| format!("Failed to get MW session: {}", e))
+    .map_err(|e| format!("Failed to get MW session: {e}"))
 }
 
 /// Update multi-wallet session status
@@ -104,7 +104,7 @@ pub fn update_mw_session_status(
         "#,
         params![status, error_message, started_at, ended_at, now, session_id,],
     )
-    .map_err(|e| format!("Failed to update MW session status: {}", e))?;
+    .map_err(|e| format!("Failed to update MW session status: {e}"))?;
 
     Ok(())
 }
@@ -142,7 +142,7 @@ pub fn update_mw_session_metrics(
             session_id,
         ],
     )
-    .map_err(|e| format!("Failed to update MW session metrics: {}", e))?;
+    .map_err(|e| format!("Failed to update MW session metrics: {e}"))?;
 
     Ok(())
 }
@@ -176,7 +176,7 @@ pub fn add_wallet_op(
             token_amount,
         ],
     )
-    .map_err(|e| format!("Failed to add wallet op: {}", e))?;
+    .map_err(|e| format!("Failed to add wallet op: {e}"))?;
 
     Ok(conn.last_insert_rowid())
 }
@@ -202,7 +202,7 @@ pub fn update_wallet_op_status(
         "#,
         params![status, signature, error_message, now, op_id],
     )
-    .map_err(|e| format!("Failed to update wallet op status: {}", e))?;
+    .map_err(|e| format!("Failed to update wallet op status: {e}"))?;
 
     Ok(())
 }
@@ -222,7 +222,7 @@ pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
             ORDER BY op_index ASC
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let rows = stmt
         .query_map(params![session_id], |row| {
@@ -233,7 +233,7 @@ pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
                 )))
             })
         })
-        .map_err(|e| format!("Failed to query session ops: {}", e))?;
+        .map_err(|e| format!("Failed to query session ops: {e}"))?;
 
     let mut ops = Vec::new();
     for row in rows {
@@ -265,7 +265,7 @@ pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
             LIMIT ?1
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let rows = stmt
         .query_map(params![limit], |row| {
@@ -276,7 +276,7 @@ pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
                 )))
             })
         })
-        .map_err(|e| format!("Failed to query sessions: {}", e))?;
+        .map_err(|e| format!("Failed to query sessions: {e}"))?;
 
     let mut sessions = Vec::new();
     for row in rows {

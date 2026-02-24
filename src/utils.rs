@@ -156,7 +156,7 @@ pub use crate::swaps::SwapResult;
 pub fn get_wallet_address() -> crate::Result<String> {
     crate::config::get_wallet_pubkey_string().map_err(|e| {
         Error::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
-            error: format!("Failed to load wallet address: {}", e),
+            error: format!("Failed to load wallet address: {e}"),
         })
     })
 }

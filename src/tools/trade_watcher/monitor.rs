@@ -155,7 +155,7 @@ async fn trade_monitor_loop() {
             Err(e) => {
                 logger::debug(
                     LogTag::Tools,
-                    &format!("[TRADE_WATCHER] Failed to get watched tokens: {}", e),
+                    &format!("[TRADE_WATCHER] Failed to get watched tokens: {e}"),
                 );
                 tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
                 continue;

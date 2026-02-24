@@ -190,7 +190,7 @@ pub async fn search_pools_by_source(
                         });
                     }
                 }
-                Err(e) => return Err(format!("GeckoTerminal search failed: {}", e)),
+                Err(e) => return Err(format!("GeckoTerminal search failed: {e}")),
             }
         }
         PoolSource::DexScreener => {
@@ -215,7 +215,7 @@ pub async fn search_pools_by_source(
                         });
                     }
                 }
-                Err(e) => return Err(format!("DexScreener search failed: {}", e)),
+                Err(e) => return Err(format!("DexScreener search failed: {e}")),
             }
         }
     }

@@ -47,7 +47,7 @@ pub async fn execute_consolidation(config: ConsolidateConfig) -> Result<SessionR
     // Get main wallet as destination
     let main_wallet = wallets::get_main_wallet()
         .await
-        .map_err(|e| format!("Failed to get main wallet: {}", e))?
+        .map_err(|e| format!("Failed to get main wallet: {e}"))?
         .ok_or("No main wallet configured")?;
 
     // Load sub-wallets to consolidate

@@ -196,7 +196,7 @@ pub fn start_update_check_service(
         if let Err(e) = check_for_update().await {
             logger::warning(
                 LogTag::System,
-                &format!("Initial update check failed: {}", e),
+                &format!("Initial update check failed: {e}"),
             );
         }
 
@@ -225,7 +225,7 @@ pub fn start_update_check_service(
                         Err(e) => {
                             logger::warning(
                                 LogTag::System,
-                                &format!("Periodic update check failed: {}", e),
+                                &format!("Periodic update check failed: {e}"),
                             );
                         }
                     }
@@ -261,7 +261,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
         .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
-        .map_err(|e| format!("Failed to check for updates: {}", e))?;
+        .map_err(|e| format!("Failed to check for updates: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!("Update check failed: HTTP {}", response.status()));
@@ -270,7 +270,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
     let api_response: ApiResponse<UpdateCheckData> = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse update response: {}", e))?;
+        .map_err(|e| format!("Failed to parse update response: {e}"))?;
 
     if !api_response.success {
         return Err(api_response
@@ -361,13 +361,13 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
         .timeout(Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
         .build()
         .map_err(|e| {
-            let err = format!("Failed to create HTTP client: {}", e);
+            let err = format!("Failed to create HTTP client: {e}");
             set_download_error_sync(&err);
             err
         })?;
 
     let response = client.get(&download_url).send().await.map_err(|e| {
-        let err = format!("Download request failed: {}", e);
+        let err = format!("Download request failed: {e}");
         set_download_error_sync(&err);
         err
     })?;
@@ -407,7 +407,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
 
     // Stream download to file (memory efficient)
     let mut file = tokio::fs::File::create(&download_path).await.map_err(|e| {
-        let err = format!("Failed to create file: {}", e);
+        let err = format!("Failed to create file: {e}");
         set_download_error_sync(&err);
         err
     })?;
@@ -418,13 +418,13 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
 
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result.map_err(|e| {
-            let err = format!("Download stream error: {}", e);
+            let err = format!("Download stream error: {e}");
             set_download_error_sync(&err);
             err
         })?;
 
         file.write_all(&chunk).await.map_err(|e| {
-            let err = format!("Write error: {}", e);
+            let err = format!("Write error: {e}");
             set_download_error_sync(&err);
             err
         })?;
@@ -450,7 +450,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
 
     // Ensure file is flushed
     file.flush().await.map_err(|e| {
-        let err = format!("Failed to flush file: {}", e);
+        let err = format!("Failed to flush file: {e}");
         set_download_error_sync(&err);
         err
     })?;
@@ -471,7 +471,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
     let file_checksum = tokio::task::spawn_blocking(move || calculate_sha256(&checksum_path))
         .await
         .map_err(|e| {
-            let err = format!("Checksum task failed: {}", e);
+            let err = format!("Checksum task failed: {e}");
             set_download_error_sync(&err);
             err
         })?
@@ -519,7 +519,7 @@ pub fn open_update(path: &str) -> Result<(), String> {
         std::process::Command::new("open")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open update: {}", e))?;
+            .map_err(|e| format!("Failed to open update: {e}"))?;
     }
 
     #[cfg(target_os = "linux")]
@@ -527,7 +527,7 @@ pub fn open_update(path: &str) -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open update: {}", e))?;
+            .map_err(|e| format!("Failed to open update: {e}"))?;
     }
 
     #[cfg(target_os = "windows")]
@@ -535,7 +535,7 @@ pub fn open_update(path: &str) -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open update: {}", e))?;
+            .map_err(|e| format!("Failed to open update: {e}"))?;
     }
 
     Ok(())
@@ -588,7 +588,7 @@ fn get_download_dir() -> Result<std::path::PathBuf, String> {
         .join("updates");
 
     std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create download directory: {}", e))?;
+        .map_err(|e| format!("Failed to create download directory: {e}"))?;
 
     Ok(dir)
 }
@@ -599,7 +599,7 @@ fn calculate_sha256(path: &std::path::Path) -> Result<String, String> {
     use std::io::Read;
 
     let mut file = std::fs::File::open(path)
-        .map_err(|e| format!("Failed to open file for checksum: {}", e))?;
+        .map_err(|e| format!("Failed to open file for checksum: {e}"))?;
 
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
@@ -607,7 +607,7 @@ fn calculate_sha256(path: &std::path::Path) -> Result<String, String> {
     loop {
         let bytes_read = file
             .read(&mut buffer)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+            .map_err(|e| format!("Failed to read file: {e}"))?;
         if bytes_read == 0 {
             break;
         }

@@ -123,7 +123,7 @@ pub fn start_cpu_profiling() -> Option<pprof::ProfilerGuard<'static>> {
         Err(e) => {
             logger::error(
                 LogTag::System,
-                &format!("Failed to start CPU profiling: {}", e),
+                &format!("Failed to start CPU profiling: {e}"),
             );
             None
         }

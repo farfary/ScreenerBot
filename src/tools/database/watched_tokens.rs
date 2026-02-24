@@ -35,7 +35,7 @@ pub fn add_watched_token(config: &WatchedTokenConfig) -> Result<i64, String> {
             config.slippage_bps.unwrap_or(500),
         ],
     )
-    .map_err(|e| format!("Failed to add watched token: {}", e))?;
+    .map_err(|e| format!("Failed to add watched token: {e}"))?;
 
     Ok(conn.last_insert_rowid())
 }
@@ -55,11 +55,11 @@ pub fn get_watched_tokens() -> Result<Vec<WatchedToken>, String> {
             ORDER BY created_at DESC
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let rows = stmt
         .query_map([], |row| Ok(WatchedToken::from_row(row)))
-        .map_err(|e| format!("Failed to query watched tokens: {}", e))?;
+        .map_err(|e| format!("Failed to query watched tokens: {e}"))?;
 
     let mut tokens = Vec::new();
     for row in rows {
@@ -89,11 +89,11 @@ pub fn get_active_watched_tokens() -> Result<Vec<WatchedToken>, String> {
             ORDER BY created_at DESC
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let rows = stmt
         .query_map([], |row| Ok(WatchedToken::from_row(row)))
-        .map_err(|e| format!("Failed to query active watched tokens: {}", e))?;
+        .map_err(|e| format!("Failed to query active watched tokens: {e}"))?;
 
     let mut tokens = Vec::new();
     for row in rows {
@@ -116,7 +116,7 @@ pub fn update_watched_token_status(id: i64, is_active: bool) -> Result<(), Strin
         "UPDATE watched_tokens SET is_active = ?1, updated_at = ?2 WHERE id = ?3",
         params![is_active as i32, now, id],
     )
-    .map_err(|e| format!("Failed to update watched token status: {}", e))?;
+    .map_err(|e| format!("Failed to update watched token status: {e}"))?;
 
     Ok(())
 }
@@ -126,7 +126,7 @@ pub fn delete_watched_token(id: i64) -> Result<(), String> {
     let conn = get_connection()?;
 
     conn.execute("DELETE FROM watched_tokens WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete watched token: {}", e))?;
+        .map_err(|e| format!("Failed to delete watched token: {e}"))?;
 
     Ok(())
 }
@@ -161,7 +161,7 @@ pub fn update_watched_token_tracking(
             id
         ],
     )
-    .map_err(|e| format!("Failed to update watched token tracking: {}", e))?;
+    .map_err(|e| format!("Failed to update watched token tracking: {e}"))?;
 
     Ok(())
 }

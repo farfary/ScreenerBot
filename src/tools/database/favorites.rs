@@ -39,7 +39,7 @@ pub fn upsert_tool_favorite(
         "#,
         params![mint, symbol, name, logo_url, tool_type, config_json, label, notes, now],
     )
-    .map_err(|e| format!("Failed to upsert tool favorite: {}", e))?;
+    .map_err(|e| format!("Failed to upsert tool favorite: {e}"))?;
 
     // Get the ID (either inserted or existing)
     conn.query_row(
@@ -47,7 +47,7 @@ pub fn upsert_tool_favorite(
         params![mint, tool_type],
         |row| row.get(0),
     )
-    .map_err(|e| format!("Failed to get favorite ID: {}", e))
+    .map_err(|e| format!("Failed to get favorite ID: {e}"))
 }
 
 /// Get all tool favorites, optionally filtered by tool type
@@ -67,11 +67,11 @@ pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow
                 ORDER BY use_count DESC, updated_at DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let rows = stmt
             .query_map(params![tt], |row| Ok(ToolFavoriteRow::from_row(row)))
-            .map_err(|e| format!("Failed to query favorites: {}", e))?;
+            .map_err(|e| format!("Failed to query favorites: {e}"))?;
 
         for row in rows {
             match row {
@@ -90,11 +90,11 @@ pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow
                 ORDER BY use_count DESC, updated_at DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let rows = stmt
             .query_map([], |row| Ok(ToolFavoriteRow::from_row(row)))
-            .map_err(|e| format!("Failed to query favorites: {}", e))?;
+            .map_err(|e| format!("Failed to query favorites: {e}"))?;
 
         for row in rows {
             match row {
@@ -114,7 +114,7 @@ pub fn remove_tool_favorite(id: i64) -> Result<bool, String> {
 
     let rows = conn
         .execute("DELETE FROM tool_favorites WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to remove tool favorite: {}", e))?;
+        .map_err(|e| format!("Failed to remove tool favorite: {e}"))?;
 
     Ok(rows > 0)
 }
@@ -128,7 +128,7 @@ pub fn increment_tool_favorite_use(id: i64) -> Result<(), String> {
         "UPDATE tool_favorites SET use_count = use_count + 1, last_used_at = ?1, updated_at = ?1 WHERE id = ?2",
         params![now, id],
     )
-    .map_err(|e| format!("Failed to increment use count: {}", e))?;
+    .map_err(|e| format!("Failed to increment use count: {e}"))?;
 
     Ok(())
 }
@@ -155,7 +155,7 @@ pub fn update_tool_favorite(
             "#,
             params![config_json, label, notes, now, id],
         )
-        .map_err(|e| format!("Failed to update tool favorite: {}", e))?;
+        .map_err(|e| format!("Failed to update tool favorite: {e}"))?;
 
     Ok(rows > 0)
 }

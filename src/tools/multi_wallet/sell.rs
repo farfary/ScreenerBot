@@ -70,7 +70,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
         if !topup_needed.is_empty() {
             let main_keypair = wallets::get_main_keypair()
                 .await
-                .map_err(|e| format!("Failed to get main wallet keypair: {}", e))?;
+                .map_err(|e| format!("Failed to get main wallet keypair: {e}"))?;
 
             for plan in topup_needed {
                 let topup_amount = config.min_sol_for_fee - plan.sol_balance + 0.001;
@@ -187,7 +187,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
     if config.consolidate_after {
         let main_wallet = wallets::get_main_wallet()
             .await
-            .map_err(|e| format!("Failed to get main wallet: {}", e))?
+            .map_err(|e| format!("Failed to get main wallet: {e}"))?
             .ok_or("No main wallet configured")?;
 
         let wallets_to_consolidate: Vec<WalletWithKey> = wallets

@@ -24,7 +24,7 @@ use super::types::{AtaCleanupResult, AtaCleanupStats, AtaInfo};
 pub async fn scan_wallet_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, String> {
     let token_accounts = crate::utils::get_all_token_accounts(wallet_address)
         .await
-        .map_err(|e| format!("Failed to get token accounts: {}", e))?;
+        .map_err(|e| format!("Failed to get token accounts: {e}"))?;
 
     let atas: Vec<AtaInfo> = token_accounts.iter().map(AtaInfo::from).collect();
 
@@ -250,7 +250,7 @@ pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + 
         if let Err(e) = remove_failed_ata(&ata.ata_address) {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to remove ATA from cache: {}", e),
+                &format!("Failed to remove ATA from cache: {e}"),
             );
         }
     }

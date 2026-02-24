@@ -74,7 +74,7 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
                     Err(e) => {
                         logger::error(
                             LogTag::Wallet,
-                            &format!("ATA cleanup service error: {}", e),
+                            &format!("ATA cleanup service error: {e}"),
                         );
                         // Sleep before continuing on error to avoid rapid failures
                         sleep(Duration::from_secs(30)).await;

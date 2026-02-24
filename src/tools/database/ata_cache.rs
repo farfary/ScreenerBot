@@ -33,7 +33,7 @@ pub fn upsert_failed_ata(
         "#,
         params![ata_address, token_mint, wallet_address, error, is_permanent as i32, now],
     )
-    .map_err(|e| format!("Failed to upsert failed ATA: {}", e))?;
+    .map_err(|e| format!("Failed to upsert failed ATA: {e}"))?;
 
     Ok(())
 }
@@ -48,7 +48,7 @@ pub fn is_ata_failed(ata_address: &str) -> Result<bool, String> {
             params![ata_address],
             |row| row.get(0),
         )
-        .map_err(|e| format!("Failed to check ATA: {}", e))?;
+        .map_err(|e| format!("Failed to check ATA: {e}"))?;
 
     Ok(count > 0)
 }
@@ -68,13 +68,13 @@ pub fn get_failed_atas_for_wallet(wallet_address: &str) -> Result<Vec<FailedAtaR
             ORDER BY last_failed_at DESC
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
     let rows = stmt
         .query_map(params![wallet_address], |row| {
             Ok(FailedAtaRow::from_row(row))
         })
-        .map_err(|e| format!("Failed to query failed ATAs: {}", e))?;
+        .map_err(|e| format!("Failed to query failed ATAs: {e}"))?;
 
     let mut atas = Vec::new();
     for row in rows {
@@ -96,7 +96,7 @@ pub fn remove_failed_ata(ata_address: &str) -> Result<(), String> {
         "DELETE FROM ata_failed_cache WHERE ata_address = ?1",
         params![ata_address],
     )
-    .map_err(|e| format!("Failed to remove failed ATA: {}", e))?;
+    .map_err(|e| format!("Failed to remove failed ATA: {e}"))?;
 
     Ok(())
 }
@@ -114,7 +114,7 @@ pub fn cleanup_old_failed_atas(max_age_days: i32) -> Result<i32, String> {
             "#,
             params![max_age_days],
         )
-        .map_err(|e| format!("Failed to cleanup old failed ATAs: {}", e))?;
+        .map_err(|e| format!("Failed to cleanup old failed ATAs: {e}"))?;
 
     Ok(deleted as i32)
 }

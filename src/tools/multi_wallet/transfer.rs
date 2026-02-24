@@ -57,7 +57,7 @@ pub async fn transfer_sol(
 
     let from_pubkey = from_keypair.pubkey();
     let to_pubkey =
-        Pubkey::from_str(to_address).map_err(|e| format!("Invalid recipient address: {}", e))?;
+        Pubkey::from_str(to_address).map_err(|e| format!("Invalid recipient address: {e}"))?;
 
     let lamports = sol_to_lamports(amount_sol);
 
@@ -68,7 +68,7 @@ pub async fn transfer_sol(
     let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .await
-        .map_err(|e| format!("Failed to get blockhash: {}", e))?;
+        .map_err(|e| format!("Failed to get blockhash: {e}"))?;
 
     // Build and sign transaction
     let transaction = Transaction::new_signed_with_payer(
@@ -82,7 +82,7 @@ pub async fn transfer_sol(
     let signature = rpc_client
         .send_and_confirm_signed_transaction(&transaction)
         .await
-        .map_err(|e| format!("Transfer failed: {}", e))?;
+        .map_err(|e| format!("Transfer failed: {e}"))?;
 
     logger::debug(
         LogTag::Tools,
@@ -126,14 +126,14 @@ pub async fn transfer_token(
 
     let from_pubkey = from_keypair.pubkey();
     let to_pubkey =
-        Pubkey::from_str(to_address).map_err(|e| format!("Invalid recipient address: {}", e))?;
-    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {}", e))?;
+        Pubkey::from_str(to_address).map_err(|e| format!("Invalid recipient address: {e}"))?;
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {e}"))?;
 
     // Fetch mint account to get decimals
     let mint_account = rpc_client
         .get_account(&mint_pubkey)
         .await
-        .map_err(|e| format!("Failed to get mint account: {}", e))?
+        .map_err(|e| format!("Failed to get mint account: {e}"))?
         .ok_or_else(|| "Mint account not found".to_string())?;
 
     // Parse decimals from mint data (offset 44, 1 byte for SPL Token)
@@ -200,7 +200,7 @@ pub async fn transfer_token(
         amount,
         decimals,
     )
-    .map_err(|e| format!("Failed to build transfer instruction: {}", e))?;
+    .map_err(|e| format!("Failed to build transfer instruction: {e}"))?;
 
     instructions.push(transfer_ix);
 
@@ -208,7 +208,7 @@ pub async fn transfer_token(
     let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .await
-        .map_err(|e| format!("Failed to get blockhash: {}", e))?;
+        .map_err(|e| format!("Failed to get blockhash: {e}"))?;
 
     // Build and sign transaction
     let transaction = Transaction::new_signed_with_payer(
@@ -222,7 +222,7 @@ pub async fn transfer_token(
     let signature = rpc_client
         .send_and_confirm_signed_transaction(&transaction)
         .await
-        .map_err(|e| format!("Token transfer failed: {}", e))?;
+        .map_err(|e| format!("Token transfer failed: {e}"))?;
 
     let ui_amount = amount as f64 / 10f64.powi(decimals as i32);
     logger::debug(
@@ -353,7 +353,7 @@ pub async fn collect_sol(
                 results.push(WalletOpResult::failure(
                     wallet_id,
                     wallet_address,
-                    format!("Failed to get balance: {}", e),
+                    format!("Failed to get balance: {e}"),
                 ));
                 continue;
             }
@@ -443,7 +443,7 @@ pub async fn close_ata(
     let rpc_client = get_rpc_client();
 
     let owner_pubkey = owner_keypair.pubkey();
-    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {}", e))?;
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {e}"))?;
 
     let token_program_id = if is_token_2022 {
         Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap()
@@ -473,14 +473,14 @@ pub async fn close_ata(
             &owner_pubkey,
             &[],
         )
-        .map_err(|e| format!("Failed to build close instruction: {}", e))?
+        .map_err(|e| format!("Failed to build close instruction: {e}"))?
     };
 
     // Get recent blockhash
     let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .await
-        .map_err(|e| format!("Failed to get blockhash: {}", e))?;
+        .map_err(|e| format!("Failed to get blockhash: {e}"))?;
 
     // Build and sign transaction
     let transaction = Transaction::new_signed_with_payer(
@@ -494,7 +494,7 @@ pub async fn close_ata(
     let signature = rpc_client
         .send_and_confirm_signed_transaction(&transaction)
         .await
-        .map_err(|e| format!("Close ATA failed: {}", e))?;
+        .map_err(|e| format!("Close ATA failed: {e}"))?;
 
     logger::debug(
         LogTag::Tools,
@@ -515,7 +515,7 @@ fn build_token_2022_close_instruction(
     owner: &Pubkey,
 ) -> Result<Instruction, String> {
     let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
-        .map_err(|e| format!("Invalid Token-2022 program ID: {}", e))?;
+        .map_err(|e| format!("Invalid Token-2022 program ID: {e}"))?;
 
     // CloseAccount instruction: [9] (instruction discriminator)
     let instruction_data = vec![9u8];

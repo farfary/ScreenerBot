@@ -150,12 +150,12 @@ fn confirm_reset() -> Result<bool, String> {
     print!("Are you sure you want to proceed? (y/n): ");
     io::stdout()
         .flush()
-        .map_err(|e| format!("Failed to flush stdout: {}", e))?;
+        .map_err(|e| format!("Failed to flush stdout: {e}"))?;
 
     let mut input = String::new();
     io::stdin()
         .read_line(&mut input)
-        .map_err(|e| format!("Failed to read input: {}", e))?;
+        .map_err(|e| format!("Failed to read input: {e}"))?;
 
     let response = input.trim().to_lowercase();
     Ok(response == "y" || response == "yes")
@@ -164,9 +164,9 @@ fn confirm_reset() -> Result<bool, String> {
 /// Remove a file or directory
 fn remove_file_or_dir(path: &Path) -> Result<(), String> {
     if path.is_dir() {
-        fs::remove_dir_all(path).map_err(|e| format!("Failed to remove directory: {}", e))?;
+        fs::remove_dir_all(path).map_err(|e| format!("Failed to remove directory: {e}"))?;
     } else {
-        fs::remove_file(path).map_err(|e| format!("Failed to remove file: {}", e))?;
+        fs::remove_file(path).map_err(|e| format!("Failed to remove file: {e}"))?;
     }
     Ok(())
 }
@@ -187,11 +187,11 @@ pub fn clear_pending_verifications() -> Result<(), String> {
     logger::info(LogTag::System, "Clearing pending verification metadata...");
 
     let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open positions database: {}", e))?;
+        .map_err(|e| format!("Failed to open positions database: {e}"))?;
 
     // Apply centralized PRAGMA configuration
     crate::database::configure_connection(&conn, crate::database::POSITIONS_DB)
-        .map_err(|e| format!("Failed to configure connection: {}", e))?;
+        .map_err(|e| format!("Failed to configure connection: {e}"))?;
 
     // Clear pending DCA swaps metadata
     match conn.execute(
@@ -209,7 +209,7 @@ pub fn clear_pending_verifications() -> Result<(), String> {
         Err(e) => {
             logger::warning(
                 LogTag::System,
-                &format!("Failed to clear DCA metadata: {}", e),
+                &format!("Failed to clear DCA metadata: {e}"),
             );
         }
     }
@@ -230,7 +230,7 @@ pub fn clear_pending_verifications() -> Result<(), String> {
         Err(e) => {
             logger::warning(
                 LogTag::System,
-                &format!("Failed to clear partial exit metadata: {}", e),
+                &format!("Failed to clear partial exit metadata: {e}"),
             );
         }
     }
@@ -246,7 +246,7 @@ pub fn execute_extended_reset(config: ResetConfig) -> Result<(), String> {
     if let Err(e) = clear_pending_verifications() {
         logger::error(
             LogTag::System,
-            &format!("Failed to clear pending verifications: {}", e),
+            &format!("Failed to clear pending verifications: {e}"),
         );
     }
 
