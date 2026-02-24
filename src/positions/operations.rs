@@ -325,7 +325,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
         .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
 
     // Get price with fallback to API when pool price unavailable
     // This enables trading for tokens not yet tracked by pool service
@@ -342,7 +342,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     let entry_price = match price_info.price_sol {
         price if price > 0.0 && price.is_finite() => price,
         _ => {
-            return Err(format!("Invalid price for token: {}", token_mint));
+            return Err(format!("Invalid price for token: {token_mint}"));
         }
     };
 
@@ -653,7 +653,7 @@ pub async fn open_position_with_size(
     trade_size_sol: f64,
 ) -> Result<String, String> {
     if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
-        return Err(format!("Invalid trade size: {}", trade_size_sol));
+        return Err(format!("Invalid trade size: {trade_size_sol}"));
     }
     open_position_impl(token_mint, trade_size_sol).await
 }
@@ -666,7 +666,7 @@ pub async fn close_position_direct(
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
         .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
 
     // Get price with fallback to API when pool price unavailable
     // This enables closing positions for tokens not tracked by pool service
@@ -683,7 +683,7 @@ pub async fn close_position_direct(
     let exit_price = match price_info.price_sol {
         price if price > 0.0 && price.is_finite() => price,
         _ => {
-            return Err(format!("Invalid exit price for token: {}", token_mint));
+            return Err(format!("Invalid exit price for token: {token_mint}"));
         }
     };
 
@@ -796,7 +796,7 @@ pub async fn close_position_direct(
     if let Some(note) = &multi_account_note {
         logger::warning(
             LogTag::Positions,
-            &format!("Sell amount adjusted due to account distribution: {}", note),
+            &format!("Sell amount adjusted due to account distribution: {note}"),
         );
     }
 
@@ -975,7 +975,7 @@ pub async fn partial_close_position(
     // Get position
     let position = super::state::get_position_by_mint(token_mint)
         .await
-        .ok_or_else(|| format!("No open position found for token: {}", token_mint))?;
+        .ok_or_else(|| format!("No open position found for token: {token_mint}"))?;
 
     let position_id = position
         .id
@@ -1024,7 +1024,7 @@ pub async fn partial_close_position(
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
         .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
 
     // Get quote for partial exit
     let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
@@ -1242,7 +1242,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     // Get position
     let position = super::state::get_position_by_mint(token_mint)
         .await
-        .ok_or_else(|| format!("No open position found for token: {}", token_mint))?;
+        .ok_or_else(|| format!("No open position found for token: {token_mint}"))?;
 
     let position_id = position
         .id
@@ -1302,7 +1302,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
         .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {}", token_mint))?;
+        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
 
     // Get quote for DCA entry
     let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
@@ -1469,7 +1469,7 @@ pub fn calculate_average_exit_price(
 /// Update position's current price and track high/low for trailing stop
 pub async fn update_position_price(token_mint: &str, current_price: f64) -> Result<(), String> {
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!("Invalid price: {}", current_price));
+        return Err(format!("Invalid price: {current_price}"));
     }
 
     let _lock = acquire_position_lock(token_mint).await;
@@ -1490,7 +1490,7 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
     .await;
 
     if !updated {
-        return Err(format!("Position not found for mint: {}", token_mint));
+        return Err(format!("Position not found for mint: {token_mint}"));
     }
 
     let position = super::state::get_position_by_mint(token_mint).await;

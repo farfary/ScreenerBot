@@ -81,7 +81,7 @@ impl EventsDatabase {
 
         logger::info(
             LogTag::System,
-            &format!("Events database initialized at {}", database_path_str),
+            &format!("Events database initialized at {database_path_str}"),
         );
 
         Ok(db)
@@ -588,28 +588,28 @@ impl EventsDatabase {
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(after_id)];
         let mut idx = 2;
         if let Some(cat) = category {
-            query.push_str(&format!(" AND category = ?{}", idx));
+            query.push_str(&format!(" AND category = ?{idx}"));
             bind.push(Box::new(cat.to_string()));
             idx += 1;
         }
         if let Some(sev) = severity {
-            query.push_str(&format!(" AND severity = ?{}", idx));
+            query.push_str(&format!(" AND severity = ?{idx}"));
             bind.push(Box::new(sev.to_string()));
             idx += 1;
         }
         if let Some(m) = mint {
-            query.push_str(&format!(" AND mint = ?{}", idx));
+            query.push_str(&format!(" AND mint = ?{idx}"));
             bind.push(Box::new(m.to_string()));
             idx += 1;
         }
         if let Some(r) = reference_id {
-            query.push_str(&format!(" AND reference_id = ?{}", idx));
+            query.push_str(&format!(" AND reference_id = ?{idx}"));
             bind.push(Box::new(r.to_string()));
             idx += 1;
         }
         if let Some(search_term) = search {
             let wildcard = format!("%{}%", search_term.to_lowercase());
-            query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{}", idx));
+            query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{idx}"));
             bind.push(Box::new(wildcard));
             idx += 1;
         }
@@ -683,28 +683,28 @@ impl EventsDatabase {
         let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(before_id)];
         let mut idx = 2;
         if let Some(cat) = category {
-            query.push_str(&format!(" AND category = ?{}", idx));
+            query.push_str(&format!(" AND category = ?{idx}"));
             bind.push(Box::new(cat.to_string()));
             idx += 1;
         }
         if let Some(sev) = severity {
-            query.push_str(&format!(" AND severity = ?{}", idx));
+            query.push_str(&format!(" AND severity = ?{idx}"));
             bind.push(Box::new(sev.to_string()));
             idx += 1;
         }
         if let Some(m) = mint {
-            query.push_str(&format!(" AND mint = ?{}", idx));
+            query.push_str(&format!(" AND mint = ?{idx}"));
             bind.push(Box::new(m.to_string()));
             idx += 1;
         }
         if let Some(r) = reference_id {
-            query.push_str(&format!(" AND reference_id = ?{}", idx));
+            query.push_str(&format!(" AND reference_id = ?{idx}"));
             bind.push(Box::new(r.to_string()));
             idx += 1;
         }
         if let Some(search_term) = search {
             let wildcard = format!("%{}%", search_term.to_lowercase());
-            query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{}", idx));
+            query.push_str(&format!(" AND LOWER(json_payload) LIKE ?{idx}"));
             bind.push(Box::new(wildcard));
             idx += 1;
         }

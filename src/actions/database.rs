@@ -81,7 +81,7 @@ impl ActionsDatabase {
 
         logger::info(
             LogTag::System,
-            &format!("Actions database initialized at {}", database_path_str),
+            &format!("Actions database initialized at {database_path_str}"),
         );
 
         Ok(db)
@@ -637,11 +637,11 @@ impl ActionsDatabase {
         query.push_str(" ORDER BY started_at DESC");
 
         if let Some(limit) = filters.limit {
-            query.push_str(&format!(" LIMIT {}", limit));
+            query.push_str(&format!(" LIMIT {limit}"));
         }
 
         if let Some(offset) = filters.offset {
-            query.push_str(&format!(" OFFSET {}", offset));
+            query.push_str(&format!(" OFFSET {offset}"));
         }
 
         let mut stmt = conn
@@ -942,7 +942,7 @@ impl ActionsDatabase {
             "positiondca" => Ok(ActionType::PositionDca),
             "positionpartialexit" => Ok(ActionType::PositionPartialExit),
             "manualorder" => Ok(ActionType::ManualOrder),
-            _ => Err(format!("Unknown action type: {}", s)),
+            _ => Err(format!("Unknown action type: {s}")),
         }
     }
 

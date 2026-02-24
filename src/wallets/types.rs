@@ -41,7 +41,7 @@ impl std::str::FromStr for WalletRole {
             "main" => Ok(WalletRole::Main),
             "secondary" => Ok(WalletRole::Secondary),
             "archive" => Ok(WalletRole::Archive),
-            _ => Err(format!("Invalid wallet role: {}", s)),
+            _ => Err(format!("Invalid wallet role: {s}")),
         }
     }
 }
@@ -76,7 +76,7 @@ impl std::str::FromStr for WalletType {
             "generated" => Ok(WalletType::Generated),
             "imported" => Ok(WalletType::Imported),
             "migrated" => Ok(WalletType::Migrated),
-            _ => Err(format!("Invalid wallet type: {}", s)),
+            _ => Err(format!("Invalid wallet type: {s}")),
         }
     }
 }

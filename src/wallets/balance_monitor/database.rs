@@ -178,7 +178,7 @@ impl WalletDatabase {
 
         logger::debug(
             LogTag::Wallet,
-            &format!("Initializing wallet database at: {}", database_path_str),
+            &format!("Initializing wallet database at: {database_path_str}"),
         );
 
         // Configure connection manager with centralized PRAGMAs
@@ -737,7 +737,7 @@ impl WalletDatabase {
 
         if let Some(ts_str) = snapshot_time_str {
             let timestamp = DateTime::parse_from_rfc3339(&ts_str)
-                .map_err(|_| format!("Invalid snapshot_time stored: {}", ts_str))?
+                .map_err(|_| format!("Invalid snapshot_time stored: {ts_str}"))?
                 .with_timezone(&Utc);
             Ok(Some(timestamp))
         } else {

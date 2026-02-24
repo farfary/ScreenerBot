@@ -545,7 +545,7 @@ pub async fn record_ohlcv_event(
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
         .entry("message".to_string())
-        .or_insert_with(|| Value::String(format!("OHLCV event: {}", subtype)));
+        .or_insert_with(|| Value::String(format!("OHLCV event: {subtype}")));
 
     let event = Event::new(
         EventCategory::Ohlcv,
@@ -593,7 +593,7 @@ pub async fn record_filtering_event(
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
         .entry("message".to_string())
-        .or_insert_with(|| Value::String(format!("Filtering event: {}", subtype)));
+        .or_insert_with(|| Value::String(format!("Filtering event: {subtype}")));
 
     let event = Event::new(
         EventCategory::Filtering,
@@ -641,7 +641,7 @@ pub async fn record_trader_event(
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
         .entry("message".to_string())
-        .or_insert_with(|| Value::String(format!("Trader event: {}", subtype)));
+        .or_insert_with(|| Value::String(format!("Trader event: {subtype}")));
 
     let event = Event::new(
         EventCategory::Trader,

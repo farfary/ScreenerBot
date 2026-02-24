@@ -112,7 +112,7 @@ async fn migrate_from_config() -> Result<(), String> {
 
     logger::info(
         LogTag::Wallet,
-        &format!("Migrated wallet from config.toml: {}", address),
+        &format!("Migrated wallet from config.toml: {address}"),
     );
 
     Ok(())

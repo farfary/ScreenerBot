@@ -158,7 +158,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         }
                     };
                 } else {
-                    let retry_msg = format!("Transaction failed: {}", error_msg);
+                    let retry_msg = format!("Transaction failed: {error_msg}");
                     if is_transient_verification_error(&retry_msg) {
                         return VerificationOutcome::RetryTransient(retry_msg);
                     } else {

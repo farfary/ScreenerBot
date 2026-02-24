@@ -22,7 +22,7 @@ impl PositionsDatabase {
         if is_first_init {
             logger::info(
                 LogTag::Positions,
-                &format!("Initializing positions database at: {}", database_path_str),
+                &format!("Initializing positions database at: {database_path_str}"),
             );
         }
 
@@ -669,9 +669,9 @@ impl PositionsDatabase {
         );
 
         if let Some(limit) = limit {
-            query.push_str(&format!("LIMIT {}", limit));
+            query.push_str(&format!("LIMIT {limit}"));
             if let Some(offset) = offset {
-                query.push_str(&format!("OFFSET {}", offset));
+                query.push_str(&format!("OFFSET {offset}"));
             }
         }
 
@@ -1113,7 +1113,7 @@ impl PositionsDatabase {
         if rows_affected > 0 {
             logger::info(
                 LogTag::Positions,
-                &format!("Deleted position with entry signature: {}", signature),
+                &format!("Deleted position with entry signature: {signature}"),
             );
         }
 

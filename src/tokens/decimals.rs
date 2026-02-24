@@ -126,7 +126,7 @@ pub async fn is_token_2022(mint: &str) -> bool {
             if is_2022 {
                 logger::debug(
                     LogTag::Tokens,
-                    &format!("Token2022 detected: mint={}", mint),
+                    &format!("Token2022 detected: mint={mint}"),
                 );
             }
             is_2022
@@ -134,7 +134,7 @@ pub async fn is_token_2022(mint: &str) -> bool {
         Ok(None) => {
             logger::warning(
                 LogTag::Tokens,
-                &format!("Mint account not found: mint={}", mint),
+                &format!("Mint account not found: mint={mint}"),
             );
             false
         }
@@ -276,9 +276,9 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
         if e_str.contains("could not find account") || e_str.contains("Account not found") {
             "Account not found".to_string()
         } else if e_str.contains("429") || e_str.to_lowercase().contains("rate limit") {
-            format!("Rate limited: {}", e_str)
+            format!("Rate limited: {e_str}")
         } else {
-            format!("Failed to fetch account: {}", e_str)
+            format!("Failed to fetch account: {e_str}")
         }
     })?;
 

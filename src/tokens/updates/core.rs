@@ -456,7 +456,7 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
                 permit.forget();
                 logger::debug(
                     LogTag::Tokens,
-                    &format!("Security data fetched for {}", mint),
+                    &format!("Security data fetched for {mint}"),
                 );
                 // Clear any previous error tracking
                 let _ = db.clear_security_error(mint);
@@ -528,7 +528,7 @@ pub async fn force_update_token(
 ) -> TokenResult<UpdateResult> {
     logger::debug(
         LogTag::Tokens,
-        &format!("Force update (full) requested for mint={}", mint),
+        &format!("Force update (full) requested for mint={mint}"),
     );
 
     let mut successes = Vec::new();

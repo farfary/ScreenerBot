@@ -432,7 +432,7 @@ pub(super) async fn compute_dashboard_payload_realtime(
         Err(err) => {
             if err.contains("not initialized") {
                 if let Err(init_err) = initialize_wallet_database().await {
-                    return Err(format!("Wallet database unavailable: {}", init_err));
+                    return Err(format!("Wallet database unavailable: {init_err}"));
                 }
 
                 match get_recent_wallet_snapshots(snapshot_limit).await {

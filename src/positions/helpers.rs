@@ -375,7 +375,7 @@ async fn fetch_and_create_token_snapshot(
     let token = crate::tokens::get_full_token_async(mint)
         .await
         .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found in store: {}", mint))?;
+        .ok_or_else(|| format!("Token not found in store: {mint}"))?;
 
     // Compute freshness based on last price update vs now
     let now = Utc::now();
@@ -539,7 +539,7 @@ pub async fn save_position_token_snapshot(
 pub async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
     logger::info(
         LogTag::Positions,
-        &format!("Starting cleanup of position with signature {}", signature),
+        &format!("Starting cleanup of position with signature {signature}"),
     );
 
     // Find mint first, then acquire lock
@@ -559,7 +559,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
         None => {
             logger::warning(
                 LogTag::Positions,
-                &format!("No position found with signature {}", signature),
+                &format!("No position found with signature {signature}"),
             );
             return Ok(());
         }
@@ -612,7 +612,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
         } else {
             logger::warning(
                 LogTag::Positions,
-                &format!("No position found with signature {}", signature),
+                &format!("No position found with signature {signature}"),
             );
             None
         }
@@ -668,7 +668,7 @@ pub async fn sync_position_to_database(position: &Position) -> Result<(), String
         let new_id = save_position(position).await?;
         logger::info(
             LogTag::Positions,
-            &format!("Position synced to database with new ID {}", new_id),
+            &format!("Position synced to database with new ID {new_id}"),
         );
         Ok(())
     }

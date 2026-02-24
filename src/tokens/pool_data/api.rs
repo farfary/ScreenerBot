@@ -149,7 +149,7 @@ pub async fn fetch_from_sources(
                 }),
             )
             .await;
-            failures.push(format!("DexScreener→{}", message));
+            failures.push(format!("DexScreener→{message}"));
         }
     }
 
@@ -183,7 +183,7 @@ pub async fn fetch_from_sources(
                 }),
             )
             .await;
-            failures.push(format!("GeckoTerminal→{}", message));
+            failures.push(format!("GeckoTerminal→{message}"));
         }
     }
 

@@ -92,7 +92,7 @@ async fn update_all_position_prices() {
 /// This eliminates the race condition and reduces DB writes from 2 to 1 per position
 async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> Result<(), String> {
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!("Invalid price: {}", current_price));
+        return Err(format!("Invalid price: {current_price}"));
     }
 
     let _lock = crate::positions::acquire_position_lock(token_mint).await;
@@ -115,13 +115,13 @@ async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> 
     .await;
 
     if !updated {
-        return Err(format!("Position not found for mint: {}", token_mint));
+        return Err(format!("Position not found for mint: {token_mint}"));
     }
 
     // Get updated position for PnL calculation
     let mut position = crate::positions::get_position_by_mint(token_mint)
         .await
-        .ok_or_else(|| format!("Position disappeared after price update: {}", token_mint))?;
+        .ok_or_else(|| format!("Position disappeared after price update: {token_mint}"))?;
 
     // Calculate PnL with the new price
     let (pnl_sol, pnl_pct) =

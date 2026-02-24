@@ -419,7 +419,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
                     logger::debug(
                         LogTag::Positions,
-                        &format!("Removed orphan entry position {}", position_id),
+                        &format!("Removed orphan entry position {position_id}"),
                     );
 
                     // Orphan entries also occupied a slot originally; free it now
@@ -972,5 +972,5 @@ async fn find_mint_by_position_id(position_id: i64) -> Result<String, String> {
         .iter()
         .find(|p| p.id == Some(position_id))
         .map(|p| p.mint.clone())
-        .ok_or_else(|| format!("Position not found: {}", position_id))
+        .ok_or_else(|| format!("Position not found: {position_id}"))
 }

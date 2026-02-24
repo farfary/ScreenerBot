@@ -592,7 +592,7 @@ pub async fn is_open_position(mint: &str) -> bool {
                 pending_write.remove(&m);
                 logger::debug(
                     LogTag::Positions,
-                    &format!("Pending-open expired for mint: {}", m),
+                    &format!("Pending-open expired for mint: {m}"),
                 );
             }
         }
@@ -666,7 +666,7 @@ pub async fn clear_pending_open(mint: &str) {
     if pending.remove(mint).is_some() {
         logger::debug(
             LogTag::Positions,
-            &format!("Cleared pending-open for mint: {}", mint),
+            &format!("Cleared pending-open for mint: {mint}"),
         );
     }
 }

@@ -288,7 +288,7 @@ impl std::str::FromStr for PositionState {
             "ExitFailed" => Ok(PositionState::ExitFailed),
             "Phantom" => Ok(PositionState::Phantom),
             "Reconciling" => Ok(PositionState::Reconciling),
-            _ => Err(format!("Unknown position state: {}", s)),
+            _ => Err(format!("Unknown position state: {s}")),
         }
     }
 }
