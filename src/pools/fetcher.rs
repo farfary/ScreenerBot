@@ -728,7 +728,7 @@ impl AccountFetcher {
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolFetcher,
-                            &format!("Failed to persist account blacklist for {}: {}", account, e),
+                            &format!("Failed to persist account blacklist for {account}: {e}"),
                         );
                     }
                 }
@@ -793,7 +793,7 @@ impl AccountFetcher {
                         Err(e) => {
                             logger::warning(
                                 LogTag::PoolFetcher,
-                                &format!("Failed to persist pool blacklist for {}: {}", pool_id, e),
+                                &format!("Failed to persist pool blacklist for {pool_id}: {e}"),
                             );
                         }
                     }

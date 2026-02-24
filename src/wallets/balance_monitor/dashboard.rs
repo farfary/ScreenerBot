@@ -289,7 +289,7 @@ async fn fetch_token_metadata_batch(
                 Err(err) => {
                     logger::debug(
                         LogTag::Wallet,
-                        &format!("Failed to load token metadata for {}: {}", mint, err),
+                        &format!("Failed to load token metadata for {mint}: {err}"),
                     );
                     None
                 }

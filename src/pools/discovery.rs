@@ -329,7 +329,7 @@ impl PoolDiscovery {
                     Err(e) => {
                         logger::debug(
                             LogTag::PoolDiscovery,
-                            &format!("Failed to get snapshot for mint={}: {}", mint, e),
+                            &format!("Failed to get snapshot for mint={mint}: {e}"),
                         );
                         continue;
                     }
@@ -417,7 +417,7 @@ impl PoolDiscovery {
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolDiscovery,
-                            &format!("Invalid pool address {}: {}", canonical_address, e),
+                            &format!("Invalid pool address {canonical_address}: {e}"),
                         );
                         continue;
                     }
@@ -514,7 +514,7 @@ impl PoolDiscovery {
             Err(e) => {
                 logger::warning(
                     LogTag::PoolDiscovery,
-                    &format!("Failed to get pool snapshot for mint={}: {}", mint, e),
+                    &format!("Failed to get pool snapshot for mint={mint}: {e}"),
                 );
                 return Vec::new();
             }

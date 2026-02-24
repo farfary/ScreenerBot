@@ -153,7 +153,7 @@ impl GroqClient {
                 message: format!("Rate limiter error: {e}"),
             })?;
 
-        let url = format!("{}{}", GROQ_BASE_URL, ENDPOINT_CHAT);
+        let url = format!("{GROQ_BASE_URL}{ENDPOINT_CHAT}");
 
         logger::debug(
             LogTag::Api,

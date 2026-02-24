@@ -499,7 +499,7 @@ pub async fn close_token_account_with_context(
         Ok(account) => {
             logger::debug(
                 LogTag::Wallet,
-                &format!("ATA_FOUND: token_account={} for mint={}", account, mint),
+                &format!("ATA_FOUND: token_account={account} for mint={mint}"),
             );
             account
         }
@@ -601,7 +601,7 @@ pub async fn close_token_account_with_context(
             );
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to close token account for {}: {}", mint, e),
+                &format!("Failed to close token account for {mint}: {e}"),
             );
             Err(e)
         }

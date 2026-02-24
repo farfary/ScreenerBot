@@ -770,10 +770,10 @@ impl ActionsDatabase {
             let action_type = self.parse_action_type(&action_type_str)?;
 
             let state: ActionState = serde_json::from_str(&state_data)
-                .map_err(|e| format!("Failed to parse state for action {}: {}", id, e))?;
+                .map_err(|e| format!("Failed to parse state for action {id}: {e}"))?;
 
             let started_at = DateTime::parse_from_rfc3339(&started_at_str)
-                .map_err(|e| format!("Failed to parse started_at for action {}: {}", id, e))?
+                .map_err(|e| format!("Failed to parse started_at for action {id}: {e}"))?
                 .with_timezone(&Utc);
 
             let completed_at = if let Some(s) = completed_at_str {
@@ -785,7 +785,7 @@ impl ActionsDatabase {
             };
 
             let metadata: serde_json::Value = serde_json::from_str(&metadata_str)
-                .map_err(|e| format!("Failed to parse metadata for action {}: {}", id, e))?;
+                .map_err(|e| format!("Failed to parse metadata for action {id}: {e}"))?;
 
             let steps = steps_map.remove(&id).unwrap_or_default();
 

@@ -138,7 +138,7 @@ pub async fn monitor_positions(
                     Err(e) => {
                         logger::error(
                             LogTag::Trader,
-                            &format!("Exit evaluation failed for {}: {}", position_symbol, e),
+                            &format!("Exit evaluation failed for {position_symbol}: {e}"),
                         );
                         None
                     }

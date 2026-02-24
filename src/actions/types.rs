@@ -57,7 +57,7 @@ impl Action {
             .into_iter()
             .enumerate()
             .map(|(index, name)| ActionStep {
-                step_id: format!("{}-step-{}", id, index),
+                step_id: format!("{id}-step-{index}"),
                 name,
                 status: StepStatus::Pending,
                 started_at: None,

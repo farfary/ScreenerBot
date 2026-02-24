@@ -1165,7 +1165,7 @@ pub(super) fn read_row_value<T: FromSql>(
     field: &str,
 ) -> TokenResult<T> {
     row.get(index)
-        .map_err(|e| TokenError::Database(format!("Failed to read {}: {}", field, e)))
+        .map_err(|e| TokenError::Database(format!("Failed to read {field}: {e}")))
 }
 
 pub(super) fn assemble_token_without_market_data(

@@ -58,7 +58,7 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
             (Some(c), Some(p)) => {
                 logger::debug(
                     LogTag::PoolDecoder,
-                    &format!("Using vault reserves: coin={} pc={}", c, p),
+                    &format!("Using vault reserves: coin={c} pc={p}"),
                 );
                 (c, p)
             }

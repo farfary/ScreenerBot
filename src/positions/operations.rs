@@ -181,7 +181,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
         Err(e) => {
             logger::debug(
                 LogTag::Positions,
-                &format!("Failed to get token data for {}: {}", token_mint, e),
+                &format!("Failed to get token data for {token_mint}: {e}"),
             );
         }
     }
@@ -248,7 +248,7 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
         Err(e) => {
             logger::warning(
                 LogTag::Positions,
-                &format!("Force fetch error for {}: {}", token_mint, e),
+                &format!("Force fetch error for {token_mint}: {e}"),
             );
         }
     }
@@ -894,7 +894,7 @@ pub async fn close_position_direct(
     super::state::update_position_state(token_mint, |pos| {
         pos.exit_transaction_signature = Some(transaction_signature.clone());
         pos.exit_price = Some(exit_price); // Store pool/market price at exit decision time
-        pos.closed_reason = Some(format!("{}{}", exit_reason, PENDING_VERIFICATION_SUFFIX));
+        pos.closed_reason = Some(format!("{exit_reason}{PENDING_VERIFICATION_SUFFIX}"));
     })
     .await;
 

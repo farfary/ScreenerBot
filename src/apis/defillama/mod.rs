@@ -106,7 +106,7 @@ impl DefiLlamaClient {
         }
 
         let start = Instant::now();
-        let url = format!("{}/solana:{}", DEFILLAMA_PRICES_URL, mint);
+        let url = format!("{DEFILLAMA_PRICES_URL}/solana:{mint}");
 
         let response = self
             .http_client

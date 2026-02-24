@@ -276,7 +276,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         Err(e) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Failed to determine OHLCV availability for {}: {}", mint, e),
+                &format!("Failed to determine OHLCV availability for {mint}: {e}"),
             );
             false
         }
@@ -301,14 +301,14 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
             Ok(Err(err)) => {
                 logger::info(
                     LogTag::Webserver,
-                    &format!("Failed to check blacklist for {}: {}", mint, err),
+                    &format!("Failed to check blacklist for {mint}: {err}"),
                 );
                 false
             }
             Err(join_err) => {
                 logger::info(
                     LogTag::Webserver,
-                    &format!("Join error checking blacklist for {}: {}", mint, join_err),
+                    &format!("Join error checking blacklist for {mint}: {join_err}"),
                 );
                 false
             }
@@ -343,7 +343,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
         logger::info(
             LogTag::Webserver,
-            &format!("Failed to add {} to OHLCV monitoring: {}", mint, e),
+            &format!("Failed to add {mint} to OHLCV monitoring: {e}"),
         );
     }
 
@@ -353,7 +353,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     {
         logger::info(
             LogTag::Webserver,
-            &format!("Failed to record token view for {}: {}", mint, e),
+            &format!("Failed to record token view for {mint}: {e}"),
         );
     }
 
@@ -371,12 +371,12 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     if total_ms > 100 {
         logger::info(
             LogTag::Webserver,
-            &format!("mint={} total_elapsed={}ms (slow request)", mint, total_ms),
+            &format!("mint={mint} total_elapsed={total_ms}ms (slow request)"),
         );
     } else {
         logger::debug(
             LogTag::Webserver,
-            &format!("mint={} total_elapsed={}ms", mint, total_ms),
+            &format!("mint={mint} total_elapsed={total_ms}ms"),
         );
     }
 
@@ -670,7 +670,7 @@ pub async fn get_token_analysis(
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to fetch token: mint={} error={}", mint, e),
+                &format!("Failed to fetch token: mint={mint} error={e}"),
             );
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -904,7 +904,7 @@ pub async fn refresh_token_data(
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("mint={} refresh_error error={}", mint, e),
+                &format!("mint={mint} refresh_error error={e}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

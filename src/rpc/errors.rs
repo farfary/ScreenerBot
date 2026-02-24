@@ -112,10 +112,10 @@ impl RpcError {
                 after: Duration::from_secs(30),
             },
             502 | 503 => Self::Network {
-                message: format!("Service unavailable ({}): {}", status, body),
+                message: format!("Service unavailable ({status}): {body}"),
                 is_timeout: false,
             },
-            _ => Self::Other(format!("HTTP {}: {}", status, body)),
+            _ => Self::Other(format!("HTTP {status}: {body}")),
         }
     }
 

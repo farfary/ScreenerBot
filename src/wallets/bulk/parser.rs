@@ -82,7 +82,7 @@ pub fn parse_excel(
     // Read sheet
     let range = workbook
         .worksheet_range(&target_sheet)
-        .map_err(|e| format!("Failed to read sheet '{}': {}", target_sheet, e))?;
+        .map_err(|e| format!("Failed to read sheet '{target_sheet}': {e}"))?;
 
     if range.is_empty() {
         return Err("Sheet is empty".to_string());

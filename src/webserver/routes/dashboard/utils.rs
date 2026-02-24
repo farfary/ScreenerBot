@@ -10,7 +10,7 @@ pub fn format_uptime(seconds: u64) -> String {
     } else if hours > 0 {
         format!("{}h {}m {}s", hours, minutes, secs)
     } else if minutes > 0 {
-        format!("{}m {}s", minutes, secs)
+        format!("{minutes}m {secs}s")
     } else {
         format!("{}s", secs)
     }

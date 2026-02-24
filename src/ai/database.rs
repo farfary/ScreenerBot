@@ -73,7 +73,7 @@ pub fn init_ai_database() -> Result<Connection, String> {
     let db_path_str = db_path.to_string_lossy().to_string();
 
     let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open AI database at {}: {}", db_path_str, e))?;
+        .map_err(|e| format!("Failed to open AI database at {db_path_str}: {e}"))?;
 
     // Apply centralized PRAGMA configuration
     database::configure_connection(&conn, database::AI_DB)
@@ -327,7 +327,7 @@ pub fn reorder_instructions(db: &Connection, ids: &[i64]) -> Result<(), String> 
     for (index, id) in ids.iter().enumerate() {
         let priority = (ids.len() - index) as i32; // Reverse: first = highest priority
         stmt.execute(params![priority, &now, id])
-            .map_err(|e| format!("Failed to update priority for instruction {}: {}", id, e))?;
+            .map_err(|e| format!("Failed to update priority for instruction {id}: {e}"))?;
     }
 
     drop(stmt);

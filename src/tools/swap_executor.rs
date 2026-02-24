@@ -190,7 +190,7 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
             .text()
             .await
             .unwrap_or_else(|_| "Unknown".to_string());
-        return Err(format!("Jupiter swap failed ({}): {}", status, error_text));
+        return Err(format!("Jupiter swap failed ({status}): {error_text}"));
     }
 
     #[derive(serde::Deserialize)]

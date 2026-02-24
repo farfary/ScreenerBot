@@ -227,7 +227,7 @@ impl OhlcvServiceImpl {
             if age_secs < BUNDLE_CACHE_TTL_SECONDS {
                 logger::debug(
                     LogTag::Ohlcv,
-                    &format!("CACHE_HIT: Bundle for {} (age: {}s)", mint, age_secs),
+                    &format!("CACHE_HIT: Bundle for {mint} (age: {age_secs}s)"),
                 );
 
                 // Create result with correct metadata - don't modify cached bundle

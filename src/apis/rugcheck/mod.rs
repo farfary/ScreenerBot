@@ -130,7 +130,7 @@ impl RugcheckClient {
             self.stats.record_request(false, elapsed).await;
             let body = response.text().await.unwrap_or_default();
             self.stats
-                .record_error_with_event("Rugcheck", endpoint, format!("HTTP {}: {}", status, body))
+                .record_error_with_event("Rugcheck", endpoint, format!("HTTP {status}: {body}"))
                 .await;
 
             // Check for 404 Not Found
@@ -182,7 +182,7 @@ impl RugcheckClient {
     /// - Decoding errors → Should never occur with flexible deserializers
     /// - Network errors → Propagated as ApiError for retry logic
     pub async fn fetch_report(&self, mint: &str) -> Result<RugcheckInfo, ApiError> {
-        let url = format!("{}/{}/report", RUGCHECK_BASE_URL, mint);
+        let url = format!("{RUGCHECK_BASE_URL}/{mint}/report");
         let api_response: RugcheckResponse = self.parse_json(&url, "rugcheck.report").await?;
 
         // Convert API response to domain type

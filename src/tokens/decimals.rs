@@ -141,7 +141,7 @@ pub async fn is_token_2022(mint: &str) -> bool {
         Err(e) => {
             logger::warning(
                 LogTag::Tokens,
-                &format!("Failed to check Token2022 status: mint={} err={}", mint, e),
+                &format!("Failed to check Token2022 status: mint={mint} err={e}"),
             );
             // On error, assume standard SPL (safer for fee collection)
             false
@@ -196,7 +196,7 @@ pub async fn get(mint: &str) -> Option<u8> {
         if let Err(e) = persist_to_db(mint, d).await {
             logger::warning(
                 LogTag::Tokens,
-                &format!("Failed to persist decimals to DB: mint={} err={}", mint, e),
+                &format!("Failed to persist decimals to DB: mint={mint} err={e}"),
             );
         }
         drop(guard);

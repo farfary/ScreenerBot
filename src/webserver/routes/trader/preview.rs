@@ -265,7 +265,7 @@ pub fn generate_what_if_scenarios(
         let exit_profit = ((exit_price - entry_price) / entry_price) * 100.0;
 
         WhatIfScenario {
-            description: format!("Activation {}%, Distance {}%", act, dist),
+            description: format!("Activation {act}%, Distance {dist}%"),
             activation_pct: act,
             distance_pct: dist,
             trail_active,

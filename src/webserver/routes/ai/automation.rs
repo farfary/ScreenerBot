@@ -117,7 +117,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
             ) {
                 logger::warning(
                     LogTag::System,
-                    &format!("Failed to update optional fields for task {}: {}", id, e),
+                    &format!("Failed to update optional fields for task {id}: {e}"),
                 );
             }
 

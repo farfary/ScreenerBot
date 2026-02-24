@@ -23,7 +23,7 @@ pub fn safe_format_signature(s: &str) -> String {
         } else {
             s.to_string()
         };
-        format!("{}...{}", first_8, last_4)
+        format!("{first_8}...{last_4}")
     } else {
         s.to_string()
     }
@@ -36,7 +36,7 @@ pub fn safe_format_signature(s: &str) -> String {
 /// Standard pubkey parsing with consistent error message formatting
 /// Consolidates 20+ identical patterns across the codebase
 pub fn parse_pubkey_safe(address: &str) -> Result<Pubkey, String> {
-    Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{}': {}", address, e))
+    Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{address}': {e}"))
 }
 
 /// Read a pubkey from byte data at specified offset with bounds checking
@@ -229,7 +229,7 @@ pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> Stri
         let hours = total_seconds / 3600;
         let minutes = (total_seconds % 3600) / 60;
         if minutes > 0 {
-            format!("{}h{}m", hours, minutes)
+            format!("{hours}h{minutes}m")
         } else {
             format!("{}h", hours)
         }
@@ -237,7 +237,7 @@ pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> Stri
         let days = total_seconds / 86400;
         let hours = (total_seconds % 86400) / 3600;
         if hours > 0 {
-            format!("{}d{}h", days, hours)
+            format!("{days}d{hours}h")
         } else {
             format!("{}d", days)
         }
@@ -315,7 +315,7 @@ pub fn safe_read_lock<'a, T>(
         Err(e) => {
             logger::error(
                 LogTag::Trader,
-                &format!("RwLock read poisoned during {}: {}", operation, e),
+                &format!("RwLock read poisoned during {operation}: {e}"),
             );
             None
         }
@@ -332,7 +332,7 @@ pub fn safe_write_lock<'a, T>(
         Err(e) => {
             logger::error(
                 LogTag::Trader,
-                &format!("RwLock write poisoned during {}: {}", operation, e),
+                &format!("RwLock write poisoned during {operation}: {e}"),
             );
             None
         }
@@ -341,5 +341,5 @@ pub fn safe_write_lock<'a, T>(
 
 /// Helper function for conditional debug trader logs
 pub fn debug_trader_log(log_type: &str, message: &str) {
-    logger::debug(LogTag::Trader, &format!("{}: {}", log_type, message));
+    logger::debug(LogTag::Trader, &format!("{log_type}: {message}"));
 }

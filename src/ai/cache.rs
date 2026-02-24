@@ -33,7 +33,7 @@ impl AiCache {
             return None;
         }
 
-        let cache_key = format!("{}:{}", evaluation_type, mint);
+        let cache_key = format!("{evaluation_type}:{mint}");
         let entry = self.cache.get(&cache_key)?;
         if entry.cached_at.elapsed() > self.ttl {
             self.cache.invalidate(&cache_key);
@@ -45,7 +45,7 @@ impl AiCache {
 
     /// Insert decision into cache
     pub fn insert(&self, mint: &str, evaluation_type: &str, decision: AiDecision) {
-        let cache_key = format!("{}:{}", evaluation_type, mint);
+        let cache_key = format!("{evaluation_type}:{mint}");
         self.cache.insert(
             cache_key,
             CachedEntry {

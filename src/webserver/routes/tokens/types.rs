@@ -759,7 +759,7 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
             Err(e) => {
                 logger::debug(
                     LogTag::Webserver,
-                    &format!("DexScreener fetch failed for {}: {}", mint, e),
+                    &format!("DexScreener fetch failed for {mint}: {e}"),
                 );
             }
         }
@@ -829,7 +829,7 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
             Err(e) => {
                 logger::debug(
                     LogTag::Webserver,
-                    &format!("GeckoTerminal fetch failed for {}: {}", mint, e),
+                    &format!("GeckoTerminal fetch failed for {mint}: {e}"),
                 );
             }
         }

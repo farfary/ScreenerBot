@@ -15,7 +15,7 @@ fn version_js_imports(js: &str) -> String {
 
     let version = crate::version::get_version();
     let ts = option_env!("ASSET_VERSION_TS").unwrap_or("0");
-    let ver = format!("{}-{}", version, ts);
+    let ver = format!("{version}-{ts}");
 
     RE.replace_all(js, |caps: &regex::Captures| {
         format!("{}{}?v={}{}", &caps[1], &caps[2], ver, &caps[3])

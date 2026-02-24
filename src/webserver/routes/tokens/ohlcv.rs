@@ -51,7 +51,7 @@ pub async fn get_token_ohlcv(
     if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
         logger::info(
             LogTag::Webserver,
-            &format!("Failed to add {} to OHLCV monitoring: {}", mint, e),
+            &format!("Failed to add {mint} to OHLCV monitoring: {e}"),
         );
     }
 
@@ -61,7 +61,7 @@ pub async fn get_token_ohlcv(
     {
         logger::info(
             LogTag::Webserver,
-            &format!("Failed to record chart view for {}: {}", mint, e),
+            &format!("Failed to record chart view for {mint}: {e}"),
         );
     }
 
@@ -144,7 +144,7 @@ pub async fn refresh_token_ohlcv(
             // Log as debug, not warning - this is normal for new tokens without pools
             logger::debug(
                 LogTag::Webserver,
-                &format!("mint={} ohlcv_refresh_deferred error={}", mint, e),
+                &format!("mint={mint} ohlcv_refresh_deferred error={e}"),
             );
             // Return success anyway - monitoring is active, data will come when pools are available
             Ok(Json(serde_json::json!({
@@ -194,7 +194,7 @@ pub async fn deprioritize_token_ohlcv(
             // Not an error if token wasn't being monitored
             logger::debug(
                 LogTag::Webserver,
-                &format!("mint={} ohlcv_deprioritize_skipped error={}", mint, e),
+                &format!("mint={mint} ohlcv_deprioritize_skipped error={e}"),
             );
             Ok(Json(serde_json::json!({
               "success": true,
@@ -238,7 +238,7 @@ pub async fn focus_token(
         Err(e) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("Failed to update OHLCV priority for {}: {}", mint, e),
+                &format!("Failed to update OHLCV priority for {mint}: {e}"),
             );
             false
         }
@@ -296,7 +296,7 @@ pub async fn unfocus_token(
             Err(e) => {
                 logger::debug(
                     LogTag::Webserver,
-                    &format!("Failed to update OHLCV priority for {}: {}", mint, e),
+                    &format!("Failed to update OHLCV priority for {mint}: {e}"),
                 );
                 false
             }
@@ -409,7 +409,7 @@ pub async fn get_token_transactions(
         Err(e) => {
             logger::error(
                 LogTag::Webserver,
-                &format!("Failed to fetch transactions for token {}: {}", mint, e),
+                &format!("Failed to fetch transactions for token {mint}: {e}"),
             );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }

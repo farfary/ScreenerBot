@@ -142,7 +142,7 @@ pub fn log_service_notice(service_name: &str, kind: &str, details: Option<&str>,
         return;
     }
 
-    let mut message = format!("service_notice service={} kind={}", service_name, kind);
+    let mut message = format!("service_notice service={service_name} kind={kind}");
     append_details(&mut message, details);
 
     logger::info(LogTag::System, &message);
@@ -268,7 +268,7 @@ impl ServiceManager {
             if gap > 100 {
                 logger::info(
                     LogTag::System,
-                    &format!("Gap before '{}': {}ms", service_name, gap),
+                    &format!("Gap before '{service_name}': {gap}ms"),
                 );
             }
 
@@ -438,7 +438,7 @@ impl ServiceManager {
                     Err(e) => {
                         logger::error(
                             LogTag::System,
-                            &format!("Failed to initialize service '{}': {}", service_name, e),
+                            &format!("Failed to initialize service '{service_name}': {e}"),
                         );
                         failed_starts.push(ServiceStartupFailure {
                             name: service_name,
@@ -482,7 +482,7 @@ impl ServiceManager {
                     Err(e) => {
                         logger::error(
                             LogTag::System,
-                            &format!("Failed to start service '{}': {}", service_name, e),
+                            &format!("Failed to start service '{service_name}': {e}"),
                         );
                         failed_starts.push(ServiceStartupFailure {
                             name: service_name,
@@ -559,7 +559,7 @@ impl ServiceManager {
                 if let Err(e) = service.stop().await {
                     logger::warning(
                         LogTag::System,
-                        &format!("Service stop error for {}: {}", service_name, e),
+                        &format!("Service stop error for {service_name}: {e}"),
                     );
                 }
 

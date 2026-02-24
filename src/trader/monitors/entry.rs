@@ -171,7 +171,7 @@ pub async fn monitor_entries(
                         Err(e) => {
                             logger::error(
                                 LogTag::Trader,
-                                &format!("Entry evaluation failed for {}: {}", token_clone, e),
+                                &format!("Entry evaluation failed for {token_clone}: {e}"),
                             );
                             None
                         }
@@ -360,7 +360,7 @@ pub async fn monitor_entries(
                     clear_token_reservation(&token).await;
                     logger::error(
                         LogTag::Trader,
-                        &format!("Entry evaluation task failed for {}: {}", token, e),
+                        &format!("Entry evaluation task failed for {token}: {e}"),
                     );
                 }
             }

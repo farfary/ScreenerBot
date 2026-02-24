@@ -21,7 +21,7 @@ pub async fn add_signature_to_index(signature: &str, mint: &str) {
 
     logger::debug(
         LogTag::Positions,
-        &format!("Added signature {} -> mint {} to index", signature, mint),
+        &format!("Added signature {signature} -> mint {mint} to index"),
     );
 }
 

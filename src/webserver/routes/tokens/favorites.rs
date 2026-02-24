@@ -119,7 +119,7 @@ pub async fn remove_favorite(
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to remove favorite mint={}: {}", mint, e),
+                &format!("Failed to remove favorite mint={mint}: {e}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -172,7 +172,7 @@ pub async fn update_favorite(
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to update favorite mint={}: {}", mint, e),
+                &format!("Failed to update favorite mint={mint}: {e}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

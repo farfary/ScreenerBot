@@ -964,7 +964,7 @@ pub async fn create_wallets_batch(
     let mut created_wallets = Vec::with_capacity(count as usize);
 
     for i in 1..=count {
-        let name = format!("{}_{}", name_prefix, i);
+        let name = format!("{name_prefix}_{i}");
 
         match create_wallet(CreateWalletRequest {
             name: name.clone(),

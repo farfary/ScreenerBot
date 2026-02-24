@@ -125,7 +125,7 @@ fn compare_values(
             let field_path = if prefix.is_empty() {
                 key.clone()
             } else {
-                format!("{}.{}", prefix, key)
+                format!("{prefix}.{key}")
             };
 
             match curr_obj.get(key) {
@@ -555,12 +555,12 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
                 // Apply to candidate config
                 if let Err(e) = apply_section_to_config(&mut candidate_config, section, final_value)
                 {
-                    errors.push(format!("{}: {}", section, e));
+                    errors.push(format!("{section}: {e}"));
                 } else {
                     imported_sections.push(section.clone());
                 }
             }
-            Err(e) => errors.push(format!("{}: {}", section, e)),
+            Err(e) => errors.push(format!("{section}: {e}")),
         }
     }
 

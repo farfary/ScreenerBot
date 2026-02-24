@@ -583,7 +583,7 @@ impl PoolsDatabase {
                 Err(e) => {
                     logger::error(
                         LogTag::PoolCache,
-                        &format!("Failed to cleanup gapped data for token {}: {}", token, e),
+                        &format!("Failed to cleanup gapped data for token {token}: {e}"),
                     );
                 }
             }

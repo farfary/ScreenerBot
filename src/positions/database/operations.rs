@@ -532,7 +532,7 @@ impl PositionsDatabase {
       "INSERT OR REPLACE INTO position_metadata (key, value, updated_at) VALUES (?1, ?2, datetime('now'))",
       params![key, value],
     )
-    .map_err(|e| format!("Failed to persist metadata key {}: {}", key, e))?;
+    .map_err(|e| format!("Failed to persist metadata key {key}: {e}"))?;
 
         Ok(())
     }
@@ -542,19 +542,19 @@ impl PositionsDatabase {
 
         let mut stmt = conn
             .prepare("SELECT value FROM position_metadata WHERE key = ?1 LIMIT 1")
-            .map_err(|e| format!("Failed to prepare metadata fetch for key {}: {}", key, e))?;
+            .map_err(|e| format!("Failed to prepare metadata fetch for key {key}: {e}"))?;
 
         let mut rows = stmt
             .query(params![key])
-            .map_err(|e| format!("Failed to query metadata for key {}: {}", key, e))?;
+            .map_err(|e| format!("Failed to query metadata for key {key}: {e}"))?;
 
         match rows
             .next()
-            .map_err(|e| format!("Failed to iterate metadata for key {}: {}", key, e))?
+            .map_err(|e| format!("Failed to iterate metadata for key {key}: {e}"))?
         {
             Some(row) => {
                 let value: String = row.get(0).map_err(|e| {
-                    format!("Failed to decode metadata payload for key {}: {}", key, e)
+                    format!("Failed to decode metadata payload for key {key}: {e}")
                 })?;
                 Ok(Some(value))
             }

@@ -721,7 +721,7 @@ async fn handle_toggle(bot: &Bot, chat_id: ChatId, setting: &str) -> Result<(), 
     if let Err(e) = result {
         logger::warning(
             LogTag::Telegram,
-            &format!("Failed to toggle {}: {}", setting, e),
+            &format!("Failed to toggle {setting}: {e}"),
         );
     }
 
@@ -996,7 +996,7 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
             } else {
                 "🔴"
             };
-            format!("{} Risk Assessment: {}/100", emoji, s)
+            format!("{emoji} Risk Assessment: {s}/100")
         })
         .unwrap_or_else(|| "⚪ Risk Assessment: Unknown".to_string());
 

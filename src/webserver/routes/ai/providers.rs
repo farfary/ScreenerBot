@@ -196,7 +196,7 @@ pub async fn test_provider(
         Err(e) => {
             logger::error(
                 LogTag::Api,
-                &format!("AI provider '{}' test failed: {}", provider_name, e),
+                &format!("AI provider '{provider_name}' test failed: {e}"),
             );
 
             error_response(

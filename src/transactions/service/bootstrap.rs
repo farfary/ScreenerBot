@@ -294,7 +294,7 @@ pub async fn perform_initial_transaction_bootstrap(
                     Err(e) => {
                         logger::warning(
                             LogTag::Transactions,
-                            &format!("Failed to query known status for {}: {}", signature, e),
+                            &format!("Failed to query known status for {signature}: {e}"),
                         );
                         stats.errors += 1;
                     }
@@ -370,7 +370,7 @@ pub async fn perform_initial_transaction_bootstrap(
                         if let Err(e) = db.add_known_signature(&signature).await {
                             logger::info(
                                 LogTag::Transactions,
-                                &format!("Failed to persist known signature {}: {}", signature, e),
+                                &format!("Failed to persist known signature {signature}: {e}"),
                             );
                             errors += 1;
                         }

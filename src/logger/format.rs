@@ -33,7 +33,7 @@ pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
 
     let mut prefix = String::new();
     if LOG_SHOW_DATE && LOG_SHOW_TIME {
-        prefix = format!("{} {} ", date, time);
+        prefix = format!("{date} {time} ");
     } else if LOG_SHOW_DATE {
         prefix = format!("{} ", date);
     } else if LOG_SHOW_TIME {
@@ -88,7 +88,7 @@ pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
             " ".repeat(TOTAL_PREFIX_WIDTH)
         );
         for chunk in &message_chunks[1..] {
-            let console_continuation = format!("{}{}", continuation_prefix, chunk);
+            let console_continuation = format!("{continuation_prefix}{chunk}");
             print_stdout_safe(&console_continuation);
 
             let file_continuation =

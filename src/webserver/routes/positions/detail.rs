@@ -146,7 +146,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
         Err(err) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Failed to resolve position for key {}: {}", key, err),
+                &format!("Failed to resolve position for key {key}: {err}"),
             );
 
             error_response(
@@ -330,7 +330,7 @@ async fn load_state_history_entries(
         Err(err) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Failed to load state history for position {}: {}", id, err),
+                &format!("Failed to load state history for position {id}: {err}"),
             );
             Vec::new()
         }
@@ -363,7 +363,7 @@ async fn load_entry_exit_history(
         Err(err) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("Failed to load entry history for position {}: {}", id, err),
+                &format!("Failed to load entry history for position {id}: {err}"),
             );
             Vec::new()
         }
@@ -388,7 +388,7 @@ async fn load_entry_exit_history(
         Err(err) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("Failed to load exit history for position {}: {}", id, err),
+                &format!("Failed to load exit history for position {id}: {err}"),
             );
             Vec::new()
         }

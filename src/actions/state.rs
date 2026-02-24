@@ -81,7 +81,7 @@ pub async fn register_action(action: Action) -> Result<(), String> {
         if let Some(db) = db_lock.as_ref() {
             if let Err(e) = db.insert_action(&action).await {
                 let error_msg =
-                    format!("Failed to insert action {} into database: {}", action_id, e);
+                    format!("Failed to insert action {action_id} into database: {e}");
                 logger::error(LogTag::System, &error_msg);
                 // Return error - don't proceed if DB write fails
                 return Err(error_msg);
@@ -246,7 +246,7 @@ pub async fn complete_action_success(action_id: &str) -> bool {
                 Err(e) => {
                     logger::error(
                         LogTag::System,
-                        &format!("Failed to complete action {} in database: {}", action_id, e),
+                        &format!("Failed to complete action {action_id} in database: {e}"),
                     );
                     false
                 }
@@ -399,7 +399,7 @@ pub async fn cancel_action(action_id: &str) -> bool {
                 Err(e) => {
                     logger::error(
                         LogTag::System,
-                        &format!("Failed to cancel action {} in database: {}", action_id, e),
+                        &format!("Failed to cancel action {action_id} in database: {e}"),
                     );
                     false
                 }

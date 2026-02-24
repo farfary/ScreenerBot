@@ -63,7 +63,7 @@ pub(super) fn handle_market_failure(db: &TokenDatabase, mint: &str, failures: &[
                 if let Err(e) = db.mark_market_permanent(mint) {
                     logger::error(
                         LogTag::Tokens,
-                        &format!("Failed to mark {} as permanent failure: {}", mint, e),
+                        &format!("Failed to mark {mint} as permanent failure: {e}"),
                     );
                     return false;
                 }
@@ -80,7 +80,7 @@ pub(super) fn handle_market_failure(db: &TokenDatabase, mint: &str, failures: &[
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to record market error for {}: {}", mint, e),
+                &format!("Failed to record market error for {mint}: {e}"),
             );
         }
     }

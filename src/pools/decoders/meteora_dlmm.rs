@@ -138,11 +138,11 @@ impl PoolDecoder for MeteoraDlmmDecoder {
 
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("SOL vault {} balance: {}", sol_vault, sol_balance),
+            &format!("SOL vault {sol_vault} balance: {sol_balance}"),
         );
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Token vault {} balance: {}", token_vault, token_balance),
+            &format!("Token vault {token_vault} balance: {token_balance}"),
         );
 
         if token_balance == 0 {

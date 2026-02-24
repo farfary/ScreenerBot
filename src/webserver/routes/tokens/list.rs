@@ -179,7 +179,7 @@ pub async fn search_tokens(
         Err(err) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Token search failed: q='{}', error={}", search_query, err),
+                &format!("Token search failed: q='{search_query}', error={err}"),
             );
 
             Err((

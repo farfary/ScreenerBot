@@ -244,7 +244,7 @@ pub async fn record_pool_event(
 
     let event = Event::new(
         EventCategory::Pool,
-        Some(format!("{}_{}", pool_type, action)),
+        Some(format!("{pool_type}_{action}")),
         Severity::Info,
         Some(token_mint.to_string()),
         Some(pool_address.to_string()),
@@ -366,7 +366,7 @@ pub async fn record_system_event(
 
     let event = Event::new(
         EventCategory::System,
-        Some(format!("{}_{}", component, action)),
+        Some(format!("{component}_{action}")),
         severity,
         None,
         None,
@@ -686,7 +686,7 @@ pub async fn record_rpc_event(method: &str, action: &str, severity: Severity, pa
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
         .entry("message".to_string())
-        .or_insert_with(|| Value::String(format!("RPC {} - {}", method, action)));
+        .or_insert_with(|| Value::String(format!("RPC {method} - {action}")));
 
     let event = Event::new(
         EventCategory::Rpc,
@@ -731,7 +731,7 @@ pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, 
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
     payload_obj
         .entry("message".to_string())
-        .or_insert_with(|| Value::String(format!("{} - {}", api_name, action)));
+        .or_insert_with(|| Value::String(format!("{api_name} - {action}")));
 
     let event = Event::new(
         EventCategory::Api,

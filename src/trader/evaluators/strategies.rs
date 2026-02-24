@@ -87,7 +87,7 @@ impl StrategyEvaluator {
                     Err(e) => {
                         logger::debug(
               LogTag::Trader,
-              &format!("Failed to build OHLCV bundle for {}: {} - evaluating without OHLCV", token_mint, e),
+              &format!("Failed to build OHLCV bundle for {token_mint}: {e} - evaluating without OHLCV"),
             );
                         None
                     }
@@ -144,7 +144,7 @@ impl StrategyEvaluator {
             Ok(Err(e)) => {
                 logger::warning(
                     LogTag::Trader,
-                    &format!("Strategy evaluation error for {}: {}", token_mint, e),
+                    &format!("Strategy evaluation error for {token_mint}: {e}"),
                 );
                 Ok(None) // Don't fail trading on strategy errors
             }

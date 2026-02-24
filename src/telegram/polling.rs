@@ -146,7 +146,7 @@ async fn poll_updates(bot: &Bot) {
                             if let Err(e) = handle_command(bot, chat_id, user_id, trimmed).await {
                                 logger::error(
                                     LogTag::Telegram,
-                                    &format!("Error handling command '{}': {}", text, e),
+                                    &format!("Error handling command '{text}': {e}"),
                                 );
                             }
                         }

@@ -392,7 +392,7 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
         Err(e) => {
             logger::warning(
                 LogTag::PoolCache,
-                &format!("Failed to load historical data for {}: {}", mint, e),
+                &format!("Failed to load historical data for {mint}: {e}"),
             );
             Err(e)
         }

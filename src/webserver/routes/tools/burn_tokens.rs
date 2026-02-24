@@ -465,7 +465,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
             Err(e) => {
                 logger::error(
                     LogTag::Tools,
-                    &format!("Failed to burn tokens for {}: {}", mint, e),
+                    &format!("Failed to burn tokens for {mint}: {e}"),
                 );
                 results.push(BurnResult {
                     mint: mint.clone(),

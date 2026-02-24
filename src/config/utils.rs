@@ -54,10 +54,10 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
     let mut config = if std::path::Path::new(path).exists() {
         // Load from file
         let contents = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read config file '{}': {}", path, e))?;
+            .map_err(|e| format!("Failed to read config file '{path}': {e}"))?;
 
         toml::from_str::<Config>(&contents)
-            .map_err(|e| format!("Failed to parse config file '{}': {}", path, e))?
+            .map_err(|e| format!("Failed to parse config file '{path}': {e}"))?
     } else {
         // Use defaults if file doesn't exist
         crate::logger::warning(
@@ -310,10 +310,10 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
 /// - `Err(String)` - Error message if reloading failed
 pub fn reload_config_from_path(path: &str) -> Result<(), String> {
     let contents = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read config file '{}': {}", path, e))?;
+        .map_err(|e| format!("Failed to read config file '{path}': {e}"))?;
 
     let mut new_config = toml::from_str::<Config>(&contents)
-        .map_err(|e| format!("Failed to parse config file '{}': {}", path, e))?;
+        .map_err(|e| format!("Failed to parse config file '{path}': {e}"))?;
 
     // Ensure all navigation tabs are present (handles migrations)
     new_config.gui.dashboard.navigation.tabs =
@@ -410,7 +410,7 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
     })?;
 
     std::fs::write(path, config_str)
-        .map_err(|e| format!("Failed to write config file '{}': {}", path, e))?;
+        .map_err(|e| format!("Failed to write config file '{path}': {e}"))?;
 
     Ok(())
 }
@@ -456,7 +456,7 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
 
     // Write to file
     std::fs::write(path, config_str)
-        .map_err(|e| format!("Failed to write config file '{}': {}", path, e))?;
+        .map_err(|e| format!("Failed to write config file '{path}': {e}"))?;
 
     // Set restrictive permissions on Unix systems (owner read/write only)
     #[cfg(unix)]

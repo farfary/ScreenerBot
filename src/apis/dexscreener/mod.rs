@@ -174,14 +174,14 @@ impl DexScreenerClient {
                 .record_error_with_event(
                     "DexScreener",
                     endpoint,
-                    format!("HTTP {}: {}", status, body),
+                    format!("HTTP {status}: {body}"),
                 )
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
-            return Err(format!("DexScreener API error {}: {}", status, body));
+            return Err(format!("DexScreener API error {status}: {body}"));
         }
 
         match response.json::<T>().await {
@@ -221,8 +221,8 @@ impl DexScreenerClient {
         chain_id: Option<&str>,
     ) -> Result<Vec<DexScreenerPool>, String> {
         let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
-        let endpoint = format!("token-pairs/v1/{}/{}", chain, token_address);
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let endpoint = format!("token-pairs/v1/{chain}/{token_address}");
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -270,8 +270,8 @@ impl DexScreenerClient {
 
         let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
         let address_list = addresses.join(",");
-        let endpoint = format!("tokens/v1/{}/{}", chain, address_list);
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let endpoint = format!("tokens/v1/{chain}/{address_list}");
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -298,8 +298,8 @@ impl DexScreenerClient {
         chain_id: &str,
         pair_address: &str,
     ) -> Result<Option<DexScreenerPool>, String> {
-        let endpoint = format!("latest/dex/pairs/{}/{}", chain_id, pair_address);
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let endpoint = format!("latest/dex/pairs/{chain_id}/{pair_address}");
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -328,7 +328,7 @@ impl DexScreenerClient {
         }
 
         let endpoint = "latest/dex/search";
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -346,7 +346,7 @@ impl DexScreenerClient {
     /// Get latest token profiles (newest listings)
     pub async fn get_latest_profiles(&self) -> Result<Vec<TokenProfile>, String> {
         let endpoint = "token-profiles/latest/v1";
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching latest token profiles");
 
@@ -366,14 +366,14 @@ impl DexScreenerClient {
                 .record_error_with_event(
                     "DexScreener",
                     endpoint,
-                    format!("HTTP {}: {}", status, body),
+                    format!("HTTP {status}: {body}"),
                 )
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
-            return Err(format!("DexScreener API error {}: {}", status, body));
+            return Err(format!("DexScreener API error {status}: {body}"));
         }
 
         let raw: serde_json::Value = match response.json().await {
@@ -423,7 +423,7 @@ impl DexScreenerClient {
         chain_id: Option<&str>,
     ) -> Result<Vec<TokenBoostTop>, String> {
         let endpoint = "token-boosts/top/v1";
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
         let builder = if let Some(chain) = chain_id {
             self.client.get(&url).query(&[("chainId", chain)])
         } else {
@@ -443,7 +443,7 @@ impl DexScreenerClient {
     /// Vec<TokenBoostLatest> - Latest boosted tokens
     pub async fn get_latest_boosted_tokens(&self) -> Result<Vec<TokenBoostLatest>, String> {
         let endpoint = "token-boosts/latest/v1";
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching latest boosted tokens");
 
@@ -464,7 +464,7 @@ impl DexScreenerClient {
         order: Option<&str>,
     ) -> Result<Vec<DexScreenerPool>, String> {
         let endpoint = "token-profiles/latest/v1";
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(chain) = chain_id {
             query_params.push(("chainId".to_string(), chain.to_string()));
@@ -502,14 +502,14 @@ impl DexScreenerClient {
                 .record_error_with_event(
                     "DexScreener",
                     endpoint,
-                    format!("HTTP {}: {}", status, body),
+                    format!("HTTP {status}: {body}"),
                 )
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
-            return Err(format!("DexScreener API error {}: {}", status, body));
+            return Err(format!("DexScreener API error {status}: {body}"));
         }
 
         match response.json::<serde_json::Value>().await {
@@ -539,7 +539,7 @@ impl DexScreenerClient {
     /// * `address` - Token address
     pub async fn get_token_info(&self, address: &str) -> Result<Option<TokenInfo>, String> {
         let endpoint = format!("token-profiles/{address}");
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -562,14 +562,14 @@ impl DexScreenerClient {
                 .record_error_with_event(
                     "DexScreener",
                     &endpoint,
-                    format!("HTTP {}: {}", status, body),
+                    format!("HTTP {status}: {body}"),
                 )
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
-            return Err(format!("DexScreener API error {}: {}", status, body));
+            return Err(format!("DexScreener API error {status}: {body}"));
         }
 
         match response.json::<TokenInfo>().await {
@@ -603,8 +603,8 @@ impl DexScreenerClient {
         chain_id: Option<&str>,
     ) -> Result<Vec<TokenOrder>, String> {
         let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
-        let endpoint = format!("orders/v1/{}/{}", chain, token_address);
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let endpoint = format!("orders/v1/{chain}/{token_address}");
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -621,7 +621,7 @@ impl DexScreenerClient {
     /// Get supported chains
     pub async fn get_supported_chains(&self) -> Result<Vec<ChainInfo>, String> {
         let endpoint = "chains/v1";
-        let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
+        let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching supported chains");
 

@@ -97,7 +97,7 @@ impl PoolPriorityManager {
                 if let Err(e) = db.update_priority(&mint, Priority::PoolTracked.to_value()) {
                     logger::error(
                         LogTag::Tokens,
-                        &format!("Failed to promote {} to PoolTracked priority: {}", mint, e),
+                        &format!("Failed to promote {mint} to PoolTracked priority: {e}"),
                     );
                 } else {
                     let previous_priority = priorities
@@ -113,7 +113,7 @@ impl PoolPriorityManager {
                 let sample_entries: Vec<String> = promoted
                     .iter()
                     .take(3)
-                    .map(|(mint, prev)| format!("{} (from={})", mint, prev))
+                    .map(|(mint, prev)| format!("{mint} (from={prev})"))
                     .collect();
                 let extra = count.saturating_sub(sample_entries.len());
                 let mut message = format!("Promoted {} tokens to pool priority", count);
@@ -167,7 +167,7 @@ impl PoolPriorityManager {
             if let Err(e) = db.update_priority(&mint, target_priority) {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Failed to demote {} from PoolTracked priority: {}", mint, e),
+                    &format!("Failed to demote {mint} from PoolTracked priority: {e}"),
                 );
             } else {
                 demoted.push((mint.clone(), target_priority));
@@ -185,7 +185,7 @@ impl PoolPriorityManager {
             let sample_entries: Vec<String> = demoted
                 .iter()
                 .take(3)
-                .map(|(mint, target)| format!("{} (to={})", mint, target))
+                .map(|(mint, target)| format!("{mint} (to={target})"))
                 .collect();
             let extra = count.saturating_sub(sample_entries.len());
             let mut message = format!("Demoted {} tokens from pool priority after timeout", count);

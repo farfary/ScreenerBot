@@ -175,7 +175,7 @@ pub async fn get_wallet(Path(id): Path<i64>) -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to get wallet {}: {}", id, e),
+                &format!("Failed to get wallet {id}: {e}"),
             );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -197,7 +197,7 @@ pub async fn update_wallet(
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to update wallet {}: {}", id, e),
+                &format!("Failed to update wallet {id}: {e}"),
             );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -218,7 +218,7 @@ pub async fn delete_wallet(Path(id): Path<i64>) -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to delete wallet {}: {}", id, e),
+                &format!("Failed to delete wallet {id}: {e}"),
             );
 
             let (status, code) = if e.contains("main wallet") {
@@ -242,7 +242,7 @@ pub async fn export_wallet(Path(id): Path<i64>) -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to export wallet {}: {}", id, e),
+                &format!("Failed to export wallet {id}: {e}"),
             );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -264,7 +264,7 @@ pub async fn set_main_wallet(Path(id): Path<i64>) -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to set main wallet {}: {}", id, e),
+                &format!("Failed to set main wallet {id}: {e}"),
             );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -285,7 +285,7 @@ pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to archive wallet {}: {}", id, e),
+                &format!("Failed to archive wallet {id}: {e}"),
             );
 
             let (status, code) = if e.contains("main wallet") {
@@ -311,7 +311,7 @@ pub async fn restore_wallet(Path(id): Path<i64>) -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to restore wallet {}: {}", id, e),
+                &format!("Failed to restore wallet {id}: {e}"),
             );
 
             let (status, code) = if e.contains("not archived") {

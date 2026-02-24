@@ -48,7 +48,7 @@ async fn find_available_port() -> Result<u16, String> {
     };
 
     for (attempt, port) in ports_to_try.into_iter().enumerate() {
-        let addr: SocketAddr = format!("{}:{}", DEFAULT_HOST, port)
+        let addr: SocketAddr = format!("{DEFAULT_HOST}:{port}")
             .parse()
             .map_err(|e| format!("Invalid address: {e}"))?;
 
@@ -154,7 +154,7 @@ pub async fn start_server(
         let source_info = if port_source == host_source {
             format!("source: {port_source}")
         } else {
-            format!("port source: {}, host source: {}", port_source, host_source)
+            format!("port source: {port_source}, host source: {host_source}")
         };
 
         if host == "0.0.0.0" {
@@ -180,7 +180,7 @@ pub async fn start_server(
 
     logger::debug(
         LogTag::Webserver,
-        &format!("Starting webserver on {}:{}", host, port),
+        &format!("Starting webserver on {host}:{port}"),
     );
 
     // Create application state with AI engine if enabled
@@ -199,7 +199,7 @@ pub async fn start_server(
     let app = build_app(state.clone());
 
     // Parse bind address
-    let addr: SocketAddr = format!("{}:{}", host, port)
+    let addr: SocketAddr = format!("{host}:{port}")
         .parse()
         .map_err(|e| format!("Invalid bind address: {e}"))?;
 
@@ -230,7 +230,7 @@ pub async fn start_server(
                     addr, port
                 )
             }
-            _ => format!("Failed to bind to {}: {}", addr, e),
+            _ => format!("Failed to bind to {addr}: {e}"),
         }
     })?;
 
@@ -377,7 +377,7 @@ pub async fn test_port_binding(
         })
         .unwrap_or_else(|| DEFAULT_HOST.to_string());
 
-    let addr = format!("{}:{}", effective_host, effective_port);
+    let addr = format!("{effective_host}:{effective_port}");
 
     logger::debug(
         LogTag::Webserver,
@@ -449,7 +449,7 @@ pub async fn test_port_binding(
                         addr, effective_port
                     )
                 }
-                _ => format!("Failed to bind to {}: {}", addr, e),
+                _ => format!("Failed to bind to {addr}: {e}"),
             };
 
             logger::error(LogTag::System, &error_msg);

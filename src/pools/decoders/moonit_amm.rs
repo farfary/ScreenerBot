@@ -28,7 +28,7 @@ impl PoolDecoder for MoonitAmmDecoder {
     ) -> Option<PriceResult> {
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Decoding Moonit AMM pool for {}/{}", base_mint, quote_mint),
+            &format!("Decoding Moonit AMM pool for {base_mint}/{quote_mint}"),
         );
 
         // Find the curve account (length should be around 200+ bytes for CurveAccount structure)
@@ -183,7 +183,7 @@ impl MoonitAmmDecoder {
     ) -> Option<PriceResult> {
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Calculating Moonit price for {}/{}", base_mint, quote_mint),
+            &format!("Calculating Moonit price for {base_mint}/{quote_mint}"),
         );
 
         // Ensure we're working with SOL as quote currency

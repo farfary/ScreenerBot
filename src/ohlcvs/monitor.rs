@@ -178,7 +178,7 @@ impl OhlcvMonitor {
                         // The monitor loop will retry discovery later
                         logger::warning(
                             LogTag::Ohlcv,
-                            &format!("Warning: Pool discovery failed for {}: {}", mint, e),
+                            &format!("Warning: Pool discovery failed for {mint}: {e}"),
                         );
                         Vec::new()
                     }
@@ -229,7 +229,7 @@ impl OhlcvMonitor {
                     Err(e) => {
                         logger::warning(
                             LogTag::Ohlcv,
-                            &format!("Backfill failed for mint={}: {}", mint_owned, e),
+                            &format!("Backfill failed for mint={mint_owned}: {e}"),
                         );
                     }
                 }
@@ -528,12 +528,12 @@ impl OhlcvMonitor {
                             Some(mint.as_str()),
                             None,
                             json!({
-                              "message": format!("Error processing {}: {}", mint, e),
+                              "message": format!("Error processing {mint}: {e}"),
                               "error_kind": kind,
                             }),
                         )
                         .await;
-                        logger::error(LogTag::Ohlcv, &format!("Error processing {}: {}", mint, e));
+                        logger::error(LogTag::Ohlcv, &format!("Error processing {mint}: {e}"));
                     }
                 }
 
@@ -1126,7 +1126,7 @@ impl OhlcvMonitor {
                 if let Err(e) = self.gap_manager.auto_fill_recent_gaps(&mint).await {
                     logger::error(
                         LogTag::Ohlcv,
-                        &format!("Gap fill error for {}: {}", mint, e),
+                        &format!("Gap fill error for {mint}: {e}"),
                     );
                     record_ohlcv_event(
                         "gap_fill_failed",
@@ -1200,7 +1200,7 @@ impl OhlcvMonitor {
                         if let Err(e) = self.update_priority(mint, Priority::Critical).await {
                             logger::error(
                                 LogTag::Ohlcv,
-                                &format!("Failed to upgrade priority for {}: {}", mint, e),
+                                &format!("Failed to upgrade priority for {mint}: {e}"),
                             );
                         } else {
                             upgraded += 1;
@@ -1232,7 +1232,7 @@ impl OhlcvMonitor {
                     if let Err(e) = self.add_token(mint.clone(), priority).await {
                         logger::error(
                             LogTag::Ohlcv,
-                            &format!("Failed to add token {}: {}", mint, e),
+                            &format!("Failed to add token {mint}: {e}"),
                         );
                     } else {
                         added += 1;
@@ -1265,7 +1265,7 @@ impl OhlcvMonitor {
                 if let Err(e) = self.remove_token(&mint).await {
                     logger::error(
                         LogTag::Ohlcv,
-                        &format!("Failed to remove token {}: {}", mint, e),
+                        &format!("Failed to remove token {mint}: {e}"),
                     );
                 } else {
                     removed += 1;
@@ -1282,7 +1282,7 @@ impl OhlcvMonitor {
                     if let Err(e) = self.remove_token(&mint).await {
                         logger::error(
                             LogTag::Ohlcv,
-                            &format!("Failed to trim token {}: {}", mint, e),
+                            &format!("Failed to trim token {mint}: {e}"),
                         );
                     } else {
                         trimmed += 1;

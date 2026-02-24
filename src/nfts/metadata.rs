@@ -291,7 +291,7 @@ pub async fn fetch_nft_metadata(mint: &str) -> Result<NftMetadata, NftMetadataEr
             Err(e) => {
                 logger::debug(
                     LogTag::Wallet,
-                    &format!("Failed to fetch JSON metadata for {}: {}", mint, e),
+                    &format!("Failed to fetch JSON metadata for {mint}: {e}"),
                 );
                 None
             }

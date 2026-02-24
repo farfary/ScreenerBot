@@ -167,7 +167,7 @@ impl OpenRouterClient {
                 message: format!("Rate limiter error: {e}"),
             })?;
 
-        let url = format!("{}{}", OPENROUTER_BASE_URL, ENDPOINT_CHAT);
+        let url = format!("{OPENROUTER_BASE_URL}{ENDPOINT_CHAT}");
 
         logger::debug(
             LogTag::Api,

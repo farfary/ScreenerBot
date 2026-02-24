@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 ///
 /// Wrapper around `Pubkey::from_str` with better error messages.
 pub fn parse_pubkey_string(s: &str) -> Result<Pubkey, String> {
-    Pubkey::from_str(s).map_err(|e| format!("Invalid pubkey '{}': {}", s, e))
+    Pubkey::from_str(s).map_err(|e| format!("Invalid pubkey '{s}': {e}"))
 }
 
 /// Convert SOL amount to lamports

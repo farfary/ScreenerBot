@@ -137,7 +137,7 @@ pub fn format_duration(seconds: u64) -> String {
         let mins = seconds / 60;
         let secs = seconds % 60;
         if secs > 0 {
-            format!("{}m {}s", mins, secs)
+            format!("{mins}m {secs}s")
         } else {
             format!("{}m", mins)
         }
@@ -145,7 +145,7 @@ pub fn format_duration(seconds: u64) -> String {
         let hours = seconds / 3600;
         let mins = (seconds % 3600) / 60;
         if mins > 0 {
-            format!("{}h {}m", hours, mins)
+            format!("{hours}h {mins}m")
         } else {
             format!("{}h", hours)
         }
@@ -153,7 +153,7 @@ pub fn format_duration(seconds: u64) -> String {
         let days = seconds / 86400;
         let hours = (seconds % 86400) / 3600;
         if hours > 0 {
-            format!("{}d {}h", days, hours)
+            format!("{days}d {hours}h")
         } else {
             format!("{}d", days)
         }

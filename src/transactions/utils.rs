@@ -261,7 +261,7 @@ impl DurationMeasure {
         let ms = self.finish();
         logger::debug(
             LogTag::Transactions,
-            &format!("Operation '{}' completed in {}ms", operation, ms),
+            &format!("Operation '{operation}' completed in {ms}ms"),
         );
         ms
     }

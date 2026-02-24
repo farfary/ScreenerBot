@@ -903,7 +903,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             logger::error(
                 LogTag::Positions,
-                &format!("DCA failed for position {}: {}", position_id, reason),
+                &format!("DCA failed for position {position_id}: {reason}"),
             );
 
             if let Err(err) = clear_pending_dca_swap(&dca_signature).await {

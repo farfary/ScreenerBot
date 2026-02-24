@@ -151,7 +151,7 @@ impl MistralClient {
                 message: format!("Rate limiter error: {e}"),
             })?;
 
-        let url = format!("{}{}", MISTRAL_BASE_URL, ENDPOINT_CHAT);
+        let url = format!("{MISTRAL_BASE_URL}{ENDPOINT_CHAT}");
 
         logger::debug(
             LogTag::Api,

@@ -21,7 +21,7 @@ pub async fn add_to_blacklist(
 
     logger::debug(
         LogTag::Webserver,
-        &format!("Adding to blacklist: mint={}, reason={}", mint, reason),
+        &format!("Adding to blacklist: mint={mint}, reason={reason}"),
     );
 
     let db = match get_global_database() {
@@ -48,7 +48,7 @@ pub async fn add_to_blacklist(
         Ok(Ok(())) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Token blacklisted: mint={}, reason={}", mint, reason),
+                &format!("Token blacklisted: mint={mint}, reason={reason}"),
             );
             Ok(Json(BlacklistResponse {
                 success: true,
@@ -60,7 +60,7 @@ pub async fn add_to_blacklist(
         Ok(Err(e)) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to blacklist token mint={}: {}", mint, e),
+                &format!("Failed to blacklist token mint={mint}: {e}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -73,7 +73,7 @@ pub async fn add_to_blacklist(
         Err(join_err) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Join error blacklisting token mint={}: {}", mint, join_err),
+                &format!("Join error blacklisting token mint={mint}: {join_err}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -128,7 +128,7 @@ pub async fn remove_from_blacklist(
         Ok(Err(e)) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to remove from blacklist mint={}: {}", mint, e),
+                &format!("Failed to remove from blacklist mint={mint}: {e}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -202,7 +202,7 @@ pub async fn get_blacklist_status(
         Ok(Err(e)) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to check blacklist status mint={}: {}", mint, e),
+                &format!("Failed to check blacklist status mint={mint}: {e}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,

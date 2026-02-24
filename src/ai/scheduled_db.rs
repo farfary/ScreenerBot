@@ -645,7 +645,7 @@ pub fn calculate_next_run(
         "interval" => {
             let seconds: u64 = schedule_value
                 .parse()
-                .map_err(|e| format!("Invalid interval value '{}': {}", schedule_value, e))?;
+                .map_err(|e| format!("Invalid interval value '{schedule_value}': {e}"))?;
             if seconds < 60 {
                 return Err(format!(
                     "Interval must be at least 60 seconds, got {}",

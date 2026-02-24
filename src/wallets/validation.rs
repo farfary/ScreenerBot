@@ -90,7 +90,7 @@ impl WalletValidator {
     /// Get stored wallet address from database metadata table
     fn get_stored_wallet(db_path: &str, metadata_table: &str) -> Result<Option<String>, String> {
         let conn =
-            Connection::open(db_path).map_err(|e| format!("Failed to open {}: {}", db_path, e))?;
+            Connection::open(db_path).map_err(|e| format!("Failed to open {db_path}: {e}"))?;
 
         // Note: We don't configure PRAGMAs here since this is a short-lived read-only validation
         // operation. For better performance in future, consider using the database pool instead.
@@ -103,7 +103,7 @@ impl WalletValidator {
         let wallet: Option<String> = conn
             .query_row(&query, [], |row| row.get(0))
             .optional()
-            .map_err(|e| format!("Failed to query current_wallet from {}: {}", db_path, e))?;
+            .map_err(|e| format!("Failed to query current_wallet from {db_path}: {e}"))?;
 
         Ok(wallet.filter(|w| !w.is_empty()))
     }

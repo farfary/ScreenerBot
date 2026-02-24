@@ -174,7 +174,7 @@ pub async fn compute_snapshot(
                 }
 
                 let detail = if let Some(pool) = pool_id.as_ref() {
-                    Some(format!("pool={}, account={}", pool, account_pubkey))
+                    Some(format!("pool={pool}, account={account_pubkey}"))
                 } else {
                     Some(account_pubkey.clone())
                 };
@@ -184,7 +184,7 @@ pub async fn compute_snapshot(
                     reason,
                     detail: source
                         .as_ref()
-                        .map(|src| format!("{} ({})", account_pubkey, src))
+                        .map(|src| format!("{account_pubkey} ({src})"))
                         .or(detail),
                 };
 

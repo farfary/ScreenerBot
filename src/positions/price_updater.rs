@@ -192,7 +192,7 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
         Err(e) => {
             logger::debug(
                 LogTag::Positions,
-                &format!("Failed to get token data for {}: {}", mint, e),
+                &format!("Failed to get token data for {mint}: {e}"),
             );
         }
     }

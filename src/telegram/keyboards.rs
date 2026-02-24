@@ -188,7 +188,7 @@ pub fn confirm_sell(mint: &str, percent: u32) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new(vec![vec![
         btn(
             &format!("✅ Confirm Sell {}%", percent),
-            &format!("exec:sell:{}:{}", m, percent),
+            &format!("exec:sell:{m}:{percent}"),
         ),
         btn("❌ Cancel", &format!("pos:{m}")),
     ]])
@@ -201,7 +201,7 @@ pub fn confirm_dca(mint: &str, amount: f64) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new(vec![vec![
         btn(
             &format!("✅ DCA {} SOL", amount),
-            &format!("exec:dca:{}:{}", m, amount),
+            &format!("exec:dca:{m}:{amount}"),
         ),
         btn("❌ Cancel", &format!("pos:{m}")),
     ]])
@@ -248,7 +248,7 @@ pub fn confirm_token_buy(mint: &str, symbol: &str, amount: f64) -> InlineKeyboar
     InlineKeyboardMarkup::new(vec![vec![
         btn(
             &format!("✅ Buy {} SOL", amount),
-            &format!("exec:tokenbuy:{}:{}", m, amount),
+            &format!("exec:tokenbuy:{m}:{amount}"),
         ),
         btn("❌ Cancel", &format!("token:view:{m}")),
     ]])
@@ -284,7 +284,7 @@ pub fn notification_settings(
 ) -> InlineKeyboardMarkup {
     let toggle = |enabled: bool, name: &str, key: &str| -> InlineKeyboardButton {
         let emoji = if enabled { "🟢" } else { "⚪" };
-        btn(&format!("{} {}", emoji, name), &format!("toggle:{key}"))
+        btn(&format!("{emoji} {name}"), &format!("toggle:{key}"))
     };
 
     InlineKeyboardMarkup::new(vec![
@@ -309,7 +309,7 @@ pub fn trading_controls(
 ) -> InlineKeyboardMarkup {
     let toggle = |enabled: bool, name: &str, key: &str| -> InlineKeyboardButton {
         let emoji = if enabled { "🟢" } else { "🔴" };
-        btn(&format!("{} {}", emoji, name), &format!("toggle:{key}"))
+        btn(&format!("{emoji} {name}"), &format!("toggle:{key}"))
     };
 
     InlineKeyboardMarkup::new(vec![

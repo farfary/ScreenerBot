@@ -150,14 +150,14 @@ impl GeckoTerminalClient {
                 .record_error_with_event(
                     "GeckoTerminal",
                     endpoint,
-                    format!("HTTP {}: {}", status, body),
+                    format!("HTTP {status}: {body}"),
                 )
                 .await;
             // Simple 429 backoff to avoid hammering when provider clamps down
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(10)).await;
             }
-            return Err(format!("GeckoTerminal API error {}: {}", status, body));
+            return Err(format!("GeckoTerminal API error {status}: {body}"));
         }
 
         match response.json::<T>().await {
@@ -191,8 +191,8 @@ impl GeckoTerminalClient {
         network: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let endpoint = format!("networks/{}/tokens/{}/pools", network_id, mint);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let endpoint = format!("networks/{network_id}/tokens/{mint}/pools");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -221,8 +221,8 @@ impl GeckoTerminalClient {
         page: Option<u32>,
         sort: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
-        let endpoint = format!("networks/{}/tokens/{}/pools", network, token_address);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let endpoint = format!("networks/{network}/tokens/{token_address}/pools");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
@@ -268,7 +268,7 @@ impl GeckoTerminalClient {
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
         let endpoint = format!("networks/{}/trending_pools", network_id);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(p) = page {
@@ -316,7 +316,7 @@ impl GeckoTerminalClient {
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
         let endpoint = format!("networks/{}/pools", network_id);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(p) = page {
@@ -365,8 +365,8 @@ impl GeckoTerminalClient {
         include_composition: bool,
     ) -> Result<GeckoTerminalPool, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let endpoint = format!("networks/{}/pools/{}", network_id, pool_address);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let endpoint = format!("networks/{network_id}/pools/{pool_address}");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(includes) = include {
@@ -424,8 +424,8 @@ impl GeckoTerminalClient {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
         let address_count = addresses.len();
         let addresses_str = addresses.join(",");
-        let endpoint = format!("networks/{}/pools/multi/{}", network_id, addresses_str);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let endpoint = format!("networks/{network_id}/pools/multi/{addresses_str}");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(includes) = include {
@@ -479,7 +479,7 @@ impl GeckoTerminalClient {
             "networks/{}/pools/{}/ohlcv/{}",
             network, pool_address, timeframe
         );
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(agg) = aggregate {
@@ -528,7 +528,7 @@ impl GeckoTerminalClient {
         page: Option<u32>,
     ) -> Result<Vec<(String, String)>, String> {
         let endpoint = format!("networks/{}/dexes", network);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let builder = if let Some(p) = page {
             self.client
@@ -563,7 +563,7 @@ impl GeckoTerminalClient {
         page: Option<u32>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let endpoint = format!("networks/{}/new_pools", network);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
@@ -604,8 +604,8 @@ impl GeckoTerminalClient {
         include: Option<&str>,
         include_composition: Option<bool>,
     ) -> Result<GeckoTerminalTokensMultiResponse, String> {
-        let endpoint = format!("networks/{}/tokens/multi/{}", network, addresses);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let endpoint = format!("networks/{network}/tokens/multi/{addresses}");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
@@ -639,8 +639,8 @@ impl GeckoTerminalClient {
         network: &str,
         address: &str,
     ) -> Result<GeckoTerminalTokenInfoResponse, String> {
-        let endpoint = format!("networks/{}/tokens/{}/info", network, address);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let endpoint = format!("networks/{network}/tokens/{address}/info");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         logger::debug(
             LogTag::Api,
@@ -660,7 +660,7 @@ impl GeckoTerminalClient {
         network: Option<&str>,
     ) -> Result<GeckoTerminalRecentlyUpdatedResponse, String> {
         let endpoint = "tokens/info_recently_updated";
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(inc) = include {
@@ -695,8 +695,8 @@ impl GeckoTerminalClient {
         trade_volume_in_usd_greater_than: Option<f64>,
         token: Option<&str>,
     ) -> Result<GeckoTerminalTradesResponse, String> {
-        let endpoint = format!("networks/{}/pools/{}/trades", network, pool_address);
-        let url = format!("{}/{}", GECKOTERMINAL_BASE_URL, endpoint);
+        let endpoint = format!("networks/{network}/pools/{pool_address}/trades");
+        let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(min_volume) = trade_volume_in_usd_greater_than {

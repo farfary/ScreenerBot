@@ -155,7 +155,7 @@ impl TransactionProcessor {
 
             logger::info(
                 LogTag::Transactions,
-                &format!("Transaction {} structure: {}", signature, instructions_info),
+                &format!("Transaction {signature} structure: {instructions_info}"),
             );
 
             if let Some(meta) = &tx_data.meta {
@@ -177,7 +177,7 @@ impl TransactionProcessor {
 
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Transaction {} {}", signature, log_preview),
+                        &format!("Transaction {signature} {log_preview}"),
                     );
                 }
 
@@ -206,7 +206,7 @@ impl TransactionProcessor {
 
             logger::info(
                 LogTag::Transactions,
-                &format!("Transaction {} accounts: {}", signature, account_keys_info),
+                &format!("Transaction {signature} accounts: {account_keys_info}"),
             );
         }
 

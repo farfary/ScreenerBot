@@ -39,7 +39,7 @@ impl TelegramNotifier {
 
         let chat_id_parsed: i64 = chat_id
             .parse()
-            .map_err(|e| format!("Invalid chat ID '{}': {}", chat_id, e))?;
+            .map_err(|e| format!("Invalid chat ID '{chat_id}': {e}"))?;
 
         let bot = Bot::new(bot_token);
 
@@ -282,7 +282,7 @@ impl TelegramNotifier {
             ),
 
             NotificationType::BotCommand { command, response } => {
-                format!("📟 <b>Command:</b> /{}\n\n{}", command, response)
+                format!("📟 <b>Command:</b> /{command}\n\n{response}")
             }
 
             NotificationType::BotStarted { version, mode } => {

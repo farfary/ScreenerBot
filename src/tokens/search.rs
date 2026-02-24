@@ -148,7 +148,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
 
     logger::debug(
         LogTag::Api,
-        &format!("Token search: query='{}', limit={}", query, max_results),
+        &format!("Token search: query='{query}', limit={max_results}"),
     );
 
     let apis = get_api_manager();

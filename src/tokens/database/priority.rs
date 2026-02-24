@@ -123,7 +123,7 @@ impl TokenDatabase {
                     Err(e) => {
                         logger::warning(
                             LogTag::Tokens,
-                            &format!("batch_update_priority error for {}: {}", mint, e),
+                            &format!("batch_update_priority error for {mint}: {e}"),
                         );
                     }
                 }

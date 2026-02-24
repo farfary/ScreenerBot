@@ -89,7 +89,7 @@ impl TokenDatabase {
                         // Log but continue - don't fail entire batch
                         logger::warning(
                             LogTag::Tokens,
-                            &format!("batch_clear_rejection_status error for {}: {}", mint, e),
+                            &format!("batch_clear_rejection_status error for {mint}: {e}"),
                         );
                     }
                 }
@@ -140,7 +140,7 @@ impl TokenDatabase {
                     Err(e) => {
                         logger::warning(
                             LogTag::Tokens,
-                            &format!("batch_update_rejection_status error for {}: {}", mint, e),
+                            &format!("batch_update_rejection_status error for {mint}: {e}"),
                         );
                     }
                 }

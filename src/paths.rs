@@ -374,7 +374,7 @@ pub fn open_url_in_browser(url: &str) -> Result<(), String> {
         std::process::Command::new("open")
             .arg(url)
             .spawn()
-            .map_err(|e| format!("Failed to open URL {}: {}", url, e))?;
+            .map_err(|e| format!("Failed to open URL {url}: {e}"))?;
         return Ok(());
     }
 
@@ -383,7 +383,7 @@ pub fn open_url_in_browser(url: &str) -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(url)
             .spawn()
-            .map_err(|e| format!("Failed to open URL {}: {}", url, e))?;
+            .map_err(|e| format!("Failed to open URL {url}: {e}"))?;
         return Ok(());
     }
 
@@ -392,7 +392,7 @@ pub fn open_url_in_browser(url: &str) -> Result<(), String> {
         std::process::Command::new("cmd")
             .args(["/C", "start", "", url])
             .spawn()
-            .map_err(|e| format!("Failed to open URL {}: {}", url, e))?;
+            .map_err(|e| format!("Failed to open URL {url}: {e}"))?;
         return Ok(());
     }
 

@@ -549,7 +549,7 @@ Rules:
 
     logger::info(
         LogTag::Api,
-        &format!("Generated title for session {}: {}", id, title),
+        &format!("Generated title for session {id}: {title}"),
     );
 
     #[derive(Serialize)]

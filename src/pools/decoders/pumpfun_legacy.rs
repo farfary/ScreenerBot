@@ -192,7 +192,7 @@ impl PumpFunLegacyDecoder {
 
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Token {} decimals: {}", token_mint, token_decimals),
+            &format!("Token {token_mint} decimals: {token_decimals}"),
         );
 
         if token_decimals > 18 {

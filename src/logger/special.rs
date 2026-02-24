@@ -163,7 +163,7 @@ pub fn log_price_change(
     let line2 = line2_parts.join("");
 
     // Combine both lines
-    let combined_message = format!("{}\n{}", line1, line2);
+    let combined_message = format!("{line1}\n{line2}");
 
     // Log using the standard info function
     logger::info(LogTag::Positions, &combined_message);

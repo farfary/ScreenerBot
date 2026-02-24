@@ -376,7 +376,7 @@ impl BlockchainError {
                     signature,
                     age / 60
                 ),
-                Some(age) => format!("Transaction {} still processing ({}s)", signature, age),
+                Some(age) => format!("Transaction {signature} still processing ({age}s)"),
                 None => format!("Transaction {} not yet indexed", signature),
             },
             BlockchainError::BlockhashExpired {
@@ -413,7 +413,7 @@ impl BlockchainError {
             BlockchainError::AccountNotFound {
                 pubkey, context, ..
             } => {
-                format!("Account {} not found ({})", pubkey, context)
+                format!("Account {pubkey} not found ({context})")
             }
             _ => format!("{:?}", self), // Fallback to debug format
         }

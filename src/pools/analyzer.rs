@@ -167,7 +167,7 @@ impl PoolAnalyzer {
                                         if let Some(fetcher) = service::get_account_fetcher() {
                                             let reserve_accounts = descriptor.reserve_accounts.clone();
                                             if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
-                                                logger::warning(LogTag::PoolAnalyzer, &format!("Failed to request fetch for analyzed pool {}: {}", pool_id, e));
+                                                logger::warning(LogTag::PoolAnalyzer, &format!("Failed to request fetch for analyzed pool {pool_id}: {e}"));
                                             }
                                         }
 
@@ -202,13 +202,13 @@ impl PoolAnalyzer {
                                         ).await {
                                             logger::warning(
                                                 LogTag::PoolAnalyzer,
-                                                &format!("Failed to blacklist pool {}: {}", pool_id, e),
+                                                &format!("Failed to blacklist pool {pool_id}: {e}"),
                                             );
                                         }
 
                                         logger::warning(
                                             LogTag::PoolAnalyzer,
-                                            &format!("Failed to analyze pool {} for token {} - blacklisted permanently", pool_id, token_to_check),
+                                            &format!("Failed to analyze pool {pool_id} for token {token_to_check} - blacklisted permanently"),
                                         );
                                     }
                                 }
@@ -340,7 +340,7 @@ impl PoolAnalyzer {
             ))
             .await;
 
-            logger::warning(LogTag::PoolAnalyzer, &format!("Unsupported DEX program for pool {}: {} (consider adding support for this DEX)", pool_id, actual_program_id));
+            logger::warning(LogTag::PoolAnalyzer, &format!("Unsupported DEX program for pool {pool_id}: {actual_program_id} (consider adding support for this DEX)"));
             return None;
         }
 
@@ -567,7 +567,7 @@ impl PoolAnalyzer {
             Err(e) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
-                    &format!("Failed to fetch pool account {}: {}", pool_id, e),
+                    &format!("Failed to fetch pool account {pool_id}: {e}"),
                 );
                 return None;
             }
@@ -807,7 +807,7 @@ impl PoolAnalyzer {
             Err(e) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
-                    &format!("Failed to fetch DLMM pool account {}: {}", pool_id, e),
+                    &format!("Failed to fetch DLMM pool account {pool_id}: {e}"),
                 );
                 return None;
             }
@@ -919,7 +919,7 @@ impl PoolAnalyzer {
             Err(e) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
-                    &format!("Failed to fetch pool account {}: {}", pool_id, e),
+                    &format!("Failed to fetch pool account {pool_id}: {e}"),
                 );
                 return None;
             }

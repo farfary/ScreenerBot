@@ -177,7 +177,7 @@ impl AnthropicClient {
                 message: format!("Rate limiter error: {e}"),
             })?;
 
-        let url = format!("{}{}", ANTHROPIC_BASE_URL, ENDPOINT_MESSAGES);
+        let url = format!("{ANTHROPIC_BASE_URL}{ENDPOINT_MESSAGES}");
 
         logger::debug(
             LogTag::Api,

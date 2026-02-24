@@ -349,13 +349,13 @@ pub async fn start_maintenance_task() {
             Ok(Err(e)) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ Failed to migrate {}: {}", name, e),
+                    &format!("✗ Failed to migrate {name}: {e}"),
                 );
             }
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ Task panic during migration of {}: {}", name_clone, e),
+                    &format!("✗ Task panic during migration of {name_clone}: {e}"),
                 );
             }
         }
@@ -407,20 +407,20 @@ async fn run_vacuum_cycle() {
             Ok(Ok(freed)) => {
                 total_freed += freed;
                 if freed > 0 {
-                    logger::info(LogTag::System, &format!("✓ {} freed {} pages", name, freed));
+                    logger::info(LogTag::System, &format!("✓ {name} freed {freed} pages"));
                 }
                 successful += 1;
             }
             Ok(Err(e)) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ Failed to vacuum {}: {}", name, e),
+                    &format!("✗ Failed to vacuum {name}: {e}"),
                 );
             }
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ Task panic during vacuum of {}: {}", name_clone, e),
+                    &format!("✗ Task panic during vacuum of {name_clone}: {e}"),
                 );
             }
         }
@@ -454,7 +454,7 @@ async fn run_wal_cycle() {
             Ok(Err(e)) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ WAL checkpoint failed for {}: {}", name, e),
+                    &format!("✗ WAL checkpoint failed for {name}: {e}"),
                 );
                 errors += 1;
             }
@@ -474,7 +474,7 @@ async fn run_wal_cycle() {
     if errors > 0 {
         logger::warning(
             LogTag::System,
-            &format!("WAL checkpoint cycle: {} ok, {} errors", successful, errors),
+            &format!("WAL checkpoint cycle: {successful} ok, {errors} errors"),
         );
     }
 }

@@ -132,7 +132,7 @@ impl ConnectivityChecker {
             crate::connectivity::types::EndpointHealth::Healthy { latency_ms, .. } => {
                 logger::debug(
                     LogTag::Connectivity,
-                    &format!("{} endpoint healthy (latency={}ms)", name, latency_ms),
+                    &format!("{name} endpoint healthy (latency={latency_ms}ms)"),
                 );
 
                 // Only record recovery event on transition TO healthy

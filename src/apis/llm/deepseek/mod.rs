@@ -159,7 +159,7 @@ impl DeepSeekClient {
                 message: format!("Rate limiter error: {e}"),
             })?;
 
-        let url = format!("{}{}", DEEPSEEK_BASE_URL, ENDPOINT_CHAT);
+        let url = format!("{DEEPSEEK_BASE_URL}{ENDPOINT_CHAT}");
 
         logger::debug(
             LogTag::Api,

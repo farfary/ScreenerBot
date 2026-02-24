@@ -103,7 +103,7 @@ pub async fn background_check_loop(engine: Arc<AiEngine>, shutdown: Arc<Notify>)
                                 if let Err(e) = blacklist_token(&mint, &blacklist_reason, &db) {
                                     logger::error(
                                         LogTag::Filtering,
-                                        &format!("Failed to blacklist token {}: {}", mint, e),
+                                        &format!("Failed to blacklist token {mint}: {e}"),
                                     );
                                 }
                             } else {
@@ -117,7 +117,7 @@ pub async fn background_check_loop(engine: Arc<AiEngine>, shutdown: Arc<Notify>)
                     Err(e) => {
                         logger::debug(
                             LogTag::Filtering,
-                            &format!("AI background check failed for {}: {}", mint, e),
+                            &format!("AI background check failed for {mint}: {e}"),
                         );
                     }
                 }

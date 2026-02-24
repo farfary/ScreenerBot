@@ -628,7 +628,7 @@ impl RpcClientMethods for RpcClient {
                     return amount_str.parse::<u64>().map_err(|e| {
                         parse_err(
                             "token amount",
-                            &format!("Failed to parse '{}': {}", amount_str, e),
+                            &format!("Failed to parse '{amount_str}': {e}"),
                         )
                     });
                 }
@@ -674,7 +674,7 @@ impl RpcClientMethods for RpcClient {
         let hash = Hash::from_str(blockhash).map_err(|e| {
             parse_err(
                 "blockhash",
-                &format!("Invalid hash \'{}\': {}", blockhash, e),
+                &format!("Invalid hash \'{blockhash}\': {e}"),
             )
         })?;
 
@@ -719,7 +719,7 @@ impl RpcClientMethods for RpcClient {
         Signature::from_str(sig_str).map_err(|e| {
             parse_err(
                 "signature",
-                &format!("Invalid signature \'{}\': {}", sig_str, e),
+                &format!("Invalid signature \'{sig_str}\': {e}"),
             )
         })
     }
@@ -819,7 +819,7 @@ impl RpcClientMethods for RpcClient {
             let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
                 parse_err(
                     "pubkey",
-                    &format!("Invalid pubkey \'{}\': {}", pubkey_str, e),
+                    &format!("Invalid pubkey \'{pubkey_str}\': {e}"),
                 )
             })?;
 
@@ -954,7 +954,7 @@ impl RpcClientMethods for RpcClient {
         Signature::from_str(sig_str).map_err(|e| {
             parse_err(
                 "signature",
-                &format!("Invalid signature \'{}\': {}", sig_str, e),
+                &format!("Invalid signature \'{sig_str}\': {e}"),
             )
         })
     }
@@ -1145,7 +1145,7 @@ impl RpcClientMethods for RpcClient {
         owner: &str,
     ) -> crate::Result<Vec<TokenAccountInfo>> {
         let owner_pubkey = Pubkey::from_str(owner)
-            .map_err(|e| parse_err("pubkey", &format!("Invalid owner \'{}\': {}", owner, e)))?;
+            .map_err(|e| parse_err("pubkey", &format!("Invalid owner \'{owner}\': {e}")))?;
         self.get_all_token_accounts(&owner_pubkey).await
     }
 
@@ -1153,7 +1153,7 @@ impl RpcClientMethods for RpcClient {
         let account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
             parse_err(
                 "pubkey",
-                &format!("Invalid token account \'{}\': {}", token_account, e),
+                &format!("Invalid token account \'{token_account}\': {e}"),
             )
         })?;
 
@@ -1188,11 +1188,11 @@ impl RpcClientMethods for RpcClient {
         let wallet_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
             parse_err(
                 "pubkey",
-                &format!("Invalid wallet \'{}\': {}", wallet_address, e),
+                &format!("Invalid wallet \'{wallet_address}\': {e}"),
             )
         })?;
         let mint_pubkey = Pubkey::from_str(mint)
-            .map_err(|e| parse_err("pubkey", &format!("Invalid mint \'{}\': {}", mint, e)))?;
+            .map_err(|e| parse_err("pubkey", &format!("Invalid mint \'{mint}\': {e}")))?;
 
         // First try standard SPL Token ATA
         let spl_ata = Self::get_associated_token_address(&wallet_pubkey, &mint_pubkey);
@@ -1325,7 +1325,7 @@ impl RpcClientMethods for RpcClient {
             let signature = Signature::from_str(sig_str).map_err(|e| {
                 parse_err(
                     "signature",
-                    &format!("Invalid signature \'{}\': {}", sig_str, e),
+                    &format!("Invalid signature \'{sig_str}\': {e}"),
                 )
             })?;
 
@@ -1490,7 +1490,7 @@ impl RpcClientMethods for RpcClient {
             let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
                 parse_err(
                     "pubkey",
-                    &format!("Invalid pubkey \'{}\': {}", pubkey_str, e),
+                    &format!("Invalid pubkey \'{pubkey_str}\': {e}"),
                 )
             })?;
 
@@ -1840,7 +1840,7 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
     let owner = Pubkey::from_str(owner_str).map_err(|e| {
         Error::Data(DataError::ParseError {
             data_type: "pubkey".to_string(),
-            error: format!("Invalid owner pubkey '{}': {}", owner_str, e),
+            error: format!("Invalid owner pubkey '{owner_str}': {e}"),
         })
     })?;
 

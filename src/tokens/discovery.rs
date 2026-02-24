@@ -83,7 +83,7 @@ pub fn start_discovery_loop(
                                 let mut parts: Vec<String> = stats
                                     .by_source
                                     .iter()
-                                    .map(|(source, count)| format!("{}:{}", source, count))
+                                    .map(|(source, count)| format!("{source}:{count}"))
                                     .collect();
                                 parts.sort();
                                 parts.join(", ")
@@ -412,7 +412,7 @@ pub async fn run_discovery_once(
                 stats.errors += 1;
                 logger::error(
                     LogTag::Tokens,
-                    &format!("[DISCOVERY] Source {} failed: {}", source, err),
+                    &format!("[DISCOVERY] Source {source} failed: {err}"),
                 );
             }
         }
@@ -442,7 +442,7 @@ pub async fn run_discovery_once(
         if let Err(err) = db.update_priority(&mint, Priority::FilterPassed.to_value()) {
             logger::error(
                 LogTag::Tokens,
-                &format!("[DISCOVERY] Failed to set priority for {}: {}", mint, err),
+                &format!("[DISCOVERY] Failed to set priority for {mint}: {err}"),
             );
         }
 

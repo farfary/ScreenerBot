@@ -225,7 +225,7 @@ fn extract_sqrt_price_from_pool_data(data: &[u8]) -> Option<u128> {
             if val > 0 && val < 1u128 << 80 {
                 logger::debug(
                     LogTag::Pool,
-                    &format!("Candidate sqrt_price @{}: {}", offset, val),
+                    &format!("Candidate sqrt_price @{offset}: {val}"),
                 );
                 return Some(val);
             }
