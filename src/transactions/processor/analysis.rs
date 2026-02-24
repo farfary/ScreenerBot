@@ -93,7 +93,7 @@ impl TransactionProcessor {
                     .created_accounts
                     .iter()
                     .filter(|acc| {
-                        acc.mint.is_some() && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
+                        acc.mint.as_deref().is_some_and(|m| m != SOL_MINT)
                     })
                     .count() as u32,
                 token_ata_closures: 0, // ClosedAccount doesn't have mint info, calculate from operations instead
@@ -114,7 +114,7 @@ impl TransactionProcessor {
                     .created_accounts
                     .iter()
                     .filter(|acc| {
-                        acc.mint.is_some() && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
+                        acc.mint.as_deref().is_some_and(|m| m != SOL_MINT)
                     })
                     .map(|acc| acc.rent_paid)
                     .sum(),
@@ -133,8 +133,7 @@ impl TransactionProcessor {
                         .created_accounts
                         .iter()
                         .filter(|acc| {
-                            acc.mint.is_some()
-                                && acc.mint.as_ref().unwrap() != &SOL_MINT.to_string()
+                            acc.mint.as_deref().is_some_and(|m| m != SOL_MINT)
                         })
                         .map(|acc| acc.rent_paid)
                         .sum();
