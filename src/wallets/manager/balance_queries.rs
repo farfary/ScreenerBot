@@ -3,9 +3,30 @@ use std::str::FromStr;
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 
-use super::balance_constants::{reclaimable_ata_rent, sol_topup_needed};
 use super::list_active_wallets;
 use super::super::types::{SimpleTokenBalance, WalletBalanceSummary, WalletWithTokenBalance};
+
+// =============================================================================
+// BALANCE CONSTANTS
+// =============================================================================
+
+/// Rent-exempt minimum for ATA (~0.00089088 SOL)
+const ATA_RENT_EXEMPT: f64 = 0.00089088;
+
+/// Minimum SOL balance to operate a wallet (for transaction fees)
+const MIN_SOL_FOR_OPERATIONS: f64 = 0.005;
+
+fn sol_topup_needed(sol_balance: f64) -> (bool, f64) {
+    if sol_balance < MIN_SOL_FOR_OPERATIONS {
+        (true, MIN_SOL_FOR_OPERATIONS - sol_balance)
+    } else {
+        (false, 0.0)
+    }
+}
+
+fn reclaimable_ata_rent(empty_ata_count: u32) -> f64 {
+    empty_ata_count as f64 * ATA_RENT_EXEMPT
+}
 
 /// Get all active wallets that hold a specific token
 ///

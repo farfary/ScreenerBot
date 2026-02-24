@@ -15,10 +15,8 @@ use cache::refresh_main_wallet_cache;
 mod main_wallet;
 pub use main_wallet::{get_main_address, get_main_keypair, get_main_wallet, has_main_wallet};
 
-mod balance_constants;
-
-mod token_balance_queries;
-pub use token_balance_queries::{get_all_wallet_balances, get_wallets_with_token};
+mod balance_queries;
+pub use balance_queries::{get_all_wallet_balances, get_wallets_with_token};
 
 mod migration;
 
@@ -86,8 +84,8 @@ pub use bulk_ops::{
 // TOKEN BALANCE OPERATIONS
 // =============================================================================
 
-mod token_balances;
-pub use token_balances::{
+mod balance_ops;
+pub use balance_ops::{
     clear_token_balances, get_all_token_balances, get_token_balances, update_all_wallet_balances,
     update_wallet_balances, upsert_token_balance,
 };
