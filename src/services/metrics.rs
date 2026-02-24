@@ -1,3 +1,5 @@
+//! Service metrics collection — poll rates, durations, and performance tracking.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

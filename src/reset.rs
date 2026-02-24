@@ -1,5 +1,4 @@
-// Reset utility for clearing bot state and databases
-//
+//! Reset utility — clears bot state, databases, and cached data for fresh start.
 // This module provides functionality to reset various parts of the bot's state,
 // including pending verifications, database files, and cache files.
 //

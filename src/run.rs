@@ -1,3 +1,5 @@
+//! Main run loop — starts the service manager and runs until shutdown signal.
+
 // New simplified run implementation using ServiceManager
 
 use crate::{

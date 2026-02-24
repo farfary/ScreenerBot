@@ -1,3 +1,5 @@
+//! Shared utility functions — formatting, parsing, safe lock wrappers, and conversions.
+
 use crate::constants::TOKEN_2022_PROGRAM_ID;
 use crate::errors::blockchain::{parse_structured_solana_error, BlockchainError};
 use crate::errors::parse_solana_error;

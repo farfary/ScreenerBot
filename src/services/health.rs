@@ -1,3 +1,5 @@
+//! Service health types — running state, error counts, and health check results.
+
 use serde::{Deserialize, Serialize};
 
 /// Service health status

@@ -1,3 +1,5 @@
+//! Application startup — initialization sequence, banner, and first-run setup.
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashMap;

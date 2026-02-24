@@ -1,3 +1,5 @@
+//! Global state — shutdown signals, status tracking, and shared runtime state.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU32};
