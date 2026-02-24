@@ -101,7 +101,7 @@ pub async fn monitor_positions(
         );
 
         // Create semaphore for concurrent position evaluation
-        let sell_concurrency = std::cmp::max(1, config::get_sell_concurrency());
+        let sell_concurrency = config::get_sell_concurrency().max(1);
         let semaphore = Arc::new(Semaphore::new(sell_concurrency));
         let mut eval_tasks = Vec::new();
 

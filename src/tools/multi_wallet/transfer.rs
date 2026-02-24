@@ -262,7 +262,7 @@ pub async fn fund_wallets(
         return Vec::new();
     }
 
-    let concurrency = std::cmp::max(1, concurrency);
+    let concurrency = concurrency.max(1);
 
     logger::info(
         LogTag::Tools,

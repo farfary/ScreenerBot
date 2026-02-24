@@ -55,7 +55,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         .map(|positions| positions.len())
         .unwrap_or(0);
     let closed_positions_today = closed_positions_result
-        .map(|count| std::cmp::max(count, 0) as usize)
+        .map(|count| count.max(0) as usize)
         .unwrap_or(0);
 
     let app_state = get_app_state().await;

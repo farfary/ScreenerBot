@@ -649,7 +649,7 @@ pub fn is_newer_version(current: &str, remote: &str) -> bool {
     let current_parts = parse_version(current);
     let remote_parts = parse_version(remote);
 
-    for i in 0..std::cmp::max(current_parts.len(), remote_parts.len()) {
+    for i in 0..current_parts.len().max(remote_parts.len()) {
         let c = current_parts.get(i).copied().unwrap_or(0);
         let r = remote_parts.get(i).copied().unwrap_or(0);
         if r > c {
