@@ -16,9 +16,9 @@ impl std::fmt::Display for ConfigurationError {
                 write!(f, "Invalid config field '{}': {}", field, reason)
             }
             ConfigurationError::InvalidPrivateKey { error } => {
-                write!(f, "Invalid private key: {}", error)
+                write!(f, "Invalid private key: {error}")
             }
-            ConfigurationError::Generic { message } => write!(f, "{}", message),
+            ConfigurationError::Generic { message } => write!(f, "{message}"),
             _ => write!(f, "{:?}", self),
         }
     }

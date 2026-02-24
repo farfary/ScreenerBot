@@ -52,18 +52,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Blockchain(e) => write!(f, "Blockchain Error: {}", e),
-            Error::Network(e) => write!(f, "Network Error: {}", e),
-            Error::Rpc(e) => write!(f, "RPC Error: {}", e),
-            Error::RpcProvider(e) => write!(f, "RPC Provider Error: {}", e),
-            Error::Database(e) => write!(f, "Database Error: {}", e),
-            Error::Service(e) => write!(f, "Service Error: {}", e),
-            Error::Io(e) => write!(f, "IO Error: {}", e),
-            Error::Internal(e) => write!(f, "Internal Error: {}", e),
-            Error::Configuration(e) => write!(f, "Configuration Error: {}", e),
-            Error::Data(e) => write!(f, "Data Error: {}", e),
-            Error::Position(e) => write!(f, "Position Error: {}", e),
-            Error::RateLimit(e) => write!(f, "Rate Limit Error: {}", e),
+            Error::Blockchain(e) => write!(f, "Blockchain Error: {e}"),
+            Error::Network(e) => write!(f, "Network Error: {e}"),
+            Error::Rpc(e) => write!(f, "RPC Error: {e}"),
+            Error::RpcProvider(e) => write!(f, "RPC Provider Error: {e}"),
+            Error::Database(e) => write!(f, "Database Error: {e}"),
+            Error::Service(e) => write!(f, "Service Error: {e}"),
+            Error::Io(e) => write!(f, "IO Error: {e}"),
+            Error::Internal(e) => write!(f, "Internal Error: {e}"),
+            Error::Configuration(e) => write!(f, "Configuration Error: {e}"),
+            Error::Data(e) => write!(f, "Data Error: {e}"),
+            Error::Position(e) => write!(f, "Position Error: {e}"),
+            Error::RateLimit(e) => write!(f, "Rate Limit Error: {e}"),
         }
     }
 }

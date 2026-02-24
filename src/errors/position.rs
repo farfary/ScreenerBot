@@ -35,8 +35,8 @@ impl std::fmt::Display for PositionError {
                     token_mint, signature
                 )
             }
-            PositionError::Generic { message } => write!(f, "{}", message),
-            PositionError::DatabaseError(msg) => write!(f, "Database error: {}", msg),
+            PositionError::Generic { message } => write!(f, "{message}"),
+            PositionError::DatabaseError(msg) => write!(f, "Database error: {msg}"),
             _ => write!(f, "{:?}", self),
         }
     }

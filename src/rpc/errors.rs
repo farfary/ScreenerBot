@@ -146,7 +146,7 @@ impl fmt::Display for RpcError {
                 provider_id,
                 retry_after,
             } => {
-                write!(f, "Rate limited by {}", provider_id)?;
+                write!(f, "Rate limited by {provider_id}")?;
                 if let Some(after) = retry_after {
                     write!(f, " (retry after {:?})", after)?;
                 }
@@ -157,9 +157,9 @@ impl fmt::Display for RpcError {
                 is_timeout,
             } => {
                 if *is_timeout {
-                    write!(f, "Network timeout: {}", message)
+                    write!(f, "Network timeout: {message}")
                 } else {
-                    write!(f, "Network error: {}", message)
+                    write!(f, "Network error: {message}")
                 }
             }
             Self::ProviderError { code, message, .. } => {
@@ -181,20 +181,20 @@ impl fmt::Display for RpcError {
             Self::NoProvidersAvailable { last_error } => {
                 write!(f, "No providers available")?;
                 if let Some(err) = last_error {
-                    write!(f, ": {}", err)?;
+                    write!(f, ": {err}")?;
                 }
                 Ok(())
             }
             Self::AccountNotFound { pubkey } => {
-                write!(f, "Account not found: {}", pubkey)
+                write!(f, "Account not found: {pubkey}")
             }
             Self::InvalidResponse { message } => {
-                write!(f, "Invalid response: {}", message)
+                write!(f, "Invalid response: {message}")
             }
             Self::Configuration { message } => {
-                write!(f, "Configuration error: {}", message)
+                write!(f, "Configuration error: {message}")
             }
-            Self::Other(msg) => write!(f, "{}", msg),
+            Self::Other(msg) => write!(f, "{msg}"),
         }
     }
 }

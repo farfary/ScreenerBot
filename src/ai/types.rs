@@ -79,18 +79,18 @@ impl std::fmt::Display for AiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AiError::Disabled => write!(f, "AI module is disabled"),
-            AiError::ProviderNotConfigured(p) => write!(f, "Provider not configured: {}", p),
+            AiError::ProviderNotConfigured(p) => write!(f, "Provider not configured: {p}"),
             AiError::RateLimited { retry_after } => {
                 if let Some(secs) = retry_after {
-                    write!(f, "Rate limited, retry after {} seconds", secs)
+                    write!(f, "Rate limited, retry after {secs} seconds")
                 } else {
                     write!(f, "Rate limited")
                 }
             }
             AiError::Timeout => write!(f, "AI request timed out"),
-            AiError::LlmError(e) => write!(f, "LLM error: {}", e),
-            AiError::ParseError(e) => write!(f, "Failed to parse AI response: {}", e),
-            AiError::ValidationError(e) => write!(f, "Validation error: {}", e),
+            AiError::LlmError(e) => write!(f, "LLM error: {e}"),
+            AiError::ParseError(e) => write!(f, "Failed to parse AI response: {e}"),
+            AiError::ValidationError(e) => write!(f, "Validation error: {e}"),
         }
     }
 }

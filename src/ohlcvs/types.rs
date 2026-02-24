@@ -579,16 +579,16 @@ pub enum OhlcvError {
 impl fmt::Display for OhlcvError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OhlcvError::DatabaseError(e) => write!(f, "Database error: {}", e),
-            OhlcvError::ApiError(e) => write!(f, "API error: {}", e),
+            OhlcvError::DatabaseError(e) => write!(f, "Database error: {e}"),
+            OhlcvError::ApiError(e) => write!(f, "API error: {e}"),
             OhlcvError::RateLimitExceeded => write!(f, "Rate limit exceeded"),
-            OhlcvError::PoolNotFound(pool) => write!(f, "Pool not found: {}", pool),
-            OhlcvError::InvalidTimeframe(tf) => write!(f, "Invalid timeframe: {}", tf),
+            OhlcvError::PoolNotFound(pool) => write!(f, "Pool not found: {pool}"),
+            OhlcvError::InvalidTimeframe(tf) => write!(f, "Invalid timeframe: {tf}"),
             OhlcvError::DataGap { start, end } => {
                 write!(f, "Data gap detected: {} to {}", start, end)
             }
-            OhlcvError::CacheError(e) => write!(f, "Cache error: {}", e),
-            OhlcvError::NotFound(msg) => write!(f, "Not found: {}", msg),
+            OhlcvError::CacheError(e) => write!(f, "Cache error: {e}"),
+            OhlcvError::NotFound(msg) => write!(f, "Not found: {msg}"),
         }
     }
 }

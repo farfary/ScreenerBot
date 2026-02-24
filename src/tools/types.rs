@@ -358,7 +358,7 @@ impl std::fmt::Display for DistributionStrategy {
         match self {
             DistributionStrategy::RoundRobin => write!(f, "Round Robin"),
             DistributionStrategy::Random => write!(f, "Random"),
-            DistributionStrategy::Burst { burst_size } => write!(f, "Burst ({})", burst_size),
+            DistributionStrategy::Burst { burst_size } => write!(f, "Burst ({burst_size})"),
         }
     }
 }

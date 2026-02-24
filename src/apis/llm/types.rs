@@ -251,7 +251,7 @@ impl fmt::Display for LlmError {
                 if let Some(ms) = retry_after_ms {
                     write!(f, "[{}] Rate limited (retry after {}ms)", provider, ms)
                 } else {
-                    write!(f, "[{}] Rate limited", provider)
+                    write!(f, "[{provider}] Rate limited")
                 }
             }
             LlmError::Timeout {
@@ -280,7 +280,7 @@ impl fmt::Display for LlmError {
                 write!(f, "[{}] API error {}: {}", provider, status_code, message)
             }
             LlmError::ProviderDisabled { provider } => {
-                write!(f, "[{}] Provider disabled in config", provider)
+                write!(f, "[{provider}] Provider disabled in config")
             }
         }
     }

@@ -40,12 +40,12 @@ pub enum NftMetadataError {
 impl std::fmt::Display for NftMetadataError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidMint(s) => write!(f, "Invalid mint: {}", s),
-            Self::PdaDerivationFailed(s) => write!(f, "PDA derivation failed: {}", s),
-            Self::AccountNotFound(s) => write!(f, "Account not found: {}", s),
-            Self::DeserializationFailed(s) => write!(f, "Deserialization failed: {}", s),
-            Self::JsonFetchFailed(s) => write!(f, "JSON fetch failed: {}", s),
-            Self::RpcError(s) => write!(f, "RPC error: {}", s),
+            Self::InvalidMint(s) => write!(f, "Invalid mint: {s}"),
+            Self::PdaDerivationFailed(s) => write!(f, "PDA derivation failed: {s}"),
+            Self::AccountNotFound(s) => write!(f, "Account not found: {s}"),
+            Self::DeserializationFailed(s) => write!(f, "Deserialization failed: {s}"),
+            Self::JsonFetchFailed(s) => write!(f, "JSON fetch failed: {s}"),
+            Self::RpcError(s) => write!(f, "RPC error: {s}"),
         }
     }
 }

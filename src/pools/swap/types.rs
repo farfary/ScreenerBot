@@ -83,14 +83,14 @@ pub enum SwapError {
 impl fmt::Display for SwapError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SwapError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
-            SwapError::InvalidPool(msg) => write!(f, "Invalid pool: {}", msg),
-            SwapError::InsufficientBalance(msg) => write!(f, "Insufficient balance: {}", msg),
-            SwapError::CalculationError(msg) => write!(f, "Calculation error: {}", msg),
-            SwapError::TransactionError(msg) => write!(f, "Transaction error: {}", msg),
-            SwapError::ExecutionError(msg) => write!(f, "Execution error: {}", msg),
-            SwapError::RpcError(msg) => write!(f, "RPC error: {}", msg),
-            SwapError::DecoderError(msg) => write!(f, "Decoder error: {}", msg),
+            SwapError::InvalidInput(msg) => write!(f, "Invalid input: {msg}"),
+            SwapError::InvalidPool(msg) => write!(f, "Invalid pool: {msg}"),
+            SwapError::InsufficientBalance(msg) => write!(f, "Insufficient balance: {msg}"),
+            SwapError::CalculationError(msg) => write!(f, "Calculation error: {msg}"),
+            SwapError::TransactionError(msg) => write!(f, "Transaction error: {msg}"),
+            SwapError::ExecutionError(msg) => write!(f, "Execution error: {msg}"),
+            SwapError::RpcError(msg) => write!(f, "RPC error: {msg}"),
+            SwapError::DecoderError(msg) => write!(f, "Decoder error: {msg}"),
         }
     }
 }

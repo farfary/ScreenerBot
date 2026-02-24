@@ -17,7 +17,7 @@ impl std::fmt::Display for TraderControlError {
         match self {
             TraderControlError::AlreadyRunning => write!(f, "Trader is already running"),
             TraderControlError::AlreadyStopped => write!(f, "Trader is already stopped"),
-            TraderControlError::ConfigUpdate(err) => write!(f, "Config update failed: {}", err),
+            TraderControlError::ConfigUpdate(err) => write!(f, "Config update failed: {err}"),
         }
     }
 }

@@ -52,7 +52,7 @@ impl std::fmt::Display for NetworkError {
                     body.as_deref().unwrap_or("No body")
                 )
             }
-            NetworkError::Generic { message } => write!(f, "{}", message),
+            NetworkError::Generic { message } => write!(f, "{message}"),
             _ => write!(f, "{:?}", self),
         }
     }

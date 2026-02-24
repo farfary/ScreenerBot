@@ -31,7 +31,7 @@ impl std::fmt::Display for DataError {
             DataError::InvalidAmount { amount, reason } => {
                 write!(f, "Invalid amount '{}': {}", amount, reason)
             }
-            DataError::Generic { message } => write!(f, "{}", message),
+            DataError::Generic { message } => write!(f, "{message}"),
             _ => write!(f, "{:?}", self),
         }
     }

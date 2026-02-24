@@ -27,7 +27,7 @@ impl std::fmt::Display for RateLimitError {
                     limit_type, current_rate, limit
                 )
             }
-            RateLimitError::Generic { message } => write!(f, "{}", message),
+            RateLimitError::Generic { message } => write!(f, "{message}"),
             _ => write!(f, "{:?}", self),
         }
     }
