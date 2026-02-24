@@ -186,7 +186,7 @@ pub fn get_bot() -> Option<std::sync::MutexGuard<'static, Option<TelegramBot>>> 
 /// Check if the bot is initialized
 pub fn is_bot_initialized() -> bool {
     if let Ok(guard) = TELEGRAM_BOT.lock() {
-        guard.as_ref().map(|b| b.is_initialized()).unwrap_or(false)
+        guard.as_ref().is_some_and(|b| b.is_initialized())
     } else {
         false
     }

@@ -255,7 +255,7 @@ pub fn get_dashboard_active_token() -> Option<String> {
 /// Used by background update loops to skip tokens that are getting priority updates via the UI
 pub fn is_token_active_in_dashboard(mint: &str) -> bool {
     match DASHBOARD_ACTIVE_TOKEN.read() {
-        Ok(guard) => guard.as_ref().map(|m| m == mint).unwrap_or(false),
+        Ok(guard) => guard.as_deref().is_some_and(|m| m == mint),
         Err(_) => false,
     }
 }
