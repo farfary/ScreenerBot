@@ -262,7 +262,7 @@ impl TokenDatabase {
                 let is_rugged: bool = row
                     .get::<_, Option<i64>>(9)?
                     .map(|v| v != 0)
-                    .unwrap_or(false);
+                    .unwrap_or_default();
                 let security_data_last_fetched_at: Option<i64> = row.get(10)?;
                 let mint_authority: Option<String> = row.get(11)?;
                 let freeze_authority: Option<String> = row.get(12)?;

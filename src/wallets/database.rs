@@ -409,7 +409,7 @@ impl WalletsDatabase {
             )
             .optional()
             .map_err(|e| format!("Failed to check wallet: {e}"))?
-            .unwrap_or(false);
+            .unwrap_or_default();
 
         if is_main {
             return Err(
@@ -471,7 +471,7 @@ impl WalletsDatabase {
             )
             .optional()
             .map_err(|e| format!("Failed to check wallet: {e}"))?
-            .unwrap_or(false);
+            .unwrap_or_default();
 
         if is_main {
             return Err(

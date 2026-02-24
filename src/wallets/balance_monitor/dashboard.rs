@@ -606,7 +606,7 @@ pub async fn get_wallet_dashboard_data(
                     .cache_metadata
                     .as_ref()
                     .map(|meta| matches!(meta.freshness, DashboardCacheFreshness::Stale))
-                    .unwrap_or(false);
+                    .unwrap_or_default();
                 record_cache_metrics(
                     DashboardDataSource::Memory,
                     start.elapsed().as_millis(),

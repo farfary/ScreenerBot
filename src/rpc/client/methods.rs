@@ -1847,7 +1847,7 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
     let executable = value
         .get("executable")
         .and_then(|v| v.as_bool())
-        .unwrap_or(false);
+        .unwrap_or_default();
 
     let rent_epoch = value.get("rentEpoch").and_then(|v| v.as_u64()).unwrap_or_default();
 

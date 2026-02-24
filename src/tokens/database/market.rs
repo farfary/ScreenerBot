@@ -114,7 +114,7 @@ impl TokenDatabase {
                 let is_rugged: bool = row
                     .get::<_, Option<i64>>(8)?
                     .map(|v| v != 0)
-                    .unwrap_or(false);
+                    .unwrap_or_default();
                 let is_blacklisted = row.get::<_, Option<String>>(9)?.is_some();
                 let priority_value: Option<i32> = row.get(10)?;
                 let blockchain_created_at: Option<i64> = row.get(11)?;
