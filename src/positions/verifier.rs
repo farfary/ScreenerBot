@@ -658,7 +658,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             if let Some(expected) = item.expected_exit_amount {
                                 let tolerance = (expected / 1000).max(10); // 0.1% tolerance or 10 units
                                 if exit_amount < expected.saturating_sub(tolerance)
-                                    || exit_amount > expected + tolerance
+                                    || exit_amount > expected.saturating_add(tolerance)
                                 {
                                     logger::warning(
                                         LogTag::Positions,
