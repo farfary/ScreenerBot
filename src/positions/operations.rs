@@ -583,7 +583,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
 
     // Record a position opened event for durability
     crate::events::record_position_event(
-        &format!("{}", position_id),
+        &position_id.to_string(),
         &api_token.mint,
         "opened",
         Some(&transaction_signature),
@@ -908,7 +908,7 @@ pub async fn close_position_direct(
 
     // Record a position closing event (pending verification)
     crate::events::record_position_event(
-        &format!("{}", position_id),
+        &position_id.to_string(),
         token_mint,
         "closing_submitted",
         None,
