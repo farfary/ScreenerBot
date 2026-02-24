@@ -216,8 +216,6 @@ pub async fn fetch_rugcheck_data(
             let mint = mint.to_string();
             let risks = data.risks.clone();
             let rugged = data.rugged;
-            let safety_score = safety_score;
-            let is_high_risk = is_high_risk;
             async move {
                 let risk_level = if rugged {
                     "critical"

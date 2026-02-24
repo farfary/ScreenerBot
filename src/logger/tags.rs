@@ -190,6 +190,6 @@ impl std::fmt::Display for LogTag {
             LogTag::Tools => format!("{:<8}", "TOOLS").bright_purple().bold(),
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
-        write!(f, "{}", tag_str)
+        write!(f, "{tag_str}")
     }
 }
