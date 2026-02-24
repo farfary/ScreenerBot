@@ -171,7 +171,7 @@ async fn trade_monitor_loop() {
         // Process each watched token
         for token in watched {
             // Only GeckoTerminal supports trade fetching currently
-            if token.pool_source.to_lowercase() == "geckoterminal" {
+            if token.pool_source.eq_ignore_ascii_case("geckoterminal") {
                 process_geckoterminal_trades(&api_manager.geckoterminal, &token).await;
             }
             // TODO: Add DexScreener trade fetching when available

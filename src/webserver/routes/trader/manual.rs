@@ -375,7 +375,7 @@ pub async fn quote_preview_handler(
         );
     }
 
-    let direction = if req.direction.to_lowercase() == "sell" {
+    let direction = if req.direction.eq_ignore_ascii_case("sell") {
         "sell"
     } else {
         "buy"

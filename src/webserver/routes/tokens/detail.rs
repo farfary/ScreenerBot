@@ -723,12 +723,12 @@ pub async fn get_token_analysis(
         twitter: token
             .socials
             .iter()
-            .find(|s| s.link_type.to_lowercase() == "twitter")
+            .find(|s| s.link_type.eq_ignore_ascii_case("twitter"))
             .map(|s| s.url.clone()),
         telegram: token
             .socials
             .iter()
-            .find(|s| s.link_type.to_lowercase() == "telegram")
+            .find(|s| s.link_type.eq_ignore_ascii_case("telegram"))
             .map(|s| s.url.clone()),
     };
 
