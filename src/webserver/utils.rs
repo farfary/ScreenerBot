@@ -49,7 +49,7 @@ pub fn format_duration(seconds: u64) -> String {
     let secs = seconds % 60;
 
     if days > 0 {
-        format!("{}d {}h {}m {}s", days, hours, minutes, secs)
+        format!("{days}d {hours}h {minutes}m {secs}s")
     } else if hours > 0 {
         format!("{hours}h {minutes}m {secs}s")
     } else if minutes > 0 {
