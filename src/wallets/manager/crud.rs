@@ -1,6 +1,7 @@
 use super::super::crypto::{generate_and_encrypt_keypair, import_and_encrypt, keypair_to_address};
 use super::super::types::{
-    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, Wallet, WalletRole, WalletType,
+    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, UpdateWalletRequest, Wallet,
+    WalletRole, WalletType,
 };
 use crate::logger::{self, LogTag};
 
@@ -152,4 +153,102 @@ pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, Strin
         warning: "NEVER share this private key. Anyone with access can steal your funds."
             .to_string(),
     })
+}
+
+/// Update wallet metadata
+pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Result<Wallet, String> {
+    let db_guard = super::WALLETS_DB.read().await;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+
+    db.update_wallet(
+        wallet_id,
+        request.name.as_deref(),
+        request.notes.as_deref(),
+        request.role.clone(),
+    )?;
+
+    // If role changed to main, refresh cache
+    if request.role == Some(WalletRole::Main) {
+        drop(db_guard);
+        super::cache::refresh_main_wallet_cache().await?;
+    }
+
+    super::WALLETS_DB
+        .read()
+        .await
+        .as_ref()
+        .ok_or("Database unavailable")?
+        .get_wallet(wallet_id)?
+        .ok_or_else(|| "Wallet not found after update".to_owned())
+}
+
+/// Set a wallet as the main wallet
+pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
+    let db_guard = super::WALLETS_DB.read().await;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+
+    db.set_main_wallet(wallet_id)?;
+
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+
+    drop(db_guard);
+    super::cache::refresh_main_wallet_cache().await?;
+
+    logger::info(
+        LogTag::Wallet,
+        &format!("Set main wallet: {} ({})", wallet.name, wallet.address),
+    );
+
+    Ok(wallet)
+}
+
+/// Archive a wallet (soft delete)
+pub async fn archive_wallet(wallet_id: i64) -> Result<(), String> {
+    let db_guard = super::WALLETS_DB.read().await;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+
+    db.archive_wallet(wallet_id)?;
+
+    logger::info(
+        LogTag::Wallet,
+        &format!("Archived wallet: {} ({})", wallet.name, wallet.address),
+    );
+
+    Ok(())
+}
+
+/// Restore an archived wallet
+pub async fn restore_wallet(wallet_id: i64) -> Result<(), String> {
+    let db_guard = super::WALLETS_DB.read().await;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+
+    db.restore_wallet(wallet_id)?;
+
+    logger::info(
+        LogTag::Wallet,
+        &format!("Restored wallet: {} ({})", wallet.name, wallet.address),
+    );
+
+    Ok(())
+}
+
+/// Permanently delete a wallet
+pub async fn delete_wallet(wallet_id: i64) -> Result<(), String> {
+    let db_guard = super::WALLETS_DB.read().await;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+
+    db.delete_wallet(wallet_id)?;
+
+    logger::warning(
+        LogTag::Wallet,
+        &format!("Deleted wallet: {} ({})", wallet.name, wallet.address),
+    );
+
+    Ok(())
 }

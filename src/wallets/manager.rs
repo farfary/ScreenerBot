@@ -78,108 +78,13 @@ pub async fn is_initialized() -> bool {
 // =============================================================================
 
 mod crud;
-pub use crud::{create_wallet, export_wallet, import_wallet};
+pub use crud::{
+    archive_wallet, create_wallet, delete_wallet, export_wallet, import_wallet, restore_wallet,
+    set_main_wallet, update_wallet,
+};
 
 mod access;
 pub use access::{get_wallet, get_wallet_by_address, get_wallet_keypair, list_active_wallets, list_wallets};
-
-/// Update wallet metadata
-pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Result<Wallet, String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    db.update_wallet(
-        wallet_id,
-        request.name.as_deref(),
-        request.notes.as_deref(),
-        request.role.clone(),
-    )?;
-
-    // If role changed to main, refresh cache
-    if request.role == Some(WalletRole::Main) {
-        drop(db_guard);
-        refresh_main_wallet_cache().await?;
-    }
-
-    WALLETS_DB
-        .read()
-        .await
-        .as_ref()
-        .ok_or("Database unavailable")?
-        .get_wallet(wallet_id)?
-        .ok_or_else(|| "Wallet not found after update".to_owned())
-}
-
-/// Set a wallet as the main wallet
-pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    db.set_main_wallet(wallet_id)?;
-
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
-
-    drop(db_guard);
-    refresh_main_wallet_cache().await?;
-
-    logger::info(
-        LogTag::Wallet,
-        &format!("Set main wallet: {} ({})", wallet.name, wallet.address),
-    );
-
-    Ok(wallet)
-}
-
-/// Archive a wallet (soft delete)
-pub async fn archive_wallet(wallet_id: i64) -> Result<(), String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
-
-    db.archive_wallet(wallet_id)?;
-
-    logger::info(
-        LogTag::Wallet,
-        &format!("Archived wallet: {} ({})", wallet.name, wallet.address),
-    );
-
-    Ok(())
-}
-
-/// Restore an archived wallet
-pub async fn restore_wallet(wallet_id: i64) -> Result<(), String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
-
-    db.restore_wallet(wallet_id)?;
-
-    logger::info(
-        LogTag::Wallet,
-        &format!("Restored wallet: {} ({})", wallet.name, wallet.address),
-    );
-
-    Ok(())
-}
-
-/// Permanently delete a wallet
-pub async fn delete_wallet(wallet_id: i64) -> Result<(), String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
-
-    db.delete_wallet(wallet_id)?;
-
-    logger::warning(
-        LogTag::Wallet,
-        &format!("Deleted wallet: {} ({})", wallet.name, wallet.address),
-    );
-
-    Ok(())
-}
 
 // =============================================================================
 // TOOLS INTEGRATION
