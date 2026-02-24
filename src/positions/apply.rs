@@ -508,13 +508,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
                 // Calculate new average exit price (weighted average)
                 let total_exited = pos.total_exited_amount;
-                if let Some(prev_avg) = pos.average_exit_price {
-                    let prev_weight = (total_exited - exit_amount) as f64 / total_exited as f64;
-                    let new_weight = exit_amount as f64 / total_exited as f64;
-                    pos.average_exit_price =
-                        Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
-                } else {
-                    pos.average_exit_price = Some(effective_exit_price);
+                if total_exited > 0 {
+                    if let Some(prev_avg) = pos.average_exit_price {
+                        let prev_weight =
+                            (total_exited - exit_amount) as f64 / total_exited as f64;
+                        let new_weight = exit_amount as f64 / total_exited as f64;
+                        pos.average_exit_price =
+                            Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
+                    } else {
+                        pos.average_exit_price = Some(effective_exit_price);
+                    }
                 }
 
                 // Increment partial exit count
