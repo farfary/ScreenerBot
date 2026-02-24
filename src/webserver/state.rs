@@ -83,36 +83,6 @@ impl AppState {
         }
         std::collections::HashMap::new()
     }
-
-    /// Get service details (priority, dependencies, enabled status)
-    pub async fn get_service_details(&self, name: &str) -> Option<ServiceDetails> {
-        if let Some(manager_ref) = crate::services::get_service_manager().await {
-            if let Some(manager) = manager_ref.read().await.as_ref() {
-                if let Some(service) = manager.get_service(name) {
-                    return Some(ServiceDetails {
-                        name: name.to_string(),
-                        priority: service.priority(),
-                        dependencies: service
-                            .dependencies()
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect(),
-                        enabled: manager.is_service_enabled(name),
-                    });
-                }
-            }
-        }
-        None
-    }
-}
-
-/// Service details for webserver responses
-#[derive(Debug, Clone)]
-pub struct ServiceDetails {
-    pub name: String,
-    pub priority: i32,
-    pub dependencies: Vec<String>,
-    pub enabled: bool,
 }
 
 // Global state accessor

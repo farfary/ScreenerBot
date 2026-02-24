@@ -117,11 +117,6 @@ pub fn cleanup_expired_sessions() {
     }
 }
 
-/// Get the number of active sessions (for debugging/monitoring)
-pub fn active_session_count() -> usize {
-    SESSIONS.read().map(|s| s.len()).unwrap_or_default()
-}
-
 /// Clear all sessions (for testing or security reset)
 pub fn clear_all_sessions() {
     if let Ok(mut sessions) = SESSIONS.write() {

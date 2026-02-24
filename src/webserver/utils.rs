@@ -33,19 +33,6 @@ pub fn success_response<T: serde::Serialize>(data: T) -> Response {
     Json(data).into_response()
 }
 
-/// Truncate string to max length with ellipsis
-pub fn truncate_string(s: &str, max_len: usize) -> String {
-    if s.len() <= max_len {
-        s.to_string()
-    } else {
-        let mut end = max_len.saturating_sub(3);
-        while end > 0 && !s.is_char_boundary(end) {
-            end -= 1;
-        }
-        format!("{}...", &s[..end])
-    }
-}
-
 /// Format duration in human-readable format
 pub fn format_duration(seconds: u64) -> String {
     let days = seconds / 86400;
