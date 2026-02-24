@@ -15,25 +15,16 @@ use solana_sdk::{
 };
 use tokio::time::{sleep, Duration};
 
-use crate::constants::{LAMPORTS_PER_SOL, TOKEN_2022_PROGRAM_ID};
+use crate::constants::TOKEN_2022_PROGRAM_ID;
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
+use crate::utils::{lamports_to_sol, sol_to_lamports};
 use crate::wallets::WalletWithKey;
 
 use super::types::WalletOpResult;
 
 /// Minimum rent-exempt balance for accounts (~0.00089 SOL)
 pub const RENT_EXEMPT_MINIMUM: u64 = 890_880;
-
-/// Convert SOL to lamports
-fn sol_to_lamports(sol: f64) -> u64 {
-    (sol * LAMPORTS_PER_SOL as f64) as u64
-}
-
-/// Convert lamports to SOL
-fn lamports_to_sol(lamports: u64) -> f64 {
-    lamports as f64 / LAMPORTS_PER_SOL as f64
-}
 
 // =============================================================================
 // SOL TRANSFER
