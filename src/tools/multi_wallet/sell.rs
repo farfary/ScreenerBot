@@ -267,7 +267,7 @@ async fn create_sell_plans(
         let sol_balance = rpc_client
             .get_sol_balance(&wallet.wallet.address)
             .await
-            .unwrap_or(0.0);
+            .unwrap_or_default();
 
         let token_balance = rpc_client
             .get_token_balance(&wallet.wallet.address, &config.token_mint)

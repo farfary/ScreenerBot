@@ -347,7 +347,7 @@ pub async fn is_favorite_async(mint: String) -> bool {
 
     tokio::task::spawn_blocking(move || is_favorite(&db.connection(), &mint))
         .await
-        .unwrap_or(false)
+        .unwrap_or_default()
 }
 
 /// Get count of favorites (async wrapper)

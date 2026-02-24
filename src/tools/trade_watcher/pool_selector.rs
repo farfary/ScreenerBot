@@ -54,9 +54,9 @@ pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
                         .last()
                         .unwrap_or("SOL")
                         .to_string(),
-                    liquidity_usd: pool.reserve_usd.unwrap_or(0.0),
-                    volume_24h: pool.volume_h24.unwrap_or(0.0),
-                    price_usd: pool.base_token_price_usd.parse().unwrap_or(0.0),
+                    liquidity_usd: pool.reserve_usd.unwrap_or_default(),
+                    volume_24h: pool.volume_h24.unwrap_or_default(),
+                    price_usd: pool.base_token_price_usd.parse().unwrap_or_default(),
                 });
             }
         }
@@ -98,9 +98,9 @@ pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
                         base_symbol: pool.base_token_symbol.clone(),
                         quote_token: pool.quote_token_address.clone(),
                         quote_symbol: pool.quote_token_symbol.clone(),
-                        liquidity_usd: pool.liquidity_usd.unwrap_or(0.0),
-                        volume_24h: pool.volume_h24.unwrap_or(0.0),
-                        price_usd: pool.price_usd.parse().unwrap_or(0.0),
+                        liquidity_usd: pool.liquidity_usd.unwrap_or_default(),
+                        volume_24h: pool.volume_h24.unwrap_or_default(),
+                        price_usd: pool.price_usd.parse().unwrap_or_default(),
                     });
                 }
             }
@@ -184,9 +184,9 @@ pub async fn search_pools_by_source(
                                 .last()
                                 .unwrap_or("SOL")
                                 .to_string(),
-                            liquidity_usd: pool.reserve_usd.unwrap_or(0.0),
-                            volume_24h: pool.volume_h24.unwrap_or(0.0),
-                            price_usd: pool.base_token_price_usd.parse().unwrap_or(0.0),
+                            liquidity_usd: pool.reserve_usd.unwrap_or_default(),
+                            volume_24h: pool.volume_h24.unwrap_or_default(),
+                            price_usd: pool.base_token_price_usd.parse().unwrap_or_default(),
                         });
                     }
                 }
@@ -209,9 +209,9 @@ pub async fn search_pools_by_source(
                             base_symbol: pool.base_token_symbol.clone(),
                             quote_token: pool.quote_token_address.clone(),
                             quote_symbol: pool.quote_token_symbol.clone(),
-                            liquidity_usd: pool.liquidity_usd.unwrap_or(0.0),
-                            volume_24h: pool.volume_h24.unwrap_or(0.0),
-                            price_usd: pool.price_usd.parse().unwrap_or(0.0),
+                            liquidity_usd: pool.liquidity_usd.unwrap_or_default(),
+                            volume_24h: pool.volume_h24.unwrap_or_default(),
+                            price_usd: pool.price_usd.parse().unwrap_or_default(),
                         });
                     }
                 }

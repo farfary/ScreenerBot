@@ -49,7 +49,7 @@ impl PoolsDatabase {
             params![&account_key],
             |_| Ok(true),
           )
-          .unwrap_or(false);
+          .unwrap_or_default();
 
         if exists {
           // Increment error count and update last_failed_at
@@ -124,7 +124,7 @@ impl PoolsDatabase {
             params![&pool_id_str],
             |_| Ok(true),
           )
-          .unwrap_or(false);
+          .unwrap_or_default();
 
         if exists {
           // Increment error count and update last_failed_at

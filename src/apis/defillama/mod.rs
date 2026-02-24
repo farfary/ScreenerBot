@@ -161,7 +161,7 @@ impl DefiLlamaClient {
                             .iter()
                             .any(|chain| chain.to_lowercase().contains("solana"))
                     })
-                    .unwrap_or(false);
+                    .unwrap_or_default();
 
                 if has_solana {
                     protocol.address.as_ref().and_then(|addr| {
@@ -194,7 +194,7 @@ impl DefiLlamaClient {
                             .iter()
                             .any(|chain| chain.to_lowercase().contains("solana"))
                     })
-                    .unwrap_or(false);
+                    .unwrap_or_default();
 
                 if has_solana {
                     protocol.address.as_ref().and_then(|addr| {

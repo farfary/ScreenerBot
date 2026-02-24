@@ -805,7 +805,7 @@ impl ServiceManager {
         self.services
             .get(name)
             .map(|s| s.is_enabled())
-            .unwrap_or(false)
+            .unwrap_or_default()
     }
 
     /// Get the names of services that currently have running handles

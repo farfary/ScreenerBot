@@ -451,8 +451,8 @@ impl PoolDiscovery {
                     program_id: Pubkey::default(),
                     base_mint,
                     quote_mint,
-                    liquidity_usd: canonical_pool.liquidity_usd.unwrap_or(0.0),
-                    volume_h24_usd: canonical_pool.volume_h24.unwrap_or(0.0),
+                    liquidity_usd: canonical_pool.liquidity_usd.unwrap_or_default(),
+                    volume_h24_usd: canonical_pool.volume_h24.unwrap_or_default(),
                 });
                 sent_count += 1;
             }
@@ -548,8 +548,8 @@ impl PoolDiscovery {
                 base_mint,
                 quote_mint,
                 reserve_accounts: Vec::new(),
-                liquidity_usd: pool.liquidity_usd.unwrap_or(0.0),
-                volume_h24_usd: pool.volume_h24.unwrap_or(0.0),
+                liquidity_usd: pool.liquidity_usd.unwrap_or_default(),
+                volume_h24_usd: pool.volume_h24.unwrap_or_default(),
                 last_updated: Instant::now(),
             });
         }

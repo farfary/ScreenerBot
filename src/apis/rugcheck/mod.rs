@@ -208,7 +208,7 @@ impl RugcheckClient {
                 amount: h.amount.to_string(),
                 pct: h.pct,
                 owner: h.owner,
-                insider: h.insider.unwrap_or(false),
+                insider: h.insider.unwrap_or_default(),
             })
             .collect();
 
@@ -246,7 +246,7 @@ impl RugcheckClient {
             creator_tokens: api_response.creator_tokens,
             score: api_response.score,
             score_normalised: api_response.score_normalised,
-            rugged: api_response.rugged.unwrap_or(false),
+            rugged: api_response.rugged.unwrap_or_default(),
             risks,
             total_markets: None, // Market data not included in API response
             total_market_liquidity: api_response.total_market_liquidity,

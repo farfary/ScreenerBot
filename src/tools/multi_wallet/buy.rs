@@ -177,7 +177,7 @@ async fn create_buy_plans(
         let balance = rpc_client
             .get_sol_balance(&wallet.wallet.address)
             .await
-            .unwrap_or(0.0);
+            .unwrap_or_default();
 
         // Calculate buy amount (random within range)
         let buy_amount = if config.min_amount_sol == config.max_amount_sol {

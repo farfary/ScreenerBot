@@ -249,7 +249,7 @@ impl SwapRouter for JupiterRouter {
                 request.input_mint,
                 request.output_mint,
                 slippage_bps,
-                platform_fee_bps.unwrap_or(0)
+                platform_fee_bps.unwrap_or_default()
             ),
         );
 

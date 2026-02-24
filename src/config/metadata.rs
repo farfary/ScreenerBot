@@ -309,11 +309,11 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("performance", super::PerformanceConfig::field_metadata());
 
     for section in map.values_mut() {
-        section.retain(|_, field| !field.hidden.unwrap_or(false));
+        section.retain(|_, field| !field.hidden.unwrap_or_default());
 
         for field in section.values_mut() {
             if let Some(ref mut children) = field.children {
-                children.retain(|_, child| !child.hidden.unwrap_or(false));
+                children.retain(|_, child| !child.hidden.unwrap_or_default());
             }
 
             // Keep original category, derive visibility from it

@@ -574,7 +574,7 @@ async fn fetch_dexscreener_profiles(
                 .chain_id
                 .as_ref()
                 .map(|chain| chain.eq_ignore_ascii_case("solana"))
-                .unwrap_or(false)
+                .unwrap_or_default()
         })
         .map(|profile| DiscoveryRecord {
             mint: profile.token_address,
