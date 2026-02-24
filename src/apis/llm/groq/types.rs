@@ -6,8 +6,7 @@
 //! Since the API is fully compatible, we re-export OpenAI types.
 
 use crate::apis::llm::openai::types::{
-    OpenAiChoice, OpenAiMessage, OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
-    OpenAiResponseMessage, OpenAiUsage,
+    OpenAiMessage, OpenAiRequest, OpenAiResponse, OpenAiResponseFormat,
 };
 
 // Re-export as Groq types (aliases)
@@ -15,6 +14,3 @@ pub type GroqRequest = OpenAiRequest;
 pub type GroqMessage = OpenAiMessage;
 pub type GroqResponseFormat = OpenAiResponseFormat;
 pub type GroqResponse = OpenAiResponse;
-pub type GroqChoice = OpenAiChoice;
-pub type GroqResponseMessage = OpenAiResponseMessage;
-pub type GroqUsage = OpenAiUsage;

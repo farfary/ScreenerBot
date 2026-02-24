@@ -19,10 +19,7 @@
 
 pub mod types;
 
-pub use self::types::{
-    GroqChoice, GroqMessage, GroqRequest, GroqResponse, GroqResponseFormat, GroqResponseMessage,
-    GroqUsage,
-};
+pub use self::types::{GroqMessage, GroqRequest, GroqResponse, GroqResponseFormat};
 
 use crate::apis::client::RateLimiter;
 use crate::apis::llm::{

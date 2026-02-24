@@ -90,7 +90,7 @@ pub use manager::{get_or_init_rpc_manager, get_rpc_manager, init_rpc_manager, Rp
 
 pub use provider::{
     config::ProviderConfig, derive_websocket_url, detect_provider_kind, generate_provider_id,
-    ProviderRef, RpcProvider,
+    RpcProvider,
 };
 
 // ============================================================================
