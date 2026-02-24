@@ -849,18 +849,18 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
     // Holders (use total_holders)
     let holders = token
         .total_holders
-        .map(|h| format!("{}", h))
+        .map(|h| h.to_string())
         .unwrap_or_else(|| "N/A".to_string());
 
     // Transactions (use helper methods)
     let txns_1h = token
         .txns_1h_total()
-        .map(|t| format!("{}", t))
+        .map(|t| t.to_string())
         .unwrap_or_else(|| "N/A".to_string());
 
     let txns_24h = token
         .txns_24h_total()
-        .map(|t| format!("{}", t))
+        .map(|t| t.to_string())
         .unwrap_or_else(|| "N/A".to_string());
 
     // Blacklist status
