@@ -1,8 +1,4 @@
-// Transactions Module - Modern modular architecture for Solana DEX bot transaction management
-//
-// This module provides comprehensive transaction monitoring, analysis, and verification
-// for the ScreenerBot trading system. It replaces the previous flat file structure
-// with a clean, maintainable modular design.
+//! Transaction processing — fetching, decoding, analysis, and persistence.
 //
 // Architecture:
 // - `manager`: Core TransactionsManager struct and lifecycle management

@@ -1,4 +1,4 @@
-// Shared database configuration and utilities.
+//! Database initialization and connection pooling for SQLite storage.
 //
 // All SQLite connections must use `configure::configure_connection()` via
 // `with_init()` to ensure PRAGMAs survive connection pool recycling.

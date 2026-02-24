@@ -1,3 +1,4 @@
+//! Service lifecycle management — orchestrates all bot subsystems.
 mod health;
 pub mod implementations;
 mod metrics;

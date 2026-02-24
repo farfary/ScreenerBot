@@ -1,3 +1,4 @@
+//! Token filtering engine — evaluates tokens against user-defined filter criteria.
 pub mod background;
 mod engine;
 pub mod sources;

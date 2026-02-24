@@ -1,3 +1,4 @@
+//! External service health monitoring — tracks API availability and latency.
 pub mod checker;
 pub mod monitor;
 pub mod monitors;

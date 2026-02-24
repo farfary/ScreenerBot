@@ -1,3 +1,4 @@
+//! Web dashboard server — REST API and real-time status endpoints.
 mod server;
 
 pub mod demo;

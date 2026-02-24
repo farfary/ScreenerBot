@@ -1,7 +1,6 @@
+//! Swap execution — routing, quoting, and transaction building for token trades.
 pub mod operations;
 pub mod registry;
-/// Swap module for handling multiple DEX routers
-/// Trait-based router architecture for extensibility
 pub mod router;
 pub mod routers;
 pub mod types;

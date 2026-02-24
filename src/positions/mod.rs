@@ -1,4 +1,4 @@
-// Position management module - clean modular design
+//! Position lifecycle management — opening, tracking, closing, and DCA operations.
 pub mod apply;
 pub mod database;
 pub use database as db;

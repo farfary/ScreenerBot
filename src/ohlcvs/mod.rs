@@ -1,7 +1,4 @@
-// OHLCV Data Module
-// Provides comprehensive OHLCV (Open, High, Low, Close, Volume) data management
-// with multi-timeframe support, intelligent caching, and smart monitoring.
-
+//! OHLCV candlestick data — fetching, caching, and gap filling for price charts.
 mod aggregator;
 mod cache;
 mod database;

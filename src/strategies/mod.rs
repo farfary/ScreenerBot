@@ -1,3 +1,4 @@
+//! Trading strategy engine — rule trees, conditions, and evaluation logic.
 pub mod conditions;
 pub mod database;
 pub use database as db;
