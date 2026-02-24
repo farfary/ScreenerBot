@@ -455,7 +455,7 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
     );
 
     if let Some(error) = &result.transaction.error_message {
-        println!("Error: {}", error);
+        println!("Error: {error}");
     }
 
     if let Some(fee) = result.transaction.fee_lamports {
@@ -487,7 +487,7 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
         );
 
         if let Some(ref pool) = swap_info.pool_address {
-            println!("Pool: {}", pool);
+            println!("Pool: {pool}");
         }
     }
 
@@ -530,7 +530,7 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
     );
 
     if let Some(analysis_ms) = result.performance_metrics.analysis_ms {
-        println!("Analysis Duration: {}ms", analysis_ms);
+        println!("Analysis Duration: {analysis_ms}ms");
     }
 
     // Analysis steps
@@ -619,7 +619,7 @@ pub fn print_transactions_debug_table(debug_infos: &[TransactionDebugInfo]) {
         .with(Modify::new(Rows::new(1..)).with(Alignment::left()));
 
     println!("\n TRANSACTIONS DEBUG TABLE");
-    println!("{}", table);
+    println!("{table}");
 }
 
 // =============================================================================
@@ -635,7 +635,7 @@ pub async fn debug_database_connection() -> Result<(), String> {
         // Health check
         match db.health_check().await {
             Ok(()) => println!("Database connection: OK"),
-            Err(e) => println!("Database connection: ERROR - {}", e),
+            Err(e) => println!("Database connection: ERROR - {e}"),
         }
 
         // Statistics
@@ -659,7 +659,7 @@ pub async fn debug_database_connection() -> Result<(), String> {
                 );
                 println!("• Schema Version: {}", stats.schema_version);
             }
-            Err(e) => println!("Database statistics: ERROR - {}", e),
+            Err(e) => println!("Database statistics: ERROR - {e}"),
         }
 
         // Integrity check
@@ -683,7 +683,7 @@ pub async fn debug_database_connection() -> Result<(), String> {
                     report.missing_processed_transactions
                 );
             }
-            Err(e) => println!("Database integrity check: ERROR - {}", e),
+            Err(e) => println!("Database integrity check: ERROR - {e}"),
         }
     } else {
         println!("No database connection available");

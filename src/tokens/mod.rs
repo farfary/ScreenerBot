@@ -157,7 +157,7 @@ pub use favorites::{
 /// match request_immediate_update("TokenMintAddress").await {
 ///     Ok(result) if result.is_success() => println!("Updated successfully"),
 ///     Ok(result) => println!("Update failed: {:?}", result.failures),
-///     Err(e) => println!("Error: {}", e),
+///     Err(e) => println!("Error: {e}"),
 /// }
 /// ```
 pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {

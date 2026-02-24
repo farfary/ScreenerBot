@@ -631,7 +631,7 @@ fn load_keypair_from_base58_format(private_key_str: &str) -> Result<Keypair, Str
 /// use screenerbot::config::get_wallet_pubkey;
 ///
 /// let pubkey = get_wallet_pubkey()?;
-/// println!("Wallet address: {}", pubkey);
+/// println!("Wallet address: {pubkey}");
 /// ```
 pub fn get_wallet_pubkey() -> Result<Pubkey, String> {
     get_wallet_keypair().map(|kp| kp.pubkey())
@@ -651,7 +651,7 @@ pub fn get_wallet_pubkey() -> Result<Pubkey, String> {
 /// use screenerbot::config::get_wallet_pubkey_string;
 ///
 /// let address = get_wallet_pubkey_string()?;
-/// println!("Wallet address: {}", address);
+/// println!("Wallet address: {address}");
 /// ```
 pub fn get_wallet_pubkey_string() -> Result<String, String> {
     get_wallet_pubkey().map(|pk| pk.to_string())
