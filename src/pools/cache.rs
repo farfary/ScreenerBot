@@ -193,11 +193,6 @@ async fn start_cache_cleanup_task() {
     });
 }
 
-/// Signal the cache cleanup task to shut down
-pub fn shutdown_cache() {
-    CLEANUP_SHUTDOWN.notify_waiters();
-}
-
 /// Remove stale price entries from cache
 fn cleanup_stale_entries() {
     let now = Instant::now();

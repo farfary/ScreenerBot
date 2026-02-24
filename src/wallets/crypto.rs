@@ -125,18 +125,6 @@ pub fn keypair_to_address(keypair: &Keypair) -> String {
     keypair.pubkey().to_string()
 }
 
-/// Verify that a keypair matches an expected address
-pub fn verify_keypair_address(keypair: &Keypair, expected_address: &str) -> Result<(), String> {
-    let actual = keypair_to_address(keypair);
-    if actual != expected_address {
-        return Err(format!(
-            "Keypair address mismatch: expected {}, got {}",
-            expected_address, actual
-        ));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

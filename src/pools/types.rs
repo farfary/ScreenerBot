@@ -402,26 +402,6 @@ impl PriceHistory {
         unix_now - elapsed
     }
 
-    /// Check if current price history has any gaps larger than 1 minute
-    pub fn has_significant_gaps(&self) -> bool {
-        if self.prices.len() <= 1 {
-            return false;
-        }
-
-        for i in 1..self.prices.len() {
-            let current_time = self.approximate_timestamp(&self.prices[i]);
-            let prev_time = self.approximate_timestamp(&self.prices[i - 1]);
-
-            let gap = current_time - prev_time;
-
-            if gap > (MAX_PRICE_GAP_SECONDS as i64) {
-                return true;
-            }
-        }
-
-        false
-    }
-
     /// Remove all data with gaps, keeping only the most recent continuous segment
     pub fn cleanup_gapped_data(&mut self) -> usize {
         let original_len = self.prices.len();

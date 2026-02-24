@@ -352,13 +352,6 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-/// Get current schema version from database
-pub fn get_schema_version(conn: &Connection) -> Result<i32, String> {
-    // Try to get version from a metadata table (if we add one in future)
-    // For now, just return current version
-    Ok(SCHEMA_VERSION)
-}
-
 /// Check if database is initialized
 pub fn is_initialized(conn: &Connection) -> bool {
     conn.prepare("SELECT 1 FROM tokens LIMIT 1").is_ok()
