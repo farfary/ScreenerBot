@@ -577,7 +577,7 @@ async fn detect_mev_tips_from_instructions(tx_data: &crate::rpc::TransactionDeta
                         .get("destination")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("to").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     if is_mev_tip_address(dest) {
                         if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
                             total_lamports = total_lamports.saturating_add(lamports);

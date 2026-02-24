@@ -26,7 +26,7 @@ pub async fn handle_callback_query(
         .await
         .map_err(|e| format!("Failed to answer callback: {e}"))?;
 
-    let data = query.data.as_deref().unwrap_or("");
+    let data = query.data.as_deref().unwrap_or_default();
     let parts: Vec<&str> = data.split(':').collect();
 
     // Check authentication for sensitive callbacks

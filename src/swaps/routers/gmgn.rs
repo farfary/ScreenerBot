@@ -184,7 +184,7 @@ impl GmgnRouter {
 
                         if let Ok(value) = serde_json::from_str::<Value>(&response_text) {
                             let code_opt = value.get("code").and_then(|c| c.as_i64());
-                            let msg_opt = value.get("msg").and_then(|m| m.as_str()).unwrap_or("");
+                            let msg_opt = value.get("msg").and_then(|m| m.as_str()).unwrap_or_default();
 
                             if let Some(code) = code_opt {
                                 if code != 0 {

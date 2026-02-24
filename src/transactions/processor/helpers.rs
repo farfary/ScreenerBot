@@ -141,13 +141,13 @@ pub(super) fn find_largest_system_transfer_from_wallet(
     let mut consider_ix = |ix: &serde_json::Value| {
         // Prefer parsed format
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
             if let Some(info) = parsed.get("info") {
                 let source = info
                     .get("source")
                     .and_then(|v| v.as_str())
                     .or_else(|| info.get("from").and_then(|v| v.as_str()))
-                    .unwrap_or("");
+                    .unwrap_or_default();
                 if source == wallet_key {
                     let lamports = info
                         .get("lamports")
@@ -219,19 +219,19 @@ pub(super) fn find_mev_tips_from_wallet(
     let mut total: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
             if ix_type == "transfer" {
                 if let Some(info) = parsed.get("info") {
                     let source = info
                         .get("source")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("from").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     let dest = info
                         .get("destination")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("to").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     if source == wallet_key && is_mev_tip_address(dest) {
                         if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
                             total = total.saturating_add(lamports);
@@ -475,19 +475,19 @@ pub(super) fn find_wrap_deposit_via_sys_transfers_to_wsol_atas(
     let mut total: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
             if ix_type == "transfer" {
                 if let Some(info) = parsed.get("info") {
                     let source = info
                         .get("source")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("from").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     let dest = info
                         .get("destination")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("to").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     if source == wallet_key && wsol_atas.iter().any(|a| a == dest) {
                         if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
                             total = total.saturating_add(lamports);
@@ -599,12 +599,12 @@ pub(super) fn sum_system_transfers_to_account_from_wallet(
                         .get("source")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("from").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     let dest = info
                         .get("destination")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("to").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     if source == wallet_key && dest == dest_account {
                         if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
                             total = total.saturating_add(lamports);
@@ -659,12 +659,12 @@ pub(super) fn find_largest_system_transfer_from_wallet_excluding_tips(
                         .get("source")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("from").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     let dest = info
                         .get("destination")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("to").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     if source == wallet_key && !is_mev_tip_address(dest) {
                         if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
                             if lamports > best {
@@ -722,7 +722,7 @@ pub(super) fn detect_mev_tips_from_instructions_light(
                         .get("destination")
                         .and_then(|v| v.as_str())
                         .or_else(|| info.get("to").and_then(|v| v.as_str()))
-                        .unwrap_or("");
+                        .unwrap_or_default();
                     if is_mev_tip_address(dest) {
                         if let Some(lamports) = info.get("lamports").and_then(|v| v.as_u64()) {
                             total_lamports = total_lamports.saturating_add(lamports);
@@ -788,7 +788,7 @@ pub(super) fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::Transactio
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
                     if let Some(info) = parsed.get("info") {
-                        let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or("");
+                        let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or_default();
                         if mint == crate::transactions::utils::WSOL_MINT {
                             if let Some(token_amount) = info.get("tokenAmount") {
                                 if let Some(ui) =
@@ -836,16 +836,16 @@ pub(super) fn sum_inner_wsol_transfers_ui_to_wallet(
         if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
-                    let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
                     if ix_type == "transfer" || ix_type == "transferChecked" {
                         if let Some(info) = parsed.get("info") {
-                            let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or("");
+                            let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or_default();
                             if mint == crate::transactions::utils::WSOL_MINT {
                                 let dest = info
                                     .get("destination")
                                     .and_then(|v| v.as_str())
                                     .or_else(|| info.get("to").and_then(|v| v.as_str()))
-                                    .unwrap_or("");
+                                    .unwrap_or_default();
                                 if !dest.is_empty() && wallet_wsol_atas.iter().any(|a| a == dest) {
                                     // Prefer tokenAmount.uiAmount (transferChecked). Fallback to amount lamports (transfer)
                                     let mut ui_amount = 0.0f64;

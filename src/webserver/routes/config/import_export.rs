@@ -69,7 +69,7 @@ fn has_nested_field(value: &serde_json::Value, path: &str) -> bool {
                 // Last part - check if field exists and is non-empty
                 if let Some(val) = obj.get(*part) {
                     return !val.is_null()
-                        && !(val.is_string() && val.as_str().unwrap_or("").is_empty());
+                        && !(val.is_string() && val.as_str().unwrap_or_default().is_empty());
                 }
                 return false;
             } else if let Some(next) = obj.get(*part) {

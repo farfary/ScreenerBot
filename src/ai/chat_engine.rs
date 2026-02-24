@@ -696,7 +696,7 @@ impl ChatEngine {
                             let param_desc = param_schema
                                 .get("description")
                                 .and_then(|d| d.as_str())
-                                .unwrap_or("");
+                                .unwrap_or_default();
                             let is_required = required.contains(&param_name.as_str());
                             let required_marker = if is_required {
                                 " (required)"

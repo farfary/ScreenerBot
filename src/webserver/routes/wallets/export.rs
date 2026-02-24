@@ -54,7 +54,7 @@ pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoRe
     let mut csv_content = "name,address,role,is_main,is_active,notes,created_at\n".to_owned();
 
     for wallet in &wallets {
-        let notes = wallet.notes.as_deref().unwrap_or("");
+        let notes = wallet.notes.as_deref().unwrap_or_default();
         // Escape CSV fields that might contain commas or quotes
         let escaped_name = escape_csv_field(&wallet.name);
         let escaped_notes = escape_csv_field(notes);

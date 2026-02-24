@@ -54,7 +54,7 @@ pub async fn handle_command(
 
     // Map keyboard button text to command, or use text directly if it's a command
     let command = if text.starts_with('/') {
-        text.split_whitespace().next().unwrap_or("")
+        text.split_whitespace().next().unwrap_or_default()
     } else if let Some(cmd) = button_to_command(text) {
         cmd
     } else {

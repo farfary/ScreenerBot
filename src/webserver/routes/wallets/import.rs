@@ -35,7 +35,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
     let mut file_data: Option<(String, Vec<u8>)> = None;
 
     while let Ok(Some(field)) = multipart.next_field().await {
-        let name = field.name().unwrap_or("").to_string();
+        let name = field.name().unwrap_or_default().to_string();
         if name == "file" {
             let filename = field.file_name().unwrap_or("unknown").to_string();
 
@@ -80,7 +80,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
     };
 
     // Determine file type from extension
-    let extension = filename.rsplit('.').next().unwrap_or("").to_lowercase();
+    let extension = filename.rsplit('.').next().unwrap_or_default().to_lowercase();
 
     // Parse file based on extension
     let (headers, rows) = match extension.as_str() {
