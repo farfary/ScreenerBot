@@ -214,9 +214,8 @@ impl LlmClient for OllamaClient {
         self.enabled
     }
 
-    async fn call(&self, request: ChatRequest) -> Result<ChatResponse, LlmError> {
+    async fn call(&self, mut request: ChatRequest) -> Result<ChatResponse, LlmError> {
         // Use the model from request, or fallback to client's default
-        let mut request = request;
         if request.model.is_empty() {
             request.model = self.model.clone();
         }
