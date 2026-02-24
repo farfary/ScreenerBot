@@ -228,7 +228,7 @@ pub async fn debug_transactions_batch(
             success_count,
             results.len(),
             total_duration.as_millis(),
-            if results.len() > 0 {
+            if !results.is_empty() {
                 total_duration.as_millis() / (results.len() as u128)
             } else {
                 0
