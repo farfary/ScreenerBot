@@ -28,14 +28,12 @@ pub fn safe_format_signature(s: &str) -> String {
 // SOLANA-SPECIFIC UTILITIES (Consolidated from multiple files)
 // =============================================================================
 
-/// Standard pubkey parsing with consistent error message formatting
-/// Consolidates 20+ identical patterns across the codebase
+/// Parse a pubkey string with consistent error formatting
 pub fn parse_pubkey_safe(address: &str) -> Result<Pubkey, String> {
     Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{address}': {e}"))
 }
 
 /// Read a pubkey from byte data at specified offset with bounds checking
-/// Consolidates 17+ duplicate read_pubkey implementations from debug binaries
 pub fn read_pubkey_from_data(data: &[u8], offset: usize) -> Option<String> {
     if offset + 32 > data.len() {
         return None;
@@ -56,7 +54,6 @@ pub fn read_pubkey_from_data(data: &[u8], offset: usize) -> Option<String> {
 }
 
 /// Read a u64 from byte data at specified offset with little-endian byte order
-/// Consolidates 9+ duplicate read_u64 implementations from debug binaries
 pub fn read_u64_from_data(data: &[u8], offset: usize) -> Option<u64> {
     if offset + 8 > data.len() {
         return None;
@@ -77,8 +74,6 @@ pub fn read_u32_from_data(data: &[u8], offset: usize) -> Option<u32> {
 }
 
 /// SOL lamports conversion functions
-/// Uses the existing LAMPORTS_PER_SOL constant from constants.rs
-/// Consolidates 20+ hardcoded 1_000_000_000 values across the codebase
 use crate::constants::LAMPORTS_PER_SOL;
 
 /// Convert lamports to SOL with consistent precision
@@ -91,7 +86,6 @@ pub fn sol_to_lamports(sol: f64) -> u64 {
     (sol * (LAMPORTS_PER_SOL as f64)).round() as u64
 }
 
-/// Format mint address consistently for logs (8 chars + "...")
 /// Format a mint address for log output (first 8 + last 4 chars)
 pub fn format_mint_for_log(mint: &str) -> String {
     let len = mint.len();
