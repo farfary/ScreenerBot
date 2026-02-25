@@ -10,6 +10,7 @@ pub mod operations;
 pub mod price_updater;
 pub mod queue;
 pub mod state;
+pub mod state_pending;
 pub mod tracking;
 pub mod transitions;
 pub mod types;
