@@ -34,6 +34,7 @@ use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::OnceCell;
 
 // ============================================================================
@@ -132,7 +133,7 @@ pub trait LlmClient: Send + Sync {
     async fn get_stats(&self) -> crate::apis::stats::ApiStats;
 
     /// Get rate limiter info
-    fn rate_limit_info(&self) -> (usize, std::time::Duration);
+    fn rate_limit_info(&self) -> (usize, Duration);
 }
 
 // ============================================================================

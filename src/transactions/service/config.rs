@@ -4,6 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use crate::transactions::types::DeferredRetry;
 use crate::transactions::utils::{NORMAL_CHECK_INTERVAL_SECS, RPC_BATCH_SIZE};
@@ -36,7 +37,7 @@ pub static DEFERRED_RETRIES: LazyLock<moka::sync::Cache<String, DeferredRetry>> 
     LazyLock::new(|| {
         moka::sync::Cache::builder()
             .max_capacity(1_000)
-            .time_to_live(std::time::Duration::from_secs(300))
+            .time_to_live(Duration::from_secs(300))
             .build()
     });
 

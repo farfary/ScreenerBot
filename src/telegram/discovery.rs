@@ -279,7 +279,7 @@ async fn discovery_poll(bot: &Bot, offset: &Arc<AtomicI64>) {
                 &format!("Discovery poll error (will retry): {e}"),
             );
             // Brief pause before retry
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 }

@@ -14,6 +14,7 @@ use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Duration;
 
 // =============================================================================
 // CONSTANTS
@@ -55,7 +56,7 @@ impl ActionsDatabase {
         let write_pool = Pool::builder()
             .max_size(WRITE_POOL_MAX_SIZE)
             .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
+            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(write_manager)
@@ -65,7 +66,7 @@ impl ActionsDatabase {
         let read_pool = Pool::builder()
             .max_size(READ_POOL_MAX_SIZE)
             .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
+            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(read_manager)

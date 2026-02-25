@@ -40,7 +40,7 @@ static TOKEN_POOLS_CACHE: LazyLock<moka::sync::Cache<String, TokenPoolCacheEntry
     LazyLock::new(|| {
         moka::sync::Cache::builder()
             .max_capacity(5_000)
-            .time_to_live(std::time::Duration::from_secs(TOKEN_POOLS_TTL_SECS * 2))
+            .time_to_live(Duration::from_secs(TOKEN_POOLS_TTL_SECS * 2))
             .build()
     });
 
@@ -50,7 +50,7 @@ static POOL_REFRESH_INFLIGHT: LazyLock<AsyncMutex<HashMap<String, std::sync::Arc
 static POOL_PREFETCH_STATE: LazyLock<moka::sync::Cache<String, Instant>> = LazyLock::new(|| {
     moka::sync::Cache::builder()
         .max_capacity(5_000)
-        .time_to_live(std::time::Duration::from_secs(
+        .time_to_live(Duration::from_secs(
             POOL_PREFETCH_DEBOUNCE_SECS * 3,
         ))
         .build()

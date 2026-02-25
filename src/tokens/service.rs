@@ -20,6 +20,7 @@ use crate::tokens::updates::RateLimitCoordinator;
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -196,7 +197,7 @@ impl Service for TokensServiceNew {
             loop {
                 tokio::select! {
                     _ = shutdown_refill.notified() => break,
-                    _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {
+                    _ = tokio::time::sleep(Duration::from_secs(60)) => {
                         coord_refill.refill_all();
                     }
                 }
@@ -224,10 +225,10 @@ impl Service for TokensServiceNew {
             // Wait 60s before first run to let other systems warm up
             tokio::select! {
                 _ = auth_shutdown.notified() => return,
-                _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {}
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
             }
 
-            let interval = std::time::Duration::from_secs(300); // 5 minutes
+            let interval = Duration::from_secs(300); // 5 minutes
             loop {
                 // Run authority discovery analysis
                 let db_clone = auth_db.clone();

@@ -3,6 +3,7 @@
 // Service lifecycle management - start/stop/status and global state
 
 use std::sync::{Arc, LazyLock};
+use std::time::Duration;
 use tokio::sync::{Mutex, Notify};
 
 use crate::logger::{self, LogTag};
@@ -213,7 +214,7 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
                         || el.contains("transaction not available");
 
                     if indexing_delay && attempts < max_attempts - 1 {
-                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                         attempts += 1;
                         delay_ms = ((delay_ms as f64) * 1.8) as u64; // mild backoff
                         continue;

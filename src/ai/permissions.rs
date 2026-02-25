@@ -3,7 +3,7 @@
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 use crate::ai::tools::ToolCategory;
@@ -486,7 +486,7 @@ mod tests {
         );
 
         // Give it a moment to expire
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(10));
         assert!(confirmation.is_expired());
         assert_eq!(confirmation.remaining_seconds(), 0);
     }

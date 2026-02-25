@@ -258,7 +258,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
     let response = client
         .get(&url)
         .header("User-Agent", format!("ScreenerBot/{VERSION}"))
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(Duration::from_secs(10))
         .send()
         .await
         .map_err(|e| format!("Failed to check for updates: {e}"))?;

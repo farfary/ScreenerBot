@@ -12,6 +12,7 @@ use crate::strategies::types::{MarketData, PositionData, StrategyType};
 use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
+use std::time::Duration;
 
 /// Evaluator for applying strategies to trading decisions
 pub struct StrategyEvaluator;
@@ -106,7 +107,7 @@ impl StrategyEvaluator {
         };
 
         // Call strategies module for evaluation with timeout
-        let strategy_timeout = std::time::Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
+        let strategy_timeout = Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
         let evaluation_result = tokio::time::timeout(
             strategy_timeout,
             strategies::evaluate_entry_strategies(
@@ -290,7 +291,7 @@ impl StrategyEvaluator {
         };
 
         // Call strategies module for evaluation with timeout
-        let strategy_timeout = std::time::Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
+        let strategy_timeout = Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
         let evaluation_result = tokio::time::timeout(
             strategy_timeout,
             strategies::evaluate_exit_strategies(

@@ -13,6 +13,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Duration;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // =============================================================================
@@ -55,7 +56,7 @@ impl EventsDatabase {
         let write_pool = Pool::builder()
             .max_size(WRITE_POOL_MAX_SIZE)
             .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
+            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(write_manager)
@@ -65,7 +66,7 @@ impl EventsDatabase {
         let read_pool = Pool::builder()
             .max_size(READ_POOL_MAX_SIZE)
             .min_idle(Some(POOL_MIN_IDLE))
-            .connection_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
+            .connection_timeout(Duration::from_millis(CONNECTION_TIMEOUT_MS))
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(read_manager)

@@ -4,7 +4,7 @@
 
 use crate::logger::{self, LogTag};
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// RPC endpoint test result with detailed metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +44,7 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
 
     // Use 10s timeout to handle cold starts where TLS initialization takes longer
     let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(Duration::from_secs(10))
         .build()
     {
         Ok(c) => c,
@@ -163,7 +163,7 @@ pub async fn validate_mainnet(url: &str) -> Result<bool, String> {
     });
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("Failed to create client: {e}"))?;
 
@@ -201,7 +201,7 @@ pub async fn get_rpc_version(url: &str) -> Result<String, String> {
     });
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
+        .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("Failed to create client: {e}"))?;
 

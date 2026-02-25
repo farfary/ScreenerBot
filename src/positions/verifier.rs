@@ -15,6 +15,7 @@ use crate::{
 };
 use chrono::Utc;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 // Throttle repeated token accounts queries per mint to reduce RPC pressure
 const TOKEN_ACCOUNTS_THROTTLE_SECS: i64 = 5; // min interval per mint between balance checks
@@ -24,7 +25,7 @@ static LAST_TOKEN_ACCOUNTS_CHECK: LazyLock<moka::sync::Cache<String, chrono::Dat
     LazyLock::new(|| {
         moka::sync::Cache::builder()
             .max_capacity(5_000)
-            .time_to_live(std::time::Duration::from_secs(3600))
+            .time_to_live(Duration::from_secs(3600))
             .build()
     });
 
