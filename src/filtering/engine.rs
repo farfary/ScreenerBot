@@ -26,6 +26,7 @@ use super::types::{
 
 const MIN_VALID_BLOCKCHAIN_TIMESTAMP: i64 = 1; // Avoid 0/invalid timestamps from market APIs
 
+/// Compute a full filtering snapshot by evaluating all tokens against configured filters.
 pub async fn compute_snapshot(
     config: FilteringConfig,
     previous: Option<&FilteringSnapshot>,

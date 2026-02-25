@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 // ==================== Public API Functions ====================
 
+/// Fetch OHLCV candle data for a token with optional pool and time range filters.
 pub async fn get_ohlcv_data(
     mint: &str,
     timeframe: Timeframe,
@@ -34,12 +35,14 @@ pub async fn get_ohlcv_data(
         .await
 }
 
+/// List available pools for a token that have OHLCV data.
 pub async fn get_available_pools(mint: &str) -> OhlcvResult<Vec<PoolMetadata>> {
     let service = get_or_init_service().await?;
 
     service.pool_manager.get_pool_metadata(mint).await
 }
 
+/// Get unfilled data gaps for a token's OHLCV timeline.
 pub async fn get_data_gaps(mint: &str, timeframe: Timeframe) -> OhlcvResult<Vec<(i64, i64)>> {
     let service = get_or_init_service().await?;
 

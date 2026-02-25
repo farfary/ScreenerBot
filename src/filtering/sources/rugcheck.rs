@@ -4,6 +4,7 @@ use crate::config::schemas::RugCheckFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::{SecurityRisk, Token};
 
+/// Evaluate a token against rugcheck filter criteria.
 pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRejectionReason> {
     if !config.enabled {
         return Ok(());

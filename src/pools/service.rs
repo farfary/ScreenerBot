@@ -53,18 +53,23 @@ static PRICE_CALCULATOR: LazyLock<RwLock<Option<Arc<PriceCalculator>>>> =
     LazyLock::new(|| RwLock::new(None));
 
 // Public accessors for service manager (used by individual service implementations)
+
+/// Get the shared pool discovery component, if initialized.
 pub fn get_pool_discovery() -> Option<Arc<PoolDiscovery>> {
     POOL_DISCOVERY.read().ok()?.clone()
 }
 
+/// Get the shared account fetcher component, if initialized.
 pub fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
     ACCOUNT_FETCHER.read().ok()?.clone()
 }
 
+/// Get the shared price calculator component, if initialized.
 pub fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
     PRICE_CALCULATOR.read().ok()?.clone()
 }
 
+/// Get the shared pool analyzer component, if initialized.
 pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
     POOL_ANALYZER.read().ok()?.clone()
 }

@@ -183,6 +183,7 @@ pub async fn get_blacklist_stats() -> Result<(usize, usize), String> {
     db_ref.get_blacklist_stats().await
 }
 
+/// List blacklisted accounts with an optional limit.
 pub async fn list_blacklisted_accounts(
     limit: Option<usize>,
 ) -> Result<Vec<BlacklistedAccountRecord>, String> {
@@ -196,6 +197,7 @@ pub async fn list_blacklisted_accounts(
     db_ref.list_blacklisted_accounts(limit).await
 }
 
+/// List blacklisted pools with an optional limit.
 pub async fn list_blacklisted_pools(
     limit: Option<usize>,
 ) -> Result<Vec<BlacklistedPoolRecord>, String> {

@@ -588,30 +588,37 @@ impl FilteringStore {
     }
 }
 
+/// Get the global filtering store singleton.
 pub fn global_store() -> Arc<FilteringStore> {
     GLOBAL_STORE.clone()
 }
 
+/// Refresh the filtering snapshot with current token data.
 pub async fn refresh_snapshot() -> Result<(), String> {
     global_store().refresh().await
 }
 
+/// Get the list of mint addresses that passed all filters.
 pub async fn get_filtered_mints() -> Result<Vec<String>, String> {
     global_store().get_filtered_mints().await
 }
 
+/// Get detailed info for tokens that passed all filters.
 pub async fn get_passed_tokens() -> Result<Vec<PassedToken>, String> {
     global_store().get_passed_tokens().await
 }
 
+/// Get detailed info for tokens that were rejected by filters.
 pub async fn get_rejected_tokens() -> Result<Vec<RejectedToken>, String> {
     global_store().get_rejected_tokens().await
 }
 
+/// Execute a filtering query with custom parameters.
 pub async fn execute_query(query: FilteringQuery) -> Result<FilteringQueryResult, String> {
     global_store().execute_query(query).await
 }
 
+/// Get aggregated filtering statistics.
 pub async fn get_stats() -> Result<FilteringStatsSnapshot, String> {
     global_store().get_stats().await
 }

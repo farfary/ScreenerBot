@@ -4,6 +4,7 @@ use crate::config::schemas::GeckoTerminalFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::{DataSource, Token};
 
+/// Evaluate a token against GeckoTerminal market data filter criteria.
 pub fn evaluate(token: &Token, config: &GeckoTerminalFilters) -> Result<(), FilterRejectionReason> {
     if !config.enabled {
         return Ok(());

@@ -4,6 +4,7 @@ use crate::config::schemas::DexScreenerFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::{DataSource, Token};
 
+/// Evaluate a token against DexScreener market data filter criteria.
 pub fn evaluate(token: &Token, config: &DexScreenerFilters) -> Result<(), FilterRejectionReason> {
     if !config.enabled {
         return Ok(());
