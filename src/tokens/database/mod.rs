@@ -3,6 +3,7 @@ mod assembly;
 mod async_api;
 mod authority;
 mod blacklist;
+mod helpers;
 mod market;
 /// Unified database operations for tokens system
 ///

@@ -10,7 +10,7 @@ use crate::tokens::types::{
     TokenResult,
 };
 
-use super::assembly::assemble_token_without_market_data;
+use super::helpers::assemble_token_without_market_data;
 use super::TokenDatabase;
 
 impl TokenDatabase {

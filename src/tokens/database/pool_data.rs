@@ -10,7 +10,7 @@ use crate::tokens::types::{
     TokenError, TokenPoolInfo, TokenPoolSources, TokenPoolsSnapshot, TokenResult,
 };
 
-use super::assembly::read_row_value;
+use super::helpers::read_row_value;
 use super::TokenDatabase;
 
 impl TokenDatabase {
