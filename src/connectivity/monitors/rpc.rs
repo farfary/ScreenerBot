@@ -10,6 +10,7 @@ use async_trait::async_trait;
 pub struct RpcMonitor;
 
 impl RpcMonitor {
+    /// Create a new monitor instance
     pub fn new() -> Self {
         Self
     }

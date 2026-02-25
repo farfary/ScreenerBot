@@ -28,6 +28,7 @@ pub struct ConnectivityChecker {
 }
 
 impl ConnectivityChecker {
+    /// Initialize all endpoint monitors for connectivity checking
     pub fn new() -> Self {
         // Initialize all monitors
         let monitors: Vec<Box<dyn EndpointMonitor>> = vec![

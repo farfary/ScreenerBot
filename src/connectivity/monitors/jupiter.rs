@@ -11,6 +11,7 @@ use tokio::time::Duration;
 pub struct JupiterMonitor;
 
 impl JupiterMonitor {
+    /// Create a new monitor instance
     pub fn new() -> Self {
         Self
     }

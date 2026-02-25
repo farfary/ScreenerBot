@@ -17,6 +17,7 @@ const GMGN_QUOTE_API: &str = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_rou
 pub struct GmgnMonitor;
 
 impl GmgnMonitor {
+    /// Create a new monitor instance
     pub fn new() -> Self {
         Self
     }

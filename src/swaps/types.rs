@@ -26,6 +26,7 @@ pub enum SwapMode {
 }
 
 impl SwapMode {
+    /// String representation of the swap mode for API requests
     pub fn as_str(&self) -> &'static str {
         match self {
             SwapMode::ExactIn => "ExactIn",

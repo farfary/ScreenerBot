@@ -16,6 +16,7 @@ pub enum EndpointCriticality {
 }
 
 impl EndpointCriticality {
+    /// Parse criticality level from a string (defaults to Optional for unknown values)
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "critical" => Self::Critical,
@@ -53,18 +54,22 @@ pub enum EndpointHealth {
 }
 
 impl EndpointHealth {
+    /// Returns true if the endpoint is fully healthy
     pub fn is_healthy(&self) -> bool {
         matches!(self, EndpointHealth::Healthy { .. })
     }
 
+    /// Returns true if the endpoint is in degraded mode
     pub fn is_degraded(&self) -> bool {
         matches!(self, EndpointHealth::Degraded { .. })
     }
 
+    /// Returns true if the endpoint is completely unavailable
     pub fn is_unhealthy(&self) -> bool {
         matches!(self, EndpointHealth::Unhealthy { .. })
     }
 
+    /// Returns true if the endpoint is usable (healthy or degraded)
     pub fn is_available(&self) -> bool {
         matches!(
             self,
@@ -88,6 +93,7 @@ pub enum FallbackStrategy {
 }
 
 impl FallbackStrategy {
+    /// Parse a fallback strategy from a config string (defaults to Skip)
     pub fn from_config(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "cache" => Self::UseCache {
@@ -109,6 +115,7 @@ pub struct HealthCheckResult {
 }
 
 impl HealthCheckResult {
+    /// Create a successful health check result with measured latency
     pub fn success(latency_ms: u64) -> Self {
         Self {
             healthy: true,
@@ -117,6 +124,7 @@ impl HealthCheckResult {
         }
     }
 
+    /// Create a failed health check result with the error message
     pub fn failure(error: String) -> Self {
         Self {
             healthy: false,
@@ -125,6 +133,7 @@ impl HealthCheckResult {
         }
     }
 
+    /// Create a degraded health check result (healthy but with performance issues)
     pub fn degraded(latency_ms: u64, reason: String) -> Self {
         Self {
             healthy: true,

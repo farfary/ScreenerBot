@@ -12,6 +12,7 @@ use tokio::time::{timeout, Duration};
 pub struct InternetMonitor;
 
 impl InternetMonitor {
+    /// Create a new monitor instance
     pub fn new() -> Self {
         Self
     }

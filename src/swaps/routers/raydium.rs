@@ -15,6 +15,7 @@ use async_trait::async_trait;
 pub struct RaydiumRouter;
 
 impl RaydiumRouter {
+    /// Create a new Raydium swap router instance
     pub fn new() -> Self {
         Self
     }

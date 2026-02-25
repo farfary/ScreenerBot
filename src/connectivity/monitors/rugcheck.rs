@@ -11,6 +11,7 @@ use tokio::time::Duration;
 pub struct RugcheckMonitor;
 
 impl RugcheckMonitor {
+    /// Create a new monitor instance
     pub fn new() -> Self {
         Self
     }
