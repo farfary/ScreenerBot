@@ -20,6 +20,7 @@ pub use methods::{
 use crate::rpc::manager::RpcManager;
 use crate::rpc::stats::{RpcStatsResponse, StatsManager};
 use crate::rpc::types::mask_url;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// RPC Client wrapper providing Solana-typed methods
@@ -84,7 +85,7 @@ impl RpcClient {
         let cb_statuses = self.manager.circuit_breakers().get_all_status().await;
 
         // Build a map of circuit breaker statuses by provider ID
-        let cb_map: std::collections::HashMap<String, _> = cb_statuses
+        let cb_map: HashMap<String, _> = cb_statuses
             .into_iter()
             .map(|s| (s.provider_id.clone(), s))
             .collect();

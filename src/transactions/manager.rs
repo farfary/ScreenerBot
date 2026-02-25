@@ -286,7 +286,7 @@ impl TransactionsManager {
         let bootstrap = self.bootstrap_fetched.load(Ordering::Relaxed);
         let fallback = self.rpc_fallback_fetched.load(Ordering::Relaxed);
 
-        let mut custom = std::collections::HashMap::new();
+        let mut custom = HashMap::new();
         custom.insert("websocket_received".to_owned(), ws as f64);
         custom.insert("bootstrap_fetched".to_owned(), bootstrap as f64);
         custom.insert("rpc_fallback_fetched".to_owned(), fallback as f64);

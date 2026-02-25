@@ -1,6 +1,7 @@
 //! Dashboard overview — aggregates key metrics for the dashboard home view.
 
 use axum::{extract::State, response::Json};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::global::{
@@ -168,7 +169,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     let blacklist_info = if let Some(db) = get_global_database() {
         match get_blacklist_summary(&db) {
             Ok(summary) => {
-                let mut by_reason = std::collections::HashMap::new();
+                let mut by_reason = HashMap::new();
                 by_reason.insert("Manual".to_owned(), summary.manual_count);
                 by_reason.insert("MintAuthority".to_owned(), summary.authority_mint_count);
                 by_reason.insert(
@@ -192,13 +193,13 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
             }
             Err(_) => BlacklistInfo {
                 total_blacklisted: 0,
-                by_reason: std::collections::HashMap::new(),
+                by_reason: HashMap::new(),
             },
         }
     } else {
         BlacklistInfo {
             total_blacklisted: 0,
-            by_reason: std::collections::HashMap::new(),
+            by_reason: HashMap::new(),
         }
     };
 

@@ -1,6 +1,7 @@
 //! Dashboard route types — data structures for dashboard API responses.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // ============================================================================
 // Dashboard Overview Types
@@ -75,7 +76,7 @@ pub struct RpcInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlacklistInfo {
     pub total_blacklisted: usize,
-    pub by_reason: std::collections::HashMap<String, usize>,
+    pub by_reason: HashMap<String, usize>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

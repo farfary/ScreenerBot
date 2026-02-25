@@ -1,6 +1,7 @@
 //! Tool favorites handlers
 
 use axum::{extract::Path, extract::Query, http::StatusCode, response::Response, Json};
+use std::collections::HashMap;
 
 use crate::logger::{self, LogTag};
 use crate::tools::database::{
@@ -17,7 +18,7 @@ use super::types::*;
 
 /// Get all tool favorites (optionally filtered by tool_type query param)
 pub async fn get_favorites_list(
-    Query(params): Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
     let tool_type = params.get("tool_type").map(String::as_str);
 

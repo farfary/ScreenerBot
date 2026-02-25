@@ -6,6 +6,7 @@ use axum::{
     Json as AxumJson, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::logger::{self, LogTag};
@@ -130,8 +131,8 @@ async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
         .collect();
 
     // Fetch token metadata in batch
-    let mut metadata_map: std::collections::HashMap<String, (Option<String>, Option<String>)> =
-        std::collections::HashMap::new();
+    let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> =
+        HashMap::new();
 
     // Try to get metadata for each token from token database
     if let Some(db) = crate::tokens::database::get_global_database() {

@@ -2,6 +2,7 @@
 
 use axum::{extract::State, response::Json, routing::get, Router};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::pools::db::{
@@ -15,7 +16,7 @@ use crate::webserver::state::AppState;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlacklistStatsResponse {
     pub total_count: usize,
-    pub by_reason: std::collections::HashMap<String, usize>,
+    pub by_reason: HashMap<String, usize>,
     pub timestamp: String,
 }
 
@@ -65,7 +66,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
         None => {
             return Json(BlacklistStatsResponse {
                 total_count: 0,
-                by_reason: std::collections::HashMap::new(),
+                by_reason: HashMap::new(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             });
         }
@@ -73,7 +74,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
 
     match get_blacklist_summary(&db) {
         Ok(summary) => {
-            let mut by_reason = std::collections::HashMap::new();
+            let mut by_reason = HashMap::new();
             by_reason.insert("MintAuthority".to_owned(), summary.authority_mint_count);
             by_reason.insert(
                 "FreezeAuthority".to_owned(),
@@ -100,7 +101,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
             // Return empty stats on error
             Json(BlacklistStatsResponse {
                 total_count: 0,
-                by_reason: std::collections::HashMap::new(),
+                by_reason: HashMap::new(),
                 timestamp: chrono::Utc::now().to_rfc3339(),
             })
         }

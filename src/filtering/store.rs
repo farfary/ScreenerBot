@@ -689,7 +689,7 @@ fn collect_entries<'a>(
 
 fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &FilteringSnapshot) {
     // quick maps for derived flags
-    let flags: std::collections::HashMap<&str, (&TokenEntry, bool, bool, bool)> = snapshot
+    let flags: HashMap<&str, (&TokenEntry, bool, bool, bool)> = snapshot
         .tokens
         .iter()
         .map(|(mint, entry)| {
