@@ -1,193 +1,21 @@
-//! OHLCV route — serves candlestick chart data for token price history.
+//! OHLCV route handlers — endpoint implementations for candlestick data.
 
-// OHLCV API routes
-
+use super::types::*;
 use crate::ohlcvs::{
     add_token_monitoring, delete_inactive_tokens, delete_token_data, get_all_tokens_with_status,
     get_available_pools, get_data_gaps, get_database_stats, get_metrics, get_ohlcv_data,
-    record_activity, remove_token_monitoring, request_refresh, ActivityType, Candle, DatabaseStats,
-    DeleteResult, OhlcvTokenStatus, PoolMetadata, Priority, Timeframe,
+    record_activity, remove_token_monitoring, request_refresh, ActivityType, DatabaseStats,
+    Priority, Timeframe,
 };
-use crate::webserver::{
-    state::AppState,
-    utils::{error_response, success_response},
-};
+use crate::webserver::utils::{error_response, success_response};
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
     response::Json,
     response::Response,
-    routing::{delete, get, post},
-    Router,
 };
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
-// ==================== Response Types ====================
-
-#[derive(Debug, Serialize)]
-struct OhlcvDataResponse {
-    mint: String,
-    pool_address: Option<String>,
-    timeframe: String,
-    data: Vec<Candle>,
-    count: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct PoolsResponse {
-    mint: String,
-    pools: Vec<PoolMetadata>,
-    default_pool: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct GapsResponse {
-    mint: String,
-    timeframe: String,
-    gaps: Vec<GapInfo>,
-    total_gaps: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct GapInfo {
-    start_timestamp: i64,
-    end_timestamp: i64,
-    duration_seconds: i64,
-}
-
-#[derive(Debug, Serialize)]
-struct DataStatusResponse {
-    mint: String,
-    has_data: bool,
-    timeframes_available: Vec<String>,
-    latest_timestamp: Option<i64>,
-    data_quality: String,
-}
-
-#[derive(Debug, Serialize)]
-struct MetricsResponse {
-    tokens_monitored: usize,
-    pools_tracked: usize,
-    api_calls_per_minute: f64,
-    cache_hit_rate_percent: f64,
-    average_fetch_latency_ms: f64,
-    gaps_detected: usize,
-    gaps_filled: usize,
-    data_points_stored: usize,
-    database_size_mb: f64,
-}
-
-// Response type for listing all OHLCV tokens
-#[derive(Debug, Serialize)]
-struct OhlcvTokenListResponse {
-    tokens: Vec<OhlcvTokenItem>,
-    total_count: usize,
-    stats: OhlcvStatsResponse,
-}
-
-#[derive(Debug, Serialize)]
-struct OhlcvTokenItem {
-    mint: String,
-    priority: String,
-    status: String,
-    is_active: bool,
-    fetch_interval_seconds: i64,
-    last_fetch: Option<String>,
-    last_activity: String,
-    consecutive_empty_fetches: i64,
-    consecutive_pool_failures: i64,
-    backfill_progress: BackfillProgress,
-    candle_count: i64,
-    earliest_timestamp: i64,
-    latest_timestamp: i64,
-    data_span_hours: f64,
-    open_gaps: i64,
-    pool_count: i64,
-    created_at: String,
-    updated_at: String,
-}
-
-#[derive(Debug, Serialize)]
-struct BackfillProgress {
-    completed: u8,
-    total: u8,
-    percent: f64,
-    timeframes: BackfillTimeframes,
-}
-
-#[derive(Debug, Serialize)]
-struct BackfillTimeframes {
-    #[serde(rename = "1m")]
-    m1: bool,
-    #[serde(rename = "5m")]
-    m5: bool,
-    #[serde(rename = "15m")]
-    m15: bool,
-    #[serde(rename = "1h")]
-    h1: bool,
-    #[serde(rename = "4h")]
-    h4: bool,
-    #[serde(rename = "12h")]
-    h12: bool,
-    #[serde(rename = "1d")]
-    d1: bool,
-}
-
-#[derive(Debug, Serialize)]
-struct OhlcvStatsResponse {
-    total_tokens: usize,
-    active_tokens: usize,
-    total_candles: usize,
-    total_gaps: usize,
-    total_pools: usize,
-    database_size_mb: f64,
-}
-
-#[derive(Debug, Serialize)]
-struct DeleteTokenResponse {
-    mint: String,
-    candles_deleted: usize,
-    gaps_deleted: usize,
-    pools_deleted: usize,
-    config_deleted: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct CleanupResponse {
-    deleted_count: usize,
-    deleted_mints: Vec<String>,
-}
-
-// ==================== Query Parameters ====================
-
-#[derive(Debug, Deserialize)]
-struct OhlcvQuery {
-    timeframe: Option<String>,
-    pool: Option<String>,
-    limit: Option<usize>,
-    from: Option<i64>,
-    to: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GapsQuery {
-    timeframe: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct MonitorRequest {
-    priority: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CleanupRequest {
-    inactive_hours: Option<i64>,
-}
-
-// ==================== Route Handlers ====================
-
-async fn get_ohlcv_data_handler(
+pub(super) async fn get_ohlcv_data_handler(
     Path(mint): Path<String>,
     Query(params): Query<OhlcvQuery>,
 ) -> Result<Response, Response> {
@@ -231,7 +59,7 @@ async fn get_ohlcv_data_handler(
     }
 }
 
-async fn get_pools_handler(Path(mint): Path<String>) -> Result<Response, Response> {
+pub(super) async fn get_pools_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match get_available_pools(&mint).await {
         Ok(pools) => {
             let default_pool = pools
@@ -256,7 +84,7 @@ async fn get_pools_handler(Path(mint): Path<String>) -> Result<Response, Respons
     }
 }
 
-async fn get_gaps_handler(
+pub(super) async fn get_gaps_handler(
     Path(mint): Path<String>,
     Query(params): Query<GapsQuery>,
 ) -> Result<Response, Response> {
@@ -295,7 +123,7 @@ async fn get_gaps_handler(
     }
 }
 
-async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Response> {
+pub(super) async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     // Check if we have data for this token
     let has_data = get_ohlcv_data(&mint, Timeframe::Minute1, None, 1, None, None)
         .await
@@ -342,7 +170,7 @@ async fn get_status_handler(Path(mint): Path<String>) -> Result<Response, Respon
     Ok(success_response(response))
 }
 
-async fn refresh_handler(Path(mint): Path<String>) -> Result<Response, Response> {
+pub(super) async fn refresh_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match request_refresh(&mint).await {
         Ok(_) => Ok(success_response(serde_json::json!({
             "message": "Refresh requested",
@@ -357,7 +185,7 @@ async fn refresh_handler(Path(mint): Path<String>) -> Result<Response, Response>
     }
 }
 
-async fn get_metrics_handler() -> Result<Response, Response> {
+pub(super) async fn get_metrics_handler() -> Result<Response, Response> {
     let metrics = get_metrics().await;
 
     let response = MetricsResponse {
@@ -375,7 +203,7 @@ async fn get_metrics_handler() -> Result<Response, Response> {
     Ok(success_response(response))
 }
 
-async fn add_monitoring_handler(
+pub(super) async fn add_monitoring_handler(
     Path(mint): Path<String>,
     Json(body): Json<MonitorRequest>,
 ) -> Result<Response, Response> {
@@ -400,7 +228,9 @@ async fn add_monitoring_handler(
     }
 }
 
-async fn remove_monitoring_handler(Path(mint): Path<String>) -> Result<Response, Response> {
+pub(super) async fn remove_monitoring_handler(
+    Path(mint): Path<String>,
+) -> Result<Response, Response> {
     match remove_token_monitoring(&mint).await {
         Ok(_) => Ok(success_response(serde_json::json!({
             "message": "Monitoring stopped",
@@ -415,7 +245,7 @@ async fn remove_monitoring_handler(Path(mint): Path<String>) -> Result<Response,
     }
 }
 
-async fn record_view_handler(Path(mint): Path<String>) -> Result<Response, Response> {
+pub(super) async fn record_view_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match record_activity(&mint, ActivityType::ChartViewed).await {
         Ok(_) => Ok(success_response(serde_json::json!({
             "message": "Activity recorded",
@@ -430,8 +260,8 @@ async fn record_view_handler(Path(mint): Path<String>) -> Result<Response, Respo
     }
 }
 
-// Handler for listing all OHLCV tokens with their status
-async fn get_all_tokens_handler() -> Result<Response, Response> {
+/// List all OHLCV tokens with their monitoring status
+pub(super) async fn get_all_tokens_handler() -> Result<Response, Response> {
     match get_all_tokens_with_status().await {
         Ok(tokens) => {
             // Get database stats for the response
@@ -539,8 +369,8 @@ async fn get_all_tokens_handler() -> Result<Response, Response> {
     }
 }
 
-// Handler for getting OHLCV stats
-async fn get_stats_handler() -> Result<Response, Response> {
+/// Get OHLCV database statistics
+pub(super) async fn get_stats_handler() -> Result<Response, Response> {
     let stats = get_database_stats().await.unwrap_or(DatabaseStats {
         total_candles: 0,
         total_gaps: 0,
@@ -567,8 +397,8 @@ async fn get_stats_handler() -> Result<Response, Response> {
     Ok(success_response(response))
 }
 
-// Handler for deleting OHLCV data for a specific token
-async fn delete_token_handler(Path(mint): Path<String>) -> Result<Response, Response> {
+/// Delete all OHLCV data for a specific token
+pub(super) async fn delete_token_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match delete_token_data(&mint).await {
         Ok(result) => {
             let response = DeleteTokenResponse {
@@ -590,8 +420,10 @@ async fn delete_token_handler(Path(mint): Path<String>) -> Result<Response, Resp
     }
 }
 
-// Handler for cleaning up inactive tokens
-async fn cleanup_inactive_handler(Json(body): Json<CleanupRequest>) -> Result<Response, Response> {
+/// Clean up data for inactive tokens
+pub(super) async fn cleanup_inactive_handler(
+    Json(body): Json<CleanupRequest>,
+) -> Result<Response, Response> {
     let inactive_hours = body.inactive_hours.unwrap_or(24); // Default: 24 hours
 
     match delete_inactive_tokens(inactive_hours).await {
@@ -610,27 +442,4 @@ async fn cleanup_inactive_handler(Json(body): Json<CleanupRequest>) -> Result<Re
             None,
         )),
     }
-}
-
-// ==================== Router ====================
-
-pub fn ohlcv_routes() -> Router<Arc<AppState>> {
-    Router::new()
-        // Token list and stats endpoints
-        .route("/ohlcv/tokens", get(get_all_tokens_handler))
-        .route("/ohlcv/stats", get(get_stats_handler))
-        .route("/ohlcv/cleanup", post(cleanup_inactive_handler))
-        // Data endpoints
-        .route("/ohlcv/:mint", get(get_ohlcv_data_handler))
-        .route("/ohlcv/:mint/pools", get(get_pools_handler))
-        .route("/ohlcv/:mint/gaps", get(get_gaps_handler))
-        .route("/ohlcv/:mint/status", get(get_status_handler))
-        .route("/ohlcv/:mint/delete", delete(delete_token_handler))
-        // Control endpoints
-        .route("/ohlcv/:mint/refresh", post(refresh_handler))
-        .route("/ohlcv/:mint/monitor", post(add_monitoring_handler))
-        .route("/ohlcv/:mint/monitor", delete(remove_monitoring_handler))
-        .route("/ohlcv/:mint/view", post(record_view_handler))
-        // System endpoints
-        .route("/ohlcv/metrics", get(get_metrics_handler))
 }
