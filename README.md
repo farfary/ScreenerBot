@@ -23,7 +23,8 @@
 <p align="center">
   A high-performance, open source, local-first automated trading system for Solana DeFi.<br>
   Built in Rust for native runtime performance and direct blockchain interaction.<br>
-  <strong> Your keys never leave your machine.</strong>
+  <strong> Your keys never leave your machine.</strong><br>
+  <sub>
 </p>
 
 <p align="center">
@@ -104,9 +105,9 @@
 </p>
 
 <p align="center">
-  ScreenerBot uses Jupiter's referral program to earn a small fee on swaps.<br>
-  This helps fund development while keeping the software free and open source.<br>
-  You can disable or replace the referral account in the swap configuration.
+  
+  
+  No subscriptions. No hidden costs.
 </p>
 
 ---
@@ -152,7 +153,7 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 | **Self-Custody**     | Private keys never leave your computer               |
 | **Native Speed**     | Rust performance with direct RPC connections         |
 | **Real-Time Prices** | Direct pool reserve calculations, not delayed APIs   |
-| **Full Control**     | Raw data access, custom strategies, no platform fees |
+| **Full Control**     | Raw data access, custom strategies, no subscriptions |
 
 ---
 
