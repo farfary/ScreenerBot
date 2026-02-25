@@ -1,93 +1,19 @@
-//! Events route — Server-Sent Events (SSE) endpoint for real-time UI updates.
+use axum::Json;
+use chrono;
 
-use axum::{extract::Query, http::StatusCode, routing::get, Json, Router};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
-use crate::{
-    events,
-    webserver::{state::AppState, utils::error_response},
-};
-
-fn default_limit() -> usize {
-    100
-}
-
-/// Event response structure
-#[derive(Debug, Serialize)]
-pub struct EventResponse {
-    pub id: i64,
-    pub event_time: String,
-    pub category: String,
-    pub subtype: Option<String>,
-    pub severity: String,
-    pub mint: Option<String>,
-    pub reference_id: Option<String>,
-    pub message: String, // Extracted from json_payload
-    pub payload: serde_json::Value,
-    pub created_at: String,
-}
-
-/// Events list response with cursor
-#[derive(Debug, Serialize)]
-pub struct EventsListResponse {
-    pub events: Vec<EventResponse>,
-    pub count: usize,
-    pub total_count: Option<i64>,
-    pub max_id: i64,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct HeadQuery {
-    pub limit: Option<usize>,
-    pub category: Option<String>,
-    pub severity: Option<String>,
-    pub mint: Option<String>,
-    pub reference: Option<String>,
-    pub search: Option<String>,
-}
-#[derive(Debug, Deserialize)]
-pub struct SinceQuery {
-    pub after_id: i64,
-    pub limit: Option<usize>,
-    pub category: Option<String>,
-    pub severity: Option<String>,
-    pub mint: Option<String>,
-    pub reference: Option<String>,
-    pub search: Option<String>,
-}
-#[derive(Debug, Deserialize)]
-pub struct BeforeQuery {
-    pub before_id: i64,
-    pub limit: Option<usize>,
-    pub category: Option<String>,
-    pub severity: Option<String>,
-    pub mint: Option<String>,
-    pub reference: Option<String>,
-    pub search: Option<String>,
-}
-
-/// Create events routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/events/head", get(get_events_head))
-        .route("/events/since", get(get_events_since))
-        .route("/events/before", get(get_events_before))
-        .route("/events/categories", get(get_categories))
-}
+use super::types::*;
 
 /// Get latest events (head) with cursor
-async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResponse> {
+pub(super) async fn get_events_head(axum::extract::Query(params): axum::extract::Query<HeadQuery>) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
     let category = params
         .category
         .as_ref()
-        .map(|s| events::EventCategory::from_string(s));
+        .map(|s| crate::events::EventCategory::from_string(s));
     let severity = params
         .severity
         .as_ref()
-        .map(|s| events::Severity::from_string(s));
+        .map(|s| crate::events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
     let search = params.search.as_deref();
@@ -113,11 +39,11 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
     let category_for_count = params
         .category
         .as_ref()
-        .map(|s| events::EventCategory::from_string(s));
+        .map(|s| crate::events::EventCategory::from_string(s));
     let severity_for_count = params
         .severity
         .as_ref()
-        .map(|s| events::Severity::from_string(s));
+        .map(|s| crate::events::Severity::from_string(s));
     let total_count = db
         .count_events_filtered(
             category_for_count,
@@ -169,16 +95,16 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
 }
 
 /// Get events newer than a cursor (since)
-async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListResponse> {
+pub(super) async fn get_events_since(axum::extract::Query(params): axum::extract::Query<SinceQuery>) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
     let category = params
         .category
         .as_ref()
-        .map(|s| events::EventCategory::from_string(s));
+        .map(|s| crate::events::EventCategory::from_string(s));
     let severity = params
         .severity
         .as_ref()
-        .map(|s| events::Severity::from_string(s));
+        .map(|s| crate::events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
     let search = params.search.as_deref();
@@ -245,16 +171,16 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
 }
 
 /// Get events older than a cursor (before)
-async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsListResponse> {
+pub(super) async fn get_events_before(axum::extract::Query(params): axum::extract::Query<BeforeQuery>) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
     let category = params
         .category
         .as_ref()
-        .map(|s| events::EventCategory::from_string(s));
+        .map(|s| crate::events::EventCategory::from_string(s));
     let severity = params
         .severity
         .as_ref()
-        .map(|s| events::Severity::from_string(s));
+        .map(|s| crate::events::Severity::from_string(s));
     let mint = params.mint.as_deref();
     let reference = params.reference.as_deref();
     let search = params.search.as_deref();
@@ -323,8 +249,8 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
 }
 
 /// Get available event categories with counts
-async fn get_categories() -> Json<serde_json::Value> {
-    let counts = events::count_by_category(24).await.unwrap_or_default();
+pub(super) async fn get_categories() -> Json<serde_json::Value> {
+    let counts = crate::events::count_by_category(24).await.unwrap_or_default();
 
     Json(serde_json::json!({
         "categories": counts,

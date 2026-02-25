@@ -1,78 +1,17 @@
-//! Services route — manages background service controls (start, stop, restart).
-
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::get,
-    Router,
 };
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
     logger::{self, LogTag},
-    services::{ServiceHealth, ServiceMetrics},
+    services::ServiceHealth,
     webserver::{state::AppState, utils::success_response},
 };
 
-// ================================================================================================
-// Response Types
-// ================================================================================================
-
-/// Complete service information for a single service
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceDetailResponse {
-    pub name: String,
-    pub priority: i32,
-    pub dependencies: Vec<String>,
-    pub enabled: bool,
-    pub health: ServiceHealth,
-    pub metrics: ServiceMetrics,
-    pub uptime_seconds: u64,
-}
-
-/// List of all services with their status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServicesListResponse {
-    pub services: Vec<ServiceDetailResponse>,
-    pub total_count: usize,
-    pub healthy_count: usize,
-    pub unhealthy_count: usize,
-    pub starting_count: usize,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Service dependency graph node for visualization
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceDependencyNode {
-    pub name: String,
-    pub priority: i32,
-    pub dependencies: Vec<String>,
-    pub health: ServiceHealth,
-}
-
-/// Complete services overview for dashboard
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServicesOverviewResponse {
-    pub services: Vec<ServiceDetailResponse>,
-    pub dependency_graph: Vec<ServiceDependencyNode>,
-    pub summary: ServicesSummary,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Summary statistics for all services
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServicesSummary {
-    pub total_services: usize,
-    pub enabled_services: usize,
-    pub healthy_services: usize,
-    pub degraded_services: usize,
-    pub unhealthy_services: usize,
-    pub starting_services: usize,
-    pub all_healthy: bool,
-}
+use super::types::*;
 
 // ================================================================================================
 // Snapshot Helpers
@@ -143,7 +82,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                             let metrics = metrics_map
                                 .get(name)
                                 .cloned()
-                                .unwrap_or_else(ServiceMetrics::default)
+                                .unwrap_or_else(crate::services::ServiceMetrics::default)
                                 .sanitized();
                             let uptime_seconds = metrics.uptime_seconds;
 
@@ -246,7 +185,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
         services,
         dependency_graph,
         summary,
-        timestamp: Utc::now(),
+        timestamp: chrono::Utc::now(),
     }
 }
 
@@ -254,17 +193,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
 // Route Handlers
 // ================================================================================================
 
-/// Create services management routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/services", get(list_services))
-        .route("/services/:name", get(get_service))
-        .route("/services/overview", get(services_overview))
-}
-
 /// GET /api/services
 /// List all services with their current status
-async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
+pub(super) async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
     logger::debug(LogTag::Webserver, "Fetching all services list");
 
     let overview = gather_services_overview_snapshot().await;
@@ -294,7 +225,7 @@ async fn list_services(State(_state): State<Arc<AppState>>) -> Response {
 
 /// GET /api/services/:name
 /// Get detailed information about a specific service
-async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
+pub(super) async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
     logger::info(
         LogTag::Webserver,
         &format!("Fetching service details for: {name}"),
@@ -319,7 +250,7 @@ async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState
 
 /// GET /api/services/overview
 /// Complete services overview with dependency graph and summary
-async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
+pub(super) async fn services_overview(State(_state): State<Arc<AppState>>) -> Response {
     use std::time::Instant;
 
     let start = Instant::now();

@@ -1,115 +1,19 @@
-//! Lockscreen API routes for dashboard security
-//!
-//! Provides REST API endpoints for managing lockscreen password and settings.
-
-use axum::{
-    http::StatusCode,
-    response::Response,
-    routing::{get, post},
-    Json, Router,
-};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use axum::http::StatusCode;
+use axum::response::Response;
+use axum::Json;
 
 use crate::config;
 use crate::secure_storage::{generate_password_salt, hash_password, verify_password};
-use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 
-// =============================================================================
-// RESPONSE TYPES (inline per ScreenerBot convention)
-// =============================================================================
-
-/// Lockscreen status response
-#[derive(Debug, Serialize)]
-pub struct LockscreenStatusResponse {
-    /// Whether lockscreen is enabled
-    pub enabled: bool,
-    /// Password type: "pin4", "pin6", "text"
-    pub password_type: String,
-    /// Whether a password has been set
-    pub has_password: bool,
-    /// Auto-lock timeout in seconds (0 = never)
-    pub auto_lock_timeout_secs: u64,
-    /// Lock on app blur/minimize
-    pub lock_on_blur: bool,
-    /// Timestamp of response
-    pub timestamp: String,
-}
-
-/// Password verification request
-#[derive(Debug, Deserialize)]
-pub struct VerifyPasswordRequest {
-    /// The password attempt
-    pub password: String,
-}
-
-/// Password verification response
-#[derive(Debug, Serialize)]
-pub struct VerifyPasswordResponse {
-    /// Whether verification succeeded
-    pub valid: bool,
-    /// Timestamp of response
-    pub timestamp: String,
-}
-
-/// Set password request
-#[derive(Debug, Deserialize)]
-pub struct SetPasswordRequest {
-    /// Current password (required if password already exists)
-    pub current_password: Option<String>,
-    /// New password to set
-    pub new_password: String,
-    /// Password type: "pin4", "pin6", "text"
-    pub password_type: String,
-}
-
-/// Clear password request
-#[derive(Debug, Deserialize)]
-pub struct ClearPasswordRequest {
-    /// Current password (required to clear)
-    pub current_password: String,
-}
-
-/// Update settings request
-#[derive(Debug, Deserialize)]
-pub struct UpdateSettingsRequest {
-    /// Enable or disable lockscreen
-    pub enabled: Option<bool>,
-    /// Auto-lock timeout in seconds (0 = never)
-    pub auto_lock_timeout_secs: Option<u64>,
-    /// Lock on app blur/minimize
-    pub lock_on_blur: Option<bool>,
-}
-
-/// Generic success response
-#[derive(Debug, Serialize)]
-pub struct SuccessResponse {
-    pub success: bool,
-    pub message: String,
-    pub timestamp: String,
-}
-
-// =============================================================================
-// ROUTES
-// =============================================================================
-
-/// Create lockscreen management routes.
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/status", get(get_status))
-        .route("/verify", post(verify_password_handler))
-        .route("/set-password", post(set_password))
-        .route("/clear-password", post(clear_password))
-        .route("/settings", post(update_settings))
-}
+use super::types::*;
 
 // =============================================================================
 // HANDLERS
 // =============================================================================
 
 /// GET /api/lockscreen/status - Get lockscreen configuration status
-async fn get_status() -> Response {
+pub(super) async fn get_status() -> Response {
     let status = config::with_config(|cfg| {
         let lockscreen = &cfg.gui.dashboard.lockscreen;
         LockscreenStatusResponse {
@@ -126,7 +30,7 @@ async fn get_status() -> Response {
 }
 
 /// POST /api/lockscreen/verify - Verify password attempt
-async fn verify_password_handler(Json(req): Json<VerifyPasswordRequest>) -> Response {
+pub(super) async fn verify_password_handler(Json(req): Json<VerifyPasswordRequest>) -> Response {
     let (salt, hash) = config::with_config(|cfg| {
         let lockscreen = &cfg.gui.dashboard.lockscreen;
         (
@@ -154,7 +58,7 @@ async fn verify_password_handler(Json(req): Json<VerifyPasswordRequest>) -> Resp
 }
 
 /// POST /api/lockscreen/set-password - Set or change password
-async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
+pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
     // Validate password type
     if !["pin4", "pin6", "text"].contains(&req.password_type.as_str()) {
         return error_response(
@@ -246,7 +150,7 @@ async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
 }
 
 /// POST /api/lockscreen/clear-password - Remove password and disable lockscreen
-async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Response {
+pub(super) async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Response {
     // Get current password info
     let (salt, hash) = config::with_config(|cfg| {
         let lockscreen = &cfg.gui.dashboard.lockscreen;
@@ -301,7 +205,7 @@ async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Response {
 }
 
 /// POST /api/lockscreen/settings - Update lockscreen settings
-async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> Response {
+pub(super) async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> Response {
     // Check if password is set before allowing enable
     if let Some(true) = req.enabled {
         let has_password =
