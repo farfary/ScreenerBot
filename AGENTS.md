@@ -1020,6 +1020,11 @@ cargo fmt --check          # Check Rust formatting
 - Windows needs Strawberry Perl prepended to PATH (Git Bash's perl lacks OpenSSL build modules)
 - macOS x64 cross-compile needs x86_64 Homebrew + `openssl@3` (`OPENSSL_DIR` + `OPENSSL_STATIC`)
 - Linux arm64 cross-compile needs `CC`/`CXX`/`LINKER` env vars for aarch64
-- Electron Forge packaging produces DMG/ZIP (macOS), DEB/ZIP (Linux), MSI/ZIP (Windows)
+- Electron Forge packaging produces DMG/ZIP (macOS), DEB/RPM/ZIP (Linux), MSI/ZIP (Windows)
 - Linux headless `.tar.gz` also built (Rust binary only, no Electron)
 - Optional GitHub Release creation with `create_release` input
+
+**Distribution:**
+- GitHub Releases is the single source of truth for all downloads
+- Tag format: `v{version}-beta` (e.g., `v0.1.111-beta`)
+- Asset filename format: `ScreenerBot-v{base_version}-{OS}-{arch}.{ext}`
