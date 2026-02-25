@@ -146,6 +146,7 @@ pub struct SwapRequestBuilder {
 }
 
 impl SwapRequestBuilder {
+    /// Create a new swap request builder with default slippage from config
     pub fn new() -> Self {
         Self {
             pool_address: None,
@@ -156,6 +157,7 @@ impl SwapRequestBuilder {
         }
     }
 
+    /// Set the target pool address (parses from string to Pubkey)
     pub fn pool_address(mut self, address: &str) -> Result<Self, SwapError> {
         self.pool_address = Some(
             Pubkey::from_str(address)
@@ -164,6 +166,7 @@ impl SwapRequestBuilder {
         Ok(self)
     }
 
+    /// Set the token mint address (parses from string to Pubkey)
     pub fn token_mint(mut self, mint: &str) -> Result<Self, SwapError> {
         self.token_mint = Some(
             Pubkey::from_str(mint)
@@ -172,41 +175,50 @@ impl SwapRequestBuilder {
         Ok(self)
     }
 
+    /// Set the swap amount (raw value, interpretation depends on direction)
     pub fn amount(mut self, amount: f64) -> Self {
         self.amount = Some(amount);
         self
     }
 
+    /// Set the swap amount in SOL (alias for amount)
     pub fn amount_sol(self, amount: f64) -> Self {
         self.amount(amount)
     }
 
+    /// Set the swap amount in tokens (alias for amount)
     pub fn amount_tokens(self, amount: f64) -> Self {
         self.amount(amount)
     }
 
+    /// Set the swap direction (Buy or Sell)
     pub fn direction(mut self, dir: SwapDirection) -> Self {
         self.direction = Some(dir);
         self
     }
 
+    /// Set direction to Buy (SOL → Token)
     pub fn buy(self) -> Self {
         self.direction(SwapDirection::Buy)
     }
 
+    /// Set direction to Sell (Token → SOL)
     pub fn sell(self) -> Self {
         self.direction(SwapDirection::Sell)
     }
 
+    /// Set slippage tolerance in basis points (100 bps = 1%)
     pub fn slippage_bps(mut self, bps: u16) -> Self {
         self.slippage_bps = bps;
         self
     }
 
+    /// Set slippage tolerance as a percentage (e.g., 1.0 = 1%)
     pub fn slippage_percent(self, percent: f64) -> Self {
         self.slippage_bps((percent * 100.0) as u16)
     }
 
+    /// Validate and build the final SwapRequest
     pub fn build(self) -> Result<SwapRequest, SwapError> {
         Ok(SwapRequest {
             pool_address: self

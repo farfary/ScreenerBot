@@ -528,6 +528,7 @@ impl PositionsDatabase {
         Ok(())
     }
 
+    /// Persist a key-value metadata pair via INSERT OR REPLACE
     pub fn set_metadata_value(&self, key: &str, value: &str) -> Result<(), String> {
         let conn = self.get_connection()?;
 
@@ -540,6 +541,7 @@ impl PositionsDatabase {
         Ok(())
     }
 
+    /// Fetch a metadata value by key, returning None if not found
     pub fn get_metadata_value(&self, key: &str) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
 

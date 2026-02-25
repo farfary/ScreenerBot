@@ -156,6 +156,7 @@ pub async fn force_database_sync() -> Result<(), String> {
     }
 }
 
+/// Store a key-value metadata pair in the positions database
 pub async fn set_metadata(key: &str, value: &str) -> Result<(), String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -164,6 +165,7 @@ pub async fn set_metadata(key: &str, value: &str) -> Result<(), String> {
     }
 }
 
+/// Retrieve a metadata value by key from the positions database
 pub async fn get_metadata(key: &str) -> Result<Option<String>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {

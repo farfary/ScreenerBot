@@ -228,6 +228,7 @@ impl PoolsDatabase {
         Ok((accounts, pools))
     }
 
+    /// List blacklisted accounts with optional limit, ordered by most recent first
     pub async fn list_blacklisted_accounts(
         &self,
         limit: Option<usize>,
@@ -309,6 +310,7 @@ impl PoolsDatabase {
     .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
+    /// List blacklisted pools with optional limit, ordered by most recent first
     pub async fn list_blacklisted_pools(
         &self,
         limit: Option<usize>,

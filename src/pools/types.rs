@@ -292,6 +292,7 @@ pub struct PriceHistory {
 }
 
 impl PriceHistory {
+    /// Create a new price history buffer for the given token mint
     pub fn new(mint: String, max_entries: usize) -> Self {
         Self {
             mint,
@@ -300,6 +301,7 @@ impl PriceHistory {
         }
     }
 
+    /// Add a price result, evicting the oldest entry if at capacity
     pub fn add_price(&mut self, price: PriceResult) {
         // Check for gaps before adding new price
         if let Some(gap_index) = self.detect_gap_before_price(&price) {
@@ -313,10 +315,12 @@ impl PriceHistory {
         self.prices.push_back(price);
     }
 
+    /// Return the most recent price result, if any
     pub fn get_latest(&self) -> Option<&PriceResult> {
         self.prices.back()
     }
 
+    /// Convert the price history to a Vec snapshot
     pub fn to_vec(&self) -> Vec<PriceResult> {
         self.prices.iter().cloned().collect()
     }

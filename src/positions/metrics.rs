@@ -61,6 +61,7 @@ impl ProceedsMetricsInternal {
         }
     }
 
+    /// Record a quote acceptance, tracking loss/profit counts and shortfall
     pub fn record_accepted_quote(&self, is_loss: bool, shortfall_bps: Option<u64>) {
         self.accepted_quotes.fetch_add(1, Ordering::Relaxed);
         self.last_update_unix

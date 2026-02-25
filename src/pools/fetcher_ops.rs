@@ -366,6 +366,7 @@ impl AccountFetcher {
         }
     }
 
+    /// Track missing accounts and blacklist after threshold failures
     pub(crate) async fn handle_missing_accounts(
         missing_accounts: &[Pubkey],
         pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
@@ -521,6 +522,7 @@ impl AccountFetcher {
         }
     }
 
+    /// Remove expired entries from account and pool failure trackers
     pub(crate) fn cleanup_missing_failure_trackers(
         account_failure_tracker: &mut HashMap<Pubkey, MissingAccountState>,
         pool_failure_tracker: &mut HashMap<Pubkey, MissingPoolState>,
