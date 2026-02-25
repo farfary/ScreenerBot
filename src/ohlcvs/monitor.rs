@@ -12,7 +12,8 @@ use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::database::OhlcvTokenStatus;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
-    Candle, MintGapAggregate, OhlcvError, OhlcvResult, Priority, Timeframe, TokenOhlcvConfig,
+    Candle, MintGapAggregate, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvResult,
+    Priority, Timeframe, TokenOhlcvConfig,
 };
 use chrono::{DateTime, Utc};
 use serde_json::json;
@@ -55,30 +56,6 @@ struct MonitorTelemetry {
     last_backfill_duration_ms: Option<u64>,
     last_backfill_points: Option<usize>,
     last_backfill_error: Option<String>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct MonitorTelemetrySnapshot {
-    pub monitor_cycle_started_at: Option<DateTime<Utc>>,
-    pub monitor_cycle_completed_at: Option<DateTime<Utc>>,
-    pub monitor_cycle_duration_ms: Option<u64>,
-    pub monitor_cycle_tokens_processed: usize,
-    pub monitor_cycle_total: u64,
-    pub gap_cycle_started_at: Option<DateTime<Utc>>,
-    pub gap_cycle_completed_at: Option<DateTime<Utc>>,
-    pub gap_cycle_duration_ms: Option<u64>,
-    pub gap_cycle_tokens_processed: usize,
-    pub gap_cycle_total: u64,
-    pub last_rate_limit_at: Option<DateTime<Utc>>,
-    pub rate_limit_events: u64,
-    pub total_backfills_scheduled: u64,
-    pub total_backfills_completed: u64,
-    pub total_backfills_failed: u64,
-    pub last_backfill_started_at: Option<DateTime<Utc>>,
-    pub last_backfill_completed_at: Option<DateTime<Utc>>,
-    pub last_backfill_duration_ms: Option<u64>,
-    pub last_backfill_points: Option<usize>,
-    pub last_backfill_error: Option<String>,
 }
 
 impl From<&MonitorTelemetry> for MonitorTelemetrySnapshot {
@@ -1616,41 +1593,4 @@ fn count_by_priority(configs: &HashMap<String, TokenOhlcvConfig>) -> HashMap<Pri
         *counts.entry(config.priority).or_default() += 1;
     }
     counts
-}
-
-#[derive(Debug, Clone)]
-pub struct MonitorStats {
-    pub total_tokens: usize,
-    pub critical_tokens: usize,
-    pub high_tokens: usize,
-    pub medium_tokens: usize,
-    pub low_tokens: usize,
-    pub cache_hit_rate: f64,
-    pub api_calls_per_minute: f64,
-    pub queue_size: usize,
-    pub telemetry: MonitorTelemetrySnapshot,
-    pub backfills_in_progress: usize,
-    pub open_gap_tokens: usize,
-    pub open_gap_total: usize,
-    pub top_open_gaps: Vec<MintGapAggregate>,
-}
-
-impl Default for MonitorStats {
-    fn default() -> Self {
-        Self {
-            total_tokens: 0,
-            critical_tokens: 0,
-            high_tokens: 0,
-            medium_tokens: 0,
-            low_tokens: 0,
-            cache_hit_rate: 0.0,
-            api_calls_per_minute: 0.0,
-            queue_size: 0,
-            telemetry: MonitorTelemetrySnapshot::default(),
-            backfills_in_progress: 0,
-            open_gap_tokens: 0,
-            open_gap_total: 0,
-            top_open_gaps: Vec::new(),
-        }
-    }
 }

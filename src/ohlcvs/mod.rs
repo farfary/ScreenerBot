@@ -12,12 +12,12 @@ mod service_api;
 mod types;
 
 pub use types::{
-    Candle, OhlcvError, OhlcvMetrics, OhlcvResult, PoolConfig, PoolMetadata, Priority, Timeframe,
-    TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
+    Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics, OhlcvResult,
+    PoolConfig, PoolMetadata, Priority, Timeframe, TimeframeBundle, TokenOhlcvConfig,
+    BUNDLE_CANDLE_COUNT,
 };
 
 pub use database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
-pub use monitor::{MonitorStats, MonitorTelemetrySnapshot};
 pub use priorities::ActivityType;
 pub use service::OhlcvService;
 

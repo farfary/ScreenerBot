@@ -1,11 +1,10 @@
 //! OHLCV service — public API functions for querying candle data.
 
 use super::database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
-use super::monitor::MonitorStats;
 use super::priorities::ActivityType;
 use super::service::{get_or_init_service, OhlcvServiceImpl, OHLCV_SERVICE};
 use super::types::{
-    Candle, OhlcvError, OhlcvMetrics, OhlcvResult, PoolMetadata, Priority, Timeframe,
+    Candle, MonitorStats, OhlcvError, OhlcvMetrics, OhlcvResult, PoolMetadata, Priority, Timeframe,
     TimeframeBundle,
 };
 use std::collections::HashSet;
