@@ -257,7 +257,7 @@ Pipeline: discover → fetch (≤50 accounts/RPC) → decode (12+ DEX decoders) 
 
 ### Tokens (src/tokens/)
 
-Unified token database (12 tables: tokens, market_dexscreener, market_geckoterminal, token_pools, security_rugcheck, blacklist, update_tracking, token_favorites, rejection_history, rejection_stats, authority_reputation + indexes). Priority-based background updates with rate limiting. Files: `database/` (split into 11 submodules: mod.rs core/globals, metadata.rs token CRUD, market.rs DexScreener/GeckoTerminal, security.rs rugcheck, pool_data.rs pool snapshots, rejections.rs rejection tracking/history/stats, blacklist.rs blacklist CRUD, priority.rs priority management, tracking.rs update tracking/counts, assembly.rs complex token assembly, authority.rs authority reputation + auto-discovery, async_api.rs async wrappers), `schema.rs` (table definitions), `market/` (dexscreener.rs, geckoterminal.rs fetchers), `security/` (rugcheck.rs fetcher), `updates/` (split into 5 submodules: mod.rs re-exports, helpers.rs in-flight tracking/error classification, rate_limiter.rs RateLimitCoordinator with per-endpoint semaphores, core.rs update_token/batch/security + PoolPriorityManager, loops.rs start_update_loop + 5 priority-specific loops + force_update_token), `priorities.rs` (Priority enum), `filtered.rs` (passed/rejected/blacklisted token lists), `decimals.rs` (on-chain + cache), `discovery.rs` (new token detection), `cleanup.rs` (blacklist management), `store.rs` (snapshot cache), `events.rs` (token events), `service.rs` (ServiceManager integration), `favorites.rs` (user-managed token favorites with notes), `search.rs` (unified search across DexScreener/GeckoTerminal), `pools/` (token pool analysis submodule: api.rs, cache.rs, conversion.rs, operations.rs, utils.rs), `types.rs` (Token, DataSource, SecurityRisk, etc.).
+Unified token database (12 tables: tokens, market_dexscreener, market_geckoterminal, token_pools, security_rugcheck, blacklist, update_tracking, token_favorites, rejection_history, rejection_stats, authority_reputation + indexes). Priority-based background updates with rate limiting. Files: `database/` (split into 12 submodules: mod.rs core/globals, metadata.rs token CRUD, market.rs DexScreener/GeckoTerminal, security.rs rugcheck, pool_data.rs pool snapshots, rejections.rs rejection tracking/history/stats, blacklist.rs blacklist CRUD, priority.rs priority management, tracking.rs update tracking/counts, assembly.rs complex token assembly, helpers.rs shared row parsing/token assembly functions, authority.rs authority reputation + auto-discovery, async_api.rs async wrappers), `schema.rs` (table definitions), `market/` (dexscreener.rs, geckoterminal.rs fetchers), `security/` (rugcheck.rs fetcher), `updates/` (split into 5 submodules: mod.rs re-exports, helpers.rs in-flight tracking/error classification, rate_limiter.rs RateLimitCoordinator with per-endpoint semaphores, core.rs update_token/batch/security + PoolPriorityManager, loops.rs start_update_loop + 5 priority-specific loops + force_update_token), `priorities.rs` (Priority enum), `filtered.rs` (passed/rejected/blacklisted token lists), `decimals.rs` (on-chain + cache), `discovery.rs` (new token detection), `cleanup.rs` (blacklist management), `store.rs` (snapshot cache), `events.rs` (token events), `service.rs` (ServiceManager integration), `favorites.rs` (user-managed token favorites with notes), `search.rs` (unified search across DexScreener/GeckoTerminal), `pools/` (token pool analysis submodule: api.rs, cache.rs, conversion.rs, operations.rs, utils.rs), `types.rs` (Token, DataSource, SecurityRisk, etc.).
 
 ### Filtering (src/filtering/)
 
@@ -382,7 +382,7 @@ Current wallet submodules:
 
 ### Transactions (src/transactions/)
 
-Real-time monitoring via WebSocket + bootstrap. Comprehensive DEX transaction analysis. Files: `manager.rs` (TransactionsManager lifecycle), `service/` (config.rs, lifecycle.rs, bootstrap.rs, processing.rs, websocket.rs, health.rs), `analyzer/` (classification, swap detection, P&L calculation, patterns.rs for pattern detection and risk assessment — 6-step pipeline), `processor/` (core.rs, extraction.rs, analysis.rs, helpers.rs), `fetcher.rs` (RPC batching with 50-account limit), `verifier.rs` (position integration), `websocket.rs` (real-time streaming), `database/` (types.rs, schema.rs, operations.rs, maintenance.rs, global.rs), `debug.rs` (diagnostics), `types.rs` (Transaction, TransactionType, SwapPnLInfo, AtaOperation), `utils.rs` (helpers), `program_ids.rs` (DEX program ID constants).
+Real-time monitoring via WebSocket + bootstrap. Comprehensive DEX transaction analysis. Files: `manager.rs` (TransactionsManager lifecycle), `service/` (config.rs, lifecycle.rs, bootstrap.rs, processing.rs, websocket.rs, health.rs), `analyzer/` (classification, swap detection, P&L calculation, patterns.rs for pattern detection and risk assessment — 6-step pipeline), `processor/` (core.rs, extraction.rs, analysis.rs, helpers.rs), `fetcher.rs` (RPC batching with 50-account limit), `verifier.rs` (position integration), `websocket.rs` (real-time streaming), `database/` (types.rs, schema.rs, operations.rs, maintenance.rs stats/integrity, bootstrap.rs backfill state, reporting.rs transaction queries/aggregation, global.rs), `debug.rs` (diagnostics), `types.rs` (Transaction, TransactionType, SwapPnLInfo, AtaOperation), `utils.rs` (helpers), `program_ids.rs` (DEX program ID constants).
 
 ### Database (src/database/)
 
@@ -439,7 +439,7 @@ API routes: `/api/trader/force-stop`, `/api/trader/resume`, `/api/trader/force-s
 
 ### Positions (src/positions/)
 
-Manages open/closed positions with DCA and partial exit support. Tracks entry/exit history with EntryRecord and ExitRecord. Files: `state.rs` (global POSITIONS state with locks), `operations.rs` (open/close/partial_close/add_to_position), `database/` (types.rs, operations.rs, global.rs, convenience.rs — SQLite persistence for positions/entries/exits), `helpers.rs` (P&L calculations, index management), `apply.rs` (position updates), `transitions.rs` (state transitions), `tracking.rs` (update_position_tracking), `price_updater.rs` (background price updates), `loss_detection.rs` (loss thresholds + blacklisting), `queue.rs` (verification queue), `verifier.rs` (chain verification), `worker.rs` (background worker), `metrics.rs` (ProceedsMetricsSnapshot), `types.rs` (Position with DCA/partial exit fields, EntryRecord, ExitRecord).
+Manages open/closed positions with DCA and partial exit support. Tracks entry/exit history with EntryRecord and ExitRecord. Files: `state.rs` (global POSITIONS state with locks), `operations.rs` (open/close/partial_close/add_to_position), `database/` (types.rs, operations.rs init/write/metadata, queries.rs read-only lookups, tracking.rs state history/snapshots/maintenance, global.rs, convenience.rs — SQLite persistence for positions/entries/exits), `helpers.rs` (P&L calculations, index management), `apply.rs` (position updates), `transitions.rs` (state transitions), `tracking.rs` (update_position_tracking), `price_updater.rs` (background price updates), `loss_detection.rs` (loss thresholds + blacklisting), `queue.rs` (verification queue), `verifier.rs` (chain verification), `worker.rs` (background worker), `metrics.rs` (ProceedsMetricsSnapshot), `types.rs` (Position with DCA/partial exit fields, EntryRecord, ExitRecord).
 
 ### Strategies (src/strategies/)
 
@@ -447,7 +447,7 @@ Condition-based trading strategy system with DB persistence. Entry/exit signal e
 
 ### OHLCV (src/ohlcvs/)
 
-Multi-timeframe OHLCV data with priority-based monitoring. Syncs with Pool Service every 5 minutes. Priority auto-adjusts for open positions. Files: `monitor.rs` (OhlcvMonitor with token tracking), `fetcher.rs` (DexScreener/GeckoTerminal data fetch), `aggregator.rs` (timeframe aggregation), `database.rs` (SQLite with per-token tables), `cache.rs` (in-memory cache), `manager.rs` (PoolManager), `priorities.rs` (ActivityType, priority calculation), `gaps.rs` (gap detection), `service.rs` (OhlcvService), `types.rs` (OhlcvDataPoint, Timeframe, Priority, PoolConfig).
+Multi-timeframe OHLCV data with priority-based monitoring. Syncs with Pool Service every 5 minutes. Priority auto-adjusts for open positions. Files: `monitor.rs` (OhlcvMonitor with token tracking), `fetcher.rs` (DexScreener/GeckoTerminal data fetch), `aggregator.rs` (timeframe aggregation), `database/` (mod.rs struct/init/pool management, candles.rs time bounds/candle storage, gaps.rs gap tracking, config.rs monitor configuration, maintenance.rs cleanup/metrics/token status), `cache.rs` (in-memory cache), `manager.rs` (PoolManager), `priorities.rs` (ActivityType, priority calculation), `gaps.rs` (gap detection), `service.rs` (OhlcvService), `types.rs` (OhlcvDataPoint, Timeframe, Priority, PoolConfig).
 
 ### AI Analysis / Assistant (src/ai/)
 
@@ -472,7 +472,9 @@ LLM-powered token analysis for intelligent filtering, entry/exit decisions, scam
 - `deny` — Block tool entirely with explanation
 
 **AI Scheduled Tasks:**
-- `scheduled_db.rs` — Scheduled AI task persistence with interval/daily/weekly schedules, retry logic, timeouts.
+- `scheduled_db.rs` — Task CRUD, scheduling logic, due task queries, next-run calculation.
+- `scheduled_types.rs` — Type definitions (ScheduleType, TaskToolPermissions, ScheduledTask, RunStatus, TaskRun, AutomationStats).
+- `scheduled_runs.rs` — Run history recording, listing, stats, cleanup.
 - Background service executes tasks headlessly via ChatEngine.
 - API Routes: `/api/ai/automation` (CRUD), toggle, run, history, stats.
 
@@ -482,11 +484,11 @@ LLM-powered token analysis for intelligent filtering, entry/exit decisions, scam
 
 ### Events (src/events/)
 
-Structured JSON event logging with dedicated SQLite DB (`data/events.db`). Non-blocking async channels. Files: `database.rs` (EventsDatabase with connection pool), `maintenance.rs` (record helpers for each event type, cleanup task), `types.rs` (Event, EventCategory, Severity). Event types: API, Connectivity, Entry, Filtering, OHLCV, Pool, Position, Security, Swap, System, Token, Trader, Transaction.
+Structured JSON event logging with dedicated SQLite DB (`data/events.db`). Non-blocking async channels. Files: `database/` (mod.rs EventsDatabase with connection pool/CRUD, pagination.rs keyset cursor-based queries/filtering), `maintenance.rs` (record helpers for each event type, cleanup task), `types.rs` (Event, EventCategory, Severity). Event types: API, Connectivity, Entry, Filtering, OHLCV, Pool, Position, Security, Swap, System, Token, Trader, Transaction.
 
 ### Telegram (src/telegram/)
 
-Comprehensive Telegram bot integration providing notifications, commands, and chat discovery. Files: `types.rs`, `bot.rs`, `service.rs`, `notifier.rs`, `session.rs` (password/TOTP auth), `discovery.rs` (chat discovery without chat_id), `polling.rs`, `totp.rs`, `formatters.rs`, `keyboards.rs`, `pagination.rs`, `commands/` (mod.rs router, trading.rs, status.rs, menu.rs, callbacks.rs).
+Comprehensive Telegram bot integration providing notifications, commands, and chat discovery. Files: `types.rs`, `bot.rs`, `service.rs`, `notifier.rs`, `session.rs` (password/TOTP auth), `discovery.rs` (chat discovery without chat_id), `polling.rs`, `totp.rs`, `formatters.rs`, `keyboards.rs`, `pagination.rs`, `commands/` (mod.rs router, trading.rs, status.rs, menu.rs, callbacks.rs dispatcher, callback_positions.rs position handlers, callback_tokens.rs token handlers).
 
 Bot States: Disconnected → Discovery (no chat_id) → Connected (full operation).
 
@@ -553,7 +555,7 @@ Background service for empty ATA cleanup. Runs every 5 minutes after a 30s start
 
 ### Actions (src/actions/)
 
-Operation progress tracking with real-time SSE broadcasting to dashboard. Tracks lifecycle of trading operations through discrete steps. Types: ActionType (SwapBuy/Sell/PositionOpen/Close/DCA/PartialExit/ManualOrder), ActionState (pending/running/completed/failed), ActionStep. Dual-write architecture: in-memory HashMap + SQLite DB. Broadcast channel for SSE streaming.
+Operation progress tracking with real-time SSE broadcasting to dashboard. Tracks lifecycle of trading operations through discrete steps. Types: ActionType (SwapBuy/Sell/PositionOpen/Close/DCA/PartialExit/ManualOrder), ActionState (pending/running/completed/failed), ActionStep. Dual-write architecture: in-memory HashMap + SQLite DB. Broadcast channel for SSE streaming. Files: `types.rs`, `state.rs`, `broadcast.rs`, `database/` (mod.rs struct/init/write ops, queries.rs read/filter/pagination/cleanup).
 
 ### Errors (src/errors/)
 
