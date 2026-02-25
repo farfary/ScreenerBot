@@ -220,10 +220,10 @@ pub fn active_tools_count() -> u32 {
 static DASHBOARD_ACTIVE_TOKEN: RwLock<Option<String>> = RwLock::new(None);
 
 /// Set the token being actively viewed (called when token details opens)
-pub fn set_dashboard_active_token(mint: Option<String>) {
+pub fn set_dashboard_active_token(mint: Option<&str>) {
     match DASHBOARD_ACTIVE_TOKEN.write() {
         Ok(mut guard) => {
-            if let Some(ref m) = mint {
+            if let Some(m) = mint {
                 crate::logger::debug(
                     crate::logger::LogTag::Webserver,
                     &format!("Dashboard focus set: mint={m}"),
@@ -231,7 +231,7 @@ pub fn set_dashboard_active_token(mint: Option<String>) {
             } else if guard.is_some() {
                 crate::logger::debug(crate::logger::LogTag::Webserver, "Dashboard focus cleared");
             }
-            *guard = mint;
+            *guard = mint.map(String::from);
         }
         Err(e) => {
             crate::logger::warning(

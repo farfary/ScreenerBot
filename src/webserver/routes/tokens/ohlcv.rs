@@ -219,7 +219,7 @@ pub async fn focus_token(
     );
 
     // Set as dashboard active token
-    crate::global::set_dashboard_active_token(Some(mint.clone()));
+    crate::global::set_dashboard_active_token(Some(&mint));
 
     // Boost OHLCV priority to Critical
     let ohlcv_updated = match crate::ohlcvs::update_token_priority(
