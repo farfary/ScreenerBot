@@ -482,29 +482,6 @@ pub struct MintGapAggregate {
     pub latest_gap_end: Option<i64>,
 }
 
-#[derive(Debug, Clone)]
-pub struct OhlcvTokenStatus {
-    pub mint: String,
-    pub priority: Priority,
-    pub is_active: bool,
-    pub has_data: bool,
-    pub pools_monitored: usize,
-    pub primary_pool: Option<String>,
-    pub last_fetch_timestamp: Option<DateTime<Utc>>,
-    pub next_fetch_timestamp: Option<DateTime<Utc>>,
-    pub last_activity_timestamp: DateTime<Utc>,
-    pub fetch_interval_seconds: u64,
-    pub consecutive_empty_fetches: u32,
-    pub retention_target_timestamp: i64,
-    pub earliest_candle_timestamp: Option<i64>,
-    pub latest_candle_timestamp: Option<i64>,
-    pub coverage_percent: f64,
-    pub backfill_in_progress: bool,
-    pub open_gap_count: usize,
-    pub largest_gap_seconds: Option<i64>,
-    pub latest_gap_end: Option<i64>,
-}
-
 /// Pool metadata for API responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolMetadata {
