@@ -7,6 +7,7 @@
 // Module declarations
 mod analysis;
 mod core;
+mod dex_corrections;
 mod extraction;
 mod helpers;
 
