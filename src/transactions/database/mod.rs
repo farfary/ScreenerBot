@@ -17,6 +17,7 @@ mod maintenance;
 mod operations;
 mod operations_queries;
 mod reporting;
+mod reporting_aggregates;
 mod schema;
 mod types;
 
