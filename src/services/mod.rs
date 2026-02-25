@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::LazyLock;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::{Notify, RwLock};
 use tokio::task::JoinHandle;
 
@@ -566,7 +566,7 @@ impl ServiceManager {
 
                 // Wait for handles with increased timeout for cleanup tasks
                 if let Some(handles) = self.handles.remove(service_name) {
-                    let timeout_duration = tokio::time::Duration::from_secs(10);
+                    let timeout_duration = Duration::from_secs(10);
                     let handle_count = handles.len();
 
                     for (idx, handle) in handles.into_iter().enumerate() {
@@ -838,7 +838,7 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
     // Task auto-terminates when ServiceManager is cleared (during shutdown)
     tokio::spawn(async {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(5)).await;
 
             // Check if ServiceManager still exists - if not, shutdown is in progress
             let manager_ref = match get_service_manager().await {
@@ -866,7 +866,7 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
 
             // Add timeout to prevent hanging forever
             let update_future = manager.update_cache();
-            match tokio::time::timeout(tokio::time::Duration::from_secs(3), update_future).await {
+            match tokio::time::timeout(Duration::from_secs(3), update_future).await {
                 Ok(_) => {
                     logger::debug(LogTag::System, "ServiceManager: Cache update completed");
                 }

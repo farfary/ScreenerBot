@@ -17,6 +17,7 @@ use solana_sdk::{
 };
 use spl_token::instruction::close_account;
 use std::str::FromStr;
+use std::time::Duration;
 
 // =============================================================================
 // BALANCE QUERIES
@@ -320,7 +321,7 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
                 closed_count += 1;
 
                 // Small delay between closures to avoid overwhelming the network
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
             Err(e) => {
                 logger::error(
@@ -426,7 +427,7 @@ pub async fn close_token_account_with_context(
                 max_checks
               ),
                         );
-                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                         continue;
                     } else {
                         logger::debug(
@@ -481,7 +482,7 @@ pub async fn close_token_account_with_context(
                             delay_ms
                         ),
                     );
-                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                     continue;
                 } else {
                     logger::warning(
