@@ -94,9 +94,7 @@ impl TransactionProcessor {
                     .account_lifecycle
                     .created_accounts
                     .iter()
-                    .filter(|acc| {
-                        acc.mint.as_deref().is_some_and(|m| m != SOL_MINT)
-                    })
+                    .filter(|acc| acc.mint.as_deref().is_some_and(|m| m != SOL_MINT))
                     .count() as u32,
                 token_ata_closures: 0, // ClosedAccount doesn't have mint info, calculate from operations instead
                 wsol_ata_creations: analysis
@@ -115,9 +113,7 @@ impl TransactionProcessor {
                     .account_lifecycle
                     .created_accounts
                     .iter()
-                    .filter(|acc| {
-                        acc.mint.as_deref().is_some_and(|m| m != SOL_MINT)
-                    })
+                    .filter(|acc| acc.mint.as_deref().is_some_and(|m| m != SOL_MINT))
                     .map(|acc| acc.rent_paid)
                     .sum(),
                 token_rent_recovered: analysis
@@ -134,9 +130,7 @@ impl TransactionProcessor {
                         .account_lifecycle
                         .created_accounts
                         .iter()
-                        .filter(|acc| {
-                            acc.mint.as_deref().is_some_and(|m| m != SOL_MINT)
-                        })
+                        .filter(|acc| acc.mint.as_deref().is_some_and(|m| m != SOL_MINT))
                         .map(|acc| acc.rent_paid)
                         .sum();
                     let recovered: f64 = analysis
@@ -655,7 +649,12 @@ impl TransactionProcessor {
                     input_ui_amount: input_ui,
                     output_ui_amount: output_ui,
                     pool_address: analysis.dex.pool_address.clone(),
-                    program_id: analysis.dex.program_ids.first().cloned().unwrap_or_default(),
+                    program_id: analysis
+                        .dex
+                        .program_ids
+                        .first()
+                        .cloned()
+                        .unwrap_or_default(),
                 };
 
                 // Add sanity checks for unreasonable swap amounts (user trades max 0.01 SOL)

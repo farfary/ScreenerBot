@@ -413,9 +413,10 @@ impl SwapRouter for JupiterRouter {
             )));
         }
 
-        let swap_response: JupiterSwapResponse = response.json().await.map_err(|e| {
-            Error::parse_error(format!("Jupiter swap response parse failed: {e}"))
-        })?;
+        let swap_response: JupiterSwapResponse = response
+            .json()
+            .await
+            .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
 
         // Transaction is already base64 encoded, send it directly
         let rpc_client = crate::rpc::get_rpc_client();

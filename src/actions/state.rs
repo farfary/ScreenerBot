@@ -81,8 +81,7 @@ pub async fn register_action(action: Action) -> Result<(), String> {
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
             if let Err(e) = db.insert_action(&action).await {
-                let error_msg =
-                    format!("Failed to insert action {action_id} into database: {e}");
+                let error_msg = format!("Failed to insert action {action_id} into database: {e}");
                 logger::error(LogTag::System, &error_msg);
                 // Return error - don't proceed if DB write fails
                 return Err(error_msg);

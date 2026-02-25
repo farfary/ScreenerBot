@@ -450,8 +450,7 @@ impl PositionsDatabase {
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
             snapshots.push(
-                snapshot_result
-                    .map_err(|e| format!("Failed to parse token snapshot row: {e}"))?,
+                snapshot_result.map_err(|e| format!("Failed to parse token snapshot row: {e}"))?,
             );
         }
 

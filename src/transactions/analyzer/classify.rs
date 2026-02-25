@@ -769,7 +769,10 @@ fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::TransactionDetails) -
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
                     if let Some(info) = parsed.get("info") {
-                        let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or_default();
+                        let mint = info
+                            .get("mint")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default();
                         if mint == WSOL_MINT {
                             if let Some(token_amount) = info.get("tokenAmount") {
                                 if let Some(ui) =

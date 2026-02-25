@@ -108,9 +108,7 @@ impl Tool for AnalyzeTokenTool {
             price_change_24h_percent: token.price_change_h24,
             volume_24h_usd: token.volume_h24,
             liquidity_usd: token.liquidity_usd,
-            security_score: token
-                .security_score_normalised
-                .map(|s| format!("{s}/100")),
+            security_score: token.security_score_normalised.map(|s| format!("{s}/100")),
             security_risks: if token.security_risks.is_empty() {
                 None
             } else {

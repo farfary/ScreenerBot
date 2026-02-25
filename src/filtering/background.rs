@@ -55,10 +55,7 @@ pub async fn run_refresh_loop(
         }
         Err(err) => {
             errors.fetch_add(1, Ordering::Relaxed);
-            logger::warning(
-                LogTag::Filtering,
-                &format!("Initial refresh failed: {err}"),
-            );
+            logger::warning(LogTag::Filtering, &format!("Initial refresh failed: {err}"));
         }
     }
 

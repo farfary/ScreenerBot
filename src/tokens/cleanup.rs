@@ -234,8 +234,7 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
     let mut authority_freeze_count = 0;
     let mut manual_count = 0;
     let mut non_authority_auto_count = 0;
-    let mut non_authority_breakdown: HashMap<String, usize> =
-        HashMap::new();
+    let mut non_authority_breakdown: HashMap<String, usize> = HashMap::new();
 
     let mut stmt = conn
         .prepare("SELECT reason, source FROM blacklist")

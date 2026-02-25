@@ -91,8 +91,7 @@ pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
             let console_continuation = format!("{continuation_prefix}{chunk}");
             print_stdout_safe(&console_continuation);
 
-            let file_continuation =
-                format!("{timestamp} [{tag_clean}] [{log_type}] {chunk}");
+            let file_continuation = format!("{timestamp} [{tag_clean}] [{log_type}] {chunk}");
             write_to_file(&file_continuation);
         }
     }

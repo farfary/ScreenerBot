@@ -14,17 +14,16 @@ use crate::logger::{self, LogTag};
 
 use super::types::*;
 
-mod schema;
-mod metrics;
-mod flow_cache;
 mod dashboard_metrics;
+mod flow_cache;
+mod metrics;
+mod schema;
 mod snapshots;
 
 use schema::{
-    DASHBOARD_METRICS_INDEXES, FLOW_CACHE_INDEXES, SCHEMA_NFT_BALANCES,
-    SCHEMA_SOL_FLOW_CACHE, SCHEMA_TOKEN_BALANCES, SCHEMA_WALLET_DASHBOARD_METRICS,
-    SCHEMA_WALLET_METADATA, SCHEMA_WALLET_SNAPSHOTS, WALLET_INDEXES,
-    WALLET_SCHEMA_VERSION,
+    DASHBOARD_METRICS_INDEXES, FLOW_CACHE_INDEXES, SCHEMA_NFT_BALANCES, SCHEMA_SOL_FLOW_CACHE,
+    SCHEMA_TOKEN_BALANCES, SCHEMA_WALLET_DASHBOARD_METRICS, SCHEMA_WALLET_METADATA,
+    SCHEMA_WALLET_SNAPSHOTS, WALLET_INDEXES, WALLET_SCHEMA_VERSION,
 };
 
 // =============================================================================
@@ -34,10 +33,10 @@ use schema::{
 pub(super) static GLOBAL_WALLET_DB: LazyLock<Mutex<Option<WalletDatabase>>> =
     LazyLock::new(|| Mutex::new(None));
 
+pub use metrics::get_wallet_service_metrics;
 pub(super) use metrics::{
     increment_errors, increment_flow_syncs, increment_operations, increment_snapshots,
 };
-pub use metrics::get_wallet_service_metrics;
 
 // =============================================================================
 // WALLET DATABASE
@@ -266,7 +265,10 @@ impl WalletDatabase {
     }
 
     /// Get token balances for a specific snapshot
-    pub fn get_token_balances(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
+    pub fn get_token_balances(
+        &self,
+        snapshot_id: i64,
+    ) -> Result<Vec<SnapshotTokenBalance>, String> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -336,9 +338,8 @@ impl WalletDatabase {
 
         let mut balances = Vec::new();
         for balance_result in balances_iter {
-            balances.push(
-                balance_result.map_err(|e| format!("Failed to parse nft balance row: {e}"))?,
-            );
+            balances
+                .push(balance_result.map_err(|e| format!("Failed to parse nft balance row: {e}"))?);
         }
 
         Ok(balances)
@@ -371,5 +372,4 @@ impl WalletDatabase {
 
         Ok(deleted_count as u64)
     }
-
 }

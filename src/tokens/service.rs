@@ -328,10 +328,9 @@ impl Service for TokensServiceNew {
         metrics
             .custom_metrics
             .insert("geckoterminal_cache_entries".to_owned(), gecko_size as f64);
-        metrics.custom_metrics.insert(
-            "rugcheck_cache_hit_rate".to_owned(),
-            rug_metrics.hit_rate(),
-        );
+        metrics
+            .custom_metrics
+            .insert("rugcheck_cache_hit_rate".to_owned(), rug_metrics.hit_rate());
         metrics
             .custom_metrics
             .insert("rugcheck_cache_entries".to_owned(), rug_size as f64);

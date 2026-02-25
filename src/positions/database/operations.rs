@@ -234,7 +234,9 @@ impl PositionsDatabase {
     }
 
     /// Get database connection from pool
-    pub(crate) fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
+    pub(crate) fn get_connection(
+        &self,
+    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.pool
             .get()
             .map_err(|e| format!("Failed to get positions database connection: {e}"))
@@ -554,9 +556,9 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to iterate metadata for key {key}: {e}"))?
         {
             Some(row) => {
-                let value: String = row.get(0).map_err(|e| {
-                    format!("Failed to decode metadata payload for key {key}: {e}")
-                })?;
+                let value: String = row
+                    .get(0)
+                    .map_err(|e| format!("Failed to decode metadata payload for key {key}: {e}"))?;
                 Ok(Some(value))
             }
             None => Ok(None),

@@ -280,12 +280,11 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
             notify.notify_waiters();
         }
     } // Wait for shutdown with timeout
-    let shutdown_result =
-        tokio::time::timeout(Duration::from_secs(timeout_seconds), async {
-            // Give tasks time to shutdown gracefully
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        })
-        .await;
+    let shutdown_result = tokio::time::timeout(Duration::from_secs(timeout_seconds), async {
+        // Give tasks time to shutdown gracefully
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    })
+    .await;
 
     match shutdown_result {
         Ok(_) => {

@@ -94,9 +94,8 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to insert token pool: {e}")))?;
         }
 
-        tx.commit().map_err(|e| {
-            TokenError::Database(format!("Failed to commit pool transaction: {e}"))
-        })?;
+        tx.commit()
+            .map_err(|e| TokenError::Database(format!("Failed to commit pool transaction: {e}")))?;
 
         Ok(())
     }

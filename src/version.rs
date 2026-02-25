@@ -194,10 +194,7 @@ pub fn start_update_check_service(
 
         // Perform initial check
         if let Err(e) = check_for_update().await {
-            logger::warning(
-                LogTag::System,
-                &format!("Initial update check failed: {e}"),
-            );
+            logger::warning(LogTag::System, &format!("Initial update check failed: {e}"));
         }
 
         // Periodic check loop
@@ -351,10 +348,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
         format!("{}{}", base_url, update.download_url)
     };
 
-    logger::debug(
-        LogTag::System,
-        &format!("Downloading from: {download_url}"),
-    );
+    logger::debug(LogTag::System, &format!("Downloading from: {download_url}"));
 
     // Download file with timeout
     let client = reqwest::Client::builder()
@@ -598,8 +592,8 @@ fn calculate_sha256(path: &std::path::Path) -> Result<String, String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
 
-    let mut file = std::fs::File::open(path)
-        .map_err(|e| format!("Failed to open file for checksum: {e}"))?;
+    let mut file =
+        std::fs::File::open(path).map_err(|e| format!("Failed to open file for checksum: {e}"))?;
 
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];

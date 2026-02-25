@@ -54,7 +54,9 @@ impl Tool for GetStatusTool {
 
     async fn execute(&self, _params: serde_json::Value) -> ToolResult {
         // Calculate uptime
-        let uptime = (chrono::Utc::now() - *global::STARTUP_TIME).num_seconds().max(0) as u64;
+        let uptime = (chrono::Utc::now() - *global::STARTUP_TIME)
+            .num_seconds()
+            .max(0) as u64;
 
         // Get force stop info
         let force_stopped = global::is_force_stopped();

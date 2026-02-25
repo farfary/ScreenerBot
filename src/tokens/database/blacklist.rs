@@ -39,9 +39,7 @@ impl TokenDatabase {
                  FROM blacklist \
                  ORDER BY added_at DESC",
             )
-            .map_err(|e| {
-                TokenError::Database(format!("Failed to prepare blacklist query: {e}"))
-            })?;
+            .map_err(|e| TokenError::Database(format!("Failed to prepare blacklist query: {e}")))?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -56,9 +54,11 @@ impl TokenDatabase {
 
         let mut records = Vec::new();
         for row in rows {
-            records.push(row.map_err(|e| {
-                TokenError::Database(format!("Failed to read blacklist row: {e}"))
-            })?);
+            records.push(
+                row.map_err(|e| {
+                    TokenError::Database(format!("Failed to read blacklist row: {e}"))
+                })?,
+            );
         }
 
         Ok(records)

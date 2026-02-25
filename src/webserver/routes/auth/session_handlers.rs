@@ -1,6 +1,9 @@
 //! Session management handlers (login, logout, status)
 
-use axum::{http::header, http::header::HeaderValue, http::HeaderMap, http::StatusCode, response::Response, Json};
+use axum::{
+    http::header, http::header::HeaderValue, http::HeaderMap, http::StatusCode, response::Response,
+    Json,
+};
 
 use crate::config;
 use crate::secure_storage::verify_password;
@@ -150,9 +153,9 @@ pub async fn login(Json(req): Json<LoginRequest>) -> Response {
     let mut response = success_response(response_body);
     response.headers_mut().insert(
         header::SET_COOKIE,
-        cookie_value.parse().unwrap_or_else(|_| {
-            HeaderValue::from_static("screenerbot_session=; Max-Age=0")
-        }),
+        cookie_value
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("screenerbot_session=; Max-Age=0")),
     );
 
     response

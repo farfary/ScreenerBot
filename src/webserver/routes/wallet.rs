@@ -131,8 +131,7 @@ async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
         .collect();
 
     // Fetch token metadata in batch
-    let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> =
-        HashMap::new();
+    let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
 
     // Try to get metadata for each token from token database
     if let Some(db) = crate::tokens::database::get_global_database() {

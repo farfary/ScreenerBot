@@ -225,12 +225,8 @@ impl RpcClientMethods for RpcClient {
             .and_then(|v| v.as_u64())
             .ok_or_else(|| parse_err("blockhash", "missing lastValidBlockHeight"))?;
 
-        let hash = Hash::from_str(blockhash).map_err(|e| {
-            parse_err(
-                "blockhash",
-                &format!("Invalid hash \'{blockhash}\': {e}"),
-            )
-        })?;
+        let hash = Hash::from_str(blockhash)
+            .map_err(|e| parse_err("blockhash", &format!("Invalid hash \'{blockhash}\': {e}")))?;
 
         Ok((hash, last_valid_block_height))
     }
@@ -371,10 +367,7 @@ impl RpcClientMethods for RpcClient {
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
             let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
-                parse_err(
-                    "pubkey",
-                    &format!("Invalid pubkey \'{pubkey_str}\': {e}"),
-                )
+                parse_err("pubkey", &format!("Invalid pubkey \'{pubkey_str}\': {e}"))
             })?;
 
             if let Some(account) =
@@ -1016,10 +1009,7 @@ impl RpcClientMethods for RpcClient {
                 })
                 .collect();
 
-            config.insert(
-                "filters".to_owned(),
-                serde_json::Value::Array(filters_json),
-            );
+            config.insert("filters".to_owned(), serde_json::Value::Array(filters_json));
         }
 
         let params = serde_json::json!([program_id.to_string(), serde_json::Value::Object(config)]);
@@ -1042,10 +1032,7 @@ impl RpcClientMethods for RpcClient {
                 .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
 
             let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
-                parse_err(
-                    "pubkey",
-                    &format!("Invalid pubkey \'{pubkey_str}\': {e}"),
-                )
+                parse_err("pubkey", &format!("Invalid pubkey \'{pubkey_str}\': {e}"))
             })?;
 
             let account_data = item
@@ -1403,7 +1390,10 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
         .and_then(|v| v.as_bool())
         .unwrap_or_default();
 
-    let rent_epoch = value.get("rentEpoch").and_then(|v| v.as_u64()).unwrap_or_default();
+    let rent_epoch = value
+        .get("rentEpoch")
+        .and_then(|v| v.as_u64())
+        .unwrap_or_default();
 
     Ok(Some(Account {
         lamports,

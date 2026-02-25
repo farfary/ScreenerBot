@@ -476,8 +476,7 @@ pub async fn perform_initial_transaction_bootstrap(
 
             // Process failed signatures in batches
             for batch_start in (0..failed_signatures.len()).step_by(CONCURRENT_BATCH_SIZE) {
-                let batch_end =
-                    (batch_start + CONCURRENT_BATCH_SIZE).min(failed_signatures.len());
+                let batch_end = (batch_start + CONCURRENT_BATCH_SIZE).min(failed_signatures.len());
                 let batch = &failed_signatures[batch_start..batch_end];
 
                 let mut futures = FuturesUnordered::new();

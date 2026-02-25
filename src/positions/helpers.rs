@@ -723,7 +723,8 @@ pub async fn calculate_split_pnl(
                     remaining as f64 / (position.token_amount.unwrap_or(1) as f64);
                 let invested_in_remaining = position.total_size_sol * remaining_portion;
                 let entry_fees_portion =
-                    lamports_to_sol(position.entry_fee_lamports.unwrap_or_default()) * remaining_portion;
+                    lamports_to_sol(position.entry_fee_lamports.unwrap_or_default())
+                        * remaining_portion;
                 current_value - invested_in_remaining - entry_fees_portion
             } else {
                 0.0

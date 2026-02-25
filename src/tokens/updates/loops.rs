@@ -241,10 +241,7 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
                 }
             }
             Err(e) => {
-                logger::error(
-                    LogTag::Tokens,
-                    &format!("Batch error during seeding: {e}"),
-                );
+                logger::error(LogTag::Tokens, &format!("Batch error during seeding: {e}"));
             }
         }
     }

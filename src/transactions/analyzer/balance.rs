@@ -220,7 +220,9 @@ async fn extract_sol_balance_changes(
     }
 
     // Align account_keys length to balances length (jsonParsed often includes additional LUT keys)
-    let min_len = account_keys.len().min(pre_balances.len().min(post_balances.len()));
+    let min_len = account_keys
+        .len()
+        .min(pre_balances.len().min(post_balances.len()));
     let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
 
     // Calculate changes for each account

@@ -17,8 +17,8 @@ use super::types::*;
 const TOKEN_METADATA_CONCURRENCY: usize = 20;
 const MAX_API_CACHE_ENTRIES: usize = 128;
 
-mod token_metadata;
 mod flow_metrics;
+mod token_metadata;
 
 use flow_metrics::{compute_daily_flows, compute_flow_metrics};
 use token_metadata::enrich_token_overview;
@@ -61,7 +61,6 @@ fn short_mint_label(mint: &str) -> String {
     }
 }
 
-
 // =============================================================================
 // DASHBOARD PAYLOAD COMPUTATION
 // =============================================================================
@@ -99,9 +98,7 @@ pub(super) async fn compute_dashboard_payload_realtime(
     };
     if snapshots.is_empty() {
         let flows = compute_flow_metrics(window_hours).await?;
-        let daily_flows = compute_daily_flows(window_hours)
-            .await
-            .unwrap_or_default();
+        let daily_flows = compute_daily_flows(window_hours).await.unwrap_or_default();
         return Ok(WalletDashboardData {
             summary: WalletSummarySnapshot {
                 window_hours,

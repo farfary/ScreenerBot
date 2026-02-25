@@ -7,7 +7,6 @@ use super::super::cache::CachedDashboardMetrics;
 use super::WalletDatabase;
 
 impl WalletDatabase {
-
     pub fn get_dashboard_metrics(
         &self,
         window_key: &str,

@@ -168,10 +168,8 @@ impl Service for TelegramService {
             }
 
             // Send startup notification
-            let startup_notification = Notification::bot_started(
-                crate::version::VERSION.to_string(),
-                "Normal".to_owned(),
-            );
+            let startup_notification =
+                Notification::bot_started(crate::version::VERSION.to_string(), "Normal".to_owned());
             send_notification(startup_notification).await;
         }
 

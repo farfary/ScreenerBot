@@ -156,7 +156,8 @@ impl TransactionDatabase {
                         None
                     }
                 });
-                let instructions_count = row.get::<_, Option<i64>>(6)?.unwrap_or_default().max(0) as usize;
+                let instructions_count =
+                    row.get::<_, Option<i64>>(6)?.unwrap_or_default().max(0) as usize;
 
                 let transaction_type: Option<String> = row.get(7)?;
                 let direction: Option<String> = row.get(8)?;

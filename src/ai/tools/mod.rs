@@ -139,10 +139,7 @@ impl ToolRegistry {
 
         for tool in self.tools.values() {
             let def = tool.definition();
-            grouped
-                .entry(def.category.clone())
-                .or_default()
-                .push(def);
+            grouped.entry(def.category.clone()).or_default().push(def);
         }
 
         grouped

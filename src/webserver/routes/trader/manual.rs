@@ -356,9 +356,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 /// GET /api/trader/quote - Get quote preview without execution
 /// For BUY: requires amount_sol (SOL to spend), returns tokens received
 /// For SELL: requires amount_tokens (tokens to sell), returns SOL received
-pub async fn quote_preview_handler(
-    Query(req): Query<QuotePreviewRequest>,
-) -> Response {
+pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Response {
     use crate::constants::SOL_MINT;
     use crate::swaps::operations::get_best_quote;
     use crate::swaps::router::{QuoteRequest, SwapMode};

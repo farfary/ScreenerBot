@@ -39,7 +39,10 @@ pub async fn get_wallets_summary() -> Response {
 
     for wallet in &all_wallets {
         // Get SOL balance via RPC
-        let sol_balance = rpc.get_sol_balance(&wallet.address).await.unwrap_or_default();
+        let sol_balance = rpc
+            .get_sol_balance(&wallet.address)
+            .await
+            .unwrap_or_default();
 
         total_sol += sol_balance;
 
@@ -93,12 +96,7 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
 
     // Validate config
     if let Err(e) = config.validate() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CONFIG",
-            &e,
-            None,
-        );
+        return error_response(StatusCode::BAD_REQUEST, "INVALID_CONFIG", &e, None);
     }
 
     // Execute consolidation

@@ -12,9 +12,8 @@ use std::sync::LazyLock;
 /// Rewrite ES module import paths to include the asset version query parameter.
 /// This ensures browser module cache is busted on version changes.
 fn version_js_imports(js: &str) -> String {
-    static RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r#"(from\s+["'])([^"']+\.js)(["'])"#).unwrap()
-    });
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"(from\s+["'])([^"']+\.js)(["'])"#).unwrap());
 
     let version = crate::version::get_version();
     let ts = option_env!("ASSET_VERSION_TS").unwrap_or("0");

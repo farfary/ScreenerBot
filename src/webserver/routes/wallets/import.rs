@@ -80,7 +80,11 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
     };
 
     // Determine file type from extension
-    let extension = filename.rsplit('.').next().unwrap_or_default().to_lowercase();
+    let extension = filename
+        .rsplit('.')
+        .next()
+        .unwrap_or_default()
+        .to_lowercase();
 
     // Parse file based on extension
     let (headers, rows) = match extension.as_str() {

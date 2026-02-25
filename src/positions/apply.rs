@@ -276,7 +276,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     let final_pnl_sol = position.pnl.unwrap_or_default();
                                     let final_pnl_pct = position.pnl_percent.unwrap_or_default();
                                     let entry_price = position.average_entry_price;
-                                    let exit_price = position.effective_exit_price.unwrap_or_default();
+                                    let exit_price =
+                                        position.effective_exit_price.unwrap_or_default();
                                     let invested = position.total_size_sol;
                                     let received = position.sol_received.unwrap_or_default();
                                     let duration_secs = position
@@ -528,8 +529,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 let total_exited = pos.total_exited_amount;
                 if total_exited > 0 {
                     if let Some(prev_avg) = pos.average_exit_price {
-                        let prev_weight =
-                            (total_exited - exit_amount) as f64 / total_exited as f64;
+                        let prev_weight = (total_exited - exit_amount) as f64 / total_exited as f64;
                         let new_weight = exit_amount as f64 / total_exited as f64;
                         pos.average_exit_price =
                             Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));

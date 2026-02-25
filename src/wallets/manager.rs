@@ -69,7 +69,9 @@ pub use crud::{
 };
 
 mod access;
-pub use access::{get_wallet, get_wallet_by_address, get_wallet_keypair, list_active_wallets, list_wallets};
+pub use access::{
+    get_wallet, get_wallet_by_address, get_wallet_keypair, list_active_wallets, list_wallets,
+};
 
 // =============================================================================
 // BULK IMPORT/EXPORT

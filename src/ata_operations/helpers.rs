@@ -138,10 +138,7 @@ async fn build_and_send_close_instruction(
     })?;
 
     // Load keypair from config
-    logger::debug(
-        LogTag::Wallet,
-        "ATA_KEYPAIR: creating keypair from config",
-    );
+    logger::debug(LogTag::Wallet, "ATA_KEYPAIR: creating keypair from config");
 
     let keypair = crate::config::get_wallet_keypair().map_err(|e| {
         Error::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {

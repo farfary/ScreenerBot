@@ -13,7 +13,9 @@ use crate::rpc::{get_rpc_client, RpcClientMethods};
 /// Returns the number of tokens updated.
 pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, String> {
     // Get wallet address
-    let wallet = super::get_wallet(wallet_id).await?.ok_or("Wallet not found")?;
+    let wallet = super::get_wallet(wallet_id)
+        .await?
+        .ok_or("Wallet not found")?;
 
     let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet.address)
         .map_err(|e| format!("Invalid wallet address: {e}"))?;

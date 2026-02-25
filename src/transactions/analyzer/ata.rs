@@ -214,7 +214,9 @@ async fn extract_from_balance_changes(
         .map(|m| m.post_balances.as_ref())
         .unwrap_or(&empty_post_balances);
     // Align to minimum length to handle LUT keys present in balances
-    let min_len = account_keys.len().min(pre_balances.len().min(post_balances.len()));
+    let min_len = account_keys
+        .len()
+        .min(pre_balances.len().min(post_balances.len()));
     let account_keys = account_keys.into_iter().take(min_len).collect::<Vec<_>>();
     let pre_balances = pre_balances
         .into_iter()

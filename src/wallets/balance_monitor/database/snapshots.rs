@@ -93,10 +93,7 @@ impl WalletDatabase {
 
     /// Get SOL balance at or before a specific time (optimized for single value)
     /// Uses idx_wallet_snapshots_time index for fast descending time lookup
-    pub fn get_balance_at_time(
-        &self,
-        target_time: DateTime<Utc>,
-    ) -> Result<Option<f64>, String> {
+    pub fn get_balance_at_time(&self, target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
         let conn = self.get_connection()?;
 
         let result = conn
@@ -144,5 +141,4 @@ impl WalletDatabase {
             Ok(None)
         }
     }
-
 }

@@ -172,11 +172,7 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event(
-                    "DexScreener",
-                    endpoint,
-                    format!("HTTP {status}: {body}"),
-                )
+                .record_error_with_event("DexScreener", endpoint, format!("HTTP {status}: {body}"))
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
@@ -193,11 +189,7 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event(
-                        "DexScreener",
-                        endpoint,
-                        format!("Parse error: {err}"),
-                    )
+                    .record_error_with_event("DexScreener", endpoint, format!("Parse error: {err}"))
                     .await;
                 Err(format!("Failed to parse response: {err}"))
             }
@@ -364,11 +356,7 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event(
-                    "DexScreener",
-                    endpoint,
-                    format!("HTTP {status}: {body}"),
-                )
+                .record_error_with_event("DexScreener", endpoint, format!("HTTP {status}: {body}"))
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
@@ -382,11 +370,7 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event(
-                        "DexScreener",
-                        endpoint,
-                        format!("Parse error: {err}"),
-                    )
+                    .record_error_with_event("DexScreener", endpoint, format!("Parse error: {err}"))
                     .await;
                 return Err(format!("Failed to parse response: {err}"));
             }
@@ -500,11 +484,7 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event(
-                    "DexScreener",
-                    endpoint,
-                    format!("HTTP {status}: {body}"),
-                )
+                .record_error_with_event("DexScreener", endpoint, format!("HTTP {status}: {body}"))
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
@@ -523,11 +503,7 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event(
-                        "DexScreener",
-                        endpoint,
-                        format!("Parse error: {err}"),
-                    )
+                    .record_error_with_event("DexScreener", endpoint, format!("Parse error: {err}"))
                     .await;
                 Err(format!("Failed to parse response: {err}"))
             }
@@ -560,11 +536,7 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event(
-                    "DexScreener",
-                    &endpoint,
-                    format!("HTTP {status}: {body}"),
-                )
+                .record_error_with_event("DexScreener", &endpoint, format!("HTTP {status}: {body}"))
                 .await;
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {

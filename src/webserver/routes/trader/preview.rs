@@ -139,9 +139,7 @@ pub async fn get_trader_stats() -> Response {
 // =============================================================================
 
 /// GET /api/trader/preview-trailing-stop - Preview trailing stop for a position
-pub async fn get_trailing_stop_preview(
-    Query(query): Query<TrailingStopPreviewQuery>,
-) -> Response {
+pub async fn get_trailing_stop_preview(Query(query): Query<TrailingStopPreviewQuery>) -> Response {
     use crate::pools::get_pool_price;
 
     // Get config values (or use query overrides)

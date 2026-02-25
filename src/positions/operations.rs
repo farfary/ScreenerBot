@@ -1004,9 +1004,7 @@ pub async fn partial_close_position(
         .await
         .ok_or_else(|| format!("No open position found for token: {token_mint}"))?;
 
-    let position_id = position
-        .id
-        .ok_or_else(|| "Position has no ID".to_owned())?;
+    let position_id = position.id.ok_or_else(|| "Position has no ID".to_owned())?;
 
     // Get remaining token amount
     let remaining_amount = position
@@ -1170,8 +1168,11 @@ pub async fn partial_close_position(
 
     let transaction_signature = swap_result.transaction_signature.clone();
 
-    let expiry_height =
-        get_rpc_client().get_block_height().await.unwrap_or_default() + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+    let expiry_height = get_rpc_client()
+        .get_block_height()
+        .await
+        .unwrap_or_default()
+        + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
 
     let pending_partial = PendingPartialExit {
         signature: transaction_signature.clone(),
@@ -1276,9 +1277,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
         .await
         .ok_or_else(|| format!("No open position found for token: {token_mint}"))?;
 
-    let position_id = position
-        .id
-        .ok_or_else(|| "Position has no ID".to_owned())?;
+    let position_id = position.id.ok_or_else(|| "Position has no ID".to_owned())?;
 
     // Check DCA limits from config
     let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);

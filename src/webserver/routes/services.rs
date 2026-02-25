@@ -313,11 +313,7 @@ async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState
             );
             success_response(service)
         }
-        None => (
-            StatusCode::NOT_FOUND,
-            format!("Service '{name}' not found"),
-        )
-            .into_response(),
+        None => (StatusCode::NOT_FOUND, format!("Service '{name}' not found")).into_response(),
     }
 }
 

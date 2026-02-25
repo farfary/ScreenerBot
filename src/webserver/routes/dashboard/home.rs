@@ -315,7 +315,10 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
 
     // Process token statistics (filtering already fetched in parallel)
     let db = crate::tokens::database::get_global_database();
-    let total_in_database = db.as_ref().and_then(|d| d.count_tokens().ok()).unwrap_or_default() as usize;
+    let total_in_database = db
+        .as_ref()
+        .and_then(|d| d.count_tokens().ok())
+        .unwrap_or_default() as usize;
 
     // Get filtering stats from the already fetched result
     let filtering_stats = filtering_stats_result.ok();
@@ -328,8 +331,14 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         .as_ref()
         .map(|s| s.with_pool_price)
         .unwrap_or_default();
-    let blacklisted = filtering_stats.as_ref().map(|s| s.blacklisted).unwrap_or_default();
-    let with_ohlcv = filtering_stats.as_ref().map(|s| s.with_ohlcv).unwrap_or_default();
+    let blacklisted = filtering_stats
+        .as_ref()
+        .map(|s| s.blacklisted)
+        .unwrap_or_default();
+    let with_ohlcv = filtering_stats
+        .as_ref()
+        .map(|s| s.with_ohlcv)
+        .unwrap_or_default();
 
     // Calculate rejected as total - passed - blacklisted
     let rejected_filters = if total_in_database > passed_filters + blacklisted {

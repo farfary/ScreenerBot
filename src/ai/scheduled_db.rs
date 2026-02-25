@@ -578,8 +578,16 @@ pub fn calculate_next_run(
             let days_str = parts[0];
             let time_str = if parts.len() > 1 { parts[1] } else { "00:00" };
             let time_parts: Vec<&str> = time_str.splitn(2, ':').collect();
-            let hour: u32 = time_parts.first().unwrap_or(&"0").parse().unwrap_or_default();
-            let minute: u32 = time_parts.get(1).unwrap_or(&"0").parse().unwrap_or_default();
+            let hour: u32 = time_parts
+                .first()
+                .unwrap_or(&"0")
+                .parse()
+                .unwrap_or_default();
+            let minute: u32 = time_parts
+                .get(1)
+                .unwrap_or(&"0")
+                .parse()
+                .unwrap_or_default();
 
             let day_names: Vec<&str> = days_str.split(',').map(|s| s.trim()).collect();
             let target_weekdays: Vec<chrono::Weekday> = day_names

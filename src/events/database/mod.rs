@@ -18,8 +18,8 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use std::collections::HashMap;
 use std::path::Path;
-use std::time::Duration;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 // =============================================================================
 // CONSTANTS
@@ -186,7 +186,9 @@ impl EventsDatabase {
     }
 
     /// Get read connection from pool
-    pub(crate) fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
+    pub(crate) fn get_read_connection(
+        &self,
+    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.read_pool
             .get()
             .map_err(|e| format!("Failed to get events read connection: {e}"))

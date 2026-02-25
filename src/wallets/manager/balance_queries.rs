@@ -5,8 +5,8 @@ use std::str::FromStr;
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 
-use super::list_active_wallets;
 use super::super::types::{SimpleTokenBalance, WalletBalanceSummary, WalletWithTokenBalance};
+use super::list_active_wallets;
 
 // =============================================================================
 // BALANCE CONSTANTS

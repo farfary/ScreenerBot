@@ -15,7 +15,9 @@ pub async fn handle_status_command() -> String {
     let entry_enabled = with_config(|cfg| cfg.trader.entry_monitor_enabled);
     let exit_enabled = with_config(|cfg| cfg.trader.exit_monitor_enabled);
     let open_positions = positions::get_open_positions_count().await;
-    let uptime = (chrono::Utc::now() - *crate::global::STARTUP_TIME).num_seconds().max(0) as u64;
+    let uptime = (chrono::Utc::now() - *crate::global::STARTUP_TIME)
+        .num_seconds()
+        .max(0) as u64;
     let force_stopped = crate::global::is_force_stopped();
 
     let status_emoji = if force_stopped {

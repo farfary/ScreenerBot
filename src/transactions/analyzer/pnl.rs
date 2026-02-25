@@ -206,7 +206,10 @@ async fn calculate_fee_breakdown(
         }
 
         // Fall back to raw data decoding when parsed is absent
-        let program_id = ix.get("programId").and_then(|v| v.as_str()).unwrap_or_default();
+        let program_id = ix
+            .get("programId")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
         if program_id == "ComputeBudget111111111111111111111111111111" {
             if let Some(data_b58) = ix.get("data").and_then(|v| v.as_str()) {
                 if let Ok(bytes) = bs58::decode(data_b58).into_vec() {

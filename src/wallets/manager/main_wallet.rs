@@ -2,8 +2,8 @@
 
 use solana_sdk::signature::Keypair;
 
-use super::cache::{refresh_main_wallet_cache, MAIN_WALLET_CACHE};
 use super::super::types::Wallet;
+use super::cache::{refresh_main_wallet_cache, MAIN_WALLET_CACHE};
 
 /// Get the main wallet's keypair (cached for performance)
 pub async fn get_main_keypair() -> Result<Keypair, String> {

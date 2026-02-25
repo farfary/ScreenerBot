@@ -30,7 +30,6 @@ pub struct SolanaTransactionError {
     pub raw_error: Value,
 }
 
-
 /// Primary Solana blockchain error classification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BlockchainError {
@@ -666,10 +665,7 @@ fn classify_builtin_error(error_name: &str) -> (FailureType, String) {
             FailureType::Permanent,
             "Incorrect program ID provided".to_owned(),
         ),
-        "InvalidAccountData" => (
-            FailureType::Permanent,
-            "Account data is invalid".to_owned(),
-        ),
+        "InvalidAccountData" => (FailureType::Permanent, "Account data is invalid".to_owned()),
         "InvalidInstructionData" => (
             FailureType::Permanent,
             "Instruction data is invalid".to_owned(),

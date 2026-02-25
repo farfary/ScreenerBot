@@ -122,10 +122,7 @@ pub async fn filter_tokens(
     match filtering::query_tokens(filtering_query).await {
         Ok(result) => Ok(Json(build_token_list_response(result, view))),
         Err(err) => {
-            logger::info(
-                LogTag::Webserver,
-                &format!("Filtering query failed: {err}"),
-            );
+            logger::info(LogTag::Webserver, &format!("Filtering query failed: {err}"));
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }

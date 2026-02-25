@@ -145,7 +145,8 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
         Some(rpc_stats) => {
             let rpc_uptime = chrono::Utc::now()
                 .signed_duration_since(rpc_stats.startup_time)
-                .num_seconds().max(0) as u64;
+                .num_seconds()
+                .max(0) as u64;
             let recent_calls_per_second = rpc_stats.calls_per_minute_recent(5) / 60.0;
             let fallback_cps = rpc_stats.calls_per_second();
             RpcInfo {
@@ -172,10 +173,7 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
                 let mut by_reason = HashMap::new();
                 by_reason.insert("Manual".to_owned(), summary.manual_count);
                 by_reason.insert("MintAuthority".to_owned(), summary.authority_mint_count);
-                by_reason.insert(
-                    "FreezeAuthority".to_owned(),
-                    summary.authority_freeze_count,
-                );
+                by_reason.insert("FreezeAuthority".to_owned(), summary.authority_freeze_count);
                 if summary.non_authority_auto_count > 0 {
                     by_reason.insert(
                         "NonAuthorityAuto".to_owned(),

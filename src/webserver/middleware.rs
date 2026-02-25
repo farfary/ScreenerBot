@@ -195,10 +195,7 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
 /// - Browser validates freshness but can cache if unchanged
 pub async fn cache_control(request: Request, next: Next) -> Response {
     let path = request.uri().path().to_string();
-    let has_version = request
-        .uri()
-        .query()
-        .is_some_and(|q| q.contains("v="));
+    let has_version = request.uri().query().is_some_and(|q| q.contains("v="));
     let mut response = next.run(request).await;
 
     let headers = response.headers_mut();

@@ -20,9 +20,7 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
     if window_hours <= 0 {
         if let Some(db) = GLOBAL_WALLET_DB.lock().await.as_ref() {
             if let Ok(Some(min_ts)) = db.get_flow_cache_min_ts() {
-                if let Ok((inflow, outflow, tx_count)) =
-                    db.aggregate_cached_flows(min_ts, None)
-                {
+                if let Ok((inflow, outflow, tx_count)) = db.aggregate_cached_flows(min_ts, None) {
                     if tx_count > 0 {
                         logger::debug(
                             LogTag::Wallet,

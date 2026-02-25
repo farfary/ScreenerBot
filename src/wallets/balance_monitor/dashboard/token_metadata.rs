@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::logger::{self, LogTag};
 
-use super::{clamp_token_limit, short_mint_label, TOKEN_METADATA_CONCURRENCY};
 use super::super::types::{SnapshotTokenBalance, WalletTokenOverview};
+use super::{clamp_token_limit, short_mint_label, TOKEN_METADATA_CONCURRENCY};
 
 async fn fetch_token_metadata_batch(
     mints: &[String],

@@ -174,9 +174,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerInsufficientTransactions5Min => {
                 "dex_txn_5m".to_owned()
             }
-            FilterRejectionReason::DexScreenerInsufficientTransactions1H => {
-                "dex_txn_1h".to_owned()
-            }
+            FilterRejectionReason::DexScreenerInsufficientTransactions1H => "dex_txn_1h".to_owned(),
             FilterRejectionReason::DexScreenerZeroLiquidity => "dex_zero_liq".to_owned(),
             FilterRejectionReason::DexScreenerInsufficientLiquidity => "dex_liq_low".to_owned(),
             FilterRejectionReason::DexScreenerLiquidityTooHigh => "dex_liq_high".to_owned(),
@@ -232,19 +230,13 @@ impl FilterRejectionReason {
             FilterRejectionReason::GeckoTerminalLiquidityMissing => "gecko_liq_missing".to_owned(),
             FilterRejectionReason::GeckoTerminalLiquidityTooLow => "gecko_liq_low".to_owned(),
             FilterRejectionReason::GeckoTerminalLiquidityTooHigh => "gecko_liq_high".to_owned(),
-            FilterRejectionReason::GeckoTerminalMarketCapMissing => {
-                "gecko_mcap_missing".to_owned()
-            }
+            FilterRejectionReason::GeckoTerminalMarketCapMissing => "gecko_mcap_missing".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooLow => "gecko_mcap_low".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooHigh => "gecko_mcap_high".to_owned(),
             FilterRejectionReason::GeckoTerminalVolume5mTooLow => "gecko_vol5m_low".to_owned(),
-            FilterRejectionReason::GeckoTerminalVolume5mMissing => {
-                "gecko_vol5m_missing".to_owned()
-            }
+            FilterRejectionReason::GeckoTerminalVolume5mMissing => "gecko_vol5m_missing".to_owned(),
             FilterRejectionReason::GeckoTerminalVolume1hTooLow => "gecko_vol1h_low".to_owned(),
-            FilterRejectionReason::GeckoTerminalVolume1hMissing => {
-                "gecko_vol1h_missing".to_owned()
-            }
+            FilterRejectionReason::GeckoTerminalVolume1hMissing => "gecko_vol1h_missing".to_owned(),
             FilterRejectionReason::GeckoTerminalVolume24hTooLow => "gecko_vol24h_low".to_owned(),
             FilterRejectionReason::GeckoTerminalVolume24hMissing => {
                 "gecko_vol24h_missing".to_owned()
@@ -305,9 +297,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::RugcheckTransferFeePresent => {
                 "rug_transfer_fee_present".to_owned()
             }
-            FilterRejectionReason::RugcheckTransferFeeTooHigh => {
-                "rug_transfer_fee_high".to_owned()
-            }
+            FilterRejectionReason::RugcheckTransferFeeTooHigh => "rug_transfer_fee_high".to_owned(),
             FilterRejectionReason::RugcheckTransferFeeMissing => {
                 "rug_transfer_fee_missing".to_owned()
             }
@@ -344,9 +334,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::RugcheckDataMissing => "Rugcheck data missing".to_owned(),
             FilterRejectionReason::OnChainNumericSymbol => "Numeric-only symbol (scam)".to_owned(),
             FilterRejectionReason::OnChainEmptySymbol => "Empty symbol (scam)".to_owned(),
-            FilterRejectionReason::OnChainSuspiciousSymbol => {
-                "Suspicious symbol (scam)".to_owned()
-            }
+            FilterRejectionReason::OnChainSuspiciousSymbol => "Suspicious symbol (scam)".to_owned(),
             FilterRejectionReason::OnChainKnownScamAuthority => "Known scam authority".to_owned(),
             FilterRejectionReason::OnChainImmutableWithFreeze => {
                 "Immutable + freeze authority (scam)".to_owned()
@@ -418,12 +406,8 @@ impl FilterRejectionReason {
             }
             FilterRejectionReason::GeckoTerminalLiquidityMissing => "Liquidity missing".to_owned(),
             FilterRejectionReason::GeckoTerminalLiquidityTooLow => "Liquidity too low".to_owned(),
-            FilterRejectionReason::GeckoTerminalLiquidityTooHigh => {
-                "Liquidity too high".to_owned()
-            }
-            FilterRejectionReason::GeckoTerminalMarketCapMissing => {
-                "Market cap missing".to_owned()
-            }
+            FilterRejectionReason::GeckoTerminalLiquidityTooHigh => "Liquidity too high".to_owned(),
+            FilterRejectionReason::GeckoTerminalMarketCapMissing => "Market cap missing".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooLow => "Market cap too low".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooHigh => {
                 "Market cap too high".to_owned()
@@ -433,9 +417,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::GeckoTerminalVolume1hTooLow => "1h volume too low".to_owned(),
             FilterRejectionReason::GeckoTerminalVolume1hMissing => "1h volume missing".to_owned(),
             FilterRejectionReason::GeckoTerminalVolume24hTooLow => "24h volume too low".to_owned(),
-            FilterRejectionReason::GeckoTerminalVolume24hMissing => {
-                "24h volume missing".to_owned()
-            }
+            FilterRejectionReason::GeckoTerminalVolume24hMissing => "24h volume missing".to_owned(),
             FilterRejectionReason::GeckoTerminalPriceChange5mTooLow => {
                 "5m price change too low".to_owned()
             }
@@ -467,9 +449,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::GeckoTerminalPoolCountTooHigh => {
                 "Pool count too high".to_owned()
             }
-            FilterRejectionReason::GeckoTerminalPoolCountMissing => {
-                "Pool count missing".to_owned()
-            }
+            FilterRejectionReason::GeckoTerminalPoolCountMissing => "Pool count missing".to_owned(),
             FilterRejectionReason::GeckoTerminalReserveTooLow => "Reserve too low".to_owned(),
             FilterRejectionReason::GeckoTerminalReserveMissing => "Reserve missing".to_owned(),
             FilterRejectionReason::RugcheckRuggedToken => "Rugged token".to_owned(),
@@ -494,9 +474,7 @@ impl FilterRejectionReason {
                 "Creator balance too high".to_owned()
             }
             FilterRejectionReason::RugcheckTransferFeePresent => "Transfer fee present".to_owned(),
-            FilterRejectionReason::RugcheckTransferFeeTooHigh => {
-                "Transfer fee too high".to_owned()
-            }
+            FilterRejectionReason::RugcheckTransferFeeTooHigh => "Transfer fee too high".to_owned(),
             FilterRejectionReason::RugcheckTransferFeeMissing => {
                 "Transfer fee data missing".to_owned()
             }

@@ -15,7 +15,11 @@ use teloxide::types::{ChatId, ParseMode};
 // POSITION DETAILS
 // ============================================================================
 
-pub(super) async fn send_position_details(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
+pub(super) async fn send_position_details(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+) -> Result<(), String> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -177,7 +181,11 @@ pub(super) async fn send_confirm_dca(
     }
 }
 
-pub(super) async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
+pub(super) async fn send_confirm_close(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+) -> Result<(), String> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -358,7 +366,11 @@ pub(super) async fn execute_dca(
     }
 }
 
-pub(super) async fn execute_close(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
+pub(super) async fn execute_close(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+) -> Result<(), String> {
     execute_sell(bot, chat_id, mint_short, 100).await
 }
 
@@ -399,7 +411,11 @@ pub(super) async fn execute_force_stop_callback(bot: &Bot, chat_id: ChatId) -> R
     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu()).await
 }
 
-pub(super) async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
+pub(super) async fn execute_blacklist(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+) -> Result<(), String> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()

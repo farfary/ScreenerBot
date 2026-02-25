@@ -33,10 +33,7 @@ pub async fn scan_burnable_tokens() -> Response {
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            logger::error(
-                LogTag::Tools,
-                &format!("Failed to get wallet address: {e}"),
-            );
+            logger::error(LogTag::Tools, &format!("Failed to get wallet address: {e}"));
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
@@ -50,10 +47,7 @@ pub async fn scan_burnable_tokens() -> Response {
     let all_accounts = match get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            logger::error(
-                LogTag::Tools,
-                &format!("Failed to get token accounts: {e}"),
-            );
+            logger::error(LogTag::Tools, &format!("Failed to get token accounts: {e}"));
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "SCAN_ERROR",

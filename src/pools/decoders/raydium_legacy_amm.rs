@@ -310,10 +310,7 @@ fn adjust_vaults(
                 }
                 if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
                     pc_vault = k.clone();
-                    logger::debug(
-                        LogTag::PoolDecoder,
-                        &format!("Found pc_vault: {pc_vault}"),
-                    );
+                    logger::debug(LogTag::PoolDecoder, &format!("Found pc_vault: {pc_vault}"));
                 }
             }
         }

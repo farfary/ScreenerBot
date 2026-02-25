@@ -76,9 +76,7 @@ impl RaydiumCpmmSwap {
         // Use the centralized decoder to decode pool info
         // We need to call the internal decode method directly since we already have the pool account
         RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&pool_data.data, &pool_data.pubkey.to_string())
-            .ok_or_else(|| {
-                SwapError::DecoderError("Failed to decode Raydium CPMM pool".to_owned())
-            })
+            .ok_or_else(|| SwapError::DecoderError("Failed to decode Raydium CPMM pool".to_owned()))
     }
 
     /// Load wallet from configuration
@@ -309,12 +307,12 @@ impl RaydiumCpmmSwap {
             SwapDirection::Buy => {
                 // Buying: SOL → Token
                 (
-                    *wsol_ata,                                             // SOL account
-                    *token_ata,                                            // Token account
-                    Pubkey::from_str(&pool_info.token_0_vault).expect("invalid pubkey string"),   // SOL vault
-                    Pubkey::from_str(&pool_info.token_1_vault).expect("invalid pubkey string"),   // Token vault
-                    Pubkey::from_str(&pool_info.token_0_mint).expect("invalid pubkey string"),    // SOL mint
-                    Pubkey::from_str(&pool_info.token_1_mint).expect("invalid pubkey string"),    // Token mint
+                    *wsol_ata,                                                                    // SOL account
+                    *token_ata, // Token account
+                    Pubkey::from_str(&pool_info.token_0_vault).expect("invalid pubkey string"), // SOL vault
+                    Pubkey::from_str(&pool_info.token_1_vault).expect("invalid pubkey string"), // Token vault
+                    Pubkey::from_str(&pool_info.token_0_mint).expect("invalid pubkey string"), // SOL mint
+                    Pubkey::from_str(&pool_info.token_1_mint).expect("invalid pubkey string"), // Token mint
                     Pubkey::from_str(&pool_info.token_0_program).expect("invalid pubkey string"), // SOL program
                     Pubkey::from_str(&pool_info.token_1_program).expect("invalid pubkey string"), // Token program
                 )
@@ -322,12 +320,12 @@ impl RaydiumCpmmSwap {
             SwapDirection::Sell => {
                 // Selling: Token → SOL
                 (
-                    *token_ata,                                            // Token account
-                    *wsol_ata,                                             // SOL account
-                    Pubkey::from_str(&pool_info.token_1_vault).expect("invalid pubkey string"),   // Token vault
-                    Pubkey::from_str(&pool_info.token_0_vault).expect("invalid pubkey string"),   // SOL vault
-                    Pubkey::from_str(&pool_info.token_1_mint).expect("invalid pubkey string"),    // Token mint
-                    Pubkey::from_str(&pool_info.token_0_mint).expect("invalid pubkey string"),    // SOL mint
+                    *token_ata, // Token account
+                    *wsol_ata,  // SOL account
+                    Pubkey::from_str(&pool_info.token_1_vault).expect("invalid pubkey string"), // Token vault
+                    Pubkey::from_str(&pool_info.token_0_vault).expect("invalid pubkey string"), // SOL vault
+                    Pubkey::from_str(&pool_info.token_1_mint).expect("invalid pubkey string"), // Token mint
+                    Pubkey::from_str(&pool_info.token_0_mint).expect("invalid pubkey string"), // SOL mint
                     Pubkey::from_str(&pool_info.token_1_program).expect("invalid pubkey string"), // Token program
                     Pubkey::from_str(&pool_info.token_0_program).expect("invalid pubkey string"), // SOL program
                 )
@@ -343,7 +341,8 @@ impl RaydiumCpmmSwap {
 
         let pool_pubkey = Pubkey::from_str(&pool_info.pool_id).expect("invalid pubkey string");
         let amm_config = Pubkey::from_str(&pool_info.amm_config).expect("invalid pubkey string");
-        let observation_key = Pubkey::from_str(&pool_info.observation_key).expect("invalid pubkey string");
+        let observation_key =
+            Pubkey::from_str(&pool_info.observation_key).expect("invalid pubkey string");
 
         // Build accounts according to Raydium CPMM swap instruction format
         let accounts = vec![

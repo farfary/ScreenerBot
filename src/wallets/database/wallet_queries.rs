@@ -5,8 +5,8 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 
-use super::WalletsDatabase;
 use super::super::types::{Wallet, WalletRole, WalletType};
+use super::WalletsDatabase;
 
 impl WalletsDatabase {
     /// Insert a new wallet

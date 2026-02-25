@@ -456,10 +456,7 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
         Ok(permit) => match rugcheck::fetch_rugcheck_data(mint, db).await {
             Ok(Some(_)) => {
                 permit.forget();
-                logger::debug(
-                    LogTag::Tokens,
-                    &format!("Security data fetched for {mint}"),
-                );
+                logger::debug(LogTag::Tokens, &format!("Security data fetched for {mint}"));
                 // Clear any previous error tracking
                 let _ = db.clear_security_error(mint);
             }

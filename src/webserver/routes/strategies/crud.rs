@@ -201,10 +201,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     let rules: RuleTree = match serde_json::from_value(request.rules) {
         Ok(rules) => rules,
         Err(e) => {
-            return err(
-                StatusCode::BAD_REQUEST,
-                &format!("Invalid rules JSON: {e}"),
-            );
+            return err(StatusCode::BAD_REQUEST, &format!("Invalid rules JSON: {e}"));
         }
     };
 
@@ -307,10 +304,7 @@ pub async fn update_strategy_handler(
     let rules: RuleTree = match serde_json::from_value(request.rules) {
         Ok(rules) => rules,
         Err(e) => {
-            return err(
-                StatusCode::BAD_REQUEST,
-                &format!("Invalid rules JSON: {e}"),
-            );
+            return err(StatusCode::BAD_REQUEST, &format!("Invalid rules JSON: {e}"));
         }
     };
 

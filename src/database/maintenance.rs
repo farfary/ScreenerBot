@@ -347,10 +347,7 @@ pub async fn start_maintenance_task() {
                 }
             }
             Ok(Err(e)) => {
-                logger::warning(
-                    LogTag::System,
-                    &format!("✗ Failed to migrate {name}: {e}"),
-                );
+                logger::warning(LogTag::System, &format!("✗ Failed to migrate {name}: {e}"));
             }
             Err(e) => {
                 logger::warning(
@@ -412,10 +409,7 @@ async fn run_vacuum_cycle() {
                 successful += 1;
             }
             Ok(Err(e)) => {
-                logger::warning(
-                    LogTag::System,
-                    &format!("✗ Failed to vacuum {name}: {e}"),
-                );
+                logger::warning(LogTag::System, &format!("✗ Failed to vacuum {name}: {e}"));
             }
             Err(e) => {
                 logger::warning(

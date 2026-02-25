@@ -169,8 +169,8 @@ fn apply_section_to_config(
                 serde_json::from_value(value).map_err(|e| format!("Invalid RpcConfig: {e}"))?;
         }
         "trader" => {
-            cfg.trader = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid TraderConfig: {e}"))?;
+            cfg.trader =
+                serde_json::from_value(value).map_err(|e| format!("Invalid TraderConfig: {e}"))?;
         }
         "positions" => {
             cfg.positions = serde_json::from_value(value)
@@ -185,16 +185,16 @@ fn apply_section_to_config(
                 serde_json::from_value(value).map_err(|e| format!("Invalid SwapsConfig: {e}"))?;
         }
         "tokens" => {
-            cfg.tokens = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid TokensConfig: {e}"))?;
+            cfg.tokens =
+                serde_json::from_value(value).map_err(|e| format!("Invalid TokensConfig: {e}"))?;
         }
         "sol_price" => {
             cfg.sol_price = serde_json::from_value(value)
                 .map_err(|e| format!("Invalid SolPriceConfig: {e}"))?;
         }
         "events" => {
-            cfg.events = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid EventsConfig: {e}"))?;
+            cfg.events =
+                serde_json::from_value(value).map_err(|e| format!("Invalid EventsConfig: {e}"))?;
         }
         "services" => {
             cfg.services = serde_json::from_value(value)

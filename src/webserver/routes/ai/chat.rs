@@ -175,10 +175,7 @@ pub async fn create_chat_session(
 
     match chat_db::create_session(&pool, &title) {
         Ok(session_id) => {
-            logger::info(
-                LogTag::Api,
-                &format!("Created chat session: {session_id}"),
-            );
+            logger::info(LogTag::Api, &format!("Created chat session: {session_id}"));
             success_response(CreateChatSessionResponse { session_id })
         }
         Err(e) => error_response(

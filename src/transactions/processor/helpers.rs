@@ -143,7 +143,10 @@ pub(super) fn find_largest_system_transfer_from_wallet(
     let mut consider_ix = |ix: &serde_json::Value| {
         // Prefer parsed format
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
+            let ix_type = parsed
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
             if let Some(info) = parsed.get("info") {
                 let source = info
                     .get("source")
@@ -221,7 +224,10 @@ pub(super) fn find_mev_tips_from_wallet(
     let mut total: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
+            let ix_type = parsed
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
             if ix_type == "transfer" {
                 if let Some(info) = parsed.get("info") {
                     let source = info
@@ -477,7 +483,10 @@ pub(super) fn find_wrap_deposit_via_sys_transfers_to_wsol_atas(
     let mut total: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
         if let Some(parsed) = ix.get("parsed") {
-            let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
+            let ix_type = parsed
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
             if ix_type == "transfer" {
                 if let Some(info) = parsed.get("info") {
                     let source = info
@@ -790,7 +799,10 @@ pub(super) fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::Transactio
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
                     if let Some(info) = parsed.get("info") {
-                        let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or_default();
+                        let mint = info
+                            .get("mint")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default();
                         if mint == crate::transactions::utils::WSOL_MINT {
                             if let Some(token_amount) = info.get("tokenAmount") {
                                 if let Some(ui) =
@@ -838,10 +850,16 @@ pub(super) fn sum_inner_wsol_transfers_ui_to_wallet(
         if let Some(ixs) = group.get("instructions").and_then(|v| v.as_array()) {
             for ix in ixs {
                 if let Some(parsed) = ix.get("parsed") {
-                    let ix_type = parsed.get("type").and_then(|v| v.as_str()).unwrap_or_default();
+                    let ix_type = parsed
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or_default();
                     if ix_type == "transfer" || ix_type == "transferChecked" {
                         if let Some(info) = parsed.get("info") {
-                            let mint = info.get("mint").and_then(|v| v.as_str()).unwrap_or_default();
+                            let mint = info
+                                .get("mint")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_default();
                             if mint == crate::transactions::utils::WSOL_MINT {
                                 let dest = info
                                     .get("destination")

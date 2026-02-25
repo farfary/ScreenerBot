@@ -17,9 +17,7 @@ use super::types::*;
 // =============================================================================
 
 /// Get all tool favorites (optionally filtered by tool_type query param)
-pub async fn get_favorites_list(
-    Query(params): Query<HashMap<String, String>>,
-) -> Response {
+pub async fn get_favorites_list(Query(params): Query<HashMap<String, String>>) -> Response {
     let tool_type = params.get("tool_type").map(String::as_str);
 
     match get_tool_favorites(tool_type) {

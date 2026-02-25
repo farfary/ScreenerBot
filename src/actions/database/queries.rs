@@ -72,8 +72,8 @@ impl ActionsDatabase {
         let action_type = self.parse_action_type(&action_type_str)?;
 
         // Parse state
-        let state: ActionState = serde_json::from_str(&state_data)
-            .map_err(|e| format!("Failed to parse state: {e}"))?;
+        let state: ActionState =
+            serde_json::from_str(&state_data).map_err(|e| format!("Failed to parse state: {e}"))?;
 
         // Parse timestamps
         let started_at = DateTime::parse_from_rfc3339(&started_at_str)
@@ -318,10 +318,7 @@ impl ActionsDatabase {
         // Build a map of action_id -> Vec<ActionStep>
         let mut steps_map: HashMap<String, Vec<ActionStep>> = HashMap::new();
         for (action_id, step) in steps_rows {
-            steps_map
-                .entry(action_id)
-                .or_default()
-                .push(step);
+            steps_map.entry(action_id).or_default().push(step);
         }
 
         // Assemble actions with their steps

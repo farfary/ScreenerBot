@@ -119,10 +119,7 @@ async fn initialization_status() -> Response {
             "Configuration file does not exist. Initial setup required.".to_owned(),
         )
     } else if !initialization_complete {
-        (
-            true,
-            "Initialization in progress or incomplete.".to_owned(),
-        )
+        (true, "Initialization in progress or incomplete.".to_owned())
     } else {
         (false, "System fully initialized.".to_owned())
     };

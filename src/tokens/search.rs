@@ -187,10 +187,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                     }
                 }
                 Err(e) => {
-                    logger::debug(
-                        LogTag::Api,
-                        &format!("DexScreener mint lookup failed: {e}"),
-                    );
+                    logger::debug(LogTag::Api, &format!("DexScreener mint lookup failed: {e}"));
                 }
             }
         }
@@ -205,7 +202,12 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                             let result = TokenSearchResult {
                                 mint: pool.mint.clone(),
                                 name: pool.pool_name.clone(),
-                                symbol: pool.pool_name.split('/').next().unwrap_or_default().to_string(),
+                                symbol: pool
+                                    .pool_name
+                                    .split('/')
+                                    .next()
+                                    .unwrap_or_default()
+                                    .to_string(),
                                 logo_url: None,
                                 price_usd: pool.token_price_usd.parse().ok(),
                                 market_cap: pool.market_cap_usd,

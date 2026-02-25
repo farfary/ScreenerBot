@@ -96,9 +96,7 @@ pub async fn compute_snapshot(
                         Some(entry.source)
                     },
                 };
-                let reasons = blacklist_reasons_map
-                    .entry(entry.mint)
-                    .or_default();
+                let reasons = blacklist_reasons_map.entry(entry.mint).or_default();
                 if !reasons.contains(&info) {
                     reasons.push(info);
                 }
@@ -212,9 +210,7 @@ pub async fn compute_snapshot(
                 token.is_blacklisted = true;
             }
         } else if token.is_blacklisted {
-            let reasons = blacklist_reasons_map
-                .entry(token.mint.clone())
-                .or_default();
+            let reasons = blacklist_reasons_map.entry(token.mint.clone()).or_default();
             let fallback = BlacklistReasonInfo {
                 category: "token".to_owned(),
                 reason: "database".to_owned(),

@@ -2,9 +2,9 @@
 
 use crate::logger::{self, LogTag};
 
-use super::WALLETS_DB;
 use super::super::crypto::{decrypt_to_keypair, keypair_to_address};
 use super::super::types::{WalletRole, WalletType};
+use super::WALLETS_DB;
 
 /// Migrate existing wallet from config.toml to wallets database
 pub(super) async fn migrate_from_config() -> Result<(), String> {

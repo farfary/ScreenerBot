@@ -189,9 +189,7 @@ pub async fn recent_all(limit: usize) -> Result<Vec<Event>, String> {
 }
 
 /// Get event counts by category for the last N hours
-pub async fn count_by_category(
-    since_hours: u64,
-) -> Result<HashMap<String, u64>, String> {
+pub async fn count_by_category(since_hours: u64) -> Result<HashMap<String, u64>, String> {
     let db = EVENTS_DB
         .get()
         .ok_or_else(|| "Events system not initialized".to_owned())?;
@@ -327,10 +325,7 @@ async fn write_batch(db: &EventsDatabase, batch: &mut Vec<Event>) {
     }
 
     if let Err(e) = db.insert_events(batch.as_mut_slice()).await {
-        logger::error(
-            LogTag::System,
-            &format!("Failed to write event batch: {e}"),
-        );
+        logger::error(LogTag::System, &format!("Failed to write event batch: {e}"));
     }
 
     // On success (or even if some failed), push to cache and broadcast

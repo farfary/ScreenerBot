@@ -3,10 +3,10 @@
 //! Handles button clicks from inline keyboards.
 
 use super::callback_positions::{
-    execute_blacklist, execute_close, execute_close_all, execute_dca,
-    execute_force_stop_callback, execute_sell, send_confirm_blacklist, send_confirm_close,
-    send_confirm_close_all, send_confirm_dca, send_confirm_force_stop, send_confirm_sell,
-    send_history, send_position_details,
+    execute_blacklist, execute_close, execute_close_all, execute_dca, execute_force_stop_callback,
+    execute_sell, send_confirm_blacklist, send_confirm_close, send_confirm_close_all,
+    send_confirm_dca, send_confirm_force_stop, send_confirm_sell, send_history,
+    send_position_details,
 };
 use super::callback_tokens::{
     execute_token_blacklist, execute_token_buy, send_confirm_token_blacklist,

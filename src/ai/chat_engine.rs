@@ -375,10 +375,7 @@ impl ChatEngine {
             match serde_json::to_string(&tool_calls_info) {
                 Ok(json) => Some(json),
                 Err(e) => {
-                    logger::warning(
-                        LogTag::Api,
-                        &format!("Failed to serialize tool calls: {e}"),
-                    );
+                    logger::warning(LogTag::Api, &format!("Failed to serialize tool calls: {e}"));
                     None
                 }
             }
@@ -764,11 +761,8 @@ impl ChatEngine {
             .with_temperature(0.7)
             .with_max_tokens(2000);
 
-        match tokio::time::timeout(
-            Duration::from_secs(60),
-            llm_manager.call(provider, request),
-        )
-        .await
+        match tokio::time::timeout(Duration::from_secs(60), llm_manager.call(provider, request))
+            .await
         {
             Ok(result) => result.map_err(|e| AiError::LlmError(format!("LLM call failed: {e}"))),
             Err(_) => Err(AiError::LlmError(

@@ -76,10 +76,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
         Ok(summary) => {
             let mut by_reason = HashMap::new();
             by_reason.insert("MintAuthority".to_owned(), summary.authority_mint_count);
-            by_reason.insert(
-                "FreezeAuthority".to_owned(),
-                summary.authority_freeze_count,
-            );
+            by_reason.insert("FreezeAuthority".to_owned(), summary.authority_freeze_count);
             by_reason.insert("Manual".to_owned(), summary.manual_count);
             if summary.non_authority_auto_count > 0 {
                 by_reason.insert(

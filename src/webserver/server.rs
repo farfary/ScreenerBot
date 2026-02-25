@@ -282,18 +282,10 @@ fn build_app(state: Arc<AppState>) -> Router {
     // 4. Initialization gate checks init status
     // 5. Cache control adds no-cache headers (innermost, runs last on response)
     let app = app
-        .layer(from_fn(
-            crate::webserver::middleware::cache_control,
-        ))
-        .layer(from_fn(
-            crate::webserver::middleware::initialization_gate,
-        ))
-        .layer(from_fn(
-            crate::webserver::middleware::auth_gate,
-        ))
-        .layer(from_fn(
-            crate::webserver::middleware::security_gate,
-        ))
+        .layer(from_fn(crate::webserver::middleware::cache_control))
+        .layer(from_fn(crate::webserver::middleware::initialization_gate))
+        .layer(from_fn(crate::webserver::middleware::auth_gate))
+        .layer(from_fn(crate::webserver::middleware::security_gate))
         .layer(CompressionLayer::new());
 
     app

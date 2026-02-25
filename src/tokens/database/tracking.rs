@@ -25,9 +25,7 @@ impl TokenDatabase {
              WHERE mint = ?3",
             params![now, pool_address, mint],
         )
-        .map_err(|e| {
-            TokenError::Database(format!("Failed to mark pool price calculated: {e}"))
-        })?;
+        .map_err(|e| TokenError::Database(format!("Failed to mark pool price calculated: {e}")))?;
 
         Ok(())
     }
@@ -181,7 +179,8 @@ fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo>
     let market_data_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(2)?);
     let market_data_update_count = row.get::<_, Option<i64>>(3)?.unwrap_or_default().max(0) as u64;
     let security_data_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(4)?);
-    let security_data_update_count = row.get::<_, Option<i64>>(5)?.unwrap_or_default().max(0) as u64;
+    let security_data_update_count =
+        row.get::<_, Option<i64>>(5)?.unwrap_or_default().max(0) as u64;
     let metadata_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(6)?);
     let decimals_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(7)?);
     let pool_price_last_calculated = ts_to_datetime(row.get::<_, Option<i64>>(8)?);

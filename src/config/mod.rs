@@ -89,11 +89,11 @@ pub use metadata::{
 };
 
 pub use schemas::{
-    AiConfig, Config, DashboardConfig, EventsConfig, FilteringConfig, GuiConfig,
-    HolderWatchConfig, InterfaceConfig, LockscreenConfig, MaintenanceConfig, MonitoringConfig,
-    OhlcvConfig, PerformanceConfig, PoolsConfig, PositionsConfig, RpcConfig, ServicesConfig,
-    SolPriceConfig, StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit,
-    TokensConfig, TraderConfig, WalletConfig, WebserverConfig,
+    AiConfig, Config, DashboardConfig, EventsConfig, FilteringConfig, GuiConfig, HolderWatchConfig,
+    InterfaceConfig, LockscreenConfig, MaintenanceConfig, MonitoringConfig, OhlcvConfig,
+    PerformanceConfig, PoolsConfig, PositionsConfig, RpcConfig, ServicesConfig, SolPriceConfig,
+    StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit, TokensConfig,
+    TraderConfig, WalletConfig, WebserverConfig,
 };
 
 pub use utils::{

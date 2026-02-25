@@ -218,8 +218,7 @@ impl AccountFetcher {
         };
 
         tokio::spawn(async move {
-            let mut interval =
-                tokio::time::interval(Duration::from_millis(FETCH_INTERVAL_MS));
+            let mut interval = tokio::time::interval(Duration::from_millis(FETCH_INTERVAL_MS));
             let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
             let mut account_failure_tracker: HashMap<Pubkey, MissingAccountState> = HashMap::new();
             let mut pool_failure_tracker: HashMap<Pubkey, MissingPoolState> = HashMap::new();

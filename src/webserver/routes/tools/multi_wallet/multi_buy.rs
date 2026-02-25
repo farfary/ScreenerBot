@@ -134,7 +134,10 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     // Build wallet plans (preview) - fetch balances for each wallet
     let mut wallet_plans = Vec::new();
     for w in existing_wallets.iter().take(request.wallet_count) {
-        let sol_balance = rpc.get_sol_balance(&w.wallet.address).await.unwrap_or_default();
+        let sol_balance = rpc
+            .get_sol_balance(&w.wallet.address)
+            .await
+            .unwrap_or_default();
         let needs_funding = sol_balance < per_wallet_sol;
         let funding_amount = if needs_funding {
             per_wallet_sol - sol_balance
@@ -234,12 +237,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
 
     // Validate config
     if let Err(e) = config.validate() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CONFIG",
-            &e,
-            None,
-        );
+        return error_response(StatusCode::BAD_REQUEST, "INVALID_CONFIG", &e, None);
     }
 
     // Create session entry

@@ -631,12 +631,12 @@ impl TransactionDatabase {
             .unwrap_or_else(|_| "[]".to_owned());
         let token_swap_info_json = serde_json::to_string(&transaction.token_swap_info)
             .unwrap_or_else(|_| "null".to_owned());
-        let swap_pnl_info_json = serde_json::to_string(&transaction.swap_pnl_info)
-            .unwrap_or_else(|_| "null".to_owned());
+        let swap_pnl_info_json =
+            serde_json::to_string(&transaction.swap_pnl_info).unwrap_or_else(|_| "null".to_owned());
         let ata_operations_json =
             serde_json::to_string(&transaction.ata_operations).unwrap_or_else(|_| "[]".to_owned());
-        let token_transfers_json = serde_json::to_string(&transaction.token_transfers)
-            .unwrap_or_else(|_| "[]".to_owned());
+        let token_transfers_json =
+            serde_json::to_string(&transaction.token_transfers).unwrap_or_else(|_| "[]".to_owned());
         let instruction_info_json =
             serde_json::to_string(&transaction.instructions).unwrap_or_else(|_| "[]".to_owned());
         let cached_analysis_json = serde_json::to_string(&transaction.cached_analysis)

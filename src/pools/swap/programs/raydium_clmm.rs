@@ -82,9 +82,8 @@ impl RaydiumClmmSwap {
         accounts.insert(pool_data.pubkey.to_string(), pool_data.clone());
 
         // Use the centralized decoder to extract pool data
-        RaydiumClmmDecoder::extract_pool_data(&accounts).ok_or_else(|| {
-            SwapError::DecoderError("Failed to decode Raydium CLMM pool".to_owned())
-        })
+        RaydiumClmmDecoder::extract_pool_data(&accounts)
+            .ok_or_else(|| SwapError::DecoderError("Failed to decode Raydium CLMM pool".to_owned()))
     }
 
     /// Load wallet from configuration
@@ -240,7 +239,10 @@ impl RaydiumClmmSwap {
             &Pubkey::from_str(SOL_MINT).expect("invalid SOL_MINT constant"),
         );
 
-        let token_ata = if token_program_id == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant") {
+        let token_ata = if token_program_id
+            == Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
+                .expect("invalid TOKEN_2022_PROGRAM_ID constant")
+        {
             // Token-2022 ATA
             spl_associated_token_account::get_associated_token_address_with_program_id(
                 &wallet_pubkey,
@@ -412,9 +414,12 @@ impl RaydiumClmmSwap {
             AccountMeta::new(observation_key, false),          // observation_state
             AccountMeta::new_readonly(spl_token::id(), false), // token_program
             AccountMeta::new_readonly(spl_token_2022::id(), false), // token_program_2022
-            AccountMeta::new_readonly(Pubkey::from_str(MEMO_PROGRAM_ID).expect("invalid pubkey string"), false), // memo_program
-            AccountMeta::new_readonly(input_mint, false), // input_vault_mint
-            AccountMeta::new_readonly(output_mint, false), // output_vault_mint
+            AccountMeta::new_readonly(
+                Pubkey::from_str(MEMO_PROGRAM_ID).expect("invalid pubkey string"),
+                false,
+            ), // memo_program
+            AccountMeta::new_readonly(input_mint, false),      // input_vault_mint
+            AccountMeta::new_readonly(output_mint, false),     // output_vault_mint
         ];
 
         Ok(Instruction {
@@ -450,8 +455,12 @@ impl RaydiumClmmSwap {
             })?;
 
         // Check the owner to determine if it's Token-2022 or legacy SPL Token
-        if mint_account.owner == Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant") {
-            Ok(Pubkey::from_str(TOKEN_2022_PROGRAM_ID).expect("invalid TOKEN_2022_PROGRAM_ID constant"))
+        if mint_account.owner
+            == Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
+                .expect("invalid TOKEN_2022_PROGRAM_ID constant")
+        {
+            Ok(Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
+                .expect("invalid TOKEN_2022_PROGRAM_ID constant"))
         } else {
             Ok(spl_token::id()) // Default to legacy SPL Token
         }

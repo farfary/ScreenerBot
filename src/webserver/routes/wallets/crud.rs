@@ -101,11 +101,7 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
 
             // Check for specific error types
             let (status, code, msg) = if e.contains("already exists") {
-                (
-                    StatusCode::CONFLICT,
-                    "DUPLICATE",
-                    "Wallet already exists",
-                )
+                (StatusCode::CONFLICT, "DUPLICATE", "Wallet already exists")
             } else if e.contains("Invalid") {
                 (
                     StatusCode::BAD_REQUEST,
@@ -167,17 +163,9 @@ pub async fn get_main_wallet() -> Response {
 pub async fn get_wallet(Path(id): Path<i64>) -> Response {
     match wallets::get_wallet(id).await {
         Ok(Some(wallet)) => success_response(wallet),
-        Ok(None) => error_response(
-            StatusCode::NOT_FOUND,
-            "NOT_FOUND",
-            "Wallet not found",
-            None,
-        ),
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Wallet not found", None),
         Err(e) => {
-            logger::error(
-                LogTag::Wallet,
-                &format!("Failed to get wallet {id}: {e}"),
-            );
+            logger::error(LogTag::Wallet, &format!("Failed to get wallet {id}: {e}"));
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "GET_ERROR",
@@ -225,10 +213,7 @@ pub async fn delete_wallet(Path(id): Path<i64>) -> Response {
             let (status, code) = if e.contains("main wallet") {
                 (StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DELETE_ERROR",
-                )
+                (StatusCode::INTERNAL_SERVER_ERROR, "DELETE_ERROR")
             };
 
             error_response(status, code, "Failed to delete wallet", Some(&e))
@@ -292,10 +277,7 @@ pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
             let (status, code) = if e.contains("main wallet") {
                 (StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ARCHIVE_ERROR",
-                )
+                (StatusCode::INTERNAL_SERVER_ERROR, "ARCHIVE_ERROR")
             };
 
             error_response(status, code, "Failed to archive wallet", Some(&e))
@@ -318,10 +300,7 @@ pub async fn restore_wallet(Path(id): Path<i64>) -> Response {
             let (status, code) = if e.contains("not archived") {
                 (StatusCode::BAD_REQUEST, "NOT_ARCHIVED")
             } else {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "RESTORE_ERROR",
-                )
+                (StatusCode::INTERNAL_SERVER_ERROR, "RESTORE_ERROR")
             };
 
             error_response(status, code, "Failed to restore wallet", Some(&e))

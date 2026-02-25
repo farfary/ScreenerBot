@@ -44,8 +44,7 @@ fn get_machine_id() -> Result<String, String> {
         let id_file = data_dir.join(".device_id");
 
         if id_file.exists() {
-            std::fs::read_to_string(&id_file)
-                .map_err(|e| format!("Failed to read device ID: {e}"))
+            std::fs::read_to_string(&id_file).map_err(|e| format!("Failed to read device ID: {e}"))
         } else {
             // Generate a new UUID for this installation
             let new_id = uuid::Uuid::new_v4().to_string();

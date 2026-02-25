@@ -431,7 +431,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                         } else {
                                             return VerificationOutcome::PermanentFailure(
                                                 PositionTransition::ExitPermanentFailureSynthetic {
-                                                    position_id: item.position_id.unwrap_or_default(),
+                                                    position_id: item
+                                                        .position_id
+                                                        .unwrap_or_default(),
                                                     exit_time: Utc::now(),
                                                 },
                                             );
@@ -616,9 +618,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         }
         VerificationKind::Exit => {
             if swap_info.swap_type != "Sell" {
-                return VerificationOutcome::RetryTransient(
-                    "Expected Sell transaction".to_owned(),
-                );
+                return VerificationOutcome::RetryTransient("Expected Sell transaction".to_owned());
             }
 
             let exit_time = if let Some(block_time) = transaction.block_time {

@@ -381,9 +381,7 @@ impl FilteringStore {
             TokenSortKey::PriceChangeH1 => Some("price_change_h1".to_owned()),
             TokenSortKey::PriceChangeH24 => Some("price_change_h24".to_owned()),
             TokenSortKey::RiskScore => Some("risk_score".to_owned()),
-            TokenSortKey::MarketDataLastFetchedAt => {
-                Some("market_data_last_fetched_at".to_owned())
-            }
+            TokenSortKey::MarketDataLastFetchedAt => Some("market_data_last_fetched_at".to_owned()),
             TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_owned()),
             TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_owned()),
             TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_owned()),
@@ -507,9 +505,7 @@ impl FilteringStore {
         let sort_by = match query.sort_key {
             TokenSortKey::Symbol => Some("symbol".to_owned()),
             TokenSortKey::RiskScore => Some("risk_score".to_owned()),
-            TokenSortKey::MarketDataLastFetchedAt => {
-                Some("market_data_last_fetched_at".to_owned())
-            }
+            TokenSortKey::MarketDataLastFetchedAt => Some("market_data_last_fetched_at".to_owned()),
             TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_owned()),
             TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_owned()),
             TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_owned()),

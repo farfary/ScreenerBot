@@ -196,9 +196,7 @@ impl OhlcvDatabase {
                  WHERE mint = ?1
                  ORDER BY liquidity DESC",
             )
-            .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to prepare statement: {e}"))
-            })?;
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare statement: {e}")))?;
 
         let pools = stmt
             .query_map(params![mint], |row| {

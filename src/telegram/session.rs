@@ -8,8 +8,8 @@ use crate::telegram::types::{DiscoveredChat, SessionState, TelegramSession};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 use std::sync::LazyLock;
+use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
@@ -212,9 +212,7 @@ impl TelegramSessionManager {
         if let Some(session) = sessions.get_mut(&user_id) {
             if session.state == SessionState::Active {
                 let timeout_mins = with_config(|c| c.telegram.session_timeout_minutes) as u64;
-                if session.last_activity.elapsed()
-                    > Duration::from_secs(timeout_mins * 60)
-                {
+                if session.last_activity.elapsed() > Duration::from_secs(timeout_mins * 60) {
                     session.state = SessionState::Expired;
                     return true;
                 }

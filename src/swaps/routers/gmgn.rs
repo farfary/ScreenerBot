@@ -185,7 +185,10 @@ impl GmgnRouter {
 
                         if let Ok(value) = serde_json::from_str::<Value>(&response_text) {
                             let code_opt = value.get("code").and_then(|c| c.as_i64());
-                            let msg_opt = value.get("msg").and_then(|m| m.as_str()).unwrap_or_default();
+                            let msg_opt = value
+                                .get("msg")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or_default();
 
                             if let Some(code) = code_opt {
                                 if code != 0 {
@@ -418,9 +421,8 @@ impl SwapRouter for GmgnRouter {
     async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult> {
         let start = Instant::now();
 
-        let swap_data: SwapData = serde_json::from_slice(&quote.execution_data).map_err(|e| {
-            Error::internal_error(format!("Swap data deserialization failed: {e}"))
-        })?;
+        let swap_data: SwapData = serde_json::from_slice(&quote.execution_data)
+            .map_err(|e| Error::internal_error(format!("Swap data deserialization failed: {e}")))?;
 
         let signature = self
             .execute_gmgn_swap_internal(

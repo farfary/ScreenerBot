@@ -221,9 +221,7 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
     if config.positions.profit_extra_needed_sol < 0.0
         || !config.positions.profit_extra_needed_sol.is_finite()
     {
-        return Err(
-            "positions.profit_extra_needed_sol must be non-negative and finite".to_owned(),
-        );
+        return Err("positions.profit_extra_needed_sol must be non-negative and finite".to_owned());
     }
     if config.positions.position_open_cooldown_secs < 0 {
         return Err("positions.position_open_cooldown_secs cannot be negative".to_owned());
@@ -616,8 +614,7 @@ fn load_keypair_from_base58_format(private_key_str: &str) -> Result<Keypair, Str
         ));
     }
 
-    Keypair::from_bytes(&decoded)
-        .map_err(|e| format!("Failed to create keypair from base58: {e}"))
+    Keypair::from_bytes(&decoded).map_err(|e| format!("Failed to create keypair from base58: {e}"))
 }
 
 /// Get the wallet public key from the configuration

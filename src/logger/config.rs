@@ -191,7 +191,11 @@ pub fn init_from_args() {
 pub fn is_debug_enabled_for_tag(tag: &LogTag) -> bool {
     let config = get_logger_config();
     let tag_name = tag.to_debug_key();
-    config.debug_modes.get(&tag_name).copied().unwrap_or_default()
+    config
+        .debug_modes
+        .get(&tag_name)
+        .copied()
+        .unwrap_or_default()
 }
 
 /// Check if verbose mode is enabled for a specific tag

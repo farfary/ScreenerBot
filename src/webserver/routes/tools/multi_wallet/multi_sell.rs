@@ -219,12 +219,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
 
     // Validate config
     if let Err(e) = config.validate() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CONFIG",
-            &e,
-            None,
-        );
+        return error_response(StatusCode::BAD_REQUEST, "INVALID_CONFIG", &e, None);
     }
 
     // Create session entry

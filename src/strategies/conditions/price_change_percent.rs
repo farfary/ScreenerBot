@@ -128,9 +128,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             }
             "HOURS" => {
                 if time_value > 720.0 {
-                    return Err(
-                        "Time value for hours must be 720 or less (30 days max)".to_owned()
-                    );
+                    return Err("Time value for hours must be 720 or less (30 days max)".to_owned());
                 }
             }
             _ => {}

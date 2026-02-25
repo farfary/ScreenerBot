@@ -488,9 +488,8 @@ where
                 )?;
             }
             "StrategiesConfig" => {
-                let new_config: config::StrategiesConfig =
-                    serde_json::from_value(section_json)
-                        .map_err(|e| format!("Invalid StrategiesConfig: {e}"))?;
+                let new_config: config::StrategiesConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid StrategiesConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.strategies = new_config;
@@ -499,9 +498,8 @@ where
                 )?;
             }
             "HolderWatchConfig" => {
-                let new_config: config::HolderWatchConfig =
-                    serde_json::from_value(section_json)
-                        .map_err(|e| format!("Invalid HolderWatchConfig: {e}"))?;
+                let new_config: config::HolderWatchConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid HolderWatchConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.holder_watch = new_config;
@@ -520,9 +518,8 @@ where
                 )?;
             }
             "PerformanceConfig" => {
-                let new_config: config::PerformanceConfig =
-                    serde_json::from_value(section_json)
-                        .map_err(|e| format!("Invalid PerformanceConfig: {e}"))?;
+                let new_config: config::PerformanceConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid PerformanceConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.performance = new_config;

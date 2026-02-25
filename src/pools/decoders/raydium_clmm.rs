@@ -401,9 +401,11 @@ impl RaydiumClmmDecoder {
 
         // Skip calculating offset through rewards and jump to known positions
         let total_fees_token_0 = Self::extract_u64_at_offset(data, 1032).unwrap_or_default();
-        let total_fees_claimed_token_0 = Self::extract_u64_at_offset(data, 1040).unwrap_or_default();
+        let total_fees_claimed_token_0 =
+            Self::extract_u64_at_offset(data, 1040).unwrap_or_default();
         let total_fees_token_1 = Self::extract_u64_at_offset(data, 1048).unwrap_or_default();
-        let total_fees_claimed_token_1 = Self::extract_u64_at_offset(data, 1056).unwrap_or_default();
+        let total_fees_claimed_token_1 =
+            Self::extract_u64_at_offset(data, 1056).unwrap_or_default();
 
         // Fund fees should be right after
         let fund_fees_token_0 = Self::extract_u64_at_offset(data, 1064).unwrap_or_default();

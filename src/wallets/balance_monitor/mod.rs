@@ -19,27 +19,27 @@ mod types;
 
 // Re-export public API
 pub use service::{
-    // Initialization & background service
-    initialize_wallet_database,
-    start_wallet_monitoring_service,
+    clear_dashboard_api_cache,
+    get_balance_at_time,
+    get_current_wallet_status,
+    get_dashboard_cache_metrics,
+    get_flow_cache_stats,
     // Snapshot queries
     get_recent_wallet_snapshots,
-    get_snapshot_token_balances,
     get_snapshot_nft_balances,
-    get_current_wallet_status,
-    get_balance_at_time,
+    get_snapshot_token_balances,
     // Monitoring stats
     get_wallet_monitor_stats,
-    get_flow_cache_stats,
+    // Initialization & background service
+    initialize_wallet_database,
     // Dashboard cache management
     refresh_dashboard_cache,
-    get_dashboard_cache_metrics,
-    clear_dashboard_api_cache,
+    start_wallet_monitoring_service,
 };
 
-pub use database::get_wallet_service_metrics;
-pub use dashboard::get_wallet_dashboard_data;
 pub use cache::get_cached_wallet_snapshot_status;
+pub use dashboard::get_wallet_dashboard_data;
+pub use database::get_wallet_service_metrics;
 
 // Re-export public types
 pub use types::{

@@ -15,8 +15,8 @@ use futures::FutureExt;
 use r2d2;
 use r2d2_sqlite;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Notify;
 
 /// Main scheduler worker loop that polls for due tasks and executes them
@@ -325,8 +325,8 @@ async fn execute_scheduled_task(
 
 /// Execute a chat request via the ChatEngine with panic recovery
 async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatResponse, String> {
-    let engine = crate::ai::try_get_chat_engine()
-        .ok_or_else(|| "Chat engine not initialized".to_owned())?;
+    let engine =
+        crate::ai::try_get_chat_engine().ok_or_else(|| "Chat engine not initialized".to_owned())?;
 
     // NOTE: catch_unwind has limitations with async code. It can catch panics in synchronous
     // code within the async block, but may not catch all async panics depending on executor state.

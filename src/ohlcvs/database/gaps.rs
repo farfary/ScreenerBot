@@ -103,9 +103,7 @@ impl OhlcvDatabase {
                 params![],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to read gap aggregate: {e}"))
-            })?;
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to read gap aggregate: {e}")))?;
 
         Ok((token_count.max(0) as usize, gap_count.max(0) as usize))
     }

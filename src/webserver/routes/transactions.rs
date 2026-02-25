@@ -258,7 +258,10 @@ async fn get_summary(State(state): State<Arc<AppState>>) -> Json<TransactionSumm
 
     // Get counts
     let total = db_stats.total_raw_transactions;
-    let success_count = db.get_successful_transactions_count().await.unwrap_or_default();
+    let success_count = db
+        .get_successful_transactions_count()
+        .await
+        .unwrap_or_default();
     let failed_count = db.get_failed_transactions_count().await.unwrap_or_default();
 
     let success_rate = if total > 0 {

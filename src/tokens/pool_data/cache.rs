@@ -50,9 +50,7 @@ static POOL_REFRESH_INFLIGHT: LazyLock<AsyncMutex<HashMap<String, std::sync::Arc
 static POOL_PREFETCH_STATE: LazyLock<moka::sync::Cache<String, Instant>> = LazyLock::new(|| {
     moka::sync::Cache::builder()
         .max_capacity(5_000)
-        .time_to_live(Duration::from_secs(
-            POOL_PREFETCH_DEBOUNCE_SECS * 3,
-        ))
+        .time_to_live(Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS * 3))
         .build()
 });
 
@@ -344,9 +342,8 @@ async fn refresh_token_pools_and_cache(
         }
     }
 
-    let coordinator = get_rate_coordinator().ok_or_else(|| {
-        TokenError::Database("Rate limit coordinator not initialized".to_owned())
-    })?;
+    let coordinator = get_rate_coordinator()
+        .ok_or_else(|| TokenError::Database("Rate limit coordinator not initialized".to_owned()))?;
 
     let (pools_map, success_sources) = match api::fetch_from_sources(mint_trimmed, coordinator)
         .await

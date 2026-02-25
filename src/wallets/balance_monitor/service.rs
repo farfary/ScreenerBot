@@ -373,9 +373,7 @@ pub async fn start_wallet_monitoring_service(
 pub async fn get_recent_wallet_snapshots(limit: usize) -> Result<Vec<WalletSnapshot>, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => {
-            db.get_recent_snapshots(limit)
-        }
+        Some(db) => db.get_recent_snapshots(limit),
         None => Err("Wallet database not initialized".to_owned()),
     }
 }
@@ -390,7 +388,9 @@ pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, String> {
 }
 
 /// Get token balances for a snapshot
-pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
+pub async fn get_snapshot_token_balances(
+    snapshot_id: i64,
+) -> Result<Vec<SnapshotTokenBalance>, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_balances(snapshot_id),

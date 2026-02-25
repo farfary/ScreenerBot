@@ -221,7 +221,10 @@ impl StatsManager {
         let session = self.get_session_stats();
         let calls_per_minute = self.get_calls_per_minute();
 
-        let calls_last_minute = calls_per_minute.first().map(|b| b.call_count).unwrap_or_default();
+        let calls_last_minute = calls_per_minute
+            .first()
+            .map(|b| b.call_count)
+            .unwrap_or_default();
 
         match session {
             Some(stats) => RpcStatsResponse {
@@ -235,7 +238,10 @@ impl StatsManager {
                 } else {
                     100.0
                 },
-                avg_latency_ms: self.db.get_avg_latency(&self.session_id).unwrap_or_default(),
+                avg_latency_ms: self
+                    .db
+                    .get_avg_latency(&self.session_id)
+                    .unwrap_or_default(),
                 provider_count,
                 healthy_provider_count: healthy_count,
                 calls_last_minute,

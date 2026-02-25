@@ -448,7 +448,7 @@ impl PriceCalculator {
         Ok(())
     }
 
-        /// Get the canonical pool used for pricing a given token mint (highest-quality pool)
+    /// Get the canonical pool used for pricing a given token mint (highest-quality pool)
     pub fn get_canonical_pool(&self, mint: &Pubkey) -> Option<PoolDescriptor> {
         let sol_mint = Pubkey::from_str(SOL_MINT).ok()?;
         if mint == &sol_mint {

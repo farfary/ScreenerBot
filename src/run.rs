@@ -57,18 +57,12 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
     // 2. Validate CLI arguments early (before any processing)
     if let Err(e) = crate::arguments::validate_port_argument() {
-        logger::error(
-            LogTag::System,
-            &format!("Argument validation failed: {e}"),
-        );
+        logger::error(LogTag::System, &format!("Argument validation failed: {e}"));
         return Err(e);
     }
 
     if let Err(e) = crate::arguments::validate_host_argument() {
-        logger::error(
-            LogTag::System,
-            &format!("Argument validation failed: {e}"),
-        );
+        logger::error(LogTag::System, &format!("Argument validation failed: {e}"));
         return Err(e);
     }
 
@@ -84,17 +78,11 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             );
         }
 
-        logger::info(
-            LogTag::System,
-            &format!("CLI override: Using port {port}"),
-        );
+        logger::info(LogTag::System, &format!("CLI override: Using port {port}"));
     }
 
     if let Some(host) = crate::arguments::get_host_override() {
-        logger::info(
-            LogTag::System,
-            &format!("CLI override: Using host {host}"),
-        );
+        logger::info(LogTag::System, &format!("CLI override: Using host {host}"));
 
         if host == "0.0.0.0" {
             logger::warning(
@@ -439,8 +427,8 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
 
         let mut sigint =
             signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {e}"))?;
-        let mut sigterm = signal(SignalKind::terminate())
-            .map_err(|e| format!("Failed to bind SIGTERM: {e}"))?;
+        let mut sigterm =
+            signal(SignalKind::terminate()).map_err(|e| format!("Failed to bind SIGTERM: {e}"))?;
         let mut sigquit =
             signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {e}"))?;
 
@@ -604,10 +592,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("OpenAI");
                 }
                 Err(e) => {
-                    logger::warning(
-                        LogTag::System,
-                        &format!("Failed to initialize OpenAI: {e}"),
-                    );
+                    logger::warning(LogTag::System, &format!("Failed to initialize OpenAI: {e}"));
                 }
             }
         }
@@ -689,10 +674,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Gemini");
                 }
                 Err(e) => {
-                    logger::warning(
-                        LogTag::System,
-                        &format!("Failed to initialize Gemini: {e}"),
-                    );
+                    logger::warning(LogTag::System, &format!("Failed to initialize Gemini: {e}"));
                 }
             }
         }
@@ -712,10 +694,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Ollama");
                 }
                 Err(e) => {
-                    logger::warning(
-                        LogTag::System,
-                        &format!("Failed to initialize Ollama: {e}"),
-                    );
+                    logger::warning(LogTag::System, &format!("Failed to initialize Ollama: {e}"));
                 }
             }
         }

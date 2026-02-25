@@ -45,10 +45,7 @@ impl WalletDatabase {
     }
 
     /// Upsert a batch of flow rows into cache
-    pub fn upsert_flow_rows(
-        &self,
-        rows: &[(String, DateTime<Utc>, f64)],
-    ) -> Result<usize, String> {
+    pub fn upsert_flow_rows(&self, rows: &[(String, DateTime<Utc>, f64)]) -> Result<usize, String> {
         if rows.is_empty() {
             return Ok(0);
         }

@@ -979,5 +979,4 @@ impl PoolAnalyzer {
             .cloned()
             .collect()
     }
-
-    }
+}

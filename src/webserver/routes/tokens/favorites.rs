@@ -93,10 +93,7 @@ pub async fn remove_favorite(
     match crate::tokens::remove_favorite_async(mint.clone()).await {
         Ok(removed) => {
             if removed {
-                logger::info(
-                    LogTag::Webserver,
-                    &format!("Removed favorite: mint={mint}"),
-                );
+                logger::info(LogTag::Webserver, &format!("Removed favorite: mint={mint}"));
                 Ok(Json(FavoriteResponse {
                     success: true,
                     favorite: None,
@@ -146,10 +143,7 @@ pub async fn update_favorite(
 
     match crate::tokens::update_favorite_async(mint.clone(), request).await {
         Ok(Some(favorite)) => {
-            logger::info(
-                LogTag::Webserver,
-                &format!("Updated favorite: mint={mint}"),
-            );
+            logger::info(LogTag::Webserver, &format!("Updated favorite: mint={mint}"));
             Ok(Json(FavoriteResponse {
                 success: true,
                 favorite: Some(favorite),

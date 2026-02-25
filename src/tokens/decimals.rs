@@ -39,13 +39,12 @@ static FETCH_LOCKS: LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
 
 // Track mints with unresolved decimals to avoid repeated expensive lookups
 // Bounded moka cache (max 50K entries, 24-hour TTL) to prevent unbounded growth
-static FAILED_CACHE: LazyLock<moka::sync::Cache<String, ()>> =
-    LazyLock::new(|| {
-        moka::sync::Cache::builder()
-            .max_capacity(50_000)
-            .time_to_live(Duration::from_secs(86400)) // 24 hours
-            .build()
-    });
+static FAILED_CACHE: LazyLock<moka::sync::Cache<String, ()>> = LazyLock::new(|| {
+    moka::sync::Cache::builder()
+        .max_capacity(50_000)
+        .time_to_live(Duration::from_secs(86400)) // 24 hours
+        .build()
+});
 
 // Cache for Token2022 detection — bounded moka cache (max 100K entries).
 // true = Token2022, false = standard SPL token
@@ -127,10 +126,7 @@ pub async fn is_token_2022(mint: &str) -> bool {
             let is_2022 = account.owner.to_string() == TOKEN_2022_PROGRAM_ID;
             cache_token_2022(mint, is_2022);
             if is_2022 {
-                logger::debug(
-                    LogTag::Tokens,
-                    &format!("Token2022 detected: mint={mint}"),
-                );
+                logger::debug(LogTag::Tokens, &format!("Token2022 detected: mint={mint}"));
             }
             is_2022
         }

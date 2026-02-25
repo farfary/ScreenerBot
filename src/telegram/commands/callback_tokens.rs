@@ -419,18 +419,12 @@ pub(super) async fn execute_token_blacklist(
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
         Ok(Err(e)) => {
-            logger::warning(
-                LogTag::Telegram,
-                &format!("Failed to blacklist token: {e}"),
-            );
+            logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {e}"));
             let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {e}");
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
         Err(e) => {
-            logger::warning(
-                LogTag::Telegram,
-                &format!("Failed to blacklist token: {e}"),
-            );
+            logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {e}"));
             let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {e}");
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }

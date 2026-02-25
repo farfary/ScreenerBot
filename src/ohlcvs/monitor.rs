@@ -360,19 +360,25 @@ impl OhlcvMonitor {
                 (0, 0, Vec::new())
             }
             Err(join_err) => {
-                logger::warning(
-                    LogTag::Ohlcv,
-                    &format!("Gap stats join error: {join_err}"),
-                );
+                logger::warning(LogTag::Ohlcv, &format!("Gap stats join error: {join_err}"));
                 (0, 0, Vec::new())
             }
         };
 
         MonitorStats {
             total_tokens,
-            critical_tokens: by_priority.get(&Priority::Critical).copied().unwrap_or_default(),
-            high_tokens: by_priority.get(&Priority::High).copied().unwrap_or_default(),
-            medium_tokens: by_priority.get(&Priority::Medium).copied().unwrap_or_default(),
+            critical_tokens: by_priority
+                .get(&Priority::Critical)
+                .copied()
+                .unwrap_or_default(),
+            high_tokens: by_priority
+                .get(&Priority::High)
+                .copied()
+                .unwrap_or_default(),
+            medium_tokens: by_priority
+                .get(&Priority::Medium)
+                .copied()
+                .unwrap_or_default(),
             low_tokens: by_priority.get(&Priority::Low).copied().unwrap_or_default(),
             cache_hit_rate: self.cache.hit_rate(),
             api_calls_per_minute: self.fetcher.calls_per_minute(),
@@ -1124,10 +1130,7 @@ impl OhlcvMonitor {
             for mint in tokens {
                 // Auto-fill recent gaps (last 24h)
                 if let Err(e) = self.gap_manager.auto_fill_recent_gaps(&mint).await {
-                    logger::error(
-                        LogTag::Ohlcv,
-                        &format!("Gap fill error for {mint}: {e}"),
-                    );
+                    logger::error(LogTag::Ohlcv, &format!("Gap fill error for {mint}: {e}"));
                     record_ohlcv_event(
                         "gap_fill_failed",
                         Severity::Error,
@@ -1230,10 +1233,7 @@ impl OhlcvMonitor {
                     };
 
                     if let Err(e) = self.add_token(mint.clone(), priority).await {
-                        logger::error(
-                            LogTag::Ohlcv,
-                            &format!("Failed to add token {mint}: {e}"),
-                        );
+                        logger::error(LogTag::Ohlcv, &format!("Failed to add token {mint}: {e}"));
                     } else {
                         added += 1;
                     }
@@ -1280,10 +1280,7 @@ impl OhlcvMonitor {
 
                 for mint in tokens_to_trim {
                     if let Err(e) = self.remove_token(&mint).await {
-                        logger::error(
-                            LogTag::Ohlcv,
-                            &format!("Failed to trim token {mint}: {e}"),
-                        );
+                        logger::error(LogTag::Ohlcv, &format!("Failed to trim token {mint}: {e}"));
                     } else {
                         trimmed += 1;
                     }

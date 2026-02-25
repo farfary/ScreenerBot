@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use rusqlite::params;
 use std::collections::HashMap;
 
-use super::WalletsDatabase;
 use super::super::types::TokenBalance;
+use super::WalletsDatabase;
 
 impl WalletsDatabase {
     /// Upsert a single token balance

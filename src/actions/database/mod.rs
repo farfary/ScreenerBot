@@ -191,14 +191,18 @@ impl ActionsDatabase {
     }
 
     /// Get a write connection from the pool
-    pub(crate) fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
+    pub(crate) fn get_write_connection(
+        &self,
+    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.write_pool
             .get()
             .map_err(|e| format!("Failed to get write connection: {e}"))
     }
 
     /// Get a read connection from the pool
-    pub(crate) fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
+    pub(crate) fn get_read_connection(
+        &self,
+    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.read_pool
             .get()
             .map_err(|e| format!("Failed to get read connection: {e}"))
@@ -359,8 +363,8 @@ impl ActionsDatabase {
             ActionState::Failed { .. } => "failed",
             ActionState::Cancelled => "cancelled",
         };
-        let state_data = serde_json::to_string(&state)
-            .map_err(|e| format!("Failed to serialize state: {e}"))?;
+        let state_data =
+            serde_json::to_string(&state).map_err(|e| format!("Failed to serialize state: {e}"))?;
         let now = Utc::now().to_rfc3339();
 
         conn.execute(
