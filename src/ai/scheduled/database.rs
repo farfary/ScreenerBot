@@ -2,19 +2,19 @@
 //!
 //! Manages scheduled AI task definitions and execution history.
 //! Schema initialization, task CRUD operations, and scheduling logic.
-//! Types are in scheduled_types.rs, run history in scheduled_runs.rs.
+//! Types are in types.rs, run history in runs.rs.
 
 use chrono::Datelike;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 
-// Re-export types and run functions so existing `scheduled_db::*` paths keep working
-pub use super::scheduled_runs::{
+// Re-export types and run functions so `database::*` paths provide full access
+pub use super::runs::{
     cleanup_old_runs, get_automation_stats, get_run, list_recent_runs, list_runs_for_task,
     record_run_complete, record_run_start,
 };
-pub use super::scheduled_types::{
+pub use super::types::{
     AutomationStats, RunStatus, ScheduleType, ScheduledTask, TaskRun, TaskToolPermissions,
 };
 

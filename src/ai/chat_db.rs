@@ -186,7 +186,7 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
     );
 
     // Initialize scheduled tasks tables
-    crate::ai::scheduled_db::initialize_scheduled_tables(conn)?;
+    crate::ai::scheduled::database::initialize_scheduled_tables(conn)?;
 
     Ok(())
 }

@@ -5,7 +5,8 @@
 //! in headless mode with configurable tool permissions. Supports interval, daily,
 //! and weekly schedules with timeout handling, retry logic, and Telegram notifications.
 
-use crate::ai::{chat_db, scheduled_db, ChatRequest, ToolMode};
+use super::database as scheduled_db;
+use crate::ai::{chat_db, ChatRequest, ToolMode};
 use crate::config::with_config;
 use crate::errors::ServiceError;
 use crate::events::{record_scheduled_task_event, Severity};
@@ -405,7 +406,7 @@ async fn send_task_notification(
 /// Public function for triggering task execution from API
 pub async fn execute_task_public(
     pool: &Arc<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
-    task: &crate::ai::scheduled_db::ScheduledTask,
+    task: &scheduled_db::ScheduledTask,
     timeout_secs: u64,
 ) -> crate::Result<()> {
     execute_scheduled_task(pool, task, timeout_secs).await

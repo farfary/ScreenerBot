@@ -7,7 +7,7 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 
-use super::scheduled_types::{AutomationStats, RunStatus, TaskRun};
+use super::types::{AutomationStats, RunStatus, TaskRun};
 
 // ─── Run History ─────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 //! Scheduled AI Tasks Service
 //!
 //! Thin Service trait wrapper for scheduled AI tasks.
-//! Business logic in ai::scheduled_worker.
+//! Business logic in ai::scheduled::worker.
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -59,7 +59,7 @@ impl Service for ScheduledAiTasksService {
         let failed = Arc::clone(&self.tasks_failed);
 
         let handle = tokio::spawn(monitor.instrument(
-            crate::ai::scheduled_worker::scheduler_worker(shutdown, completed, failed),
+            crate::ai::scheduled::worker::scheduler_worker(shutdown, completed, failed),
         ));
 
         Ok(vec![handle])
