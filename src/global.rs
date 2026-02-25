@@ -115,9 +115,9 @@ pub fn get_webserver_port() -> u16 {
 }
 
 /// Set the webserver host (called from server.rs after binding)
-pub fn set_webserver_host(host: String) {
+pub fn set_webserver_host(host: &str) {
     if let Ok(mut h) = WEBSERVER_HOST.write() {
-        *h = host;
+        *h = host.to_string();
     }
 }
 

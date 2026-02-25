@@ -110,7 +110,7 @@ pub async fn start_server(
         // Generate security token for GUI mode
         let token = global::generate_security_token();
         global::set_webserver_port(dynamic_port);
-        global::set_webserver_host(DEFAULT_HOST.to_string());
+        global::set_webserver_host(DEFAULT_HOST);
 
         // Output port and token to stdout for Electron to parse
         // Format: SCREENERBOT_READY:port:token
@@ -149,7 +149,7 @@ pub async fn start_server(
         };
 
         global::set_webserver_port(port);
-        global::set_webserver_host(host.clone());
+        global::set_webserver_host(&host);
 
         // Log effective values with source information
         let source_info = if port_source == host_source {
