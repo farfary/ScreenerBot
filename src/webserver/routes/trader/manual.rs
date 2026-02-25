@@ -359,7 +359,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Response {
     use crate::constants::SOL_MINT;
     use crate::swaps::operations::get_best_quote;
-    use crate::swaps::router::{QuoteRequest, SwapMode};
+    use crate::swaps::types::{QuoteRequest, SwapMode};
     use crate::tokens::database::get_token_async;
     use crate::utils::get_wallet_address;
 

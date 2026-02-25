@@ -132,7 +132,6 @@
 }
 
 /* Scrollbar styling - uses global scrollbar-table pattern */
-
 /* Note: Inherits from global scrollbar system in scrollbar.css */
 
 .data-table-blocking-state {
@@ -618,7 +617,6 @@ body.dt-column-resizing * {
   background: var(--border-color);
   margin: 4px 0;
 }
-
 /* ==================== State Cells (Loading & Empty) ==================== */
 
 .data-table td.dt-state-cell {

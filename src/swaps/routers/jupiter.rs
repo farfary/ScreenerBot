@@ -4,7 +4,8 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::rpc::RpcClientMethods;
-use crate::swaps::router::{Quote, QuoteRequest, SwapMode, SwapResult, SwapRouter};
+use crate::swaps::router::SwapRouter;
+use crate::swaps::types::{Quote, QuoteRequest, SwapMode, SwapResult};
 use crate::tokens::decimals::is_token_2022;
 use crate::tokens::Token;
 use crate::{Error, Result};

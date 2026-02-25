@@ -4,7 +4,7 @@
 use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::swaps::registry::get_registry;
-use crate::swaps::router::{Quote, QuoteRequest, SwapResult};
+use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
 use futures::future;

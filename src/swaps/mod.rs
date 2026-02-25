@@ -8,10 +8,8 @@ pub mod types;
 // Re-export router system
 pub use operations::{execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening};
 pub use registry::{get_registry, RouterRegistry};
-pub use router::{Quote, QuoteRequest, SwapMode, SwapResult, SwapRouter};
-
-// Re-export shared types
-pub use types::{ExitType, RouterType};
+pub use router::SwapRouter;
+pub use types::{ExitType, Quote, QuoteRequest, RouterType, SwapMode, SwapResult};
 
 /// Calculate the token amount for a partial exit
 /// Returns 0 if total_amount is 0 or percentage is <= 0

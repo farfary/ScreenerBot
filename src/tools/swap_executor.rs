@@ -14,7 +14,7 @@ use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::registry::get_registry;
-use crate::swaps::router::{Quote, QuoteRequest, SwapMode};
+use crate::swaps::types::{Quote, QuoteRequest, SwapMode};
 use crate::wallets::WalletWithKey;
 
 /// Result of a tool swap execution
