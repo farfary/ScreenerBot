@@ -15,6 +15,7 @@ mod bootstrap;
 mod global;
 mod maintenance;
 mod operations;
+mod operations_queries;
 mod reporting;
 mod schema;
 mod types;
