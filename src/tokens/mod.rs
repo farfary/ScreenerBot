@@ -19,6 +19,7 @@ pub mod cleanup;
 pub mod database;
 pub mod decimals;
 pub mod discovery;
+mod discovery_sources;
 pub mod events;
 pub mod favorites;
 pub mod filtered;
