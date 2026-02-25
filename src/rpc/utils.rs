@@ -6,7 +6,7 @@ use crate::constants::LAMPORTS_PER_SOL;
 use crate::logger::{self, LogTag};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 /// Parse a pubkey from string safely
@@ -53,8 +53,8 @@ pub struct AtaRentInfo {
 }
 
 /// Global cache for ATA rent amounts (10-second cache)
-static ATA_RENT_CACHE: std::sync::LazyLock<Arc<std::sync::Mutex<Option<AtaRentInfo>>>> =
-    std::sync::LazyLock::new(|| Arc::new(std::sync::Mutex::new(None)));
+static ATA_RENT_CACHE: LazyLock<Arc<Mutex<Option<AtaRentInfo>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Default ATA rent in lamports (0.00203928 SOL)
 pub const DEFAULT_ATA_RENT_LAMPORTS: u64 = 2_039_280;

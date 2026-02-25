@@ -19,7 +19,7 @@
 // - NEVER read DB directly - always use cache or get()
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::logger::{self, LogTag};
 
@@ -29,17 +29,17 @@ use tokio::sync::Mutex as AsyncMutex;
 
 // In-memory decimals cache — bounded moka cache for fast synchronous lookups (max 100K entries).
 // Populated at startup + updated on every DB write.
-static DECIMALS_CACHE: std::sync::LazyLock<moka::sync::Cache<String, u8>> =
-    std::sync::LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
+static DECIMALS_CACHE: LazyLock<moka::sync::Cache<String, u8>> =
+    LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
 
 // Single-flight locks to prevent duplicate fetches
-static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+static FETCH_LOCKS: LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // Track mints with unresolved decimals to avoid repeated expensive lookups
 // Bounded moka cache (max 50K entries, 24-hour TTL) to prevent unbounded growth
-static FAILED_CACHE: std::sync::LazyLock<moka::sync::Cache<String, ()>> =
-    std::sync::LazyLock::new(|| {
+static FAILED_CACHE: LazyLock<moka::sync::Cache<String, ()>> =
+    LazyLock::new(|| {
         moka::sync::Cache::builder()
             .max_capacity(50_000)
             .time_to_live(std::time::Duration::from_secs(86400)) // 24 hours
@@ -48,8 +48,8 @@ static FAILED_CACHE: std::sync::LazyLock<moka::sync::Cache<String, ()>> =
 
 // Cache for Token2022 detection — bounded moka cache (max 100K entries).
 // true = Token2022, false = standard SPL token
-static TOKEN_2022_CACHE: std::sync::LazyLock<moka::sync::Cache<String, bool>> =
-    std::sync::LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
+static TOKEN_2022_CACHE: LazyLock<moka::sync::Cache<String, bool>> =
+    LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
 
 // =============================================================================
 // PUBLIC API

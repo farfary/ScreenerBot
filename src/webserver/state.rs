@@ -4,7 +4,7 @@
 //! that need to be accessed by route handlers.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// Shared application state passed to all route handlers
 #[derive(Clone)]
@@ -87,7 +87,7 @@ impl AppState {
 }
 
 // Global state accessor
-static GLOBAL_APP_STATE: std::sync::OnceLock<Arc<AppState>> = std::sync::OnceLock::new();
+static GLOBAL_APP_STATE: OnceLock<Arc<AppState>> = OnceLock::new();
 
 /// Set global app state (called during webserver initialization)
 pub fn set_global_app_state(state: Arc<AppState>) {
