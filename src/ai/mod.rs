@@ -14,6 +14,8 @@ pub mod engine;
 pub mod permissions;
 pub mod prompts;
 pub mod scheduled_db;
+pub mod scheduled_runs;
+pub mod scheduled_types;
 pub mod scheduled_worker;
 pub mod schemas;
 pub mod tools;
@@ -40,11 +42,15 @@ pub use db::{
 pub use engine::{get_ai_engine, init_ai_engine, try_get_ai_engine, AiEngine};
 pub use permissions::{PermissionLevel, ToolPermissions};
 pub use scheduled_db::{
-    calculate_next_run, cleanup_old_runs, create_task, delete_task, get_automation_stats,
-    get_due_tasks, get_run, get_task, initialize_scheduled_tables, list_recent_runs,
-    list_runs_for_task, list_tasks, record_run_complete, record_run_start, toggle_task,
-    update_task, update_task_after_run, AutomationStats, RunStatus, ScheduleType, ScheduledTask,
-    TaskRun, TaskToolPermissions,
+    calculate_next_run, create_task, delete_task, get_due_tasks, get_task,
+    initialize_scheduled_tables, list_tasks, toggle_task, update_task, update_task_after_run,
+};
+pub use scheduled_runs::{
+    cleanup_old_runs, get_automation_stats, get_run, list_recent_runs, list_runs_for_task,
+    record_run_complete, record_run_start,
+};
+pub use scheduled_types::{
+    AutomationStats, RunStatus, ScheduleType, ScheduledTask, TaskRun, TaskToolPermissions,
 };
 pub use schemas::{ExitSuggestion, FilterDecision, TradeDecision};
 pub use tools::{
