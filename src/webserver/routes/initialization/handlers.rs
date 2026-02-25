@@ -1,103 +1,22 @@
-//! Initialization route — reports bot startup progress and initialization status.
+//! Initialization route handlers — onboarding and setup endpoint implementations.
 
-use axum::{
-    extract::Json,
-    http::StatusCode,
-    response::Response,
-    routing::{get, post},
-    Router,
-};
-use serde::{Deserialize, Serialize};
-use solana_sdk::signature::{Keypair, Signer};
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-
+use super::types::*;
 use crate::{
     arguments,
     config::{self, schemas::Config},
     global,
     logger::{self, LogTag},
-    rpc::{self, RpcEndpointTestResult},
+    rpc,
     services,
-    webserver::{
-        state::AppState,
-        utils::{error_response, success_response},
-    },
+    webserver::utils::{error_response, success_response},
 };
-
-// ============================================================================
-// REQUEST/RESPONSE TYPES (INLINE)
-// ============================================================================
-
-#[derive(Debug, Serialize)]
-pub struct InitializationStatusResponse {
-    pub required: bool,
-    pub reason: String,
-    pub config_exists: bool,
-    pub initialization_complete: bool,
-    pub onboarding_complete: bool,
-    pub force_onboarding: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ValidateCredentialsRequest {
-    pub wallet_private_key: String,
-    pub rpc_urls: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ValidationResult {
-    pub valid: bool,
-    pub wallet_address: Option<String>,
-    pub errors: Vec<String>,
-    pub warnings: Vec<String>,
-    pub rpc_test_results: Vec<RpcEndpointTestResult>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CompleteInitializationRequest {
-    pub wallet_private_key: String,
-    pub rpc_urls: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct InitializationCompleteResponse {
-    pub success: bool,
-    pub wallet_address: String,
-    pub services_started: usize,
-    pub errors: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct InitializationProgressResponse {
-    pub step: String,
-    pub status: String,
-    pub message: String,
-    pub services_started: usize,
-    pub services_total: usize,
-}
-
-// ============================================================================
-// ROUTES
-// ============================================================================
-
-/// Create initialization routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/status", get(initialization_status))
-        .route("/validate", post(validate_credentials))
-        .route("/complete", post(complete_initialization))
-        .route("/progress", get(initialization_progress))
-        .route("/onboarding/complete", post(complete_onboarding))
-}
-
-// ============================================================================
-// HANDLERS
-// ============================================================================
+use axum::{extract::Json, http::StatusCode, response::Response};
+use solana_sdk::signature::Signer;
+use std::sync::atomic::Ordering;
 
 /// GET /api/initialization/status
 /// Check if initialization is required
-async fn initialization_status() -> Response {
+pub(super) async fn initialization_status() -> Response {
     logger::debug(LogTag::Webserver, "Checking initialization status");
 
     let config_path = crate::paths::get_config_path();
@@ -138,7 +57,7 @@ async fn initialization_status() -> Response {
 
 /// POST /api/initialization/onboarding/complete
 /// Mark onboarding as complete in memory only (NOT persisted until setup completes)
-async fn complete_onboarding() -> Response {
+pub(super) async fn complete_onboarding() -> Response {
     logger::info(
         LogTag::Webserver,
         "Marking onboarding as complete (in-memory only)",
@@ -171,7 +90,9 @@ async fn complete_onboarding() -> Response {
 
 /// POST /api/initialization/validate
 /// Validate credentials without persisting
-async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -> Response {
+pub(super) async fn validate_credentials(
+    Json(request): Json<ValidateCredentialsRequest>,
+) -> Response {
     logger::info(
         LogTag::Webserver,
         &format!(
@@ -294,7 +215,9 @@ async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -
 
 /// POST /api/initialization/complete
 /// Complete initialization (validate + persist + start services)
-async fn complete_initialization(Json(request): Json<CompleteInitializationRequest>) -> Response {
+pub(super) async fn complete_initialization(
+    Json(request): Json<CompleteInitializationRequest>,
+) -> Response {
     logger::info(
         LogTag::Webserver,
         "Starting initialization completion process",
@@ -500,7 +423,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
 
 /// GET /api/initialization/progress
 /// Get initialization progress (services startup status)
-async fn initialization_progress() -> Response {
+pub(super) async fn initialization_progress() -> Response {
     let initialization_complete = global::is_initialization_complete();
 
     // Get service progress metrics
@@ -566,37 +489,6 @@ async fn initialization_progress() -> Response {
     };
 
     success_response(response)
-}
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/// Parse wallet private key from string (supports base58 and JSON array formats)
-fn parse_wallet_private_key(private_key: &str) -> Result<Keypair, String> {
-    let trimmed = private_key.trim();
-
-    // Try base58 format first
-    if let Ok(bytes) = bs58::decode(trimmed).into_vec() {
-        if bytes.len() == 64 {
-            if let Ok(keypair) = Keypair::from_bytes(&bytes) {
-                return Ok(keypair);
-            }
-        }
-    }
-
-    // Try JSON array format [1,2,3,...]
-    if trimmed.starts_with('[') && trimmed.ends_with(']') {
-        if let Ok(bytes) = serde_json::from_str::<Vec<u8>>(trimmed) {
-            if bytes.len() == 64 {
-                if let Ok(keypair) = Keypair::from_bytes(&bytes) {
-                    return Ok(keypair);
-                }
-            }
-        }
-    }
-
-    Err("Invalid private key format. Must be base58 string or JSON array of 64 bytes".to_owned())
 }
 
 /// Start remaining services after initialization
