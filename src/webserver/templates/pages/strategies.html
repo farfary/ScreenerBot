@@ -4,16 +4,16 @@
     <div class="sidebar-header">
       <h2>Strategies</h2>
       <div class="sidebar-actions-top">
-        <button class="btn-icon" id="refresh-strategies" title="Refresh">
+        <button type="button" class="btn-icon" id="refresh-strategies" title="Refresh">
           <i class="icon-refresh-cw"></i>
         </button>
       </div>
     </div>
 
     <div class="filter-tabs">
-      <button class="filter-tab active" data-filter="all">All</button>
-      <button class="filter-tab" data-filter="entry">Entry</button>
-      <button class="filter-tab" data-filter="exit">Exit</button>
+      <button type="button" class="filter-tab active" data-filter="all">All</button>
+      <button type="button" class="filter-tab" data-filter="entry">Entry</button>
+      <button type="button" class="filter-tab" data-filter="exit">Exit</button>
     </div>
 
     <div class="sidebar-content">
@@ -31,7 +31,7 @@
         <button class="btn primary flex-1" id="create-strategy">
           <i class="icon-plus"></i> New Strategy
         </button>
-        <button class="btn-icon" id="import-strategy" title="Import Strategy">
+        <button type="button" class="btn-icon" id="import-strategy" title="Import Strategy">
           <i class="icon-download"></i>
         </button>
       </div>
@@ -62,10 +62,10 @@
           </label>
           <span class="header-divider"></span>
           <div class="header-action-group">
-            <button class="btn ghost" id="validate-strategy" title="Validate Strategy">
+            <button type="button" class="btn ghost" id="validate-strategy" title="Validate Strategy">
               <i class="icon-circle-check"></i> Validate
             </button>
-            <button class="btn primary" id="save-strategy" title="Save Strategy">
+            <button type="button" class="btn primary" id="save-strategy" title="Save Strategy">
               <i class="icon-save"></i> Save
             </button>
           </div>
@@ -88,7 +88,7 @@
 
     <!-- Sticky Footer -->
     <footer class="editor-footer">
-      <button class="btn dashed full-width" id="add-condition">
+      <button type="button" class="btn dashed full-width" id="add-condition">
         <i class="icon-plus"></i> Add Condition
       </button>
     </footer>
@@ -102,7 +102,7 @@
           <i class="icon-puzzle"></i>
           <h3>Add Condition</h3>
         </div>
-        <button class="condition-catalog-close" id="close-condition-catalog">✕</button>
+        <button type="button" class="condition-catalog-close" id="close-condition-catalog">✕</button>
       </div>
       <div class="condition-catalog-body">
         <div class="search-container">
@@ -112,14 +112,14 @@
             placeholder="Search conditions..."
             class="search-input"
           />
-          <button class="btn-icon" id="clear-search">✕</button>
+          <button type="button" class="btn-icon" id="clear-search">✕</button>
         </div>
         <div class="condition-catalog-actions">
-          <button class="catalog-toggle-btn" id="collapse-all-categories">
+          <button type="button" class="catalog-toggle-btn" id="collapse-all-categories">
             <i class="icon-chevrons-up"></i>
             Fold All
           </button>
-          <button class="catalog-toggle-btn" id="expand-all-categories">
+          <button type="button" class="catalog-toggle-btn" id="expand-all-categories">
             <i class="icon-chevrons-down"></i>
             Unfold All
           </button>
@@ -139,14 +139,14 @@
           <i class="icon-settings"></i>
           <h3>Edit Parameters</h3>
         </div>
-        <button class="parameter-editor-close" id="close-parameter-editor">✕</button>
+        <button type="button" class="parameter-editor-close" id="close-parameter-editor">✕</button>
       </div>
       <div class="parameter-editor-body" id="parameter-editor-body">
         <!-- Dynamic content -->
       </div>
       <div class="parameter-editor-footer">
-        <button class="btn" id="cancel-parameter-edit">Cancel</button>
-        <button class="btn primary" id="apply-parameter-edit">Apply Changes</button>
+        <button type="button" class="btn" id="cancel-parameter-edit">Cancel</button>
+        <button type="button" class="btn primary" id="apply-parameter-edit">Apply Changes</button>
       </div>
     </div>
   </div>
@@ -158,18 +158,18 @@
       <h3>Create New Strategy</h3>
       <p class="modal-desc">Choose the type of strategy you want to create:</p>
       <div class="strategy-type-cards">
-        <button class="type-card" data-type="ENTRY">
+        <button type="button" class="type-card" data-type="ENTRY">
           <span class="type-icon"><i class="icon-trending-up"></i></span>
           <span class="type-name">Entry Strategy</span>
           <span class="type-desc">Define conditions for when to BUY a token</span>
         </button>
-        <button class="type-card" data-type="EXIT">
+        <button type="button" class="type-card" data-type="EXIT">
           <span class="type-icon"><i class="icon-trending-down"></i></span>
           <span class="type-name">Exit Strategy</span>
           <span class="type-desc">Define conditions for when to SELL a token</span>
         </button>
       </div>
-      <button class="btn btn-secondary" id="cancel-create-strategy">Cancel</button>
+      <button type="button" class="btn btn-secondary" id="cancel-create-strategy">Cancel</button>
     </div>
   </div>
 </div>
