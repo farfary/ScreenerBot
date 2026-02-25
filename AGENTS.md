@@ -170,7 +170,7 @@ screenerbot::config::load_config().expect("Failed to load config");
 - **Database**: SQLite via rusqlite + r2d2. Use `with_init()` for PRAGMA settings.
 - **Error handling**: Use `crate::Error` + `crate::Result<T>` from `src/errors/`. All errors must use explicit domain variants (no implicit String/&str conversions).
 - **Logging**: Use `error!()`, `warning!()`, `info!()`, `debug!()`, `verbose!()` with `LogTag`.
-- **Services**: ALL Service trait implementations MUST live in `src/services/implementations/`. Business logic belongs in domain modules (e.g., `connectivity/checker.rs`, `filtering/background.rs`, `ai/scheduled_worker.rs`).
+- **Services**: ALL Service trait implementations MUST live in `src/services/implementations/`. Business logic belongs in domain modules (e.g., `connectivity/checker.rs`, `filtering/background.rs`, `ai/scheduled/worker.rs`).
 - **Global state**: Check `src/global.rs` for startup flags before accessing services.
 
 ### Dashboard (Embedded HTML/CSS/JS)
@@ -456,14 +456,17 @@ LLM-powered token analysis for intelligent filtering, entry/exit decisions, scam
 **Architecture:**
 - `engine.rs` — AiEngine orchestrator with evaluate_filter(), evaluate_entry(), evaluate_exit(). Global singleton via init_ai_engine()/get_ai_engine()/try_get_ai_engine().
 - `cache.rs` — AiCache with DashMap, TTL-based expiry. Priority::High bypasses cache (for trading decisions).
-- `db.rs` — SQLite persistence (data/ai.db) for Instructions and DecisionRecord.
+- `database.rs` — SQLite persistence (data/ai.db) for Instructions and DecisionRecord.
+- `permissions.rs` — Tool permission system (allow/ask_user/deny per category).
 - `prompts/` — builder.rs (PromptBuilder), templates.rs (system prompts).
 - `schemas/` — filter_decision.rs, trade_decision.rs, exit_suggestion.rs.
 - `types.rs` — Priority (High/Medium/Low), AiDecision, AiError, EvaluationContext, EvaluationResult.
 
-**AI Chat System (MCP-like tool calling):**
-- `chat_engine.rs` — ChatEngine with process_message(), call_llm(), parse_tool_calls(). Tool loop with MAX_TOOL_ITERATIONS=5.
-- `chat_db.rs` — SQLite persistence (data/ai_chat.db) for sessions and messages.
+**AI Chat System (`chat/` submodule, MCP-like tool calling):**
+- `chat/engine.rs` — ChatEngine with process_message(). Global singleton. Types: ChatRequest, ChatResponse, ChatContext.
+- `chat/engine_internals.rs` — Private methods: call_llm(), parse_tool_calls(), execute_tools(), build_system_prompt(). Tool loop with MAX_TOOL_ITERATIONS=5.
+- `chat/database.rs` — SQLite persistence (data/ai_chat.db) for sessions and messages.
+- `chat/database_queries.rs` — Chat DB query methods (history, search, cleanup).
 - `tools/` — Tool registry: analysis.rs, portfolio.rs, trading.rs (require confirmation), config.rs, system.rs.
 
 **Tool Permissions** (per-category config fields):
@@ -471,11 +474,11 @@ LLM-powered token analysis for intelligent filtering, entry/exit decisions, scam
 - `ask_user` — Show confirmation dialog before execution
 - `deny` — Block tool entirely with explanation
 
-**AI Scheduled Tasks:**
-- `scheduled_db.rs` — Task CRUD, scheduling logic, due task queries, next-run calculation.
-- `scheduled_types.rs` — Type definitions (ScheduleType, TaskToolPermissions, ScheduledTask, RunStatus, TaskRun, AutomationStats).
-- `scheduled_runs.rs` — Run history recording, listing, stats, cleanup.
-- Background service executes tasks headlessly via ChatEngine.
+**AI Scheduled Tasks (`scheduled/` submodule):**
+- `scheduled/database.rs` — Task CRUD, scheduling logic, due task queries, next-run calculation.
+- `scheduled/types.rs` — Type definitions (ScheduleType, TaskToolPermissions, ScheduledTask, RunStatus, TaskRun, AutomationStats).
+- `scheduled/runs.rs` — Run history recording, listing, stats, cleanup.
+- `scheduled/worker.rs` — Background service executes tasks headlessly via ChatEngine.
 - API Routes: `/api/ai/automation` (CRUD), toggle, run, history, stats.
 
 **LLM Clients** (`src/apis/llm/`): LlmManager singleton. LlmClient trait. Per-provider subdirectories with client.rs.
@@ -1058,6 +1061,7 @@ When extracting methods to sibling files, use `pub(super)` for internal access:
 ### Current Module Structure Reference
 
 Well-organized submodule patterns to follow:
+- `src/ai/` — `chat/`, `scheduled/`, `prompts/`, `schemas/`, `tools/` submodules
 - `src/tokens/` — `database/`, `market/`, `pool_data/`, `security/`, `updates/` submodules
 - `src/trader/` — `actions/`, `evaluators/`, `executors/`, `manual/`, `monitors/`, `safety/`
 - `src/transactions/` — `analyzer/`, `database/`, `processor/`, `service/`
