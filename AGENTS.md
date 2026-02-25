@@ -439,7 +439,7 @@ API routes: `/api/trader/force-stop`, `/api/trader/resume`, `/api/trader/force-s
 
 ### Positions (src/positions/)
 
-Manages open/closed positions with DCA and partial exit support. Tracks entry/exit history with EntryRecord and ExitRecord. Files: `state.rs` (global POSITIONS state with locks), `operations.rs` (open/close/partial_close/add_to_position), `database/` (types.rs, operations.rs init/write/metadata, queries.rs read-only lookups, tracking.rs state history/snapshots/maintenance, global.rs, convenience.rs — SQLite persistence for positions/entries/exits), `helpers.rs` (P&L calculations, index management), `apply.rs` (position updates), `transitions.rs` (state transitions), `tracking.rs` (update_position_tracking), `price_updater.rs` (background price updates), `loss_detection.rs` (loss thresholds + blacklisting), `queue.rs` (verification queue), `verifier.rs` (chain verification), `worker.rs` (background worker), `metrics.rs` (ProceedsMetricsSnapshot), `types.rs` (Position with DCA/partial exit fields, EntryRecord, ExitRecord).
+Manages open/closed positions with DCA and partial exit support. Tracks entry/exit history with EntryRecord and ExitRecord. Files: `state.rs` (global POSITIONS state with locks), `operations.rs` (open/close/partial_close/add_to_position), `price_resolution.rs` (price cascade: pool -> API -> force fetch), `database/` (types.rs, operations.rs init/write/metadata, queries.rs read-only lookups, tracking.rs state history/snapshots/maintenance, global.rs, convenience.rs — SQLite persistence for positions/entries/exits), `helpers.rs` (P&L calculations, index management), `apply.rs` (position updates), `transitions.rs` (state transitions), `tracking.rs` (update_position_tracking), `price_updater.rs` (background price updates), `loss_detection.rs` (loss thresholds + blacklisting), `queue.rs` (verification queue), `verifier.rs` (chain verification), `worker.rs` (background worker), `metrics.rs` (ProceedsMetricsSnapshot), `types.rs` (Position with DCA/partial exit fields, EntryRecord, ExitRecord).
 
 ### Strategies (src/strategies/)
 
@@ -463,7 +463,8 @@ LLM-powered token analysis for intelligent filtering, entry/exit decisions, scam
 - `types.rs` — Priority (High/Medium/Low), AiDecision, AiError, EvaluationContext, EvaluationResult.
 
 **AI Chat System (`chat/` submodule, MCP-like tool calling):**
-- `chat/engine.rs` — ChatEngine with process_message(). Global singleton. Types: ChatRequest, ChatResponse, ChatContext.
+- `chat/types.rs` — Chat data types: ChatRequest, ChatResponse, ChatContext, ToolCallInfo, ToolCallStatus, ToolMode, PendingConfirmation.
+- `chat/engine.rs` — ChatEngine with process_message(). Global singleton. ConfirmationManager for tool approvals.
 - `chat/engine_internals.rs` — Private methods: call_llm(), parse_tool_calls(), execute_tools(), build_system_prompt(). Tool loop with MAX_TOOL_ITERATIONS=5.
 - `chat/database.rs` — SQLite persistence (data/ai_chat.db) for sessions and messages.
 - `chat/database_queries.rs` — Chat DB query methods (history, search, cleanup).
