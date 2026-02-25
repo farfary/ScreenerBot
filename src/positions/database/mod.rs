@@ -2,6 +2,8 @@
 mod convenience;
 mod global;
 mod operations;
+mod queries;
+mod tracking;
 /// Database module for positions management
 /// Replaces JSON file-based storage with high-performance SQLite database
 ///
