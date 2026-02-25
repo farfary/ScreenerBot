@@ -35,6 +35,7 @@
 pub mod analyzer;
 pub mod database;
 pub mod debug;
+mod debug_helpers;
 pub mod fetcher;
 pub mod manager;
 pub mod processor;
