@@ -22,9 +22,9 @@ class GlobalChat {
 
     // Hide button on AI page
     window.addEventListener("popstate", () => this._updateVisibility());
-    const origPush = history.pushState;
-    history.pushState = (...args) => {
-      origPush.apply(history, args);
+    const origPush = window.history.pushState;
+    window.history.pushState = (...args) => {
+      origPush.apply(window.history, args);
       this._updateVisibility();
     };
   }
