@@ -1,5 +1,3 @@
-//! Asset serving route — serves static files (CSS, JS, images) from embedded resources.
-
 use crate::webserver::embeds;
 use axum::{
     extract::Path,

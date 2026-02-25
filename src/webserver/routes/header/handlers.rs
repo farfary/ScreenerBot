@@ -1,87 +1,18 @@
-//! Header route — renders the dashboard header bar with connection and system info.
-
-use axum::{response::Json, routing::get, Router};
-use serde::Serialize;
-use std::sync::Arc;
+use axum::response::Json;
 
 use crate::config::with_config;
 use crate::connectivity::state::are_critical_endpoints_healthy;
 use crate::filtering::global_store;
 use crate::global::are_core_services_ready;
-use crate::positions::state::{get_open_positions, get_position_by_mint};
+use crate::positions::state::get_open_positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::services::{get_service_manager, ServiceHealth};
 use crate::trader::is_trader_running;
 use crate::wallet::get_current_wallet_status;
-use crate::webserver::state::AppState;
 
-#[derive(Debug, Serialize)]
-pub struct HeaderMetricsResponse {
-    pub trader: TraderHeaderInfo,
-    pub wallet: WalletHeaderInfo,
-    pub positions: PositionsHeaderInfo,
-    pub rpc: RpcHeaderInfo,
-    pub filtering: FilteringHeaderInfo,
-    pub system: SystemHeaderInfo,
-    pub timestamp: String,
-}
+use super::types::*;
 
-#[derive(Debug, Serialize)]
-pub struct TraderHeaderInfo {
-    pub running: bool,
-    pub enabled: bool,
-    pub today_pnl_sol: f64,
-    pub today_pnl_percent: f64,
-    pub uptime_seconds: u64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct WalletHeaderInfo {
-    pub sol_balance: f64,
-    pub change_24h_sol: f64,
-    pub change_24h_percent: f64,
-    pub token_count: usize,
-    pub tokens_worth_sol: f64,
-    pub last_updated: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PositionsHeaderInfo {
-    pub open_count: i64,
-    pub unrealized_pnl_sol: f64,
-    pub unrealized_pnl_percent: f64,
-    pub total_invested_sol: f64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RpcHeaderInfo {
-    pub success_rate_percent: f32,
-    pub avg_latency_ms: u64,
-    pub calls_per_minute: f64,
-    pub healthy: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct FilteringHeaderInfo {
-    pub monitoring_count: usize,
-    pub passed_count: usize,
-    pub rejected_count: usize,
-    pub last_refresh: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct SystemHeaderInfo {
-    pub all_services_healthy: bool,
-    pub unhealthy_services: Vec<String>,
-    pub critical_degraded: bool,
-}
-
-/// Create header metrics routes.
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/header/metrics", get(get_header_metrics))
-}
-
-async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
+pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     // Return demo data if demo mode is enabled
     if crate::webserver::demo::is_demo_mode() {
         return Json(crate::webserver::demo::get_demo_header_metrics());

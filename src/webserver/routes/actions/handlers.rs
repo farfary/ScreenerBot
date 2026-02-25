@@ -1,80 +1,23 @@
-//! Actions route — handles user-triggered actions like start, stop, and reset.
-
 use axum::{
     extract::{Path, Query, State},
     response::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse,
     },
-    routing::get,
-    Json, Router,
+    Json,
 };
 use chrono::{DateTime, Utc};
 use futures::stream::Stream;
-use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_stream::StreamExt as _;
 
 use crate::webserver::state::AppState;
-
-/// Active actions response
-#[derive(Debug, Serialize)]
-pub struct ActiveActionsResponse {
-    pub actions: Vec<crate::actions::Action>,
-    pub count: usize,
-    pub in_progress: usize,
-    pub completed: usize,
-    pub failed: usize,
-}
-
-/// Action history response with pagination
-#[derive(Debug, Serialize)]
-pub struct ActionHistoryResponse {
-    pub actions: Vec<crate::actions::Action>,
-    pub total: usize,
-    pub limit: usize,
-    pub offset: usize,
-}
-
-/// Action history query parameters
-#[derive(Debug, Deserialize)]
-pub struct ActionHistoryQuery {
-    #[serde(default = "default_limit")]
-    pub limit: usize,
-    #[serde(default)]
-    pub offset: usize,
-    pub action_type: Option<String>,
-    pub entity_id: Option<String>,
-    pub state: Option<String>,
-    pub started_after: Option<String>,
-    pub started_before: Option<String>,
-}
-
-fn default_limit() -> usize {
-    50
-}
-
-/// Subscriber count response
-#[derive(Debug, Serialize)]
-pub struct SubscriberCountResponse {
-    pub subscriber_count: usize,
-}
-
-/// Create actions routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/actions/stream", get(stream_actions))
-        .route("/actions/active", get(get_active_actions))
-        .route("/actions/all", get(get_all_actions))
-        .route("/actions/history", get(get_action_history))
-        .route("/actions/:action_id", get(get_action_by_id))
-        .route("/actions/subscribers", get(get_subscriber_count))
-}
+use super::types::*;
 
 /// Server-Sent Events stream for real-time action updates
-async fn stream_actions(
+pub(super) async fn stream_actions(
     State(_state): State<Arc<AppState>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     // Subscribe to action broadcast channel
@@ -124,7 +67,7 @@ async fn stream_actions(
 }
 
 /// Get currently active actions (in-progress only)
-async fn get_active_actions(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
+pub(super) async fn get_active_actions(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
     let actions = crate::actions::get_active_actions().await;
     let count = actions.len();
     let (in_progress, completed, failed, _cancelled) = crate::actions::get_action_counts().await;
@@ -139,7 +82,7 @@ async fn get_active_actions(State(_state): State<Arc<AppState>>) -> impl IntoRes
 }
 
 /// Get all actions (including completed/failed)
-async fn get_all_actions(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
+pub(super) async fn get_all_actions(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
     let actions = crate::actions::get_all_actions().await;
     let total = actions.len();
 
@@ -152,7 +95,7 @@ async fn get_all_actions(State(_state): State<Arc<AppState>>) -> impl IntoRespon
 }
 
 /// Get action history with pagination and filters
-async fn get_action_history(
+pub(super) async fn get_action_history(
     State(_state): State<Arc<AppState>>,
     Query(query): Query<ActionHistoryQuery>,
 ) -> impl IntoResponse {
@@ -218,7 +161,7 @@ async fn get_action_history(
 }
 
 /// Get single action by ID
-async fn get_action_by_id(
+pub(super) async fn get_action_by_id(
     State(_state): State<Arc<AppState>>,
     Path(action_id): Path<String>,
 ) -> impl IntoResponse {
@@ -235,7 +178,7 @@ async fn get_action_by_id(
 }
 
 /// Get current subscriber count
-async fn get_subscriber_count(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
+pub(super) async fn get_subscriber_count(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
     let count = crate::actions::subscriber_count();
 
     Json(SubscriberCountResponse {

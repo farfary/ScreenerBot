@@ -1,80 +1,15 @@
-//! Update management API endpoints
-//!
-//! Provides endpoints for version info, update checking, downloading, and status.
-
 use axum::{
     http::StatusCode,
     response::Response,
-    routing::{get, post},
-    Json, Router,
+    Json,
 };
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
 use crate::{
     logger::{self, LogTag},
-    version::{self, DownloadProgress, UpdateInfo, UpdateState, VersionInfo},
-    webserver::{
-        state::AppState,
-        utils::{error_response, success_response},
-    },
+    version,
+    webserver::utils::{error_response, success_response},
 };
 
-// =============================================================================
-// Response Types
-// =============================================================================
-
-#[derive(Debug, Serialize)]
-struct VersionResponse {
-    version: String,
-    platform: String,
-    build_number: String,
-}
-
-#[derive(Debug, Serialize)]
-struct UpdateCheckResponse {
-    update_available: bool,
-    current_version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    update: Option<UpdateInfo>,
-    last_check: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct UpdateStatusResponse {
-    state: UpdateState,
-}
-
-#[derive(Debug, Deserialize)]
-struct DownloadRequest {
-    // Empty for now, could add options later
-}
-
-#[derive(Debug, Serialize)]
-struct DownloadResponse {
-    started: bool,
-    message: String,
-}
-
-#[derive(Debug, Serialize)]
-struct InstallResponse {
-    opened: bool,
-    message: String,
-}
-
-// =============================================================================
-// Routes
-// =============================================================================
-
-/// Create update check routes.
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/version", get(get_version))
-        .route("/updates/check", get(check_updates))
-        .route("/updates/download", post(download_update))
-        .route("/updates/status", get(get_status))
-        .route("/updates/install", post(install_update))
-}
+use super::types::*;
 
 // =============================================================================
 // Handlers
@@ -82,7 +17,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// GET /api/version
 /// Returns current version information
-async fn get_version() -> Response {
+pub(super) async fn get_version() -> Response {
     logger::debug(LogTag::Webserver, "Version endpoint called");
 
     let info = version::get_version_info();
@@ -102,7 +37,7 @@ async fn get_version() -> Response {
 
 /// GET /api/updates/check
 /// Checks for available updates
-async fn check_updates() -> Response {
+pub(super) async fn check_updates() -> Response {
     logger::debug(LogTag::Webserver, "Checking for updates...");
 
     let current_version = version::get_version().to_string();
@@ -132,7 +67,7 @@ async fn check_updates() -> Response {
 
 /// POST /api/updates/download
 /// Starts downloading an available update
-async fn download_update(_body: Json<DownloadRequest>) -> Response {
+pub(super) async fn download_update(_body: Json<DownloadRequest>) -> Response {
     logger::info(LogTag::Webserver, "Download update requested");
 
     let state = version::get_update_state().await;
@@ -178,14 +113,14 @@ async fn download_update(_body: Json<DownloadRequest>) -> Response {
 
 /// GET /api/updates/status
 /// Returns current update/download status
-async fn get_status() -> Response {
+pub(super) async fn get_status() -> Response {
     let state = version::get_update_state().await;
     success_response(UpdateStatusResponse { state })
 }
 
 /// POST /api/updates/install
 /// Opens the downloaded update for installation
-async fn install_update() -> Response {
+pub(super) async fn install_update() -> Response {
     logger::info(LogTag::Webserver, "Install update requested");
 
     let state = version::get_update_state().await;
@@ -215,35 +150,4 @@ async fn install_update() -> Response {
             None,
         ),
     }
-}
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-fn get_platform() -> &'static str {
-    // macOS always uses universal builds (Intel + Apple Silicon combined)
-    #[cfg(target_os = "macos")]
-    return "macos-universal";
-
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    return "linux-x64";
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    return "linux-arm64";
-
-    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    return "windows-x64";
-
-    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
-    return "windows-arm64";
-
-    #[cfg(not(any(
-        target_os = "macos",
-        all(target_os = "linux", target_arch = "x86_64"),
-        all(target_os = "linux", target_arch = "aarch64"),
-        all(target_os = "windows", target_arch = "x86_64"),
-        all(target_os = "windows", target_arch = "aarch64"),
-    )))]
-    return "unknown";
 }
