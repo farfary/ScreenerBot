@@ -13,6 +13,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 mod analyzer;
+mod analyzer_extractors;
 mod api;
 mod cache;
 mod calculator;
