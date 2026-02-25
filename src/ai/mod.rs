@@ -34,7 +34,7 @@ pub use db::{
     clear_old_decisions, create_instruction, delete_instruction, get_ai_database,
     get_builtin_templates, get_decision, get_instruction, init_ai_database, list_decisions,
     list_decisions_for_mint, list_instructions, record_decision, reorder_instructions,
-    update_instruction, with_ai_db, DecisionRecord, Instruction, InstructionTemplate,
+    update_instruction, with_ai_db,
 };
 pub use engine::{get_ai_engine, init_ai_engine, try_get_ai_engine, AiEngine};
 pub use permissions::{PermissionLevel, ToolPermissions};
@@ -53,4 +53,7 @@ pub use schemas::{ExitSuggestion, FilterDecision, TradeDecision};
 pub use tools::{
     create_tool_registry, Tool, ToolCategory, ToolDefinition, ToolRegistry, ToolResult,
 };
-pub use types::{AiDecision, AiError, EvaluationContext, EvaluationResult, Priority};
+pub use types::{
+    AiDecision, AiError, DecisionRecord, EvaluationContext, EvaluationResult, Instruction,
+    InstructionTemplate, Priority,
+};

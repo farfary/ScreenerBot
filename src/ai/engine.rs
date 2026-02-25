@@ -1,13 +1,14 @@
 //! AI engine — core orchestration of LLM providers, tool dispatch, and response handling.
 
 use crate::ai::cache::AiCache;
-use crate::ai::db::{record_decision, with_ai_db, DecisionRecord};
+use crate::ai::db::{record_decision, with_ai_db};
 use crate::ai::prompts::{
     get_entry_analysis_prompt, get_exit_analysis_prompt, get_filter_prompt, PromptBuilder,
 };
 use crate::ai::schemas::{validate_json_response, FilterDecision, TradeDecision};
 use crate::ai::types::{
-    AiDecision, AiError, EvaluationContext, EvaluationResult, Factor, Impact, Priority, RiskLevel,
+    AiDecision, AiError, DecisionRecord, EvaluationContext, EvaluationResult, Factor, Impact,
+    Priority, RiskLevel,
 };
 use crate::apis::llm::{get_llm_manager, ChatMessage, ChatRequest, LlmError, Provider};
 use crate::config::with_config;
