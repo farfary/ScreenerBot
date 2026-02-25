@@ -10,7 +10,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-pub fn ohlcv_routes() -> Router<Arc<AppState>> {
+pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         // Token list and stats endpoints
         .route("/ohlcv/tokens", get(handlers::get_all_tokens_handler))

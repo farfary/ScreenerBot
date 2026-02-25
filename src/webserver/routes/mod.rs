@@ -187,6 +187,7 @@ async fn login_page() -> Html<String> {
     Html(templates::login_template("Login", &content))
 }
 
+/// Register all API route groups under `/api`.
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -199,7 +200,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(blacklist::routes())
         .merge(config::routes())
         .merge(services::routes())
-        .merge(ohlcv::ohlcv_routes())
+        .merge(ohlcv::routes())
         .merge(actions::routes())
         .merge(header::routes())
         .merge(ui_state::routes())
