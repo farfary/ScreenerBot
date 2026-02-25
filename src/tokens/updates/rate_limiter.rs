@@ -44,6 +44,7 @@ pub struct RateLimitCoordinator {
 }
 
 impl RateLimitCoordinator {
+    /// Create a new rate limit coordinator with per-endpoint semaphores
     pub fn new() -> Self {
         // Read limits from config; fall back to API defaults if unset (0)
         let (gecko_limit, rug_limit) = with_config(|cfg| {

@@ -299,14 +299,17 @@ pub struct UpdateResult {
 }
 
 impl UpdateResult {
+    /// Whether all sources updated successfully
     pub fn is_success(&self) -> bool {
         !self.successes.is_empty()
     }
 
+    /// Whether some but not all sources failed
     pub fn is_partial_failure(&self) -> bool {
         !self.successes.is_empty() && !self.failures.is_empty()
     }
 
+    /// Whether all sources failed
     pub fn is_total_failure(&self) -> bool {
         self.successes.is_empty() && !self.failures.is_empty()
     }

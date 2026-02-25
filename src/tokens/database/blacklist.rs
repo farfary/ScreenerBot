@@ -8,6 +8,7 @@ use crate::tokens::types::{TokenError, TokenResult};
 use super::{TokenBlacklistRecord, TokenDatabase};
 
 impl TokenDatabase {
+    /// Add a token to the blacklist with a reason and source
     pub fn add_to_blacklist(&self, mint: &str, reason: &str, source: &str) -> TokenResult<()> {
         let conn = self
             .conn

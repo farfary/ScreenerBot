@@ -12,6 +12,7 @@ use crate::tokens::types::{
 
 use super::{get_global_database, TokenBlacklistRecord};
 
+/// Fetch token metadata asynchronously via spawn_blocking
 pub async fn get_token_async(mint: &str) -> TokenResult<Option<TokenMetadata>> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
@@ -220,8 +221,7 @@ pub async fn update_token_priority_async(mint: &str, priority: i32) -> TokenResu
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
 }
 
-/// Async: check if token market data is stale
-/// Reserved for future use in health monitoring/diagnostics (Bug #27)
+/// Check if a token's market data exceeds the staleness threshold
 #[allow(dead_code)]
 pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
     let db = get_global_database()
@@ -364,6 +364,7 @@ pub async fn get_recent_rejections_async(
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
 }
 
+/// Fetch rejected tokens with optional filters asynchronously
 pub async fn get_rejected_tokens_async(
     reason_filter: Option<String>,
     source_filter: Option<String>,

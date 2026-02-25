@@ -10,6 +10,7 @@ use crate::tokens::types::{RugcheckData, SecurityRisk, TokenError, TokenHolder, 
 use super::TokenDatabase;
 
 impl TokenDatabase {
+    /// Insert or update Rugcheck security data for a token
     pub fn upsert_rugcheck_data(&self, mint: &str, data: &RugcheckData) -> TokenResult<()> {
         let mut conn = self
             .conn
@@ -153,6 +154,7 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Fetch Rugcheck security data for a token
     pub fn get_rugcheck_data(&self, mint: &str) -> TokenResult<Option<RugcheckData>> {
         let conn = self
             .conn
@@ -250,6 +252,7 @@ impl TokenDatabase {
         }
     }
 
+    /// Fetch token mints that have no security assessment
     pub fn get_tokens_without_security_data(&self, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
             .conn

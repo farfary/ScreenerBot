@@ -17,6 +17,7 @@ use super::helpers::{assemble_token, MarketDataType};
 use super::TokenDatabase;
 
 impl TokenDatabase {
+    /// Assemble a complete token record with market data from the specified source
     pub fn get_full_token_for_source(
         &self,
         mint: &str,

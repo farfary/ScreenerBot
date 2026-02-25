@@ -14,6 +14,7 @@ use super::helpers::assemble_token_without_market_data;
 use super::TokenDatabase;
 
 impl TokenDatabase {
+    /// Count tokens that have no market data from any source
     pub fn count_tokens_no_market(&self) -> TokenResult<usize> {
         let conn = self
             .conn
@@ -34,6 +35,7 @@ impl TokenDatabase {
         Ok(count)
     }
 
+    /// Fetch tokens missing market data, ordered by priority
     pub fn get_tokens_no_market(
         &self,
         limit: usize,
@@ -230,6 +232,7 @@ impl TokenDatabase {
     // DEXSCREENER DATA OPERATIONS
     // ========================================================================
 
+    /// Insert or update DexScreener market data for a token
     pub fn upsert_dexscreener_data(&self, mint: &str, data: &DexScreenerData) -> TokenResult<()> {
         let conn = self
             .conn
@@ -390,6 +393,7 @@ impl TokenDatabase {
     // GECKOTERMINAL DATA OPERATIONS
     // ========================================================================
 
+    /// Insert or update GeckoTerminal market data for a token
     pub fn upsert_geckoterminal_data(
         &self,
         mint: &str,
@@ -524,6 +528,7 @@ impl TokenDatabase {
     // MARKET DATA FRESHNESS & ERRORS
     // ========================================================================
 
+    /// Check if a token's market data is older than the given threshold
     pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
         let conn = self
             .conn
@@ -547,6 +552,7 @@ impl TokenDatabase {
         }
     }
 
+    /// Fetch token mints that have no market data records
     pub fn get_tokens_without_market_data(&self, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
             .conn
@@ -597,6 +603,7 @@ impl TokenDatabase {
         Ok(count as u64)
     }
 
+    /// Record a market data fetch error for tracking and retry logic
     pub fn record_market_error(
         &self,
         mint: &str,

@@ -9,6 +9,7 @@ use crate::tokens::types::{Priority, TokenError, TokenResult};
 use super::TokenDatabase;
 
 impl TokenDatabase {
+    /// Fetch token mints with the given priority level
     pub fn get_tokens_by_priority(&self, priority: i32, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
             .conn
@@ -90,6 +91,7 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Update priority for multiple tokens in a single transaction
     pub fn batch_update_priority(&self, mints: &[String], priority: i32) -> TokenResult<usize> {
         if mints.is_empty() {
             return Ok(0);
@@ -188,6 +190,7 @@ impl TokenDatabase {
         Ok(result)
     }
 
+    /// Get counts of tokens at each priority level
     pub fn summarize_priorities(&self) -> TokenResult<Vec<(i32, u64)>> {
         let conn = self
             .conn
@@ -212,6 +215,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to collect priority summary: {e}")))
     }
 
+    /// Get the current priority level for a specific token
     pub fn get_priority(&self, mint: &str) -> TokenResult<Priority> {
         let conn = self
             .conn

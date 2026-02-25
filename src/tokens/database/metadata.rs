@@ -14,6 +14,7 @@ impl TokenDatabase {
     // TOKEN METADATA OPERATIONS
     // ========================================================================
 
+    /// Insert or update token metadata in the database
     pub fn upsert_token(
         &self,
         mint: &str,
@@ -186,6 +187,7 @@ impl TokenDatabase {
     // TOKEN INFO BATCH QUERIES
     // ========================================================================
 
+    /// Fetch image URLs for multiple tokens in a single query
     pub fn get_token_images_batch(&self, mints: &[String]) -> TokenResult<HashMap<String, String>> {
         if mints.is_empty() {
             return Ok(HashMap::new());

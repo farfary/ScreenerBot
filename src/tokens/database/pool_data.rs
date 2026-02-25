@@ -14,6 +14,7 @@ use super::helpers::read_row_value;
 use super::TokenDatabase;
 
 impl TokenDatabase {
+    /// Replace all pool records for a token with the given snapshot
     pub fn replace_token_pools(&self, snapshot: &TokenPoolsSnapshot) -> TokenResult<()> {
         let mut conn = self
             .conn

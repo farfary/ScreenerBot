@@ -34,6 +34,7 @@ impl TokenDatabase {
     // COUNTS & TRACKING
     // ========================================================================
 
+    /// Count total tokens in the database
     pub fn count_tokens(&self) -> TokenResult<u64> {
         let conn = self
             .conn

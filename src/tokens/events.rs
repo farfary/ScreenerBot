@@ -36,12 +36,14 @@ pub enum TokenEvent {
 static SUBSCRIBERS: std::sync::LazyLock<RwLock<Vec<Arc<dyn Fn(&TokenEvent) + Send + Sync>>>> =
     std::sync::LazyLock::new(|| RwLock::new(Vec::new()));
 
+/// Register a callback to receive token events
 pub fn subscribe(cb: Arc<dyn Fn(&TokenEvent) + Send + Sync>) {
     if let Ok(mut subs) = SUBSCRIBERS.write() {
         subs.push(cb);
     }
 }
 
+/// Broadcast a token event to all subscribers
 pub fn emit(event: TokenEvent) {
     if let Ok(subs) = SUBSCRIBERS.read() {
         for cb in subs.iter() {

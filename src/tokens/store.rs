@@ -24,6 +24,7 @@ pub struct CacheMetrics {
 }
 
 impl CacheMetrics {
+    /// Calculate cache hit rate as a fraction (0.0 to 1.0)
     pub fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
         if total == 0 {
@@ -127,14 +128,17 @@ static RUGCHECK_CACHE: LazyLock<moka::sync::Cache<String, RugcheckData>> = LazyL
         .build()
 });
 
+/// Retrieve cached DexScreener data for a token mint
 pub fn get_cached_dexscreener(mint: &str) -> Option<DexScreenerData> {
     DEXSCREENER_CACHE.get(&mint.to_string())
 }
 
+/// Cache DexScreener data for a token mint
 pub fn store_dexscreener(mint: &str, data: &DexScreenerData) {
     DEXSCREENER_CACHE.insert(mint.to_string(), data.clone());
 }
 
+/// Get DexScreener cache usage metrics
 pub fn dexscreener_cache_metrics() -> CacheMetrics {
     CacheMetrics {
         hits: 0,
@@ -145,18 +149,22 @@ pub fn dexscreener_cache_metrics() -> CacheMetrics {
     }
 }
 
+/// Number of entries in the DexScreener cache
 pub fn dexscreener_cache_size() -> usize {
     DEXSCREENER_CACHE.entry_count() as usize
 }
 
+/// Retrieve cached GeckoTerminal data for a token mint
 pub fn get_cached_geckoterminal(mint: &str) -> Option<GeckoTerminalData> {
     GECKOTERMINAL_CACHE.get(&mint.to_string())
 }
 
+/// Cache GeckoTerminal data for a token mint
 pub fn store_geckoterminal(mint: &str, data: &GeckoTerminalData) {
     GECKOTERMINAL_CACHE.insert(mint.to_string(), data.clone());
 }
 
+/// Get GeckoTerminal cache usage metrics
 pub fn geckoterminal_cache_metrics() -> CacheMetrics {
     CacheMetrics {
         hits: 0,
@@ -167,18 +175,22 @@ pub fn geckoterminal_cache_metrics() -> CacheMetrics {
     }
 }
 
+/// Number of entries in the GeckoTerminal cache
 pub fn geckoterminal_cache_size() -> usize {
     GECKOTERMINAL_CACHE.entry_count() as usize
 }
 
+/// Retrieve cached Rugcheck data for a token mint
 pub fn get_cached_rugcheck(mint: &str) -> Option<RugcheckData> {
     RUGCHECK_CACHE.get(&mint.to_string())
 }
 
+/// Cache Rugcheck data for a token mint
 pub fn store_rugcheck(mint: &str, data: &RugcheckData) {
     RUGCHECK_CACHE.insert(mint.to_string(), data.clone());
 }
 
+/// Get Rugcheck cache usage metrics
 pub fn rugcheck_cache_metrics() -> CacheMetrics {
     CacheMetrics {
         hits: 0,
@@ -189,22 +201,27 @@ pub fn rugcheck_cache_metrics() -> CacheMetrics {
     }
 }
 
+/// Number of entries in the Rugcheck cache
 pub fn rugcheck_cache_size() -> usize {
     RUGCHECK_CACHE.entry_count() as usize
 }
 
+/// Retrieve a cached assembled token snapshot
 pub fn get_cached_token(mint: &str) -> Option<Token> {
     TOKEN_STORE.get(mint)
 }
 
+/// Cache an assembled token snapshot
 pub fn store_token_snapshot(token: Token) {
     TOKEN_STORE.set(token);
 }
 
+/// Remove a token snapshot from the cache
 pub fn invalidate_token_snapshot(mint: &str) {
     TOKEN_STORE.invalidate(mint);
 }
 
+/// Rebuild and cache a token snapshot from database
 pub async fn refresh_token_snapshot(mint: &str) -> TokenResult<Option<Token>> {
     let token = database::get_full_token_async(mint).await?;
     match token.clone() {
@@ -214,6 +231,7 @@ pub async fn refresh_token_snapshot(mint: &str) -> TokenResult<Option<Token>> {
     Ok(token)
 }
 
+/// Get a full token, using cache if available or rebuilding from database
 pub async fn get_full_token_async(mint: &str) -> TokenResult<Option<Token>> {
     if let Some(token) = get_cached_token(mint) {
         return Ok(Some(token));
@@ -221,11 +239,13 @@ pub async fn get_full_token_async(mint: &str) -> TokenResult<Option<Token>> {
     refresh_token_snapshot(mint).await
 }
 
+/// Invalidate all DexScreener and GeckoTerminal cache entries
 pub fn clear_all_market_caches() {
     DEXSCREENER_CACHE.invalidate_all();
     GECKOTERMINAL_CACHE.invalidate_all();
 }
 
+/// Invalidate all Rugcheck cache entries
 pub fn clear_security_cache() {
     RUGCHECK_CACHE.invalidate_all();
 }

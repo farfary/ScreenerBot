@@ -17,6 +17,7 @@ pub enum DataSource {
 }
 
 impl DataSource {
+    /// String representation of the data source
     pub fn as_str(&self) -> &'static str {
         match self {
             DataSource::DexScreener => "dexscreener",

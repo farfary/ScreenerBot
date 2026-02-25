@@ -10,6 +10,7 @@ use crate::tokens::types::{TokenError, TokenResult};
 use super::TokenDatabase;
 
 impl TokenDatabase {
+    /// Update or insert a rejection record for a token
     pub fn update_rejection_status(
         &self,
         mint: &str,
@@ -321,6 +322,7 @@ impl TokenDatabase {
         Ok(results)
     }
 
+    /// Query rejected tokens with optional filtering and pagination
     pub fn get_rejected_tokens(
         &self,
         reason_filter: Option<String>,
