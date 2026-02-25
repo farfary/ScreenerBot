@@ -3,7 +3,7 @@
 //! Main orchestrator for AI chat with MCP-like tool calling.
 //! Handles conversation flow, tool execution, and permission management.
 
-use crate::ai::chat_db;
+use super::database;
 use crate::ai::tools::{create_tool_registry, ToolRegistry};
 use crate::ai::types::AiError;
 use crate::apis::llm::ChatMessage as LlmChatMessage;
@@ -257,12 +257,12 @@ impl ChatEngine {
     /// Process a user message and generate response
     pub async fn process_message(&self, request: ChatRequest) -> Result<ChatResponse, AiError> {
         // Get database pool
-        let pool = chat_db::get_chat_pool()
+        let pool = database::get_chat_pool()
             .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
 
         // Add user message to history
         let user_message_id =
-            chat_db::add_message(&pool, request.session_id, "user", &request.message, None)
+            database::add_message(&pool, request.session_id, "user", &request.message, None)
                 .map_err(|e| AiError::ParseError(format!("Failed to save user message: {e}")))?;
 
         logger::debug(
@@ -274,7 +274,7 @@ impl ChatEngine {
         );
 
         // Load conversation history
-        let history = chat_db::get_messages(&pool, request.session_id)
+        let history = database::get_messages(&pool, request.session_id)
             .map_err(|e| AiError::ParseError(format!("Failed to load history: {e}")))?;
 
         // Build messages for LLM (system + history)
@@ -376,7 +376,7 @@ impl ChatEngine {
             }
         };
 
-        let assistant_message_id = chat_db::add_message(
+        let assistant_message_id = database::add_message(
             &pool,
             request.session_id,
             "assistant",
@@ -458,7 +458,7 @@ impl ChatEngine {
         }
 
         // Get database pool
-        let pool = chat_db::get_chat_pool()
+        let pool = database::get_chat_pool()
             .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
 
         // Execute the approved tool

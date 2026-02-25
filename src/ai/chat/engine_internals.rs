@@ -3,11 +3,11 @@
 //! Private implementation methods for ChatEngine.
 //! Separated from chat_engine.rs for maintainability.
 
-use super::chat_engine::{
+use super::engine::{
     ChatContext, ChatEngine, PendingConfirmation, ToolCall, ToolCallInfo, ToolCallStatus,
     ToolMode, JSON_CODE_BLOCK_PATTERN, LOOSE_JSON_PATTERN,
 };
-use crate::ai::chat_db;
+use super::database;
 use crate::ai::tools::ToolResult;
 use crate::ai::types::AiError;
 use crate::apis::llm::{
@@ -27,7 +27,7 @@ impl ChatEngine {
     /// Build messages for LLM including system prompt and history
     pub(super) fn build_messages(
         &self,
-        history: &[chat_db::ChatMessage],
+        history: &[database::ChatMessage],
         context: &Option<ChatContext>,
     ) -> Result<Vec<LlmChatMessage>, AiError> {
         let mut messages = Vec::new();
@@ -564,7 +564,7 @@ impl ChatEngine {
             }
         };
 
-        if let Err(e) = chat_db::add_tool_execution(
+        if let Err(e) = database::add_tool_execution(
             pool,
             message_id,
             &tool_call.name,
@@ -637,7 +637,7 @@ impl ChatEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::super::chat_engine::{ChatContext, ChatEngine, ToolCallInfo, ToolCallStatus};
+    use super::super::engine::{ChatContext, ChatEngine, ToolCallInfo, ToolCallStatus};
 
     #[test]
     fn test_parse_tool_calls() {

@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::OnceLock;
 
-// Re-export all query operations so callers can use `chat_db::create_session(...)` etc.
-pub use crate::ai::chat_db_queries::*;
+// Re-export all query operations so callers can use `database::create_session(...)` etc.
+pub use super::database_queries::*;
 
 // =============================================================================
 // GLOBAL CONNECTION POOL

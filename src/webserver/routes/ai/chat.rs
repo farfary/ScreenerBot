@@ -9,7 +9,7 @@ use axum::{
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::ai::chat_db;
+use crate::ai::chat::database as chat_db;
 use crate::ai::permissions::ToolPermissions;
 use crate::ai::{try_get_chat_engine, ChatRequest as ChatEngineRequest};
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};

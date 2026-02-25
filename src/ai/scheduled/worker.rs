@@ -6,7 +6,7 @@
 //! and weekly schedules with timeout handling, retry logic, and Telegram notifications.
 
 use super::database as scheduled_db;
-use crate::ai::{chat_db, ChatRequest, ToolMode};
+use crate::ai::{chat, ChatRequest, ToolMode};
 use crate::config::with_config;
 use crate::errors::ServiceError;
 use crate::events::{record_scheduled_task_event, Severity};
@@ -32,8 +32,8 @@ pub async fn scheduler_worker(
     tokio::time::sleep(Duration::from_secs(5)).await;
 
     // Clean up old hidden sessions on startup (older than 7 days)
-    if let Some(pool) = chat_db::get_chat_pool() {
-        match chat_db::cleanup_hidden_sessions(&pool, 7) {
+    if let Some(pool) = chat::database::get_chat_pool() {
+        match chat::database::cleanup_hidden_sessions(&pool, 7) {
             Ok(count) if count > 0 => {
                 logger::info(
                     LogTag::System,
@@ -65,7 +65,7 @@ pub async fn scheduler_worker(
         }
 
         // Check for due tasks
-        if let Some(pool) = chat_db::get_chat_pool() {
+        if let Some(pool) = chat::database::get_chat_pool() {
             match scheduled_db::get_due_tasks(&pool) {
                 Ok(tasks) if !tasks.is_empty() => {
                     logger::debug(
@@ -143,7 +143,7 @@ async fn execute_scheduled_task(
         task.name,
         chrono::Utc::now().format("%Y-%m-%d %H:%M")
     );
-    let session_id = chat_db::create_hidden_session(pool, &session_title).map_err(|e| {
+    let session_id = chat::database::create_hidden_session(pool, &session_title).map_err(|e| {
         crate::Error::Service(ServiceError::Generic {
             message: format!("Failed to create session: {e}"),
         })

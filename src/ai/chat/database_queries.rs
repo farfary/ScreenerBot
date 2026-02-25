@@ -1,13 +1,13 @@
 //! AI Chat Database Query Operations
 //!
 //! CRUD operations for chat sessions, messages, and tool executions.
-//! Data types are defined in `chat_db.rs`; this module contains the query functions.
+//! Data types are defined in `database.rs`; this module contains the query functions.
 
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 
-use super::chat_db::{ChatMessage, ChatSession, ToolExecution};
+use super::database::{ChatMessage, ChatSession, ToolExecution};
 
 // =============================================================================
 // SESSION CRUD OPERATIONS

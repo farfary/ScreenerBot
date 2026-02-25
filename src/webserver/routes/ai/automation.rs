@@ -9,7 +9,7 @@ use super::types::*;
 
 /// GET /api/ai/automation — List all scheduled tasks
 pub async fn list_automation_tasks() -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -34,7 +34,7 @@ pub async fn list_automation_tasks() -> Response {
 
 /// POST /api/ai/automation — Create a new scheduled task
 pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -137,7 +137,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
 
 /// GET /api/ai/automation/:id — Get a specific task
 pub async fn get_automation_task(Path(id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -166,7 +166,7 @@ pub async fn update_automation_task(
     Path(id): Path<i64>,
     Json(req): Json<UpdateAutomationTaskRequest>,
 ) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -245,7 +245,7 @@ pub async fn update_automation_task(
 
 /// DELETE /api/ai/automation/:id — Delete a task
 pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -286,7 +286,7 @@ pub async fn toggle_automation_task(
     Path(id): Path<i64>,
     Json(req): Json<ToggleTaskRequest>,
 ) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -314,7 +314,7 @@ pub async fn toggle_automation_task(
 
 /// POST /api/ai/automation/:id/run — Trigger immediate execution
 pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -366,7 +366,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
 
     // Execute in background
     tokio::spawn(async move {
-        let pool = match crate::ai::chat_db::get_chat_pool() {
+        let pool = match crate::ai::chat::database::get_chat_pool() {
             Some(p) => p,
             None => {
                 logger::warning(
@@ -396,7 +396,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
 
 /// GET /api/ai/automation/:id/runs — Get run history for a task
 pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -421,7 +421,7 @@ pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
 
 /// GET /api/ai/automation/runs — Get all recent runs
 pub async fn get_automation_recent_runs() -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -446,7 +446,7 @@ pub async fn get_automation_recent_runs() -> Response {
 
 /// GET /api/ai/automation/runs/:id — Get a specific run
 pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -472,7 +472,7 @@ pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
 
 /// GET /api/ai/automation/stats — Aggregated automation statistics
 pub async fn get_automation_stats_handler() -> Response {
-    let pool = match crate::ai::chat_db::get_chat_pool() {
+    let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
