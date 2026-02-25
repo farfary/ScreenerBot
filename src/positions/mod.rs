@@ -7,6 +7,7 @@ pub use helpers as lib; // Backward compatibility alias
 pub mod loss_detection;
 pub mod metrics;
 pub mod operations;
+pub mod pnl;
 pub mod price_resolution;
 pub mod price_updater;
 pub mod queue;
