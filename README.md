@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.jpg" alt="ScreenerBot Banner" width="100%">
+  <img src="https://screenerbot.io/banner.jpg" alt="ScreenerBot Banner" width="100%">
 </p>
 
 <h1 align="center">ScreenerBot</h1>
