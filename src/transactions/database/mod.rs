@@ -11,9 +11,11 @@
 // - `maintenance`: Statistics, cleanup, and bootstrap operations
 // - `global`: Global instance management
 
+mod bootstrap;
 mod global;
 mod maintenance;
 mod operations;
+mod reporting;
 mod schema;
 mod types;
 
@@ -22,6 +24,9 @@ pub use types::{
     DatabaseStats, IntegrityReport, TransactionCursor, TransactionListFilters,
     TransactionListResult, TransactionListRow, WalletFlowExportRow,
 };
+
+// Re-export bootstrap types
+pub use bootstrap::BootstrapState;
 
 // Re-export main database struct
 pub use operations::TransactionDatabase;
