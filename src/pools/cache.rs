@@ -5,7 +5,9 @@
 //! to minimize lock contention on the hot path.
 
 use super::db;
-use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HISTORY_MAX_ENTRIES};
+use super::types::{
+    price_cache_ttl_seconds, CacheStats, PriceHistory, PriceResult, PRICE_HISTORY_MAX_ENTRIES,
+};
 
 use crate::logger::{self, LogTag};
 
@@ -156,14 +158,6 @@ pub fn get_cache_stats() -> CacheStats {
         fresh_prices: fresh_count,
         history_entries: history_count,
     }
-}
-
-/// Cache statistics structure
-#[derive(Debug, Clone)]
-pub struct CacheStats {
-    pub total_prices: usize,
-    pub fresh_prices: usize,
-    pub history_entries: usize,
 }
 
 /// Start background cache cleanup task with shutdown support

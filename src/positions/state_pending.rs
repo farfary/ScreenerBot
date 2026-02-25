@@ -1,9 +1,8 @@
 //! Pending swap state — tracks in-flight partial exits and DCA swaps with persistence.
 
+pub use super::types::{PendingDcaSwap, PendingPartialExit};
 use super::db;
 use crate::logger::{self, LogTag};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::LazyLock};
 use tokio::sync::RwLock;
 
@@ -12,31 +11,11 @@ use tokio::sync::RwLock;
 static PENDING_PARTIAL_EXITS: LazyLock<RwLock<HashMap<String, u32>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingPartialExit {
-    pub signature: String,
-    pub mint: String,
-    pub position_id: i64,
-    pub expected_exit_amount: u64,
-    pub requested_exit_percentage: f64,
-    pub expiry_height: Option<u64>,
-    pub created_at: DateTime<Utc>,
-}
-
 static PENDING_PARTIAL_EXIT_DETAILS: LazyLock<RwLock<HashMap<String, PendingPartialExit>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 const PENDING_PARTIAL_EXIT_METADATA_KEY: &str = "pending_partial_exits";
 
 // Pending DCA swaps registry: ensures DCA verifications survive restarts and duplicate submissions
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingDcaSwap {
-    pub signature: String,
-    pub mint: String,
-    pub position_id: i64,
-    pub expiry_height: Option<u64>,
-    pub created_at: DateTime<Utc>,
-}
-
 static PENDING_DCA_SWAPS: LazyLock<RwLock<HashMap<String, PendingDcaSwap>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 

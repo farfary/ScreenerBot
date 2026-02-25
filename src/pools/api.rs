@@ -7,7 +7,7 @@
 use super::cache;
 use super::db;
 use super::service;
-use super::types::{PoolDescriptor, PoolError, PriceResult};
+use super::types::{CacheStats, PoolDescriptor, PoolError, PriceResult};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 
@@ -104,6 +104,6 @@ pub fn get_price_history(mint: &str) -> Vec<PriceResult> {
 ///
 /// # Returns
 /// * `CacheStats` - Current cache statistics
-pub fn get_cache_stats() -> cache::CacheStats {
+pub fn get_cache_stats() -> CacheStats {
     cache::get_cache_stats()
 }

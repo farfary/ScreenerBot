@@ -47,4 +47,4 @@ pub use service::{
     get_price_calculator, initialize_pool_components, is_pool_service_running,
     is_single_pool_mode_enabled, set_debug_token_override, start_helper_tasks, stop_pool_service,
 };
-pub use types::{PoolError, PriceResult};
+pub use types::{CacheStats, PoolError, PoolMintVaultInfo, PriceResult, TokenPairInfo};

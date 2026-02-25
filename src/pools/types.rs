@@ -445,3 +445,41 @@ pub fn max_watched_tokens() -> usize {
 /// Maximum allowable gap between consecutive price updates (1 minute)
 /// If gap is larger, older data becomes invalid and should be removed
 pub const MAX_PRICE_GAP_SECONDS: u64 = 60;
+
+// ============================================================================
+// POOL DATA TYPES
+// ============================================================================
+
+/// Cache statistics for the pool price cache
+#[derive(Debug, Clone)]
+pub struct CacheStats {
+    pub total_prices: usize,
+    pub fresh_prices: usize,
+    pub history_entries: usize,
+}
+
+/// Result of mint and vault analysis for a pool
+#[derive(Debug, Clone)]
+pub struct TokenPairInfo {
+    /// The token mint (non-SOL)
+    pub token_mint: String,
+    /// The SOL mint (always normalized to wrapped SOL)
+    pub sol_mint: String,
+    /// Vault address for the token
+    pub token_vault: String,
+    /// Vault address for SOL
+    pub sol_vault: String,
+    /// Whether the original pool has SOL as the first mint (affects price calculation)
+    pub sol_is_first: bool,
+    /// Whether this is a valid SOL-based pair
+    pub is_sol_pair: bool,
+}
+
+/// Pool mint and vault extraction result
+#[derive(Debug, Clone)]
+pub struct PoolMintVaultInfo {
+    pub mint1: String,
+    pub mint2: String,
+    pub vault1: String,
+    pub vault2: String,
+}

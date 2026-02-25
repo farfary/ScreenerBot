@@ -6,13 +6,13 @@ use super::{
     queue::{
         enqueue_verification, gc_expired_verifications, poll_verification_batch,
         queue_has_items_with_expiry, remove_verification, requeue_verification, VerificationItem,
-        VerificationKind,
     },
     state::{
         reconcile_global_position_semaphore, rehydrate_pending_dca_swaps, MINT_TO_POSITION_INDEX,
         POSITIONS, SIG_TO_MINT_INDEX,
     },
-    verifier::{verify_transaction, VerificationOutcome},
+    types::{VerificationKind, VerificationOutcome},
+    verifier::verify_transaction,
 };
 use crate::{
     logger::{self, LogTag},

@@ -1,9 +1,10 @@
 //! Position verifier — confirms transaction success and updates position state accordingly.
 
 use super::{
-    queue::{VerificationItem, VerificationKind},
+    queue::VerificationItem,
     state::{get_mint_by_signature, get_position_by_id},
     transitions::PositionTransition,
+    types::{VerificationKind, VerificationOutcome},
 };
 use crate::{
     logger::{self, LogTag},
@@ -60,13 +61,6 @@ fn is_transient_verification_error(msg: &str) -> bool {
         || m.contains("rpc error")
         || m.contains("transaction not available")
         || m.contains("blockchain transaction not found")
-}
-
-#[derive(Debug)]
-pub enum VerificationOutcome {
-    Transition(PositionTransition),
-    RetryTransient(String),
-    PermanentFailure(PositionTransition),
 }
 
 async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64) -> bool {

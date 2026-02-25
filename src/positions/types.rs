@@ -1,7 +1,58 @@
 //! Position data types — core Position struct, transitions, and lifecycle events.
 
+use super::transitions::PositionTransition;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+// ==================== SHARED ENUMS ====================
+
+/// Price source for logging and tracking
+#[derive(Debug, Clone, Copy)]
+pub enum PriceSource {
+    Pool,
+    Api,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum VerificationKind {
+    Entry,
+    Exit,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum GiveUpReason {
+    MaxAttemptsReached { attempts: u8, max: u8 },
+    MaxAgeReached { age_hours: i64, max: i64 },
+}
+
+#[derive(Debug)]
+pub enum VerificationOutcome {
+    Transition(PositionTransition),
+    RetryTransient(String),
+    PermanentFailure(PositionTransition),
+}
+
+// ==================== PENDING SWAP TYPES ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingPartialExit {
+    pub signature: String,
+    pub mint: String,
+    pub position_id: i64,
+    pub expected_exit_amount: u64,
+    pub requested_exit_percentage: f64,
+    pub expiry_height: Option<u64>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDcaSwap {
+    pub signature: String,
+    pub mint: String,
+    pub position_id: i64,
+    pub expiry_height: Option<u64>,
+    pub created_at: DateTime<Utc>,
+}
 
 // ==================== POSITION STRUCTURES ====================
 

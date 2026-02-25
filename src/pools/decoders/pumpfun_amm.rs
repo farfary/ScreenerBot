@@ -10,7 +10,8 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 // Import centralized utilities
-use super::super::utils::{read_pubkey_at_offset, validate_sol_pool, PoolMintVaultInfo};
+use super::super::types::PoolMintVaultInfo;
+use super::super::utils::{read_pubkey_at_offset, validate_sol_pool};
 
 /// PumpFun AMM pool decoder and calculator
 pub struct PumpFunAmmDecoder;

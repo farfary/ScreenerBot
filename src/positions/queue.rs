@@ -1,7 +1,7 @@
 //! Position verification queue — tracks pending transaction verifications with retry logic.
 
+use super::types::{GiveUpReason, VerificationKind};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::LazyLock;
 use tokio::sync::RwLock;
@@ -21,18 +21,6 @@ const BACKOFF_MAX_SECS: i64 = 300;
 
 /// Jitter fraction for backoff randomization (±10%)
 const BACKOFF_JITTER_FRACTION: f64 = 0.1;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum VerificationKind {
-    Entry,
-    Exit,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub enum GiveUpReason {
-    MaxAttemptsReached { attempts: u8, max: u8 },
-    MaxAgeReached { age_hours: i64, max: i64 },
-}
 
 #[derive(Debug, Clone)]
 pub struct VerificationItem {

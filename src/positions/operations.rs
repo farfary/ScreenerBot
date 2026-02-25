@@ -9,14 +9,15 @@ use super::db as positions_db;
 use super::PENDING_VERIFICATION_SUFFIX;
 use super::{
     apply::apply_transition,
-    queue::{enqueue_verification, VerificationItem, VerificationKind},
+    queue::{enqueue_verification, VerificationItem},
     state::{
         acquire_global_position_permit, acquire_position_lock, add_position,
         add_signature_to_index, clear_pending_dca_swap, clear_pending_partial_exit,
         register_pending_dca_swap, register_pending_partial_exit, release_global_position_permit,
-        PendingDcaSwap, PendingPartialExit, LAST_OPEN_TIME,
+        LAST_OPEN_TIME,
     },
     transitions::PositionTransition,
+    types::{PendingDcaSwap, PendingPartialExit, PriceSource, VerificationKind},
 };
 use super::{
     db::{save_position, update_position_price_fields},
@@ -47,13 +48,6 @@ const POSITION_SAVE_MAX_BACKOFF_MS: u64 = 3_000;
 
 /// Maximum age (in seconds) for API price to be considered valid for trading
 const API_PRICE_MAX_AGE_SECS: i64 = 60;
-
-/// Price source for logging and tracking
-#[derive(Debug, Clone, Copy)]
-pub enum PriceSource {
-    Pool,
-    Api,
-}
 
 /// Get price with fallback to API when pool price unavailable
 ///

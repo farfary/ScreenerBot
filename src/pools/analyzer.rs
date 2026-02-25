@@ -5,7 +5,8 @@
 //! data, and prepare account lists for fetching.
 
 use super::types::{PoolDescriptor, ProgramKind};
-use super::utils::{is_sol_mint, PoolMintVaultInfo};
+use super::types::PoolMintVaultInfo;
+use super::utils::is_sol_mint;
 
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};

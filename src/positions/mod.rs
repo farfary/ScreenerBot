@@ -72,7 +72,10 @@ pub use helpers::{
 
 // Core types re-exports
 pub use metrics::ProceedsMetricsSnapshot;
-pub use queue::{enqueue_verification, VerificationItem, VerificationKind};
+pub use queue::{enqueue_verification, VerificationItem};
 pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
-pub use types::{EntryRecord, ExitRecord, Position};
+pub use types::{
+    EntryRecord, ExitRecord, GiveUpReason, PendingDcaSwap, PendingPartialExit, Position,
+    PriceSource, VerificationKind, VerificationOutcome,
+};
