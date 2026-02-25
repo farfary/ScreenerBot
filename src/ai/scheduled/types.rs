@@ -17,6 +17,7 @@ pub enum ScheduleType {
 }
 
 impl ScheduleType {
+    /// String representation of the schedule type
     pub fn as_str(&self) -> &str {
         match self {
             ScheduleType::Interval => "interval",
@@ -25,6 +26,7 @@ impl ScheduleType {
         }
     }
 
+    /// Parse a schedule type from its string representation
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "interval" => Ok(ScheduleType::Interval),
@@ -44,6 +46,7 @@ pub enum TaskToolPermissions {
 }
 
 impl TaskToolPermissions {
+    /// String representation of the permission level
     pub fn as_str(&self) -> &str {
         match self {
             TaskToolPermissions::ReadOnly => "read_only",
@@ -51,6 +54,7 @@ impl TaskToolPermissions {
         }
     }
 
+    /// Parse a permission level from its string representation
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "read_only" => Ok(TaskToolPermissions::ReadOnly),
@@ -97,6 +101,7 @@ pub enum RunStatus {
 }
 
 impl RunStatus {
+    /// String representation of the run status
     pub fn as_str(&self) -> &str {
         match self {
             RunStatus::Running => "running",

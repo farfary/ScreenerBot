@@ -36,6 +36,7 @@ pub struct DefiLlamaClient {
 }
 
 impl DefiLlamaClient {
+    /// Create a new DefiLlama API client
     pub fn new(enabled: bool) -> Result<Self, String> {
         let http_client = HttpClient::new(TIMEOUT_SECS)?;
         let stats = Arc::new(ApiStatsTracker::new());
@@ -47,10 +48,12 @@ impl DefiLlamaClient {
         })
     }
 
+    /// Whether this client is enabled in the current configuration
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }
 
+    /// Retrieve cumulative API usage statistics
     pub async fn get_stats(&self) -> super::stats::ApiStats {
         self.stats.get_stats().await
     }

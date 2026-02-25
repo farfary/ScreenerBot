@@ -17,6 +17,7 @@ pub struct AiCache {
 }
 
 impl AiCache {
+    /// Create a new AI cache with the given time-to-live in seconds
     pub fn new(ttl_seconds: u64) -> Self {
         let ttl = Duration::from_secs(ttl_seconds);
         Self {

@@ -14,6 +14,7 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
+    /// Create a new rate limiter with the given requests-per-minute cap
     pub fn new(max_per_minute: usize) -> Self {
         let min_interval = if max_per_minute > 0 {
             Duration::from_secs_f64(60.0 / max_per_minute as f64)
@@ -61,10 +62,12 @@ impl RateLimiter {
         Ok(RateLimitGuard { _permit: permit })
     }
 
+    /// Maximum allowed requests per minute
     pub fn max_per_minute(&self) -> usize {
         self.max_per_minute
     }
 
+    /// Minimum interval between consecutive requests
     pub fn min_interval(&self) -> Duration {
         self.min_interval
     }
@@ -82,6 +85,7 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
+    /// Create a new HTTP client with the given timeout in seconds
     pub fn new(timeout_secs: u64) -> Result<Self, String> {
         let client = Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
@@ -94,10 +98,12 @@ impl HttpClient {
         })
     }
 
+    /// Reference to the underlying reqwest HTTP client
     pub fn client(&self) -> &Client {
         &self.client
     }
 
+    /// Configured request timeout duration
     pub fn timeout(&self) -> Duration {
         self.timeout
     }

@@ -56,6 +56,7 @@ pub struct ToolResult {
 }
 
 impl ToolResult {
+    /// Build a successful tool result with the given JSON data
     pub fn success(data: serde_json::Value) -> Self {
         Self {
             success: true,
@@ -64,6 +65,7 @@ impl ToolResult {
         }
     }
 
+    /// Build a failed tool result with an error message
     pub fn error(message: impl Into<String>) -> Self {
         Self {
             success: false,
