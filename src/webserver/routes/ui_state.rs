@@ -205,6 +205,7 @@ async fn clear_state() -> Response {
 // ROUTES
 // =============================================================================
 
+/// Create UI state persistence routes.
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/ui-state/all", get(load_all_state))

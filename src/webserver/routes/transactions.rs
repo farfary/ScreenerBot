@@ -311,6 +311,7 @@ async fn get_summary(State(state): State<Arc<AppState>>) -> Json<TransactionSumm
 // ROUTER SETUP
 // =============================================================================
 
+/// Create transaction history routes.
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/list", post(list_transactions))

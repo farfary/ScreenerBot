@@ -66,6 +66,7 @@ struct InstallResponse {
 // Routes
 // =============================================================================
 
+/// Create update check routes.
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/version", get(get_version))

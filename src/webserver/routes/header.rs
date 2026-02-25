@@ -76,6 +76,7 @@ pub struct SystemHeaderInfo {
     pub critical_degraded: bool,
 }
 
+/// Create header metrics routes.
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new().route("/header/metrics", get(get_header_metrics))
 }

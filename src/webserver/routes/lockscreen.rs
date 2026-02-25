@@ -94,6 +94,7 @@ pub struct SuccessResponse {
 // ROUTES
 // =============================================================================
 
+/// Create lockscreen management routes.
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(get_status))
