@@ -9,6 +9,7 @@ pub mod cache;
 pub mod chat_db;
 mod chat_db_queries;
 pub mod chat_engine;
+mod chat_engine_internals;
 pub mod database;
 pub use database as db;
 pub mod engine;
