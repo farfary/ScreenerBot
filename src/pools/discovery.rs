@@ -24,7 +24,7 @@ use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 
 // Timing constants
@@ -168,7 +168,7 @@ impl PoolDiscovery {
         tokio::spawn(async move {
             let mut current_interval = interval_seed;
             let mut interval =
-                tokio::time::interval(tokio::time::Duration::from_secs(current_interval));
+                tokio::time::interval(Duration::from_secs(current_interval));
 
             loop {
                 tokio::select! {
@@ -190,7 +190,7 @@ impl PoolDiscovery {
                     let updated_interval = DISCOVERY_TICK_INTERVAL_SECS;
                     if updated_interval != current_interval {
                       current_interval = updated_interval;
-                      interval = tokio::time::interval(tokio::time::Duration::from_secs(current_interval));
+                      interval = tokio::time::interval(Duration::from_secs(current_interval));
                     }
                   }
                 }

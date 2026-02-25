@@ -11,6 +11,7 @@ use crate::positions::state::POSITIONS;
 use crate::tokens::cleanup::blacklist_token;
 use crate::tokens::database::get_global_database;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Notify;
 
 /// Background loop that periodically evaluates tokens in open positions
@@ -43,7 +44,7 @@ pub async fn background_check_loop(engine: Arc<AiEngine>, shutdown: Arc<Notify>)
                     logger::info(LogTag::System, "AI background check worker shutting down");
                     return;
                 }
-                _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {}
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
             }
             continue;
         }
@@ -123,7 +124,7 @@ pub async fn background_check_loop(engine: Arc<AiEngine>, shutdown: Arc<Notify>)
                 }
 
                 // Small delay between evaluations to respect rate limits
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
         }
 
@@ -133,7 +134,7 @@ pub async fn background_check_loop(engine: Arc<AiEngine>, shutdown: Arc<Notify>)
                 logger::info(LogTag::System, "AI background check worker shutting down");
                 return;
             }
-            _ = tokio::time::sleep(std::time::Duration::from_secs(interval_secs)) => {}
+            _ = tokio::time::sleep(Duration::from_secs(interval_secs)) => {}
         }
     }
 }

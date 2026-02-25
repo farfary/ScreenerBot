@@ -59,6 +59,7 @@ pub use maintenance::{
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::{LazyLock, OnceLock};
+use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 pub use types::{Event, EventCategory, Severity};
 
@@ -284,7 +285,7 @@ async fn event_writer_task(mut receiver: mpsc::Receiver<Event>, db: Arc<EventsDa
     const BATCH_SIZE: usize = 100;
     const BATCH_TIMEOUT_MS: u64 = 1000;
 
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(BATCH_TIMEOUT_MS));
+    let mut interval = tokio::time::interval(Duration::from_millis(BATCH_TIMEOUT_MS));
 
     loop {
         tokio::select! {

@@ -3,6 +3,7 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{mpsc, Notify};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
@@ -151,7 +152,7 @@ impl SolanaWebSocketClient {
             .map_err(|e| format!("Failed to send subscription: {e}"))?;
 
         // Create heartbeat timer (ping every 5 seconds to prevent server timeout)
-        let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+        let mut heartbeat_interval = tokio::time::interval(Duration::from_secs(5));
         heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         logger::info(
@@ -324,7 +325,7 @@ pub async fn start_websocket_monitoring(
                 logger::info(LogTag::Websocket, "WebSocket background task received shutdown signal");
                 break;
               }
-              _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
+              _ = tokio::time::sleep(Duration::from_millis(100)) => {
                 // Continue with connection attempt
               }
             }
@@ -380,7 +381,7 @@ pub async fn start_websocket_monitoring(
                         logger::info(LogTag::Websocket, "Shutdown received during reconnection wait");
                         break;
                       }
-                      _ = tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds)) => {
+                      _ = tokio::time::sleep(Duration::from_secs(delay_seconds)) => {
                         // Continue reconnection loop
                       }
                     }

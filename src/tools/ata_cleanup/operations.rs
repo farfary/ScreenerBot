@@ -3,6 +3,7 @@
 //! Core functions for scanning and closing empty Associated Token Accounts
 
 use std::collections::HashSet;
+use std::time::Duration;
 
 use chrono::Utc;
 
@@ -198,7 +199,7 @@ pub async fn cleanup_empty_atas(wallet_address: &str) -> Result<AtaCleanupResult
 
         // Rate limiting to prevent RPC spam (every 5 closures)
         if (index + 1) % 5 == 0 {
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
     }
 

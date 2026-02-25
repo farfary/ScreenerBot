@@ -8,6 +8,7 @@ use crate::trader::monitors;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{Notify, RwLock};
 use tokio::task::JoinHandle;
 
@@ -181,7 +182,7 @@ impl Service for TraderService {
             let _ = tx.send(true);
         }
 
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
 
         logger::info(LogTag::Trader, "Trader Service stopped");
 

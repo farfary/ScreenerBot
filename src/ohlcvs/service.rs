@@ -17,7 +17,7 @@ use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::{Notify, OnceCell, RwLock};
 use tokio::task::JoinHandle;
 
@@ -271,7 +271,7 @@ impl OhlcvServiceImpl {
                 // Wait for the other build to complete (poll cache with exponential backoff)
                 let mut wait_ms = 50u64;
                 for _ in 0..10 {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(wait_ms)).await;
+                    tokio::time::sleep(Duration::from_millis(wait_ms)).await;
 
                     // Check if build completed (no longer in progress)
                     let still_building = {

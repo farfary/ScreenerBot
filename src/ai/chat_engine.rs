@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::time::Duration;
 use tokio::sync::{OnceCell, RwLock};
 
 // =============================================================================
@@ -192,7 +193,7 @@ impl ConfirmationManager {
         let mut pending = self.pending.write().await;
 
         // Cleanup expired confirmations (older than 10 minutes)
-        let timeout = std::time::Duration::from_secs(600);
+        let timeout = Duration::from_secs(600);
         pending.retain(|_, v| v.created_at.elapsed() < timeout);
 
         // Limit max pending confirmations per session (prevent DoS)
@@ -222,7 +223,7 @@ impl ConfirmationManager {
         let state = pending.get(confirmation_id)?;
 
         // Check if confirmation has expired (10 minutes)
-        if state.created_at.elapsed() > std::time::Duration::from_secs(600) {
+        if state.created_at.elapsed() > Duration::from_secs(600) {
             pending.remove(confirmation_id);
             return None;
         }
@@ -764,7 +765,7 @@ impl ChatEngine {
             .with_max_tokens(2000);
 
         match tokio::time::timeout(
-            tokio::time::Duration::from_secs(60),
+            Duration::from_secs(60),
             llm_manager.call(provider, request),
         )
         .await
@@ -1044,7 +1045,7 @@ impl ChatEngine {
         };
 
         // Execute the tool with timeout (30 seconds)
-        let execution_timeout = tokio::time::Duration::from_secs(30);
+        let execution_timeout = Duration::from_secs(30);
         let result = match tokio::time::timeout(
             execution_timeout,
             tool.execute(tool_call.arguments.clone()),

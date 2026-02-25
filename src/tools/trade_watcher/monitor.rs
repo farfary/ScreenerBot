@@ -5,6 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 use super::types::{DetectedTrade, PoolSource, TradeMonitorStatus, WatchType};
@@ -157,14 +158,14 @@ async fn trade_monitor_loop() {
                     LogTag::Tools,
                     &format!("[TRADE_WATCHER] Failed to get watched tokens: {e}"),
                 );
-                tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+                tokio::time::sleep(Duration::from_secs(POLL_INTERVAL_SECS)).await;
                 continue;
             }
         };
 
         if watched.is_empty() {
             // No tokens to watch, sleep and retry
-            tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+            tokio::time::sleep(Duration::from_secs(POLL_INTERVAL_SECS)).await;
             continue;
         }
 
@@ -178,7 +179,7 @@ async fn trade_monitor_loop() {
         }
 
         // Poll interval
-        tokio::time::sleep(tokio::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
+        tokio::time::sleep(Duration::from_secs(POLL_INTERVAL_SECS)).await;
     }
 }
 

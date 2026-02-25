@@ -7,6 +7,7 @@ use solana_sdk::transaction::Transaction;
 use spl_token::instruction as spl_instruction;
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::time::Duration;
 
 use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
@@ -477,7 +478,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         }
 
         // Small delay between burns to avoid rate limiting
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
     logger::info(

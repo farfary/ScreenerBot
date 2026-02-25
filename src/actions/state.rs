@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 static ACTIVE_ACTIONS: LazyLock<Arc<RwLock<HashMap<ActionId, Action>>>> =
@@ -487,8 +488,8 @@ pub fn spawn_cleanup_task() {
         const RETENTION_DAYS: i64 = 30;
         const MEMORY_RETENTION_HOURS: i64 = 24;
         // Wait 5 minutes after startup before first cleanup
-        tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(86400));
+        tokio::time::sleep(Duration::from_secs(300)).await;
+        let mut interval = tokio::time::interval(Duration::from_secs(86400));
         loop {
             interval.tick().await;
 

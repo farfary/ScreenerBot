@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // ============================================================================
 // GMGN-SPECIFIC TYPES
@@ -166,7 +166,7 @@ impl GmgnRouter {
             match self
                 .client
                 .get(&url)
-                .timeout(tokio::time::Duration::from_secs(QUOTE_TIMEOUT_SECS))
+                .timeout(Duration::from_secs(QUOTE_TIMEOUT_SECS))
                 .send()
                 .await
             {
@@ -258,7 +258,7 @@ impl GmgnRouter {
             }
 
             if attempt < RETRY_ATTEMPTS {
-                let delay = tokio::time::Duration::from_millis(1000 * (attempt as u64));
+                let delay = Duration::from_millis(1000 * (attempt as u64));
                 tokio::time::sleep(delay).await;
             }
         }

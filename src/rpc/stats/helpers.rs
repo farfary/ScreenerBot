@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
 
 use super::RpcStatsResponse;
 use crate::rpc::global::try_get_rpc_client;
@@ -166,7 +167,7 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
 
     logger::info(LogTag::Rpc, "Starting RPC stats monitoring service");
 
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+    let mut interval = tokio::time::interval(Duration::from_secs(60));
     let mut cleanup_counter: u32 = 0;
     // Run cleanup every ~60 ticks (60 min) with 72h retention
     const CLEANUP_EVERY_TICKS: u32 = 60;

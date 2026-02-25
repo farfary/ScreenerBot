@@ -4,6 +4,7 @@ use crate::logger::{self, LogTag};
 use crate::services::{log_service_notice, Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -136,7 +137,7 @@ impl Service for WebserverService {
         }));
 
         // Brief delay to let server initialize
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
 
         // Get actual configured host and port (not the defaults)
         let host = crate::global::get_webserver_host();

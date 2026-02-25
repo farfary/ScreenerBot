@@ -13,7 +13,7 @@ use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::LazyLock;
 use std::sync::{Arc, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 
 /// Global price cache - high-performance concurrent hashmap
@@ -171,7 +171,7 @@ async fn start_cache_cleanup_task() {
     let shutdown = CLEANUP_SHUTDOWN.clone();
 
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
 
         loop {
             tokio::select! {

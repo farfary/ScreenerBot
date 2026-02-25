@@ -15,6 +15,7 @@ use futures::FutureExt;
 use r2d2;
 use r2d2_sqlite;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
@@ -27,7 +28,7 @@ pub async fn scheduler_worker(
     logger::info(LogTag::System, "Scheduled AI tasks worker started");
 
     // Wait a bit for other services to be ready
-    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     // Clean up old hidden sessions on startup (older than 7 days)
     if let Some(pool) = chat_db::get_chat_pool() {
@@ -114,7 +115,7 @@ pub async fn scheduler_worker(
                 logger::info(LogTag::System, "Scheduled AI tasks worker shutting down");
                 break;
             }
-            _ = tokio::time::sleep(tokio::time::Duration::from_secs(interval_secs)) => {
+            _ = tokio::time::sleep(Duration::from_secs(interval_secs)) => {
                 // Continue loop
             }
         }
@@ -174,7 +175,7 @@ async fn execute_scheduled_task(
     // Execute with timeout — select! drops (cancels) the losing branch
     let result: Result<Result<crate::ai::ChatResponse, String>, ()> = tokio::select! {
         res = execute_chat_request(request) => Ok(res),
-        _ = tokio::time::sleep(tokio::time::Duration::from_secs(timeout_secs)) => Err(()),
+        _ = tokio::time::sleep(Duration::from_secs(timeout_secs)) => Err(()),
     };
 
     let duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;

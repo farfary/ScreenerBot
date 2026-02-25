@@ -20,6 +20,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Duration;
 
 use crate::logger::{self, LogTag};
 
@@ -42,7 +43,7 @@ static FAILED_CACHE: LazyLock<moka::sync::Cache<String, ()>> =
     LazyLock::new(|| {
         moka::sync::Cache::builder()
             .max_capacity(50_000)
-            .time_to_live(std::time::Duration::from_secs(86400)) // 24 hours
+            .time_to_live(Duration::from_secs(86400)) // 24 hours
             .build()
     });
 
