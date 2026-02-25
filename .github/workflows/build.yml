@@ -264,7 +264,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y dpkg fakeroot
+          sudo apt-get install -y dpkg fakeroot rpm
 
       # arm64 electron packaging requires additional setup
       - name: Install arm64 packaging dependencies
@@ -391,7 +391,7 @@ jobs:
         run: |
           mkdir -p release
           # Copy all packaged artifacts
-          find artifacts/package-* -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.deb" -o -name "*.msi" \) -exec cp {} release/ \;
+          find artifacts/package-* -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.deb" -o -name "*.rpm" -o -name "*.msi" \) -exec cp {} release/ \;
           # Copy headless tarballs
           find artifacts/headless-* -type f -name "*.tar.gz" -exec cp {} release/ \;
           echo "Release artifacts:"
