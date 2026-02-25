@@ -3,6 +3,7 @@ pub mod background;
 mod engine;
 pub mod sources;
 mod store;
+mod store_helpers;
 pub mod types;
 
 pub use types::{
