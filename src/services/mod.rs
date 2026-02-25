@@ -1,9 +1,13 @@
 //! Service lifecycle management — orchestrates all bot subsystems.
+mod global;
 mod health;
 pub mod implementations;
+mod logging;
 mod metrics;
 
+pub use global::*;
 pub use health::ServiceHealth;
+pub use logging::*;
 pub use metrics::{MetricsCollector, ServiceMetrics};
 
 use crate::logger::{self, LogTag};
@@ -11,14 +15,9 @@ use crate::startup;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, RwLock};
 use tokio::task::JoinHandle;
-
-/// Global ServiceManager instance for webserver and other components access
-static GLOBAL_SERVICE_MANAGER: LazyLock<Arc<RwLock<Option<ServiceManager>>>> =
-    LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 /// Core service trait that all services must implement
 #[async_trait]
@@ -81,7 +80,7 @@ pub enum ServiceLogEvent {
 }
 
 impl ServiceLogEvent {
-    fn label(&self) -> &'static str {
+    pub(crate) fn label(&self) -> &'static str {
         match self {
             ServiceLogEvent::InitializeStart => "init.begin",
             ServiceLogEvent::InitializeSuccess => "init.complete",
@@ -92,67 +91,13 @@ impl ServiceLogEvent {
         }
     }
 
-    fn level(&self) -> &'static str {
+    pub(crate) fn level(&self) -> &'static str {
         match self {
             ServiceLogEvent::InitializeSuccess | ServiceLogEvent::StartSuccess => "SUCCESS",
             ServiceLogEvent::StopSuccess => "SUCCESS",
             _ => "INFO",
         }
     }
-}
-
-fn should_log_service_details(always: bool) -> bool {
-    always
-}
-
-fn append_details(message: &mut String, details: Option<&str>) {
-    if let Some(extra) = details {
-        let trimmed = extra.trim();
-        if !trimmed.is_empty() {
-            message.push(' ');
-            message.push_str(trimmed);
-        }
-    }
-}
-
-pub fn log_service_event(
-    service_name: &str,
-    event: ServiceLogEvent,
-    details: Option<&str>,
-    always: bool,
-) {
-    if !should_log_service_details(always) {
-        return;
-    }
-
-    let mut message = format!("service={} event={}", service_name, event.label());
-    append_details(&mut message, details);
-
-    // Map dynamic level string to logger methods
-    match event.level() {
-        "DEBUG" => logger::debug(LogTag::System, &message),
-        "SUCCESS" | "INFO" => logger::info(LogTag::System, &message),
-        "WARN" | "WARNING" => logger::warning(LogTag::System, &message),
-        "ERROR" => logger::error(LogTag::System, &message),
-        _ => logger::info(LogTag::System, &message),
-    }
-}
-
-pub fn log_service_notice(service_name: &str, kind: &str, details: Option<&str>, always: bool) {
-    if !should_log_service_details(always) {
-        return;
-    }
-
-    let mut message = format!("service_notice service={service_name} kind={kind}");
-    append_details(&mut message, details);
-
-    logger::info(LogTag::System, &message);
-}
-
-pub fn log_service_startup_phase(phase: &str, details: Option<&str>) {
-    let mut message = format!("service_startup phase={phase}");
-    append_details(&mut message, details);
-    logger::info(LogTag::System, &message);
 }
 
 pub struct ServiceStartupFailure {
@@ -817,76 +762,5 @@ impl ServiceManager {
     /// Get the number of services that currently have running handles
     pub fn get_running_service_count(&self) -> usize {
         self.handles.len()
-    }
-}
-
-// =============================================================================
-// Global ServiceManager Access Functions
-// =============================================================================
-
-/// Initialize global ServiceManager instance
-pub async fn init_global_service_manager(manager: ServiceManager) {
-    // Do initial cache update
-    manager.update_cache().await;
-
-    let mut global = GLOBAL_SERVICE_MANAGER.write().await;
-    *global = Some(manager);
-    logger::info(LogTag::System, "Global ServiceManager initialized");
-
-    // Spawn background task to update cache every 5 seconds
-    // (most services are idle, so less frequent updates reduce CPU overhead)
-    // Task auto-terminates when ServiceManager is cleared (during shutdown)
-    tokio::spawn(async {
-        loop {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-
-            // Check if ServiceManager still exists - if not, shutdown is in progress
-            let manager_ref = match get_service_manager().await {
-                Some(m) => m,
-                None => {
-                    logger::debug(
-                        LogTag::System,
-                        "ServiceManager: Cache update task terminating - manager not available",
-                    );
-                    break;
-                }
-            };
-
-            let manager_guard = manager_ref.read().await;
-            let manager = match manager_guard.as_ref() {
-                Some(m) => m,
-                None => {
-                    logger::debug(
-                        LogTag::System,
-                        "ServiceManager: Cache update task terminating - manager cleared",
-                    );
-                    break;
-                }
-            };
-
-            // Add timeout to prevent hanging forever
-            let update_future = manager.update_cache();
-            match tokio::time::timeout(Duration::from_secs(3), update_future).await {
-                Ok(_) => {
-                    logger::debug(LogTag::System, "ServiceManager: Cache update completed");
-                }
-                Err(_) => {
-                    logger::warning(
-            LogTag::System,
-            "ServiceManager: Cache update timed out after 3s - continuing with stale cache",
-          );
-                }
-            }
-        }
-    });
-}
-
-/// Get reference to global ServiceManager
-pub async fn get_service_manager() -> Option<Arc<RwLock<Option<ServiceManager>>>> {
-    let global = GLOBAL_SERVICE_MANAGER.read().await;
-    if global.is_some() {
-        Some(GLOBAL_SERVICE_MANAGER.clone())
-    } else {
-        None
     }
 }
