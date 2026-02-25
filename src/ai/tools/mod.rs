@@ -197,8 +197,8 @@ mod tests {
         let registry = create_tool_registry();
         let definitions = registry.list_definitions();
 
-        // Should have all 16 tools
-        assert_eq!(definitions.len(), 16);
+        // Should have all registered tools
+        assert_eq!(definitions.len(), 15);
 
         // Check that we have tools in each category
         let by_category = registry.get_tools_by_category();
@@ -229,7 +229,7 @@ mod tests {
         // Should be an array
         assert!(schema.is_array());
         let tools = schema.as_array().unwrap();
-        assert_eq!(tools.len(), 16);
+        assert_eq!(tools.len(), 15);
 
         // Check format
         let first_tool = &tools[0];

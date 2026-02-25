@@ -745,7 +745,7 @@ I'll fetch that information now.
 
         let prompt = engine.build_system_prompt(&None);
         assert!(prompt.contains("ScreenerBot"));
-        assert!(prompt.contains("Available Tools"));
+        assert!(prompt.contains("AVAILABLE TOOLS"));
         assert!(prompt.contains("tool_calls"));
 
         // With context

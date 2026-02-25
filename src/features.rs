@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn test_tool_availability() {
         assert!(is_tool_available("wallet-cleanup"));
-        assert!(is_tool_available("burn-tokens"));
+        assert!(!is_tool_available("burn-tokens")); // ComingSoon
         assert!(!is_tool_available("create-token")); // ComingSoon
         assert!(!is_tool_available("airdrop-checker")); // ComingSoon
         assert!(!is_tool_available("unknown-tool")); // Disabled

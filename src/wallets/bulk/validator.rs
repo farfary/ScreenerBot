@@ -238,6 +238,6 @@ mod tests {
     fn test_truncate_address() {
         let addr = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
         let truncated = truncate_address(addr);
-        assert_eq!(truncated, "7xKXtg2C...sAsU");
+        assert_eq!(truncated, "7xKXtg2C...gAsU");
     }
 }
