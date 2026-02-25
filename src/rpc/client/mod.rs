@@ -4,6 +4,7 @@
 //! and translate to/from Solana SDK types.
 
 pub mod methods;
+mod methods_impl;
 
 pub use methods::{
     ProviderHealthInfo,
