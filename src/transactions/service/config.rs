@@ -48,7 +48,7 @@ pub static DEFERRED_RETRY_KEYS: LazyLock<dashmap::DashSet<String>> =
 
 /// Get all deferred retry keys (for iteration since moka has no iter()).
 pub fn get_deferred_retry_keys() -> Vec<String> {
-    DEFERRED_RETRY_KEYS.iter().map(|k| k.clone()).collect()
+    DEFERRED_RETRY_KEYS.iter().map(|k| k.key().clone()).collect()
 }
 
 /// Add a transaction to the deferred retry queue
