@@ -5,6 +5,7 @@
 //! - `crate::Result<T>` / `crate::errors::Result<T>`
 
 pub mod blockchain;
+mod blockchain_parser;
 
 mod configuration;
 mod data;
@@ -19,6 +20,7 @@ mod rpc_provider;
 mod service;
 
 pub use blockchain::*;
+pub use blockchain_parser::*;
 pub use configuration::*;
 pub use data::*;
 pub use database::*;
