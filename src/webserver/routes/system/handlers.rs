@@ -1,115 +1,30 @@
-//! System route — serves system information (version, uptime, resource usage).
+//! System route handlers — endpoint implementations for system info and control.
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Response,
-    routing::{get, post},
-    Json, Router,
+use super::types::*;
+use crate::logger::{self, LogTag};
+use crate::paths;
+use crate::webserver::state::AppState;
+use crate::webserver::utils::{error_response, success_response};
+use crate::{
+    global::{
+        self, are_core_services_ready, get_pending_services, CONNECTIVITY_SYSTEM_READY,
+        POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY,
+        TRANSACTIONS_SYSTEM_READY,
+    },
+    services::get_service_manager,
+    startup,
+    wallet,
 };
+use axum::{extract::State, http::StatusCode, response::Response, Json};
 use chrono::Utc;
-use serde::Serialize;
 use std::env;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task;
 
-use crate::logger::{self, LogTag};
-use crate::paths;
-// TODO: Re-enable when trader module is fully integrated
-// use crate::trader::CRITICAL_OPERATIONS_IN_PROGRESS;
-use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
-use crate::{
-    global::{
-        self, are_core_services_ready, get_pending_services, CONNECTIVITY_SYSTEM_READY,
-        POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
-    },
-    services::get_service_manager,
-    startup::{self, StartupServiceStatus},
-    wallet,
-};
-
-// =============================================================================
-// RESPONSE TYPES
-// =============================================================================
-
-#[derive(Debug, Serialize)]
-pub struct RebootResponse {
-    pub success: bool,
-    pub message: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct BootStatusResponse {
-    pub timestamp: String,
-    pub initialization_required: bool,
-    pub initialization_complete: bool,
-    pub onboarding_complete: bool,
-    pub core_services_ready: bool,
-    pub ui_ready: bool,
-    pub ready_for_requests: bool,
-    pub pending_services: Vec<&'static str>,
-    pub services_total: usize,
-    pub services_running: usize,
-    pub connectivity_ready: bool,
-    pub tokens_ready: bool,
-    pub positions_ready: bool,
-    pub pools_ready: bool,
-    pub transactions_ready: bool,
-    pub boot_progress: Vec<StartupServiceStatus>,
-    pub wallet_snapshot_ready: bool,
-    pub wallet_last_updated: Option<String>,
-    pub uptime_seconds: u64,
-    pub phase: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub retry_after_ms: Option<u64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PathsResponse {
-    pub base_directory: String,
-    pub data_directory: String,
-    pub logs_directory: String,
-    pub cache_pool_directory: String,
-    pub analysis_exports_directory: String,
-    pub config_path: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct OpenPathResponse {
-    pub opened: bool,
-    pub message: String,
-    pub path: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DatabaseStats {
-    pub name: String,
-    pub path: String,
-    pub size_bytes: u64,
-    pub size_mb: f64,
-    pub exists: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DataStatsResponse {
-    pub databases: Vec<DatabaseStats>,
-    pub total_size_mb: f64,
-    pub config_path: String,
-    pub config_size_bytes: u64,
-    pub data_directory: String,
-    pub timestamp: String,
-}
-
-// =============================================================================
-// ROUTE HANDLERS
-// =============================================================================
-
-/// POST /api/system/reboot - Restart the entire screenerbot process
-async fn reboot_system() -> Response {
+/// POST /api/system/reboot — Restart the entire screenerbot process
+pub(super) async fn reboot_system() -> Response {
     logger::debug(LogTag::Webserver, "System reboot requested via API");
 
     // TODO: Re-enable critical operations check when trader module is integrated
@@ -209,23 +124,8 @@ async fn reboot_system() -> Response {
     success_response(response)
 }
 
-// =============================================================================
-// ROUTER
-// =============================================================================
-
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/reboot", post(reboot_system))
-        .route("/bootstrap", get(boot_status))
-        .route("/paths", get(get_paths))
-        .route("/paths/open-data", post(open_data_directory))
-        .route("/open-url", post(open_url))
-        .route("/exit", post(exit_app))
-        .route("/data-stats", get(get_data_stats))
-}
-
-/// GET /api/system/bootstrap - Report real-time boot status for GUI/frontend gating
-async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
+/// GET /api/system/bootstrap — Report real-time boot status for GUI/frontend gating
+pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
     let timestamp = Utc::now();
     let initialization_complete = global::is_initialization_complete();
     let initialization_required = !initialization_complete;
@@ -347,8 +247,8 @@ async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
     success_response(response)
 }
 
-/// GET /api/system/paths - Return key filesystem locations
-async fn get_paths() -> Response {
+/// GET /api/system/paths — Return key filesystem locations
+pub(super) async fn get_paths() -> Response {
     if let Err(err) = paths::ensure_all_directories() {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -372,8 +272,8 @@ async fn get_paths() -> Response {
     success_response(response)
 }
 
-/// POST /api/system/paths/open-data - Open the data directory in the OS file manager
-async fn open_data_directory() -> Response {
+/// POST /api/system/paths/open-data — Open the data directory in the OS file manager
+pub(super) async fn open_data_directory() -> Response {
     if let Err(err) = paths::ensure_all_directories() {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -400,24 +300,8 @@ async fn open_data_directory() -> Response {
     }
 }
 
-// =============================================================================
-// OPEN URL IN BROWSER
-// =============================================================================
-
-#[derive(Debug, serde::Deserialize)]
-pub struct OpenUrlRequest {
-    pub url: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct OpenUrlResponse {
-    pub opened: bool,
-    pub message: String,
-    pub url: String,
-}
-
-/// POST /api/system/open-url - Open a URL in the system's default browser
-async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
+/// POST /api/system/open-url — Open a URL in the system's default browser
+pub(super) async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
     let url = request.url.trim();
 
     if url.is_empty() {
@@ -444,26 +328,9 @@ async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
     }
 }
 
-// =============================================================================
-// EXIT APP
-// =============================================================================
-
-#[derive(Debug, serde::Deserialize)]
-pub struct ExitAppRequest {
-    /// Delay in milliseconds before exiting (default: 0)
-    #[serde(default)]
-    pub delay_ms: u64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ExitAppResponse {
-    pub success: bool,
-    pub message: String,
-}
-
-/// POST /api/system/exit - Exit the application
+/// POST /api/system/exit — Exit the application
 /// Used for "Install & Restart" to close the app after opening the installer
-async fn exit_app(Json(request): Json<ExitAppRequest>) -> Response {
+pub(super) async fn exit_app(Json(request): Json<ExitAppRequest>) -> Response {
     logger::info(
         LogTag::System,
         &format!("Exit requested via API with delay: {}ms", request.delay_ms),
@@ -485,12 +352,8 @@ async fn exit_app(Json(request): Json<ExitAppRequest>) -> Response {
     })
 }
 
-// =============================================================================
-// DATA STATS
-// =============================================================================
-
-/// GET /api/system/data-stats - Get statistics for all databases and data files
-async fn get_data_stats() -> Response {
+/// GET /api/system/data-stats — Get statistics for all databases and data files
+pub(super) async fn get_data_stats() -> Response {
     let mut databases = Vec::new();
     let mut total_size: u64 = 0;
 
