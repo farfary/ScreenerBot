@@ -10,6 +10,8 @@ mod core;
 mod dex_corrections;
 mod extraction;
 mod helpers;
+mod helpers_transfers;
+mod helpers_wsol;
 
 // Re-export the main processor struct
 pub use core::TransactionProcessor;
