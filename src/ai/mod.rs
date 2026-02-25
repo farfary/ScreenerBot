@@ -7,6 +7,7 @@
 pub mod background_worker;
 pub mod cache;
 pub mod chat_db;
+mod chat_db_queries;
 pub mod chat_engine;
 pub mod database;
 pub use database as db;
