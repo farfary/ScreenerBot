@@ -2,12 +2,15 @@
 //!
 //! Organized command handlers for different functionality areas.
 
+mod callback_positions;
+mod callback_tokens;
 mod callbacks;
 mod menu;
 mod status;
 mod trading;
 
-pub use callbacks::{handle_callback_query, send_token_detail, send_tokens_list, send_tokens_menu};
+pub use callback_tokens::{send_token_detail, send_tokens_list, send_tokens_menu};
+pub use callbacks::handle_callback_query;
 pub use menu::{handle_menu_command, send_main_menu};
 pub use status::{
     handle_balance_command, handle_positions_command, handle_stats_command, handle_status_command,
@@ -69,7 +72,7 @@ pub async fn handle_command(
             if !check_auth(bot, chat_id, user_id).await {
                 return Ok(());
             }
-            return callbacks::send_token_detail(bot, chat_id, mint_short).await;
+            return callback_tokens::send_token_detail(bot, chat_id, mint_short).await;
         }
     }
 
@@ -124,10 +127,10 @@ pub async fn handle_command(
             return handle_login_command(bot, chat_id, user_id).await;
         }
         "/tokens" => {
-            return callbacks::send_tokens_menu(bot, chat_id).await;
+            return callback_tokens::send_tokens_menu(bot, chat_id).await;
         }
         "/rejected" => {
-            return callbacks::send_tokens_list(bot, chat_id, "rejected").await;
+            return callback_tokens::send_tokens_list(bot, chat_id, "rejected").await;
         }
         _ => {}
     }
