@@ -11,6 +11,7 @@
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -61,7 +62,7 @@
   border-radius: var(--radius-lg);
   font-size: 0.9375rem;
   line-height: 1.6;
-  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .message.user .message-bubble {
@@ -100,7 +101,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
 }
 
 .message:hover .message-actions {
@@ -344,6 +345,7 @@
     transform: scale(1);
     opacity: 0.4;
   }
+
   30% {
     transform: scale(1.2);
     opacity: 1;
@@ -361,7 +363,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgb(0, 0, 0, 0.3);
   z-index: var(--z-popover);
   animation: slideUp 0.2s ease;
 }
@@ -371,6 +373,7 @@
     opacity: 0;
     transform: translate(-50%, 20px);
   }
+
   to {
     opacity: 1;
     transform: translate(-50%, 0);
@@ -456,6 +459,6 @@
 
 /* Ensure user bubble inline code is readable on primary bg */
 .message.user .chat-inline-code {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(255, 255, 255, 0.2);
   color: inherit;
 }

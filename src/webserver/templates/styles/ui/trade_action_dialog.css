@@ -509,7 +509,7 @@ body.trade-action-dialog-open {
 .trade-action-quote-section {
   margin-top: 16px;
   padding: 12px;
-  background: rgb(var(--color-surface) / 60%);
+  background: rgb(var(--color-surface) / 0.6);
   border: 1px solid rgb(var(--color-border));
   border-radius: var(--radius-md, 6px);
 }
@@ -609,7 +609,7 @@ body.trade-action-dialog-open {
   padding: 12px;
   font-size: 0.8rem;
   color: rgb(var(--color-error, 248 81 73));
-  background: rgb(var(--color-error, 248 81 73) / 10%);
+  background: rgb(var(--color-error, 248 81 73) / 0.1);
   border-radius: var(--radius-sm, 4px);
 }
 
@@ -640,7 +640,7 @@ body.trade-action-dialog-open {
   align-items: center;
   justify-content: space-between;
   padding: 6px 0;
-  border-bottom: 1px solid rgb(var(--color-border) / 50%);
+  border-bottom: 1px solid rgb(var(--color-border) / 0.5);
 }
 
 .quote-row:last-child {

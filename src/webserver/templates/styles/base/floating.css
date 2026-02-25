@@ -42,25 +42,25 @@
   /* ==========================================================================
      Overlay Background
      ========================================================================== */
-  --floating-overlay-bg: rgba(0, 0, 0, 0.6);
+  --floating-overlay-bg: rgb(0, 0, 0, 0.6);
 
   /* ==========================================================================
      Floating Panel Backgrounds
      ========================================================================== */
   --floating-bg: var(--bg-secondary);
-  --floating-bg-blur: rgba(255, 255, 255, 0.95);
+  --floating-bg-blur: rgb(255, 255, 255, 0.95);
   --floating-border: var(--border-color);
 
   /* ==========================================================================
      Box Shadows (3 levels)
      ========================================================================== */
-  --shadow-floating-sm: 0 4px 16px rgba(0, 0, 0, 0.12);
-  --shadow-floating-md: 0 8px 32px rgba(0, 0, 0, 0.16),
-                        0 0 0 1px rgba(0, 0, 0, 0.05);
-  --shadow-floating-lg: 0 12px 48px -12px rgba(0, 0, 0, 0.4),
-                        0 8px 24px -4px rgba(0, 0, 0, 0.2);
-  --shadow-floating-macos: 0 10px 40px -10px rgba(0, 0, 0, 0.35),
-                           0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-floating-sm: 0 4px 16px rgb(0, 0, 0, 0.12);
+  --shadow-floating-md: 0 8px 32px rgb(0, 0, 0, 0.16),
+                        0 0 0 1px rgb(0, 0, 0, 0.05);
+  --shadow-floating-lg: 0 12px 48px -12px rgb(0, 0, 0, 0.4),
+                        0 8px 24px -4px rgb(0, 0, 0, 0.2);
+  --shadow-floating-macos: 0 10px 40px -10px rgb(0, 0, 0, 0.35),
+                           0 0 0 1px rgb(255, 255, 255, 0.08);
 
   /* ==========================================================================
      Backdrop Blur
@@ -104,15 +104,15 @@
 
 /* Dark Theme Overrides */
 [data-theme="dark"] {
-  --floating-overlay-bg: rgba(0, 0, 0, 0.7);
-  --floating-bg-blur: rgba(22, 27, 34, 0.92);
-  --shadow-floating-sm: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-floating-md: 0 8px 32px rgba(0, 0, 0, 0.4),
-                        0 0 0 1px rgba(255, 255, 255, 0.05);
-  --shadow-floating-lg: 0 12px 48px -12px rgba(0, 0, 0, 0.7),
-                        0 8px 24px -4px rgba(0, 0, 0, 0.5);
-  --shadow-floating-macos: 0 10px 40px -10px rgba(0, 0, 0, 0.5),
-                           0 0 0 1px rgba(255, 255, 255, 0.05);
+  --floating-overlay-bg: rgb(0, 0, 0, 0.7);
+  --floating-bg-blur: rgb(22, 27, 34, 0.92);
+  --shadow-floating-sm: 0 4px 16px rgb(0, 0, 0, 0.3);
+  --shadow-floating-md: 0 8px 32px rgb(0, 0, 0, 0.4),
+                        0 0 0 1px rgb(255, 255, 255, 0.05);
+  --shadow-floating-lg: 0 12px 48px -12px rgb(0, 0, 0, 0.7),
+                        0 8px 24px -4px rgb(0, 0, 0, 0.5);
+  --shadow-floating-macos: 0 10px 40px -10px rgb(0, 0, 0, 0.5),
+                           0 0 0 1px rgb(255, 255, 255, 0.05);
 }
 
 /* =============================================================================
@@ -126,7 +126,6 @@
   border-radius: var(--floating-panel-radius);
   box-shadow: var(--shadow-floating-lg);
   backdrop-filter: var(--floating-blur-md);
-  -webkit-backdrop-filter: var(--floating-blur-md);
   min-width: var(--floating-panel-min-width);
   max-width: var(--floating-panel-max-width);
   padding: var(--floating-panel-padding);
@@ -138,7 +137,7 @@
 }
 
 [data-theme="light"] .floating-panel {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgb(255, 255, 255, 0.95);
 }
 
 /* =============================================================================
@@ -268,7 +267,7 @@
 }
 
 .floating-item.danger:hover:not(.disabled) {
-  background: rgba(239, 68, 68, 0.08);
+  background: rgb(239, 68, 68, 0.08);
 }
 
 .floating-item.success {
@@ -276,7 +275,7 @@
 }
 
 .floating-item.success:hover:not(.disabled) {
-  background: rgba(16, 185, 129, 0.08);
+  background: rgb(16, 185, 129, 0.08);
 }
 
 /* =============================================================================
@@ -318,7 +317,7 @@
 
 .floating-item:hover .floating-item-shortcut,
 .floating-item:focus .floating-item-shortcut {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgb(255, 255, 255, 0.7);
 }
 
 .floating-item-badge {
@@ -408,9 +407,8 @@
 .floating-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgb(0, 0, 0, 0.6);
   backdrop-filter: var(--floating-blur-overlay);
-  -webkit-backdrop-filter: var(--floating-blur-overlay);
   z-index: var(--z-dialog-overlay);
   opacity: 0;
   visibility: hidden;
@@ -464,7 +462,7 @@
 
 .floating-item:hover > .floating-submenu-arrow,
 .floating-item:focus > .floating-submenu-arrow {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgb(255, 255, 255, 0.7);
 }
 
 /* =============================================================================

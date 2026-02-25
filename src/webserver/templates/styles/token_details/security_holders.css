@@ -34,18 +34,19 @@
   background: var(--bg-primary);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.1);
 }
 
 .risk-danger .risk-icon {
-  border-color: rgba(248, 81, 73, 0.3);
+  border-color: rgb(248, 81, 73, 0.3);
   color: #f85149;
-  background: rgba(248, 81, 73, 0.1);
+  background: rgb(248, 81, 73, 0.1);
 }
+
 .risk-warn .risk-icon {
-  border-color: rgba(210, 153, 34, 0.3);
+  border-color: rgb(210, 153, 34, 0.3);
   color: #d29922;
-  background: rgba(210, 153, 34, 0.1);
+  background: rgb(210, 153, 34, 0.1);
 }
 
 .risk-details {
@@ -331,7 +332,7 @@
   justify-content: center;
   font-size: 1.2rem;
   margin-bottom: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.2);
   z-index: 2;
 }
 
@@ -367,12 +368,14 @@
 
 .rank-1 .podium-pedestal {
   height: 80px;
-  background: linear-gradient(180deg, rgba(210, 153, 34, 0.15) 0%, rgba(210, 153, 34, 0.05) 100%);
-  border-color: rgba(210, 153, 34, 0.3);
+  background: linear-gradient(180deg, rgb(210, 153, 34, 0.15) 0%, rgb(210, 153, 34, 0.05) 100%);
+  border-color: rgb(210, 153, 34, 0.3);
 }
+
 .rank-2 .podium-pedestal {
   height: 55px;
 }
+
 .rank-3 .podium-pedestal {
   height: 35px;
 }
@@ -451,6 +454,7 @@
     opacity: 0;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -496,20 +500,20 @@
 /* Rank Colors (Header is child 1, so rows are 2,3,4) */
 .holder-row:nth-child(2) .holder-rank {
   color: #ffd700;
-  background: rgba(255, 215, 0, 0.1);
-  box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.2);
+  background: rgb(255, 215, 0, 0.1);
+  box-shadow: 0 0 0 1px rgb(255, 215, 0, 0.2);
 }
 
 .holder-row:nth-child(3) .holder-rank {
   color: #e0e0e0;
-  background: rgba(224, 224, 224, 0.1);
-  box-shadow: 0 0 0 1px rgba(224, 224, 224, 0.2);
+  background: rgb(224, 224, 224, 0.1);
+  box-shadow: 0 0 0 1px rgb(224, 224, 224, 0.2);
 }
 
 .holder-row:nth-child(4) .holder-rank {
   color: #cd7f32;
-  background: rgba(205, 127, 50, 0.1);
-  box-shadow: 0 0 0 1px rgba(205, 127, 50, 0.2);
+  background: rgb(205, 127, 50, 0.1);
+  box-shadow: 0 0 0 1px rgb(205, 127, 50, 0.2);
 }
 
 .holder-address {

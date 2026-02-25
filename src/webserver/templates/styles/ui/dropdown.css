@@ -22,7 +22,6 @@
     transform var(--floating-duration) var(--floating-easing),
     visibility var(--floating-duration);
   backdrop-filter: var(--floating-blur-md);
-  -webkit-backdrop-filter: var(--floating-blur-md);
 }
 
 [data-theme="dark"] .dropdown-menu {
@@ -30,7 +29,7 @@
 }
 
 [data-theme="light"] .dropdown-menu {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgb(255, 255, 255, 0.95);
 }
 
 .dropdown-menu.open {
@@ -139,7 +138,7 @@
 }
 
 .dropdown-item.danger:hover:not(.disabled) {
-  background: rgba(239, 68, 68, 0.08);
+  background: rgb(239, 68, 68, 0.08);
 }
 
 .dropdown-divider {

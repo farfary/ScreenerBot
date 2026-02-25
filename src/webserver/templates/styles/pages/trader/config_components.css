@@ -126,6 +126,7 @@
 }
 
 /* Toggle switch - Now uses centralized .toggle from form_controls.css */
+
 /* Migrated: Use <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label> */
 
 .toggle-description {

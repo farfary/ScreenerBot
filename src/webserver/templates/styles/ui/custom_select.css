@@ -107,7 +107,6 @@
   border-radius: var(--floating-panel-radius);
   box-shadow: var(--shadow-floating-lg);
   backdrop-filter: var(--floating-blur-md);
-  -webkit-backdrop-filter: var(--floating-blur-md);
   opacity: 0;
   visibility: hidden;
   transform: translateY(-8px) scale(0.98);
@@ -123,7 +122,7 @@
 }
 
 [data-theme="light"] .cs-dropdown {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgb(255, 255, 255, 0.95);
 }
 
 .custom-select.open .cs-dropdown {
@@ -291,6 +290,7 @@
 }
 
 /* Scrollbar styling - inherits from global scrollbar-dropdown pattern */
+
 /* Note: Uses global scrollbar system in scrollbar.css */
 
 /* Size variants */

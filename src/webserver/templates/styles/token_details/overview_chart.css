@@ -243,27 +243,27 @@
 }
 
 .status-badge.rejected {
-  background: rgb(248 81 73 / 15%);
+  background: rgb(248 81 73 / 0.15);
   color: var(--error-color);
-  border: 1px solid rgb(248 81 73 / 30%);
+  border: 1px solid rgb(248 81 73 / 0.3);
 }
 
 .status-badge.passed {
-  background: rgb(63 185 80 / 15%);
+  background: rgb(63 185 80 / 0.15);
   color: var(--success-color);
-  border: 1px solid rgb(63 185 80 / 30%);
+  border: 1px solid rgb(63 185 80 / 0.3);
 }
 
 .status-badge.status-safe {
-  background: rgb(63 185 80 / 15%);
+  background: rgb(63 185 80 / 0.15);
   color: var(--success-color);
-  border: 1px solid rgb(63 185 80 / 30%);
+  border: 1px solid rgb(63 185 80 / 0.3);
 }
 
 .status-badge.status-danger {
-  background: rgb(248 81 73 / 15%);
+  background: rgb(248 81 73 / 0.15);
   color: var(--error-color);
-  border: 1px solid rgb(248 81 73 / 30%);
+  border: 1px solid rgb(248 81 73 / 0.3);
 }
 
 /* Token Tags */

@@ -36,7 +36,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   padding: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.1);
   position: relative;
   overflow: hidden;
 }
@@ -118,22 +118,28 @@
 .score-glow.score-good {
   background: var(--success-color);
 }
+
 .score-glow.score-ok {
   background: var(--primary-color);
 }
+
 .score-glow.score-warn {
   background: var(--warning-color);
 }
+
 .score-glow.score-danger {
   background: var(--danger);
 }
+
 /* New mappings */
 .score-glow.score-safe {
   background: var(--success-color);
 }
+
 .score-glow.score-caution {
   background: var(--warning-color);
 }
+
 .score-glow.score-vulnerable {
   background: var(--danger);
 }
@@ -141,22 +147,28 @@
 .score-ring.score-good {
   stroke: var(--success-color);
 }
+
 .score-ring.score-ok {
   stroke: var(--primary-color);
 }
+
 .score-ring.score-warn {
   stroke: var(--warning-color);
 }
+
 .score-ring.score-danger {
   stroke: var(--danger);
 }
+
 /* New mappings */
 .score-ring.score-safe {
   stroke: var(--success-color);
 }
+
 .score-ring.score-caution {
   stroke: var(--warning-color);
 }
+
 .score-ring.score-vulnerable {
   stroke: var(--danger);
 }
@@ -198,7 +210,7 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.2);
   border: 1px solid transparent;
 }
 
@@ -207,19 +219,21 @@
 }
 
 .safety-badge.good {
-  background: rgba(63, 185, 80, 0.15);
+  background: rgb(63, 185, 80, 0.15);
   color: #3fb950;
-  border-color: rgba(63, 185, 80, 0.4);
+  border-color: rgb(63, 185, 80, 0.4);
 }
+
 .safety-badge.warning {
-  background: rgba(210, 153, 34, 0.15);
+  background: rgb(210, 153, 34, 0.15);
   color: #d29922;
-  border-color: rgba(210, 153, 34, 0.4);
+  border-color: rgb(210, 153, 34, 0.4);
 }
+
 .safety-badge.critical {
-  background: rgba(248, 81, 73, 0.15);
+  background: rgb(248, 81, 73, 0.15);
   color: #f85149;
-  border-color: rgba(248, 81, 73, 0.4);
+  border-color: rgb(248, 81, 73, 0.4);
 }
 
 /* Bento Grid for Security Overview */
@@ -250,7 +264,7 @@
   border-color: var(--primary-alpha-30);
   background: var(--bg-card-hover);
   transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.15);
 }
 
 .bento-icon {
@@ -287,9 +301,11 @@
   background: #3fb950;
   box-shadow: 0 0 8px #3fb950;
 }
+
 .bento-status-dot.inactive {
   background: var(--text-muted);
 }
+
 .bento-status-dot.warning {
   background: #d29922;
   box-shadow: 0 0 8px #d29922;
@@ -309,7 +325,7 @@
 
 .security-card:hover {
   border-color: var(--border-color-hover, var(--text-muted));
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgb(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
 
@@ -370,7 +386,7 @@
 .authority-item:hover {
   background: var(--bg-card-hover);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.1);
 }
 
 .authority-header {
@@ -400,14 +416,14 @@
 
 .auth-badge.revoked {
   color: #3fb950;
-  background: rgba(63, 185, 80, 0.15);
-  border: 1px solid rgba(63, 185, 80, 0.3);
+  background: rgb(63, 185, 80, 0.15);
+  border: 1px solid rgb(63, 185, 80, 0.3);
 }
 
 .auth-badge.present {
   color: #f85149;
-  background: rgba(248, 81, 73, 0.15);
-  border: 1px solid rgba(248, 81, 73, 0.3);
+  background: rgb(248, 81, 73, 0.15);
+  border: 1px solid rgb(248, 81, 73, 0.3);
 }
 
 .authority-status-text {
@@ -422,6 +438,7 @@
 .authority-item.danger .authority-status-text {
   color: var(--danger);
 }
+
 .authority-item.safe .authority-status-text {
   color: var(--success-color);
 }
@@ -430,7 +447,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgb(0, 0, 0, 0.2);
   padding: 5px 8px;
   border-radius: var(--radius-md);
   font-family: var(--font-data);
@@ -491,6 +508,7 @@
 .fee-row:hover {
   background: var(--bg-secondary);
 }
+
 .fee-row:last-child {
   border-bottom: none;
 }

@@ -331,8 +331,7 @@
 .chat-messages {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   padding: var(--spacing-lg) var(--spacing-xl);
   display: flex;
   flex-direction: column;
@@ -361,6 +360,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -428,7 +428,7 @@
   background: var(--hover-bg);
   border-color: var(--primary-color);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.08);
 }
 
 .quick-prompt:active {
@@ -447,7 +447,7 @@
 }
 
 /* Responsive: Stack prompts on smaller screens */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .quick-prompts {
     grid-template-columns: 1fr;
     max-width: 400px;

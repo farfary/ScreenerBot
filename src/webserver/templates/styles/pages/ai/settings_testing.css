@@ -96,7 +96,6 @@
   border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   outline: none;
-  -webkit-appearance: none;
   appearance: none;
 }
 
@@ -379,7 +378,7 @@
    Responsive Design
    ============================================================================ */
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   /* Stack sidebar on mobile */
   .ai-layout {
     flex-direction: column;
@@ -463,7 +462,7 @@
     }
   }
 
-  @media (max-width: 640px) {
+  @media (width <= 640px) {
     .chat-sessions-sidebar {
       display: none;
     }

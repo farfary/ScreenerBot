@@ -155,7 +155,6 @@
 }
 
 .status-indicator.paused {
-  background: var(--text-muted);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
 }
@@ -485,7 +484,7 @@
 }
 
 /* Responsive */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .automation-stats {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -512,7 +511,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (width <= 640px) {
   .automation-stats {
     grid-template-columns: 1fr;
   }

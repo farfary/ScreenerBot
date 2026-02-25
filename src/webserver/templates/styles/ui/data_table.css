@@ -46,6 +46,7 @@ body.dt-column-resizing .data-table col {
 }
 
 /* ==================== Module Organization ==================== */
+
 /*
  * Additional DataTable styles are split into sub-modules:
  * - core.css: Loading states, table structure, header, body, cells, drag & drop

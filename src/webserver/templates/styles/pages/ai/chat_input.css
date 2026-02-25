@@ -41,6 +41,7 @@
     opacity: 0;
     transform: translateY(4px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -116,6 +117,7 @@
   100% {
     transform: translateX(0);
   }
+
   10%,
   30%,
   50%,
@@ -123,6 +125,7 @@
   90% {
     transform: translateX(-2px);
   }
+
   20%,
   40%,
   60%,
@@ -155,8 +158,6 @@
   line-height: 1.5;
   padding: 6px 0;
   appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
 }
 
 /* Scrollbar styling - inherits from global ultra-thin scrollbar */
@@ -312,6 +313,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -365,7 +367,7 @@
 .input-status .typing-dots span {
   width: 4px;
   height: 4px;
-  background: currentColor;
+  background: currentcolor;
   border-radius: var(--radius-full);
   animation: typingDot 1.2s infinite ease-in-out;
 }
@@ -385,6 +387,7 @@
     transform: translateY(0);
     opacity: 0.4;
   }
+
   30% {
     transform: translateY(-3px);
     opacity: 1;
