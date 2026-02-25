@@ -19,6 +19,7 @@
 pub mod ata;
 pub mod balance;
 pub mod classify;
+mod classify_patterns;
 pub mod dex;
 pub mod patterns;
 pub mod pnl;
