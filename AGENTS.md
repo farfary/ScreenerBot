@@ -983,6 +983,99 @@ cargo fmt --check          # Check Rust formatting
 
 ---
 
+## Module Organization
+
+### File Size Limits
+- **Hard limit: 600 LOC** per file. Files exceeding this must be split.
+- **Ideal range: 200-500 LOC** for most implementation files.
+- **Types files**: Can be up to 700 LOC if they contain only struct/enum definitions with derives.
+- **Trait impl files** (e.g., `methods_impl.rs`): Exempt from splitting when all methods belong to one trait impl block.
+
+### Directory Structure Rules
+
+**When to create a submodule (directory with `mod.rs`):**
+- 3+ closely related files sharing a prefix (e.g., `chat_engine.rs`, `chat_engine_internals.rs`, `chat_db.rs` → `chat/`)
+- A file grows past 600 LOC and needs splitting into 3+ parts
+- A logical subsystem has its own types, database, and operations (e.g., `balance_monitor/`)
+
+**When to keep flat files (sibling `.rs` files):**
+- A file splits into exactly 2 parts (e.g., `service.rs` + `service_api.rs`)
+- Files are loosely related but share the parent module's types
+- Simple helper extraction (e.g., `helpers.rs` + `helpers_transfers.rs`)
+
+### Naming Conventions for Split Files
+
+| Pattern | When to Use | Example |
+|---------|------------|---------|
+| `{base}.rs` + `{base}_{suffix}.rs` | Splitting one file into 2 | `fetcher.rs` + `fetcher_ops.rs` |
+| `{base}.rs` + `{base}_types.rs` | Extracting types from impl | `fetcher.rs` + `fetcher_types.rs` |
+| `{base}/{mod,ops,types}.rs` | Splitting into 3+ files | `chat/mod.rs`, `chat/engine.rs`, `chat/db.rs` |
+| `operations.rs` + `operations_queries.rs` | Database CRUD separation | Core lifecycle vs query methods |
+| `reporting.rs` + `reporting_aggregates.rs` | Report query separation | Listing/filtering vs aggregate analytics |
+
+### Type Organization (`types.rs`)
+
+**Every module MUST have a `types.rs` for its data types.** This is the standard pattern.
+
+**What goes in `types.rs`:**
+- All `pub struct` data types (requests, responses, configs, state)
+- All `pub enum` value enums (status, kind, category, direction)
+- Type aliases (`pub type Result<T> = ...`)
+- Simple `impl` blocks (constructors, `Default`, display, conversion)
+- Serde derive macros and custom deserializers
+
+**What does NOT go in `types.rs`:**
+- Trait definitions → dedicated `{trait_name}.rs` file (e.g., `router.rs` for `SwapRouter`)
+- Service/manager structs with complex impl blocks → their own file
+- Error types → `errors.rs` or the module's error handling file
+- Database structs (connection pools, query builders) → `database.rs`
+
+**Rule: If a struct has >5 methods or >100 LOC of impl, it belongs in its own file, not types.rs.**
+
+### Import Path Stability
+
+When splitting files, preserve the public API by using re-exports in `mod.rs`:
+```rust
+// mod.rs — re-exports maintain backward compatibility
+mod service;
+mod service_api;
+pub use service::OhlcvService;
+pub use service_api::{get_ohlcv_data, get_available_pools};
+```
+
+**Never break external imports.** If `crate::swaps::Quote` worked before, it must work after refactoring.
+
+### Visibility Rules for Split Files
+
+When extracting methods to sibling files, use `pub(super)` for internal access:
+- Struct fields accessed by sibling: `pub(super) field: Type`
+- Helper methods called by sibling: `pub(super) fn helper()`
+- Constants used by sibling: `pub(super) const X: usize`
+- Global statics shared: `pub(super) static INSTANCE: ...`
+
+**Never use `pub` for internal-only items** — `pub(super)` or `pub(crate)` is correct.
+
+### Current Module Structure Reference
+
+Well-organized submodule patterns to follow:
+- `src/tokens/` — `database/`, `market/`, `pool_data/`, `security/`, `updates/` submodules
+- `src/trader/` — `actions/`, `evaluators/`, `executors/`, `manual/`, `monitors/`, `safety/`
+- `src/transactions/` — `analyzer/`, `database/`, `processor/`, `service/`
+- `src/pools/` — `database/`, `decoders/`, `swap/` (with `programs/`)
+- `src/rpc/` — `circuit_breaker/`, `client/`, `provider/`, `rate_limiter/`, `stats/`
+
+### Refactoring Pitfalls
+
+1. **Trait impl blocks cannot span files** — All methods of `impl Trait for Struct` must be in one file. Split the trait itself if needed.
+2. **`cargo check` is not enough** — Always run `cargo check --all-targets` to catch test compilation errors.
+3. **Unused imports after moves** — When moving types to another file, remove now-unused imports from the source file.
+4. **Re-export paths** — After moving types, update `mod.rs` re-exports AND all `use crate::module::old_location::Type` imports.
+5. **Test modules** — Tests that reference private methods must move with those methods to the new file.
+6. **Second `impl` blocks** — Rust allows multiple `impl MyStruct` blocks across files in the same crate. Use this for splits.
+7. **`pub(super)` vs `pub(crate)`** — Use `pub(super)` for sibling file access within one module. Use `pub(crate)` only when other modules also need access.
+
+---
+
 ## Code Quality
 
 - Always remove obsolete code: Delete unused functions, stale comments, and anything not serving current architecture.
