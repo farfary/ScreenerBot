@@ -4,8 +4,9 @@ mod candles;
 mod config;
 mod gaps;
 mod maintenance;
+pub mod types;
 
-pub use maintenance::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
+pub use types::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
 
 use crate::database;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
