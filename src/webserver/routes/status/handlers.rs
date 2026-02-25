@@ -1,41 +1,20 @@
-//! Status route — reports overall bot health and component readiness.
-
-use axum::{response::Response, routing::get, Router};
+use axum::response::Response;
 use chrono::Utc;
-use serde::Serialize;
-use std::sync::Arc;
 
 use crate::{
     logger::{self, LogTag},
     webserver::{
         snapshot::{
             collect_service_status_snapshot, gather_status_snapshot, get_cached_system_metrics,
-            StatusSnapshot,
         },
-        state::AppState,
         utils::success_response,
     },
 };
 
-/// Simple health check response
-#[derive(Debug, Clone, Serialize)]
-pub struct HealthResponse {
-    pub status: String,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub version: String,
-}
-
-/// Create status routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/health", get(health_check))
-        .route("/status", get(system_status))
-        .route("/status/services", get(service_status))
-        .route("/status/metrics", get(system_metrics))
-}
+use super::types::*;
 
 /// GET /api/health
-async fn health_check() -> Response {
+pub(super) async fn health_check() -> Response {
     logger::debug(LogTag::Webserver, "Health check endpoint called");
 
     let response = HealthResponse {
@@ -48,10 +27,10 @@ async fn health_check() -> Response {
 }
 
 /// GET /api/status
-async fn system_status() -> Response {
+pub(super) async fn system_status() -> Response {
     logger::info(LogTag::Webserver, "Fetching system status snapshot");
 
-    let snapshot: StatusSnapshot = gather_status_snapshot().await;
+    let snapshot = gather_status_snapshot().await;
 
     logger::info(
         LogTag::Webserver,
@@ -65,7 +44,7 @@ async fn system_status() -> Response {
 }
 
 /// GET /api/status/services
-async fn service_status() -> Response {
+pub(super) async fn service_status() -> Response {
     logger::info(LogTag::Webserver, "Fetching service status snapshot");
 
     let services = collect_service_status_snapshot();
@@ -73,7 +52,7 @@ async fn service_status() -> Response {
 }
 
 /// GET /api/status/metrics
-async fn system_metrics() -> Response {
+pub(super) async fn system_metrics() -> Response {
     logger::info(LogTag::Webserver, "Fetching system metrics snapshot");
 
     let metrics = get_cached_system_metrics().await;

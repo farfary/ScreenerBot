@@ -1,19 +1,7 @@
-//! Connectivity route — reports RPC and WebSocket connection status to the dashboard.
-
-use axum::{extract::Path, http::StatusCode, response::Response, routing::get, Router};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use crate::{
-    connectivity::{
-        get_all_health, get_endpoint_health, get_unhealthy_critical_endpoints, EndpointHealth,
-    },
-    webserver::{
-        state::AppState,
-        utils::{error_response, success_response},
-    },
-};
+use crate::connectivity::EndpointHealth;
 
 /// Response for connectivity status overview
 #[derive(Debug, Serialize, Deserialize)]
@@ -83,58 +71,5 @@ impl From<EndpointHealth> for EndpointHealthResponse {
                 consecutive_failures: None,
             },
         }
-    }
-}
-
-/// Create connectivity routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/status", get(get_connectivity_status))
-        .route("/status/:endpoint", get(get_endpoint_status))
-}
-
-/// GET /api/connectivity/status
-/// Get overall connectivity status
-async fn get_connectivity_status() -> Response {
-    let all_health = get_all_health().await;
-    let unhealthy_critical = get_unhealthy_critical_endpoints().await;
-
-    let mut endpoints = HashMap::new();
-    let mut all_healthy = true;
-
-    for (name, health) in &all_health {
-        if !health.is_available() {
-            all_healthy = false;
-        }
-        endpoints.insert(
-            name.to_string(),
-            EndpointHealthResponse::from(health.clone()),
-        );
-    }
-
-    let response = ConnectivityStatusResponse {
-        all_healthy,
-        critical_healthy: unhealthy_critical.is_empty(),
-        unhealthy_critical_endpoints: unhealthy_critical.iter().map(|s| s.to_string()).collect(),
-        endpoints,
-    };
-
-    success_response(response)
-}
-
-/// GET /api/connectivity/status/:endpoint
-/// Get status for a specific endpoint
-async fn get_endpoint_status(Path(endpoint): Path<String>) -> Response {
-    match get_endpoint_health(&endpoint).await {
-        Some(health) => {
-            let response = EndpointHealthResponse::from(health);
-            success_response(response)
-        }
-        None => error_response(
-            StatusCode::NOT_FOUND,
-            "NOT_FOUND",
-            &format!("Endpoint '{endpoint}' not found or not monitored"),
-            None,
-        ),
     }
 }

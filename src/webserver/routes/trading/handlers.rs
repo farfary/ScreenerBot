@@ -1,49 +1,11 @@
-//! Trading route — manages trading engine controls and configuration via the UI.
+use axum::response::Response;
 
-use axum::{response::Response, routing::get, Router};
-use serde::Serialize;
-use std::sync::Arc;
+use crate::{config::with_config, webserver::utils::success_response};
 
-use crate::config::with_config;
-use crate::webserver::{state::AppState, utils::success_response};
-
-#[derive(Debug, Serialize)]
-pub struct TradingConfigResponse {
-    pub trading_limits: TradingLimits,
-    pub risk_management: RiskManagement,
-    pub profit_targets: ProfitTargets,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TradingLimits {
-    pub max_open_positions: usize,
-    pub trade_size_sol: f64,
-    pub entry_monitor_interval_secs: u64,
-    pub position_monitor_interval_secs: u64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RiskManagement {
-    pub stop_loss_percent: f64,
-    pub time_override_loss_threshold_percent: f64,
-    pub time_override_duration_hours: f64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ProfitTargets {
-    pub base_min_profit_percent: f64,
-    pub min_profit_threshold_enabled: bool,
-    pub profit_extra_needed_sol: f64,
-}
-
-/// Create trading routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/config", get(get_trading_config))
-}
+use super::types::*;
 
 /// GET /api/trading/config - summarized trading configuration for dashboard
-async fn get_trading_config() -> Response {
+pub(super) async fn get_trading_config() -> Response {
     let response = with_config(|cfg| TradingConfigResponse {
         trading_limits: TradingLimits {
             max_open_positions: cfg.trader.max_open_positions,

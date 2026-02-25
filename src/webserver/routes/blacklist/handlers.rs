@@ -1,66 +1,14 @@
-//! Blacklist route — manages token blacklist additions and removals via the UI.
-
-use axum::{extract::State, response::Json, routing::get, Router};
-use serde::{Deserialize, Serialize};
+use axum::response::Json;
 use std::collections::HashMap;
-use std::sync::Arc;
 
-use crate::pools::db::{
-    list_blacklisted_accounts, list_blacklisted_pools, BlacklistedAccountRecord,
-    BlacklistedPoolRecord,
-};
+use crate::pools::db::{list_blacklisted_accounts, list_blacklisted_pools, BlacklistedAccountRecord, BlacklistedPoolRecord};
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
-use crate::webserver::state::AppState;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct BlacklistStatsResponse {
-    pub total_count: usize,
-    pub by_reason: HashMap<String, usize>,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PoolBlacklistEntry {
-    pub pool_id: String,
-    pub token_mint: Option<String>,
-    pub reason: String,
-    pub program_id: Option<String>,
-    pub error_count: i64,
-    pub first_failed_at: String,
-    pub last_failed_at: String,
-    pub added_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AccountBlacklistEntry {
-    pub account_pubkey: String,
-    pub token_mint: Option<String>,
-    pub pool_id: Option<String>,
-    pub reason: String,
-    pub source: Option<String>,
-    pub error_count: i64,
-    pub first_failed_at: String,
-    pub last_failed_at: String,
-    pub added_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct BlacklistDetailsResponse {
-    pub pools: Vec<PoolBlacklistEntry>,
-    pub accounts: Vec<AccountBlacklistEntry>,
-    pub timestamp: String,
-}
-
-/// Create blacklist routes
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        .route("/blacklist/stats", get(get_blacklist_stats))
-        .route("/blacklist/details", get(get_blacklist_details))
-}
+use super::types::*;
 
 /// Get blacklist statistics
-async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
+pub(super) async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
     let db = match get_global_database() {
         Some(db) => db,
         None => {
@@ -105,7 +53,7 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
     }
 }
 
-async fn get_blacklist_details() -> Json<BlacklistDetailsResponse> {
+pub(super) async fn get_blacklist_details() -> Json<BlacklistDetailsResponse> {
     let pool_records = list_blacklisted_pools(Some(200)).await.unwrap_or_default();
     let account_records = list_blacklisted_accounts(Some(200))
         .await
