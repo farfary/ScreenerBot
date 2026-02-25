@@ -1,143 +1,21 @@
-//! Telegram session management API routes
-//!
-//! Provides endpoints for:
-//! - Telegram connection status
-//! - Session listing and management
-//! - Password authentication
-//! - TOTP two-factor authentication
-//! - Test message sending
+//! Telegram route handlers — endpoint implementations for session management and discovery.
 
+use super::types::*;
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
-use crate::telegram::session::{get_session_manager, TelegramSessionManager};
+use crate::telegram::session::get_session_manager;
 use crate::webserver::state::AppState;
-use crate::webserver::totp;
 use crate::webserver::utils::{error_response, success_response};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::{get, post},
-    Json, Router,
+    response::Response,
+    Json,
 };
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-// === RESPONSE TYPES ===
-
-#[derive(Serialize)]
-pub struct TelegramStatusResponse {
-    pub enabled: bool,
-    pub connected: bool,
-    pub bot_configured: bool,
-    pub totp_configured: bool, // Whether lockscreen 2FA is configured (shared with dashboard)
-    pub active_sessions: usize,
-    pub commands_enabled: bool,
-    pub inline_actions_enabled: bool,
-}
-
-#[derive(Serialize)]
-pub struct SessionResponse {
-    pub user_id: i64,
-    pub username: Option<String>,
-    pub first_name: Option<String>,
-    pub state: String,
-    pub is_authenticated: bool,
-    pub last_activity_secs: u64,
-    pub created_at_secs: u64,
-}
-
-#[derive(Serialize)]
-pub struct SessionsListResponse {
-    pub sessions: Vec<SessionResponse>,
-}
-
-// === REQUEST TYPES ===
-
-#[derive(Deserialize)]
-pub struct TestMessageRequest {
-    pub message: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct TelegramSettingsResponse {
-    pub enabled: bool,
-    pub bot_token: String,
-    pub chat_id: String,
-    pub totp_configured: bool, // Whether lockscreen 2FA is configured (shared with dashboard)
-    pub commands_require_2fa: bool,
-    pub session_timeout_minutes: i64,
-    pub notifications: NotificationSettings,
-    pub commands_enabled: bool,
-    pub inline_actions: bool,
-    pub sessions: Vec<SessionResponse>,
-}
-
-#[derive(Serialize)]
-pub struct NotificationSettings {
-    pub position_opened: bool,
-    pub position_closed: bool,
-    pub partial_exit: bool,
-    pub dca_executed: bool,
-    pub errors: bool,
-    pub startup_shutdown: bool,
-    pub filtering_alerts: bool,
-    pub trade_alerts: bool,
-    pub daily_summary: bool,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateSettingsRequest {
-    pub enabled: Option<bool>,
-    pub bot_token: Option<String>,
-    pub chat_id: Option<String>,
-    pub session_timeout_minutes: Option<i64>,
-    pub notifications: Option<UpdateNotificationSettings>,
-    pub commands_enabled: Option<bool>,
-    pub commands_require_2fa: Option<bool>,
-    pub inline_actions: Option<bool>,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateNotificationSettings {
-    pub position_opened: Option<bool>,
-    pub position_closed: Option<bool>,
-    pub partial_exit: Option<bool>,
-    pub dca_executed: Option<bool>,
-    pub errors: Option<bool>,
-    pub startup_shutdown: Option<bool>,
-    pub filtering_alerts: Option<bool>,
-    pub trade_alerts: Option<bool>,
-    pub daily_summary: Option<bool>,
-}
-
-// === ROUTES ===
-
-pub fn routes() -> Router<Arc<AppState>> {
-    Router::new()
-        // Status
-        .route("/status", get(get_status))
-        .route("/test", post(send_test_message))
-        // Settings (combined view for dashboard)
-        .route("/settings", get(get_settings))
-        .route("/settings", post(update_settings))
-        // Sessions
-        .route("/sessions", get(list_sessions))
-        .route("/sessions/:user_id/revoke", post(revoke_session))
-        // TOTP 2FA (status only - setup is in Security settings)
-        .route("/totp/status", get(get_totp_status))
-        // Chat Discovery
-        .route("/discovery/start", post(start_discovery))
-        .route("/discovery/stop", post(stop_discovery))
-        .route("/discovery/chats", get(get_discovered_chats))
-        .route("/discovery/select/:chat_id", post(select_discovered_chat))
-        .route("/discovery/clear", post(clear_discovered_chats))
-}
-
-// === HANDLERS ===
-
 /// Get Telegram connection status
-async fn get_status(State(_state): State<Arc<AppState>>) -> Response {
+pub(super) async fn get_status(State(_state): State<Arc<AppState>>) -> Response {
     let manager = get_session_manager();
 
     let (enabled, bot_token, totp_secret, commands, inline) = with_config(|c| {
@@ -166,7 +44,7 @@ async fn get_status(State(_state): State<Arc<AppState>>) -> Response {
 }
 
 /// Get full Telegram settings for dashboard
-async fn get_settings(State(_state): State<Arc<AppState>>) -> Response {
+pub(super) async fn get_settings(State(_state): State<Arc<AppState>>) -> Response {
     let manager = get_session_manager();
 
     let config = with_config(|c| c.telegram.clone());
@@ -230,7 +108,7 @@ async fn get_settings(State(_state): State<Arc<AppState>>) -> Response {
 }
 
 /// Update Telegram settings
-async fn update_settings(
+pub(super) async fn update_settings(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<UpdateSettingsRequest>,
 ) -> Response {
@@ -312,7 +190,7 @@ async fn update_settings(
 }
 
 /// List all sessions
-async fn list_sessions(State(_state): State<Arc<AppState>>) -> Response {
+pub(super) async fn list_sessions(State(_state): State<Arc<AppState>>) -> Response {
     let manager = get_session_manager();
 
     let sessions: Vec<SessionResponse> = manager
@@ -339,7 +217,10 @@ async fn list_sessions(State(_state): State<Arc<AppState>>) -> Response {
 }
 
 /// Revoke a session
-async fn revoke_session(State(_state): State<Arc<AppState>>, Path(user_id): Path<i64>) -> Response {
+pub(super) async fn revoke_session(
+    State(_state): State<Arc<AppState>>,
+    Path(user_id): Path<i64>,
+) -> Response {
     let manager = get_session_manager();
     manager.revoke_session(user_id).await;
 
@@ -355,7 +236,7 @@ async fn revoke_session(State(_state): State<Arc<AppState>>, Path(user_id): Path
 }
 
 /// Send a test message
-async fn send_test_message(
+pub(super) async fn send_test_message(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<TestMessageRequest>,
 ) -> Response {
@@ -416,8 +297,8 @@ async fn send_test_message(
     }
 }
 
-/// GET /totp/status - Check if TOTP is enabled (uses shared lockscreen 2FA)
-async fn get_totp_status(State(_state): State<Arc<AppState>>) -> Response {
+/// GET /totp/status — Check if TOTP is enabled (uses shared lockscreen 2FA)
+pub(super) async fn get_totp_status(State(_state): State<Arc<AppState>>) -> Response {
     let totp_configured = with_config(|c| !c.webserver.auth_totp_secret.is_empty());
     let commands_require_2fa = with_config(|c| c.telegram.commands_require_2fa);
     success_response(serde_json::json!({
@@ -427,22 +308,10 @@ async fn get_totp_status(State(_state): State<Arc<AppState>>) -> Response {
     }))
 }
 
-// === DISCOVERY HANDLERS ===
+// ==================== Discovery Handlers ====================
 
-/// Response for discovered chat
-#[derive(Serialize)]
-pub struct DiscoveredChatResponse {
-    pub chat_id: i64,
-    pub user_id: i64,
-    pub username: Option<String>,
-    pub first_name: Option<String>,
-    pub chat_type: String,
-    pub message_preview: Option<String>,
-    pub discovered_at_secs: u64,
-}
-
-/// POST /discovery/start - Start discovery mode to capture incoming chat IDs
-async fn start_discovery(State(_state): State<Arc<AppState>>) -> Response {
+/// POST /discovery/start — Start discovery mode to capture incoming chat IDs
+pub(super) async fn start_discovery(State(_state): State<Arc<AppState>>) -> Response {
     let bot_token = with_config(|c| c.telegram.bot_token.clone());
 
     if bot_token.is_empty() {
@@ -472,8 +341,8 @@ async fn start_discovery(State(_state): State<Arc<AppState>>) -> Response {
     }))
 }
 
-/// POST /discovery/stop - Stop discovery mode
-async fn stop_discovery(State(_state): State<Arc<AppState>>) -> Response {
+/// POST /discovery/stop — Stop discovery mode
+pub(super) async fn stop_discovery(State(_state): State<Arc<AppState>>) -> Response {
     // Stop the discovery polling service
     crate::telegram::discovery::stop_discovery().await;
 
@@ -485,8 +354,8 @@ async fn stop_discovery(State(_state): State<Arc<AppState>>) -> Response {
     }))
 }
 
-/// GET /discovery/chats - Get list of discovered chats
-async fn get_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
+/// GET /discovery/chats — Get list of discovered chats
+pub(super) async fn get_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
     let is_active = crate::telegram::discovery::is_discovery_running().await;
     let chats = crate::telegram::discovery::get_discovered_chats().await;
 
@@ -509,8 +378,8 @@ async fn get_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
     }))
 }
 
-/// POST /discovery/select/:chat_id - Select a discovered chat as the notification target
-async fn select_discovered_chat(
+/// POST /discovery/select/:chat_id — Select a discovered chat as the notification target
+pub(super) async fn select_discovered_chat(
     State(_state): State<Arc<AppState>>,
     Path(chat_id): Path<i64>,
 ) -> Response {
@@ -539,8 +408,8 @@ async fn select_discovered_chat(
     }
 }
 
-/// POST /discovery/clear - Clear discovered chats list
-async fn clear_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
+/// POST /discovery/clear — Clear discovered chats list
+pub(super) async fn clear_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
     crate::telegram::discovery::clear_discovered_chats().await;
 
     success_response(serde_json::json!({
