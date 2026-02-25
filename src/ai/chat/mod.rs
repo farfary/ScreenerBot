@@ -1,7 +1,8 @@
 //! AI Chat Submodule
 //!
 //! Groups all chat-related functionality:
-//! - `engine` — Chat engine singleton and public types
+//! - `types` — Chat data types (request, response, tool call info)
+//! - `engine` — Chat engine singleton and orchestration
 //! - `engine_internals` — Private implementation methods for ChatEngine
 //! - `database` — SQLite persistence for chat sessions/messages/tool executions
 //! - `database_queries` — CRUD query operations
@@ -10,6 +11,7 @@ pub mod database;
 mod database_queries;
 pub mod engine;
 mod engine_internals;
+pub mod types;
 
 // Re-export database items so callers can use `chat::database::get_chat_pool()` etc.
 pub use database::{
@@ -21,7 +23,10 @@ pub use database::{
 };
 
 // Re-export engine items
-pub use engine::{
-    get_chat_engine, init_chat_engine, try_get_chat_engine, ChatContext, ChatEngine, ChatRequest,
-    ChatResponse, PendingConfirmation, ToolCallInfo, ToolCallStatus, ToolMode,
+pub use engine::{get_chat_engine, init_chat_engine, try_get_chat_engine, ChatEngine};
+
+// Re-export chat types
+pub use types::{
+    ChatContext, ChatRequest, ChatResponse, PendingConfirmation, ToolCallInfo, ToolCallStatus,
+    ToolMode,
 };
