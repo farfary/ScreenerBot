@@ -2,8 +2,6 @@
   <img src="https://screenerbot.io/banner.jpg" alt="ScreenerBot Banner" width="100%">
 </p>
 
-<h1 align="center">ScreenerBot</h1>
-
 <p align="center">
   <strong>Open Source Solana Trading Engine</strong>
 </p>
