@@ -998,6 +998,7 @@ cargo fmt --check          # Check Rust formatting
 - Use `.round()` before `as u16`/`as u64` for float-to-integer conversions — truncation loses precision.
 - Use `is_char_boundary()` loop for `String::truncate()` on user-facing data — UTF-8 multi-byte chars cause panics.
 - Centralize utility functions in `src/utils.rs` — never duplicate `lamports_to_sol`/`sol_to_lamports` in submodules.
+- **Module size target**: Keep files under ~600 LOC. Split large files by extracting logical groups (endpoints, helpers, API facades, pattern detection, source fetchers) into sibling modules. Use re-exports to preserve public API stability.
 
 ---
 
