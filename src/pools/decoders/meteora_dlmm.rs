@@ -345,8 +345,20 @@ impl MeteoraDlmmDecoder {
         );
 
         // Get decimals for proper price scaling
-        let token_x_decimals = get_cached_decimals(&dlmm_info.token_x_mint).unwrap_or(6);
-        let token_y_decimals = get_cached_decimals(&dlmm_info.token_y_mint).unwrap_or(9);
+        // CRITICAL: SOL_MINT must always use SOL_DECIMALS (9), never rely on cache fallback.
+        // Previous bug: hardcoded unwrap_or(6) for token_x and unwrap_or(9) for token_y
+        // assumed token_x was always the target token — but pools can have either order.
+        // When SOL was token_x, it got decimals=6 instead of 9, causing 10^6x price error.
+        let token_x_decimals = if dlmm_info.token_x_mint == SOL_MINT {
+            SOL_DECIMALS
+        } else {
+            get_cached_decimals(&dlmm_info.token_x_mint).unwrap_or(6)
+        };
+        let token_y_decimals = if dlmm_info.token_y_mint == SOL_MINT {
+            SOL_DECIMALS
+        } else {
+            get_cached_decimals(&dlmm_info.token_y_mint).unwrap_or(6)
+        };
 
         // Adjust for decimals difference: price_in_human_units = raw_price * 10^(token_x_decimals - token_y_decimals)
         let decimals_scale = (10f64).powi((token_x_decimals as i32) - (token_y_decimals as i32));
