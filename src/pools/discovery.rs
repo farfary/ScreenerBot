@@ -369,11 +369,56 @@ impl PoolDiscovery {
                     }
                 };
 
-                // Check blacklists
+                // Check pool blacklist — if the canonical pool is blacklisted,
+                // try to find the best non-blacklisted SOL-pair alternative
+                // before giving up on this token entirely. This handles graduated
+                // PumpFun tokens whose bonding-curve pool is blacklisted but
+                // have working AMM pools available.
+                let mut effective_canonical_pool = canonical_pool.clone();
+                let mut effective_canonical_address = canonical_address.clone();
+
                 match super::db::is_pool_blacklisted(&canonical_address).await {
                     Ok(true) => {
-                        blacklist_filtered += 1;
-                        continue;
+                        // Canonical pool is blacklisted — look for an alternative
+                        let mut sorted_pools: Vec<_> = snapshot
+                            .pools
+                            .iter()
+                            .filter(|p| p.is_sol_pair && p.pool_address != canonical_address)
+                            .collect();
+                        sorted_pools.sort_by(|a, b| {
+                            let metric_a =
+                                crate::tokens::calculate_pool_metric(a);
+                            let metric_b =
+                                crate::tokens::calculate_pool_metric(b);
+                            metric_b
+                                .partial_cmp(&metric_a)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+
+                        let mut found_alternative = false;
+                        for alt_pool in sorted_pools {
+                            match super::db::is_pool_blacklisted(&alt_pool.pool_address).await {
+                                Ok(false) => {
+                                    effective_canonical_pool = alt_pool.clone();
+                                    effective_canonical_address = alt_pool.pool_address.clone();
+                                    found_alternative = true;
+                                    logger::info(
+                                        LogTag::PoolDiscovery,
+                                        &format!(
+                                            "Using alternative pool {} for mint={} (blacklisted canonical {})",
+                                            alt_pool.pool_address, mint, canonical_address
+                                        ),
+                                    );
+                                    break;
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        if !found_alternative {
+                            blacklist_filtered += 1;
+                            continue;
+                        }
                     }
                     Ok(false) => {}
                     Err(e) => {
@@ -390,10 +435,10 @@ impl PoolDiscovery {
                 }
 
                 // Check token blacklist
-                let token_mint = if is_sol_mint(&canonical_pool.base_mint) {
-                    &canonical_pool.quote_mint
+                let token_mint = if is_sol_mint(&effective_canonical_pool.base_mint) {
+                    &effective_canonical_pool.quote_mint
                 } else {
-                    &canonical_pool.base_mint
+                    &effective_canonical_pool.base_mint
                 };
 
                 if let Some(db) = crate::tokens::database::get_global_database() {
@@ -412,34 +457,43 @@ impl PoolDiscovery {
                 }
 
                 // Parse addresses
-                let pool_id = match Pubkey::from_str(&canonical_address) {
+                let pool_id = match Pubkey::from_str(&effective_canonical_address) {
                     Ok(pk) => pk,
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolDiscovery,
-                            &format!("Invalid pool address {canonical_address}: {e}"),
+                            &format!(
+                                "Invalid pool address {}: {}",
+                                effective_canonical_address, e
+                            ),
                         );
                         continue;
                     }
                 };
 
-                let base_mint = match Pubkey::from_str(&canonical_pool.base_mint) {
+                let base_mint = match Pubkey::from_str(&effective_canonical_pool.base_mint) {
                     Ok(pk) => pk,
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolDiscovery,
-                            &format!("Invalid base mint {}: {}", canonical_pool.base_mint, e),
+                            &format!(
+                                "Invalid base mint {}: {}",
+                                effective_canonical_pool.base_mint, e
+                            ),
                         );
                         continue;
                     }
                 };
 
-                let quote_mint = match Pubkey::from_str(&canonical_pool.quote_mint) {
+                let quote_mint = match Pubkey::from_str(&effective_canonical_pool.quote_mint) {
                     Ok(pk) => pk,
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolDiscovery,
-                            &format!("Invalid quote mint {}: {}", canonical_pool.quote_mint, e),
+                            &format!(
+                                "Invalid quote mint {}: {}",
+                                effective_canonical_pool.quote_mint, e
+                            ),
                         );
                         continue;
                     }
@@ -451,8 +505,10 @@ impl PoolDiscovery {
                     program_id: Pubkey::default(),
                     base_mint,
                     quote_mint,
-                    liquidity_usd: canonical_pool.liquidity_usd.unwrap_or_default(),
-                    volume_h24_usd: canonical_pool.volume_h24.unwrap_or_default(),
+                    liquidity_usd: effective_canonical_pool
+                        .liquidity_usd
+                        .unwrap_or_default(),
+                    volume_h24_usd: effective_canonical_pool.volume_h24.unwrap_or_default(),
                 });
                 sent_count += 1;
             }
