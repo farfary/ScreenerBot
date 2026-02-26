@@ -2,8 +2,11 @@
 //!
 //! Contains data structures used by the account fetcher module.
 
+use crate::constants::{SOL_MINT, SYSTEM_PROGRAM_ID};
+
 use solana_sdk::{account::Account, pubkey::Pubkey};
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
@@ -97,9 +100,14 @@ impl PoolAccountBundle {
     }
 
     /// Check if bundle is complete (has all required accounts)
+    /// Skips the native SOL mint since it's not a real on-chain account and
+    /// RPC returns null for it, which would prevent bundles from ever completing.
     pub fn is_complete(&self, required_accounts: &[Pubkey]) -> bool {
+        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).unwrap();
+        let system_program_pubkey = Pubkey::from_str(SYSTEM_PROGRAM_ID).unwrap();
         required_accounts
             .iter()
+            .filter(|key| **key != sol_mint_pubkey && **key != system_program_pubkey)
             .all(|key| self.accounts.contains_key(key))
     }
 

@@ -244,6 +244,25 @@ impl PriceCalculator {
                                             error
                                         ),
                                     );
+
+                                    // Blacklist the pool so canonical selection skips it next cycle
+                                    // (e.g. migrated PumpFunLegacy bonding curves with zero reserves)
+                                    let pool_id_str = pool_id.to_string();
+                                    let token_mint_clone = token_mint.clone();
+                                    let program_kind_str = format!("{:?}", pool_descriptor.program_kind);
+                                    tokio::spawn(async move {
+                                        if let Err(e) = crate::pools::database::add_pool_to_blacklist(
+                                            &pool_id_str,
+                                            "decoder_failed",
+                                            Some(&token_mint_clone),
+                                            Some(&program_kind_str),
+                                        ).await {
+                                            crate::logger::warning(
+                                                crate::logger::LogTag::PoolCalculator,
+                                                &format!("Failed to blacklist pool {}: {}", pool_id_str, e),
+                                            );
+                                        }
+                                    });
                                 }
                             }
 

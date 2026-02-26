@@ -20,6 +20,7 @@ use crate::rpc::{get_rpc_client, RpcClientMethods};
 use futures::future::join_all;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -187,8 +188,16 @@ impl AccountFetcher {
             return;
         }
 
-        // Convert to vector and batch
-        let drained_accounts: Vec<Pubkey> = pending_accounts.drain().collect();
+        // Convert to vector and batch, filtering out native SOL mint which is not a
+        // real on-chain account (RPC returns null for it, wasting batch slots)
+        let sol_mint_pubkey =
+            Pubkey::from_str(crate::constants::SOL_MINT).unwrap();
+        let system_program_pubkey =
+            Pubkey::from_str(crate::constants::SYSTEM_PROGRAM_ID).unwrap();
+        let drained_accounts: Vec<Pubkey> = pending_accounts
+            .drain()
+            .filter(|key| *key != sol_mint_pubkey && *key != system_program_pubkey)
+            .collect();
 
         if drained_accounts.is_empty() {
             return;
