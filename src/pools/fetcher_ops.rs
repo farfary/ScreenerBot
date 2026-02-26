@@ -747,7 +747,7 @@ impl AccountFetcher {
                             } else {
                                 pool_descriptor.base_mint.to_string()
                             };
-                        if super::cache::get_price(&target_mint).is_none() {
+                        if !super::cache::is_price_fresh(&target_mint) {
                             // Price expired — reset flag and re-trigger calculation
                             entry.0.calculation_requested = false;
                             entry.0.mark_calculation_requested();

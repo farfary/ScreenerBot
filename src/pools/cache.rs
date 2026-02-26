@@ -50,6 +50,15 @@ pub fn get_price(mint: &str) -> Option<PriceResult> {
     PRICE_CACHE.get(mint).map(|entry| entry.value().clone())
 }
 
+/// Check if a token has a fresh (non-expired) price in cache
+pub fn is_price_fresh(mint: &str) -> bool {
+    let ttl = price_cache_ttl_seconds();
+    PRICE_CACHE
+        .get(mint)
+        .map(|entry| entry.value().timestamp.elapsed().as_secs() < ttl)
+        .unwrap_or(false)
+}
+
 /// Update price for a token
 pub fn update_price(price: PriceResult) {
     let mint = price.mint.clone();
