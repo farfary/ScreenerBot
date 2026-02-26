@@ -173,11 +173,20 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
         "prioritizationFeeLamports": with_config(|cfg| cfg.swaps.jupiter.default_priority_fee),
     });
 
-    // Call Jupiter swap endpoint
+    // Call Jupiter swap endpoint (API key only if configured)
     let client = reqwest::Client::new();
-    let response = client
-        .post("https://api.jup.ag/swap/v1/swap")
-        .header("x-api-key", "YOUR_JUPITER_API_KEY")
+    let api_key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
+    let api_base = if api_key.is_empty() {
+        "https://lite-api.jup.ag"
+    } else {
+        "https://api.jup.ag"
+    };
+    let mut req = client
+        .post(format!("{api_base}/swap/v1/swap"));
+    if !api_key.is_empty() {
+        req = req.header("x-api-key", api_key);
+    }
+    let response = req
         .header("Content-Type", "application/json")
         .json(&swap_req)
         .send()

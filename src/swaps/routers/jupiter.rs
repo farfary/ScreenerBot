@@ -20,22 +20,31 @@ use std::time::Instant;
 // Fee params: HARDCODED - NOT configurable (revenue source)
 // ============================================================================
 
-/// Jupiter API base URL (NEW - migrated from lite-api.jup.ag)
+/// Jupiter API base URLs
+/// api.jup.ag requires API key (free key from portal.jup.ag, or paid tier)
+/// lite-api.jup.ag works without API key (free fallback, deprecation date TBA)
 const JUPITER_API_BASE: &str = "https://api.jup.ag";
+const JUPITER_API_BASE_FREE: &str = "https://lite-api.jup.ag";
 
-/// Default Jupiter API key used when user hasn't configured their own
-/// User can set their own key in config for higher rate limits (portal.jup.ag)
-/// This does NOT affect fee collection — fees use platformFeeBps + feeAccount
-/// NOTE: This placeholder will cause API failures if config is not set - this is intentional
-const DEFAULT_JUPITER_API_KEY: &str = "YOUR_JUPITER_API_KEY";
-
-/// Get the Jupiter API key (from config or default)
-fn get_api_key() -> String {
+/// Get the Jupiter API key from config, if set.
+/// Returns None if empty/unset.
+fn get_api_key() -> Option<String> {
     let key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
     if key.is_empty() {
-        DEFAULT_JUPITER_API_KEY.to_string()
+        None
     } else {
-        key
+        Some(key)
+    }
+}
+
+/// Get the correct Jupiter API base URL.
+/// Uses api.jup.ag when API key is configured, lite-api.jup.ag as free fallback.
+fn get_api_base() -> &'static str {
+    let key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
+    if key.is_empty() {
+        JUPITER_API_BASE_FREE
+    } else {
+        JUPITER_API_BASE
     }
 }
 
@@ -256,12 +265,14 @@ impl SwapRouter for JupiterRouter {
             ),
         );
 
-        // Send quote request with API key
-        let url = format!("{JUPITER_API_BASE}/swap/v1/quote");
-        let response = self
-            .client
-            .get(&url)
-            .header("x-api-key", get_api_key())
+        // Send quote request (with API key header if configured)
+        let api_base = get_api_base();
+        let url = format!("{api_base}/swap/v1/quote");
+        let mut req = self.client.get(&url);
+        if let Some(key) = get_api_key() {
+            req = req.header("x-api-key", key);
+        }
+        let response = req
             .query(&quote_req)
             .send()
             .await
@@ -391,12 +402,14 @@ impl SwapRouter for JupiterRouter {
             ),
         );
 
-        // Get swap transaction
-        let url = format!("{JUPITER_API_BASE}/swap/v1/swap");
-        let response = self
-            .client
-            .post(&url)
-            .header("x-api-key", get_api_key())
+        // Get swap transaction (with API key header if configured)
+        let api_base = get_api_base();
+        let url = format!("{api_base}/swap/v1/swap");
+        let mut req = self.client.post(&url);
+        if let Some(key) = get_api_key() {
+            req = req.header("x-api-key", key);
+        }
+        let response = req
             .header("Content-Type", "application/json")
             .json(&swap_req)
             .send()
