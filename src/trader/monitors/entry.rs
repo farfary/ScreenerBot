@@ -110,8 +110,23 @@ pub async fn monitor_entries(
         // Start cycle timing
         let cycle_start = Instant::now();
 
-        // Get available tokens from pools
-        let available_tokens = pools::get_available_tokens();
+        // Get tokens that passed filtering — only these should be evaluated for entry
+        let passed_mints: std::collections::HashSet<String> =
+            match crate::filtering::get_passed_tokens().await {
+                Ok(tokens) => tokens.into_iter().map(|t| t.mint).collect(),
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Trader,
+                        &format!("Failed to get passed tokens for entry: {e}"),
+                    );
+                    std::collections::HashSet::new()
+                }
+            };
+        // Only consider pool-tracked tokens that also passed filtering
+        let available_tokens: Vec<String> = pools::get_available_tokens()
+            .into_iter()
+            .filter(|mint| passed_mints.contains(mint))
+            .collect();
 
         // Process tokens with concurrency control
         let mut futures = Vec::new();
