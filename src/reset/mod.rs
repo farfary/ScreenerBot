@@ -1,47 +1,23 @@
 //! Reset utility — clears bot state, databases, and cached data for fresh start.
-// This module provides functionality to reset various parts of the bot's state,
-// including pending verifications, database files, and cache files.
-//
-// Usage:
-// cargo run --bin screenerbot -- --reset # Interactive mode (asks for confirmation)
-// cargo run --bin screenerbot -- --reset --force # Force mode (no confirmation)
+//!
+//! This module provides functionality to reset various parts of the bot's state,
+//! including pending verifications, database files, and cache files.
+//!
+//! # Usage
+//! ```text
+//! cargo run --bin screenerbot -- --reset         # Interactive mode (asks for confirmation)
+//! cargo run --bin screenerbot -- --reset --force  # Force mode (no confirmation)
+//! ```
+
+mod types;
+
+pub use types::*;
 
 use crate::logger::{self, LogTag};
 use crate::paths;
 use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-
-/// Get list of files and directories to be removed during reset
-fn get_reset_targets() -> Vec<PathBuf> {
-    let mut targets = Vec::new();
-
-    // Database files with WAL and SHM
-    targets.extend(paths::get_db_with_wal_files(paths::get_positions_db_path()));
-    targets.extend(paths::get_db_with_wal_files(paths::get_events_db_path()));
-
-    // Cache files
-    targets.push(paths::get_rpc_stats_path());
-    targets.push(paths::get_ata_failed_cache_path());
-
-    targets
-}
-
-/// Configuration for reset operation
-#[derive(Debug, Clone)]
-pub struct ResetConfig {
-    pub force: bool,
-    pub targets: Vec<PathBuf>,
-}
-
-impl Default for ResetConfig {
-    fn default() -> Self {
-        Self {
-            force: false,
-            targets: get_reset_targets(),
-        }
-    }
-}
+use std::path::Path;
 
 /// Execute reset operation with given configuration
 pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
@@ -120,54 +96,18 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
     Ok(())
 }
 
-/// Print list of targets that will be reset
-fn print_reset_targets(targets: &[PathBuf]) {
-    logger::warning(
-        LogTag::System,
-        "The following files/directories will be DELETED:",
-    );
-    logger::info(LogTag::System, "");
-
-    for target in targets {
-        let exists = target.exists();
-        let size = if exists {
-            fs::metadata(target)
-                .map(|m| format!("({:.2} MB)", m.len() as f64 / 1_048_576.0))
-                .unwrap_or_default()
-        } else {
-            "(does not exist)".to_owned()
-        };
-
-        logger::info(LogTag::System, &format!("• {}{}", target.display(), size));
+/// Extended reset operation that also clears pending verification metadata
+pub fn execute_extended_reset(config: ResetConfig) -> Result<(), String> {
+    // First clear pending verifications from database
+    if let Err(e) = clear_pending_verifications() {
+        logger::error(
+            LogTag::System,
+            &format!("Failed to clear pending verifications: {e}"),
+        );
     }
 
-    logger::info(LogTag::System, "");
-}
-
-/// Ask user for confirmation to proceed with reset
-fn confirm_reset() -> Result<bool, String> {
-    print!("Are you sure you want to proceed? (y/n): ");
-    io::stdout()
-        .flush()
-        .map_err(|e| format!("Failed to flush stdout: {e}"))?;
-
-    let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| format!("Failed to read input: {e}"))?;
-
-    let response = input.trim().to_lowercase();
-    Ok(response == "y" || response == "yes")
-}
-
-/// Remove a file or directory
-fn remove_file_or_dir(path: &Path) -> Result<(), String> {
-    if path.is_dir() {
-        fs::remove_dir_all(path).map_err(|e| format!("Failed to remove directory: {e}"))?;
-    } else {
-        fs::remove_file(path).map_err(|e| format!("Failed to remove file: {e}"))?;
-    }
-    Ok(())
+    // Then proceed with normal reset
+    execute_reset(config)
 }
 
 /// Clear pending verification metadata from positions database
@@ -239,23 +179,60 @@ pub fn clear_pending_verifications() -> Result<(), String> {
     Ok(())
 }
 
-/// Extended reset operation that also clears pending verification metadata
-pub fn execute_extended_reset(config: ResetConfig) -> Result<(), String> {
-    // First clear pending verifications from database
-    if let Err(e) = clear_pending_verifications() {
-        logger::error(
-            LogTag::System,
-            &format!("Failed to clear pending verifications: {e}"),
-        );
+/// Print list of targets that will be reset
+fn print_reset_targets(targets: &[std::path::PathBuf]) {
+    logger::warning(
+        LogTag::System,
+        "The following files/directories will be DELETED:",
+    );
+    logger::info(LogTag::System, "");
+
+    for target in targets {
+        let exists = target.exists();
+        let size = if exists {
+            fs::metadata(target)
+                .map(|m| format!("({:.2} MB)", m.len() as f64 / 1_048_576.0))
+                .unwrap_or_default()
+        } else {
+            "(does not exist)".to_owned()
+        };
+
+        logger::info(LogTag::System, &format!("• {}{}", target.display(), size));
     }
 
-    // Then proceed with normal reset
-    execute_reset(config)
+    logger::info(LogTag::System, "");
+}
+
+/// Ask user for confirmation to proceed with reset
+fn confirm_reset() -> Result<bool, String> {
+    print!("Are you sure you want to proceed? (y/n): ");
+    io::stdout()
+        .flush()
+        .map_err(|e| format!("Failed to flush stdout: {e}"))?;
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| format!("Failed to read input: {e}"))?;
+
+    let response = input.trim().to_lowercase();
+    Ok(response == "y" || response == "yes")
+}
+
+/// Remove a file or directory
+fn remove_file_or_dir(path: &Path) -> Result<(), String> {
+    if path.is_dir() {
+        fs::remove_dir_all(path).map_err(|e| format!("Failed to remove directory: {e}"))?;
+    } else {
+        fs::remove_file(path).map_err(|e| format!("Failed to remove file: {e}"))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use types::get_reset_targets;
 
     #[test]
     fn test_reset_config_default() {
