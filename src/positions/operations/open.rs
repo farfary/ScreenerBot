@@ -211,6 +211,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage_quote_default,
         swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
     };
 
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)

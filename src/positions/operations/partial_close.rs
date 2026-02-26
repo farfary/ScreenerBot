@@ -105,6 +105,7 @@ pub async fn partial_close_position(
             wallet_address: wallet_address.clone(),
             slippage_pct: *slippage,
             swap_mode: SwapMode::ExactIn,
+            exclude_dexes: None,
         };
         match get_best_quote(quote_request).await {
             Ok(q) => {
@@ -153,6 +154,34 @@ pub async fn partial_close_position(
     let mut swap_result = execute_swap_with_fallback(&api_token, quote)
         .await
         .map_err(|e| format!("Swap failed: {e}"));
+
+    // If pump.fun bonding curve error on initial attempt, retry with Pump.fun Amm excluded
+    if let Err(ref err_msg) = swap_result {
+        if err_msg.contains("0x1787") || err_msg.contains("6023") {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Pump.fun bonding curve error detected for {}, retrying partial exit with alternative DEX route",
+                    token_mint
+                ),
+            );
+            let retry_request = QuoteRequest {
+                input_mint: token_mint.to_string(),
+                output_mint: SOL_MINT.to_string(),
+                input_amount: exit_amount,
+                wallet_address: wallet_address.clone(),
+                slippage_pct: slippage_exit_retry_steps.first().copied().unwrap_or(1.0),
+                swap_mode: SwapMode::ExactIn,
+                exclude_dexes: Some(vec!["Pump.fun Amm".to_string()]),
+            };
+            if let Ok(retry_quote) = get_best_quote(retry_request).await {
+                if let Ok(res) = execute_swap_with_fallback(&api_token, retry_quote).await {
+                    swap_result = Ok(res);
+                }
+            }
+        }
+    }
+
     if swap_result.is_err() {
         for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
             let quote_request = QuoteRequest {
@@ -162,8 +191,9 @@ pub async fn partial_close_position(
                 wallet_address: wallet_address.clone(),
                 slippage_pct: *slippage,
                 swap_mode: SwapMode::ExactIn,
+                exclude_dexes: None,
             };
-            let q = match get_best_quote(quote_request).await {
+            let q = match get_best_quote(quote_request.clone()).await {
                 Ok(q) => q,
                 Err(e) => {
                     let err_msg = e.to_string();
@@ -194,6 +224,44 @@ pub async fn partial_close_position(
                 }
                 Err(e) => {
                     let err_msg = e.to_string();
+
+                    // Check for pump.fun bonding curve error (graduated token)
+                    if err_msg.contains("0x1787") || err_msg.contains("6023") {
+                        logger::warning(
+                            LogTag::Positions,
+                            &format!(
+                                "Pump.fun bonding curve error detected for {}, retrying partial exit with alternative DEX route",
+                                token_mint
+                            ),
+                        );
+                        let mut retry_request = quote_request.clone();
+                        retry_request.exclude_dexes = Some(vec!["Pump.fun Amm".to_string()]);
+                        let retry_quote = match get_best_quote(retry_request).await {
+                            Ok(q) => q,
+                            Err(e2) => {
+                                last_err = Some(format!(
+                                    "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
+                                    i + 1, slippage
+                                ));
+                                continue;
+                            }
+                        };
+                        match execute_swap_with_fallback(&api_token, retry_quote).await {
+                            Ok(res) => {
+                                swap_result = Ok(res);
+                                last_err = None;
+                                break;
+                            }
+                            Err(e2) => {
+                                last_err = Some(format!(
+                                    "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
+                                    i + 1, slippage
+                                ));
+                                continue;
+                            }
+                        }
+                    }
+
                     last_err = Some(format!(
                         "Partial exit swap failed at step {} ({}%): {}",
                         i + 1,

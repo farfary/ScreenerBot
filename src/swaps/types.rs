@@ -16,6 +16,8 @@ pub struct QuoteRequest {
     pub wallet_address: String,
     pub slippage_pct: f64,
     pub swap_mode: SwapMode,
+    /// DEX labels to exclude from routing (e.g. "Pump.fun Amm" for graduated tokens)
+    pub exclude_dexes: Option<Vec<String>>,
 }
 
 /// Swap mode enum

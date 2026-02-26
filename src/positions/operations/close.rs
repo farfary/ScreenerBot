@@ -175,9 +175,10 @@ pub async fn close_position_direct(
             wallet_address: wallet_address.clone(),
             slippage_pct: *slippage,
             swap_mode: SwapMode::ExactIn,
+            exclude_dexes: None,
         };
 
-        let quote = match get_best_quote(quote_request).await {
+        let quote = match get_best_quote(quote_request.clone()).await {
             Ok(q) => q,
             Err(e) => {
                 let err_msg = e.to_string();
@@ -208,10 +209,49 @@ pub async fn close_position_direct(
                 break;
             }
             Err(e) => {
-                // If we attempted to sell the aggregated total and failed with insufficient funds,
-                // hint at likely multi-account cause for easier diagnosis.
+                // Check for pump.fun bonding curve error (graduated token routed through closed curve)
                 let msg = e.to_string();
                 let msg_lower = msg.to_lowercase();
+
+                if msg.contains("0x1787") || msg.contains("6023") {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Pump.fun bonding curve error detected for {}, retrying with alternative DEX route",
+                            token_mint
+                        ),
+                    );
+                    // Retry once with Pump.fun Amm excluded
+                    let mut retry_request = quote_request.clone();
+                    retry_request.exclude_dexes = Some(vec!["Pump.fun Amm".to_string()]);
+                    let retry_quote = match get_best_quote(retry_request).await {
+                        Ok(q) => q,
+                        Err(e2) => {
+                            last_err = Some(format!(
+                                "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
+                                i + 1, slippage
+                            ));
+                            continue;
+                        }
+                    };
+                    match execute_swap_with_fallback(&api_token, retry_quote).await {
+                        Ok(res) => {
+                            swap_result = Some(res);
+                            last_err = None;
+                            break;
+                        }
+                        Err(e2) => {
+                            last_err = Some(format!(
+                                "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
+                                i + 1, slippage
+                            ));
+                            continue;
+                        }
+                    }
+                }
+
+                // If we attempted to sell the aggregated total and failed with insufficient funds,
+                // hint at likely multi-account cause for easier diagnosis.
                 let enriched = if msg_lower.contains("insufficient funds")
                     && multi_account_note.is_none()
                     && total_token_balance > sell_amount

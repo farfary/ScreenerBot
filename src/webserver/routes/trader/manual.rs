@@ -449,6 +449,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         wallet_address,
         slippage_pct: with_config(|cfg| cfg.swaps.slippage.quote_default_pct),
         swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
     };
 
     // Fetch quote

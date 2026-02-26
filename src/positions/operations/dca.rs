@@ -95,6 +95,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage,
         swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
     };
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
         .await

@@ -211,6 +211,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                     wallet_address: quote.wallet_address.clone(),
                     slippage_pct: (quote.slippage_bps as f64) / 100.0,
                     swap_mode: quote.swap_mode,
+                    exclude_dexes: None,
                 };
 
                 let fallback_quote = match fallback_router.get_quote(&fallback_request).await {

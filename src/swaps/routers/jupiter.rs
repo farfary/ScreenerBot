@@ -80,6 +80,9 @@ struct JupiterQuoteRequest {
     /// Platform fee in basis points - applied to output amount
     #[serde(rename = "platformFeeBps", skip_serializing_if = "Option::is_none")]
     platform_fee_bps: Option<u16>,
+    /// Comma-separated list of DEX labels to exclude from routing
+    #[serde(rename = "excludeDexes", skip_serializing_if = "Option::is_none")]
+    exclude_dexes: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -251,6 +254,7 @@ impl SwapRouter for JupiterRouter {
             slippage_bps,
             swap_mode: Some(request.swap_mode.as_str().to_owned()),
             platform_fee_bps,
+            exclude_dexes: request.exclude_dexes.as_ref().map(|d| d.join(",")),
         };
 
         logger::debug(

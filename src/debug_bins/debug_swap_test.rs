@@ -161,6 +161,7 @@ async fn run_test(args: Args) -> Result<(), String> {
     wallet_address: wallet_address.clone(),
     slippage_pct,
     swap_mode: SwapMode::ExactIn,
+    exclude_dexes: None,
   };
 
   println!("\n Fetching quote from routers...");
@@ -228,6 +229,7 @@ async fn run_test(args: Args) -> Result<(), String> {
         wallet_address: wallet_address.clone(),
         slippage_pct,
         swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
       };
 
       println!("\n Fetching quote from routers...");

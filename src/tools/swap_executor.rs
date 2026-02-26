@@ -55,6 +55,7 @@ pub async fn execute_tool_swap(
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage,
         swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
     };
 
     // Get quote from registry (uses best available router)
