@@ -1,21 +1,22 @@
 //! Main run loop — starts the service manager and runs until shutdown signal.
+//!
+//! Orchestrates bot lifecycle: process lock, configuration, wallet setup,
+//! service registration, and graceful shutdown handling.
 
-// New simplified run implementation using ServiceManager
+mod llm_init;
+mod services;
+mod shutdown;
 
 use crate::{
     global,
     logger::{self, LogTag},
     process_lock::ProcessLock,
     profiling,
-    run_helpers::{
-        initialize_llm_providers, register_all_services, wait_for_initialization_or_shutdown,
-        wait_for_shutdown_signal,
-    },
     services::ServiceManager,
 };
 use solana_sdk::signature::Signer;
 
-/// Main bot execution function - handles the full bot lifecycle with ServiceManager
+/// Main bot execution function — handles the full bot lifecycle with ServiceManager.
 ///
 /// Acquires process lock and runs the bot. For GUI mode, use `run_bot_with_lock()` instead.
 pub async fn run_bot() -> Result<(), String> {
@@ -33,7 +34,7 @@ pub async fn run_bot() -> Result<(), String> {
     run_bot_internal(process_lock).await
 }
 
-/// Run bot with a pre-acquired process lock
+/// Run bot with a pre-acquired process lock.
 ///
 /// Used by Electron GUI mode which acquires the lock before starting to ensure
 /// the window doesn't open if another instance is running.
@@ -49,7 +50,7 @@ pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> 
     run_bot_internal(process_lock).await
 }
 
-/// Internal bot execution with pre-acquired lock
+/// Internal bot execution with pre-acquired lock.
 async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
     logger::info(LogTag::System, "ScreenerBot starting up...");
 
@@ -127,7 +128,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         logger::info(LogTag::System, "Service manager initialized");
 
         // Register all services (but only webserver will be enabled)
-        register_all_services(&mut service_manager);
+        services::register_all_services(&mut service_manager);
 
         // Initialize global ServiceManager for webserver access
         crate::services::init_global_service_manager(service_manager).await;
@@ -161,7 +162,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         logger::info(LogTag::System, "Waiting for initialization to complete...");
 
         // Wait for initialization to complete or shutdown signal
-        wait_for_initialization_or_shutdown().await?;
+        shutdown::wait_for_initialization_or_shutdown().await?;
 
         logger::info(
             LogTag::System,
@@ -294,7 +295,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             logger::info(LogTag::System, "AI chat engine initialized successfully");
 
             // Initialize LLM manager with configured providers
-            initialize_llm_providers().await?;
+            llm_init::initialize_llm_providers().await?;
         }
 
         // 9. Create service manager
@@ -303,7 +304,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         logger::info(LogTag::System, "Service manager initialized");
 
         // 10. Register all services
-        register_all_services(&mut service_manager);
+        services::register_all_services(&mut service_manager);
 
         // 11. Initialize global ServiceManager for webserver access
         crate::services::init_global_service_manager(service_manager).await;
@@ -337,7 +338,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
     }
 
     // 15. Wait for shutdown signal
-    wait_for_shutdown_signal().await?;
+    shutdown::wait_for_shutdown_signal().await?;
 
     // 16. Stop all services gracefully
     logger::info(LogTag::System, "Initiating graceful shutdown...");
@@ -362,5 +363,3 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
     Ok(())
 }
-
-
