@@ -49,7 +49,7 @@ async fn update_all_position_prices() {
     let mut api_fresh_count = 0;
     let mut failed_count = 0;
 
-    for position in positions {
+    for position in &positions {
         match get_current_price(&position.mint).await {
             Some((price, source)) => {
                 // Atomically update both price AND PnL in single operation
@@ -63,30 +63,43 @@ async fn update_all_position_prices() {
                         }
                     }
                     Err(e) => {
-                        logger::debug(
+                        logger::warning(
                             LogTag::Positions,
-                            &format!("Failed to update price+PnL for {}: {}", position.symbol, e),
+                            &format!("[PRICE_UPD] Failed update {}: {}", position.symbol, e),
                         );
                         failed_count += 1;
                     }
                 }
             }
             None => {
-                logger::debug(
+                // Log at info level to diagnose frozen prices
+                let has_pool = pools::get_pool_price(&position.mint).is_some();
+                logger::info(
                     LogTag::Positions,
-                    &format!("No valid price available for {}", position.symbol),
+                    &format!(
+                        "[PRICE_UPD] No price for {} (mint={}...) pool_available={}",
+                        position.symbol,
+                        &position.mint[..8.min(position.mint.len())],
+                        has_pool
+                    ),
                 );
                 failed_count += 1;
             }
         }
     }
 
-    if updated_count > 0 {
-        logger::debug(
+    // Log every cycle when there are open positions (info level for debugging)
+    if !positions.is_empty() {
+        logger::info(
             LogTag::Positions,
             &format!(
-                "Price+PnL update: updated={} (pool={}, api={}, api_fresh={}) failed={}",
-                updated_count, pool_price_count, api_price_count, api_fresh_count, failed_count
+                "[PRICE_UPD] positions={} updated={} (pool={}, api={}, fresh={}) failed={}",
+                positions.len(),
+                updated_count,
+                pool_price_count,
+                api_price_count,
+                api_fresh_count,
+                failed_count
             ),
         );
     }
