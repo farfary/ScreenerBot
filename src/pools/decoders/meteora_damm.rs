@@ -240,7 +240,7 @@ impl PoolDecoder for MeteoraDammDecoder {
                 adjusted
             };
 
-            // Compare with simple vault ratio (raw balances) for diagnostics only
+            // Compare with simple vault ratio (raw balances) — use as sanity check and fallback
             vault_ratio_diag = if token_balance > 0 {
                 (sol_balance as f64)
                     / (10_f64).powi(sol_decimals as i32)
@@ -254,18 +254,36 @@ impl PoolDecoder for MeteoraDammDecoder {
                 0.0
             };
 
+            // BUG-34 FIX: sqrt_price offset varies across DAMM pool versions and can produce
+            // wildly wrong prices (e.g. 1 million x too high). The vault ratio is always reliable
+            // for standard AMM pools. When sqrt-derived price diverges >300% from vault ratio,
+            // fall back to vault ratio which is derived from actual on-chain vault balances.
+            let final_oriented = if vault_ratio_diag > 0.0 && diff_pct > 300.0 {
+                logger::warning(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "DAMM BUG-34: sqrt price {:.12e} diverges {:.0}% from vault ratio {:.12e} — using vault ratio",
+                        oriented, diff_pct, vault_ratio_diag
+                    ),
+                );
+                vault_ratio_diag
+            } else {
+                oriented
+            };
+
             logger::debug(
                 LogTag::PoolDecoder,
                 &format!(
-                    "DAMM sqrt_pricing: sqrt={} ratio={:.18e} oriented={:.18e} vault_ratio_raw={:.18e} diff_vs_vault={:.2}%",
+                    "DAMM sqrt_pricing: sqrt={} ratio={:.18e} oriented={:.18e} vault_ratio={:.18e} diff={:.2}% use_vault={}",
                     damm_info.sqrt_price,
                     ratio,
-                    oriented,
+                    final_oriented,
                     vault_ratio_diag,
-                    diff_pct
+                    diff_pct,
+                    diff_pct > 300.0
                 ),
             );
-            oriented
+            final_oriented
         } else {
             0.0
         };
