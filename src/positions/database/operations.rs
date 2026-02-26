@@ -1,6 +1,6 @@
 //! Position database operations — init, schema, write operations, and row-mapping helpers.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection};
@@ -567,81 +567,99 @@ impl PositionsDatabase {
         }
     }
 
+    /// Parse a datetime string leniently, trying multiple formats with UTC fallback.
+    ///
+    /// Tries in order:
+    /// 1. RFC3339 (e.g. "2026-02-26T08:25:54+00:00")
+    /// 2. ISO8601 without timezone (e.g. "2026-02-26T08:25:54") → assume UTC
+    /// 3. Space-separated without timezone (e.g. "2026-02-26 08:25:54") → assume UTC
+    /// 4. Space-separated with fractional seconds (e.g. "2026-02-26 08:25:54.123") → assume UTC
+    fn parse_datetime_lenient(s: &str) -> Result<DateTime<Utc>, String> {
+        // 1. RFC3339
+        if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+            return Ok(dt.with_timezone(&Utc));
+        }
+
+        // Fallback formats (no timezone → assume UTC)
+        const FALLBACK_FORMATS: &[&str] = &[
+            "%Y-%m-%dT%H:%M:%S",   // ISO8601 without tz
+            "%Y-%m-%d %H:%M:%S",   // space-separated
+            "%Y-%m-%d %H:%M:%S%.f", // space-separated with fractional seconds
+        ];
+
+        for fmt in FALLBACK_FORMATS {
+            if let Ok(naive) = NaiveDateTime::parse_from_str(s, fmt) {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Datetime '{}' is not RFC3339; parsed with fallback format '{}' as UTC",
+                        s, fmt
+                    ),
+                );
+                return Ok(naive.and_utc());
+            }
+        }
+
+        Err(format!("Failed to parse datetime '{s}' with any known format"))
+    }
+
     /// Helper function to convert database row to Position struct
     pub(crate) fn row_to_position(&self, row: &rusqlite::Row) -> rusqlite::Result<Position> {
         let entry_time_str: String = row.get("entry_time")?;
-        let entry_time = DateTime::parse_from_rfc3339(&entry_time_str)
-            .map_err(|e| {
-                rusqlite::Error::InvalidColumnType(
-                    5,
-                    "Invalid entry_time".to_owned(),
-                    rusqlite::types::Type::Text,
-                )
-            })?
-            .with_timezone(&Utc);
+        let entry_time = Self::parse_datetime_lenient(&entry_time_str).map_err(|e| {
+            rusqlite::Error::InvalidColumnType(
+                5,
+                format!("Invalid entry_time: {e}"),
+                rusqlite::types::Type::Text,
+            )
+        })?;
 
         let exit_time = if let Some(exit_time_str) = row.get::<_, Option<String>>("exit_time")? {
-            Some(
-                DateTime::parse_from_rfc3339(&exit_time_str)
-                    .map_err(|e| {
-                        rusqlite::Error::InvalidColumnType(
-                            7,
-                            "Invalid exit_time".to_owned(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?
-                    .with_timezone(&Utc),
-            )
+            Some(Self::parse_datetime_lenient(&exit_time_str).map_err(|e| {
+                rusqlite::Error::InvalidColumnType(
+                    7,
+                    format!("Invalid exit_time: {e}"),
+                    rusqlite::types::Type::Text,
+                )
+            })?)
         } else {
             None
         };
 
         let current_price_updated =
             if let Some(updated_str) = row.get::<_, Option<String>>("current_price_updated")? {
-                Some(
-                    DateTime::parse_from_rfc3339(&updated_str)
-                        .map_err(|e| {
-                            rusqlite::Error::InvalidColumnType(
-                                27,
-                                "Invalid current_price_updated".to_owned(),
-                                rusqlite::types::Type::Text,
-                            )
-                        })?
-                        .with_timezone(&Utc),
-                )
+                Some(Self::parse_datetime_lenient(&updated_str).map_err(|e| {
+                    rusqlite::Error::InvalidColumnType(
+                        27,
+                        format!("Invalid current_price_updated: {e}"),
+                        rusqlite::types::Type::Text,
+                    )
+                })?)
             } else {
                 None
             };
 
         let phantom_first_seen =
             if let Some(seen_str) = row.get::<_, Option<String>>("phantom_first_seen")? {
-                Some(
-                    DateTime::parse_from_rfc3339(&seen_str)
-                        .map_err(|e| {
-                            rusqlite::Error::InvalidColumnType(
-                                29,
-                                "Invalid phantom_first_seen".to_owned(),
-                                rusqlite::types::Type::Text,
-                            )
-                        })?
-                        .with_timezone(&Utc),
-                )
+                Some(Self::parse_datetime_lenient(&seen_str).map_err(|e| {
+                    rusqlite::Error::InvalidColumnType(
+                        29,
+                        format!("Invalid phantom_first_seen: {e}"),
+                        rusqlite::types::Type::Text,
+                    )
+                })?)
             } else {
                 None
             };
 
         let last_dca_time = if let Some(dca_str) = row.get::<_, Option<String>>("last_dca_time")? {
-            Some(
-                DateTime::parse_from_rfc3339(&dca_str)
-                    .map_err(|e| {
-                        rusqlite::Error::InvalidColumnType(
-                            35,
-                            "Invalid last_dca_time".to_owned(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?
-                    .with_timezone(&Utc),
-            )
+            Some(Self::parse_datetime_lenient(&dca_str).map_err(|e| {
+                rusqlite::Error::InvalidColumnType(
+                    35,
+                    format!("Invalid last_dca_time: {e}"),
+                    rusqlite::types::Type::Text,
+                )
+            })?)
         } else {
             None
         };
