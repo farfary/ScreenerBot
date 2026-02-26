@@ -296,6 +296,13 @@ async fn rebuild_position_indexes(positions: &[Position]) {
 /// Get position by mint
 pub async fn get_position_by_mint(mint: &str) -> Option<Position> {
     let positions = POSITIONS.read().await;
+    // Prefer open positions (no exit) over closed ones to avoid stale match
+    let open = positions.iter().find(|p| {
+        p.mint == mint && p.exit_time.is_none() && p.exit_transaction_signature.is_none()
+    });
+    if let Some(pos) = open {
+        return Some(pos.clone());
+    }
     positions.iter().find(|p| p.mint == mint).cloned()
 }
 
