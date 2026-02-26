@@ -65,14 +65,13 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                         (token_amount as f64) / (10_f64).powi(token_decimals as i32);
                     let current_value = ui_token_amount * current;
 
-                    // Account for fees (estimated)
+                    // Account for actual fees only — profit_extra_needed is a decision
+                    // buffer, not an actual cost (inflates losses ~2% on small trades)
                     let buy_fee = position
                         .entry_fee_lamports
                         .map_or(0.0, |fee| lamports_to_sol(fee));
                     let estimated_sell_fee = buy_fee;
-                    let profit_extra_needed =
-                        with_config(|cfg| cfg.positions.profit_extra_needed_sol);
-                    let total_fees = buy_fee + estimated_sell_fee + profit_extra_needed;
+                    let total_fees = buy_fee + estimated_sell_fee;
                     let net_pnl_sol = current_value - entry_cost - total_fees;
                     let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
@@ -86,8 +85,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                 .entry_fee_lamports
                 .map_or(0.0, |fee| lamports_to_sol(fee));
             let estimated_sell_fee = buy_fee;
-            let profit_extra_needed = with_config(|cfg| cfg.positions.profit_extra_needed_sol);
-            let total_fees = buy_fee + estimated_sell_fee + profit_extra_needed;
+            let total_fees = buy_fee + estimated_sell_fee;
             let fee_percent = (total_fees / entry_cost) * 100.0;
             let net_pnl_percent = price_change * 100.0 - fee_percent;
             let net_pnl_sol = (net_pnl_percent / 100.0) * entry_cost;
@@ -213,13 +211,13 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             // Use total_size_sol (includes DCA) instead of entry_size_sol
             let entry_cost = position.total_size_sol;
 
-            // Account for actual buy fee (already paid) + estimated sell fee + profit buffer
+            // Account for actual fees only — profit_extra_needed is a decision
+            // buffer, not an actual cost (inflates losses ~2% on small trades)
             let buy_fee = position
                 .entry_fee_lamports
                 .map_or(0.0, |fee| lamports_to_sol(fee));
-            let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
-            let profit_extra_needed = with_config(|cfg| cfg.positions.profit_extra_needed_sol);
-            let total_fees = buy_fee + estimated_sell_fee + profit_extra_needed; // Include profit buffer
+            let estimated_sell_fee = buy_fee;
+            let total_fees = buy_fee + estimated_sell_fee;
             let net_pnl_sol = current_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
@@ -231,9 +229,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         let buy_fee = position
             .entry_fee_lamports
             .map_or(0.0, |fee| lamports_to_sol(fee));
-        let estimated_sell_fee = buy_fee; // Estimate sell fee same as buy fee
-        let profit_extra_needed = with_config(|cfg| cfg.positions.profit_extra_needed_sol);
-        let total_fees = buy_fee + estimated_sell_fee + profit_extra_needed; // Include profit buffer
+        let estimated_sell_fee = buy_fee;
+        let total_fees = buy_fee + estimated_sell_fee;
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
         let net_pnl_sol = (net_pnl_percent / 100.0) * position.entry_size_sol;
