@@ -63,8 +63,8 @@ pub async fn evaluate_exit_for_position(
         None => return Ok(None), // Position disappeared
     };
 
-    // Priority 1: Blacklist (emergency - sync check)
-    if let Some(decision) = safety::check_blacklist_exit(&fresh_position, current_price) {
+    // Priority 1: Blacklist (emergency - token-level DB check only)
+    if let Some(decision) = safety::check_blacklist_exit(&fresh_position, current_price).await {
         crate::logger::info(
             crate::logger::LogTag::Trader,
             &format!(

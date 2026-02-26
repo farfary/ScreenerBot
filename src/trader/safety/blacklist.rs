@@ -9,12 +9,24 @@ use crate::positions::Position;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
-/// Check if a token is blacklisted (sync - direct read from tokens module)
+/// Check if a token is blacklisted at the TOKEN level (async - DB check)
 ///
-/// Returns true if the token is in the blacklist maintained by the tokens module.
-/// No caching layer - tokens module is the single source of truth.
-pub fn is_blacklisted(mint: &str) -> bool {
-    crate::tokens::get_blacklisted_tokens().contains(&mint.to_string())
+/// Only checks the token blacklist table (explicit bad tokens: scam, rug, mint/freeze authority).
+/// Does NOT include pool-level or account-level blacklists — those are handled by the pool
+/// service (fallback to alternative pools) and should not block entry for tokens that have
+/// valid alternative pools with working prices.
+///
+/// See BUG-30: Pool blacklist was propagating to token-level via filtering engine,
+/// blocking entry for tokens with valid alternative pools.
+pub async fn is_blacklisted(mint: &str) -> bool {
+    // Check token-level blacklist in DB (the authoritative source for "bad token")
+    match crate::tokens::get_global_database() {
+        Some(db) => db.is_blacklisted(mint).unwrap_or(false),
+        None => {
+            // DB not initialized yet — fall back to in-memory filtered list
+            crate::tokens::get_blacklisted_tokens().contains(&mint.to_string())
+        }
+    }
 }
 
 /// Check if a position should be exited due to blacklist (sync)
@@ -24,8 +36,8 @@ pub fn is_blacklisted(mint: &str) -> bool {
 ///
 /// Uses tokens module as single source of truth (no cache layer).
 /// Priority: Emergency (highest)
-pub fn check_blacklist_exit(position: &Position, current_price: f64) -> Option<TradeDecision> {
-    if is_blacklisted(&position.mint) {
+pub async fn check_blacklist_exit(position: &Position, current_price: f64) -> Option<TradeDecision> {
+    if is_blacklisted(&position.mint).await {
         logger::warning(
             LogTag::Trader,
             &format!(

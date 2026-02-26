@@ -123,10 +123,29 @@ pub async fn monitor_entries(
                 }
             };
         // Only consider pool-tracked tokens that also passed filtering
-        let available_tokens: Vec<String> = pools::get_available_tokens()
-            .into_iter()
-            .filter(|mint| passed_mints.contains(mint))
+        let pool_tokens = pools::get_available_tokens();
+        let available_tokens: Vec<String> = pool_tokens
+            .iter()
+            .filter(|mint| passed_mints.contains(*mint))
+            .cloned()
             .collect();
+
+        // Log periodically (every ~30s = every 10 cycles at 3s interval)
+        static CYCLE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let cycle = CYCLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if cycle % 10 == 0 || !available_tokens.is_empty() {
+            logger::info(
+                LogTag::Trader,
+                &format!(
+                    "[ENTRY] cycle={} pool={} passed={} intersection={} tokens=[{}]",
+                    cycle,
+                    pool_tokens.len(),
+                    passed_mints.len(),
+                    available_tokens.len(),
+                    available_tokens.iter().take(5).map(|m| &m[..8.min(m.len())]).collect::<Vec<_>>().join(",")
+                ),
+            );
+        }
 
         // Process tokens with concurrency control
         let mut futures = Vec::new();
