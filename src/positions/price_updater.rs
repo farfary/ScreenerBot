@@ -2,18 +2,18 @@
 
 use crate::logger::{self, LogTag};
 use crate::pools;
+use crate::positions::get_open_positions;
 use crate::positions::state::update_position_state;
-use crate::positions::{get_open_positions, update_position_price};
 use crate::tokens;
 use std::time::Duration;
 use tokio::time::sleep;
 
 /// Position price updater service
-/// Updates all open positions'current_price every second
-/// Priority: Pool price (real-time) > API price (if fresh < 5s)
+/// Updates all open positions' current_price every second
+/// Priority: Pool price (real-time) > API price (if fresh < 30s) > Force-fetched API price
 
 const UPDATE_INTERVAL_SECS: u64 = 1;
-const API_PRICE_MAX_AGE_SECS: i64 = 5;
+const API_PRICE_MAX_AGE_SECS: i64 = 30;
 
 pub async fn start_price_updater(mut shutdown: tokio::sync::watch::Receiver<bool>) {
     logger::info(
@@ -46,6 +46,7 @@ async fn update_all_position_prices() {
     let mut updated_count = 0;
     let mut pool_price_count = 0;
     let mut api_price_count = 0;
+    let mut api_fresh_count = 0;
     let mut failed_count = 0;
 
     for position in positions {
@@ -58,6 +59,7 @@ async fn update_all_position_prices() {
                         match source {
                             PriceSource::Pool => pool_price_count += 1,
                             PriceSource::Api => api_price_count += 1,
+                            PriceSource::ApiFresh => api_fresh_count += 1,
                         }
                     }
                     Err(e) => {
@@ -83,8 +85,8 @@ async fn update_all_position_prices() {
         logger::debug(
             LogTag::Positions,
             &format!(
-                "Price+PnL update: updated={} (pool={}, api={}) failed={}",
-                updated_count, pool_price_count, api_price_count, failed_count
+                "Price+PnL update: updated={} (pool={}, api={}, api_fresh={}) failed={}",
+                updated_count, pool_price_count, api_price_count, api_fresh_count, failed_count
             ),
         );
     }
@@ -160,13 +162,17 @@ async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> 
     Ok(())
 }
 
+/// Force-fetch cooldown: avoid hammering the API. Only force-fetch once per 30 seconds.
+const FORCE_FETCH_COOLDOWN_SECS: i64 = 30;
+
 #[derive(Debug)]
 enum PriceSource {
     Pool,
     Api,
+    ApiFresh,
 }
 
-/// Get current price for a token with priority: Pool > Fresh API
+/// Get current price for a token with priority: Pool > Fresh API > Force-fetched API
 async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
     // Priority 1: Try pool price (real-time on-chain data)
     if let Some(price_result) = pools::get_pool_price(mint) {
@@ -175,10 +181,9 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
         }
     }
 
-    // Priority 2: Try API price if fresh (updated within last 5 seconds)
+    // Priority 2: Try API price if fresh (updated within API_PRICE_MAX_AGE_SECS)
     match tokens::get_full_token_async(mint).await {
         Ok(Some(token)) => {
-            // Check if price is recent (within last 5 seconds)
             let now = chrono::Utc::now();
             let age_secs = now
                 .signed_duration_since(token.market_data_last_fetched_at)
@@ -189,8 +194,21 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
                     return Some((token.price_sol, PriceSource::Api));
                 }
             }
+
+            // Priority 3: API price is stale — force-fetch with cooldown
+            // Only force-fetch if data is old enough to justify the cost
+            if age_secs > API_PRICE_MAX_AGE_SECS && age_secs > FORCE_FETCH_COOLDOWN_SECS {
+                if let Some(fresh_token) = force_fetch_price(mint).await {
+                    return Some((fresh_token.price_sol, PriceSource::ApiFresh));
+                }
+            }
         }
-        Ok(None) => {}
+        Ok(None) => {
+            // Token not in database — try force-fetch
+            if let Some(fresh_token) = force_fetch_price(mint).await {
+                return Some((fresh_token.price_sol, PriceSource::ApiFresh));
+            }
+        }
         Err(e) => {
             logger::debug(
                 LogTag::Positions,
@@ -199,5 +217,31 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
         }
     }
 
+    None
+}
+
+/// Force-fetch fresh price from API for a token.
+/// Used as last-resort fallback when pool price and cached API price are unavailable.
+async fn force_fetch_price(mint: &str) -> Option<crate::tokens::Token> {
+    match crate::tokens::request_immediate_update(mint).await {
+        Ok(result) => {
+            if result.is_success() {
+                match crate::tokens::get_full_token_async(mint).await {
+                    Ok(Some(token)) => {
+                        if token.price_sol > 0.0 && token.price_sol.is_finite() {
+                            return Some(token);
+                        }
+                    }
+                    Ok(None) | Err(_) => {}
+                }
+            }
+        }
+        Err(e) => {
+            logger::debug(
+                LogTag::Positions,
+                &format!("Force fetch failed for {mint}: {e}"),
+            );
+        }
+    }
     None
 }

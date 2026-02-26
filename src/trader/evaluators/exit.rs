@@ -10,7 +10,7 @@
 //! 7. Time override (normal priority)
 //! 8. Strategy exit (normal priority)
 
-use crate::pools;
+use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::Position;
 use crate::trader::types::TradeDecision;
 use crate::trader::{ai_analysis, evaluators, safety};
@@ -41,16 +41,20 @@ pub async fn evaluate_exit_for_position(
         return Ok(None);
     }
 
-    // Get current price
-    let current_price = match pools::get_pool_price(&position.mint) {
-        Some(price_info) => {
-            if price_info.price_sol > 0.0 && price_info.price_sol.is_finite() {
-                price_info.price_sol
+    // Get current price with fallback cascade:
+    // 1. Pool price (real-time on-chain) — preferred
+    // 2. API price from token database (DexScreener/GeckoTerminal) — if fresh
+    // 3. Force-fetch fresh API price if stale
+    // This matches the price resolution used by position open/close/DCA operations.
+    let current_price = match get_price_with_api_fallback(&position.mint).await {
+        Some((price_result, _source)) => {
+            if price_result.price_sol > 0.0 && price_result.price_sol.is_finite() {
+                price_result.price_sol
             } else {
                 return Ok(None); // Invalid price
             }
         }
-        None => return Ok(None), // No price data
+        None => return Ok(None), // No price data from any source
     };
 
     // Get fresh position with updated price_highest for accurate trailing stop calculation

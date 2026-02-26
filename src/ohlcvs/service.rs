@@ -506,6 +506,15 @@ impl OhlcvService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> OhlcvResult<Vec<JoinHandle<()>>> {
+        let enabled = crate::config::with_config(|cfg| cfg.ohlcv.enabled);
+        if !enabled {
+            logger::info(
+                LogTag::Ohlcv,
+                &"OHLCV service is disabled via config, skipping start".to_owned(),
+            );
+            return Ok(vec![]);
+        }
+
         let service = get_or_init_service().await?;
 
         let monitor_instance = Arc::clone(&service.monitor);

@@ -120,6 +120,15 @@ impl OhlcvMonitor {
 
     /// Start monitoring all active tokens
     pub async fn start(self: Arc<Self>) -> OhlcvResult<()> {
+        let enabled = crate::config::with_config(|cfg| cfg.ohlcv.enabled);
+        if !enabled {
+            logger::info(
+                LogTag::Ohlcv,
+                &"OHLCV monitor is disabled via config, skipping start".to_owned(),
+            );
+            return Ok(());
+        }
+
         // Load active tokens from database
         self.load_active_tokens().await?;
 
