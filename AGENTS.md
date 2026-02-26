@@ -655,6 +655,13 @@ For nested config structs, add `#[metadata(field_metadata!{...})]` on ALL leaf f
 **Hardcoded Constants (NEVER make configurable):**
 - Jupiter referral fee: `REFERRAL_FEE_BPS=50` and referral token accounts are hardcoded in `src/swaps/routers/jupiter.rs`
 
+**Jupiter API URL & Authentication (CRITICAL):**
+- `api.jup.ag` requires API key for ALL tiers (including free) — register at portal.jup.ag
+- `lite-api.jup.ag` works WITHOUT API key (free, 60 req/min, deprecation date TBA)
+- Bot auto-selects: `get_api_base()` returns `lite-api.jup.ag` when no key, `api.jup.ag` when key is configured
+- NEVER send an invalid/placeholder `x-api-key` header — Jupiter returns 401 Unauthorized
+- `swap_executor.rs` also makes direct Jupiter calls — keep URL logic consistent with `jupiter.rs`
+
 ### RPC Client Rules
 
 Use `get_rpc_client()` — never construct RpcClient directly. Transaction encoding must be jsonParsed. Features: multi-provider support, per-provider rate limiting (Governor GCRA), circuit breaker failover. Respect ≤50 accounts for `get_multiple_accounts`.
