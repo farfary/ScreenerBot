@@ -244,6 +244,11 @@ pub async fn start_server(
         &format!("API endpoints available at http://{addr}/api"),
     );
 
+    // Write MCP connection file for external tool integration
+    // This allows the ScreenerBot MCP server and other tools to auto-discover
+    // the running instance without manual configuration
+    write_mcp_connection_file(port, is_gui);
+
     // Run the server with graceful shutdown
     let shutdown_signal = async {
         SHUTDOWN_NOTIFY.notified().await;
@@ -259,6 +264,9 @@ pub async fn start_server(
         .map_err(|e| format!("Server error: {e}"))?;
 
     logger::debug(LogTag::Webserver, "Webserver stopped gracefully");
+
+    // Clean up MCP connection file
+    cleanup_mcp_connection_file();
 
     Ok(())
 }
@@ -447,6 +455,65 @@ pub async fn test_port_binding(
 
             logger::error(LogTag::System, &error_msg);
             Err(error_msg)
+        }
+    }
+}
+
+// =============================================================================
+// MCP CONNECTION FILE
+// =============================================================================
+
+/// Returns the path for the MCP connection file.
+fn mcp_connection_file_path() -> std::path::PathBuf {
+    crate::paths::get_data_directory().join("mcp.json")
+}
+
+/// Write MCP connection file so external tools (like @screenerbot/mcp) can
+/// auto-discover the running bot's URL and security token.
+fn write_mcp_connection_file(port: u16, is_gui: bool) {
+    let token = if is_gui {
+        global::get_security_token().unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let content = serde_json::json!({
+        "url": format!("http://127.0.0.1:{}", port),
+        "port": port,
+        "token": token,
+        "pid": std::process::id(),
+        "gui_mode": is_gui,
+        "version": env!("CARGO_PKG_VERSION"),
+    });
+
+    let path = mcp_connection_file_path();
+    match std::fs::write(&path, serde_json::to_string_pretty(&content).unwrap_or_default()) {
+        Ok(_) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!("MCP connection file written to {}", path.display()),
+            );
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to write MCP connection file: {e}"),
+            );
+        }
+    }
+}
+
+/// Remove the MCP connection file on shutdown.
+fn cleanup_mcp_connection_file() {
+    let path = mcp_connection_file_path();
+    if path.exists() {
+        if let Err(e) = std::fs::remove_file(&path) {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to remove MCP connection file: {e}"),
+            );
+        } else {
+            logger::debug(LogTag::Webserver, "MCP connection file removed");
         }
     }
 }
