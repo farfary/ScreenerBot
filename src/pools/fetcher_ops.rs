@@ -725,13 +725,34 @@ impl AccountFetcher {
                         ),
                     );
 
-                    // Check if bundle is now complete
+                    // Check if bundle is now complete and needs (re)calculation.
+                    // First check handles initial calculation (never calculated before).
+                    // Second check handles price refresh: when a bundle was already calculated
+                    // but its price has expired from the cache (TTL-based), reset the flag
+                    // so the price gets recalculated from the re-fetched accounts.
                     if entry
                         .0
                         .is_complete_and_needs_calculation(&pool_descriptor.reserve_accounts)
                     {
                         entry.0.mark_calculation_requested();
                         entry.2 = true; // Mark needs calculation
+                    } else if entry.0.calculation_requested
+                        && entry.0.is_complete(&pool_descriptor.reserve_accounts)
+                    {
+                        // Price was calculated before but may have expired from cache.
+                        // Check if the target token still has a valid cached price.
+                        let target_mint =
+                            if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
+                                pool_descriptor.quote_mint.to_string()
+                            } else {
+                                pool_descriptor.base_mint.to_string()
+                            };
+                        if super::cache::get_price(&target_mint).is_none() {
+                            // Price expired — reset flag and re-trigger calculation
+                            entry.0.calculation_requested = false;
+                            entry.0.mark_calculation_requested();
+                            entry.2 = true;
+                        }
                     }
                 }
             }
