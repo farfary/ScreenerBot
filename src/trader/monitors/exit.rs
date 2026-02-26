@@ -182,6 +182,9 @@ pub async fn monitor_positions(
             }
         });
 
+        // Track if any rate limit (429) error occurred this cycle
+        let mut rate_limit_hit = false;
+
         // Execute trades sequentially in priority order
         for evaluation in evaluations {
             // Check shutdown before each execution
@@ -244,6 +247,19 @@ pub async fn monitor_positions(
                         // Fail action
                         if let Some(ref a) = action {
                             a.fail(&e).await;
+                        }
+
+                        // Detect Jupiter rate limiting to back off
+                        let err_lower = e.to_lowercase();
+                        if err_lower.contains("429") || err_lower.contains("rate limit") {
+                            logger::warning(
+                                LogTag::Trader,
+                                &format!(
+                                    "Jupiter rate limit hit during exit for {}, will back off",
+                                    evaluation.symbol
+                                ),
+                            );
+                            rate_limit_hit = true;
                         }
 
                         logger::error(
@@ -336,6 +352,15 @@ pub async fn monitor_positions(
                     &format!("Error processing DCA opportunities: {e}"),
                 );
             }
+        }
+
+        // If rate limited, back off 30 seconds before next cycle to avoid hammering Jupiter
+        if rate_limit_hit {
+            logger::warning(
+                LogTag::Trader,
+                "Rate limit detected this cycle, backing off 30 seconds before next exit monitor cycle",
+            );
+            sleep(Duration::from_secs(30)).await;
         }
 
         // Ensure minimum cycle time

@@ -12,6 +12,7 @@ use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::{get_token_balance, get_total_token_balance, get_wallet_address};
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 
 /// Close an existing position
 pub async fn close_position_direct(
@@ -179,12 +180,23 @@ pub async fn close_position_direct(
         let quote = match get_best_quote(quote_request).await {
             Ok(q) => q,
             Err(e) => {
+                let err_msg = e.to_string();
                 last_err = Some(format!(
                     "Quote failed at step {} ({}%): {}",
                     i + 1,
                     slippage,
-                    e
+                    err_msg
                 ));
+                let err_lower = err_msg.to_lowercase();
+                if err_lower.contains("429") || err_lower.contains("rate limit") {
+                    logger::warning(
+                        LogTag::Positions,
+                        "Jupiter rate limit hit, backing off 10 seconds before retry",
+                    );
+                    sleep(Duration::from_secs(10)).await;
+                } else {
+                    sleep(Duration::from_secs(2)).await;
+                }
                 continue;
             }
         };
@@ -199,7 +211,8 @@ pub async fn close_position_direct(
                 // If we attempted to sell the aggregated total and failed with insufficient funds,
                 // hint at likely multi-account cause for easier diagnosis.
                 let msg = e.to_string();
-                let enriched = if msg.to_lowercase().contains("insufficient funds")
+                let msg_lower = msg.to_lowercase();
+                let enriched = if msg_lower.contains("insufficient funds")
                     && multi_account_note.is_none()
                     && total_token_balance > sell_amount
                 {
@@ -213,6 +226,15 @@ pub async fn close_position_direct(
                     i + 1,
                     slippage
                 ));
+                if msg_lower.contains("429") || msg_lower.contains("rate limit") {
+                    logger::warning(
+                        LogTag::Positions,
+                        "Jupiter rate limit hit, backing off 10 seconds before retry",
+                    );
+                    sleep(Duration::from_secs(10)).await;
+                } else {
+                    sleep(Duration::from_secs(2)).await;
+                }
                 continue;
             }
         }

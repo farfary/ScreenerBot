@@ -17,6 +17,7 @@ use crate::swaps::{
 use crate::utils::get_wallet_address;
 use chrono::Utc;
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 
 /// Partially close a position by selling a percentage of remaining tokens
 /// CRITICAL: This does NOT release the semaphore permit - position stays open
@@ -112,12 +113,23 @@ pub async fn partial_close_position(
                 break;
             }
             Err(e) => {
+                let err_msg = e.to_string();
                 last_err = Some(format!(
                     "Quote failed at step {} ({}%): {}",
                     i + 1,
                     slippage,
-                    e
+                    err_msg
                 ));
+                let err_lower = err_msg.to_lowercase();
+                if err_lower.contains("429") || err_lower.contains("rate limit") {
+                    logger::warning(
+                        LogTag::Positions,
+                        "Jupiter rate limit hit, backing off 10 seconds before retry",
+                    );
+                    sleep(Duration::from_secs(10)).await;
+                } else {
+                    sleep(Duration::from_secs(2)).await;
+                }
                 continue;
             }
         }
@@ -154,12 +166,23 @@ pub async fn partial_close_position(
             let q = match get_best_quote(quote_request).await {
                 Ok(q) => q,
                 Err(e) => {
+                    let err_msg = e.to_string();
                     last_err = Some(format!(
                         "Quote failed at step {} ({}%): {}",
                         i + 1,
                         slippage,
-                        e
+                        err_msg
                     ));
+                    let err_lower = err_msg.to_lowercase();
+                    if err_lower.contains("429") || err_lower.contains("rate limit") {
+                        logger::warning(
+                            LogTag::Positions,
+                            "Jupiter rate limit hit, backing off 10 seconds before retry",
+                        );
+                        sleep(Duration::from_secs(10)).await;
+                    } else {
+                        sleep(Duration::from_secs(2)).await;
+                    }
                     continue;
                 }
             };
@@ -170,12 +193,23 @@ pub async fn partial_close_position(
                     break;
                 }
                 Err(e) => {
+                    let err_msg = e.to_string();
                     last_err = Some(format!(
                         "Partial exit swap failed at step {} ({}%): {}",
                         i + 1,
                         slippage,
-                        e
+                        err_msg
                     ));
+                    let err_lower = err_msg.to_lowercase();
+                    if err_lower.contains("429") || err_lower.contains("rate limit") {
+                        logger::warning(
+                            LogTag::Positions,
+                            "Jupiter rate limit hit, backing off 10 seconds before retry",
+                        );
+                        sleep(Duration::from_secs(10)).await;
+                    } else {
+                        sleep(Duration::from_secs(2)).await;
+                    }
                 }
             }
         }
