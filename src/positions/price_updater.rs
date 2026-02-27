@@ -3,7 +3,6 @@
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions::get_open_positions;
-use crate::positions::state::update_position_state;
 use crate::tokens;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -52,8 +51,10 @@ async fn update_all_position_prices() {
     for position in &positions {
         match get_current_price(&position.mint).await {
             Some((price, source)) => {
-                // Atomically update both price AND PnL in single operation
-                match update_position_price_and_pnl(&position.mint, price).await {
+                // Use position ID to target the correct position (avoids updating
+                // a closed position when multiple positions share the same mint)
+                let position_id = position.id.unwrap_or(-1);
+                match update_position_price_and_pnl(position_id, &position.mint, price).await {
                     Ok(_) => {
                         updated_count += 1;
                         match source {
@@ -106,8 +107,13 @@ async fn update_all_position_prices() {
 }
 
 /// Atomically update position price and PnL in a single database operation
-/// This eliminates the race condition and reduces DB writes from 2 to 1 per position
-async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> Result<(), String> {
+/// Uses position_id to target the specific position (critical when multiple
+/// positions share the same token mint — e.g. re-entry after closing)
+async fn update_position_price_and_pnl(
+    position_id: i64,
+    token_mint: &str,
+    current_price: f64,
+) -> Result<(), String> {
     if !current_price.is_finite() || current_price <= 0.0 {
         return Err(format!("Invalid price: {current_price}"));
     }
@@ -116,8 +122,8 @@ async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> 
 
     let now = chrono::Utc::now();
 
-    // First, update price in memory and get the updated position
-    let updated = update_position_state(token_mint, |pos| {
+    // Update by position ID to avoid updating a closed position with the same mint
+    let updated = crate::positions::state::update_position_state_by_id(position_id, |pos| {
         pos.current_price = Some(current_price);
         pos.current_price_updated = Some(now);
 
@@ -132,13 +138,17 @@ async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> 
     .await;
 
     if !updated {
-        return Err(format!("Position not found for mint: {token_mint}"));
+        return Err(format!(
+            "Position id={position_id} not found for mint: {token_mint}"
+        ));
     }
 
-    // Get updated position for PnL calculation
-    let mut position = crate::positions::get_position_by_mint(token_mint)
+    // Get position by ID for PnL calculation
+    let mut position = crate::positions::state::get_position_by_id(position_id)
         .await
-        .ok_or_else(|| format!("Position disappeared after price update: {token_mint}"))?;
+        .ok_or_else(|| {
+            format!("Position id={position_id} disappeared after price update: {token_mint}")
+        })?;
 
     // Calculate PnL with the new price
     let (pnl_sol, pnl_pct) =
@@ -148,8 +158,8 @@ async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> 
     position.unrealized_pnl = Some(pnl_sol);
     position.unrealized_pnl_percent = Some(pnl_pct);
 
-    // Store back to in-memory state
-    update_position_state(token_mint, |pos| {
+    // Store back to in-memory state by position ID
+    crate::positions::state::update_position_state_by_id(position_id, |pos| {
         pos.unrealized_pnl = Some(pnl_sol);
         pos.unrealized_pnl_percent = Some(pnl_pct);
     })
