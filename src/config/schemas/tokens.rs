@@ -214,6 +214,57 @@ config_struct! {
             rate_limit_per_minute: 30,
             timeout_seconds: 15,
         },
+
+        #[metadata(field_metadata! {
+            label: "SolanaTracker Source",
+            hint: "SolanaTracker API configuration (credit-based, requires API key)",
+            impact: "medium",
+            category: "Sources",
+        })]
+        solana_tracker: SolanaTrackerSourceConfig = SolanaTrackerSourceConfig::default(),
+    }
+}
+
+config_struct! {
+    /// SolanaTracker API configuration (credit-based billing)
+    pub struct SolanaTrackerSourceConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable SolanaTracker as a data source (OHLCV, token info, risk)",
+            impact: "high",
+            category: "Sources",
+        })]
+        enabled: bool = false,
+
+        #[metadata(field_metadata! {
+            label: "API Key",
+            hint: "SolanaTracker API key from solanatracker.io",
+            impact: "critical",
+            category: "Sources",
+        })]
+        api_key: String = String::new(),
+
+        #[metadata(field_metadata! {
+            label: "Rate Limit (req/min)",
+            hint: "Maximum API requests per minute (credit-based, be conservative)",
+            impact: "medium",
+            category: "Sources",
+            min: 1.0,
+            max: 120.0,
+            step: 1.0,
+        })]
+        rate_limit_per_minute: u32 = 30,
+
+        #[metadata(field_metadata! {
+            label: "Timeout (seconds)",
+            hint: "HTTP request timeout for SolanaTracker API calls",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 60.0,
+            step: 1.0,
+        })]
+        timeout_seconds: u64 = 15,
     }
 }
 

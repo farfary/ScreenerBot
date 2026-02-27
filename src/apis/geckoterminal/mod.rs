@@ -31,6 +31,7 @@ use crate::apis::stats::ApiStatsTracker;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -63,6 +64,8 @@ pub struct GeckoTerminalClient {
     stats: Arc<ApiStatsTracker>,
     timeout: Duration,
     enabled: bool,
+    /// Consecutive 429 error count for exponential backoff
+    consecutive_429s: AtomicU32,
 }
 
 impl GeckoTerminalClient {
@@ -77,6 +80,7 @@ impl GeckoTerminalClient {
             stats: Arc::new(ApiStatsTracker::new()),
             timeout: Duration::from_secs(timeout_seconds),
             enabled,
+            consecutive_429s: AtomicU32::new(0),
         })
     }
 
@@ -154,9 +158,11 @@ impl GeckoTerminalClient {
                     format!("HTTP {status}: {body}"),
                 )
                 .await;
-            // Simple 429 backoff to avoid hammering when provider clamps down
+            // Exponential backoff on 429: 10s, 20s, 40s, 60s max
             if status.as_u16() == 429 {
-                tokio::time::sleep(Duration::from_secs(10)).await;
+                let count = self.consecutive_429s.fetch_add(1, Ordering::Relaxed) + 1;
+                let backoff_secs = (10u64 * (1u64 << (count - 1).min(3))).min(60);
+                tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
             }
             return Err(format!("GeckoTerminal API error {status}: {body}"));
         }
@@ -164,6 +170,7 @@ impl GeckoTerminalClient {
         match response.json::<T>().await {
             Ok(value) => {
                 self.stats.record_request(true, elapsed).await;
+                self.consecutive_429s.store(0, Ordering::Relaxed);
                 Ok(value)
             }
             Err(err) => {

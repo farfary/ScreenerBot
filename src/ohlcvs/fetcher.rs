@@ -1,4 +1,8 @@
-//! OHLCV fetcher — retrieves candlestick data from GeckoTerminal API.
+//! OHLCV fetcher — retrieves candlestick data from multiple sources.
+//!
+//! Sources (in priority order):
+//! 1. SolanaTracker — uses token address, credit-based, high quality
+//! 2. GeckoTerminal — uses pool address, rate-limited 30/min, free
 
 use crate::apis::{get_api_manager, ApiManager};
 use crate::events::{record_ohlcv_event, Severity};
@@ -64,6 +68,11 @@ impl OhlcvFetcher {
             api_calls_count: Arc::new(Mutex::new(0)),
             total_latency_ms: Arc::new(Mutex::new(0)),
         }
+    }
+
+    /// Check if SolanaTracker source is available (enabled with API key)
+    pub fn has_solana_tracker(&self) -> bool {
+        self.api_manager.solana_tracker.is_enabled()
     }
 
     /// Fetch OHLCV data for a pool with priority
@@ -206,6 +215,158 @@ impl OhlcvFetcher {
                 }
             }
         }
+    }
+
+    /// Map GeckoTerminal API params to SolanaTracker interval string
+    fn gt_to_st_interval(api_endpoint: &str, aggregate: u32) -> Option<&'static str> {
+        match (api_endpoint, aggregate) {
+            ("minute", 1) => Some("1m"),
+            ("minute", 5) => Some("5m"),
+            ("minute", 15) => Some("15m"),
+            ("minute", 30) => Some("30m"),
+            ("hour", 1) => Some("1h"),
+            ("hour", 4) => Some("4h"),
+            ("hour", 12) => Some("12h"),
+            ("day", 1) => Some("1d"),
+            _ => None,
+        }
+    }
+
+    /// Fetch OHLCV from SolanaTracker using token mint address
+    pub async fn fetch_from_solana_tracker(
+        &self,
+        mint: &str,
+        interval: &str,
+        limit: usize,
+    ) -> OhlcvResult<Vec<Candle>> {
+        if !self.api_manager.solana_tracker.is_enabled() {
+            return Err(OhlcvError::ApiError("SolanaTracker not enabled".to_owned()));
+        }
+
+        let start = Instant::now();
+
+        record_ohlcv_event(
+            "solanatracker_fetch_attempt",
+            Severity::Debug,
+            Some(mint),
+            None,
+            json!({
+                "mint": mint,
+                "interval": interval,
+                "limit": limit,
+            }),
+        )
+        .await;
+
+        let response = self
+            .api_manager
+            .solana_tracker
+            .fetch_ohlcv(mint, interval, "sol", None, None)
+            .await;
+
+        match response {
+            Ok(ohlcv) => {
+                let mut data_points: Vec<Candle> = ohlcv
+                    .candles
+                    .into_iter()
+                    .map(|c| Candle {
+                        timestamp: c.time,
+                        open: c.open,
+                        high: c.high,
+                        low: c.low,
+                        close: c.close,
+                        volume: c.volume,
+                    })
+                    .collect();
+
+                // SolanaTracker returns newest first, sort by timestamp ascending
+                data_points.sort_by_key(|c| c.timestamp);
+
+                // Limit results
+                if data_points.len() > limit {
+                    let skip = data_points.len() - limit;
+                    data_points = data_points.into_iter().skip(skip).collect();
+                }
+
+                let latency = start.elapsed().as_millis() as u64;
+                self.record_api_call(latency);
+
+                record_ohlcv_event(
+                    "solanatracker_fetch_complete",
+                    Severity::Debug,
+                    Some(mint),
+                    None,
+                    json!({
+                        "mint": mint,
+                        "interval": interval,
+                        "data_points": data_points.len(),
+                        "latency_ms": latency,
+                    }),
+                )
+                .await;
+
+                Ok(data_points)
+            }
+            Err(err) => {
+                let latency = start.elapsed().as_millis() as u64;
+
+                record_ohlcv_event(
+                    "solanatracker_fetch_error",
+                    Severity::Error,
+                    Some(mint),
+                    None,
+                    json!({
+                        "mint": mint,
+                        "interval": interval,
+                        "error": &err,
+                        "latency_ms": latency,
+                    }),
+                )
+                .await;
+
+                Err(OhlcvError::ApiError(err))
+            }
+        }
+    }
+
+    /// Fetch OHLCV with multi-source fallback: SolanaTracker → GeckoTerminal
+    /// `mint` is needed for SolanaTracker, `pool_address` for GeckoTerminal
+    pub async fn fetch_multi_source(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        api_endpoint: &str,
+        aggregate: u32,
+        limit: usize,
+    ) -> OhlcvResult<Vec<Candle>> {
+        // Try SolanaTracker first (uses token address, better data)
+        if self.api_manager.solana_tracker.is_enabled() {
+            if let Some(interval) = Self::gt_to_st_interval(api_endpoint, aggregate) {
+                match self.fetch_from_solana_tracker(mint, interval, limit).await {
+                    Ok(candles) if !candles.is_empty() => return Ok(candles),
+                    Ok(_) => {
+                        // Empty result, fall through to GeckoTerminal
+                    }
+                    Err(e) => {
+                        record_ohlcv_event(
+                            "solanatracker_fallback",
+                            Severity::Warn,
+                            Some(mint),
+                            Some(pool_address),
+                            json!({
+                                "reason": "SolanaTracker failed, falling back to GeckoTerminal",
+                                "error": e.to_string(),
+                            }),
+                        )
+                        .await;
+                    }
+                }
+            }
+        }
+
+        // Fallback to GeckoTerminal (uses pool address)
+        self.fetch_with_aggregate(pool_address, api_endpoint, aggregate, None, limit)
+            .await
     }
 
     /// Fetch OHLCV data immediately (bypasses queue, use for critical requests only)

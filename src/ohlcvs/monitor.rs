@@ -670,6 +670,11 @@ impl OhlcvMonitor {
                         }
                     }
 
+                    // Pool discovery failed — try SolanaTracker directly (no pool needed)
+                    if self.fetcher.has_solana_tracker() {
+                        return self.fetch_via_solana_tracker(mint).await;
+                    }
+
                     return Err(OhlcvError::PoolNotFound(format!(
                         "No pools available for token: {}",
                         mint
@@ -677,7 +682,10 @@ impl OhlcvMonitor {
                 }
             }
         } else if !has_pools {
-            // In backoff period - skip silently
+            // In backoff period — try SolanaTracker directly (no pool needed)
+            if self.fetcher.has_solana_tracker() {
+                return self.fetch_via_solana_tracker(mint).await;
+            }
             return Err(OhlcvError::PoolNotFound(format!(
                 "Token {} in discovery backoff period",
                 mint
@@ -702,10 +710,10 @@ impl OhlcvMonitor {
             (pool.address.clone(), config.priority, batch_size)
         };
 
-        // Fetch 1-minute data (base timeframe) with priority-based batch size
+        // Fetch 1-minute data (base timeframe) with multi-source fallback
         let data = self
             .fetcher
-            .fetch_with_aggregate(&pool_address, "minute", 1, None, batch_size)
+            .fetch_multi_source(mint, &pool_address, "minute", 1, batch_size)
             .await;
 
         match data {
@@ -892,6 +900,100 @@ impl OhlcvMonitor {
         }
 
         Ok(())
+    }
+
+    /// Fetch OHLCV directly from SolanaTracker (no pool address needed)
+    /// Used as fallback when pool discovery fails
+    async fn fetch_via_solana_tracker(&self, mint: &str) -> OhlcvResult<()> {
+        let batch_size = {
+            let active = self.active_tokens.read().await;
+            let config = active
+                .get(mint)
+                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
+            PriorityManager::calculate_batch_size(config.priority)
+        };
+
+        let data = self
+            .fetcher
+            .fetch_from_solana_tracker(mint, "1m", batch_size)
+            .await;
+
+        match data {
+            Ok(candles) if !candles.is_empty() => {
+                // Store in DB (use mint as pool placeholder since we don't have one)
+                let stored_count = self.db.insert_candles_batch(
+                    mint,
+                    mint, // Use mint as pool_address for SolanaTracker-sourced data
+                    Timeframe::Minute1,
+                    &candles,
+                    "solanatracker",
+                )?;
+
+                if stored_count > 0 {
+                    // Update cache
+                    self.cache.put(
+                        mint,
+                        None,
+                        Timeframe::Minute1,
+                        candles.clone(),
+                    )?;
+
+                    // Mark successful fetch
+                    {
+                        let mut active = self.active_tokens.write().await;
+                        if let Some(config) = active.get_mut(mint) {
+                            config.mark_fetch();
+                            config.mark_activity();
+                        }
+                    }
+
+                    record_ohlcv_event(
+                        "solanatracker_fetch_success",
+                        Severity::Info,
+                        Some(mint),
+                        None,
+                        json!({
+                            "source": "solanatracker",
+                            "candles_fetched": candles.len(),
+                            "candles_stored": stored_count,
+                        }),
+                    )
+                    .await;
+
+                    logger::info(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "SolanaTracker OHLCV: {} candles for {} (no pool needed)",
+                            stored_count, &mint[..mint.len().min(12)]
+                        ),
+                    );
+                }
+
+                Ok(())
+            }
+            Ok(_) => {
+                // Empty response
+                let mut active = self.active_tokens.write().await;
+                if let Some(config) = active.get_mut(mint) {
+                    config.mark_empty_fetch();
+                }
+                Ok(())
+            }
+            Err(e) => {
+                record_ohlcv_event(
+                    "solanatracker_fetch_failed",
+                    Severity::Warn,
+                    Some(mint),
+                    None,
+                    json!({
+                        "error": e.to_string(),
+                        "source": "solanatracker",
+                    }),
+                )
+                .await;
+                Err(e)
+            }
+        }
     }
 
     async fn record_monitor_cycle_start(&self, token_count: usize) {
@@ -1468,10 +1570,10 @@ impl OhlcvMonitor {
             ),
         );
 
-        // Fetch using native timeframe
+        // Fetch using multi-source fallback
         let candles = self
             .fetcher
-            .fetch_with_aggregate(pool_address, api_endpoint, aggregate, None, max_candles)
+            .fetch_multi_source(mint, pool_address, api_endpoint, aggregate, max_candles)
             .await?;
 
         if candles.is_empty() {

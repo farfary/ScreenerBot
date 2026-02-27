@@ -17,6 +17,9 @@ use super::jupiter::JupiterClient;
 use super::rugcheck::{
     RugcheckClient, RATE_LIMIT_PER_MINUTE as RUG_RATE_LIMIT, TIMEOUT_SECS as RUG_TIMEOUT,
 };
+use super::solana_tracker::{
+    SolanaTrackerClient, RATE_LIMIT_PER_MINUTE as ST_RATE_LIMIT, TIMEOUT_SECS as ST_TIMEOUT,
+};
 use super::stats::ApiStats;
 
 /// Global API manager - holds all API clients with their individual rate limiters and stats
@@ -27,6 +30,7 @@ pub struct ApiManager {
     pub jupiter: JupiterClient,
     pub coingecko: CoinGeckoClient,
     pub defillama: DefiLlamaClient,
+    pub solana_tracker: SolanaTrackerClient,
 }
 
 impl ApiManager {
@@ -71,6 +75,19 @@ impl ApiManager {
             && discovery_cfg.defillama.enabled
             && discovery_cfg.defillama.protocols_enabled;
 
+        let st_cfg = &sources_cfg.solana_tracker;
+        let st_enabled = st_cfg.enabled && !st_cfg.api_key.is_empty();
+        let st_rate_limit = if st_cfg.rate_limit_per_minute == 0 {
+            ST_RATE_LIMIT
+        } else {
+            st_cfg.rate_limit_per_minute as usize
+        };
+        let st_timeout = if st_cfg.timeout_seconds == 0 {
+            ST_TIMEOUT
+        } else {
+            st_cfg.timeout_seconds
+        };
+
         logger::info(LogTag::Api, "Initializing global API manager");
 
         // Record API manager initialization event
@@ -81,6 +98,7 @@ impl ApiManager {
             let jup = jup_enabled;
             let cg = coingecko_enabled;
             let dl = defillama_enabled;
+            let st = st_enabled;
             async move {
                 record_api_event(
                     "ApiManager",
@@ -94,6 +112,7 @@ impl ApiManager {
                             "jupiter": jup,
                             "coingecko": cg,
                             "defillama": dl,
+                            "solana_tracker": st,
                         },
                     }),
                 )
@@ -174,6 +193,23 @@ impl ApiManager {
                 );
                 DefiLlamaClient::new(false).expect("Failed to create disabled DefiLlama client")
             }),
+            solana_tracker: SolanaTrackerClient::new(
+                st_enabled,
+                st_cfg.api_key.clone(),
+                st_rate_limit,
+                st_timeout,
+            )
+            .unwrap_or_else(|e| {
+                logger::warning(
+                    LogTag::Api,
+                    &format!(
+                        "Failed to initialize SolanaTracker client: {} - using disabled client",
+                        e
+                    ),
+                );
+                SolanaTrackerClient::new(false, String::new(), ST_RATE_LIMIT, ST_TIMEOUT)
+                    .expect("Failed to create disabled SolanaTracker client")
+            }),
         }
     }
 
@@ -186,6 +222,7 @@ impl ApiManager {
             jupiter: self.jupiter.get_stats().await,
             coingecko: self.coingecko.get_stats().await,
             defillama: self.defillama.get_stats().await,
+            solana_tracker: self.solana_tracker.get_stats().await,
         }
     }
 }
@@ -199,6 +236,7 @@ pub struct ApiManagerStats {
     pub jupiter: ApiStats,
     pub coingecko: ApiStats,
     pub defillama: ApiStats,
+    pub solana_tracker: ApiStats,
 }
 
 /// Global singleton instance - lazy initialized on first access
