@@ -120,19 +120,34 @@ async fn update_position_price_and_pnl(
 
     let _lock = crate::positions::acquire_position_lock(token_mint).await;
 
+    // Apply pool price bias correction (BUG-31: DAMM pools underestimate by ~5-6%)
+    // Uses the ratio of actual swap price to pool price at entry time to correct ongoing bias
+    let corrected_price = {
+        let pos_opt = crate::positions::state::get_position_by_id(position_id).await;
+        if let Some(ref pos) = pos_opt {
+            crate::positions::price_resolution::apply_pool_bias_correction(
+                current_price,
+                pos.entry_price,
+                pos.effective_entry_price,
+            )
+        } else {
+            current_price
+        }
+    };
+
     let now = chrono::Utc::now();
 
     // Update by position ID to avoid updating a closed position with the same mint
     let updated = crate::positions::state::update_position_state_by_id(position_id, |pos| {
-        pos.current_price = Some(current_price);
+        pos.current_price = Some(corrected_price);
         pos.current_price_updated = Some(now);
 
-        if current_price > pos.price_highest {
-            pos.price_highest = current_price;
+        if corrected_price > pos.price_highest {
+            pos.price_highest = corrected_price;
         }
 
-        if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
-            pos.price_lowest = current_price;
+        if corrected_price < pos.price_lowest || pos.price_lowest == 0.0 {
+            pos.price_lowest = corrected_price;
         }
     })
     .await;
@@ -150,9 +165,9 @@ async fn update_position_price_and_pnl(
             format!("Position id={position_id} disappeared after price update: {token_mint}")
         })?;
 
-    // Calculate PnL with the new price
+    // Calculate PnL with the bias-corrected price
     let (pnl_sol, pnl_pct) =
-        crate::positions::calculate_position_pnl(&position, Some(current_price)).await;
+        crate::positions::calculate_position_pnl(&position, Some(corrected_price)).await;
 
     // Update PnL fields in memory
     position.unrealized_pnl = Some(pnl_sol);

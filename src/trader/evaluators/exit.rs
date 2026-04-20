@@ -49,7 +49,12 @@ pub async fn evaluate_exit_for_position(
     let current_price = match get_price_with_api_fallback(&position.mint).await {
         Some((price_result, _source)) => {
             if price_result.price_sol > 0.0 && price_result.price_sol.is_finite() {
-                price_result.price_sol
+                // Apply pool price bias correction (BUG-31: DAMM pools underestimate ~5-6%)
+                crate::positions::price_resolution::apply_pool_bias_correction(
+                    price_result.price_sol,
+                    position.entry_price,
+                    position.effective_entry_price,
+                )
             } else {
                 return Ok(None); // Invalid price
             }
