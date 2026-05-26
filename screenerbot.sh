@@ -18,8 +18,6 @@
 # USAGE:
 #   curl -fsSL https://screenerbot.io/install.sh | bash
 #   OR
-#   bash <(curl -fsSL https://raw.githubusercontent.com/screenerbotio/ScreenerBot/main/screenerbot.sh)
-#   OR
 #   wget -qO- https://screenerbot.io/install.sh | bash
 #
 # FEATURES:
@@ -69,7 +67,7 @@ ensure_root
 
 readonly SCRIPT_VERSION="1.1.2"
 readonly API_BASE="https://screenerbot.io/api"
-readonly GITHUB_RAW="https://raw.githubusercontent.com/screenerbotio/ScreenerBot/main"
+readonly INSTALL_SCRIPT_URL="https://screenerbot.io/install.sh"
 readonly INSTALL_DIR="/opt/screenerbot"
 readonly SYMLINK_PATH="/usr/local/bin/screenerbot"
 readonly MANAGER_PATH="/usr/local/bin/screenerbot-manager"
@@ -649,10 +647,10 @@ get_download_url() {
     echo "${API_BASE}/releases/download?version=${version}&platform=${platform}&mode=update"
 }
 
-# Get remote script version from GitHub
+# Get remote script version from install endpoint
 get_remote_script_version() {
     local remote_version
-    remote_version=$(curl -fsSL --connect-timeout 5 "${GITHUB_RAW}/screenerbot.sh" 2>/dev/null | \
+    remote_version=$(curl -fsSL --connect-timeout 5 "${INSTALL_SCRIPT_URL}" 2>/dev/null | \
         grep -m1 'SCRIPT_VERSION=' | sed 's/.*SCRIPT_VERSION="\([^"]*\)".*/\1/')
     echo "$remote_version"
 }
@@ -712,7 +710,7 @@ install_manager_script() {
     local temp_script
     temp_script=$(mktemp)
     
-    if curl -fsSL "${GITHUB_RAW}/screenerbot.sh" -o "$temp_script"; then
+    if curl -fsSL "${INSTALL_SCRIPT_URL}" -o "$temp_script"; then
         if head -n 1 "$temp_script" | grep -q "^#!/bin/bash"; then
             chmod +x "$temp_script"
             mv "$temp_script" "$MANAGER_PATH"
@@ -737,7 +735,7 @@ self_update() {
     temp_script=$(mktemp)
     
     log_info "Downloading latest script..."
-    if curl -fsSL "${GITHUB_RAW}/screenerbot.sh" -o "$temp_script"; then
+    if curl -fsSL "${INSTALL_SCRIPT_URL}" -o "$temp_script"; then
         # Check if file is valid bash script
         if ! head -n 1 "$temp_script" | grep -q "^#!/bin/bash"; then
             log_error "Downloaded file is not a valid script"
@@ -764,7 +762,7 @@ self_update() {
         
         # Also update manager path if different
         if [ "$current_script" != "$MANAGER_PATH" ] && [ -f "$MANAGER_PATH" ]; then
-            curl -fsSL "${GITHUB_RAW}/screenerbot.sh" -o "$MANAGER_PATH" 2>/dev/null
+            curl -fsSL "${INSTALL_SCRIPT_URL}" -o "$MANAGER_PATH" 2>/dev/null
             chmod +x "$MANAGER_PATH" 2>/dev/null
         fi
         
