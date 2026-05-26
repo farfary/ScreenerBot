@@ -492,6 +492,35 @@ function saveWindowState() {
   }
 }
 
+function getZoomWebContents() {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  if (focusedWindow && focusedWindow.webContents && !focusedWindow.webContents.isDestroyed()) {
+    return focusedWindow.webContents;
+  }
+  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+    return mainWindow.webContents;
+  }
+  return null;
+}
+
+function adjustZoomLevel(delta) {
+  const webContents = getZoomWebContents();
+  if (!webContents) return 0;
+  const currentZoom = webContents.getZoomLevel();
+  const nextZoom = Math.max(-5, Math.min(5, currentZoom + delta));
+  webContents.setZoomLevel(nextZoom);
+  saveWindowState();
+  return webContents.getZoomLevel();
+}
+
+function resetZoomLevel() {
+  const webContents = getZoomWebContents();
+  if (!webContents) return 0;
+  webContents.setZoomLevel(0);
+  saveWindowState();
+  return 0;
+}
+
 /**
  * Check and install Visual C++ Redistributable if missing (Windows Only)
  * Returns true if safe to proceed, false if we should stop/restart
@@ -676,6 +705,29 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Ensure zoom shortcuts work consistently across keyboard layouts.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isZoomModifier = input.control || input.meta;
+    if (!isZoomModifier || input.alt) return;
+
+    if (input.key === '+' || input.key === '=' || input.code === 'NumpadAdd') {
+      event.preventDefault();
+      adjustZoomLevel(0.5);
+      return;
+    }
+
+    if (input.key === '-' || input.code === 'NumpadSubtract') {
+      event.preventDefault();
+      adjustZoomLevel(-0.5);
+      return;
+    }
+
+    if (input.key === '0' || input.code === 'Numpad0') {
+      event.preventDefault();
+      resetZoomLevel();
+    }
+  });
+
   // Handle window close event
   mainWindow.on('close', async (event) => {
     // If we're already quitting, let it close
@@ -811,9 +863,9 @@ function createApplicationMenu() {
         { role: 'reload' },
         { role: 'forceReload' },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        { label: 'Reset Zoom', accelerator: 'CmdOrCtrl+0', click: () => resetZoomLevel() },
+        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => adjustZoomLevel(0.5) },
+        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => adjustZoomLevel(-0.5) },
         { type: 'separator' },
         { role: 'togglefullscreen' },
         { type: 'separator' },
@@ -1144,38 +1196,20 @@ ipcMain.handle('app:close', () => {
 });
 
 ipcMain.handle('app:zoom-in', () => {
-  if (mainWindow) {
-    const currentZoom = mainWindow.webContents.getZoomLevel();
-    // Limit zoom to max +5 (about 300%)
-    if (currentZoom < 5) {
-      mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
-    }
-    return mainWindow.webContents.getZoomLevel();
-  }
-  return 0;
+  return adjustZoomLevel(0.5);
 });
 
 ipcMain.handle('app:zoom-out', () => {
-  if (mainWindow) {
-    const currentZoom = mainWindow.webContents.getZoomLevel();
-    // Limit zoom to min -5 (about 25%)
-    if (currentZoom > -5) {
-      mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
-    }
-    return mainWindow.webContents.getZoomLevel();
-  }
-  return 0;
+  return adjustZoomLevel(-0.5);
 });
 
 ipcMain.handle('app:zoom-reset', () => {
-  if (mainWindow) {
-    mainWindow.webContents.setZoomLevel(0);
-  }
-  return 0;
+  return resetZoomLevel();
 });
 
 ipcMain.handle('app:get-zoom-level', () => {
-  return mainWindow ? mainWindow.webContents.getZoomLevel() : 0;
+  const webContents = getZoomWebContents();
+  return webContents ? webContents.getZoomLevel() : 0;
 });
 
 ipcMain.handle('app:get-version', () => {

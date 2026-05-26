@@ -8,7 +8,7 @@
 //   MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:2000
 // Default dirty_decay_ms=10000 (10s) — lower values return pages to OS faster
 // but increase CPU overhead from the decay thread.
-#[cfg(feature = "jemalloc")]
+#[cfg(all(feature = "jemalloc", not(target_env = "msvc")))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
