@@ -1136,5 +1136,7 @@ Well-organized submodule patterns to follow:
 - Primary distribution is now website-managed release storage on `screenerbot.io` (`/api/releases/*` + `/releases/...`), with release metadata stored in website DB.
 - `install.sh` must resolve to `https://screenerbot.io/install.sh` (do not depend on raw GitHub installer URLs in docs or scripts).
 - For release metadata updates (notes/latest/history), avoid long-lived public caching on `latest`/`history` API responses; stale cache can hide newly published notes/versions.
+- Download UI integrity: only expose per-platform download buttons when the target file exists in `public/releases/...`; missing files must be hidden (keep notes/history entry visible as archived).
+- Release notes style: use professional text-only notes (no emoji/icons) for consistency across all versions in website latest/history views.
 - Tag format: `v{version}-beta` (e.g., `v0.1.111-beta`)
 - Asset filename format: `ScreenerBot-v{base_version}-{OS}-{arch}.{ext}`
