@@ -1130,9 +1130,11 @@ Well-organized submodule patterns to follow:
 - Linux arm64 cross-compile needs `CC`/`CXX`/`LINKER` env vars for aarch64
 - Electron Forge packaging produces DMG/ZIP (macOS), DEB/RPM/ZIP (Linux), MSI/ZIP (Windows)
 - Linux headless `.tar.gz` also built (Rust binary only, no Electron)
-- Optional GitHub Release creation with `create_release` input
+- Optional GitHub Release creation with `create_release` input (not required for current distribution path)
 
 **Distribution:**
-- GitHub Releases is the single source of truth for all downloads
+- Primary distribution is now website-managed release storage on `screenerbot.io` (`/api/releases/*` + `/releases/...`), with release metadata stored in website DB.
+- `install.sh` must resolve to `https://screenerbot.io/install.sh` (do not depend on raw GitHub installer URLs in docs or scripts).
+- For release metadata updates (notes/latest/history), avoid long-lived public caching on `latest`/`history` API responses; stale cache can hide newly published notes/versions.
 - Tag format: `v{version}-beta` (e.g., `v0.1.111-beta`)
 - Asset filename format: `ScreenerBot-v{base_version}-{OS}-{arch}.{ext}`
