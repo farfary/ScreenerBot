@@ -86,9 +86,11 @@ nvm use 22
 ## Quick Start
 
 ```bash
-# Clone the repository
-git clone https://github.com/screenerbotio/ScreenerBot.git
-cd ScreenerBot
+# Download and extract the source tarball for a specific version
+curl -fL "https://screenerbot.io/api/releases/download?version=<VERSION>&platform=source-code" \
+     -o screenerbot-source.tar.gz
+tar -xzf screenerbot-source.tar.gz
+cd ScreenerBot-v<VERSION>-source
 
 # Build the Rust engine (release mode)
 cargo build --release
