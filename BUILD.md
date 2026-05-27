@@ -311,7 +311,7 @@ cargo build --release
 ./target/release/screenerbot --help
 ```
 
-In headless mode, the web dashboard is accessible via browser at `http://localhost:3333` (default port). All trading functionality works identically — the Electron shell is only a convenience wrapper.
+In headless mode, the web dashboard is accessible via browser at `http://localhost:8080` (default port). The port is configurable via the `[webserver]` section in `config.toml`. All trading functionality works identically — the Electron shell is only a convenience wrapper.
 
 **Headless binary size is significantly smaller** (~16 MB compressed) since it doesn't include Electron.
 
