@@ -80,6 +80,8 @@ _backup/
 !.github/workflows/
 Assistant-session-*.md
 .folderinfo
+# Agent instruction files — stay on disk but are not part of the public repo
+**/AGENTS.md
 
 # Lint/format configs (development only)
 .htmlvalidate.json
