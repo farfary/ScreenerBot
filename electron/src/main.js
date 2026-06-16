@@ -41,6 +41,9 @@ let isQuitting = false;
 let tray = null;
 let isExitDialogOpen = false; // Guard flag to prevent multiple exit dialogs
 let backendReadyResolve = null; // Promise resolver for SCREENERBOT_READY signal
+let startupError = null; // Structured fatal startup error (SCREENERBOT_ERROR payload), if any
+let isRecovering = false; // True while a one-click recovery (e.g. wallet reset) is in progress
+let dashboardLoaded = false; // True once the dashboard URL has been loaded successfully
 
 /**
  * Get the path to tray icon based on platform
@@ -321,20 +324,21 @@ async function waitForBackend() {
 /**
  * Start the screenerbot backend process
  */
-function startBackend() {
+function startBackend(extraArgs = []) {
   const binaryPath = getBinaryPath();
-  
+
   // Check if binary exists
   if (!fs.existsSync(binaryPath)) {
     console.error('[Electron] Binary not found at:', binaryPath);
     return null;
   }
-  
-  console.log('[Electron] Starting backend:', binaryPath);
+
+  const args = ['--gui', ...extraArgs];
+  console.log('[Electron] Starting backend:', binaryPath, args.join(' '));
 
   try {
     // Spawn the backend process
-    backendProcess = spawn(binaryPath, ['--gui'], {
+    backendProcess = spawn(binaryPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
       env: {
@@ -351,6 +355,24 @@ function startBackend() {
       lines.forEach(line => {
         if (line.trim()) {
           console.log('[Backend]', line);
+          // Parse SCREENERBOT_ERROR signal — a structured fatal startup failure.
+          // Symmetric with SCREENERBOT_READY: base64-encoded JSON on one line.
+          if (line.startsWith('SCREENERBOT_ERROR:')) {
+            try {
+              const encoded = line.slice('SCREENERBOT_ERROR:'.length).trim();
+              const payload = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+              console.error('[Electron] Backend reported fatal startup error:', payload.code);
+              startupError = payload;
+              // Unblock waitForBackend() so the boot sequence stops waiting.
+              if (backendReadyResolve) {
+                backendReadyResolve(false);
+                backendReadyResolve = null;
+              }
+            } catch (err) {
+              console.error('[Electron] Failed to parse SCREENERBOT_ERROR payload:', err.message);
+            }
+            return;
+          }
           // Parse SCREENERBOT_READY message for port and token
           if (line.startsWith('SCREENERBOT_READY:')) {
             const parts = line.split(':');
@@ -389,10 +411,23 @@ function startBackend() {
     backendProcess.on('exit', (code, signal) => {
       console.log(`[Electron] Backend exited with code ${code}, signal ${signal}`);
       backendProcess = null;
-      
-      // If we're not quitting, the backend crashed - show error
-      if (!isQuitting && mainWindow) {
-        updateLoadingStatus(`Backend process exited unexpectedly (code: ${code})`);
+
+      // Ignore exits during shutdown or while a recovery relaunch is in flight.
+      if (isQuitting || isRecovering || !mainWindow) {
+        return;
+      }
+
+      // If the backend reported a structured startup error, the boot sequence
+      // renders the dedicated error screen — don't overwrite it here. Only
+      // surface a generic crash screen for an unexplained early exit.
+      if (startupError) {
+        return;
+      }
+
+      if (!dashboardLoaded) {
+        showBootError(genericBootError(
+          `The backend stopped before the dashboard was ready (exit code ${code}).`
+        ));
       }
     });
 
@@ -1023,7 +1058,49 @@ function loadMainApp() {
   // Add ?electron=1 to tell the dashboard to skip its splash screen
   const appUrl = `http://${CONFIG.host}:${CONFIG.port}?electron=1`;
   console.log('[Electron] Loading main app:', appUrl);
+  dashboardLoaded = true;
   mainWindow.loadURL(appUrl);
+}
+
+/**
+ * Build a generic boot-error payload for unexplained early failures, mirroring
+ * the structured SCREENERBOT_ERROR shape so the renderer can treat both alike.
+ */
+function genericBootError(detail) {
+  const logsPath = path.join(app.getPath('userData'), 'logs', 'latest.log');
+  return {
+    code: 'generic',
+    title: 'ScreenerBot could not start',
+    detail: detail || 'The backend stopped unexpectedly before the dashboard was ready.',
+    remedy: 'Open the logs folder to see what happened, then restart the app. If the problem '
+      + 'persists, contact support at t.me/screenerbotio_support.',
+    log_path: logsPath
+  };
+}
+
+/**
+ * Render the dedicated boot-error screen by reloading the splash page (if the
+ * dashboard URL had already been attempted) and pushing the error payload to it.
+ */
+function showBootError(payload) {
+  if (!mainWindow) return;
+  startupError = payload;
+
+  const send = () => {
+    if (mainWindow && mainWindow.webContents) {
+      mainWindow.webContents.send('boot:error', payload);
+    }
+  };
+
+  // The splash page (index.html) hosts the error screen. If we've navigated away
+  // to the dashboard URL, reload it first; otherwise push the payload directly.
+  const currentUrl = mainWindow.webContents.getURL();
+  if (!currentUrl.endsWith('index.html') && !currentUrl.startsWith('file://')) {
+    mainWindow.webContents.once('did-finish-load', send);
+    loadLoadingPage();
+  } else {
+    send();
+  }
 }
 
 /**
@@ -1070,7 +1147,9 @@ async function initialize() {
   
   if (!backend) {
     console.error('[Electron] Failed to start backend process');
-    updateLoadingStatus('Failed to start backend process');
+    showBootError(genericBootError(
+      'The backend program could not be started. It may be missing or blocked by security software.'
+    ));
     return;
   }
 
@@ -1084,9 +1163,15 @@ async function initialize() {
     await new Promise(resolve => setTimeout(resolve, 500));
     // Load the main application
     loadMainApp();
+  } else if (startupError) {
+    // Backend reported a structured fatal error — show the dedicated screen.
+    showBootError(startupError);
   } else {
-    // Show error in the loading page
-    updateLoadingStatus('Backend failed to start. Please check logs.');
+    // No structured error but never became ready (e.g. health-check timeout).
+    showBootError(genericBootError(
+      'The backend did not finish starting in time. This can happen on a slow first run or if '
+      + 'another program is blocking the connection.'
+    ));
   }
 }
 
@@ -1165,6 +1250,74 @@ app.on('window-all-closed', () => {
 // ============================================================================
 // IPC Handlers
 // ============================================================================
+
+// --- Boot-error screen actions -------------------------------------------------
+
+/**
+ * Perform a safe one-click recovery for a recoverable startup error by relaunching
+ * the backend with the matching CLI flag. The Rust binary backs up the affected
+ * data before clearing it, then continues into a normal boot.
+ */
+async function recoverAndRestart(extraArgs, statusLabel) {
+  if (isRecovering) return;
+  isRecovering = true;
+  startupError = null;
+  dashboardLoaded = false;
+
+  // Return to the splash page and show progress.
+  loadLoadingPage();
+  if (mainWindow.webContents.isLoading()) {
+    await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
+  }
+  updateLoadingStatus(statusLabel || 'Recovering...');
+
+  // Ensure any prior backend is gone before relaunching.
+  if (backendProcess) {
+    try { backendProcess.kill(); } catch (_) { /* already gone */ }
+    backendProcess = null;
+  }
+
+  const backend = startBackend(extraArgs);
+  isRecovering = false;
+  if (!backend) {
+    showBootError(genericBootError('Could not relaunch the backend for recovery.'));
+    return;
+  }
+
+  updateLoadingStatus('Waiting for backend...');
+  const isReady = await waitForBackend();
+  if (isReady) {
+    updateLoadingStatus('Loading dashboard...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    loadMainApp();
+  } else if (startupError) {
+    showBootError(startupError);
+  } else {
+    showBootError(genericBootError('Recovery finished but the backend did not become ready.'));
+  }
+}
+
+ipcMain.handle('boot:reset-wallet-data', async () => {
+  console.log('[Electron] Boot recovery requested: reset wallet data');
+  await recoverAndRestart(['--clean-wallet-data'], 'Backing up and resetting wallet data...');
+  return true;
+});
+
+ipcMain.handle('boot:open-logs', () => {
+  const logsPath = path.join(app.getPath('userData'), 'logs');
+  if (fs.existsSync(logsPath)) {
+    shell.openPath(logsPath);
+  } else {
+    shell.openPath(app.getPath('userData'));
+  }
+  return true;
+});
+
+ipcMain.handle('boot:quit', () => {
+  isQuitting = true;
+  app.quit();
+  return true;
+});
 
 ipcMain.handle('app:minimize', () => {
   if (mainWindow) {

@@ -125,6 +125,153 @@
       color: #6e7681;
       font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Menlo', monospace;
     }
+
+    /* ====================================================================
+       Boot-error screen — shown only when the backend cannot start.
+       Hidden by default so a healthy boot is completely silent.
+       ==================================================================== */
+    .boot-error {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      padding: 2.5rem 1.5rem;
+      -webkit-app-region: no-drag;
+    }
+
+    .boot-error.visible { display: flex; }
+    .splash-screen.hidden { display: none; }
+
+    .boot-error-card {
+      width: 100%;
+      max-width: 620px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      animation: splashFadeIn 0.4s ease-out;
+    }
+
+    .boot-error-head {
+      display: flex;
+      align-items: center;
+      gap: 0.875rem;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .boot-error-icon {
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(248, 81, 73, 0.12);
+      color: #f85149;
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    .boot-error-title {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .boot-error-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    .boot-error-body { padding: 1.25rem 1.5rem; }
+
+    .boot-error-detail {
+      font-size: 0.85rem;
+      line-height: 1.55;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      text-align: left;
+      word-break: break-word;
+      max-height: 220px;
+      overflow-y: auto;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.875rem 1rem;
+    }
+
+    .boot-error-remedy {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      line-height: 1.55;
+      color: var(--text-primary);
+      word-break: break-word;
+      text-align: left;
+    }
+
+    #bootErrorRemedy {
+      display: block;
+      white-space: pre-wrap;
+      text-align: left;
+    }
+
+    .boot-error-remedy-label {
+      display: block;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .boot-error-logpath {
+      margin-top: 1rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Menlo', monospace;
+      word-break: break-all;
+    }
+
+    .boot-error-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 0.625rem;
+      padding: 1rem 1.5rem 1.25rem;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .boot-btn {
+      -webkit-app-region: no-drag;
+      padding: 0.55rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .boot-btn.primary { background: #2ea043; color: #fff; }
+    .boot-btn.primary:hover { background: #3fb950; }
+
+    .boot-btn.secondary {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border-color: var(--border-color);
+    }
+    .boot-btn.secondary:hover { border-color: #484f58; }
+
+    .boot-btn.ghost { background: transparent; color: var(--text-secondary); }
+    .boot-btn.ghost:hover { color: var(--text-primary); }
+
+    .boot-btn:disabled { opacity: 0.55; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -155,19 +302,28 @@
     <div class="splash-version" id="version"></div>
   </div>
 
-  <script>
-    // Listen for status updates from main process via IPC
-    if (window.electronAPI) {
-      // Get version
-      window.electronAPI.getVersion().then(version => {
-        document.getElementById('version').textContent = 'v' + version;
-      }).catch(() => {});
-      
-      // Listen for loading status updates
-      window.electronAPI.onLoadingStatus((status) => {
-        document.getElementById('status').textContent = status;
-      });
-    }
-  </script>
+  <!-- Boot-error screen — hidden unless the backend fails to start -->
+  <div class="boot-error" id="bootError">
+    <div class="boot-error-card">
+      <div class="boot-error-head">
+        <div class="boot-error-icon">!</div>
+        <div>
+          <div class="boot-error-title" id="bootErrorTitle">ScreenerBot could not start</div>
+          <div class="boot-error-subtitle" id="bootErrorSubtitle"></div>
+        </div>
+      </div>
+      <div class="boot-error-body">
+        <div class="boot-error-detail" id="bootErrorDetail"></div>
+        <div class="boot-error-remedy" id="bootErrorRemedyWrap" hidden>
+          <span class="boot-error-remedy-label">How to fix</span>
+          <span id="bootErrorRemedy"></span>
+        </div>
+        <div class="boot-error-logpath" id="bootErrorLogPath"></div>
+      </div>
+      <div class="boot-error-actions" id="bootErrorActions"></div>
+    </div>
+  </div>
+
+  <script src="boot.js"></script>
 </body>
 </html>

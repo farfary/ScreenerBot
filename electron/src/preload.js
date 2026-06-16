@@ -40,6 +40,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('loading:status', handler);
     return () => ipcRenderer.removeListener('loading:status', handler);
   },
+
+  // Boot-error screen: receive a structured fatal startup error payload
+  onBootError: (callback) => {
+    const handler = (event, payload) => callback(payload);
+    ipcRenderer.on('boot:error', handler);
+    return () => ipcRenderer.removeListener('boot:error', handler);
+  },
+
+  // Boot-error recovery/actions
+  bootResetWalletData: () => ipcRenderer.invoke('boot:reset-wallet-data'),
+  bootOpenLogs: () => ipcRenderer.invoke('boot:open-logs'),
+  bootQuit: () => ipcRenderer.invoke('boot:quit'),
   
   // Platform info
   platform: process.platform,
