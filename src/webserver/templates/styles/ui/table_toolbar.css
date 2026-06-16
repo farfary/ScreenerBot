@@ -572,27 +572,92 @@
 }
 
 .table-toolbar--compact .table-toolbar__row--main {
-  gap: 0.75rem;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
 }
 
 .table-toolbar--compact .table-toolbar-controls {
   flex: 0 1 auto;
-  gap: 0.5rem;
+  gap: 0.375rem;
+  flex-wrap: nowrap;
 }
 
 .table-toolbar--compact .table-toolbar-controls > .table-toolbar-search {
-  flex: 0 1 280px;
-  min-width: 160px;
-  max-width: 320px;
+  flex: 0 1 180px;
+  min-width: 110px;
+  max-width: 240px;
+}
+
+/* Filter field: no forced minimum — size to select content */
+.table-toolbar--compact .table-toolbar-field {
+  min-width: 0;
+}
+
+/* Compact inputs and selects: reduced height and font */
+.table-toolbar--compact .table-toolbar-input,
+.table-toolbar--compact .table-toolbar-select,
+.table-toolbar--compact .dt-filter,
+.table-toolbar--compact .dt-search-input {
+  height: 32px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+
+/* Select arrow repositioned for the smaller height */
+.table-toolbar--compact .table-toolbar-select,
+.table-toolbar--compact .dt-filter {
+  padding-right: 26px;
+  min-width: 0;
+  background-position: right 7px center;
+}
+
+/* Search input: maintain icon and clear-button spacing */
+.table-toolbar--compact .table-toolbar-search .dt-search-input {
+  padding-left: 30px;
+  padding-right: 28px;
+  min-width: 0;
+}
+
+.table-toolbar--compact .table-toolbar-search__icon {
+  left: 10px;
+  font-size: 0.8rem;
+}
+
+/* Compact toolbar buttons */
+.table-toolbar--compact .table-toolbar-btn {
+  height: 32px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+
+.table-toolbar--compact .table-toolbar-btn--icon {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 5px;
+}
+
+/* Compact chip label/value sizing */
+.table-toolbar--compact .table-toolbar-chip__label {
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.table-toolbar--compact .table-toolbar-chip__value {
+  font-size: 0.8rem;
 }
 
 .table-toolbar--compact .table-toolbar-summary {
-  gap: 0.75rem;
+  gap: 0.5rem;
   margin-left: auto;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .table-toolbar--compact .table-toolbar-actions {
   flex-shrink: 0;
+  flex-wrap: nowrap;
+  gap: 0.375rem;
 }
 
 @media (width <= 960px) {
@@ -629,20 +694,20 @@
     margin-left: auto;
   }
 
-  /* Compact: wrap into two rows on narrow screens */
+  /* Compact: graceful wrap on narrow screens */
   .table-toolbar--compact .table-toolbar__row--main {
     flex-wrap: wrap;
   }
 
   .table-toolbar--compact .table-toolbar-controls {
     flex: 1 1 100%;
-    flex-direction: row;
+    flex-flow: row wrap;
     align-items: center;
   }
 
   .table-toolbar--compact .table-toolbar-controls > .table-toolbar-search {
     flex: 1 1 auto;
-    min-width: 160px;
+    min-width: 0;
     max-width: none;
   }
 }
