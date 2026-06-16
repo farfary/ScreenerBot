@@ -180,7 +180,20 @@ impl ServiceManager {
         log_service_startup_phase("begin", Some(&begin_details));
 
         // Resolve dependencies and order by priority
-        let ordered = self.resolve_startup_order(&enabled_services)?;
+        let mut ordered = self.resolve_startup_order(&enabled_services)?;
+
+        // resolve_startup_order pulls in declared dependencies transitively, even
+        // ones that are disabled. Dependency declarations only define ordering, not
+        // a hard requirement to run (see validate_dependencies: warn, don't fail).
+        // Retain only enabled services so a disabled dependency (e.g. RPC-bound
+        // pools/transactions in discovery-only mode) is never started. No-op when
+        // every service is enabled (normal mode).
+        ordered.retain(|name| {
+            self.services
+                .get(name)
+                .map(|s| s.is_enabled())
+                .unwrap_or(false)
+        });
 
         if !enabled_services.is_empty() {
             let enabled_list = enabled_services.join(",");
@@ -341,7 +354,7 @@ impl ServiceManager {
         );
 
         // Resolve dependencies and order by priority (includes dependency checking)
-        let ordered = match self.resolve_startup_order(&to_start) {
+        let mut ordered = match self.resolve_startup_order(&to_start) {
             Ok(order) => order,
             Err(e) => {
                 logger::error(
@@ -351,6 +364,17 @@ impl ServiceManager {
                 return Err(e);
             }
         };
+
+        // Drop transitively-pulled-in dependencies that are disabled (e.g.
+        // RPC-bound services in discovery-only mode). Also drop anything already
+        // running so we never re-init it. See start_all for the rationale.
+        ordered.retain(|name| {
+            self.services
+                .get(name)
+                .map(|s| s.is_enabled())
+                .unwrap_or(false)
+                && !self.handles.contains_key(name)
+        });
 
         logger::info(
             LogTag::System,
