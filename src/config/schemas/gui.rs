@@ -108,6 +108,10 @@ config_struct! {
 
         /// Whether onboarding has been completed (set true after first-time onboarding)
         onboarding_complete: bool = false,
+
+        /// Whether the user skipped wallet + RPC setup at first run (discovery-only mode).
+        /// When true the bot boots into discovery-only mode until setup is completed.
+        setup_skipped: bool = false,
     }
 }
 

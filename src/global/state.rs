@@ -15,9 +15,33 @@ pub static INITIALIZATION_COMPLETE: AtomicBool = AtomicBool::new(false);
 pub static CREDENTIALS_VALID: AtomicBool = AtomicBool::new(false);
 pub static RPC_VALID: AtomicBool = AtomicBool::new(false);
 
+/// Discovery-only mode — set when the user skipped wallet + RPC setup at first run.
+///
+/// In this mode only the discovery tier runs (connectivity, events, tokens,
+/// filtering, webserver); everything that needs a wallet or RPC stays stopped.
+/// Mutually exclusive with full initialization: when the user later completes
+/// setup, this is cleared and `INITIALIZATION_COMPLETE` is set instead.
+pub static DISCOVERY_ONLY_MODE: AtomicBool = AtomicBool::new(false);
+
 /// Check if initialization is complete and services can start.
 pub fn is_initialization_complete() -> bool {
     INITIALIZATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Check if the bot is running in discovery-only mode (wallet + RPC skipped).
+pub fn is_discovery_only_mode() -> bool {
+    DISCOVERY_ONLY_MODE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Set discovery-only mode flag.
+pub fn set_discovery_only_mode(enabled: bool) {
+    DISCOVERY_ONLY_MODE.store(enabled, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether discovery-tier services should run — true in either full mode or
+/// discovery-only mode. Used by the discovery-tier services' `is_enabled()`.
+pub fn is_discovery_or_full() -> bool {
+    is_initialization_complete() || is_discovery_only_mode()
 }
 
 // =============================================================================
