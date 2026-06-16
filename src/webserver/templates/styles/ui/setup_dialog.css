@@ -1,0 +1,234 @@
+/* Setup Dialog — wallet + RPC credential modal (preview-mode completion) */
+
+.setup-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgb(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  animation: setup-dialog-fade 0.18s ease;
+}
+
+@keyframes setup-dialog-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.setup-dialog {
+  width: 100%;
+  max-width: 560px;
+  background: var(--card-bg, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: var(--radius-xl, 14px);
+  box-shadow: 0 24px 60px rgb(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: setup-dialog-rise 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes setup-dialog-rise {
+  from {
+    transform: translateY(12px) scale(0.98);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.setup-dialog-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.875rem;
+  align-items: start;
+  padding: 1.25rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border-color, #30363d);
+}
+
+.setup-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgb(88, 166, 255, 0.12);
+  color: #58a6ff;
+  font-size: 1.25rem;
+}
+
+.setup-dialog-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--text-primary, #e6edf3);
+}
+
+.setup-dialog-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-secondary, #8b949e);
+}
+
+.setup-dialog-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+
+.setup-dialog-close:hover {
+  color: var(--text-primary, #e6edf3);
+  background: var(--bg-tertiary, #21262d);
+}
+
+.setup-dialog-body {
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.setup-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.setup-dialog-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary, #e6edf3);
+}
+
+.setup-dialog-label .req {
+  color: #f85149;
+}
+
+.setup-dialog-input-wrap {
+  position: relative;
+}
+
+.setup-dialog-input {
+  width: 100%;
+  resize: vertical;
+  padding: 0.625rem 0.75rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  color: var(--text-primary, #e6edf3);
+  background: var(--bg-primary, #0d1117);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  outline: none;
+}
+
+.setup-dialog-input:focus {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgb(88, 166, 255, 0.15);
+}
+
+.setup-dialog-reveal {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+  padding: 0.125rem;
+}
+
+.setup-dialog-reveal:hover {
+  color: var(--text-primary, #e6edf3);
+}
+
+.setup-dialog-hint {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--text-tertiary, #6e7681);
+}
+
+.setup-dialog-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.setup-dialog-status.error {
+  background: rgb(248, 81, 73, 0.1);
+  border: 1px solid rgb(248, 81, 73, 0.35);
+  color: #ff7b72;
+}
+
+.setup-dialog-status.warning {
+  background: rgb(227, 179, 65, 0.1);
+  border: 1px solid rgb(227, 179, 65, 0.35);
+  color: #e3b341;
+}
+
+.setup-dialog-status.success {
+  background: rgb(63, 185, 80, 0.1);
+  border: 1px solid rgb(63, 185, 80, 0.35);
+  color: #3fb950;
+}
+
+.setup-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding: 0.875rem 1.25rem 1.25rem;
+}
+
+.setup-dialog-btn {
+  padding: 0.5rem 1.125rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.setup-dialog-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.setup-dialog-btn.secondary {
+  background: var(--bg-tertiary, #21262d);
+  color: var(--text-primary, #e6edf3);
+  border-color: var(--border-color, #30363d);
+}
+
+.setup-dialog-btn.secondary:hover:not(:disabled) {
+  border-color: #484f58;
+}
+
+.setup-dialog-btn.primary {
+  background: #2ea043;
+  color: #fff;
+}
+
+.setup-dialog-btn.primary:hover:not(:disabled) {
+  background: #3fb950;
+}

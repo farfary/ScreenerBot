@@ -125,6 +125,7 @@ pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
 pub(super) const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
+pub(super) const SETUP_DIALOG_STYLES: &str = include_str!("templates/styles/ui/setup_dialog.css");
 pub(super) const CONTEXT_MENU_STYLES: &str = include_str!("templates/styles/ui/context_menu.css");
 pub(super) const ADVANCED_CHART_STYLES: &str =
     include_str!("templates/styles/ui/advanced_chart.css");
@@ -335,6 +336,7 @@ pub const EXIT_DIALOG_UI: &str = include_str!("templates/scripts/ui/exit_dialog.
 pub const CONFIG_IMPORT_EXPORT_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/config_import_export_dialog.js");
 pub const INPUT_DIALOG_UI: &str = include_str!("templates/scripts/ui/input_dialog.js");
+pub const SETUP_DIALOG_UI: &str = include_str!("templates/scripts/ui/setup_dialog.js");
 
 // Page-specific JavaScript - Public for asset_serving.rs
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");

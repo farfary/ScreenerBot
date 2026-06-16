@@ -51,8 +51,8 @@
   margin-top: 28px; /* Height of title bar area */
 }
 
-/* Discovery-only mode banner — shown when wallet + RPC setup was skipped */
-.discovery-banner {
+/* preview mode banner — shown when wallet + RPC setup was skipped */
+.preview-banner {
   display: flex;
   align-items: center;
   gap: 0.625rem;
@@ -64,21 +64,21 @@
   font-weight: 600;
 }
 
-.discovery-banner[hidden] {
+.preview-banner[hidden] {
   display: none;
 }
 
-.discovery-banner-icon {
+.preview-banner-icon {
   flex-shrink: 0;
   font-size: 1rem;
 }
 
-.discovery-banner-text {
+.preview-banner-text {
   flex: 1;
   min-width: 0;
 }
 
-.discovery-banner-btn {
+.preview-banner-btn {
   flex-shrink: 0;
   padding: 0.3125rem 0.875rem;
   border-radius: var(--radius-md, 6px);
@@ -93,7 +93,7 @@
     color 0.2s ease;
 }
 
-.discovery-banner-btn:hover {
+.preview-banner-btn:hover {
   background: var(--warning-text, #e3b341);
   color: var(--header-solid-bg, #0d1117);
 }
@@ -374,12 +374,12 @@
   color: #fbbf24;
 }
 
-/* Discovery-only mode: trading is intentionally off — use a neutral (not alarming) tone */
-.bot-card[data-status="discovery"] .card-icon {
+/* preview mode: trading is intentionally off — use a neutral (not alarming) tone */
+.bot-card[data-status="preview"] .card-icon {
   color: #58a6ff;
 }
 
-.bot-card[data-status="discovery"] .card-status {
+.bot-card[data-status="preview"] .card-status {
   color: #58a6ff;
 }
 

@@ -9,6 +9,7 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "./request_manager.js";
 import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
+import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff } from "./sounds.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
@@ -199,35 +200,24 @@ function setLoading(isLoading) {
   updateBadge(elements);
 }
 
-// Reveal the setup wizard overlay (reused from the first-run flow) so the user can
-// complete wallet + RPC setup from discovery-only mode.
+// Open the wallet + RPC setup dialog so the user can complete setup from preview mode
+// without leaving the current page. On success the dialog reloads into full mode.
 function openSetupWizard() {
-  const wrapperEl = document.getElementById("setupScreenWrapper");
-  if (wrapperEl) {
-    wrapperEl.style.display = "block";
-  }
-  const setupEl = document.getElementById("setupScreen");
-  if (setupEl) {
-    setupEl.style.display = "grid";
-    document.body.classList.add("initialization-mode");
-    if (window.SetupController) {
-      window.SetupController.init();
-    }
-  }
+  SetupDialog.show();
 }
 
-// Show/hide the discovery-only banner based on bootstrap status.
-function updateDiscoveryBanner(status) {
-  const banner = document.getElementById("discoveryBanner");
+// Show/hide the preview-mode banner based on bootstrap status.
+function updatePreviewBanner(status) {
+  const banner = document.getElementById("previewBanner");
   if (!banner) {
     return;
   }
 
-  const discoveryOnly = Boolean(status?.discovery_only_mode);
-  banner.hidden = !discoveryOnly;
+  const previewMode = Boolean(status?.preview_mode);
+  banner.hidden = !previewMode;
 
-  if (discoveryOnly) {
-    const btn = document.getElementById("discoveryBannerComplete");
+  if (previewMode) {
+    const btn = document.getElementById("previewBannerSetupBtn");
     if (btn && !btn.dataset.bound) {
       btn.dataset.bound = "true";
       btn.addEventListener("click", () => openSetupWizard());
@@ -237,7 +227,7 @@ function updateDiscoveryBanner(status) {
 
 function applyBootstrapStatus(status) {
   state.bootstrapStatus = status;
-  updateDiscoveryBanner(status);
+  updatePreviewBanner(status);
   const initializationRequired = Boolean(status?.initialization_required);
   const uiReady = Boolean(status && (status.ui_ready || initializationRequired));
   const coreReady = Boolean(status?.ready_for_requests);
@@ -324,18 +314,18 @@ function updateBotCard(trader) {
 
   if (!card || !status || !pnl) return;
 
-  const discoveryOnly = Boolean(state.bootstrapStatus?.discovery_only_mode);
+  const previewMode = Boolean(state.bootstrapStatus?.preview_mode);
 
-  // Update status. In discovery-only mode trading is intentionally off — show a neutral
-  // "DISCOVERY" state instead of an alarming "STOPPED".
-  const statusText = discoveryOnly ? "DISCOVERY" : trader.running ? "RUNNING" : "STOPPED";
-  const statusAttr = discoveryOnly ? "discovery" : trader.running ? "running" : "stopped";
+  // Update status. In preview mode trading is intentionally off — show a neutral
+  // "PREVIEW" state instead of an alarming "STOPPED".
+  const statusText = previewMode ? "PREVIEW" : trader.running ? "RUNNING" : "STOPPED";
+  const statusAttr = previewMode ? "preview" : trader.running ? "running" : "stopped";
 
   card.setAttribute("data-status", statusAttr);
   status.textContent = statusText;
 
-  // Update P&L (no trading P&L in discovery-only mode)
-  if (discoveryOnly) {
+  // Update P&L (no trading P&L in preview mode)
+  if (previewMode) {
     pnl.textContent = "—";
     pnl.classList.remove("positive", "negative");
     return;
@@ -360,8 +350,8 @@ function updateWalletCard(wallet) {
 
   if (!sol) return;
 
-  // Discovery-only mode: no wallet configured — show neutral placeholders.
-  if (state.bootstrapStatus?.discovery_only_mode) {
+  // preview mode: no wallet configured — show neutral placeholders.
+  if (state.bootstrapStatus?.preview_mode) {
     sol.textContent = "—";
     if (change) {
       change.textContent = "—";
