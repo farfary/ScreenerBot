@@ -36,6 +36,7 @@ pub mod bulk;
 mod crypto;
 mod database;
 mod manager;
+pub mod recovery;
 mod types;
 pub mod validation;
 
