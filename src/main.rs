@@ -221,9 +221,33 @@ async fn main() {
         request_shutdown();
     });
 
-    // Run the bot in headless mode
+    // Handle one-shot wallet-data reset (safe: backs up before clearing) then
+    // continue into a normal boot, so a single relaunch fixes a wallet mismatch.
+    // This is what the GUI's "Reset wallet data & restart" and the documented
+    // `screenerbot --clean-wallet-data` both trigger.
+    if screenerbot::arguments::is_clean_wallet_data_enabled() {
+        match screenerbot::wallets::recovery::backup_and_clean_wallet_data() {
+            Ok(backup_dir) => info(
+                LogTag::System,
+                &format!(
+                    "Wallet data reset complete (backup: {}). Continuing startup.",
+                    backup_dir.display()
+                ),
+            ),
+            Err(e) => error(
+                LogTag::System,
+                &format!("Wallet data reset failed: {e}. Continuing startup anyway."),
+            ),
+        }
+    }
+
+    // Run the bot in headless mode. On a fatal startup failure, surface a
+    // structured error to the terminal/log file and the GUI shell, then exit
+    // with a non-zero code so callers (Electron, systemd) can tell a failed
+    // boot apart from a clean shutdown.
     if let Err(e) = run_bot().await {
-        error(LogTag::System, &format!("Bot error: {e}"));
+        e.emit();
+        std::process::exit(1);
     }
 
     info(LogTag::System, "ScreenerBot shutdown complete");

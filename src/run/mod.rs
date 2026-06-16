@@ -8,6 +8,7 @@ mod services;
 mod shutdown;
 
 use crate::{
+    errors::StartupError,
     global,
     logger::{self, LogTag},
     process_lock::ProcessLock,
@@ -19,7 +20,7 @@ use solana_sdk::signature::Signer;
 /// Main bot execution function — handles the full bot lifecycle with ServiceManager.
 ///
 /// Acquires process lock and runs the bot. For GUI mode, use `run_bot_with_lock()` instead.
-pub async fn run_bot() -> Result<(), String> {
+pub async fn run_bot() -> Result<(), StartupError> {
     // 0. Initialize profiling if requested (must be done before any tokio tasks)
     profiling::init_profiling();
 
@@ -38,7 +39,7 @@ pub async fn run_bot() -> Result<(), String> {
 ///
 /// Used by Electron GUI mode which acquires the lock before starting to ensure
 /// the window doesn't open if another instance is running.
-pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> {
+pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), StartupError> {
     // 0. Initialize profiling if requested (must be done before any tokio tasks)
     profiling::init_profiling();
 
@@ -51,7 +52,7 @@ pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> 
 }
 
 /// Internal bot execution with pre-acquired lock.
-async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
+async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError> {
     logger::info(LogTag::System, "ScreenerBot starting up...");
 
     // 1. Set GUI mode if --gui flag is present (must be done early for webserver security)
@@ -62,13 +63,23 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
     // 2. Validate CLI arguments early (before any processing)
     if let Err(e) = crate::arguments::validate_port_argument() {
-        logger::error(LogTag::System, &format!("Argument validation failed: {e}"));
-        return Err(e);
+        return Err(StartupError::new(
+            crate::errors::StartupErrorCode::ConfigInvalid,
+            "Invalid startup option",
+            e,
+            "A command-line option is invalid. Start ScreenerBot without that option, or \
+             correct it and try again.",
+        ));
     }
 
     if let Err(e) = crate::arguments::validate_host_argument() {
-        logger::error(LogTag::System, &format!("Argument validation failed: {e}"));
-        return Err(e);
+        return Err(StartupError::new(
+            crate::errors::StartupErrorCode::ConfigInvalid,
+            "Invalid startup option",
+            e,
+            "A command-line option is invalid. Start ScreenerBot without that option, or \
+             correct it and try again.",
+        ));
     }
 
     // 3. Log CLI overrides (if provided)
@@ -250,28 +261,15 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
                     stored,
                     affected_systems,
                 } => {
-                    logger::error(
-                        LogTag::System,
-                        &format!(
-                            "WALLET MISMATCH DETECTED!\n\
-             \n\
-             Current wallet: {}\n\
-             Stored wallet: {}\n\
-             Affected systems: {}\n\
-             \n\
-              You MUST clean existing data before starting with a new wallet.\n\
-             Run: cargo run --bin screenerbot -- --clean-wallet-data\n\
-             Or manually delete: data/transactions.db data/positions.db data/wallet.db",
-                            current,
-                            stored,
-                            affected_systems.join(", ")
-                        ),
-                    );
-
-                    return Err(format!(
-          "Wallet mismatch detected - current wallet {} does not match stored wallet {}. Clean data before proceeding.",
-          current, stored
-        ));
+                    // Surfaced uniformly to terminal/log and the GUI via the
+                    // StartupError emitted at the process boundary (main.rs).
+                    // Remedy text is binary-user-appropriate (no `cargo`) and a
+                    // safe one-click recovery is attached for the GUI.
+                    return Err(StartupError::wallet_mismatch(
+                        &current,
+                        &stored,
+                        &affected_systems,
+                    ));
                 }
             }
 

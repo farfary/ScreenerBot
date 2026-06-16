@@ -17,7 +17,7 @@ pub fn print_help() {
         "    --reset                     Reset pending verifications and delete database files"
     );
     println!("    --reset-default-configs     Reset all config to defaults (preserves wallet + RPC URLs)");
-    println!("    --clean-wallet-data         Clean all wallet-specific databases (use when switching wallets)");
+    println!("    --clean-wallet-data         Back up, then clear the previous wallet's local data and continue (use when switching wallets)");
     println!("    --help, -h                  Show this help message");
     println!();
     println!("DISPLAY OPTIONS:");
