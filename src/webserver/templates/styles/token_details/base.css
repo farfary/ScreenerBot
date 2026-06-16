@@ -207,19 +207,15 @@
   white-space: nowrap;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
+.token-details-dialog .badge {
   padding: 4px 10px;
   border-radius: var(--radius-md);
   font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   transition: opacity var(--transition-fast);
 }
 
-.badge:hover {
+.token-details-dialog .badge:hover {
   opacity: 0.9;
 }
 

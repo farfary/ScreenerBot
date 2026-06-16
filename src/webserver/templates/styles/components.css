@@ -5,9 +5,12 @@
   align-items: center;
   gap: var(--spacing-xs);
   padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-xl);
-  font-size: 0.8em;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .badge--pool {
