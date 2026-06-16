@@ -18,6 +18,7 @@ mod position;
 mod rate_limit;
 mod rpc_provider;
 mod service;
+mod startup;
 
 pub use blockchain::*;
 pub use blockchain_parser::*;
@@ -32,3 +33,4 @@ pub use position::*;
 pub use rate_limit::*;
 pub use rpc_provider::*;
 pub use service::*;
+pub use startup::{StartupError, StartupErrorCode, StartupRecovery};
