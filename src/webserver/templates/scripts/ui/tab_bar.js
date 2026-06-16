@@ -589,19 +589,24 @@ class TabBarManagerClass {
   onPageSwitch(newPage, oldPage) {
     // Use queueMicrotask to ensure DOM is ready after router innerHTML replacement
     queueMicrotask(() => {
-      // Hide old page's tab bar
-      if (oldPage) {
-        const oldTabBar = this.instances.get(oldPage);
-        if (oldTabBar) {
-          oldTabBar.hide({ silent: true });
-        }
-      }
+      // Hide all registered tab bars first (defensive — catches cases where
+      // the deactivate-lifecycle cleanup missed hiding the old bar, e.g. when
+      // the old page's TabBar was unregistered before the microtask ran, or
+      // when the CSS [data-ui="tab-bar"] attribute rule kept the container
+      // visible despite an inline display:none having been skipped).
+      this.hideAll();
 
-      // Show new page's tab bar
-      if (newPage) {
-        const newTabBar = this.instances.get(newPage);
-        if (newTabBar) {
-          newTabBar.show();
+      // Show new page's tab bar, or forcibly hide the shared container when
+      // the new page has no subtabs at all.
+      const newTabBar = newPage ? this.instances.get(newPage) : null;
+      if (newTabBar) {
+        newTabBar.show();
+      } else {
+        // No TabBar registered for this page — ensure the container is hidden
+        // even if no registered instance was available to hide it above.
+        const container = document.getElementById("subTabsContainer");
+        if (container) {
+          container.style.display = "none";
         }
       }
 
