@@ -126,11 +126,11 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
 pub async fn initialization_gate(request: Request, next: Next) -> Response {
     let path = request.uri().path();
 
-    // Check if initialization is complete
-    let initialized = global::is_initialization_complete();
-
-    // If initialized, allow everything
-    if initialized {
+    // If initialized, allow everything. Discovery-only mode (wallet + RPC skipped) is
+    // also treated as "allowed": the dashboard is usable for token discovery/browsing,
+    // and wallet/RPC-dependent endpoints enforce their own deeper guards
+    // (are_core_services_ready / FORCE_STOP) so trading still cannot happen.
+    if global::is_initialization_complete() || global::is_discovery_only_mode() {
         return next.run(request).await;
     }
 

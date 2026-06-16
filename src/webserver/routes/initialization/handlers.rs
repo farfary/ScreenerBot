@@ -6,8 +6,7 @@ use crate::{
     config::{self, schemas::Config},
     global,
     logger::{self, LogTag},
-    rpc,
-    services,
+    rpc, services,
     webserver::utils::{error_response, success_response},
 };
 use axum::{extract::Json, http::StatusCode, response::Response};
@@ -22,7 +21,14 @@ pub(super) async fn initialization_status() -> Response {
     let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
     let initialization_complete = global::is_initialization_complete();
+    let discovery_only_mode = global::is_discovery_only_mode();
     let force_onboarding = arguments::is_dashboard_onboarding_forced();
+
+    let setup_skipped = if config_exists {
+        config::with_config(|cfg| cfg.gui.dashboard.startup.setup_skipped)
+    } else {
+        false
+    };
 
     let onboarding_complete = if force_onboarding {
         false
@@ -32,7 +38,14 @@ pub(super) async fn initialization_status() -> Response {
         config::with_config(|cfg| cfg.gui.dashboard.startup.onboarding_complete)
     };
 
-    let (required, reason) = if !config_exists {
+    let (required, reason) = if discovery_only_mode {
+        // Discovery-only mode: setup was skipped. The app is usable (token discovery);
+        // setup is not "required" so the dashboard is not blocked by the setup screen.
+        (
+            false,
+            "Running in discovery-only mode - wallet + RPC setup skipped.".to_owned(),
+        )
+    } else if !config_exists {
         (
             true,
             "Configuration file does not exist. Initial setup required.".to_owned(),
@@ -50,6 +63,8 @@ pub(super) async fn initialization_status() -> Response {
         initialization_complete,
         onboarding_complete,
         force_onboarding,
+        discovery_only_mode,
+        setup_skipped,
     };
 
     success_response(response)
@@ -86,6 +101,114 @@ pub(super) async fn complete_onboarding() -> Response {
     }
 
     success_response(serde_json::json!({ "success": true }))
+}
+
+/// POST /api/initialization/skip
+/// Skip wallet + RPC setup and enter discovery-only mode.
+///
+/// Persists a config with an empty wallet, the public default RPC, and
+/// `setup_skipped = true`, then starts only the discovery tier (connectivity,
+/// events, tokens, filtering, webserver). Trading and all wallet/RPC-dependent
+/// services stay stopped until the user completes setup later.
+pub(super) async fn skip_setup() -> Response {
+    logger::info(
+        LogTag::Webserver,
+        "Skipping wallet + RPC setup - entering discovery-only mode",
+    );
+
+    let mut errors = Vec::new();
+
+    // Preserve existing settings if a config is already loaded; otherwise start from
+    // defaults. Wallet stays empty; RPC falls back to the public default endpoint.
+    let mut config = if config::is_config_initialized() {
+        config::get_config_clone()
+    } else {
+        Config::default()
+    };
+
+    config.wallet_encrypted = String::new();
+    config.wallet_nonce = String::new();
+    if config.rpc.urls.is_empty() {
+        config.rpc = crate::config::schemas::RpcConfig::default();
+    }
+    config.gui.dashboard.startup.setup_skipped = true;
+    config.gui.dashboard.startup.onboarding_complete = true;
+
+    let config_path = crate::paths::get_config_path();
+    if let Err(e) =
+        config::utils::save_config_to_file(&config, &config_path.to_string_lossy(), true)
+    {
+        errors.push(format!("Failed to save configuration: {e}"));
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CONFIG_SAVE_FAILED",
+            &errors.join("; "),
+            None,
+        );
+    }
+
+    logger::info(LogTag::Webserver, "Discovery-only configuration saved");
+
+    // Enter discovery-only mode (INITIALIZATION_COMPLETE intentionally stays false).
+    global::set_discovery_only_mode(true);
+
+    // Start discovery-tier services. start_newly_enabled is idempotent and the
+    // ServiceManager filters out disabled (wallet/RPC-bound) services.
+    let mut services_started = 0usize;
+    match start_remaining_services().await {
+        Ok(report) => {
+            services_started = report.started.len();
+            logger::info(
+                LogTag::Webserver,
+                &format!(
+                    "Discovery-only startup summary: started={} already_running={} total_enabled={} duration_ms={}",
+                    report.started.len(),
+                    report.already_running,
+                    report.total_enabled,
+                    report.duration_ms
+                ),
+            );
+
+            if !report.failures.is_empty() {
+                let failure_names = report
+                    .failures
+                    .iter()
+                    .map(|failure| failure.name)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                errors.push(format!(
+                    "Failed to start {} service(s): {}",
+                    report.failures.len(),
+                    failure_names
+                ));
+                for failure in report.failures {
+                    logger::error(
+                        LogTag::Webserver,
+                        &format!(
+                            "Service startup failure: {} -> {}",
+                            failure.name, failure.error
+                        ),
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Webserver,
+                &format!("Failed to start discovery-tier services: {e}"),
+            );
+            errors.push(format!("Service startup incomplete: {e}"));
+        }
+    }
+
+    let response = SkipSetupResponse {
+        success: errors.is_empty(),
+        discovery_only_mode: true,
+        services_started,
+        errors,
+    };
+
+    success_response(response)
 }
 
 /// POST /api/initialization/validate
@@ -306,18 +429,21 @@ pub(super) async fn complete_initialization(
         "Creating configuration with encrypted wallet...",
     );
 
-    // Create config with encrypted credentials and mark setup as complete
-    let mut config = Config {
-        wallet_encrypted: encrypted.ciphertext,
-        wallet_nonce: encrypted.nonce,
-        rpc: crate::config::schemas::RpcConfig {
-            urls: working_rpc_urls,
-            ..Default::default()
-        },
-        ..Default::default()
+    // Merge into the existing config when one is already loaded (e.g. completing setup
+    // from discovery-only mode) so user settings are preserved. Only fall back to
+    // defaults on a true first run with no config in memory.
+    let mut config = if config::is_config_initialized() {
+        config::get_config_clone()
+    } else {
+        Config::default()
     };
 
-    // Mark onboarding as complete since user finished the full setup flow
+    config.wallet_encrypted = encrypted.ciphertext;
+    config.wallet_nonce = encrypted.nonce;
+    config.rpc.urls = working_rpc_urls;
+
+    // Setup is now complete: clear the discovery-only skip marker and mark onboarding done.
+    config.gui.dashboard.startup.setup_skipped = false;
     config.gui.dashboard.startup.onboarding_complete = true;
 
     let config_path = crate::paths::get_config_path();
@@ -342,7 +468,9 @@ pub(super) async fn complete_initialization(
     logger::info(LogTag::Webserver, "Credential validation flags set");
 
     // Step 5: Set initialization complete flag BEFORE starting services
-    // (services check this flag in their is_enabled() method)
+    // (services check this flag in their is_enabled() method). Clear discovery-only
+    // mode: full mode and discovery-only mode are mutually exclusive.
+    global::set_discovery_only_mode(false);
     global::INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
     logger::info(
         LogTag::Webserver,

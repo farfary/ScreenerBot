@@ -12,6 +12,18 @@ pub struct InitializationStatusResponse {
     pub initialization_complete: bool,
     pub onboarding_complete: bool,
     pub force_onboarding: bool,
+    /// Whether the bot is running in discovery-only mode (wallet + RPC skipped).
+    pub discovery_only_mode: bool,
+    /// Whether the user previously chose to skip wallet + RPC setup (persisted).
+    pub setup_skipped: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SkipSetupResponse {
+    pub success: bool,
+    pub discovery_only_mode: bool,
+    pub services_started: usize,
+    pub errors: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
