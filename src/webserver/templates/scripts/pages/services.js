@@ -6,7 +6,7 @@ import { requestManager } from "../core/request_manager.js";
 
 // Helper functions
 function healthRank(status) {
-  const ranks = { healthy: 3, degraded: 2, starting: 1, unhealthy: 0 };
+  const ranks = { healthy: 4, disabled: 3, degraded: 2, starting: 1, unhealthy: 0 };
   return ranks[status] ?? -1;
 }
 
@@ -17,6 +17,7 @@ function getHealthBadge(health) {
     starting: '<span class="badge warning"><i class="icon-loader"></i> Starting</span>',
     degraded: '<span class="badge warning"><i class="icon-triangle-alert"></i> Degraded</span>',
     unhealthy: '<span class="badge error"><i class="icon-x"></i> Unhealthy</span>',
+    disabled: '<span class="badge secondary"><i class="icon-pause"></i> Disabled</span>',
   };
   return (
     badges[status] || `<span class="badge secondary"><i class="icon-pause"></i> ${status}</span>`

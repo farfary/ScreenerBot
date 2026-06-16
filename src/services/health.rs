@@ -25,6 +25,11 @@ pub enum ServiceHealth {
     /// Service is shutting down
     #[serde(rename = "stopping")]
     Stopping,
+
+    /// Service is intentionally not running (disabled by config or mode, e.g. wallet/RPC
+    /// services while in preview mode). This is a normal state, never an error/issue.
+    #[serde(rename = "disabled")]
+    Disabled,
 }
 
 impl ServiceHealth {
@@ -38,5 +43,9 @@ impl ServiceHealth {
 
     pub fn is_unhealthy(&self) -> bool {
         matches!(self, ServiceHealth::Unhealthy(_))
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        matches!(self, ServiceHealth::Disabled)
     }
 }

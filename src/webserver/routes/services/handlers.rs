@@ -35,6 +35,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
         degraded_services: 0,
         unhealthy_services: 0,
         starting_services: 0,
+        disabled_services: 0,
         all_healthy: true,
     };
 
@@ -117,6 +118,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                                 }
                                 ServiceHealth::Stopping => {
                                     summary.unhealthy_services += 1;
+                                }
+                                ServiceHealth::Disabled => {
+                                    summary.disabled_services += 1;
                                 }
                             }
 
@@ -225,7 +229,10 @@ pub(super) async fn list_services(State(_state): State<Arc<AppState>>) -> Respon
 
 /// GET /api/services/:name
 /// Get detailed information about a specific service
-pub(super) async fn get_service(Path(name): Path<String>, State(_state): State<Arc<AppState>>) -> Response {
+pub(super) async fn get_service(
+    Path(name): Path<String>,
+    State(_state): State<Arc<AppState>>,
+) -> Response {
     logger::info(
         LogTag::Webserver,
         &format!("Fetching service details for: {name}"),

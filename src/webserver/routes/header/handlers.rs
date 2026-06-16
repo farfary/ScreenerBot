@@ -20,11 +20,11 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
     let now = chrono::Utc::now();
 
-    // Trader info. In discovery-only mode trading is disabled outright, so report the
+    // Trader info. In preview mode trading is disabled outright, so report the
     // trader as neither enabled nor running regardless of the persisted config value.
-    let discovery_only = crate::global::is_discovery_only_mode();
-    let trader_enabled = !discovery_only && with_config(|cfg| cfg.trader.enabled);
-    let trader_running = !discovery_only && is_trader_running();
+    let preview = crate::global::is_preview_mode();
+    let trader_enabled = !preview && with_config(|cfg| cfg.trader.enabled);
+    let trader_running = !preview && is_trader_running();
 
     // Calculate today's P&L from positions
     let (today_pnl_sol, today_pnl_percent) = calculate_today_pnl().await;
@@ -179,12 +179,12 @@ async fn calculate_system_health() -> SystemHeaderInfo {
     let mut unhealthy_services = Vec::new();
     let mut critical_degraded = false;
 
-    // In discovery-only mode the wallet/RPC services are intentionally not running, so
+    // In preview mode the wallet/RPC services are intentionally not running, so
     // "core services" being incomplete is expected and must not be flagged as a problem.
-    let discovery_only = crate::global::is_discovery_only_mode();
+    let preview = crate::global::is_preview_mode();
 
-    // Check core services readiness (skipped in discovery-only mode)
-    if !discovery_only && !are_core_services_ready() {
+    // Check core services readiness (skipped in preview mode)
+    if !preview && !are_core_services_ready() {
         unhealthy_services.push("Core Services".to_owned());
         critical_degraded = true;
     }
@@ -196,14 +196,16 @@ async fn calculate_system_health() -> SystemHeaderInfo {
     }
 
     // Check service manager health. Only enabled services can be "unhealthy" — a
-    // disabled service (e.g. trading/pools in discovery-only mode, or any service
+    // disabled service (e.g. trading/pools in preview mode, or any service
     // turned off via config) is intentionally off, not a fault.
     if let Some(manager_arc) = get_service_manager().await {
         let manager = manager_arc.read().await;
         if let Some(manager) = &*manager {
             let health_map = manager.get_health().await;
             for (name, health) in health_map {
-                if manager.is_service_enabled(name) && health != ServiceHealth::Healthy {
+                // Only genuine faults count as issues — not transient "starting" or
+                // intentionally "disabled" services.
+                if health.is_unhealthy() || health.is_degraded() {
                     unhealthy_services.push(name.to_string());
                 }
             }

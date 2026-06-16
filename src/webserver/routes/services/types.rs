@@ -57,5 +57,6 @@ pub struct ServicesSummary {
     pub degraded_services: usize,
     pub unhealthy_services: usize,
     pub starting_services: usize,
+    pub disabled_services: usize,
     pub all_healthy: bool,
 }

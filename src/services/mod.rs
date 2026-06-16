@@ -186,7 +186,7 @@ impl ServiceManager {
         // ones that are disabled. Dependency declarations only define ordering, not
         // a hard requirement to run (see validate_dependencies: warn, don't fail).
         // Retain only enabled services so a disabled dependency (e.g. RPC-bound
-        // pools/transactions in discovery-only mode) is never started. No-op when
+        // pools/transactions in preview mode) is never started. No-op when
         // every service is enabled (normal mode).
         ordered.retain(|name| {
             self.services
@@ -366,7 +366,7 @@ impl ServiceManager {
         };
 
         // Drop transitively-pulled-in dependencies that are disabled (e.g.
-        // RPC-bound services in discovery-only mode). Also drop anything already
+        // RPC-bound services in preview mode). Also drop anything already
         // running so we never re-init it. See start_all for the rationale.
         ordered.retain(|name| {
             self.services
@@ -686,11 +686,17 @@ impl ServiceManager {
         Ok(())
     }
 
-    /// Get health status
+    /// Get health status. Intentionally-disabled services report `Disabled` (a normal
+    /// state) rather than their internal health, so they are never surfaced as issues.
     pub async fn get_health(&self) -> HashMap<&'static str, ServiceHealth> {
         let mut health = HashMap::new();
         for (name, service) in &self.services {
-            health.insert(*name, service.health().await);
+            let status = if service.is_enabled() {
+                service.health().await
+            } else {
+                ServiceHealth::Disabled
+            };
+            health.insert(*name, status);
         }
         health
     }
