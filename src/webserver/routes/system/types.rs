@@ -14,7 +14,7 @@ pub struct BootStatusResponse {
     pub timestamp: String,
     pub initialization_required: bool,
     pub initialization_complete: bool,
-    pub discovery_only_mode: bool,
+    pub preview_mode: bool,
     pub onboarding_complete: bool,
     pub core_services_ready: bool,
     pub ui_ready: bool,

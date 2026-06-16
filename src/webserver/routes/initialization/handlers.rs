@@ -21,7 +21,7 @@ pub(super) async fn initialization_status() -> Response {
     let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
     let initialization_complete = global::is_initialization_complete();
-    let discovery_only_mode = global::is_discovery_only_mode();
+    let preview_mode = global::is_preview_mode();
     let force_onboarding = arguments::is_dashboard_onboarding_forced();
 
     let setup_skipped = if config_exists {
@@ -38,12 +38,12 @@ pub(super) async fn initialization_status() -> Response {
         config::with_config(|cfg| cfg.gui.dashboard.startup.onboarding_complete)
     };
 
-    let (required, reason) = if discovery_only_mode {
-        // Discovery-only mode: setup was skipped. The app is usable (token discovery);
+    let (required, reason) = if preview_mode {
+        // preview mode: setup was skipped. The app is usable (token discovery);
         // setup is not "required" so the dashboard is not blocked by the setup screen.
         (
             false,
-            "Running in discovery-only mode - wallet + RPC setup skipped.".to_owned(),
+            "Running in preview mode - wallet + RPC setup skipped.".to_owned(),
         )
     } else if !config_exists {
         (
@@ -63,7 +63,7 @@ pub(super) async fn initialization_status() -> Response {
         initialization_complete,
         onboarding_complete,
         force_onboarding,
-        discovery_only_mode,
+        preview_mode,
         setup_skipped,
     };
 
@@ -104,16 +104,16 @@ pub(super) async fn complete_onboarding() -> Response {
 }
 
 /// POST /api/initialization/skip
-/// Skip wallet + RPC setup and enter discovery-only mode.
+/// Skip wallet + RPC setup and enter preview mode.
 ///
 /// Persists a config with an empty wallet, the public default RPC, and
-/// `setup_skipped = true`, then starts only the discovery tier (connectivity,
+/// `setup_skipped = true`, then starts only the preview tier (connectivity,
 /// events, tokens, filtering, webserver). Trading and all wallet/RPC-dependent
 /// services stay stopped until the user completes setup later.
 pub(super) async fn skip_setup() -> Response {
     logger::info(
         LogTag::Webserver,
-        "Skipping wallet + RPC setup - entering discovery-only mode",
+        "Skipping wallet + RPC setup - entering preview mode",
     );
 
     let mut errors = Vec::new();
@@ -147,10 +147,10 @@ pub(super) async fn skip_setup() -> Response {
         );
     }
 
-    logger::info(LogTag::Webserver, "Discovery-only configuration saved");
+    logger::info(LogTag::Webserver, "preview configuration saved");
 
-    // Enter discovery-only mode (INITIALIZATION_COMPLETE intentionally stays false).
-    global::set_discovery_only_mode(true);
+    // Enter preview mode (INITIALIZATION_COMPLETE intentionally stays false).
+    global::set_preview_mode(true);
 
     // Start discovery-tier services. start_newly_enabled is idempotent and the
     // ServiceManager filters out disabled (wallet/RPC-bound) services.
@@ -161,7 +161,7 @@ pub(super) async fn skip_setup() -> Response {
             logger::info(
                 LogTag::Webserver,
                 &format!(
-                    "Discovery-only startup summary: started={} already_running={} total_enabled={} duration_ms={}",
+                    "preview startup summary: started={} already_running={} total_enabled={} duration_ms={}",
                     report.started.len(),
                     report.already_running,
                     report.total_enabled,
@@ -203,7 +203,7 @@ pub(super) async fn skip_setup() -> Response {
 
     let response = SkipSetupResponse {
         success: errors.is_empty(),
-        discovery_only_mode: true,
+        preview_mode: true,
         services_started,
         errors,
     };
@@ -430,7 +430,7 @@ pub(super) async fn complete_initialization(
     );
 
     // Merge into the existing config when one is already loaded (e.g. completing setup
-    // from discovery-only mode) so user settings are preserved. Only fall back to
+    // from preview mode) so user settings are preserved. Only fall back to
     // defaults on a true first run with no config in memory.
     let mut config = if config::is_config_initialized() {
         config::get_config_clone()
@@ -442,7 +442,7 @@ pub(super) async fn complete_initialization(
     config.wallet_nonce = encrypted.nonce;
     config.rpc.urls = working_rpc_urls;
 
-    // Setup is now complete: clear the discovery-only skip marker and mark onboarding done.
+    // Setup is now complete: clear the preview skip marker and mark onboarding done.
     config.gui.dashboard.startup.setup_skipped = false;
     config.gui.dashboard.startup.onboarding_complete = true;
 
@@ -468,9 +468,9 @@ pub(super) async fn complete_initialization(
     logger::info(LogTag::Webserver, "Credential validation flags set");
 
     // Step 5: Set initialization complete flag BEFORE starting services
-    // (services check this flag in their is_enabled() method). Clear discovery-only
-    // mode: full mode and discovery-only mode are mutually exclusive.
-    global::set_discovery_only_mode(false);
+    // (services check this flag in their is_enabled() method). Clear preview
+    // mode: full mode and preview mode are mutually exclusive.
+    global::set_preview_mode(false);
     global::INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
     logger::info(
         LogTag::Webserver,

@@ -180,29 +180,26 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             logger::info(LogTag::System, "Configuration loaded successfully");
         }
 
-        // 4b. Detect discovery-only mode: the user skipped wallet + RPC setup at first
+        // 4b. Detect preview mode: the user skipped wallet + RPC setup at first
         // run. The durable marker is `setup_skipped`; an empty encrypted wallet is a
-        // safety fallback (treat as discovery-only rather than hard-failing later).
-        let discovery_only = crate::config::with_config(|cfg| {
+        // safety fallback (treat as preview rather than hard-failing later).
+        let preview = crate::config::with_config(|cfg| {
             cfg.gui.dashboard.startup.setup_skipped || cfg.wallet_encrypted.trim().is_empty()
         });
 
-        if discovery_only {
+        if preview {
             logger::info(
                 LogTag::System,
-                "Discovery-only mode: wallet + RPC not configured - starting token discovery tier only",
+                "preview mode: wallet + RPC not configured - starting preview tier only",
             );
 
-            // Discovery-only mode: only the discovery tier runs. Wallet/RPC-dependent
+            // preview mode: only the preview tier runs. Wallet/RPC-dependent
             // services stay disabled and are filtered out of the startup order.
-            global::set_discovery_only_mode(true);
+            global::set_preview_mode(true);
             global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
 
             let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
-            logger::info(
-                LogTag::System,
-                "Service manager initialized (discovery-only)",
-            );
+            logger::info(LogTag::System, "Service manager initialized (preview)");
 
             services::register_all_services(&mut service_manager);
             crate::services::init_global_service_manager(service_manager).await;
@@ -228,7 +225,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
             logger::info(
                 LogTag::System,
-                "Discovery-only mode active - complete wallet + RPC setup in the dashboard to enable trading",
+                "preview mode active - complete wallet + RPC setup in the dashboard to enable trading",
             );
         } else {
             // 5. Initialize wallets module (migrates from config.toml if needed)

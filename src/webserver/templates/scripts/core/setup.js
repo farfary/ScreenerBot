@@ -229,12 +229,12 @@ class SetupControllerClass {
     this.setStep(1);
   }
 
-  // Skip wallet + RPC setup and enter discovery-only mode. The backend persists the
-  // skip, starts the discovery tier, and the dashboard becomes usable for browsing.
+  // Skip wallet + RPC setup and enter preview mode. The backend persists the
+  // skip, starts the preview tier, and the dashboard becomes usable for browsing.
   async skipSetup() {
     if (this.skipBtn) {
       this.skipBtn.disabled = true;
-      this.skipBtn.innerHTML = '<i class="icon-loader"></i> Starting token discovery...';
+      this.skipBtn.innerHTML = '<i class="icon-loader"></i> Loading dashboard...';
     }
 
     try {
@@ -262,7 +262,7 @@ class SetupControllerClass {
       this.showError(error.message || "Failed to skip setup");
       if (this.skipBtn) {
         this.skipBtn.disabled = false;
-        this.skipBtn.textContent = "Skip for now — explore with token discovery";
+        this.skipBtn.textContent = "Skip for now — explore the app";
       }
     }
   }

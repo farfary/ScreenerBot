@@ -34,11 +34,11 @@ impl Service for TokensService {
     }
 
     fn is_enabled(&self) -> bool {
-        // Discovery tier: token discovery is API-driven (no wallet/RPC needed), so it
-        // runs in full mode OR discovery-only mode (wallet/RPC skipped). The declared
+        // preview tier: token discovery is API-driven (no wallet/RPC needed), so it
+        // runs in full mode OR preview mode (wallet/RPC skipped). The declared
         // transactions/pools dependencies are ordering hints only and are filtered out
         // when disabled (see ServiceManager startup-order filter).
-        crate::global::is_discovery_or_full()
+        crate::global::is_preview_or_full()
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

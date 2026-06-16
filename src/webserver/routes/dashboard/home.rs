@@ -360,9 +360,9 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         found_all_time: total_in_database,
     };
 
-    // Get trader status (always off in discovery-only mode — trading is disabled)
+    // Get trader status (always off in preview mode — trading is disabled)
     let trader_status = TraderStatusInfo {
-        running: !crate::global::is_discovery_only_mode() && is_trader_running(),
+        running: !crate::global::is_preview_mode() && is_trader_running(),
     };
 
     Json(HomeDashboardResponse {

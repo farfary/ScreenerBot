@@ -50,10 +50,10 @@ impl Service for FilteringService {
     }
 
     fn is_enabled(&self) -> bool {
-        // Discovery tier: filtering applies to the discovered token list and needs no
-        // wallet/RPC, so it runs in full mode OR discovery-only mode. The declared
+        // preview tier: filtering applies to the discovered token list and needs no
+        // wallet/RPC, so it runs in full mode OR preview mode. The declared
         // pools dependency is an ordering hint and is filtered out when disabled.
-        crate::global::is_discovery_or_full()
+        crate::global::is_preview_or_full()
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

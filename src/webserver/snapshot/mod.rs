@@ -37,12 +37,12 @@ static SYSTEM_METRICS_CACHE: LazyLock<RwLock<Option<CachedSystemMetrics>>> =
 
 /// Gather current status snapshot (aggregates data from multiple sources)
 pub async fn gather_status_snapshot() -> StatusSnapshot {
-    // In discovery-only mode trading is disabled outright — report it as off regardless
+    // In preview mode trading is disabled outright — report it as off regardless
     // of the persisted config value so the status bar reflects reality.
-    let discovery_only = crate::global::is_discovery_only_mode();
-    let trading_enabled = !discovery_only && config::with_config(|cfg| cfg.trader.enabled);
+    let preview = crate::global::is_preview_mode();
+    let trading_enabled = !preview && config::with_config(|cfg| cfg.trader.enabled);
     let trader_mode = "Normal".to_owned();
-    let trader_running = !discovery_only && is_trader_running();
+    let trader_running = !preview && is_trader_running();
 
     let day_start_naive = Utc::now()
         .date_naive()

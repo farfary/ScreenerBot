@@ -12,8 +12,8 @@ pub struct EventsService;
 /// Check if events are enabled in config (safe to call even when config not loaded)
 fn is_events_enabled_in_config() -> bool {
     // MUST check init/discovery state first - config may not be loaded yet.
-    // Discovery tier: runs in full mode OR discovery-only mode (wallet/RPC skipped).
-    if !crate::global::is_discovery_or_full() {
+    // preview tier: runs in full mode OR preview mode (wallet/RPC skipped).
+    if !crate::global::is_preview_or_full() {
         return false;
     }
     config::with_config(|c| c.events.enabled)

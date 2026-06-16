@@ -158,14 +158,15 @@
 
     <!-- THREE-ROW HEADER: Main Control + Tabs + Live Ticker -->
     <header class="modern-header">
-      <!-- Discovery-only mode banner (shown when wallet + RPC setup was skipped) -->
-      <div class="discovery-banner" id="discoveryBanner" hidden>
-        <i class="discovery-banner-icon icon-triangle-alert"></i>
-        <span class="discovery-banner-text">
-          Wallet &amp; RPC not configured — trading is disabled. Only token discovery is running.
+      <!-- Preview-mode banner (shown when wallet + RPC setup was skipped) -->
+      <div class="preview-banner" id="previewBanner" hidden>
+        <i class="preview-banner-icon icon-info"></i>
+        <span class="preview-banner-text">
+          You're in preview mode. Add your wallet and RPC endpoint to enable trading, balances, and
+          live on-chain data.
         </span>
-        <button type="button" class="discovery-banner-btn" id="discoveryBannerComplete">
-          Complete setup
+        <button type="button" class="preview-banner-btn" id="previewBannerSetupBtn">
+          Set up wallet &amp; RPC
         </button>
       </div>
 

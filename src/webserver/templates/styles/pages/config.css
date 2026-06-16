@@ -42,8 +42,8 @@
   overflow: hidden;
 }
 
-/* Discovery-only mode banner — shown at the top of the config page */
-.config-discovery-banner {
+/* preview mode banner — shown at the top of the config page */
+.config-preview-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -55,15 +55,15 @@
   font-size: 13px;
 }
 
-.config-discovery-banner[hidden] {
+.config-preview-banner[hidden] {
   display: none;
 }
 
-.config-discovery-banner-text {
+.config-preview-banner-text {
   min-width: 0;
 }
 
-.config-discovery-banner-btn {
+.config-preview-banner-btn {
   flex-shrink: 0;
   padding: 7px 14px;
   border-radius: var(--radius-md, 6px);
@@ -78,7 +78,7 @@
     color 0.2s ease;
 }
 
-.config-discovery-banner-btn:hover {
+.config-preview-banner-btn:hover {
   background: var(--warning-text, #e3b341);
   color: var(--bg-primary, #0d1117);
 }

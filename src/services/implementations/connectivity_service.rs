@@ -39,8 +39,8 @@ impl Service for ConnectivityService {
 
     fn is_enabled(&self) -> bool {
         // During pre-initialization (no config loaded), connectivity service should not
-        // start. Discovery tier: runs in full mode OR discovery-only mode (wallet/RPC skipped).
-        if !crate::global::is_discovery_or_full() {
+        // start. preview tier: runs in full mode OR preview mode (wallet/RPC skipped).
+        if !crate::global::is_preview_or_full() {
             return false;
         }
 
@@ -157,8 +157,8 @@ impl Service for ConnectivityService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        // Service is healthy if not started yet (neither full nor discovery-only mode)
-        if !crate::global::is_discovery_or_full() {
+        // Service is healthy if not started yet (neither full nor preview mode)
+        if !crate::global::is_preview_or_full() {
             return ServiceHealth::Healthy; // Not started yet, so healthy
         }
 
