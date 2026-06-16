@@ -158,6 +158,17 @@
 
     <!-- THREE-ROW HEADER: Main Control + Tabs + Live Ticker -->
     <header class="modern-header">
+      <!-- Discovery-only mode banner (shown when wallet + RPC setup was skipped) -->
+      <div class="discovery-banner" id="discoveryBanner" hidden>
+        <i class="discovery-banner-icon icon-triangle-alert"></i>
+        <span class="discovery-banner-text">
+          Wallet &amp; RPC not configured — trading is disabled. Only token discovery is running.
+        </span>
+        <button type="button" class="discovery-banner-btn" id="discoveryBannerComplete">
+          Complete setup
+        </button>
+      </div>
+
       <!-- Row 1: Main Control Bar -->
       <div class="header-row header-row-1">
         <!-- Logo & Brand -->
@@ -235,7 +246,12 @@
           </button>
 
           <!-- Notifications -->
-          <button type="button" class="header-action-btn" id="notificationBtn" aria-label="Notifications">
+          <button
+            type="button"
+            class="header-action-btn"
+            id="notificationBtn"
+            aria-label="Notifications"
+          >
             <i class="action-icon icon-bell"></i>
             <span class="action-badge" id="notificationBadge" style="display: none">0</span>
           </button>
@@ -251,7 +267,12 @@
           </button>
 
           <!-- Theme Toggle -->
-          <button type="button" class="header-action-btn" id="themeToggle" aria-label="Toggle theme">
+          <button
+            type="button"
+            class="header-action-btn"
+            id="themeToggle"
+            aria-label="Toggle theme"
+          >
             <i class="action-icon icon-moon" id="themeIcon"></i>
           </button>
 

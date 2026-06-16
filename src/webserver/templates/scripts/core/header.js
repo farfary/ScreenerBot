@@ -199,8 +199,45 @@ function setLoading(isLoading) {
   updateBadge(elements);
 }
 
+// Reveal the setup wizard overlay (reused from the first-run flow) so the user can
+// complete wallet + RPC setup from discovery-only mode.
+function openSetupWizard() {
+  const wrapperEl = document.getElementById("setupScreenWrapper");
+  if (wrapperEl) {
+    wrapperEl.style.display = "block";
+  }
+  const setupEl = document.getElementById("setupScreen");
+  if (setupEl) {
+    setupEl.style.display = "grid";
+    document.body.classList.add("initialization-mode");
+    if (window.SetupController) {
+      window.SetupController.init();
+    }
+  }
+}
+
+// Show/hide the discovery-only banner based on bootstrap status.
+function updateDiscoveryBanner(status) {
+  const banner = document.getElementById("discoveryBanner");
+  if (!banner) {
+    return;
+  }
+
+  const discoveryOnly = Boolean(status?.discovery_only_mode);
+  banner.hidden = !discoveryOnly;
+
+  if (discoveryOnly) {
+    const btn = document.getElementById("discoveryBannerComplete");
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = "true";
+      btn.addEventListener("click", () => openSetupWizard());
+    }
+  }
+}
+
 function applyBootstrapStatus(status) {
   state.bootstrapStatus = status;
+  updateDiscoveryBanner(status);
   const initializationRequired = Boolean(status?.initialization_required);
   const uiReady = Boolean(status && (status.ui_ready || initializationRequired));
   const coreReady = Boolean(status?.ready_for_requests);
@@ -287,14 +324,23 @@ function updateBotCard(trader) {
 
   if (!card || !status || !pnl) return;
 
-  // Update status
-  const statusText = trader.running ? "RUNNING" : "STOPPED";
-  const statusAttr = trader.running ? "running" : "stopped";
+  const discoveryOnly = Boolean(state.bootstrapStatus?.discovery_only_mode);
+
+  // Update status. In discovery-only mode trading is intentionally off — show a neutral
+  // "DISCOVERY" state instead of an alarming "STOPPED".
+  const statusText = discoveryOnly ? "DISCOVERY" : trader.running ? "RUNNING" : "STOPPED";
+  const statusAttr = discoveryOnly ? "discovery" : trader.running ? "running" : "stopped";
 
   card.setAttribute("data-status", statusAttr);
   status.textContent = statusText;
 
-  // Update P&L
+  // Update P&L (no trading P&L in discovery-only mode)
+  if (discoveryOnly) {
+    pnl.textContent = "—";
+    pnl.classList.remove("positive", "negative");
+    return;
+  }
+
   const pnlText =
     trader.today_pnl_sol >= 0
       ? `+${trader.today_pnl_sol.toFixed(3)} SOL`
@@ -313,6 +359,18 @@ function updateWalletCard(wallet) {
   const tokenWorth = document.getElementById("walletTokenWorth");
 
   if (!sol) return;
+
+  // Discovery-only mode: no wallet configured — show neutral placeholders.
+  if (state.bootstrapStatus?.discovery_only_mode) {
+    sol.textContent = "—";
+    if (change) {
+      change.textContent = "—";
+      change.classList.remove("positive", "negative");
+    }
+    if (tokenCount) tokenCount.textContent = "—";
+    if (tokenWorth) tokenWorth.textContent = "—";
+    return;
+  }
 
   // Update SOL balance
   sol.textContent = wallet.sol_balance.toFixed(3);
@@ -613,6 +671,12 @@ function initTraderControls() {
 
   if (!bootstrapUnsubscribe) {
     bootstrapUnsubscribe = subscribeToBootstrap(applyBootstrapStatus);
+  }
+
+  // Allow other pages (e.g. the config tab) to request the setup wizard.
+  if (!window.__setupWizardListenerAdded) {
+    window.__setupWizardListenerAdded = true;
+    window.addEventListener("screenerbot:open-setup-wizard", () => openSetupWizard());
   }
 
   // Initialize connection status as connecting

@@ -454,6 +454,20 @@
   transform: translateY(-1px);
 }
 
+/* Ghost (tertiary) button — used for "Skip for now" on the credentials step */
+.setup-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary, #8b949e);
+  border: 1px solid transparent;
+  font-weight: 600;
+}
+
+.setup-btn-ghost:hover:not(:disabled) {
+  color: var(--text-primary, #e6edf3);
+  background: var(--bg-tertiary, #21262d);
+  border-color: var(--border-color, #30363d);
+}
+
 /* Error display - positioned as overlay */
 .setup-error {
   position: fixed;

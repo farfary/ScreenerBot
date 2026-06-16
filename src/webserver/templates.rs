@@ -34,8 +34,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("{{IS_GUI_MODE}}", if is_gui { "true" } else { "false" });
     html = html.replace("{{ASSET_VERSION}}", asset_version.as_str());
 
-    // Inject initialization state for early DOM setup (prevents dashboard flash)
-    let needs_initialization = !global::is_initialization_complete();
+    // Inject initialization state for early DOM setup (prevents dashboard flash).
+    // Discovery-only mode shows the dashboard immediately, so it does not "need init".
+    let needs_initialization =
+        !global::is_initialization_complete() && !global::is_discovery_only_mode();
     html = html.replace(
         "{{NEEDS_INITIALIZATION}}",
         if needs_initialization {
@@ -279,8 +281,10 @@ fn nav_tabs(active: &str) -> String {
     use crate::config;
     use crate::global;
 
-    // In initialization mode (before config is loaded), return minimal nav
-    if !global::is_initialization_complete() {
+    // In initialization mode (before config is loaded), return minimal nav.
+    // Discovery-only mode is exempt: the user skipped setup to browse, so they get the
+    // full configured navigation (token/filtering pages work without a wallet).
+    if !global::is_initialization_complete() && !global::is_discovery_only_mode() {
         // Only show initialization tab during setup
         let active_class = if active == "initialization" {
             " active"

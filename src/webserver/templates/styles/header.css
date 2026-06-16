@@ -51,6 +51,53 @@
   margin-top: 28px; /* Height of title bar area */
 }
 
+/* Discovery-only mode banner — shown when wallet + RPC setup was skipped */
+.discovery-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 1rem;
+  background: var(--warning-bg, #3a2a12);
+  border-bottom: 1px solid var(--warning-border, #5a4012);
+  color: var(--warning-text, #e3b341);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.discovery-banner[hidden] {
+  display: none;
+}
+
+.discovery-banner-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.discovery-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.discovery-banner-btn {
+  flex-shrink: 0;
+  padding: 0.3125rem 0.875rem;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--warning-text, #e3b341);
+  background: transparent;
+  color: var(--warning-text, #e3b341);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.discovery-banner-btn:hover {
+  background: var(--warning-text, #e3b341);
+  color: var(--header-solid-bg, #0d1117);
+}
+
 .header-row-1 {
   display: flex;
   align-items: center;
@@ -325,6 +372,15 @@
 
 .bot-card[data-status="loading"] .card-status {
   color: #fbbf24;
+}
+
+/* Discovery-only mode: trading is intentionally off — use a neutral (not alarming) tone */
+.bot-card[data-status="discovery"] .card-icon {
+  color: #58a6ff;
+}
+
+.bot-card[data-status="discovery"] .card-status {
+  color: #58a6ff;
 }
 
 /* Status Pulse Animation */

@@ -19,6 +19,7 @@ class SetupControllerClass {
     this.stepIndicators = document.querySelectorAll(".setup-step[data-step]");
     this.backBtn = document.getElementById("setup-back");
     this.nextBtn = document.getElementById("setup-next");
+    this.skipBtn = document.getElementById("setup-skip");
     this.retryBtn = document.getElementById("setup-retry");
     this.errorEl = document.getElementById("setup-error");
     this.errorMessages = document.getElementById("setup-error-messages");
@@ -61,6 +62,9 @@ class SetupControllerClass {
     }
     if (this.nextBtn) {
       this.nextBtn.addEventListener("click", () => this.goNext());
+    }
+    if (this.skipBtn) {
+      this.skipBtn.addEventListener("click", () => this.skipSetup());
     }
     if (this.retryBtn) {
       this.retryBtn.addEventListener("click", () => this.retry());
@@ -187,6 +191,11 @@ class SetupControllerClass {
       this.backBtn.style.visibility = this.currentStep === 3 ? "hidden" : "visible";
     }
 
+    // Skip is only available on the credentials step (before any commitment).
+    if (this.skipBtn) {
+      this.skipBtn.style.display = this.currentStep === 1 ? "inline-flex" : "none";
+    }
+
     if (this.nextBtn) {
       if (this.currentStep === 3) {
         this.nextBtn.style.display = "none";
@@ -218,6 +227,44 @@ class SetupControllerClass {
     this.resetVerificationStates();
     this.hideWalletPreview();
     this.setStep(1);
+  }
+
+  // Skip wallet + RPC setup and enter discovery-only mode. The backend persists the
+  // skip, starts the discovery tier, and the dashboard becomes usable for browsing.
+  async skipSetup() {
+    if (this.skipBtn) {
+      this.skipBtn.disabled = true;
+      this.skipBtn.innerHTML = '<i class="icon-loader"></i> Starting token discovery...';
+    }
+
+    try {
+      this.hideError();
+      const response = await fetch("/api/initialization/skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (!result.success) {
+        const errorMsg =
+          result.errors?.length > 0 ? result.errors.join("; ") : "Failed to skip setup";
+        throw new Error(errorMsg);
+      }
+
+      // Land on the token discovery page.
+      window.location.href = "/tokens";
+    } catch (error) {
+      this.showError(error.message || "Failed to skip setup");
+      if (this.skipBtn) {
+        this.skipBtn.disabled = false;
+        this.skipBtn.textContent = "Skip for now — explore with token discovery";
+      }
+    }
   }
 
   hideWalletPreview() {
