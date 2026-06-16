@@ -208,12 +208,6 @@ function createLifecycle() {
       },
     ]);
 
-    table.updateToolbarMeta([
-      {
-        id: "tx-last-update",
-        text: `Last update ${new Date().toLocaleTimeString()}`,
-      },
-    ]);
   };
 
   const fetchSummary = async ({ signal } = {}) => {
@@ -520,11 +514,6 @@ function createLifecycle() {
           onPageLoaded: handlePageLoaded,
         },
         toolbar: {
-          title: {
-            icon: "icon-arrow-right-left",
-            text: "Transactions",
-            meta: [{ id: "tx-last-update", text: "Last update —" }],
-          },
           summary: [
             { id: "tx-total", label: "Total", value: "—" },
             { id: "tx-estimate", label: "Estimate", value: "—" },

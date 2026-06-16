@@ -101,12 +101,6 @@ function createLifecycle() {
       },
     ]);
 
-    table.updateToolbarMeta([
-      {
-        id: "services-last-update",
-        text: `Last update ${new Date().toLocaleTimeString()}`,
-      },
-    ]);
   };
 
   const loadServicesPage = async ({ reason, signal }) => {
@@ -350,11 +344,6 @@ function createLifecycle() {
           onPageLoaded: handlePageLoaded,
         },
         toolbar: {
-          title: {
-            icon: "icon-settings",
-            text: "Services",
-            meta: [{ id: "services-last-update", text: "Last update —" }],
-          },
           summary: [
             { id: "services-total", label: "Total", value: "0" },
             {

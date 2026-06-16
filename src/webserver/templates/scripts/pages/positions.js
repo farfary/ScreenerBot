@@ -276,14 +276,6 @@ function createLifecycle() {
       },
     ]);
 
-    table.updateToolbarMeta([
-      {
-        id: "positions-last-update",
-        text: state.lastUpdate
-          ? `Last update ${new Date(state.lastUpdate).toLocaleTimeString()}`
-          : "",
-      },
-    ]);
   };
 
   const loadPositionsPage = async ({ reason, signal }) => {
@@ -404,11 +396,6 @@ function createLifecycle() {
           onPageLoaded: () => updateToolbar(),
         },
         toolbar: {
-          title: {
-            icon: "icon-chart-bar",
-            text: `Positions: ${viewLabel}`,
-            meta: [{ id: "positions-last-update", lines: ["Last Update", "—"] }],
-          },
           summary: [{ id: "positions-total", label: "Total", value: "0", variant: "secondary" }],
           search: {
             enabled: true,

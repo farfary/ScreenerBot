@@ -123,12 +123,6 @@ function createLifecycle() {
       },
     ]);
 
-    table.updateToolbarMeta([
-      {
-        id: "events-last-update",
-        text: `Last update ${new Date().toLocaleTimeString()}`,
-      },
-    ]);
   };
 
   const loadEventsPage = async ({ direction, cursor, reason, signal }) => {
@@ -392,11 +386,6 @@ function createLifecycle() {
           onPageLoaded: handlePageLoaded,
         },
         toolbar: {
-          title: {
-            icon: "icon-radio",
-            text: "Events",
-            meta: [{ id: "events-last-update", text: "Last update —" }],
-          },
           summary: [{ id: "events-total", label: "Total", value: "0" }],
           search: {
             enabled: true,
