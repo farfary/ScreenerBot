@@ -159,21 +159,37 @@ Important responsibilities:
 
 ## 5. Startup Flow (run.rs + ServiceManager::start_all)
 
-### 5.1 Two boot modes: initialization vs normal
+### 5.1 Three boot modes: initialization vs discovery-only vs normal
 
-**File:** `src/run.rs`
+**File:** `src/run/mod.rs`
 
-Startup branches based on whether `config.toml` exists:
+Startup branches based on whether `config.toml` exists and whether wallet + RPC were configured:
 
 * **No config.toml** => "initialization mode"
   * `global::INITIALIZATION_COMPLETE = false`
   * all services are registered, but most `is_enabled()` return false
-  * webserver is always enabled so the user can complete setup
+  * webserver is always enabled so the user can complete setup (or skip it)
 
-* **Config.toml exists** => "normal mode"
+* **Config.toml exists, wallet skipped** => "discovery-only mode"
+  * Detected when `gui.dashboard.startup.setup_skipped == true` **or** `wallet_encrypted` is empty.
+  * `global::DISCOVERY_ONLY_MODE = true`, `INITIALIZATION_COMPLETE = false`.
+  * Wallet init/validation is **skipped**.
+  * Only the **discovery tier** runs: `connectivity`, `events`, `tokens`, `filtering`, `webserver`
+    (these gate on `global::is_discovery_or_full()`). Everything wallet/RPC-bound stays off.
+  * Token discovery is API-driven (DexScreener / GeckoTerminal / Rugcheck / Jupiter) so it needs
+    neither a wallet nor a custom RPC. The user completes setup later via the header banner /
+    config tab / setup wizard, which calls `POST /api/initialization/complete` and brings the full
+    tier up live (no restart).
+
+* **Config.toml exists, wallet present** => "normal mode"
   * config is loaded/validated
   * `global::INITIALIZATION_COMPLETE = true`
   * services can start normally
+
+**Two-tier gating:** discovery-tier services use `is_enabled() = global::is_discovery_or_full()`
+(`is_initialization_complete() || is_discovery_only_mode()`); all other services keep
+`is_enabled() = is_initialization_complete()`. `DISCOVERY_ONLY_MODE` and `INITIALIZATION_COMPLETE`
+are mutually exclusive — completing setup clears the former and sets the latter.
 
 ### 5.2 register_all_services()
 
@@ -246,6 +262,14 @@ ordered.sort_by_key(|name| self.services.get(name).map(|s| s.priority()).unwrap_
 
 Implication:
 * Dependencies are effectively enforced by convention: a dependency must have a **lower** priority value than its dependents.
+
+**Enabled filter (important):** the DFS pulls a service's declared dependencies into `ordered`
+*even if those dependencies are disabled*. So after `resolve_startup_order()` returns, both
+`start_all()` and `start_newly_enabled()` **retain only services whose `is_enabled()` is true**
+before the start loop. This is what lets discovery-only mode start `tokens`/`filtering` without
+dragging in their disabled `transactions`/`pools` dependencies. The filter is a no-op in normal
+mode (everything enabled). Dependency declarations therefore remain pure ordering hints — never a
+hard requirement that a dep actually run.
 
 ---
 
@@ -405,4 +429,10 @@ Registered today (in registration order):
 
 3) **SIGHUP is intentionally ignored at the process level.**  
    `run.rs` documents that terminal disconnects (SSH/nohup) must not stop a headless bot; use SIGTERM or Ctrl+C.
+
+4) **Disabled dependencies must be filtered before start.**  
+   `resolve_startup_order()` pulls declared deps into the order even when disabled. `start_all()` and `start_newly_enabled()` `retain(|s| s.is_enabled())` afterwards. If you add a new boot mode or partial-startup tier, keep that filter — otherwise a disabled RPC/wallet service can be started transitively via a discovery-tier service's declared deps.
+
+5) **Discovery-only mode gates on `is_discovery_or_full()`, not `is_initialization_complete()`.**  
+   The discovery tier (`connectivity`, `events`, `tokens`, `filtering`, `webserver`) uses `global::is_discovery_or_full()`. The `initialization_gate` middleware (`src/webserver/middleware.rs`) also treats `is_discovery_only_mode()` as allowed, so dashboard/token APIs work without a wallet. Wallet/RPC endpoints stay protected by their own `are_core_services_ready()` / FORCE_STOP guards. Don't gate a wallet-dependent service on `is_discovery_or_full()` — it must stay on `is_initialization_complete()`.
 
