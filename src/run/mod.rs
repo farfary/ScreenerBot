@@ -180,32 +180,83 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             logger::info(LogTag::System, "Configuration loaded successfully");
         }
 
-        // 5. Initialize wallets module (migrates from config.toml if needed)
-        crate::wallets::initialize()
-            .await
-            .map_err(|e| format!("Failed to initialize wallets: {e}"))?;
+        // 4b. Detect discovery-only mode: the user skipped wallet + RPC setup at first
+        // run. The durable marker is `setup_skipped`; an empty encrypted wallet is a
+        // safety fallback (treat as discovery-only rather than hard-failing later).
+        let discovery_only = crate::config::with_config(|cfg| {
+            cfg.gui.dashboard.startup.setup_skipped || cfg.wallet_encrypted.trim().is_empty()
+        });
 
-        logger::info(LogTag::System, "Wallets module initialized");
+        if discovery_only {
+            logger::info(
+                LogTag::System,
+                "Discovery-only mode: wallet + RPC not configured - starting token discovery tier only",
+            );
 
-        // 6. Validate wallet consistency
-        logger::info(LogTag::System, "Validating wallet consistency...");
+            // Discovery-only mode: only the discovery tier runs. Wallet/RPC-dependent
+            // services stay disabled and are filtered out of the startup order.
+            global::set_discovery_only_mode(true);
+            global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
 
-        match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {
-            crate::wallet_validation::WalletValidationResult::Valid => {
-                logger::info(LogTag::System, "Wallet validation passed");
+            let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
+            logger::info(
+                LogTag::System,
+                "Service manager initialized (discovery-only)",
+            );
+
+            services::register_all_services(&mut service_manager);
+            crate::services::init_global_service_manager(service_manager).await;
+
+            let manager_ref = crate::services::get_service_manager()
+                .await
+                .ok_or("Failed to get ServiceManager reference")?;
+
+            let mut service_manager = {
+                let mut guard = manager_ref.write().await;
+                guard.take().ok_or("ServiceManager was already taken")?
+            };
+
+            service_manager
+                .start_all()
+                .await
+                .map_err(|e| e.to_string())?;
+
+            {
+                let mut guard = manager_ref.write().await;
+                *guard = Some(service_manager);
             }
-            crate::wallet_validation::WalletValidationResult::FirstRun => {
-                logger::info(LogTag::System, "First run - no existing data");
-            }
-            crate::wallet_validation::WalletValidationResult::Mismatch {
-                current,
-                stored,
-                affected_systems,
-            } => {
-                logger::error(
-                    LogTag::System,
-                    &format!(
-                        "WALLET MISMATCH DETECTED!\n\
+
+            logger::info(
+                LogTag::System,
+                "Discovery-only mode active - complete wallet + RPC setup in the dashboard to enable trading",
+            );
+        } else {
+            // 5. Initialize wallets module (migrates from config.toml if needed)
+            crate::wallets::initialize()
+                .await
+                .map_err(|e| format!("Failed to initialize wallets: {e}"))?;
+
+            logger::info(LogTag::System, "Wallets module initialized");
+
+            // 6. Validate wallet consistency
+            logger::info(LogTag::System, "Validating wallet consistency...");
+
+            match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {
+                crate::wallet_validation::WalletValidationResult::Valid => {
+                    logger::info(LogTag::System, "Wallet validation passed");
+                }
+                crate::wallet_validation::WalletValidationResult::FirstRun => {
+                    logger::info(LogTag::System, "First run - no existing data");
+                }
+                crate::wallet_validation::WalletValidationResult::Mismatch {
+                    current,
+                    stored,
+                    affected_systems,
+                } => {
+                    logger::error(
+                        LogTag::System,
+                        &format!(
+                            "WALLET MISMATCH DETECTED!\n\
              \n\
              Current wallet: {}\n\
              Stored wallet: {}\n\
@@ -214,127 +265,130 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
               You MUST clean existing data before starting with a new wallet.\n\
              Run: cargo run --bin screenerbot -- --clean-wallet-data\n\
              Or manually delete: data/transactions.db data/positions.db data/wallet.db",
-                        current,
-                        stored,
-                        affected_systems.join(", ")
-                    ),
-                );
+                            current,
+                            stored,
+                            affected_systems.join(", ")
+                        ),
+                    );
 
-                return Err(format!(
+                    return Err(format!(
           "Wallet mismatch detected - current wallet {} does not match stored wallet {}. Clean data before proceeding.",
           current, stored
         ));
+                }
             }
-        }
 
-        // Set initialization flag to true (all services enabled)
-        global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
+            // Set initialization flag to true (all services enabled)
+            global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        // 7. Initialize strategy system
-        crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
+            // 7. Initialize strategy system
+            crate::strategies::init_strategy_system(
+                crate::strategies::engine::EngineConfig::default(),
+            )
             .await
             .map_err(|e| format!("Failed to initialize strategy system: {e}"))?;
 
-        logger::info(LogTag::System, "Strategy system initialized successfully");
+            logger::info(LogTag::System, "Strategy system initialized successfully");
 
-        // 8. Initialize actions database
-        crate::actions::init_database()
-            .await
-            .map_err(|e| format!("Failed to initialize actions database: {e}"))?;
+            // 8. Initialize actions database
+            crate::actions::init_database()
+                .await
+                .map_err(|e| format!("Failed to initialize actions database: {e}"))?;
 
-        logger::info(LogTag::System, "Actions database initialized successfully");
+            logger::info(LogTag::System, "Actions database initialized successfully");
 
-        // Sync recent incomplete actions from database to memory
-        crate::actions::sync_from_db()
-            .await
-            .map_err(|e| format!("Failed to sync actions from database: {e}"))?;
+            // Sync recent incomplete actions from database to memory
+            crate::actions::sync_from_db()
+                .await
+                .map_err(|e| format!("Failed to sync actions from database: {e}"))?;
 
-        // Start periodic cleanup of old completed actions (30-day retention)
-        crate::actions::spawn_cleanup_task();
+            // Start periodic cleanup of old completed actions (30-day retention)
+            crate::actions::spawn_cleanup_task();
 
-        // Start database maintenance (auto-vacuum migration + periodic incremental vacuum)
-        tokio::spawn(crate::database::start_db_maintenance_task());
+            // Start database maintenance (auto-vacuum migration + periodic incremental vacuum)
+            tokio::spawn(crate::database::start_db_maintenance_task());
 
-        // 8.5. Initialize AI database (always) and AI engine (if enabled)
-        // Database is always initialized so dashboard can view/edit instructions
-        if let Err(e) = crate::ai::init_ai_database() {
-            logger::warning(
+            // 8.5. Initialize AI database (always) and AI engine (if enabled)
+            // Database is always initialized so dashboard can view/edit instructions
+            if let Err(e) = crate::ai::init_ai_database() {
+                logger::warning(
                 LogTag::System,
                 &format!(
                     "Failed to initialize AI database: {} - AI instructions and history will not be available",
                     e
                 ),
             );
-        }
+            }
 
-        // Initialize AI chat database (always, for chat history persistence)
-        if let Err(e) = crate::ai::init_chat_db() {
-            logger::warning(
+            // Initialize AI chat database (always, for chat history persistence)
+            if let Err(e) = crate::ai::init_chat_db() {
+                logger::warning(
                 LogTag::System,
                 &format!(
                     "Failed to initialize AI chat database: {} - Chat history will not be available",
                     e
                 ),
             );
-        }
+            }
 
-        // Initialize AI engine only if enabled
-        let ai_enabled = crate::config::with_config(|cfg| cfg.ai.enabled);
-        if ai_enabled {
-            logger::info(LogTag::System, "Initializing AI engine...");
+            // Initialize AI engine only if enabled
+            let ai_enabled = crate::config::with_config(|cfg| cfg.ai.enabled);
+            if ai_enabled {
+                logger::info(LogTag::System, "Initializing AI engine...");
 
-            crate::ai::init_ai_engine()
+                crate::ai::init_ai_engine()
+                    .await
+                    .map_err(|e| format!("Failed to initialize AI engine: {e}"))?;
+                logger::info(LogTag::System, "AI engine initialized successfully");
+
+                // Initialize AI chat engine
+                crate::ai::init_chat_engine()
+                    .await
+                    .map_err(|e| format!("Failed to initialize AI chat engine: {e}"))?;
+                logger::info(LogTag::System, "AI chat engine initialized successfully");
+
+                // Initialize LLM manager with configured providers
+                llm_init::initialize_llm_providers().await?;
+            }
+
+            // 9. Create service manager
+            let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
+
+            logger::info(LogTag::System, "Service manager initialized");
+
+            // 10. Register all services
+            services::register_all_services(&mut service_manager);
+
+            // 11. Initialize global ServiceManager for webserver access
+            crate::services::init_global_service_manager(service_manager).await;
+
+            // 12. Get mutable reference to continue
+            let manager_ref = crate::services::get_service_manager()
                 .await
-                .map_err(|e| format!("Failed to initialize AI engine: {e}"))?;
-            logger::info(LogTag::System, "AI engine initialized successfully");
+                .ok_or("Failed to get ServiceManager reference")?;
 
-            // Initialize AI chat engine
-            crate::ai::init_chat_engine()
+            let mut service_manager = {
+                let mut guard = manager_ref.write().await;
+                guard.take().ok_or("ServiceManager was already taken")?
+            };
+
+            // 13. Start all enabled services
+            service_manager
+                .start_all()
                 .await
-                .map_err(|e| format!("Failed to initialize AI chat engine: {e}"))?;
-            logger::info(LogTag::System, "AI chat engine initialized successfully");
+                .map_err(|e| e.to_string())?;
 
-            // Initialize LLM manager with configured providers
-            llm_init::initialize_llm_providers().await?;
-        }
+            // 14. Put it back for webserver access
+            {
+                let mut guard = manager_ref.write().await;
+                *guard = Some(service_manager);
+            }
 
-        // 9. Create service manager
-        let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
-
-        logger::info(LogTag::System, "Service manager initialized");
-
-        // 10. Register all services
-        services::register_all_services(&mut service_manager);
-
-        // 11. Initialize global ServiceManager for webserver access
-        crate::services::init_global_service_manager(service_manager).await;
-
-        // 12. Get mutable reference to continue
-        let manager_ref = crate::services::get_service_manager()
-            .await
-            .ok_or("Failed to get ServiceManager reference")?;
-
-        let mut service_manager = {
-            let mut guard = manager_ref.write().await;
-            guard.take().ok_or("ServiceManager was already taken")?
-        };
-
-        // 13. Start all enabled services
-        service_manager
-            .start_all()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        // 14. Put it back for webserver access
-        {
-            let mut guard = manager_ref.write().await;
-            *guard = Some(service_manager);
-        }
-
-        logger::info(
-            LogTag::System,
-            "All services started - ScreenerBot is running",
-        );
+            logger::info(
+                LogTag::System,
+                "All services started - ScreenerBot is running",
+            );
+        } // end normal (full) mode
     }
 
     // 15. Wait for shutdown signal
