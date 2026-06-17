@@ -139,12 +139,12 @@
 }
 
 /* ===== IMPROVED SELECTS ===== */
-.custom-select {
+.ai-native-select {
   position: relative;
   min-width: 180px;
 }
 
-.custom-select select {
+.ai-native-select select {
   width: 100%;
   padding: 10px 36px 10px 14px;
   font-size: 14px;
@@ -157,17 +157,17 @@
   transition: all var(--transition-fast);
 }
 
-.custom-select select:hover {
+.ai-native-select select:hover {
   border-color: #4b5563;
 }
 
-.custom-select select:focus {
+.ai-native-select select:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15);
 }
 
-.custom-select::after {
+.ai-native-select::after {
   content: "";
   position: absolute;
   inset-inline-end: 14px;
@@ -290,7 +290,10 @@
 
 .form-control {
   padding: var(--input-padding-y, 8px) var(--input-padding-x, 12px);
-  background: var(--bg-tertiary);
+
+  /* background-color (not the `background` shorthand) so a <select class="form-control">
+     keeps the global var(--select-arrow) chevron instead of wiping it to none. */
+  background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: var(--input-border-radius, 6px);
   color: var(--text-primary);

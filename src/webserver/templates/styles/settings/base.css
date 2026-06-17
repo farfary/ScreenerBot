@@ -434,17 +434,15 @@
 .settings-select {
   min-width: 160px;
   padding: 7px 32px 7px 10px;
-  background: var(--bg-primary);
+  /* background-color (not the `background` shorthand) so the global select arrow survives. */
+  background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
-  appearance: none;
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 8px center;
+  /* Arrow inherited from global `select {}` (form_controls.css). */
   transition: all var(--transition-fast);
 }
 

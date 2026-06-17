@@ -780,7 +780,8 @@
   padding: var(--input-padding-y, 8px) var(--input-padding-x, 12px);
   border: 1px solid var(--border-color);
   border-radius: var(--input-border-radius, 6px);
-  background: var(--bg-secondary);
+  /* background-color (not the `background` shorthand) so a <select> keeps the global arrow. */
+  background-color: var(--bg-secondary);
   color: var(--text-primary);
   font-size: var(--input-font-size, 0.875rem);
   transition: border-color var(--transition-base);

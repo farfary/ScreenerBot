@@ -404,7 +404,8 @@
   padding: 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  /* background-color (not the `background` shorthand) so the global select arrow survives. */
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.875rem;
   line-height: 1.5;
@@ -413,16 +414,13 @@
   transition: all var(--transition-base);
 }
 
-/* Select-specific styles with chevron */
+/* Select-specific styles. The chevron arrow comes from the single global
+   `select {}` rule in form_controls.css — never re-declare background-image
+   here (that is what produced duplicate/again-broken arrows historically). */
 .table-toolbar-select,
 .dt-filter {
-  appearance: none;
   padding-right: 32px;
   cursor: pointer;
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px;
 }
 
 .table-toolbar-input:focus,
@@ -843,7 +841,8 @@
   padding: 5px 9px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  /* background-color (not the `background` shorthand) so the global select arrow survives. */
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.9em;
   line-height: 1.4;
@@ -866,13 +865,9 @@
 }
 
 .toolbar-select {
+  /* Arrow inherited from global `select {}` (form_controls.css). */
   min-width: 140px;
-  appearance: none;
   cursor: pointer;
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px;
   padding-right: 28px;
 }
 

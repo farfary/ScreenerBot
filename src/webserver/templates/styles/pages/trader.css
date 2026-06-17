@@ -534,15 +534,11 @@
 }
 
 .input-with-unit-group .unit-select {
-  appearance: none;
+  /* Arrow inherited from global `select {}` (form_controls.css). */
   padding: 8px 32px 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background-color: var(--background-secondary);
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px;
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;

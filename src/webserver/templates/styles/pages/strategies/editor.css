@@ -129,13 +129,9 @@
 }
 
 .template-filters select {
-  appearance: none;
+  /* Arrow inherited from global `select {}` (form_controls.css). */
   padding: 0.5rem 2rem 0.5rem 0.5rem;
   background-color: var(--background-color);
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-color);
@@ -375,13 +371,9 @@
 /* strategy-name-input styles defined earlier */
 
 .strategy-type-select {
-  appearance: none;
+  /* Arrow inherited from global `select {}` (form_controls.css). */
   padding: 0.5rem 2rem 0.5rem 0.75rem;
   background-color: var(--background-color);
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-color);
@@ -502,13 +494,9 @@
 }
 
 .param-field select {
-  appearance: none;
+  /* Arrow inherited from global `select {}` (form_controls.css). */
   padding-right: 28px;
   cursor: pointer;
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 12px;
 }
 
 .param-field input:focus,

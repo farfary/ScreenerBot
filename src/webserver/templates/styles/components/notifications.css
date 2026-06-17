@@ -324,19 +324,17 @@ body.notification-drawer-open {
 .filter-select {
   flex: 1;
   padding: 6px 10px;
+  padding-right: 24px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  /* background-color (not the `background` shorthand) so the global select arrow survives. */
+  background-color: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
-  appearance: none;
-  background-image: var(--select-arrow);
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  padding-right: 24px;
+  /* Arrow inherited from global `select {}` (form_controls.css). */
 }
 
 .filter-select:hover {

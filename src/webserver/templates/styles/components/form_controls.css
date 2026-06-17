@@ -251,6 +251,15 @@ textarea::placeholder {
    ============================================================================= */
 
 select {
+  /* -webkit-/-moz- prefixes are REQUIRED to suppress the native OS dropdown arrow
+     in Electron's Chromium. Without them the browser draws its own chevron on top
+     of var(--select-arrow), producing two overlapping arrows. The stylelint-disable
+     is intentional: a previous `lint --fix` stripped these prefixes and reintroduced
+     the double-arrow bug. Do not remove. */
+  /* stylelint-disable property-no-vendor-prefix */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  /* stylelint-enable property-no-vendor-prefix */
   appearance: none;
   height: var(--input-height);
   padding: var(--input-padding-y) var(--input-padding-x);

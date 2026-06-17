@@ -1,10 +1,11 @@
 /* Explorer Section */
 .explorer-controls select {
   min-width: 200px;
-  padding: 4px 8px;
+  padding: 4px 28px 4px 8px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  /* background-color (not the `background` shorthand) so the global select arrow survives. */
+  background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.85rem;
 }
