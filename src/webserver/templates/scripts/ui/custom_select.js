@@ -226,6 +226,7 @@ export class CustomSelect {
       optionEl.dataset.value = opt.value;
       optionEl.dataset.index = index;
       optionEl.textContent = opt.label;
+      optionEl.title = opt.label; // full text on hover when a long label is ellipsized
       optionEl.setAttribute("role", "option");
 
       if (opt.value === this.selectedValue) {
@@ -563,28 +564,48 @@ export class CustomSelect {
   }
 
   _positionDropdown() {
+    const MARGIN = 8; // keep this gap from every viewport edge
     const triggerRect = this.triggerEl.getBoundingClientRect();
-    const dropdownHeight = this.dropdownEl.offsetHeight || 240; // max-height fallback
+    const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - triggerRect.bottom - 8;
-    const spaceAbove = triggerRect.top - 8;
+    const style = this.dropdownEl.style;
 
-    // Set fixed positioning for portal
-    this.dropdownEl.style.position = "fixed";
-    this.dropdownEl.style.left = `${triggerRect.left}px`;
-    this.dropdownEl.style.width = `${triggerRect.width}px`;
-    this.dropdownEl.style.maxHeight = `${Math.min(240, Math.max(spaceBelow, spaceAbove))}px`;
+    style.position = "fixed";
+    style.right = "auto"; // JS owns horizontal placement; clear the base `right: 0`
 
-    // Decide above or below based on available space
+    // --- WIDTH: at least the trigger width, grow to fit the widest option,
+    //     but never wider than the viewport (responsive on small screens). ---
+    const maxWidth = Math.max(triggerRect.width, viewportWidth - MARGIN * 2);
+    style.minWidth = `${Math.min(triggerRect.width, maxWidth)}px`;
+    style.maxWidth = `${maxWidth}px`;
+    style.width = "max-content";
+
+    // Measure the resolved size after the width constraints are applied.
+    const dropdownRect = this.dropdownEl.getBoundingClientRect();
+    const dropdownWidth = dropdownRect.width;
+    const dropdownHeight = this.dropdownEl.offsetHeight || 240;
+
+    // --- HORIZONTAL: align to the trigger, then clamp fully into the viewport. ---
+    let left = triggerRect.left;
+    if (left + dropdownWidth > viewportWidth - MARGIN) {
+      // Prefer right-aligning to the trigger when it would overflow the right edge.
+      left = triggerRect.right - dropdownWidth;
+    }
+    left = Math.max(MARGIN, Math.min(left, viewportWidth - dropdownWidth - MARGIN));
+    style.left = `${left}px`;
+
+    // --- VERTICAL: open below by default, flip above when there is more room. ---
+    const spaceBelow = viewportHeight - triggerRect.bottom - MARGIN;
+    const spaceAbove = triggerRect.top - MARGIN;
+    style.maxHeight = `${Math.min(280, Math.max(spaceBelow, spaceAbove))}px`;
+
     if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
-      // Position above the trigger
-      this.dropdownEl.style.top = "auto";
-      this.dropdownEl.style.bottom = `${viewportHeight - triggerRect.top + 4}px`;
+      style.top = "auto";
+      style.bottom = `${viewportHeight - triggerRect.top + 4}px`;
       this.el.classList.add("dropdown-above");
     } else {
-      // Position below the trigger
-      this.dropdownEl.style.top = `${triggerRect.bottom + 4}px`;
-      this.dropdownEl.style.bottom = "auto";
+      style.top = `${triggerRect.bottom + 4}px`;
+      style.bottom = "auto";
       this.el.classList.remove("dropdown-above");
     }
   }

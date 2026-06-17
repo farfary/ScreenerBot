@@ -177,11 +177,8 @@
   bottom: 100%;
   margin-top: 0;
   margin-bottom: 6px;
-  transform-origin: bottom center;
-}
-
-.custom-select.dropdown-above .cs-dropdown {
   transform: translateY(8px) scale(0.98);
+  transform-origin: bottom center;
 }
 
 .custom-select.dropdown-above.open .cs-dropdown {
@@ -198,20 +195,27 @@
   transform: translateY(0) scale(1);
 }
 
-/* Option items - Uses floating item pattern */
+/* Option items - Uses floating item pattern.
+   Single-line (block + nowrap) so the dropdown's `width: max-content` sizes to the
+   widest full label instead of the longest word. Long labels ellipsize as a
+   fallback once the panel is capped to the viewport width (a title tooltip on each
+   option preserves the full text). */
 .cs-option {
   position: relative;
-  display: flex;
-  align-items: center;
+  display: block;
   padding: var(--floating-item-padding);
   padding-right: 36px;
   color: var(--text-primary);
   font-size: 0.8125rem;
   font-weight: 450;
+  line-height: 1.4;
   cursor: pointer;
   transition: all var(--transition-fast);
   margin: 2px 4px;
   border-radius: var(--floating-item-radius);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cs-option:first-child {
