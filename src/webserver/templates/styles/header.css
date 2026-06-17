@@ -571,10 +571,23 @@
   display: flex;
   align-items: center;
   flex-shrink: 0; /* actions stay fully visible; never squeezed or clipped */
-  gap: 16px; /* Increased from 12px */
   margin-left: auto;
   border-left: 2px solid rgb(255, 255, 255, 0.1);
   padding-left: 32px; /* Increased from 24px */
+}
+
+/* The action buttons live in their own flex group so they can be collapsed into a
+   floating panel on mid screens (see the folding-drawer block in RESPONSIVE). */
+.header-actions-items {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Collapsed handle — only shown on mid screens where the full row would crowd the
+   info cards. Hidden (and unused) at desktop and mobile widths. */
+.header-actions-toggle {
+  display: none;
 }
 
 .header-action-dropdown {
@@ -991,6 +1004,108 @@
   }
 }
 
+/* ----------------------------------------------------------------------------
+   FOLDING ACTION DRAWER — mid screens only (tablet → small desktop, 768-1279px)
+   The action buttons are the widest fixed block on the row, so on the screens
+   where they would otherwise crowd (and overlap) the info cards, they collapse to
+   a single handle. Only the handle stays in flow, which frees the whole row for
+   the cards. On hover / keyboard focus the buttons reveal as a floating panel to
+   the LEFT of the handle — properly spaced, never overlapping, on a solid header
+   backdrop so it sits cleanly above the cards. At >= 1280px the full row shows;
+   <= 767px keeps the dedicated mobile icon row below.
+   ---------------------------------------------------------------------------- */
+@media (width >= 768px) and (width <= 1279px) {
+  .header-actions {
+    position: relative;
+    padding-left: 0;
+    border-left: none;
+  }
+
+  /* The collapsed handle is the only thing in flow → cards get the whole row. */
+  .header-actions-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 36px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid rgb(255, 255, 255, 0.15);
+    border-radius: var(--radius-lg);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .header-actions-toggle .action-icon {
+    font-size: 18px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .header-actions:hover .header-actions-toggle,
+  .header-actions:focus-within .header-actions-toggle,
+  .header-actions.is-open .header-actions-toggle {
+    background: rgb(59, 130, 246, 0.15);
+    border-color: rgb(59, 130, 246, 0.4);
+  }
+
+  /* chevrons flip to hint "collapse" once the drawer is open */
+  .header-actions:hover .header-actions-toggle .action-icon,
+  .header-actions:focus-within .header-actions-toggle .action-icon,
+  .header-actions.is-open .header-actions-toggle .action-icon {
+    transform: rotate(180deg);
+  }
+
+  /* Floating panel of buttons, anchored just left of the handle. */
+  .header-actions-items {
+    position: absolute;
+    top: 50%;
+    right: calc(100% + 8px);
+    z-index: 30;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--header-solid-bg);
+    border: 1px solid var(--header-border, rgb(255, 255, 255, 0.12));
+    border-radius: var(--radius-xl);
+    box-shadow: 0 12px 32px rgb(0, 0, 0, 0.38);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-50%) translateX(12px) scale(0.98);
+    transform-origin: right center;
+    transition:
+      opacity 0.22s ease,
+      transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s linear 0.28s;
+  }
+
+  /* Invisible bridge across the 8px gap so moving mouse handle->panel never
+     drops :hover (no flicker). */
+  .header-actions-items::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -8px;
+    width: 8px;
+  }
+
+  .header-actions:hover .header-actions-items,
+  .header-actions:focus-within .header-actions-items,
+  .header-actions.is-open .header-actions-items {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(-50%) translateX(0) scale(1);
+    transition:
+      opacity 0.22s ease,
+      transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+      visibility 0s;
+  }
+}
+
 /* Mobile (<= 767px): an explicit 2-row grid — deterministic regardless of source
    order or flex quirks. Row 1: brand (logo, left) + actions (right). Row 2: the
    cards as a full-width horizontal scroll strip so the full metrics stay reachable. */
@@ -1028,6 +1143,16 @@
     margin-left: 0;
     border-left: none;
     padding-left: 0;
+  }
+
+  /* Phones use the dedicated icon row, not the folding drawer: hide the handle and
+     show the buttons inline. */
+  .header-actions-toggle {
+    display: none;
+  }
+
+  .header-actions-items {
+    flex-wrap: nowrap;
     gap: 5px;
   }
 
@@ -1074,7 +1199,7 @@
     font-size: 15px;
   }
 
-  .header-actions {
+  .header-actions-items {
     gap: 4px;
   }
 

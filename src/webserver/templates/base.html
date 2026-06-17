@@ -229,62 +229,77 @@
         </div>
 
         <!-- Quick Actions -->
-        <div class="header-actions">
-          <!-- Search -->
-          <button
-            class="header-action-btn"
-            id="searchBtn"
-            aria-label="Search tokens (Cmd+K)"
-            title="Search tokens (⌘K)"
-          >
-            <i class="action-icon icon-search"></i>
-          </button>
-
-          <!-- Billboard -->
-          <button
-            class="header-action-btn"
-            id="billboard-btn"
-            aria-label="Billboard - Featured Tokens"
-            title="Billboard - Featured Tokens"
-          >
-            <i class="action-icon icon-megaphone"></i>
-          </button>
-
-          <!-- Notifications -->
+        <div class="header-actions" id="headerActions">
+          <!-- Collapsed handle: only shown on mid screens where the full action row
+               would crowd the info cards. Hover/focus fans the items out to the left. -->
           <button
             type="button"
-            class="header-action-btn"
-            id="notificationBtn"
-            aria-label="Notifications"
+            class="header-actions-toggle"
+            id="headerActionsToggle"
+            aria-label="Show actions"
+            title="Actions"
+            aria-expanded="false"
           >
-            <i class="action-icon icon-bell"></i>
-            <span class="action-badge" id="notificationBadge" style="display: none">0</span>
+            <i class="action-icon icon-chevrons-left"></i>
           </button>
 
-          <!-- Power Menu -->
-          <button
-            class="header-action-btn"
-            id="powerMenuBtn"
-            aria-label="Power Menu"
-            title="Power Menu"
-          >
-            <i class="action-icon icon-power"></i>
-          </button>
+          <div class="header-actions-items" id="headerActionsItems">
+            <!-- Search -->
+            <button
+              class="header-action-btn"
+              id="searchBtn"
+              aria-label="Search tokens (Cmd+K)"
+              title="Search tokens (⌘K)"
+            >
+              <i class="action-icon icon-search"></i>
+            </button>
 
-          <!-- Theme Toggle -->
-          <button
-            type="button"
-            class="header-action-btn"
-            id="themeToggle"
-            aria-label="Toggle theme"
-          >
-            <i class="action-icon icon-moon" id="themeIcon"></i>
-          </button>
+            <!-- Billboard -->
+            <button
+              class="header-action-btn"
+              id="billboard-btn"
+              aria-label="Billboard - Featured Tokens"
+              title="Billboard - Featured Tokens"
+            >
+              <i class="action-icon icon-megaphone"></i>
+            </button>
 
-          <!-- Settings -->
-          <button type="button" class="header-action-btn" id="settingsBtn" aria-label="Settings">
-            <i class="action-icon icon-settings"></i>
-          </button>
+            <!-- Notifications -->
+            <button
+              type="button"
+              class="header-action-btn"
+              id="notificationBtn"
+              aria-label="Notifications"
+            >
+              <i class="action-icon icon-bell"></i>
+              <span class="action-badge" id="notificationBadge" style="display: none">0</span>
+            </button>
+
+            <!-- Power Menu -->
+            <button
+              class="header-action-btn"
+              id="powerMenuBtn"
+              aria-label="Power Menu"
+              title="Power Menu"
+            >
+              <i class="action-icon icon-power"></i>
+            </button>
+
+            <!-- Theme Toggle -->
+            <button
+              type="button"
+              class="header-action-btn"
+              id="themeToggle"
+              aria-label="Toggle theme"
+            >
+              <i class="action-icon icon-moon" id="themeIcon"></i>
+            </button>
+
+            <!-- Settings -->
+            <button type="button" class="header-action-btn" id="settingsBtn" aria-label="Settings">
+              <i class="action-icon icon-settings"></i>
+            </button>
+          </div>
         </div>
       </div>
 

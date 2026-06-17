@@ -679,6 +679,9 @@ function initTraderControls() {
   // Initialize card click handlers
   initCardHandlers();
 
+  // Initialize the collapsible action drawer (mid screens / touch)
+  initHeaderActionsToggle();
+
   // Initialize settings button
   initSettingsButton();
 
@@ -712,6 +715,40 @@ function initTraderControls() {
     .catch((error) => {
       console.error("[Header] Failed to initialize after bootstrap", error);
     });
+}
+
+function initHeaderActionsToggle() {
+  // On mid screens the action buttons collapse behind a handle and reveal on hover
+  // (handled purely in CSS). Touch devices can't hover, so the handle also toggles
+  // an `.is-open` class on tap; an outside tap/click closes it.
+  const actions = document.getElementById("headerActions");
+  const toggle = document.getElementById("headerActionsToggle");
+  if (!actions || !toggle) return;
+
+  const close = () => {
+    actions.classList.remove("is-open");
+    toggle.setAttribute("aria-expanded", "false");
+  };
+
+  toggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = actions.classList.toggle("is-open");
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+
+  // Close when tapping/clicking anywhere outside the actions cluster.
+  document.addEventListener("click", (event) => {
+    if (actions.classList.contains("is-open") && !actions.contains(event.target)) {
+      close();
+    }
+  });
+
+  // Close on Escape for keyboard users.
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && actions.classList.contains("is-open")) {
+      close();
+    }
+  });
 }
 
 function initCardHandlers() {

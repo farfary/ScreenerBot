@@ -56,10 +56,14 @@ class GlobalChat {
       </div>
     `;
 
-    // Insert as first child of .header-actions (before search button)
-    const headerActions = document.querySelector(".header-actions");
-    if (headerActions) {
-      headerActions.insertBefore(this._btn, headerActions.firstChild);
+    // Insert as first child of the action items group (before search button) so it
+    // folds together with the other actions on mid screens. Fall back to the
+    // actions container, then body, if the expected structure is missing.
+    const headerActionsItems =
+      document.querySelector(".header-actions-items") ||
+      document.querySelector(".header-actions");
+    if (headerActionsItems) {
+      headerActionsItems.insertBefore(this._btn, headerActionsItems.firstChild);
     } else {
       document.body.appendChild(this._btn);
     }
