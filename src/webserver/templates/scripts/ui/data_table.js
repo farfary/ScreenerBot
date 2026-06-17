@@ -1631,6 +1631,11 @@ export class DataTable {
         subtle: useSubtle,
         sortingColumn: reason === "reload" || reason === "sort" ? this.state.sortColumn : null,
       });
+      // When there are no rows to fade (initial load or a just-cleared view switch),
+      // render so the loading spinner shows instead of a stale "No data" empty state.
+      if (!useSubtle && this.state.filteredData.length === 0) {
+        this._renderTable();
+      }
     }
 
     pagination.loadingInitial = true;
@@ -2288,7 +2293,20 @@ export class DataTable {
       // Note: _applyFilters() already calls _renderTable() internally
       this._applyFilters();
     } else {
-      // Just re-render empty table
+      // Not preserving data: drop the previous column set's rows so they can never
+      // linger under the new columns (stale-row bug when switching sub-tabs). The
+      // caller is expected to trigger a reload afterwards to populate the new view.
+      if (!preserveData) {
+        this.state.data = [];
+        this.state.filteredData = [];
+        this.state.hasAutoFitted = false;
+        if (this._pagination?.enabled) {
+          this._updatePaginationMeta(
+            { cursorNext: null, cursorPrev: null, hasMoreNext: false, hasMorePrev: false },
+            { replace: true }
+          );
+        }
+      }
       this._renderTable();
     }
 

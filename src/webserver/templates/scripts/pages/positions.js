@@ -48,7 +48,6 @@ function createLifecycle() {
   const state = {
     view: "open", // 'open' | 'closed'
     total: 0,
-    lastUpdate: null,
     sort: getInitialSortForView("open"),
   };
 
@@ -286,7 +285,6 @@ function createLifecycle() {
         priority: "normal",
       });
       state.total = Array.isArray(rows) ? rows.length : 0;
-      state.lastUpdate = Date.now();
 
       const mapped = rows.map((row) => ({
         ...row,
@@ -329,17 +327,13 @@ function createLifecycle() {
         resetState: false, // Keep column widths/visibility preferences within each view
       });
 
-      // Update toolbar title
-      const viewLabel = view === "open" ? "Open" : "Closed";
-      if (table.toolbarView) {
-        const titleConfig = table.options.toolbar?.title;
-        if (titleConfig) {
-          titleConfig.text = `Positions: ${viewLabel}`;
-        }
-      }
+      // Update sorting for the new view (defer render — the reload below renders)
+      table.setSortState(state.sort.column, state.sort.direction, { render: false });
 
-      // Update sorting for the new view
-      table.setSortState(state.sort.column, state.sort.direction);
+      // Load the new view's data immediately. setColumns(preserveData:false) already
+      // cleared the previous view's rows, so this replaces the (now empty) table with
+      // fresh data instead of leaving stale items until the next poll tick.
+      table.reload({ reason: "view-change", resetScroll: true }).catch(() => {});
     }
     updateToolbar();
   };
@@ -589,7 +583,6 @@ function createLifecycle() {
       TabBarManager.unregister("positions");
       state.view = "open";
       state.total = 0;
-      state.lastUpdate = null;
       walletBalance = 0;
     },
   };
