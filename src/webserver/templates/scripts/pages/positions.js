@@ -283,6 +283,7 @@ function createLifecycle() {
     try {
       const rows = await requestManager.fetch(url, {
         priority: "normal",
+        signal,
       });
       state.total = Array.isArray(rows) ? rows.length : 0;
 
@@ -368,7 +369,10 @@ function createLifecycle() {
       table = new DataTable({
         container: "#positions-root",
         columns,
-        rowIdField: "mint",
+        // Unique per position. mint is NOT unique — the same token can have many
+        // positions (multiple closed trades, plus an open + closed of the same mint),
+        // so keying rows by mint caused duplicate rows and cross-sub-tab row mixing.
+        rowIdField: "id",
         stateKey: getPositionsTableStateKey(state.view),
         enableLogging: false,
         sorting: {
@@ -385,8 +389,8 @@ function createLifecycle() {
           threshold: 160,
           maxRows: 5000,
           loadPage: loadPositionsPage,
-          dedupeKey: (row) => row?.mint ?? null,
-          rowIdField: "mint",
+          dedupeKey: (row) => row?.id ?? null,
+          rowIdField: "id",
           onPageLoaded: () => updateToolbar(),
         },
         toolbar: {
@@ -516,8 +520,9 @@ function createLifecycle() {
           const row = e.target.closest("tr[data-row-id]");
           if (!row) return;
 
-          const mint = row.dataset.rowId;
-          const position = table?.getData()?.find((p) => p.mint === mint);
+          // data-row-id is now the unique position id (see rowIdField above).
+          const rowId = row.dataset.rowId;
+          const position = table?.getData()?.find((p) => String(p.id) === rowId);
           if (position && positionDetailsDialog) {
             positionDetailsDialog.show(position);
           }

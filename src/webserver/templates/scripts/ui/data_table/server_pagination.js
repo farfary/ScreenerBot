@@ -732,6 +732,14 @@ export function applyServerPaginationMixin(DataTable) {
 
     pagination.pendingRequest = loadPromise
       .then((result) => {
+        // Discard results from a superseded request. If a newer load replaced this
+        // one (e.g. the user switched sub-tabs / sort), our controller is no longer
+        // the active one. Applying here would overwrite the current view's data with
+        // a stale response — this is how the previous sub-tab's rows leak in when a
+        // loadPage callback ignores the abort signal.
+        if (pagination.abortController !== controller) {
+          return result;
+        }
         this._applyPageResult(normalizedDirection, result, options);
         return result;
       })
