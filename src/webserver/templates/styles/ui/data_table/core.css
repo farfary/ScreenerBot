@@ -7,7 +7,11 @@
   pointer-events: none;
 }
 
-/* Animated loading bar under header (shared by full + subtle modes) */
+/* Animated loading bar on the header's bottom edge (shared by full + subtle modes).
+   This is the single loading line — it lives where the sorted-column primary border
+   sits, so the two read as one cohesive line. A faint primary track tints the whole
+   edge during loading (so the sorted segment blends in) while a brighter gradient
+   sweeps across on top to signal activity. */
 .data-table-wrapper.is-loading .data-table thead::after,
 .data-table-wrapper.is-loading-subtle .data-table thead::after {
   content: "";
@@ -16,16 +20,19 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(
+  background-color: var(--primary-alpha-15);
+  background-image: linear-gradient(
     90deg,
     transparent 0%,
     var(--primary-color) 30%,
     var(--primary-color) 70%,
     transparent 100%
   );
+  background-repeat: no-repeat;
   background-size: 200% 100%;
   animation: dt-loading-slide 1.2s ease-in-out infinite;
   z-index: 10;
+  pointer-events: none;
 }
 
 @keyframes dt-loading-slide {
@@ -36,19 +43,6 @@
   100% {
     background-position: -100% 0;
   }
-}
-
-/* Toolbar loading indicator (full loading only) */
-.data-table-wrapper.is-loading .data-table-toolbar::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
-  background-size: 200% 100%;
-  animation: dt-loading-slide 1.2s ease-in-out infinite;
 }
 
 /* Column sorting indicator - spinner on sorted column */
@@ -753,8 +747,7 @@ body.dt-column-resizing * {
 /* ==================== Reduced Motion ==================== */
 @media (prefers-reduced-motion: reduce) {
   .data-table-wrapper.is-loading .data-table thead::after,
-  .data-table-wrapper.is-loading-subtle .data-table thead::after,
-  .data-table-wrapper.is-loading .data-table-toolbar::before {
+  .data-table-wrapper.is-loading-subtle .data-table thead::after {
     animation: none;
   }
 
