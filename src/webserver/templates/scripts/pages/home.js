@@ -4,8 +4,6 @@ import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
-import { playToggleOn, playToggleOff, playError, playSuccess } from "../core/sounds.js";
-import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 
 function createLifecycle() {
   let poller = null;
@@ -13,8 +11,6 @@ function createLifecycle() {
   let currentPeriod = "today";
   let cachedData = null;
   let hasLoadedOnce = false;
-  let tradeDialog = null;
-
   // Event cleanup tracking
   const eventCleanups = [];
   // Animation intervals tracking
@@ -82,9 +78,6 @@ function createLifecycle() {
   function updateUI(data) {
     if (!data) return;
 
-    // Update auto trader control bar
-    updateAutoTraderControl(data.trader_status);
-
     // Update trading analytics for current period
     updateTraderStats(data.trader[currentPeriod]);
 
@@ -132,70 +125,6 @@ function createLifecycle() {
     }
     if (drawdownEl) {
       drawdownEl.textContent = `${Utils.formatNumber(stats.drawdown_percent, 2)}%`;
-    }
-  }
-
-  // Update auto trader control bar
-  function updateAutoTraderControl(status) {
-    const control = document.getElementById("autoTraderControl");
-    const statusEl = document.getElementById("autoTraderStatus");
-    const toggleEl = document.getElementById("autoTraderToggle");
-
-    if (!control || !statusEl || !toggleEl) return;
-
-    const isRunning = status?.running === true;
-    const isAvailable = status !== undefined && status !== null;
-
-    // Update data attribute for styling
-    control.setAttribute("data-status", isRunning ? "running" : "stopped");
-
-    // Update status text
-    statusEl.textContent = isRunning ? "Running" : "Stopped";
-
-    // Update toggle state
-    toggleEl.checked = isRunning;
-    toggleEl.disabled = !isAvailable;
-  }
-
-  // Toggle auto trader
-  async function toggleAutoTrader(shouldStart) {
-    const toggleEl = document.getElementById("autoTraderToggle");
-    if (toggleEl) toggleEl.disabled = true;
-
-    const endpoint = shouldStart ? "/api/trader/start" : "/api/trader/stop";
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to ${shouldStart ? "start" : "stop"} trader`);
-      }
-
-      // Play sound feedback
-      if (shouldStart) {
-        playToggleOn();
-      } else {
-        playToggleOff();
-      }
-
-      // Show toast
-      Utils.showToast(`Auto Trader ${shouldStart ? "started" : "stopped"}`, "success");
-
-      // Refresh data
-      fetchData();
-    } catch (error) {
-      console.error("Toggle auto trader error:", error);
-      Utils.showToast(error.message, "error");
-      playError();
-
-      // Revert toggle state
-      if (toggleEl) {
-        toggleEl.checked = !shouldStart;
-        toggleEl.disabled = false;
-      }
     }
   }
 
@@ -407,111 +336,6 @@ function createLifecycle() {
     });
   }
 
-  /**
-   * Show quick trade dialog using TradeActionDialog's quick mode
-   * This opens the trade dialog with a mint input step first
-   * @param {string} action - 'buy' or 'sell'
-   */
-  async function showQuickTradeDialog(action) {
-    // Initialize trade dialog if needed
-    if (!tradeDialog) {
-      tradeDialog = new TradeActionDialog();
-    }
-
-    // Build context - for buy, pre-fetch wallet balance
-    let context = {};
-    if (action === "buy") {
-      try {
-        const walletRes = await fetch("/api/wallet/balance");
-        if (walletRes.ok) {
-          const walletData = await walletRes.json();
-          context.balance = walletData.sol_balance || 0;
-        }
-      } catch {
-        context.balance = 0;
-      }
-    }
-
-    // Open trade dialog in quick mode (will prompt for mint address)
-    const result = await tradeDialog.open({
-      action,
-      mode: "quick",
-      symbol: null,
-      context,
-    });
-
-    if (!result) return;
-
-    // Get the mint from the dialog's context (set during quick mode flow)
-    const mint = tradeDialog.currentContext?.mint;
-    if (!mint) {
-      playError();
-      Utils.showToast("No token selected", "error");
-      return;
-    }
-
-    // Execute trade
-    try {
-      const endpoint = action === "sell" ? "/api/trader/manual/sell" : "/api/trader/manual/buy";
-
-      const body =
-        action === "sell"
-          ? { mint, percentage: result.percentage }
-          : { mint, amount_sol: result.amount };
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.error || `${action} failed`);
-      }
-
-      const symbol = tradeDialog.currentContext?.symbol || mint.slice(0, 6) + "...";
-      playSuccess();
-      Utils.showToast(
-        `${action === "sell" ? "Sell" : "Buy"} order submitted for ${symbol}`,
-        "success"
-      );
-
-      // Refresh dashboard data
-      fetchData();
-    } catch (error) {
-      playError();
-      Utils.showToast(error.message || `Failed to ${action}`, "error");
-    }
-  }
-
-  // Setup auto trader toggle handler
-  function setupAutoTraderControl() {
-    const toggleEl = document.getElementById("autoTraderToggle");
-    const quickBuyEl = document.getElementById("quickBuyControl");
-    const quickSellEl = document.getElementById("quickSellControl");
-
-    if (toggleEl) {
-      addTrackedListener(toggleEl, "change", (e) => {
-        toggleAutoTrader(e.target.checked);
-      });
-    }
-
-    // Quick buy button - open quick trade dialog
-    if (quickBuyEl) {
-      addTrackedListener(quickBuyEl, "click", () => {
-        showQuickTradeDialog("buy");
-      });
-    }
-
-    // Quick sell button - open quick trade dialog
-    if (quickSellEl) {
-      addTrackedListener(quickSellEl, "click", () => {
-        showQuickTradeDialog("sell");
-      });
-    }
-  }
-
   return {
     init: (ctx) => {
       console.log("[Home] Initializing dashboard");
@@ -521,17 +345,6 @@ function createLifecycle() {
       // Data fetch happens in activate() to avoid double call
 
       setupPeriodTabs();
-      setupAutoTraderControl();
-
-      // Update shortcut hints based on platform (Mac vs Windows/Linux)
-      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-      if (!isMac) {
-        // Convert Mac symbols to Windows/Linux format
-        const buyHint = document.querySelector("#quickBuyControl .shortcut-hint");
-        const sellHint = document.querySelector("#quickSellControl .shortcut-hint");
-        if (buyHint) buyHint.textContent = "Ctrl+B";
-        if (sellHint) sellHint.textContent = "Ctrl+⇧S";
-      }
     },
 
     activate: (ctx) => {
@@ -579,12 +392,6 @@ function createLifecycle() {
     dispose: () => {
       console.log("[Home] Disposing dashboard");
       scopedFetch = null;
-
-      // Clean up trade dialog
-      if (tradeDialog) {
-        tradeDialog.destroy();
-        tradeDialog = null;
-      }
 
       // Note: Don't reset hasLoadedOnce or cachedData here
       // Preserving them allows instant display on page revisit
