@@ -743,9 +743,17 @@ export function applyServerPaginationMixin(DataTable) {
         throw error;
       })
       .finally(() => {
-        if (pagination.abortController === controller) {
-          pagination.abortController = null;
+        // If a newer request superseded this one (via _cancelPaginationRequest or a
+        // fresh _loadPage), the abortController will no longer point at ours. In that
+        // case this (aborted) request must NOT reset the shared loading / pending
+        // state — doing so would turn the loading indicator OFF while the newer
+        // request is still loading (intermittent "no loading shown" on sort/refresh).
+        const isCurrent = pagination.abortController === controller;
+        if (!isCurrent) {
+          this._notifyPaginationStateChange();
+          return;
         }
+        pagination.abortController = null;
         if (normalizedDirection === "next") {
           pagination.loadingNext = false;
         } else if (normalizedDirection === "prev") {
@@ -1300,5 +1308,11 @@ export function applyServerPaginationMixin(DataTable) {
     this._pagination.loadingNext = false;
     this._pagination.loadingPrev = false;
     this._pagination.loadingInitial = false;
+
+    // After cancelling there is no in-flight request, so clear the visible loading
+    // indicator here. The aborted request's finally now skips this (it is no longer
+    // the current request), so cancel owns turning it off. A reload that cancels as
+    // its first step re-enables loading immediately afterwards.
+    this._setLoadingState(false);
   };
 }

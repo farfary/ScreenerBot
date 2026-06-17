@@ -260,6 +260,11 @@ export class DataTable {
     this._serverPaginationMode = "scroll";
     this._scrollLoadingDisabled = false;
 
+    // Monotonic id for the active visible (initial) load. Incremented on every
+    // reload so a superseded reload's finally can detect it is no longer current
+    // and avoid turning OFF the loading indicator the newer reload just turned ON.
+    this._loadToken = 0;
+
     // Interaction tracking: skip re-renders while user is hovering/interacting
     this._isHovering = false;
     this._hoverTimeout = null;
@@ -1603,6 +1608,10 @@ export class DataTable {
 
     this._cancelPaginationRequest();
 
+    // Claim ownership of the visible loading indicator for this reload. Any older
+    // reload still settling will see a newer token and must not toggle loading off.
+    const loadToken = ++this._loadToken;
+
     pagination.cursorNext = options.cursor ?? pagination.initialCursor ?? null;
     pagination.cursorPrev = options.prevCursor ?? pagination.initialPrevCursor ?? null;
     pagination.hasMoreNext =
@@ -1648,6 +1657,12 @@ export class DataTable {
       replace: true,
       resetScroll: options.resetScroll ?? false,
     }).finally(() => {
+      // Only the latest reload may clear the shared loading state. A superseded
+      // reload (its request was aborted by a newer one) must leave the newer
+      // reload's loading indicator intact.
+      if (loadToken !== this._loadToken) {
+        return;
+      }
       pagination.loadingInitial = false;
       if (!silent) {
         this._setLoadingState(false);
