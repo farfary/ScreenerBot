@@ -370,7 +370,65 @@
   color: var(--text-primary);
 }
 
-/* Bot Card Status Colors - Just text colors, no backgrounds */
+/* ============================================================================
+   BOT / AUTO-TRADER CARD — clickable state pill (RUNNING / STOPPED + daily P&L)
+   No hard border ring: state reads from a soft tinted fill + coloured text.
+   Layout is fully fluid (clamp) so it scales smoothly at every width, and the
+   secondary "Today" label is revealed only when there is room (see responsive).
+   ============================================================================ */
+
+/* Horizontal pill: state on the left, daily P&L on the right */
+.bot-card .card-content {
+  flex-direction: row;
+  align-items: center;
+  gap: clamp(8px, 0.9vw, 16px);
+}
+
+.bot-card .card-top {
+  gap: clamp(5px, 0.4vw, 8px);
+  font-size: inherit;
+}
+
+.bot-card .card-icon {
+  font-size: clamp(15px, 0.4vw + 12px, 19px);
+}
+
+.bot-card .card-status {
+  font-size: clamp(11px, 0.25vw + 9px, 14px);
+  white-space: nowrap;
+}
+
+/* Daily P&L block: thin divider + optional label; the value is always visible */
+.bot-card .card-bottom {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(4px, 0.4vw, 7px);
+  padding-left: clamp(8px, 0.8vw, 14px);
+  border-left: 1px solid rgb(255, 255, 255, 0.14);
+  color: inherit;
+  font-size: inherit;
+}
+
+.bot-card .bot-pnl-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  opacity: 0.7;
+}
+
+.bot-card .card-value {
+  font-size: clamp(13px, 0.4vw + 10px, 18px);
+  white-space: nowrap;
+}
+
+/* ---- State colours: soft tinted fill + matching icon/label ---- */
+.bot-card[data-status="running"] {
+  background: rgb(16, 185, 129, 0.16);
+}
+
+.bot-card[data-status="running"]:hover {
+  background: rgb(16, 185, 129, 0.24);
+}
+
 .bot-card[data-status="running"] .card-icon {
   color: #10b981;
   animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -380,27 +438,42 @@
   color: #10b981;
 }
 
-.bot-card[data-status="stopped"] .card-icon {
-  color: #ef4444;
+.bot-card[data-status="running"] .card-bottom {
+  border-left-color: rgb(16, 185, 129, 0.28);
 }
 
+.bot-card[data-status="stopped"] {
+  background: rgb(239, 68, 68, 0.16);
+}
+
+.bot-card[data-status="stopped"]:hover {
+  background: rgb(239, 68, 68, 0.24);
+}
+
+.bot-card[data-status="stopped"] .card-icon,
 .bot-card[data-status="stopped"] .card-status {
   color: #ef4444;
 }
 
-.bot-card[data-status="loading"] .card-icon {
-  color: #fbbf24;
+.bot-card[data-status="stopped"] .card-bottom {
+  border-left-color: rgb(239, 68, 68, 0.28);
 }
 
+.bot-card[data-status="loading"] {
+  background: rgb(251, 191, 36, 0.14);
+}
+
+.bot-card[data-status="loading"] .card-icon,
 .bot-card[data-status="loading"] .card-status {
   color: #fbbf24;
 }
 
 /* preview mode: trading is intentionally off — use a neutral (not alarming) tone */
-.bot-card[data-status="preview"] .card-icon {
-  color: #58a6ff;
+.bot-card[data-status="preview"] {
+  background: rgb(88, 166, 255, 0.14);
 }
 
+.bot-card[data-status="preview"] .card-icon,
 .bot-card[data-status="preview"] .card-status {
   color: #58a6ff;
 }
@@ -423,34 +496,21 @@
 .bot-card {
   position: relative;
   overflow: hidden;
-  border-radius: var(--radius-md); /* Tighter border radius */
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.bot-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: transparent;
-  transition: background 0.25s ease;
-  pointer-events: none;
-}
-
-.bot-card:hover::before {
+  border-radius: var(--radius-lg);
+  padding: clamp(5px, 0.4vw + 2px, 11px) clamp(10px, 0.9vw + 4px, 18px);
   background: rgb(255, 255, 255, 0.05);
-}
-
-.bot-card:active::before {
-  background: rgb(255, 255, 255, 0.1);
+  transition:
+    background 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .bot-card:hover {
+  background: rgb(255, 255, 255, 0.1);
   transform: translateY(-1px);
 }
 
 .bot-card:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 /* Bot Card Toggle Animation */
@@ -504,29 +564,6 @@
     transform: scale(2.5);
     opacity: 0;
   }
-}
-
-/* Bot Card Glow on Running State */
-.bot-card[data-status="running"] {
-  box-shadow:
-    0 0 0 1px rgb(16, 185, 129, 0.2),
-    0 0 20px rgb(16, 185, 129, 0.1);
-}
-
-.bot-card[data-status="running"]:hover {
-  box-shadow:
-    0 0 0 1px rgb(16, 185, 129, 0.3),
-    0 0 25px rgb(16, 185, 129, 0.15);
-}
-
-.bot-card[data-status="stopped"] {
-  box-shadow: 0 0 0 1px rgb(239, 68, 68, 0.25); /* Slightly more visible */
-}
-
-.bot-card[data-status="stopped"]:hover {
-  box-shadow:
-    0 0 0 1px rgb(239, 68, 68, 0.35),
-    0 0 15px rgb(239, 68, 68, 0.12);
 }
 
 /* Quick Actions */
@@ -889,6 +926,11 @@
     font-size: 16px;
   }
 
+  /* drop the secondary "Today" detail once space tightens */
+  .bot-card .bot-pnl-label {
+    display: none;
+  }
+
   .header-actions {
     gap: 10px;
     padding-left: 18px;
@@ -913,6 +955,15 @@
 
   .card-bottom {
     display: none; /* primary metric stays; secondary line hidden for space */
+  }
+
+  /* the bot card's P&L IS its primary metric — keep it inline, drop only the label */
+  .bot-card .card-bottom {
+    display: flex;
+  }
+
+  .bot-card .bot-pnl-label {
+    display: none;
   }
 
   .card-value,
@@ -999,6 +1050,11 @@
 
   .header-card {
     padding: 6px 10px;
+  }
+
+  /* bot card stays a compact state + P&L pill; secondary label stays hidden */
+  .bot-card .bot-pnl-label {
+    display: none;
   }
 
   .header-row-3 {
