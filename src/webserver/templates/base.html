@@ -178,48 +178,51 @@
           <span class="brand-text">ScreenerBot</span>
         </div>
 
-        <!-- Bot Status Card -->
-        <div class="header-card bot-card" id="botCard" data-status="loading">
-          <div class="card-content">
-            <div class="card-top">
-              <i class="card-icon icon-bot" id="botIcon"></i>
-              <span class="card-status" id="botStatus">LOADING</span>
-            </div>
-            <div class="card-bottom">
-              <span class="card-value" id="botPnL">—</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Wallet Card -->
-        <div class="header-card wallet-card" id="walletCard">
-          <div class="card-content">
-            <div class="card-top">
-              <span class="card-label">SOL</span>
-              <span class="card-value" id="walletSol">—</span>
-              <span class="card-change" id="walletChange">—</span>
-            </div>
-            <div class="card-bottom">
-              <span class="card-sub">TKN</span>
-              <span class="card-sub-value" id="walletTokenCount">—</span>
-              <span class="card-sub">Worth</span>
-              <span class="card-sub-value" id="walletTokenWorth">—</span>
+        <!-- Status / metric cards (flexible, overflow-safe middle region) -->
+        <div class="header-cards" id="headerCards">
+          <!-- Bot Status Card -->
+          <div class="header-card bot-card" id="botCard" data-status="loading">
+            <div class="card-content">
+              <div class="card-top">
+                <i class="card-icon icon-bot" id="botIcon"></i>
+                <span class="card-status" id="botStatus">LOADING</span>
+              </div>
+              <div class="card-bottom">
+                <span class="card-value" id="botPnL">—</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- Positions Card -->
-        <div class="header-card positions-card" id="positionsCard">
-          <div class="card-content">
-            <div class="card-top">
-              <span class="card-label">POS</span>
-              <span class="card-value" id="positionsCount">—</span>
-              <span class="card-change" id="positionsPnL">—</span>
+          <!-- Wallet Card -->
+          <div class="header-card wallet-card" id="walletCard">
+            <div class="card-content">
+              <div class="card-top">
+                <span class="card-label">SOL</span>
+                <span class="card-value" id="walletSol">—</span>
+                <span class="card-change" id="walletChange">—</span>
+              </div>
+              <div class="card-bottom">
+                <span class="card-sub">TKN</span>
+                <span class="card-sub-value" id="walletTokenCount">—</span>
+                <span class="card-sub">Worth</span>
+                <span class="card-sub-value" id="walletTokenWorth">—</span>
+              </div>
             </div>
-            <div class="card-bottom">
-              <span class="card-sub">RPC</span>
-              <span class="card-sub-value" id="rpcSuccess">—</span>
-              <span class="card-sub" id="rpcLatency">—</span>
+          </div>
+
+          <!-- Positions Card -->
+          <div class="header-card positions-card" id="positionsCard">
+            <div class="card-content">
+              <div class="card-top">
+                <span class="card-label">POS</span>
+                <span class="card-value" id="positionsCount">—</span>
+                <span class="card-change" id="positionsPnL">—</span>
+              </div>
+              <div class="card-bottom">
+                <span class="card-sub">RPC</span>
+                <span class="card-sub-value" id="rpcSuccess">—</span>
+                <span class="card-sub" id="rpcLatency">—</span>
+              </div>
             </div>
           </div>
         </div>
