@@ -126,11 +126,14 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
 
       if (!this._isOpen) return; // Dialog closed during fetch
 
-      if (data.success && data.data) {
-        this._quoteData = data.data;
+      // The /api/trader/quote endpoint returns a FLAT object (success + quote
+      // fields at the top level), not a {data:{...}} wrapper. _renderQuote and
+      // the confirm-path slippage check both read these flat fields directly.
+      if (data.success) {
+        this._quoteData = data;
         this._quoteError = null;
         this._quoteTimestamp = Date.now();
-        this._renderQuote(data.data);
+        this._renderQuote(data);
         this._setQuoteState("loaded");
         this._startQuoteRefreshTimer();
       } else {
