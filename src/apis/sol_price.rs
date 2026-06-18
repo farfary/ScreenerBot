@@ -321,6 +321,10 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
 
 /// Fetch SOL price from Jupiter API
 async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
+    // Yield to in-flight swaps and space against other background Jupiter calls
+    // so price polling never starves the swap rate budget (lite-api is per-IP).
+    crate::apis::jupiter::throttle::acquire_background().await;
+
     let client = reqwest::Client::new();
 
     let response = client

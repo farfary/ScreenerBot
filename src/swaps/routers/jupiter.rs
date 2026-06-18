@@ -1,18 +1,26 @@
 //! Jupiter Router Implementation
-//! Uses api.jup.ag with referral fees for revenue and optional user API key for rate limits
+//!
+//! Referral fees (0.5%) are the project's revenue and work WITHOUT an API key:
+//! by default we hit the free `lite-api.jup.ag`. An API key is optional and only
+//! raises rate limits (switches to `api.jup.ag`) — it does NOT change fees.
+//!
+//! The free endpoint rate-limits aggressively (HTTP 429), so quote/swap requests
+//! retry with exponential backoff (see `jupiter_send_with_retry`) instead of
+//! failing the trade. The `/swap` call only BUILDS an unsigned transaction, so
+//! retrying it is safe (on-chain submission happens later via RPC).
+//! Docs: https://developers.jup.ag/docs/swap/add-fees-to-swap
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::rpc::RpcClientMethods;
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapMode, SwapResult};
-use crate::tokens::decimals::is_token_2022;
 use crate::tokens::Token;
 use crate::{Error, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // ============================================================================
 // CREDENTIALS & FEE CONSTANTS
@@ -83,6 +91,11 @@ struct JupiterQuoteRequest {
     /// Comma-separated list of DEX labels to exclude from routing
     #[serde(rename = "excludeDexes", skip_serializing_if = "Option::is_none")]
     exclude_dexes: Option<String>,
+    /// Instruction version. "V2" is REQUIRED to collect the platform/referral fee
+    /// on Token2022 tokens (otherwise the swap fails with IncorrectTokenProgramID
+    /// 0x177e). It's a safe superset for standard SPL too, so we always send it.
+    #[serde(rename = "instructionVersion", skip_serializing_if = "Option::is_none")]
+    instruction_version: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -146,6 +159,96 @@ struct JupiterSwapResponse {
 // HELPER FUNCTIONS
 // ============================================================================
 
+/// Max attempts for transient Jupiter API failures (HTTP 429 / 5xx / network).
+/// The free lite-api.jup.ag has tight rate limits, so we retry with backoff
+/// rather than failing the trade outright.
+const JUPITER_MAX_ATTEMPTS: u32 = 4;
+
+/// Compute a backoff delay. Honors a server `Retry-After` (seconds) when present,
+/// otherwise exponential (~0.4s, 0.8s, 1.6s, 3.2s) capped at 4s, plus small jitter.
+fn jupiter_backoff_delay(attempt: u32, retry_after_secs: Option<u64>) -> Duration {
+    if let Some(secs) = retry_after_secs {
+        return Duration::from_millis(secs.clamp(1, 5) * 1000);
+    }
+    let exp = 400u64.saturating_mul(1u64 << attempt.saturating_sub(1).min(4));
+    let capped = exp.min(4000);
+    let jitter = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| (d.subsec_nanos() as u64) % 200)
+        .unwrap_or(0);
+    Duration::from_millis(capped + jitter)
+}
+
+/// Send a Jupiter HTTP request with retry+backoff on transient failures.
+/// `build` is invoked fresh per attempt (a RequestBuilder is single-use).
+/// Returns the success body text on 2xx, or a domain Error. Retries only on
+/// HTTP 429, 5xx, and network/transport errors — never on 4xx (e.g. 400 = no
+/// route), which are deterministic and surfaced immediately to the caller.
+async fn jupiter_send_with_retry<F>(label: &str, build: F) -> Result<String>
+where
+    F: Fn() -> reqwest::RequestBuilder,
+{
+    let mut attempt = 0u32;
+    loop {
+        attempt += 1;
+        match build().send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_success() {
+                    return resp.text().await.map_err(|e| {
+                        Error::network_error(format!("Failed to read Jupiter {label} response: {e}"))
+                    });
+                }
+                let is_transient = status.as_u16() == 429 || status.is_server_error();
+                let retry_after = resp
+                    .headers()
+                    .get(reqwest::header::RETRY_AFTER)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.trim().parse::<u64>().ok());
+                let body = resp.text().await.unwrap_or_else(|_| "Unknown".to_owned());
+                if is_transient && attempt < JUPITER_MAX_ATTEMPTS {
+                    let delay = jupiter_backoff_delay(attempt, retry_after);
+                    logger::warning(
+                        LogTag::Swap,
+                        &format!(
+                            "Jupiter {label} transient {} (attempt {}/{}), retrying in {}ms",
+                            status,
+                            attempt,
+                            JUPITER_MAX_ATTEMPTS,
+                            delay.as_millis()
+                        ),
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                return Err(Error::api_error(format!(
+                    "Jupiter {label} failed ({status}): {body}"
+                )));
+            }
+            Err(e) => {
+                if attempt < JUPITER_MAX_ATTEMPTS {
+                    let delay = jupiter_backoff_delay(attempt, None);
+                    logger::warning(
+                        LogTag::Swap,
+                        &format!(
+                            "Jupiter {label} network error (attempt {}/{}): {} - retrying in {}ms",
+                            attempt,
+                            JUPITER_MAX_ATTEMPTS,
+                            e,
+                            delay.as_millis()
+                        ),
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                return Err(Error::network_error(format!(
+                    "Jupiter {label} request failed after {attempt} attempts: {e}"
+                )));
+            }
+        }
+    }
+}
+
 /// Get the referral token account for a swap based on input or output mint
 /// Since we always trade against SOL or USDC, one side will always match
 /// Fee is taken from the output side, but Jupiter handles routing internally
@@ -168,6 +271,15 @@ fn get_referral_token_account_for_swap(input_mint: &str, output_mint: &str) -> O
 
     // Neither side is SOL/USDC (shouldn't happen in our trading flow)
     None
+}
+
+/// Resolve the referral fee account (WSOL/USDC) for a swap pair. We always trade
+/// against SOL/USDC, so the fee is taken on that (standard SPL) side — works for
+/// Token2022 tokens too when the quote uses `instructionVersion=V2`. Shared by the
+/// main router AND the multi-wallet tool executor so BOTH collect referral revenue.
+/// Docs: developers.jup.ag/docs/swap/add-fees-to-swap
+pub(crate) fn referral_fee_account(input_mint: &str, output_mint: &str) -> Option<String> {
+    get_referral_token_account_for_swap(input_mint, output_mint)
 }
 
 // ============================================================================
@@ -225,80 +337,53 @@ impl SwapRouter for JupiterRouter {
     }
 
     async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
+        // Mark a swap as in flight so background Jupiter pollers (price, token
+        // discovery, health) defer and don't steal the shared rate budget.
+        let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
+
         let slippage_bps = ((request.slippage_pct * 100.0).round() as u16).max(1);
 
-        // Check if either token is Token2022 - Jupiter cannot collect fees on Token2022
-        // Error 0x177e (6014) = IncorrectTokenProgramID when trying to collect fees
-        // TODO: Monitor Jupiter API updates for Token2022 fee support in the future
-        let input_is_token_2022 = is_token_2022(&request.input_mint).await;
-        let output_is_token_2022 = is_token_2022(&request.output_mint).await;
-        let skip_fees = input_is_token_2022 || output_is_token_2022;
-
-        let platform_fee_bps = if skip_fees {
-            logger::info(
-                LogTag::Swap,
-                &format!(
-                    "Skipping Jupiter platform fee for Token2022 swap: input_2022={}, output_2022={}, input={}, output={}",
-                    input_is_token_2022, output_is_token_2022, request.input_mint, request.output_mint
-                ),
-            );
-            None
-        } else {
-            Some(REFERRAL_FEE_BPS)
-        };
-
+        // Always collect the referral platform fee — this is the project's revenue.
+        // `instructionVersion=V2` (set below) lets Jupiter collect fees even on
+        // Token2022 tokens (the fee is taken on the SOL/USDC side, which is always
+        // standard SPL), so we no longer skip fees for Token2022.
         let quote_req = JupiterQuoteRequest {
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
             amount: request.input_amount.to_string(),
             slippage_bps,
             swap_mode: Some(request.swap_mode.as_str().to_owned()),
-            platform_fee_bps,
+            platform_fee_bps: Some(REFERRAL_FEE_BPS),
             exclude_dexes: request.exclude_dexes.as_ref().map(|d| d.join(",")),
+            instruction_version: Some("V2".to_owned()),
         };
 
         logger::debug(
             LogTag::Swap,
             &format!(
-                "Jupiter quote request: {} {} → {} (slippage: {}bps, fee: {}bps)",
+                "Jupiter quote request: {} {} → {} (slippage: {}bps, fee: {}bps, V2)",
                 request.input_amount,
                 request.input_mint,
                 request.output_mint,
                 slippage_bps,
-                platform_fee_bps.unwrap_or_default()
+                REFERRAL_FEE_BPS
             ),
         );
 
-        // Send quote request (with API key header if configured)
+        // Send quote request (with API key header if configured), retrying on
+        // transient rate-limit / network failures. Raw response text is kept so
+        // ALL fields are preserved for the later swap request.
         let api_base = get_api_base();
         let url = format!("{api_base}/swap/v1/quote");
-        let mut req = self.client.get(&url);
-        if let Some(key) = get_api_key() {
-            req = req.header("x-api-key", key);
-        }
-        let response = req
-            .query(&quote_req)
-            .send()
-            .await
-            .map_err(|e| Error::network_error(format!("Jupiter quote request failed: {e}")))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown".to_owned());
-            return Err(Error::api_error(format!(
-                "Jupiter quote failed ({}): {}",
-                status, error_text
-            )));
-        }
-
-        // Get raw response text first - we need to preserve ALL fields for the swap request
-        let response_text = response
-            .text()
-            .await
-            .map_err(|e| Error::network_error(format!("Failed to read Jupiter response: {e}")))?;
+        let api_key = get_api_key();
+        let response_text = jupiter_send_with_retry("quote", || {
+            let mut req = self.client.get(&url);
+            if let Some(ref key) = api_key {
+                req = req.header("x-api-key", key.clone());
+            }
+            req.query(&quote_req)
+        })
+        .await?;
 
         // Parse into our limited struct just to extract key values
         let quote_response: JupiterQuoteResponse = serde_json::from_str(&response_text)
@@ -355,34 +440,19 @@ impl SwapRouter for JupiterRouter {
     }
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
+        // Keep background Jupiter pollers deferred while the swap transaction is
+        // being built (see throttle module).
+        let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
+
         let start = Instant::now();
 
         // Deserialize quote response
         let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
             .map_err(|e| Error::internal_error(format!("Quote deserialization failed: {e}")))?;
 
-        // Check if either token is Token2022 - Jupiter cannot collect fees on Token2022
-        // Skip fee account for Token2022 tokens to avoid IncorrectTokenProgramID error
-        // TODO: Optimize by passing Token2022 status from quote to avoid duplicate RPC calls
-        let input_is_token_2022 = is_token_2022(&quote.input_mint).await;
-        let output_is_token_2022 = is_token_2022(&quote.output_mint).await;
-        let skip_fees = input_is_token_2022 || output_is_token_2022;
-
-        // Get the referral token account - check both input and output mints
-        // Since we always trade against SOL or USDC, one side will always match
-        // Skip fee account for Token2022 tokens to avoid IncorrectTokenProgramID error
-        let fee_account = if skip_fees {
-            logger::debug(
-                LogTag::Swap,
-                &format!(
-                    "Skipping feeAccount for Token2022 swap: input={}, output={}",
-                    quote.input_mint, quote.output_mint
-                ),
-            );
-            None
-        } else {
-            get_referral_token_account_for_swap(&quote.input_mint, &quote.output_mint)
-        };
+        // Resolve the referral fee account (WSOL/USDC side; works for Token2022 too
+        // because the quote uses instructionVersion=V2).
+        let fee_account = referral_fee_account(&quote.input_mint, &quote.output_mint);
 
         let swap_req = JupiterSwapRequest {
             user_public_key: quote.wallet_address.clone(),
@@ -406,35 +476,22 @@ impl SwapRouter for JupiterRouter {
             ),
         );
 
-        // Get swap transaction (with API key header if configured)
+        // Get swap transaction (with API key header if configured), retrying on
+        // transient failures. This only BUILDS an unsigned transaction, so retry
+        // is safe — on-chain submission happens afterwards via RPC.
         let api_base = get_api_base();
         let url = format!("{api_base}/swap/v1/swap");
-        let mut req = self.client.post(&url);
-        if let Some(key) = get_api_key() {
-            req = req.header("x-api-key", key);
-        }
-        let response = req
-            .header("Content-Type", "application/json")
-            .json(&swap_req)
-            .send()
-            .await
-            .map_err(|e| Error::network_error(format!("Jupiter swap request failed: {e}")))?;
+        let api_key = get_api_key();
+        let response_text = jupiter_send_with_retry("swap", || {
+            let mut req = self.client.post(&url);
+            if let Some(ref key) = api_key {
+                req = req.header("x-api-key", key.clone());
+            }
+            req.header("Content-Type", "application/json").json(&swap_req)
+        })
+        .await?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unknown".to_owned());
-            return Err(Error::api_error(format!(
-                "Jupiter swap failed ({}): {}",
-                status, error_text
-            )));
-        }
-
-        let swap_response: JupiterSwapResponse = response
-            .json()
-            .await
+        let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
             .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
 
         // Transaction is already base64 encoded, send it directly

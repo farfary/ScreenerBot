@@ -166,13 +166,25 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
     let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
         .map_err(|e| format!("Quote deserialization failed: {e}"))?;
 
+    // Resolve the referral fee account so multi-wallet tool swaps ALSO collect
+    // the 0.5% referral revenue (same mechanism as the main router). The quote
+    // was fetched with platformFeeBps set, so feeAccount must be provided here.
+    let fee_account =
+        crate::swaps::routers::referral_fee_account(&quote.input_mint, &quote.output_mint);
+
     // Build swap request for Jupiter API
-    let swap_req = serde_json::json!({
+    let mut swap_req = serde_json::json!({
         "userPublicKey": keypair.pubkey().to_string(),
         "quoteResponse": quote_response,
         "dynamicComputeUnitLimit": true,
         "prioritizationFeeLamports": with_config(|cfg| cfg.swaps.jupiter.default_priority_fee),
     });
+    if let Some(ref account) = fee_account {
+        swap_req["feeAccount"] = serde_json::Value::String(account.clone());
+    }
+
+    // Mark a swap in flight so background Jupiter pollers defer to it.
+    let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
 
     // Call Jupiter swap endpoint (API key only if configured)
     let client = reqwest::Client::new();

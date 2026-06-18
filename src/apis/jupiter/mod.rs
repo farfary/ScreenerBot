@@ -8,6 +8,7 @@
 //! 3. /tokens/v2/toptraded/{interval} - Top traded tokens
 //! 4. /tokens/v2/toptrending/{interval} - Top trending tokens
 
+pub mod throttle;
 pub mod types;
 
 use self::types::JupiterToken;
@@ -68,6 +69,8 @@ impl JupiterClient {
         let start = Instant::now();
         let url = format!("{JUPITER_BASE_URL}/recent");
 
+        crate::apis::jupiter::throttle::acquire_background().await;
+
         let response = self
             .http_client
             .client()
@@ -121,6 +124,8 @@ impl JupiterClient {
             "{}/toporganicscore/{}?limit={}",
             JUPITER_BASE_URL, interval, limit
         );
+
+        crate::apis::jupiter::throttle::acquire_background().await;
 
         let response = self
             .http_client
@@ -176,6 +181,8 @@ impl JupiterClient {
             JUPITER_BASE_URL, interval, limit
         );
 
+        crate::apis::jupiter::throttle::acquire_background().await;
+
         let response = self
             .http_client
             .client()
@@ -229,6 +236,8 @@ impl JupiterClient {
             "{}/toptrending/{}?limit={}",
             JUPITER_BASE_URL, interval, limit
         );
+
+        crate::apis::jupiter::throttle::acquire_background().await;
 
         let response = self
             .http_client

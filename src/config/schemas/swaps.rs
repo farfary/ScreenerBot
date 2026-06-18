@@ -89,8 +89,8 @@ config_struct! {
         default_swap_mode: String = "ExactIn".to_owned(),
         #[metadata(field_metadata! {
             label: "API Key",
-            hint: "Optional. Get from portal.jup.ag for higher rate limits. Free tier: 1 req/sec. Does NOT affect swap fees.",
-            impact: "medium",
+            hint: "Optional. Leave empty to use Jupiter's free endpoint (lite-api.jup.ag). Add a key from portal.jup.ag only if you hit rate limits and want higher throughput (api.jup.ag). Does NOT affect swap fees or the referral revenue share.",
+            impact: "low",
             category: "API",
         })]
         api_key: String = String::new(),

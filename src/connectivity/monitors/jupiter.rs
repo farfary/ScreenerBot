@@ -61,6 +61,9 @@ impl EndpointMonitor for JupiterMonitor {
         let url = format!("{}/tokens/v2/search?query=SOL", Self::BASE_URL);
         let start = Instant::now();
 
+        // Defer to in-flight swaps so health pings don't compete for the rate budget.
+        crate::apis::jupiter::throttle::acquire_background().await;
+
         match client.get(&url).send().await {
             Ok(response) => {
                 let latency = start.elapsed().as_millis() as u64;
