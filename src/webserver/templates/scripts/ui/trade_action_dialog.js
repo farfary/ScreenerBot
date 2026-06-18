@@ -165,13 +165,20 @@ export class TradeActionDialog {
           </button>
         </header>
         <div class="trade-action-body">
+          <div class="trade-action-grid">
+          <div class="trade-action-pane trade-action-pane-form">
           <div class="trade-action-context"></div>
           <div class="trade-action-presets"></div>
           <div class="trade-action-input-section">
             <label class="trade-action-input-label" for="trade-action-input"></label>
             <div class="trade-action-input-wrapper">
-              <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" />
+              <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" inputmode="decimal" />
               <span class="trade-action-input-suffix">SOL</span>
+              <button type="button" class="trade-action-input-max" data-action="max" aria-label="Use maximum">MAX</button>
+            </div>
+            <div class="trade-action-slider-row" data-visible="false">
+              <input type="range" class="trade-action-slider" min="0" max="100" step="1" value="0" aria-label="Amount slider" />
+              <span class="trade-action-slider-readout"></span>
             </div>
             <div class="trade-action-input-hint"></div>
             <div class="trade-action-error-msg" data-visible="false">
@@ -182,10 +189,13 @@ export class TradeActionDialog {
               <span class="trade-action-error-text"></span>
             </div>
           </div>
-          <div class="trade-action-quote-section" data-state="idle">
+          </div>
+          <div class="trade-action-pane trade-action-pane-preview">
+          <div class="trade-action-quote-section" data-state="idle" data-refreshing="false">
+            <div class="trade-action-quote-refresh-bar"></div>
             <div class="trade-action-quote-header">
-              <span class="trade-action-quote-title">Quote Preview</span>
-              <button type="button" class="trade-action-quote-refresh" aria-label="Refresh quote">
+              <span class="trade-action-quote-title">Swap Preview</span>
+              <button type="button" class="trade-action-quote-refresh" aria-label="Refresh quote" title="Refresh quote">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
                 </svg>
@@ -193,11 +203,11 @@ export class TradeActionDialog {
               </button>
             </div>
             <div class="trade-action-quote-idle">
-              <span>Select an amount to see quote</span>
+              <span>Choose an amount to preview your swap</span>
             </div>
             <div class="trade-action-quote-loading">
               <div class="trade-action-quote-spinner"></div>
-              <span>Fetching quote...</span>
+              <span>Finding the best route…</span>
             </div>
             <div class="trade-action-quote-error">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -207,31 +217,56 @@ export class TradeActionDialog {
               <span class="quote-error-text"></span>
             </div>
             <div class="trade-action-quote-content">
-              <div class="quote-row quote-row-main">
-                <span class="quote-label">You Receive</span>
-                <span class="quote-value quote-output"></span>
+              <div class="quote-hero">
+                <span class="quote-hero-label">You receive (estimated)</span>
+                <span class="quote-hero-value quote-output">—</span>
+                <span class="quote-hero-sub quote-unit-price"></span>
               </div>
-              <div class="quote-row">
-                <span class="quote-label">Price Impact</span>
-                <span class="quote-value quote-impact"></span>
+              <div class="quote-rows">
+                <div class="quote-row" data-min="minimal">
+                  <span class="quote-label">Price impact</span>
+                  <span class="quote-value quote-impact"></span>
+                </div>
+                <div class="quote-row" data-min="minimal">
+                  <span class="quote-label">Minimum received <span class="quote-info" title="The least you will get after max slippage. The swap reverts if it cannot fill at this amount.">?</span></span>
+                  <span class="quote-value quote-min-received"></span>
+                </div>
+                <div class="quote-row" data-min="normal">
+                  <span class="quote-label">Platform fee <span class="quote-info" title="0.5% — supports ScreenerBot. Built into the quote.">?</span></span>
+                  <span class="quote-value quote-platform-fee"></span>
+                </div>
+                <div class="quote-row" data-min="normal">
+                  <span class="quote-label">Network fee</span>
+                  <span class="quote-value quote-network-fee"></span>
+                </div>
+                <div class="quote-row" data-min="normal">
+                  <span class="quote-label">Max slippage</span>
+                  <span class="quote-value quote-slippage"></span>
+                </div>
+                <div class="quote-row" data-min="normal">
+                  <span class="quote-label">Provider</span>
+                  <span class="quote-value quote-route"></span>
+                </div>
+                <div class="quote-row" data-min="advanced">
+                  <span class="quote-label">You pay</span>
+                  <span class="quote-value quote-you-pay"></span>
+                </div>
+                <div class="quote-row" data-min="advanced">
+                  <span class="quote-label">Route</span>
+                  <span class="quote-value quote-route-path"></span>
+                </div>
+                <div class="quote-row" data-min="advanced">
+                  <span class="quote-label">Quote expires</span>
+                  <span class="quote-value quote-expiry"></span>
+                </div>
               </div>
-              <div class="quote-row">
-                <span class="quote-label">Platform Fee</span>
-                <span class="quote-value quote-platform-fee"></span>
-              </div>
-              <div class="quote-row">
-                <span class="quote-label">Network Fee</span>
-                <span class="quote-value quote-network-fee"></span>
-              </div>
-              <div class="quote-row">
-                <span class="quote-label">Route</span>
-                <span class="quote-value quote-route"></span>
-              </div>
-              <div class="quote-row">
-                <span class="quote-label">Slippage</span>
-                <span class="quote-value quote-slippage"></span>
+              <div class="quote-disclaimer" data-min="advanced">
+                Estimates update with live on-chain prices. The transaction reverts if it can't
+                fill within your max slippage, so you never spend more than shown.
               </div>
             </div>
+          </div>
+          </div>
           </div>
         </div>
         <footer class="trade-action-footer">
@@ -327,6 +362,18 @@ export class TradeActionDialog {
     this.quoteRouteEl = overlay.querySelector(".quote-route");
     this.quoteSlippageEl = overlay.querySelector(".quote-slippage");
     this.quoteErrorTextEl = overlay.querySelector(".quote-error-text");
+    this.quoteUnitPriceEl = overlay.querySelector(".quote-unit-price");
+    this.quoteMinReceivedEl = overlay.querySelector(".quote-min-received");
+    this.quoteYouPayEl = overlay.querySelector(".quote-you-pay");
+    this.quoteRoutePathEl = overlay.querySelector(".quote-route-path");
+    this.quoteExpiryEl = overlay.querySelector(".quote-expiry");
+    this.quoteContentEl = overlay.querySelector(".trade-action-quote-content");
+
+    // Amount controls (slider + MAX)
+    this.sliderRow = overlay.querySelector(".trade-action-slider-row");
+    this.sliderEl = overlay.querySelector(".trade-action-slider");
+    this.sliderReadoutEl = overlay.querySelector(".trade-action-slider-readout");
+    this.maxBtn = overlay.querySelector(".trade-action-input-max");
 
     // Quick trade step elements
     this._quickMintStepEl = overlay.querySelector(".quick-trade-mint-step");
@@ -352,6 +399,12 @@ export class TradeActionDialog {
     on(this.confirmBtn, "click", this._confirmListener);
     on(this.inputField, "input", this._inputChangeListener);
     on(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
+
+    // Amount slider + MAX
+    this._sliderListener = this._handleSliderInput.bind(this);
+    this._maxListener = this._handleMaxClick.bind(this);
+    on(this.sliderEl, "input", this._sliderListener);
+    on(this.maxBtn, "click", this._maxListener);
 
     // Quick trade step listeners
     on(this._quickPasteBtnEl, "click", this._quickPasteListener);
@@ -534,6 +587,8 @@ export class TradeActionDialog {
     off(this.confirmBtn, "click", this._confirmListener);
     off(this.inputField, "input", this._inputChangeListener);
     off(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
+    off(this.sliderEl, "input", this._sliderListener);
+    off(this.maxBtn, "click", this._maxListener);
 
     // Clean up quick trade mode listeners
     off(this._quickPasteBtnEl, "click", this._quickPasteListener);
@@ -579,6 +634,9 @@ export class TradeActionDialog {
     // Build and render presets
     const presets = this._buildPresets(action, context);
     this._renderPresets(presets, action);
+
+    // Configure the amount slider + MAX for this action/context
+    this._configureAmountControls(action, context);
 
     // Set input labels and state
     this.inputLabelEl.textContent = config.inputLabel;
@@ -821,6 +879,9 @@ export class TradeActionDialog {
     this.inputField.value = value;
     this._settingInputProgrammatically = false;
 
+    // Keep slider in sync with the chosen preset
+    this._syncSliderToValue(value);
+
     // Clear error and validate
     this._clearError();
     this._updateConfirmButton();
@@ -840,12 +901,122 @@ export class TradeActionDialog {
     });
     this._selectedPreset = null;
 
+    // Keep the slider in sync with typed value
+    const typed = parseFloat(this.inputField.value);
+    this._syncSliderToValue(Number.isFinite(typed) ? typed : 0);
+
     // Clear error and validate
     this._clearError();
     this._updateConfirmButton();
 
     // Fetch quote when input changes
     this._fetchQuoteDebounced();
+  }
+
+  // --- Amount controls (slider + MAX) -------------------------------------
+
+  /** Configure the slider range/units for the current action + context. */
+  _configureAmountControls(action, context) {
+    if (!this.sliderEl) return;
+    if (action === "sell") {
+      // Percentage 0–100
+      this._sliderMax = 100;
+      this._sliderStep = 1;
+      this._sliderUnit = "%";
+      this.sliderEl.min = "0";
+      this.sliderEl.max = "100";
+      this.sliderEl.step = "1";
+      this.maxBtn.textContent = "100%";
+      this.sliderRow.dataset.visible = "true";
+    } else {
+      // Buy/add: SOL from 0 to available balance (fall back to a sane default)
+      const bal = typeof context.balance === "number" && context.balance > 0 ? context.balance : 1;
+      // Leave a tiny headroom for fees when using the balance as the ceiling.
+      const max = action === "buy" ? Math.max(bal - 0.002, 0.001) : Math.max(bal, 0.001);
+      this._sliderMax = max;
+      this._sliderStep = max > 0.5 ? 0.005 : 0.001;
+      this._sliderUnit = "SOL";
+      this.sliderEl.min = "0";
+      this.sliderEl.max = String(max);
+      this.sliderEl.step = String(this._sliderStep);
+      this.maxBtn.textContent = "MAX";
+      // Only show the slider when we know the balance (otherwise it's misleading).
+      this.sliderRow.dataset.visible = typeof context.balance === "number" ? "true" : "false";
+    }
+    this.sliderEl.value = "0";
+    this._updateSliderFill();
+    this._updateSliderReadout(0);
+  }
+
+  _handleSliderInput() {
+    const raw = parseFloat(this.sliderEl.value);
+    const value = Number.isFinite(raw) ? raw : 0;
+    // Slider acts like typing: clear presets, fill input, fetch.
+    this.presetsContainer.querySelectorAll(".trade-action-preset-btn").forEach((b) => {
+      b.classList.remove("selected");
+    });
+    this._selectedPreset = null;
+    this._settingInputProgrammatically = true;
+    this.inputField.value = value > 0 ? this._trimNumber(value) : "";
+    this._settingInputProgrammatically = false;
+    this._updateSliderFill();
+    this._updateSliderReadout(value);
+    this._clearError();
+    this._updateConfirmButton();
+    if (value > 0) this._fetchQuoteDebounced();
+  }
+
+  _handleMaxClick() {
+    const max = this._sliderMax || 0;
+    if (max <= 0) return;
+    this.presetsContainer.querySelectorAll(".trade-action-preset-btn").forEach((b) => {
+      b.classList.remove("selected");
+    });
+    this._selectedPreset = null;
+    this._settingInputProgrammatically = true;
+    this.inputField.value = this._trimNumber(max);
+    this._settingInputProgrammatically = false;
+    if (this.sliderEl) this.sliderEl.value = String(max);
+    this._updateSliderFill();
+    this._updateSliderReadout(max);
+    this._clearError();
+    this._updateConfirmButton();
+    this._fetchQuoteDebounced();
+  }
+
+  /** Move the slider to match a value set via input/preset (no event loop). */
+  _syncSliderToValue(value) {
+    if (!this.sliderEl) return;
+    const v = Number.isFinite(value) ? Math.min(Math.max(value, 0), this._sliderMax || 100) : 0;
+    this.sliderEl.value = String(v);
+    this._updateSliderFill();
+    this._updateSliderReadout(value);
+  }
+
+  _updateSliderFill() {
+    if (!this.sliderEl) return;
+    const max = parseFloat(this.sliderEl.max) || 1;
+    const val = parseFloat(this.sliderEl.value) || 0;
+    const pct = Math.min(Math.max((val / max) * 100, 0), 100);
+    this.sliderEl.style.setProperty("--slider-fill", `${pct}%`);
+  }
+
+  _updateSliderReadout(value) {
+    if (!this.sliderReadoutEl) return;
+    if (!value || value <= 0) {
+      this.sliderReadoutEl.textContent = "";
+      return;
+    }
+    if (this._sliderUnit === "%") {
+      this.sliderReadoutEl.textContent = `${Math.round(value)}%`;
+    } else {
+      this.sliderReadoutEl.textContent = `${this._trimNumber(value)} SOL`;
+    }
+  }
+
+  _trimNumber(n) {
+    // Compact numeric string without trailing zeros (e.g. 0.0500 -> 0.05).
+    return parseFloat(Number(n).toFixed(6)).toString();
   }
 
   _updateConfirmButton() {

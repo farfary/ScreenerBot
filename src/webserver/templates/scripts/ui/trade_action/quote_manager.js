@@ -88,7 +88,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
   /**
    * Fetch quote preview from API
    */
-  proto._fetchQuote = async function () {
+  proto._fetchQuote = async function (opts = {}) {
     if (!this._isOpen || !this.currentContext?.mint) {
       return;
     }
@@ -99,8 +99,17 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       return;
     }
 
-    this._setQuoteState("loading");
-    this._quoteData = null;
+    // Silent refresh: when we already have a quote on screen (auto-refresh,
+    // manual refresh, or an amount tweak), update values in place with a subtle
+    // pulse instead of blanking the panel and showing the big spinner. The full
+    // loading state is only used for the very first fetch.
+    const silent = opts.silent === true || !!this._quoteData;
+    if (silent) {
+      this._setRefreshing(true);
+    } else {
+      this._setQuoteState("loading");
+      this._quoteData = null;
+    }
     this._quoteError = null;
 
     const direction = this.currentAction === "sell" ? "sell" : "buy";
@@ -134,13 +143,21 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         this._quoteError = null;
         this._quoteTimestamp = Date.now();
         this._renderQuote(data);
+        this._setRefreshing(false);
         this._setQuoteState("loaded");
+        this._pulseQuote();
         this._startQuoteRefreshTimer();
       } else {
         throw new Error(data.error?.message || "Failed to fetch quote");
       }
     } catch (err) {
       if (!this._isOpen) return;
+      this._setRefreshing(false);
+      // On a silent refresh failure, keep the last good quote on screen instead
+      // of flipping to an error panel — the next tick will retry.
+      if (silent && this._quoteData) {
+        return;
+      }
       this._quoteError = err.message;
       this._quoteData = null;
       this.quoteErrorTextEl.textContent = err.message;
@@ -153,11 +170,19 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
    * @param {Object} quote - Quote data from API
    */
   proto._renderQuote = function (quote) {
-    // Output amount
-    this.quoteOutputEl.textContent = `~${quote.output_formatted}`;
+    const isSell = this.currentAction === "sell";
+    const outUnit = isSell ? "SOL" : "tokens";
+
+    // Hero: output amount + unit price
+    this.quoteOutputEl.textContent = `≈ ${quote.output_formatted}`;
+    if (this.quoteUnitPriceEl) {
+      const pp = quote.price_per_token_sol;
+      this.quoteUnitPriceEl.textContent =
+        typeof pp === "number" && pp > 0 ? `1 token ≈ ${trimSol(pp)} SOL` : "";
+    }
 
     // Price impact with color
-    const impactPct = quote.price_impact_pct.toFixed(2);
+    const impactPct = (quote.price_impact_pct ?? 0).toFixed(2);
     this.quoteImpactEl.textContent = `${impactPct}%`;
     this.quoteImpactEl.className = "quote-value quote-impact";
     if (quote.price_impact_pct > 5) {
@@ -168,14 +193,56 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       this.quoteImpactEl.classList.add("impact-low");
     }
 
-    // Fees
-    this.quotePlatformFeeEl.textContent = `${quote.platform_fee_pct}% (${quote.platform_fee_sol.toFixed(6)} SOL)`;
-    this.quoteNetworkFeeEl.textContent = `~${quote.network_fee_sol.toFixed(6)} SOL`;
+    // Minimum received (after max slippage)
+    if (this.quoteMinReceivedEl) {
+      const slipFrac = (quote.slippage_bps || 0) / 10000;
+      const minOut = (quote.output_amount ?? 0) * (1 - slipFrac);
+      this.quoteMinReceivedEl.textContent = `≈ ${formatAmount(minOut, outUnit)}`;
+    }
 
-    // Route and slippage
-    this.quoteRouteEl.textContent = quote.router || "Unknown";
+    // Fees
+    this.quotePlatformFeeEl.textContent = `${quote.platform_fee_pct}% · ${trimSol(quote.platform_fee_sol)} SOL`;
+    this.quoteNetworkFeeEl.textContent = `≈ ${trimSol(quote.network_fee_sol)} SOL`;
+
+    // Slippage + provider + full route path
     this.quoteSlippageEl.textContent = `${(quote.slippage_bps / 100).toFixed(1)}%`;
+    this.quoteRouteEl.textContent = quote.router || "Unknown";
+    if (this.quoteRoutePathEl) {
+      this.quoteRoutePathEl.textContent = quote.route || quote.router || "Direct";
+    }
+
+    // You pay (advanced)
+    if (this.quoteYouPayEl) {
+      this.quoteYouPayEl.textContent = isSell
+        ? formatAmount(quote.input_amount, "tokens")
+        : `${trimSol(quote.input_amount)} SOL`;
+    }
+
+    // Quote expiry (advanced)
+    if (this.quoteExpiryEl) {
+      const secs = quote.expires_in_secs;
+      this.quoteExpiryEl.textContent =
+        typeof secs === "number" && secs > 0 ? `in ${secs}s (auto-refreshes)` : "auto-refreshes";
+    }
   };
+
+  /** Compact SOL string without trailing zeros, never scientific notation. */
+  function trimSol(n) {
+    if (typeof n !== "number" || !isFinite(n)) return "0";
+    if (n === 0) return "0";
+    if (n < 0.000001) return n.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
+    return parseFloat(n.toFixed(6)).toString();
+  }
+
+  /** Compact amount with a unit label, using K/M/B for large token counts. */
+  function formatAmount(n, unit) {
+    if (typeof n !== "number" || !isFinite(n)) return `0 ${unit}`;
+    if (unit === "SOL") return `${trimSol(n)} ${unit}`;
+    if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B ${unit}`;
+    if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M ${unit}`;
+    if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K ${unit}`;
+    return `${parseFloat(n.toFixed(4))} ${unit}`;
+  }
 
   /**
    * Set quote section state (idle, loading, loaded, error)
@@ -185,6 +252,24 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     if (this.quoteSection) {
       this.quoteSection.dataset.state = state;
     }
+  };
+
+  /** Toggle the subtle "refreshing" indicator (thin bar + spinning refresh icon)
+   * without hiding the current quote content. */
+  proto._setRefreshing = function (on) {
+    if (this.quoteSection) {
+      this.quoteSection.dataset.refreshing = on ? "true" : "false";
+    }
+  };
+
+  /** Briefly pulse the quote content so a silent value update is noticeable. */
+  proto._pulseQuote = function () {
+    const el = this.quoteContentEl;
+    if (!el) return;
+    el.classList.remove("quote-pulse");
+    // Force reflow so the animation can restart on consecutive refreshes.
+    void el.offsetWidth;
+    el.classList.add("quote-pulse");
   };
 
   /**

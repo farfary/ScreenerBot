@@ -23,7 +23,7 @@ body.trade-action-dialog-open {
 
 /* Dialog Container */
 .trade-action-dialog {
-  width: min(440px, 92vw);
+  width: min(460px, 94vw);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -339,7 +339,7 @@ body.trade-action-dialog-open {
 .trade-action-input {
   width: 100%;
   padding: 14px 16px;
-  padding-right: 52px;
+  padding-right: 104px;
   background: rgb(0, 0, 0, 0.3);
   border: 1px solid var(--border-color, #30363d);
   border-radius: var(--radius-md, 6px);
@@ -374,7 +374,7 @@ body.trade-action-dialog-open {
 
 .trade-action-input-suffix {
   position: absolute;
-  right: 16px;
+  right: 62px;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-secondary, #8b949e);
@@ -507,6 +507,7 @@ body.trade-action-dialog-open {
    ======================================== */
 
 .trade-action-quote-section {
+  position: relative;
   margin-top: 16px;
   padding: 12px;
   background: rgb(var(--color-surface) / 0.6);
@@ -634,39 +635,39 @@ body.trade-action-dialog-open {
   pointer-events: none;
 }
 
-/* Quote Content */
+/* Quote Content — stat grid (label stacked over value for clean alignment) */
+.quote-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0 26px;
+}
+
 .quote-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid rgb(var(--color-border) / 0.5);
-}
-
-.quote-row:last-child {
-  border-bottom: none;
-}
-
-.quote-row-main {
-  padding: 8px 0;
-}
-
-.quote-row-main .quote-value {
-  font-size: 1rem;
-  font-weight: 600;
-  color: rgb(var(--color-text-primary));
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgb(255, 255, 255, 0.06);
 }
 
 .quote-label {
-  font-size: 0.75rem;
-  color: rgb(var(--color-text-secondary));
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.64rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  color: var(--text-secondary, #8b949e);
 }
 
 .quote-value {
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.25;
   font-variant-numeric: tabular-nums;
-  color: rgb(var(--color-text-primary));
+  color: var(--text-primary, #e6edf3);
+  overflow-wrap: anywhere;
 }
 
 /* Impact colors */
@@ -867,4 +868,309 @@ body.trade-action-dialog-open {
 
 .slippage-warning-btn.confirm:hover {
   background: #dc2626;
+}
+
+/* ============================================================
+   REDESIGN: combined amount controls + multi-level swap preview
+   (dialog width, input padding-right, and suffix offset are set in
+   their original rules above to make room for the MAX button)
+   ============================================================ */
+
+.trade-action-input-max {
+  position: absolute;
+  right: 10px;
+  padding: 5px 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--action-color, #10b981);
+  background: var(--action-color-light, rgb(16, 185, 129, 0.15));
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+
+.trade-action-input-max:hover {
+  filter: brightness(1.2);
+}
+
+.trade-action-input-max:active {
+  transform: scale(0.94);
+}
+
+/* Amount slider (synced with presets + input) */
+.trade-action-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.trade-action-slider-row[data-visible="false"] {
+  display: none;
+}
+
+.trade-action-slider {
+  --slider-fill: 0%;
+
+  flex: 1;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background:
+    linear-gradient(var(--action-color, #10b981), var(--action-color, #10b981)) 0 / var(--slider-fill)
+      100% no-repeat,
+    rgb(255, 255, 255, 0.1);
+  cursor: pointer;
+  outline: none;
+}
+
+.trade-action-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--bg-secondary, #161b22);
+  border-radius: 50%;
+  background: var(--action-color, #10b981);
+  box-shadow: 0 1px 4px rgb(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.trade-action-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--bg-secondary, #161b22);
+  border-radius: 50%;
+  background: var(--action-color, #10b981);
+  cursor: pointer;
+}
+
+.trade-action-slider:focus-visible {
+  box-shadow: 0 0 0 3px var(--action-color-light);
+}
+
+.trade-action-slider-readout {
+  min-width: 70px;
+  text-align: right;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--action-color, #10b981);
+  font-family: var(--font-data, monospace);
+}
+
+/* Hero "you receive" block */
+.quote-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--action-color-light, rgb(16, 185, 129, 0.1));
+  border: 1px solid var(--action-color-light, rgb(16, 185, 129, 0.15));
+  border-radius: var(--radius-md, 8px);
+}
+
+.quote-hero-label {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #8b949e);
+}
+
+.quote-hero-value {
+  font-size: clamp(1.15rem, 4.5vw, 1.5rem);
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--text-primary, #e6edf3);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.quote-hero-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted, #6e7681);
+  font-variant-numeric: tabular-nums;
+}
+
+.quote-hero-sub:empty {
+  display: none;
+}
+
+/* Info tooltip marker */
+.quote-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-muted, #6e7681);
+  background: rgb(255, 255, 255, 0.08);
+  border-radius: 50%;
+  cursor: help;
+}
+
+/* Advanced disclaimer */
+.quote-disclaimer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-color, #30363d);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--text-muted, #6e7681);
+}
+
+/* Light mode for new components */
+[data-theme="light"] .trade-action-slider {
+  background:
+    linear-gradient(var(--action-color), var(--action-color)) 0 / var(--slider-fill) 100% no-repeat,
+    rgb(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .quote-info {
+  background: rgb(0, 0, 0, 0.06);
+}
+
+/* ============================================================
+   Space-aware layout: 2-column on wide screens, stacked on narrow
+   ============================================================ */
+
+/* The dialog grows with available width so desktop users see the full
+   swap preview beside the amount controls without scrolling, while staying
+   compact and single-column on tablet/mobile/small desktop. */
+.trade-action-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+.trade-action-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* Wide screens: two columns + a roomier dialog. The preview pane sticks so it
+   stays visible while the left controls scroll on shorter viewports. */
+@media (width >= 760px) {
+  .trade-action-dialog:has(.trade-action-grid) {
+    width: min(880px, 94vw);
+  }
+
+  .trade-action-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+    gap: 24px;
+    align-items: start;
+  }
+
+  .trade-action-pane-preview {
+    position: sticky;
+    top: 0;
+  }
+
+  /* The preview reads as a card on desktop */
+  .trade-action-quote-section {
+    background: rgb(0, 0, 0, 0.18);
+    border: 1px solid var(--border-color, #30363d);
+    border-radius: var(--radius-lg, 8px);
+    padding: 14px 16px;
+  }
+}
+
+/* Extra-wide: let the swap details breathe in two sub-columns */
+@media (width >= 1024px) {
+  .trade-action-dialog:has(.trade-action-grid) {
+    width: min(960px, 92vw);
+  }
+}
+
+/* Quick-trade mint step is a single-column flow regardless of the grid */
+.quick-trade-mint-step .trade-action-grid {
+  grid-template-columns: 1fr;
+}
+
+/* ============================================================
+   Silent refresh: thin progress bar + spin + subtle value pulse
+   ============================================================ */
+.trade-action-quote-refresh-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  border-radius: 999px 999px 0 0;
+  background: var(--action-color, #10b981);
+  transform: scaleX(0);
+  transform-origin: left center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh-bar {
+  opacity: 1;
+  animation: trade-quote-bar 0.9s ease-in-out infinite;
+}
+
+.trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh svg {
+  animation: trade-spinner 0.8s linear infinite;
+}
+
+@keyframes trade-quote-bar {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+
+  50% {
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
+
+  51% {
+    transform-origin: right center;
+  }
+
+  100% {
+    transform: scaleX(0);
+    transform-origin: right center;
+  }
+}
+
+/* Brief highlight when a silent refresh swaps in new values */
+.trade-action-quote-content.quote-pulse .quote-hero-value,
+.trade-action-quote-content.quote-pulse .quote-value {
+  animation: trade-quote-pulse 0.5s ease;
+}
+
+@keyframes trade-quote-pulse {
+  0% {
+    background: var(--action-color-light, rgb(16, 185, 129, 0.15));
+  }
+
+  100% {
+    background: transparent;
+  }
+}
+
+/* Responsive refinements */
+@media (width <= 480px) {
+  .quote-hero-value {
+    font-size: clamp(1.1rem, 6vw, 1.4rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh-bar,
+  .trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh svg,
+  .trade-action-quote-content.quote-pulse .quote-hero-value,
+  .trade-action-quote-content.quote-pulse .quote-value {
+    animation: none;
+  }
 }
