@@ -263,12 +263,17 @@
   }
 }
 
-/* Left status bar — drawn on the first cell of each open-list row */
-.pos-row-open > td:first-child,
-.pos-row-buying > td:first-child,
-.pos-row-selling > td:first-child,
-.pos-row-closing > td:first-child,
-.pos-row-failed > td:first-child {
+/* Left status bar — drawn on the first cell of each open-list row.
+   `:not(.dt-col-sticky)` is critical: when the first column is pinned/floating it
+   already carries `position: sticky` (a valid containing block for the absolute
+   `::before` bar). Forcing `position: relative` here would override that equal-
+   specificity sticky rule (positions.css loads after the table core), un-sticking
+   the cell so it scrolls off-screen. Only non-sticky first cells need it. */
+.pos-row-open > td:first-child:not(.dt-col-sticky),
+.pos-row-buying > td:first-child:not(.dt-col-sticky),
+.pos-row-selling > td:first-child:not(.dt-col-sticky),
+.pos-row-closing > td:first-child:not(.dt-col-sticky),
+.pos-row-failed > td:first-child:not(.dt-col-sticky) {
   position: relative;
 }
 

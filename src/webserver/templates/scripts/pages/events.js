@@ -299,6 +299,7 @@ function createLifecycle() {
           label: "Time",
           minWidth: 165,
           sortable: true,
+          floating: true,
           wrap: false,
           render: (value) => {
             if (!value) {

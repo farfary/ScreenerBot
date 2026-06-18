@@ -2266,6 +2266,29 @@ export class DataTable {
   }
 
   /**
+   * Insert a column id into `state.floatingColumns` at the slot that matches its
+   * position in the current column-definition order, so a newly-pinned default
+   * (e.g. an Actions column defined before Token) lands left of columns that come
+   * after it, without disturbing the user's manual ordering of the rest.
+   * @param {string} colId
+   */
+  _insertFloatingInDefinitionOrder(colId) {
+    if (!Array.isArray(this.state.floatingColumns)) {
+      this.state.floatingColumns = [];
+    }
+    const defOrder = this.options.columns.map((col) => col.id);
+    const targetIndex = defOrder.indexOf(colId);
+    let insertAt = 0;
+    for (const existingId of this.state.floatingColumns) {
+      const existingIndex = defOrder.indexOf(existingId);
+      if (existingIndex !== -1 && existingIndex < targetIndex) {
+        insertAt += 1;
+      }
+    }
+    this.state.floatingColumns.splice(insertAt, 0, colId);
+  }
+
+  /**
    * Restore server-side state and trigger callbacks
    * This enables automatic persistence for server-side sorting, filtering, and search
    */
@@ -2880,6 +2903,11 @@ export class DataTable {
     // Save current scroll position
     const scrollPosition = preserveScroll ? this.elements.scrollContainer?.scrollTop || 0 : 0;
 
+    // Capture the previous column id set BEFORE swapping, so we can tell which
+    // columns are genuinely new to this table (e.g. a view-specific Actions column
+    // that only exists in some sub-tabs).
+    const prevColumnIds = new Set((this.options.columns || []).map((col) => col.id));
+
     // Update columns
     this.options.columns = newColumns;
 
@@ -2920,6 +2948,27 @@ export class DataTable {
         this.state.floatingColumns = this.state.floatingColumns.filter((colId) =>
           validColumnIds.has(colId)
         );
+      }
+
+      // Pin any genuinely-new column that defaults to `floating: true`. This makes
+      // view-specific pinned columns (e.g. the Pool view's Actions column) honor
+      // their default even though the table was first seeded in a view that lacked
+      // them. Only columns NOT present in the previous set are added, so a column
+      // the user explicitly unpinned within the same column set is never re-pinned.
+      if (!Array.isArray(this.state.floatingColumns)) {
+        this.state.floatingColumns = [];
+      }
+      const alreadyFloating = new Set(this.state.floatingColumns);
+      for (const col of newColumns) {
+        if (
+          col &&
+          col.floating === true &&
+          !prevColumnIds.has(col.id) &&
+          !alreadyFloating.has(col.id)
+        ) {
+          this._insertFloatingInDefinitionOrder(col.id);
+          alreadyFloating.add(col.id);
+        }
       }
 
       // Remove user resize flags for deleted columns

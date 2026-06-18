@@ -423,6 +423,7 @@ function createLifecycle() {
           label: "Time",
           minWidth: 160,
           sortable: true,
+          floating: true,
           render: (value) => formatTimestamp(value),
         },
         {

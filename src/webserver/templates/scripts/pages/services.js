@@ -177,6 +177,7 @@ function createLifecycle() {
           id: "name",
           label: "Service",
           sortable: true,
+          floating: true,
           minWidth: 140,
           render: (v) => `<strong>${v || "-"}</strong>`,
         },

@@ -89,6 +89,15 @@ class ContextMenuManager {
           return;
         }
 
+        // Let DataTable column headers show their own pin/unpin/hide menu. Their
+        // handler is a capture-phase listener on the header <thead>; because this
+        // global handler runs first (document, capture) and stops propagation, we
+        // must bail out here without preventing the default so the event keeps
+        // capturing down to the table's own handler.
+        if (e.target.closest && e.target.closest(".data-table-header-container th")) {
+          return;
+        }
+
         e.preventDefault();
         e.stopPropagation();
         this._handleContextMenu(e);
