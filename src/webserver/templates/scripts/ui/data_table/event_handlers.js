@@ -286,6 +286,32 @@ export function applyEventHandlersMixin(DataTable) {
     };
     this._addEventListener(this.elements.thead, "click", sortHandler);
 
+    // Header right-click context menu (pin/unpin, hide). Delegated on thead so it
+    // survives header re-renders. Attached in the CAPTURE phase and stops
+    // propagation so the table's own menu wins over any global context menu, and
+    // so clicks on the resize handle don't also open it.
+    const headerContextHandler = (e) => {
+      const th = e.target.closest("th[data-column-id]");
+      if (!th || !this.elements.thead.contains(th)) {
+        return;
+      }
+      // Never hijack the resize handle's own interactions.
+      if (e.target.classList.contains("dt-resize-handle")) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      this._openHeaderColumnMenu(th.dataset.columnId, e.clientX, e.clientY);
+    };
+    this.elements.thead.addEventListener("contextmenu", headerContextHandler, true);
+    // Track for cleanup with the same capture flag used to register it.
+    this.eventHandlers.set(`contextmenu_header_${Date.now()}_${Math.random()}`, {
+      element: this.elements.thead,
+      event: "contextmenu",
+      handler: headerContextHandler,
+      capture: true,
+    });
+
     // Column resizing - use event delegation on thead to survive innerHTML updates
     const resizeHandler = (e) => {
       // Only handle mousedown on resize handles
@@ -667,7 +693,13 @@ export function applyEventHandlersMixin(DataTable) {
     // Sync horizontal scroll from body scroll container to the fixed header container
     if (this.elements.headerContainer && this.elements.scrollContainer) {
       const hScrollSync = () => {
-        this.elements.headerContainer.scrollLeft = this.elements.scrollContainer.scrollLeft;
+        const scrollLeft = this.elements.scrollContainer.scrollLeft;
+        this.elements.headerContainer.scrollLeft = scrollLeft;
+        // Toggle a wrapper class so CSS can add an elevation/shadow to pinned
+        // (floating-left) columns once the body has scrolled horizontally.
+        if (this.elements.wrapper) {
+          this.elements.wrapper.classList.toggle("is-pinned-scrolled", scrollLeft > 0);
+        }
       };
       this._addEventListener(this.elements.scrollContainer, "scroll", hScrollSync);
     }

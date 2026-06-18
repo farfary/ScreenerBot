@@ -431,6 +431,11 @@ export function applyColumnManagementMixin(DataTable) {
 
   /**
    * Handle resize end
+   *
+   * Always clears `this.resizing` and tears down the document listeners, even on
+   * an unexpected/duplicate call. A stuck `this.resizing` would otherwise wedge
+   * `_isUserInteracting()` and block all subsequent sorting/renders, so the
+   * cleanup below runs unconditionally.
    */
   proto._handleResizeEnd = function () {
     // Cancel any pending RAF
@@ -449,11 +454,20 @@ export function applyColumnManagementMixin(DataTable) {
       }
 
       this._saveState();
-      this.resizing = null;
     }
+
+    // Defensively clear the flag regardless of whether `this.resizing` was set,
+    // so the interaction guard can never get permanently stuck.
+    this.resizing = null;
 
     document.body.classList.remove("dt-column-resizing");
     document.removeEventListener("mousemove", this._handleResize);
     document.removeEventListener("mouseup", this._handleResizeEnd);
+
+    // A pinned column may have been resized — recompute the cumulative left
+    // offsets so subsequent pinned columns stay correctly aligned.
+    if (typeof this._updateStickyOffsets === "function") {
+      this._updateStickyOffsets();
+    }
   };
 }

@@ -17,9 +17,34 @@ export function createFavoritesModule(deps) {
   const buildFavoritesColumns = () => {
     return [
       {
+        id: "actions",
+        label: "",
+        sortable: false,
+        floating: true,
+        minWidth: 120,
+        maxWidth: 120,
+        wrap: false,
+        render: (_value, row) => {
+          return `
+            <div class="favorites-actions dt-actions-flex">
+              <button class="btn btn-small btn-icon favorites-action-btn" data-action="copy" data-mint="${Utils.escapeHtml(row.mint)}" title="Copy Mint">
+                <i class="icon-copy"></i>
+              </button>
+              <button class="btn btn-small btn-icon favorites-action-btn" data-action="external" data-mint="${Utils.escapeHtml(row.mint)}" title="View on DexScreener">
+                <i class="icon-external-link"></i>
+              </button>
+              <button class="btn btn-small btn-icon btn-danger favorites-action-btn" data-action="remove" data-mint="${Utils.escapeHtml(row.mint)}" title="Remove from favorites">
+                <i class="icon-trash-2"></i>
+              </button>
+            </div>
+          `;
+        },
+      },
+      {
         id: "token",
         label: "Token",
         sortable: true,
+        floating: true,
         minWidth: 200,
         wrap: false,
         render: (_v, row) => {
@@ -66,29 +91,6 @@ export function createFavoritesModule(deps) {
           const timestamp =
             typeof value === "string" ? Math.floor(new Date(value).getTime() / 1000) : value;
           return timeAgoCell(timestamp);
-        },
-      },
-      {
-        id: "actions",
-        label: "",
-        sortable: false,
-        minWidth: 120,
-        maxWidth: 120,
-        wrap: false,
-        render: (_value, row) => {
-          return `
-            <div class="favorites-actions">
-              <button class="btn btn-small btn-icon favorites-action-btn" data-action="copy" data-mint="${Utils.escapeHtml(row.mint)}" title="Copy Mint">
-                <i class="icon-copy"></i>
-              </button>
-              <button class="btn btn-small btn-icon favorites-action-btn" data-action="external" data-mint="${Utils.escapeHtml(row.mint)}" title="View on DexScreener">
-                <i class="icon-external-link"></i>
-              </button>
-              <button class="btn btn-small btn-icon btn-danger favorites-action-btn" data-action="remove" data-mint="${Utils.escapeHtml(row.mint)}" title="Remove from favorites">
-                <i class="icon-trash-2"></i>
-              </button>
-            </div>
-          `;
         },
       },
     ];

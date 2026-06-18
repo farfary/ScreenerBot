@@ -374,3 +374,32 @@
     animation: none;
   }
 }
+
+/* ===========================================================================
+   Floating-column tint compatibility
+   The pinned/floating actions + token cells carry `dt-col-sticky`, whose core
+   rules set an opaque `background` so non-sticky cells scroll cleanly beneath
+   them. That shorthand would otherwise wipe the row-state `background-image`
+   tint, so re-apply each tint here as a layered background (tint over an opaque
+   surface) on the sticky cells. The left status bar lives on the first cell's
+   ::before, which is unaffected by these background rules.
+   =========================================================================== */
+
+.pos-row-buying > td.dt-col-sticky {
+  background:
+    linear-gradient(0deg, rgb(245, 158, 11, 0.09), rgb(245, 158, 11, 0.09)),
+    var(--bg-primary);
+}
+
+.pos-row-selling > td.dt-col-sticky,
+.pos-row-closing > td.dt-col-sticky {
+  background:
+    linear-gradient(0deg, rgb(251, 146, 60, 0.09), rgb(251, 146, 60, 0.09)),
+    var(--bg-primary);
+}
+
+.pos-row-failed > td.dt-col-sticky {
+  background:
+    linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1)),
+    var(--bg-primary);
+}

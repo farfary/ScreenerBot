@@ -16,6 +16,19 @@ import * as Utils from "../core/utils.js";
 
 const ORDER_ACTIONS = ["move-top", "move-up", "move-down", "move-bottom"];
 
+function canFloatColumn(column) {
+  if (!column) {
+    return false;
+  }
+  // A column is pinnable when it explicitly opts in via `floating` capability,
+  // is currently floating, or doesn't forbid it. Columns can mark
+  // `floatable: false` to opt out entirely.
+  if (column.floatable === false) {
+    return false;
+  }
+  return true;
+}
+
 function canToggleVisibility(column) {
   if (!column) {
     return true;
@@ -62,6 +75,8 @@ export class TableSettingsDialog {
       currentVisibility: options.currentVisibility || {},
       defaultOrder: options.defaultOrder || [],
       defaultVisibility: options.defaultVisibility || {},
+      currentFloating: Array.isArray(options.currentFloating) ? options.currentFloating : [],
+      defaultFloating: Array.isArray(options.defaultFloating) ? options.defaultFloating : [],
       onApply: typeof options.onApply === "function" ? options.onApply : null,
       // Pagination toggle options
       showPaginationToggle: options.showPaginationToggle || false,
@@ -102,6 +117,9 @@ export class TableSettingsDialog {
     const visibilitySource = useDefaults
       ? this.options.defaultVisibility
       : this.options.currentVisibility;
+    const floatingSource = useDefaults
+      ? this.options.defaultFloating
+      : this.options.currentFloating;
 
     const orderedColumns = normalizeColumns(this.options.columns, orderSource);
     const visibility = {};
@@ -117,9 +135,17 @@ export class TableSettingsDialog {
       }
     });
 
+    // Ordered list of pinned (floating) column ids, restricted to columns that
+    // both exist and may float. Preserves the order given by the source.
+    const validIds = new Set(orderedColumns.filter((col) => canFloatColumn(col)).map((c) => c.id));
+    const floating = (Array.isArray(floatingSource) ? floatingSource : []).filter((id) =>
+      validIds.has(id)
+    );
+
     return {
       columns: orderedColumns,
       visibility,
+      floating,
     };
   }
 
@@ -339,85 +365,166 @@ export class TableSettingsDialog {
       return;
     }
 
-    const filteredColumns = columns
-      .map((col, idx) => ({ ...col, originalIndex: idx }))
-      .filter((col) => {
-        if (!this._searchTerm) return true;
-        return (col.label || "").toLowerCase().includes(this._searchTerm);
-      });
+    const floatingSet = new Set(this._workingState.floating);
+    const isFiltered = !!this._searchTerm;
 
-    if (filteredColumns.length === 0) {
+    const matchesSearch = (col) => {
+      if (!this._searchTerm) return true;
+      return (col.label || "").toLowerCase().includes(this._searchTerm);
+    };
+
+    // Pinned columns render first, in the working floating order. The rest keep
+    // their natural column order. Reordering is group-local, so each item's
+    // move-button disabled state is computed from its position WITHIN its group.
+    const pinnedColumns = this._workingState.floating
+      .map((id) => columns.find((col) => col.id === id))
+      .filter((col) => col && matchesSearch(col));
+
+    const unpinnedColumns = columns.filter((col) => !floatingSet.has(col.id) && matchesSearch(col));
+
+    // Group position lookup (id -> { index, length }) used for move-button state.
+    const groupPosition = new Map();
+    this._workingState.floating.forEach((id, idx, list) => {
+      groupPosition.set(id, { index: idx, length: list.length });
+    });
+    const unpinnedIds = columns.filter((col) => !floatingSet.has(col.id)).map((col) => col.id);
+    unpinnedIds.forEach((id, idx) => {
+      groupPosition.set(id, { index: idx, length: unpinnedIds.length });
+    });
+    const displayIndexById = new Map();
+    [...pinnedColumns, ...unpinnedColumns].forEach((col, idx) => {
+      displayIndexById.set(col.id, idx);
+    });
+
+    if (pinnedColumns.length === 0 && unpinnedColumns.length === 0) {
       this.columnListEl.innerHTML =
         '<div class="table-settings-empty">No columns match your search.</div>';
       return;
     }
 
-    this.columnListEl.innerHTML = filteredColumns
-      .map((column) => {
-        const index = column.originalIndex;
-        const isVisible = visibility[column.id] !== false;
-        const canToggle = canToggleVisibility(column);
-        const disableToggleAttr = canToggle ? "" : " disabled";
-        const visibilityLabel = canToggle ? "" : " (locked)";
+    const renderItem = (column) => {
+      // Visible 1-based position shown in the list (purely informational).
+      const index = displayIndexById.get(column.id) ?? 0;
+      const isVisible = visibility[column.id] !== false;
+      const canToggle = canToggleVisibility(column);
+      const disableToggleAttr = canToggle ? "" : " disabled";
+      const visibilityLabel = canToggle ? "" : " (locked)";
 
-        const moveTopDisabled = index === 0;
-        const moveUpDisabled = index === 0;
-        const moveDownDisabled = index === columns.length - 1;
-        const moveBottomDisabled = index === columns.length - 1;
+      const canFloat = canFloatColumn(column);
+      const isPinned = floatingSet.has(column.id);
+      const pinDisabledAttr = canFloat ? "" : " disabled";
 
-        // Disable move buttons if filtered, as index logic gets messy
-        const isFiltered = !!this._searchTerm;
-        const moveAttr = isFiltered ? "disabled" : "";
+      // Move buttons enable/disable based on position within the column's GROUP.
+      const pos = groupPosition.get(column.id) || { index: 0, length: 1 };
+      const moveTopDisabled = pos.index === 0;
+      const moveUpDisabled = pos.index === 0;
+      const moveDownDisabled = pos.index === pos.length - 1;
+      const moveBottomDisabled = pos.index === pos.length - 1;
 
-        return `
-          <div class="table-settings-column-item" draggable="${!isFiltered}" data-column-id="${column.id}" role="listitem">
-            <div class="table-settings-drag-handle" aria-hidden="true" title="Drag to reorder">⋮⋮</div>
-            <span class="table-settings-column-index" aria-hidden="true">${index + 1}</span>
-            <label class="table-settings-column-label${canToggle ? "" : " is-locked"}">
-              <input type="checkbox" data-role="visibility-toggle" data-column-id="${column.id}" ${isVisible ? "checked" : ""}${disableToggleAttr} />
-              <span class="column-name">${Utils.escapeHtml(column.label)}${visibilityLabel}</span>
-            </label>
-            <div class="table-settings-column-actions" aria-label="Ordering controls">
-              <div class="table-settings-move-group" role="group" aria-label="Move up or down">
-                <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${column.id}" ${moveUpDisabled || isFiltered ? "disabled" : ""} title="Move up">
-                  <span class="icon" aria-hidden="true">↑</span>
-                  <span class="sr-only">Move up</span>
-                </button>
-                <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${column.id}" ${moveDownDisabled || isFiltered ? "disabled" : ""} title="Move down">
-                  <span class="icon" aria-hidden="true">↓</span>
-                  <span class="sr-only">Move down</span>
-                </button>
-              </div>
-              <div class="table-settings-move-group" role="group" aria-label="Move to extremes">
-                <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${column.id}" ${moveTopDisabled || isFiltered ? "disabled" : ""} title="Move to top">
-                  <span class="icon" aria-hidden="true">⇡</span>
-                  <span class="sr-only">Move to top</span>
-                </button>
-                <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${column.id}" ${moveBottomDisabled || isFiltered ? "disabled" : ""} title="Move to bottom">
-                  <span class="icon" aria-hidden="true">⇣</span>
-                  <span class="sr-only">Move to bottom</span>
-                </button>
-              </div>
+      return `
+        <div class="table-settings-column-item${isPinned ? " is-pinned" : ""}" draggable="${!isFiltered}" data-column-id="${column.id}" role="listitem">
+          <div class="table-settings-drag-handle" aria-hidden="true" title="Drag to reorder">⋮⋮</div>
+          <span class="table-settings-column-index" aria-hidden="true">${index + 1}</span>
+          <label class="table-settings-column-label${canToggle ? "" : " is-locked"}">
+            <input type="checkbox" data-role="visibility-toggle" data-column-id="${column.id}" ${isVisible ? "checked" : ""}${disableToggleAttr} />
+            <span class="column-name">${Utils.escapeHtml(column.label)}${visibilityLabel}</span>
+          </label>
+          <div class="table-settings-column-actions" aria-label="Column controls">
+            <button type="button" class="table-settings-btn-pin${isPinned ? " is-active" : ""}" data-role="floating-toggle" data-column-id="${column.id}"${pinDisabledAttr} aria-pressed="${isPinned ? "true" : "false"}" title="${isPinned ? "Unpin from left" : "Pin to left"}">
+              <i class="icon ${isPinned ? "icon-pin-off" : "icon-pin"}" aria-hidden="true"></i>
+              <span class="sr-only">${isPinned ? "Unpin column" : "Pin column to left"}</span>
+            </button>
+            <div class="table-settings-move-group" role="group" aria-label="Move up or down">
+              <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${column.id}" ${moveUpDisabled || isFiltered ? "disabled" : ""} title="Move up">
+                <span class="icon" aria-hidden="true">↑</span>
+                <span class="sr-only">Move up</span>
+              </button>
+              <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${column.id}" ${moveDownDisabled || isFiltered ? "disabled" : ""} title="Move down">
+                <span class="icon" aria-hidden="true">↓</span>
+                <span class="sr-only">Move down</span>
+              </button>
+            </div>
+            <div class="table-settings-move-group" role="group" aria-label="Move to extremes">
+              <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${column.id}" ${moveTopDisabled || isFiltered ? "disabled" : ""} title="Move to top">
+                <span class="icon" aria-hidden="true">⇡</span>
+                <span class="sr-only">Move to top</span>
+              </button>
+              <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${column.id}" ${moveBottomDisabled || isFiltered ? "disabled" : ""} title="Move to bottom">
+                <span class="icon" aria-hidden="true">⇣</span>
+                <span class="sr-only">Move to bottom</span>
+              </button>
             </div>
           </div>
-        `;
-      })
-      .join("");
+        </div>
+      `;
+    };
+
+    let html = "";
+
+    if (pinnedColumns.length > 0) {
+      html += '<div class="table-settings-group-heading">Pinned (floating)</div>';
+      html += pinnedColumns.map(renderItem).join("");
+      html += '<div class="table-settings-group-heading">Other columns</div>';
+    }
+
+    html += unpinnedColumns.map(renderItem).join("");
+
+    this.columnListEl.innerHTML = html;
 
     this._attachColumnListeners();
   }
 
+  _toggleFloating(columnId) {
+    const column = this._workingState.columns.find((col) => col.id === columnId);
+    if (!column || !canFloatColumn(column)) {
+      return;
+    }
+
+    const idx = this._workingState.floating.indexOf(columnId);
+    if (idx === -1) {
+      // Newly pinned columns append to the end of the pinned group.
+      this._workingState.floating.push(columnId);
+    } else {
+      this._workingState.floating.splice(idx, 1);
+    }
+
+    this._render();
+  }
+
+  /**
+   * Reorder happens WITHIN a group: pinned (floating) columns reorder among the
+   * pinned ids in `_workingState.floating`; everything else reorders within
+   * `_workingState.columns`. This keeps the two groups separate (a column never
+   * crosses groups via drag/move — only the Pin button changes membership).
+   * Returns the array a column belongs to for reordering purposes.
+   * @param {string} columnId
+   * @returns {Array} the working array (floating ids OR column objects)
+   */
+  _reorderTargetFor(columnId) {
+    return this._workingState.floating.includes(columnId)
+      ? this._workingState.floating
+      : this._workingState.columns;
+  }
+
   _handleDrop(sourceId, targetId) {
-    const columns = this._workingState.columns;
-    const sourceIndex = columns.findIndex((col) => col.id === sourceId);
-    const targetIndex = columns.findIndex((col) => col.id === targetId);
+    // Only reorder when source and target are in the SAME group.
+    const sourcePinned = this._workingState.floating.includes(sourceId);
+    const targetPinned = this._workingState.floating.includes(targetId);
+    if (sourcePinned !== targetPinned) {
+      return;
+    }
+
+    const arr = this._reorderTargetFor(sourceId);
+    const idOf = (entry) => (typeof entry === "string" ? entry : entry.id);
+    const sourceIndex = arr.findIndex((entry) => idOf(entry) === sourceId);
+    const targetIndex = arr.findIndex((entry) => idOf(entry) === targetId);
 
     if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
       return;
     }
 
-    const [column] = columns.splice(sourceIndex, 1);
-    columns.splice(targetIndex, 0, column);
+    const [moved] = arr.splice(sourceIndex, 1);
+    arr.splice(targetIndex, 0, moved);
 
     this._render();
   }
@@ -438,6 +545,21 @@ export class TableSettingsDialog {
       };
       on(checkbox, "change", handler);
       this._columnListeners.push({ element: checkbox, event: "change", handler });
+    });
+
+    const pinButtons = this.columnListEl.querySelectorAll(
+      '.table-settings-btn-pin[data-role="floating-toggle"]'
+    );
+    pinButtons.forEach((button) => {
+      const columnId = button.dataset.columnId;
+      if (!columnId) {
+        return;
+      }
+      const handler = () => {
+        this._toggleFloating(columnId);
+      };
+      on(button, "click", handler);
+      this._columnListeners.push({ element: button, event: "click", handler });
     });
 
     const buttons = this.columnListEl.querySelectorAll(".table-settings-btn-move");
@@ -518,8 +640,10 @@ export class TableSettingsDialog {
   }
 
   _reorderColumn(columnId, action) {
-    const columns = this._workingState.columns;
-    const currentIndex = columns.findIndex((col) => col.id === columnId);
+    // Reorder within the column's own group (pinned ids or non-pinned columns).
+    const arr = this._reorderTargetFor(columnId);
+    const idOf = (entry) => (typeof entry === "string" ? entry : entry.id);
+    const currentIndex = arr.findIndex((entry) => idOf(entry) === columnId);
     if (currentIndex === -1) {
       return;
     }
@@ -533,10 +657,10 @@ export class TableSettingsDialog {
         targetIndex = Math.max(0, currentIndex - 1);
         break;
       case "move-down":
-        targetIndex = Math.min(columns.length - 1, currentIndex + 1);
+        targetIndex = Math.min(arr.length - 1, currentIndex + 1);
         break;
       case "move-bottom":
-        targetIndex = columns.length - 1;
+        targetIndex = arr.length - 1;
         break;
       default:
         return;
@@ -546,8 +670,8 @@ export class TableSettingsDialog {
       return;
     }
 
-    const [column] = columns.splice(currentIndex, 1);
-    columns.splice(targetIndex, 0, column);
+    const [moved] = arr.splice(currentIndex, 1);
+    arr.splice(targetIndex, 0, moved);
 
     this._render();
   }
@@ -637,6 +761,7 @@ export class TableSettingsDialog {
     const settings = {
       columnOrder: this._workingState.columns.map((column) => column.id),
       visibleColumns: { ...this._workingState.visibility },
+      floatingColumns: [...this._workingState.floating],
     };
 
     this.options.onApply(settings);

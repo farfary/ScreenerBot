@@ -280,6 +280,45 @@
   min-height: 26px;
 }
 
+/* ==================== Responsive Action Buttons (Container Query) ====================
+ * Wraps the row action buttons. Uses a container query on the column width so
+ * text labels (`.row-action-label`) only appear when the column is wide enough;
+ * below the threshold the buttons collapse to compact icon-only squares. This
+ * pairs with the floating/pinned actions column, which can be resized narrow.
+ */
+.dt-actions-flex {
+  container-type: inline-size;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+/* Text label hidden by default — shown only when the container is wide. */
+.row-action-label {
+  display: none;
+}
+
+@container (min-width: 220px) {
+  .row-action-label {
+    display: inline;
+  }
+}
+
+/* Icon-only (label hidden) buttons stay square with symmetric padding so they
+   never clip at the minimum width. */
+.dt-actions-flex .btn {
+  flex-shrink: 0;
+}
+
+@container (max-width: 219px) {
+  .dt-actions-flex .btn {
+    padding: 6px;
+    min-width: 32px;
+    justify-content: center;
+  }
+}
+
 /* ==================== Dropdown Menu (Three Dot Style) ==================== */
 
 /* Dropdown trigger */

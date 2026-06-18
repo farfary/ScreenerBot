@@ -41,6 +41,10 @@ import {
 import { createOhlcvModule } from "./tokens/ohlcv.js";
 import { createFavoritesModule } from "./tokens/favorites.js";
 
+// Minimum width for an actions column at its icon-only (collapsed) size so the
+// buttons never clip: n square 32px buttons + (n-1) 6px gaps + 16px cell padding.
+const actionsMinWidth = (n) => n * 32 + (n - 1) * 6 + 16;
+
 function createLifecycle() {
   let table = null;
   let ohlcvTable = null; // Separate table for OHLCV data view
@@ -861,22 +865,16 @@ function createLifecycle() {
    */
   const buildColumns = () => {
     return [
-      {
-        id: "token",
-        label: "Token",
-        sortable: true,
-        minWidth: 180,
-        wrap: false,
-        render: (_v, row) => tokenCell(row),
-      },
-      // Conditionally add Actions column for Pool view
+      // Conditionally add Actions column for Pool view (pinned/floating, leftmost).
       ...(state.view === "pool"
         ? [
             {
               id: "actions",
               label: "Actions",
               sortable: false,
-              minWidth: 100,
+              floating: true,
+              minWidth: actionsMinWidth(2),
+              width: actionsMinWidth(2),
               wrap: false,
               render: (_v, row) => {
                 const mint = row?.mint || "";
@@ -888,28 +886,37 @@ function createLifecycle() {
 
                 if (hasOpen) {
                   return `
-                    <div class="row-actions">
+                    <div class="row-actions dt-actions-flex">
                       <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
                         mint
-                      )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-circle-plus"></i> Add</button>
+                      )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-circle-plus"></i><span class="row-action-label">Add</span></button>
                       <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
                         mint
-                      )}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i> Sell</button>
+                      )}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i><span class="row-action-label">Sell</span></button>
                     </div>
                   `;
                 }
 
                 return `
-                  <div class="row-actions">
+                  <div class="row-actions dt-actions-flex">
                     <button class="btn row-action" data-action="buy" data-mint="${Utils.escapeHtml(
                       mint
-                    )}" title="Buy position"${disabledAttr}><i class="icon-shopping-cart"></i> Buy</button>
+                    )}" title="Buy position"${disabledAttr}><i class="icon-shopping-cart"></i><span class="row-action-label">Buy</span></button>
                   </div>
                 `;
               },
             },
           ]
         : []),
+      {
+        id: "token",
+        label: "Token",
+        sortable: true,
+        floating: true,
+        minWidth: 180,
+        wrap: false,
+        render: (_v, row) => tokenCell(row),
+      },
       {
         id: "links",
         label: "Links",

@@ -50,6 +50,11 @@ const parseTs = (v) => {
   return Number.isFinite(t) ? t : NaN;
 };
 
+// Minimum width for an actions column at its icon-only (collapsed) size, so the
+// buttons can never clip: n square 32px buttons + (n-1) 6px gaps + 16px cell
+// padding. The comfortable `width` (where labels show) is set separately.
+const actionsMinWidth = (n) => n * 32 + (n - 1) * 6 + 16;
+
 const getPositionsTableStateKey = (view) => `positions-table.${view}`;
 const normalizeSortDirection = (direction) => (direction === "desc" ? "desc" : "asc");
 
@@ -165,12 +170,12 @@ function createLifecycle() {
   const removeActionCell = (row) => {
     const id = row?.id;
     if (id == null) return "—";
-    return `<div class="row-actions">
+    return `<div class="row-actions dt-actions-flex">
       <button class="btn row-action row-action--icon" data-action="remove" data-id="${Utils.escapeHtml(
         String(id)
       )}" data-mint="${Utils.escapeHtml(
         row?.mint || ""
-      )}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
+      )}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i><span class="row-action-label">Remove</span></button>
     </div>`;
   };
 
@@ -180,28 +185,31 @@ function createLifecycle() {
     if (id == null) return "—";
     const idAttr = Utils.escapeHtml(String(id));
     const mintAttr = Utils.escapeHtml(row?.mint || "");
-    return `<div class="row-actions">
-      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" title="Restore to Open/Closed"><i class="icon-rotate-ccw"></i> Restore</button>
-      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" title="Delete permanently" aria-label="Delete permanently"><i class="icon-trash-2"></i></button>
+    return `<div class="row-actions dt-actions-flex">
+      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" title="Restore to Open/Closed"><i class="icon-rotate-ccw"></i><span class="row-action-label">Restore</span></button>
+      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" title="Delete permanently" aria-label="Delete permanently"><i class="icon-trash-2"></i><span class="row-action-label">Delete</span></button>
     </div>`;
   };
 
   const buildArchivedColumns = () => [
     {
-      id: "token",
-      label: "Token",
-      sortable: true,
-      minWidth: 180,
-      wrap: false,
-      render: (_v, r) => tokenCell(r),
-    },
-    {
       id: "actions",
       label: "Actions",
       sortable: false,
-      minWidth: 170,
+      floating: true,
+      minWidth: actionsMinWidth(2),
+      width: actionsMinWidth(2),
       wrap: false,
       render: (_v, row) => archivedActionCell(row),
+    },
+    {
+      id: "token",
+      label: "Token",
+      sortable: true,
+      floating: true,
+      minWidth: 180,
+      wrap: false,
+      render: (_v, r) => tokenCell(r),
     },
     {
       id: "archived_at",
@@ -256,18 +264,12 @@ function createLifecycle() {
     if (state.view === "open") {
       return [
         {
-          id: "token",
-          label: "Token",
-          sortable: true,
-          minWidth: 180,
-          wrap: false,
-          render: (_v, r) => tokenCell(r),
-        },
-        {
           id: "actions",
           label: "Actions",
           sortable: false,
-          minWidth: 180,
+          floating: true,
+          minWidth: actionsMinWidth(3),
+          width: actionsMinWidth(3),
           wrap: false,
           render: (_v, row) => {
             const mint = row?.mint || "";
@@ -287,13 +289,22 @@ function createLifecycle() {
             const mintAttr = Utils.escapeHtml(mint);
             const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
             return `
-              <div class="row-actions">
-                <button class="btn row-action" data-action="add" data-mint="${mintAttr}" title="Add to position (DCA)"${dis}><i class="icon-circle-plus"></i> Add</button>
-                <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="Sell (full or % partial)"${dis}><i class="icon-trending-down"></i> Sell</button>
-                <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
+              <div class="row-actions dt-actions-flex">
+                <button class="btn row-action" data-action="add" data-mint="${mintAttr}" title="Add to position (DCA)"${dis}><i class="icon-circle-plus"></i><span class="row-action-label">Add</span></button>
+                <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="Sell (full or % partial)"${dis}><i class="icon-trending-down"></i><span class="row-action-label">Sell</span></button>
+                <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i><span class="row-action-label">Remove</span></button>
               </div>
             `;
           },
+        },
+        {
+          id: "token",
+          label: "Token",
+          sortable: true,
+          floating: true,
+          minWidth: 180,
+          wrap: false,
+          render: (_v, r) => tokenCell(r),
         },
         {
           id: "entry_time",
@@ -365,20 +376,23 @@ function createLifecycle() {
       // closed view
       return [
         {
-          id: "token",
-          label: "Token",
-          sortable: true,
-          minWidth: 180,
-          wrap: false,
-          render: (_v, r) => tokenCell(r),
-        },
-        {
           id: "actions",
           label: "Actions",
           sortable: false,
-          minWidth: 90,
+          floating: true,
+          minWidth: actionsMinWidth(1),
+          width: actionsMinWidth(1),
           wrap: false,
           render: (_v, row) => removeActionCell(row),
+        },
+        {
+          id: "token",
+          label: "Token",
+          sortable: true,
+          floating: true,
+          minWidth: 180,
+          wrap: false,
+          render: (_v, r) => tokenCell(r),
         },
         {
           id: "exit_time",

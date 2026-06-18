@@ -808,3 +808,191 @@ body.dt-column-resizing * {
     animation: none;
   }
 }
+
+
+/* ==================== Floating / Pinned-Left Columns ====================
+ * Columns flagged `floating: true` are pinned to the left edge so they stay
+ * visible while the rest of the table scrolls horizontally underneath them.
+ * The DataTable core sets cumulative left offsets as custom properties on the
+ * wrapper (`--dt-pin-left-0 … --dt-pin-left-3`) and tags each pinned cell with
+ * `dt-col-sticky` + `data-sticky-index="N"`; the last pinned cell additionally
+ * gets `dt-col-sticky-last` for the depth shadow. Backgrounds must stay opaque
+ * so non-sticky cells slide cleanly beneath them.
+ */
+.data-table th.dt-col-sticky,
+.data-table td.dt-col-sticky {
+  position: sticky;
+  left: var(--dt-pin-left-0, 0);
+  z-index: 3;
+}
+
+.data-table th.dt-col-sticky[data-sticky-index="1"],
+.data-table td.dt-col-sticky[data-sticky-index="1"] {
+  left: var(--dt-pin-left-1, 0);
+}
+
+.data-table th.dt-col-sticky[data-sticky-index="2"],
+.data-table td.dt-col-sticky[data-sticky-index="2"] {
+  left: var(--dt-pin-left-2, 0);
+}
+
+.data-table th.dt-col-sticky[data-sticky-index="3"],
+.data-table td.dt-col-sticky[data-sticky-index="3"] {
+  left: var(--dt-pin-left-3, 0);
+}
+
+/* Header sticky cells must sit above body sticky cells AND above non-sticky
+   header cells so nothing bleeds through during scroll. Keep the opaque header
+   surface so scrolled body cells hide behind them. */
+.data-table thead th.dt-col-sticky {
+  z-index: 6;
+  background: var(--bg-secondary);
+}
+
+/* Opaque body backgrounds — base is the surface color so scrolled cells hide
+   behind them rather than showing through. */
+.data-table td.dt-col-sticky {
+  background: var(--bg-primary);
+}
+
+/* Zebra even rows: composite the zebra overlay (matches the
+   `.data-table.zebra tbody tr:nth-child(even)` rule above) over the base so
+   striping survives on the opaque sticky cell. */
+.data-table.zebra tbody tr:nth-child(even) td.dt-col-sticky {
+  background: linear-gradient(rgb(0, 0, 0, 0.02), rgb(0, 0, 0, 0.02)), var(--bg-primary);
+}
+
+/* Hover + selected states win over the base/zebra background. */
+.data-table tbody tr:hover td.dt-col-sticky,
+.data-table.zebra tbody tr:nth-child(even):hover td.dt-col-sticky {
+  background: var(--bg-hover);
+}
+
+.data-table tbody tr.selected td.dt-col-sticky {
+  background: rgb(59, 130, 246, 0.1);
+}
+
+.data-table tbody tr.selected:hover td.dt-col-sticky {
+  background: rgb(59, 130, 246, 0.15);
+}
+
+/* Depth cue — a soft right-edge shadow on the last pinned cell, revealed only
+   once the table has been scrolled horizontally. */
+.data-table th.dt-col-sticky-last::after,
+.data-table td.dt-col-sticky-last::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 8px;
+  transform: translateX(100%);
+  background: linear-gradient(to right, rgb(0, 0, 0, 0.18), rgb(0, 0, 0, 0));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-base);
+}
+
+.data-table-wrapper.is-pinned-scrolled .data-table th.dt-col-sticky-last::after,
+.data-table-wrapper.is-pinned-scrolled .data-table td.dt-col-sticky-last::after {
+  opacity: 1;
+}
+
+/* Freshly pinned highlight — quick slide-in + accent flash. */
+.data-table th.dt-col-justpinned,
+.data-table td.dt-col-justpinned {
+  animation: dt-col-justpinned-kf 0.35s ease both;
+}
+
+@keyframes dt-col-justpinned-kf {
+  0% {
+    transform: translateX(-6px);
+    box-shadow: inset 0 0 0 9999px rgb(59, 130, 246, 0.12);
+  }
+
+  100% {
+    transform: translateX(0);
+    box-shadow: inset 0 0 0 9999px rgb(59, 130, 246, 0);
+  }
+}
+
+/* Dark theme — deeper right-edge shadow for the pinned group. */
+[data-theme="dark"] .data-table td.dt-col-sticky-last::after,
+[data-theme="dark"] .data-table th.dt-col-sticky-last::after {
+  background: linear-gradient(to right, rgb(0, 0, 0, 0.4), rgb(0, 0, 0, 0));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-table th.dt-col-justpinned,
+  .data-table td.dt-col-justpinned {
+    animation: none;
+  }
+
+  .data-table th.dt-col-sticky-last::after,
+  .data-table td.dt-col-sticky-last::after {
+    transition: none;
+  }
+}
+
+/* ==================== Header Right-Click Column Menu ====================
+ * Self-contained context menu shown on right-click of a column header. Offers
+ * pin/unpin and hide. Appended to document.body and positioned at the cursor by
+ * the DataTable, so only layout/appearance live here.
+ */
+.dt-col-menu {
+  position: fixed;
+  z-index: var(--z-popover, 1000);
+  min-width: 172px;
+  padding: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgb(0, 0, 0, 0.28);
+  animation: dt-col-menu-in 0.12s ease;
+}
+
+@keyframes dt-col-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dt-col-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.dt-col-menu-item:hover,
+.dt-col-menu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.dt-col-menu-icon {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dt-col-menu {
+    animation: none;
+  }
+}

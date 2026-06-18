@@ -208,6 +208,7 @@ export class DataTable {
       columnWidths: {},
       visibleColumns: {},
       columnOrder: [], // Store custom column order
+      floatingColumns: [], // Ordered ids of pinned/floating (sticky-left) columns
       selectedRows: new Set(),
       scrollPosition: 0,
       isLoading: false,
@@ -268,6 +269,18 @@ export class DataTable {
     // Interaction tracking: skip re-renders while user is hovering/interacting
     this._isHovering = false;
     this._hoverTimeout = null;
+
+    // PITFALL FIX: _handleResize / _handleResizeEnd are prototype methods that are
+    // attached to (and detached from) the document via add/removeEventListener in the
+    // event handlers mixin. Passing the bare prototype reference meant `this` was lost
+    // when the events fired (resize did nothing), and add/removeEventListener received
+    // DIFFERENT function identities on each call so listeners were never actually
+    // removed. Binding ONCE here gives a single, stable bound reference that both
+    // add and remove use, fixing resize and preventing a stuck `this.resizing` flag
+    // (which would otherwise wedge _isUserInteracting() and block sorting/renders).
+    // Do not revert to passing the unbound prototype methods.
+    this._handleResize = this._handleResize.bind(this);
+    this._handleResizeEnd = this._handleResizeEnd.bind(this);
 
     this._loadState();
     this._restoreServerState(); // NEW: Restore server-side state after loading
@@ -431,6 +444,22 @@ export class DataTable {
       }
     };
     window.addEventListener("beforeunload", this._unloadHandler);
+
+    // Recompute pinned-column offsets when the viewport changes (column widths
+    // can re-fit to the container) so sticky offsets stay accurate.
+    this._windowResizeHandler = () => {
+      this._updateStickyOffsets();
+    };
+    window.addEventListener("resize", this._windowResizeHandler);
+
+    // Observe the wrapper for size changes (layout/sidebar toggles, fit-to-container
+    // reflows) and refresh pinned offsets. Guarded for environments lacking the API.
+    if (typeof ResizeObserver === "function" && this.elements.wrapper) {
+      this._wrapperResizeObserver = new ResizeObserver(() => {
+        this._updateStickyOffsets();
+      });
+      this._wrapperResizeObserver.observe(this.elements.wrapper);
+    }
   }
 
   /**
@@ -690,25 +719,50 @@ export class DataTable {
       ? [...this.options.columns]
       : this.options.columns.filter((col) => this._isColumnVisible(col.id));
 
+    const floatingIds = Array.isArray(this.state.floatingColumns)
+      ? this.state.floatingColumns
+      : [];
+
+    // Resolve the non-floating columns first using the existing columnOrder logic,
+    // so behaviour is byte-for-byte identical when no columns are floating.
+    let nonFloating;
     if (this.state.columnOrder.length === 0) {
-      return sourceColumns;
+      nonFloating = sourceColumns;
+    } else {
+      nonFloating = [];
+      const columnMap = new Map(sourceColumns.map((col) => [col.id, col]));
+
+      // Add columns in the order specified by columnOrder
+      for (const colId of this.state.columnOrder) {
+        if (columnMap.has(colId)) {
+          nonFloating.push(columnMap.get(colId));
+          columnMap.delete(colId);
+        }
+      }
+
+      // Add any remaining columns that weren't in columnOrder (new columns)
+      nonFloating.push(...columnMap.values());
     }
 
-    const ordered = [];
-    const columnMap = new Map(sourceColumns.map((col) => [col.id, col]));
+    // Fast path: nothing pinned → identical to the historical behaviour above.
+    if (floatingIds.length === 0) {
+      return nonFloating;
+    }
 
-    // Add columns in the order specified by columnOrder
-    for (const colId of this.state.columnOrder) {
-      if (columnMap.has(colId)) {
-        ordered.push(columnMap.get(colId));
-        columnMap.delete(colId);
+    // Floating columns are always leftmost, in floatingColumns order, regardless
+    // of columnOrder. Build the group from the (visible-filtered) source columns
+    // and strip those ids out of the non-floating list so a column never appears
+    // in both groups.
+    const sourceById = new Map(sourceColumns.map((col) => [col.id, col]));
+    const floatingSet = new Set(floatingIds);
+    const floatingGroup = [];
+    for (const colId of floatingIds) {
+      if (sourceById.has(colId)) {
+        floatingGroup.push(sourceById.get(colId));
       }
     }
 
-    // Add any remaining columns that weren't in columnOrder (new columns)
-    ordered.push(...columnMap.values());
-
-    return ordered;
+    return [...floatingGroup, ...nonFloating.filter((col) => !floatingSet.has(col.id))];
   }
 
   /**
@@ -718,11 +772,12 @@ export class DataTable {
    */
   _renderColgroup() {
     const visibleColumns = this._getOrderedColumns();
+    const floatingCount = this._getFloatingColumnCount(visibleColumns);
 
     return `
       <colgroup>
         ${visibleColumns
-          .map((col) => {
+          .map((col, index) => {
             const storedWidth = this.state.columnWidths[col.id];
             const configuredWidth = col.width;
 
@@ -738,7 +793,8 @@ export class DataTable {
             }
 
             const styleAttr = widthValue ? ` style="width: ${widthValue};"` : "";
-            return `<col data-column-id="${col.id}"${styleAttr}>`;
+            const stickyAttrs = this._stickyCellMarkup(index, floatingCount);
+            return `<col data-column-id="${col.id}"${stickyAttrs}${styleAttr}>`;
           })
           .join("")}
       </colgroup>
@@ -746,22 +802,85 @@ export class DataTable {
   }
 
   /**
+   * Count how many of the leading (leftmost) columns are floating/pinned.
+   * Because `_getOrderedColumns()` always places the floating group first, the
+   * floating columns are exactly the first N entries, so a simple count of the
+   * visible columns whose id is in `floatingColumns` is sufficient.
+   * @param {Array} orderedColumns - result of `_getOrderedColumns()`
+   * @returns {number} number of leading floating columns
+   */
+  _getFloatingColumnCount(orderedColumns) {
+    const floatingIds = Array.isArray(this.state.floatingColumns)
+      ? this.state.floatingColumns
+      : [];
+    if (floatingIds.length === 0) {
+      return 0;
+    }
+    const floatingSet = new Set(floatingIds);
+    let count = 0;
+    for (const col of orderedColumns) {
+      if (floatingSet.has(col.id)) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Compute sticky marker pieces for a cell at the given ordered index.
+   * Floating columns (the leading `floatingCount` entries) get the
+   * `dt-col-sticky` class, `dt-col-sticky-last` on the last one, and a
+   * 0-based `data-sticky-index`. Non-floating columns get empty strings, so
+   * tables with no floating columns emit no sticky markup at all.
+   * @param {number} index - 0-based index within the ordered (visible) columns
+   * @param {number} floatingCount - number of leading floating columns
+   * @returns {{classes: string, attr: string}} classes to append + extra attrs
+   */
+  _stickyCellParts(index, floatingCount) {
+    if (floatingCount <= 0 || index >= floatingCount) {
+      return { classes: "", attr: "" };
+    }
+    const isLast = index === floatingCount - 1;
+    return {
+      classes: `dt-col-sticky${isLast ? " dt-col-sticky-last" : ""}`,
+      attr: ` data-sticky-index="${index}"`,
+    };
+  }
+
+  /**
+   * Build the full sticky attribute string for a bare `<col>` element (which has
+   * no other class attribute). Returns "" for non-floating columns.
+   * @param {number} index - 0-based ordered column index
+   * @param {number} floatingCount - number of leading floating columns
+   * @returns {string} attribute string to splice into a <col> tag
+   */
+  _stickyCellMarkup(index, floatingCount) {
+    const { classes, attr } = this._stickyCellParts(index, floatingCount);
+    if (!classes) {
+      return "";
+    }
+    return ` class="${classes}"${attr}`;
+  }
+
+  /**
    * Render table header with sortable columns
    */
   _renderHeader() {
     const visibleColumns = this._getOrderedColumns();
+    const floatingCount = this._getFloatingColumnCount(visibleColumns);
 
     return `
       <tr>
         ${visibleColumns
-          .map((col) => {
+          .map((col, index) => {
             const isSorted = this.state.sortColumn === col.id;
             const sortIcon = isSorted ? (this.state.sortDirection === "asc" ? "▲" : "▼") : "";
+            const sticky = this._stickyCellParts(index, floatingCount);
 
             return `
-            <th 
+            <th
               data-column-id="${col.id}"
-              class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""}"
+              class="dt-header-column ${col.sortable ? "sortable" : ""} ${isSorted ? "sorted" : ""} ${sticky.classes}"${sticky.attr}
             >
               <div class="dt-header-content">
                 <span class="dt-header-label">
@@ -1065,9 +1184,10 @@ export class DataTable {
    */
   _renderRow(row) {
     const visibleColumns = this._getOrderedColumns();
+    const floatingCount = this._getFloatingColumnCount(visibleColumns);
 
     return visibleColumns
-      .map((col) => {
+      .map((col, index) => {
         const cellContent = this._renderCellContent(col, row);
         let cellClass = col.className || "";
 
@@ -1081,6 +1201,9 @@ export class DataTable {
         // Add text wrapping class
         const wrapClass = col.wrap ? "wrap-text" : col.wrap === false ? "no-wrap" : "";
 
+        // Sticky markers for floating/pinned-left columns
+        const sticky = this._stickyCellParts(index, floatingCount);
+
         // Apply dt-cell-clamp for uniformRowHeight, but NOT for no-wrap columns
         // no-wrap columns handle truncation via CSS (white-space: nowrap + text-overflow: ellipsis)
         const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
@@ -1089,8 +1212,8 @@ export class DataTable {
           : cellContent;
 
         return `
-        <td data-column-id="${col.id}" 
-            class="${cellClass} ${wrapClass}"
+        <td data-column-id="${col.id}"
+            class="${cellClass} ${wrapClass} ${sticky.classes}"${sticky.attr}
             data-row-id="${row[this.options.rowIdField] || ""}">
           ${content}
         </td>
@@ -1355,9 +1478,11 @@ export class DataTable {
    * Remove all attached event listeners
    */
   _removeEventListeners() {
-    // Remove all stored event handlers
-    this.eventHandlers.forEach(({ element, event, handler }) => {
-      element.removeEventListener(event, handler);
+    // Remove all stored event handlers. Pass the capture flag through so
+    // capture-phase listeners (e.g. the header context menu) are actually
+    // removed — removeEventListener must match the phase used at registration.
+    this.eventHandlers.forEach(({ element, event, handler, capture }) => {
+      element.removeEventListener(event, handler, capture === true);
     });
     this.eventHandlers.clear();
 
@@ -1408,7 +1533,21 @@ export class DataTable {
       return;
     }
 
-    if (this._arraysEqual(orderedIds, this.state.columnOrder)) {
+    // Group-aware reorder: the menu presents a single combined list, but floating
+    // (pinned-left) columns reorder only among themselves and non-floating only
+    // among themselves. Derive each group's new order by filtering the combined
+    // list down to its current membership; columns never cross groups here.
+    const floatingSet = new Set(
+      Array.isArray(this.state.floatingColumns) ? this.state.floatingColumns : []
+    );
+    const nextFloating = orderedIds.filter((id) => floatingSet.has(id));
+    const nextOrder = orderedIds.filter((id) => !floatingSet.has(id));
+
+    const floatingChanged =
+      floatingSet.size > 0 && !this._arraysEqual(nextFloating, this.state.floatingColumns);
+    const orderChanged = !this._arraysEqual(nextOrder, this.state.columnOrder);
+
+    if (!floatingChanged && !orderChanged) {
       return;
     }
 
@@ -1417,14 +1556,20 @@ export class DataTable {
       : null;
     const shouldReopen = existingMenu?.style.display === "block";
 
-    this.state.columnOrder = orderedIds;
+    if (floatingChanged) {
+      this.state.floatingColumns = nextFloating;
+    }
+    this.state.columnOrder = nextOrder;
+    this._invalidateRenderedCells();
     this._saveState();
     this._pendingColumnMenuOpen = shouldReopen;
     this._renderTable();
+    this._updateStickyOffsets();
 
     this._log("info", "Column order updated", {
       via: "column-menu",
-      order: orderedIds,
+      order: nextOrder,
+      floating: nextFloating,
     });
   }
 
@@ -1686,6 +1831,57 @@ export class DataTable {
     // Update server pagination bar after table render (for pages mode)
     if (this._pagination?.enabled && this._hasHybridPaginationModes()) {
       this._updateServerPaginationBar();
+    }
+
+    // Recompute cumulative left offsets for any pinned/floating columns so the
+    // CSS (left: var(--dt-pin-left-N)) stacks them correctly.
+    this._updateStickyOffsets();
+  }
+
+  /**
+   * Measure the rendered width of each floating column and publish cumulative
+   * left offsets as CSS custom properties on `.data-table-wrapper`:
+   *   --dt-pin-left-0: 0px;
+   *   --dt-pin-left-1: <width of col 0>px;
+   *   --dt-pin-left-2: <w0 + w1>px; ...
+   * The CSS applies `left: var(--dt-pin-left-N)` to `[data-sticky-index="N"]`.
+   * Widths are read from the HEADER table's <th> (offsetWidth); the body shares
+   * the same colgroup widths, so header and body stay aligned. Stale vars from a
+   * previous, larger floating group are cleared. No-op when nothing is pinned or
+   * required elements are missing.
+   */
+  _updateStickyOffsets() {
+    const wrapper = this.elements.wrapper;
+    if (!wrapper) {
+      return;
+    }
+
+    const floatingCount = this._getFloatingColumnCount(this._getOrderedColumns());
+
+    // Clear any previously-set pin vars so a shrinking group leaves no leftovers.
+    const previous = this._stickyVarCount || 0;
+    for (let i = 0; i < Math.max(previous, floatingCount); i++) {
+      wrapper.style.removeProperty(`--dt-pin-left-${i}`);
+    }
+    this._stickyVarCount = floatingCount;
+
+    if (floatingCount <= 0) {
+      return;
+    }
+
+    const headerThead = this.elements.headerTable?.querySelector("thead");
+    if (!headerThead) {
+      return;
+    }
+
+    // The floating columns are the first `floatingCount` ordered columns; read
+    // their offsetWidth from the header and accumulate the left offset.
+    let cumulative = 0;
+    for (let i = 0; i < floatingCount; i++) {
+      wrapper.style.setProperty(`--dt-pin-left-${i}`, `${cumulative}px`);
+      const th = headerThead.querySelector(`th[data-sticky-index="${i}"]`);
+      const width = th ? th.offsetWidth : 0;
+      cumulative += Number.isFinite(width) ? width : 0;
     }
   }
 
@@ -2006,6 +2202,11 @@ export class DataTable {
    */
   _loadState() {
     const saved = AppState.load(this.options.stateKey);
+    // Whether the user already has a persisted floating set (even an empty one):
+    // if so we must NOT re-seed defaults, or unpinning every column would silently
+    // come back on the next load.
+    const hadSavedFloating =
+      !!saved && Object.prototype.hasOwnProperty.call(saved, "floatingColumns");
     if (saved) {
       this.state = { ...this.state, ...saved };
       if (
@@ -2034,6 +2235,33 @@ export class DataTable {
     // Load client pagination preference (separate state key)
     if (this.options.clientPagination?.enabled) {
       this._loadClientPaginationPreference();
+    }
+
+    // Seed floating (pinned-left) columns. Only when the user has NO persisted
+    // floating set at all — derive the initial set from any columns flagged
+    // `floating: true` in their config, preserving column-definition order.
+    this._seedFloatingColumns(hadSavedFloating);
+  }
+
+  /**
+   * Seed `state.floatingColumns` from column configs.
+   * Columns whose config has `floating === true` become pinned by default, in
+   * column-definition order. Skipped entirely when the user already has a
+   * persisted set (`hasSaved`), so an explicit empty set survives reloads.
+   * @param {boolean} hasSaved - true if saved state already had floatingColumns
+   */
+  _seedFloatingColumns(hasSaved = false) {
+    if (!Array.isArray(this.state.floatingColumns)) {
+      this.state.floatingColumns = [];
+    }
+    if (hasSaved || this.state.floatingColumns.length > 0) {
+      return;
+    }
+    const seeded = this.options.columns
+      .filter((col) => col && col.floating === true)
+      .map((col) => col.id);
+    if (seeded.length > 0) {
+      this.state.floatingColumns = seeded;
     }
   }
 
@@ -2129,6 +2357,7 @@ export class DataTable {
       visibleColumns: this.state.visibleColumns,
       scrollPosition: this.state.scrollPosition,
       columnOrder: this.state.columnOrder,
+      floatingColumns: this.state.floatingColumns,
       tableWidth: this.state.tableWidth,
       userResizedColumns: this.state.userResizedColumns,
       serverPageSize: this.state.serverPaginationState.pageSize,
@@ -2205,6 +2434,7 @@ export class DataTable {
         columns: this.options.columns,
         currentOrder: this.state.columnOrder,
         currentVisibility: this.state.visibleColumns,
+        currentFloating: this.state.floatingColumns,
         onApply: (settings) => this.applySettings(settings),
         // Pagination toggle options
         showPaginationToggle: !!this.options.clientPagination?.enabled,
@@ -2216,6 +2446,7 @@ export class DataTable {
     // Update current state before opening
     this._settingsDialog.options.currentOrder = this.state.columnOrder;
     this._settingsDialog.options.currentVisibility = this.state.visibleColumns;
+    this._settingsDialog.options.currentFloating = this.state.floatingColumns;
     // Update pagination state
     if (this.options.clientPagination?.enabled) {
       this._settingsDialog.updatePaginationState(this._clientPaginationActive);
@@ -2266,14 +2497,309 @@ export class DataTable {
       });
     }
 
+    // Consume floating (pinned-left) column set from the settings dialog when
+    // present. Validate ids against known columns, ensure columnOrder never
+    // contains a floating id (a column lives in exactly one group), then save +
+    // re-render + recompute sticky offsets.
+    if (Array.isArray(settings.floatingColumns)) {
+      const validColumnIds = new Set(this.options.columns.map((col) => col.id));
+      const validFloating = settings.floatingColumns.filter((colId) =>
+        validColumnIds.has(colId)
+      );
+      if (!this._arraysEqual(validFloating, this.state.floatingColumns)) {
+        this.state.floatingColumns = validFloating;
+        const floatingSet = new Set(validFloating);
+        this.state.columnOrder = this.state.columnOrder.filter(
+          (colId) => !floatingSet.has(colId)
+        );
+        hasChanges = true;
+        this.state.hasAutoFitted = false;
+      }
+    }
+
     if (hasChanges) {
       this._saveState();
       this._renderTable();
+      this._updateStickyOffsets();
       this._log("info", "Table settings applied", {
         columnOrder: this.state.columnOrder,
         visibleColumns: this.state.visibleColumns,
+        floatingColumns: this.state.floatingColumns,
       });
     }
+  }
+
+  /**
+   * Whether a column is currently pinned (floating to the left).
+   * @param {string} colId
+   * @returns {boolean}
+   */
+  isColumnFloating(colId) {
+    return (
+      Array.isArray(this.state.floatingColumns) && this.state.floatingColumns.includes(colId)
+    );
+  }
+
+  /**
+   * Pin or unpin a column to the left.
+   * - Pinning appends to the end of the floating group and removes the id from
+   *   `columnOrder` (a column never lives in both groups).
+   * - Unpinning removes it from the floating group and restores it into
+   *   `columnOrder` (so its non-floating position is tracked again).
+   * Re-renders, recomputes sticky offsets, saves state, and (when pinning)
+   * briefly tags the column's th+td with `dt-col-justpinned` for the CSS move
+   * animation.
+   * @param {string} colId
+   * @param {boolean} isFloating - true to pin, false to unpin
+   */
+  setColumnFloating(colId, isFloating) {
+    if (!colId) {
+      return;
+    }
+    const known = this.options.columns.some((col) => col.id === colId);
+    if (!known) {
+      return;
+    }
+    if (!Array.isArray(this.state.floatingColumns)) {
+      this.state.floatingColumns = [];
+    }
+
+    const currentlyFloating = this.state.floatingColumns.includes(colId);
+    const next = Boolean(isFloating);
+    if (currentlyFloating === next) {
+      return; // No change
+    }
+
+    if (next) {
+      // Pin: append to floating group, drop from non-floating order.
+      this.state.floatingColumns.push(colId);
+      this.state.columnOrder = this.state.columnOrder.filter((id) => id !== colId);
+    } else {
+      // Unpin: remove from floating group, restore into non-floating order so it
+      // keeps a tracked position (append to end if not already present).
+      this.state.floatingColumns = this.state.floatingColumns.filter((id) => id !== colId);
+      if (!this.state.columnOrder.includes(colId)) {
+        this.state.columnOrder.push(colId);
+      }
+    }
+
+    // Floating membership changes the column set per row; rebuild bodies fully so
+    // reused <td> elements pick up/lose the sticky classes (the in-place body
+    // diff only swaps innerHTML, not cell attributes).
+    this._invalidateRenderedCells();
+    this.state.hasAutoFitted = false;
+    this._renderTable({ force: true });
+    this._updateStickyOffsets();
+    this._saveState();
+
+    if (next) {
+      this._flashJustPinned(colId);
+    }
+
+    this._log("info", "Column floating changed", { colId, isFloating: next });
+  }
+
+  /**
+   * Toggle a column's pinned/floating state.
+   * @param {string} colId
+   */
+  toggleColumnFloating(colId) {
+    this.setColumnFloating(colId, !this.isColumnFloating(colId));
+  }
+
+  /**
+   * Whether a column may be hidden (mirrors the settings dialog's rules so the
+   * header menu and the dialog stay consistent).
+   * @param {object} col - column config
+   * @returns {boolean}
+   */
+  _canHideColumn(col) {
+    if (!col) return false;
+    return !(
+      col.lockVisibility === true ||
+      col.disableVisibilityToggle === true ||
+      col.hideable === false
+    );
+  }
+
+  /**
+   * Open a lightweight right-click context menu for a column header at the given
+   * viewport coordinates. Offers Pin/Unpin (to the left floating group) and, when
+   * allowed, Hide column. The menu is a self-contained element appended to
+   * document.body (NOT coupled to the app's token context menu), positioned at the
+   * cursor and clamped to the viewport, and dismissed on outside click / Escape /
+   * scroll / resize. Only one menu exists at a time.
+   * @param {string} colId
+   * @param {number} x - clientX
+   * @param {number} y - clientY
+   */
+  _openHeaderColumnMenu(colId, x, y) {
+    this._closeHeaderColumnMenu();
+
+    const col = this.options.columns.find((c) => c.id === colId);
+    if (!col) {
+      return;
+    }
+
+    const isFloating = this.isColumnFloating(colId);
+    const items = [];
+
+    // Pin / Unpin (unless the column explicitly opts out via floatable: false)
+    if (col.floatable !== false) {
+      items.push({
+        label: isFloating ? "Unpin from left" : "Pin to left",
+        icon: isFloating ? "icon-pin-off" : "icon-pin",
+        onClick: () => this.toggleColumnFloating(colId),
+      });
+    }
+
+    // Hide column (when permitted)
+    if (this._canHideColumn(col)) {
+      items.push({
+        label: "Hide column",
+        icon: "icon-eye-off",
+        onClick: () => {
+          this.applySettings({
+            visibleColumns: { ...this.state.visibleColumns, [colId]: false },
+          });
+        },
+      });
+    }
+
+    if (items.length === 0) {
+      return;
+    }
+
+    const menu = document.createElement("div");
+    menu.className = "dt-col-menu";
+    menu.setAttribute("role", "menu");
+    menu.innerHTML = items
+      .map(
+        (item, i) =>
+          `<button type="button" class="dt-col-menu-item" role="menuitem" data-index="${i}">
+            <i class="dt-col-menu-icon ${item.icon}" aria-hidden="true"></i>
+            <span>${item.label}</span>
+          </button>`
+      )
+      .join("");
+
+    document.body.appendChild(menu);
+
+    // Position at the cursor, clamped so the menu stays fully on-screen.
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(x, window.innerWidth - rect.width - 8);
+    const top = Math.min(y, window.innerHeight - rect.height - 8);
+    menu.style.left = `${Math.max(8, left)}px`;
+    menu.style.top = `${Math.max(8, top)}px`;
+
+    // Wire item clicks.
+    menu.querySelectorAll(".dt-col-menu-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = Number(btn.dataset.index);
+        this._closeHeaderColumnMenu();
+        items[idx]?.onClick?.();
+      });
+    });
+
+    // Dismissal: outside pointer-down, Escape, scroll, resize. Defer attaching the
+    // outside-click listener so the originating right-click doesn't instantly close it.
+    const onPointerDown = (ev) => {
+      if (!menu.contains(ev.target)) {
+        this._closeHeaderColumnMenu();
+      }
+    };
+    const onKeyDown = (ev) => {
+      if (ev.key === "Escape") {
+        this._closeHeaderColumnMenu();
+      }
+    };
+    const onDismiss = () => this._closeHeaderColumnMenu();
+
+    this._headerColMenu = { el: menu, onPointerDown, onKeyDown, onDismiss };
+
+    window.setTimeout(() => {
+      document.addEventListener("mousedown", onPointerDown, true);
+      document.addEventListener("keydown", onKeyDown, true);
+      window.addEventListener("scroll", onDismiss, true);
+      window.addEventListener("resize", onDismiss, true);
+    }, 0);
+
+    // Focus the first item for keyboard users.
+    menu.querySelector(".dt-col-menu-item")?.focus();
+  }
+
+  /**
+   * Close and clean up the header column context menu, if open.
+   */
+  _closeHeaderColumnMenu() {
+    const ref = this._headerColMenu;
+    if (!ref) {
+      return;
+    }
+    this._headerColMenu = null;
+    document.removeEventListener("mousedown", ref.onPointerDown, true);
+    document.removeEventListener("keydown", ref.onKeyDown, true);
+    window.removeEventListener("scroll", ref.onDismiss, true);
+    window.removeEventListener("resize", ref.onDismiss, true);
+    ref.el?.remove();
+  }
+
+  /**
+   * Reorder a column WITHIN the floating group only.
+   * @param {string} colId - id of a currently-floating column
+   * @param {number} toIndex - target index within `floatingColumns`
+   */
+  moveFloatingColumn(colId, toIndex) {
+    if (!Array.isArray(this.state.floatingColumns)) {
+      return;
+    }
+    const from = this.state.floatingColumns.indexOf(colId);
+    if (from === -1) {
+      return;
+    }
+    const clamped = Math.max(0, Math.min(this.state.floatingColumns.length - 1, toIndex));
+    if (clamped === from) {
+      return;
+    }
+    const [moved] = this.state.floatingColumns.splice(from, 1);
+    this.state.floatingColumns.splice(clamped, 0, moved);
+
+    this._invalidateRenderedCells();
+    this._renderTable({ force: true });
+    this._updateStickyOffsets();
+    this._saveState();
+
+    this._log("info", "Floating column moved", { colId, toIndex: clamped });
+  }
+
+  /**
+   * Force the next render to rebuild row cells from scratch. The in-place body
+   * diff (`_updateTableBody`) reuses existing <td> elements and only updates
+   * their innerHTML, so structural attribute changes (sticky classes/indices)
+   * would not propagate to existing rows. Clearing the tbody makes the diff
+   * treat every row as new.
+   */
+  _invalidateRenderedCells() {
+    if (this.elements.tbody) {
+      this.elements.tbody.innerHTML = "";
+    }
+  }
+
+  /**
+   * Briefly add `dt-col-justpinned` to a column's header + body cells so the CSS
+   * can animate the column sliding into the pinned group, then remove it.
+   * @param {string} colId
+   */
+  _flashJustPinned(colId) {
+    const apply = (root) => {
+      if (!root) return [];
+      return Array.from(root.querySelectorAll(`[data-column-id="${colId}"]`));
+    };
+    const cells = [...apply(this.elements.thead), ...apply(this.elements.tbody)];
+    cells.forEach((cell) => cell.classList.add("dt-col-justpinned"));
+    window.setTimeout(() => {
+      cells.forEach((cell) => cell.classList.remove("dt-col-justpinned"));
+    }, 450);
   }
 
   /**
@@ -2362,8 +2888,11 @@ export class DataTable {
       this.state.columnWidths = {};
       this.state.visibleColumns = {};
       this.state.columnOrder = [];
+      this.state.floatingColumns = [];
       this.state.userResizedColumns = {};
       this.state.hasAutoFitted = false;
+      // Re-seed pinned columns from the new column defs' `floating: true` flags.
+      this._seedFloatingColumns();
       this._log("info", "Column state reset");
     } else {
       // Clean up state for columns that no longer exist
@@ -2385,6 +2914,13 @@ export class DataTable {
 
       // Remove deleted columns from order
       this.state.columnOrder = this.state.columnOrder.filter((colId) => validColumnIds.has(colId));
+
+      // Remove deleted columns from the floating (pinned-left) group
+      if (Array.isArray(this.state.floatingColumns)) {
+        this.state.floatingColumns = this.state.floatingColumns.filter((colId) =>
+          validColumnIds.has(colId)
+        );
+      }
 
       // Remove user resize flags for deleted columns
       Object.keys(this.state.userResizedColumns).forEach((colId) => {
@@ -2632,6 +3168,17 @@ export class DataTable {
       window.removeEventListener("beforeunload", this._unloadHandler);
       this._unloadHandler = null;
     }
+    if (this._windowResizeHandler) {
+      window.removeEventListener("resize", this._windowResizeHandler);
+      this._windowResizeHandler = null;
+    }
+    if (this._wrapperResizeObserver) {
+      this._wrapperResizeObserver.disconnect();
+      this._wrapperResizeObserver = null;
+    }
+
+    // Close any open header context menu and detach its document listeners
+    this._closeHeaderColumnMenu();
 
     // Clean up scroll throttle
     if (this.scrollThrottle) {
