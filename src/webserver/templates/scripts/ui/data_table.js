@@ -828,17 +828,62 @@ export class DataTable {
       .map((row, index) => {
         const rowId = row[this.options.rowIdField] || index;
         const isSelected = this.state.selectedRows.has(rowId);
+        const customClass = this._computeRowClass(row);
+        const rowClass = [isSelected ? "selected" : "", customClass]
+          .filter(Boolean)
+          .join(" ");
 
         return `
-        <tr 
-          data-row-id="${rowId}" 
-          class="${isSelected ? "selected" : ""}"
+        <tr
+          data-row-id="${rowId}"
+          class="${rowClass}"${customClass ? ` data-dt-row-class="${customClass}"` : ""}
         >
           ${this._renderRow(row)}
         </tr>
       `;
       })
       .join("");
+  }
+
+  /**
+   * Compute the optional per-row CSS class from the `rowClass` option.
+   * Lets pages tag rows with state styling (e.g. pending/selling) without
+   * forking the table. Returns a trimmed, space-separated class string.
+   */
+  _computeRowClass(row) {
+    const fn = this.options.rowClass;
+    if (typeof fn !== "function") return "";
+    try {
+      const cls = fn(row);
+      return typeof cls === "string" ? cls.trim() : "";
+    } catch (error) {
+      this._log("error", "rowClass function failed", error);
+      return "";
+    }
+  }
+
+  /**
+   * Apply the computed custom row class to an existing <tr>, diffing against
+   * the previously applied set so we never clobber framework classes
+   * (e.g. `selected`). Tracks the applied classes on `data-dt-row-class`.
+   */
+  _syncRowClass(tr, row) {
+    const next = this._computeRowClass(row);
+    const prev = tr.getAttribute("data-dt-row-class") || "";
+    if (prev === next) return;
+    prev
+      .split(/\s+/)
+      .filter(Boolean)
+      .forEach((c) => tr.classList.remove(c));
+    next
+      .split(/\s+/)
+      .filter(Boolean)
+      .forEach((c) => tr.classList.add(c));
+    if (next) {
+      tr.setAttribute("data-dt-row-class", next);
+    } else {
+      tr.removeAttribute("data-dt-row-class");
+    }
   }
 
   /**
@@ -895,6 +940,10 @@ export class DataTable {
       if (id) existingRows.set(id, tr);
     });
 
+    // Whether the table already had rows before this update. Used to gate the
+    // enter animation so an initial full load doesn't animate every row at once.
+    const hadRows = existingRows.size > 0;
+
     const fragment = document.createDocumentFragment();
 
     newData.forEach((row, index) => {
@@ -911,6 +960,9 @@ export class DataTable {
         if (tr.classList.contains("selected") !== isSelected) {
           tr.classList.toggle("selected", isSelected);
         }
+
+        // Keep the optional per-row state class in sync (pending/selling/etc.)
+        this._syncRowClass(tr, row);
 
         // Update cells
         visibleColumns.forEach((col) => {
@@ -944,16 +996,68 @@ export class DataTable {
         if (this.state.selectedRows.has(rowId)) {
           tr.classList.add("selected");
         }
+        this._syncRowClass(tr, row);
         tr.innerHTML = this._renderRow(row);
+        // Subtle enter animation only on incremental updates (not initial load),
+        // so freshly-injected rows (e.g. a pending buy) slide in gracefully.
+        if (hadRows && !this._prefersReducedMotion()) {
+          tr.classList.add("dt-row-enter");
+          window.setTimeout(() => tr.classList.remove("dt-row-enter"), 360);
+        }
         fragment.appendChild(tr);
       }
     });
 
-    // Remove remaining rows
-    existingRows.forEach((tr) => tr.remove());
+    // Remove remaining rows — optionally play a leave animation for rows the
+    // page flags (e.g. a position that just finished closing) before removal.
+    const leaving = Array.from(existingRows.values());
+    const animateExit =
+      typeof this.options.rowExitAnimation === "function" &&
+      leaving.length > 0 &&
+      leaving.length <= 8 &&
+      !this._prefersReducedMotion();
+    leaving.forEach((tr) => {
+      let shouldAnimate = false;
+      if (animateExit) {
+        try {
+          shouldAnimate = this.options.rowExitAnimation(tr) === true;
+        } catch (error) {
+          this._log("error", "rowExitAnimation function failed", error);
+        }
+      }
+      if (shouldAnimate) {
+        this._animateRowExit(tr);
+      } else {
+        tr.remove();
+      }
+    });
 
     // Append fragment (reorders existing rows and adds new ones)
     tbody.appendChild(fragment);
+  }
+
+  /** Respect the user's reduced-motion preference for table animations. */
+  _prefersReducedMotion() {
+    try {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  /** Add a leaving class and remove the row after the exit animation. */
+  _animateRowExit(tr) {
+    if (tr.dataset.dtLeaving === "1") return;
+    tr.dataset.dtLeaving = "1";
+    tr.classList.add("dt-row-leaving");
+    const dur = Number(this.options.rowExitDurationMs) || 340;
+    window.setTimeout(() => {
+      try {
+        tr.remove();
+      } catch (_error) {
+        /* row already detached */
+      }
+    }, dur);
   }
 
   /**

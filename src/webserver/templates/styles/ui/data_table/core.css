@@ -764,3 +764,47 @@ body.dt-column-resizing * {
   }
 }
 
+
+/* ==================== Row enter / leave animations ====================
+ * Opt-in via the DataTable `rowClass` (enter) and `rowExitAnimation` (leave)
+ * options. Used e.g. by the positions page so a pending buy slides in and a
+ * just-closed position fades out before moving to the Closed list.
+ */
+@keyframes dt-row-enter-kf {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.data-table tbody tr.dt-row-enter {
+  animation: dt-row-enter-kf 0.34s ease both;
+}
+
+@keyframes dt-row-leave-kf {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
+.data-table tbody tr.dt-row-leaving {
+  animation: dt-row-leave-kf 0.32s ease forwards;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .data-table tbody tr.dt-row-enter,
+  .data-table tbody tr.dt-row-leaving {
+    animation: none;
+  }
+}

@@ -160,3 +160,177 @@
 .row-actions .btn i {
   font-size: 0.85em;
 }
+
+/* ===========================================================================
+   Live row state — left status bar + tint + caption
+   Open-list rows carry a left status bar encoding their lifecycle:
+   green = healthy open, amber (pulsing) = in-flight buy/sell, red = failed.
+   The bar + tint are layered with background-image so they survive zebra
+   striping regardless of selector specificity.
+   =========================================================================== */
+
+.position-token-meta {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Compact state caption under the token symbol (active states only) */
+.pos-state-caption {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pos-state-caption .pos-state-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pos-state-caption.pos-state-buying {
+  color: #fbbf24;
+}
+
+.pos-state-caption.pos-state-selling,
+.pos-state-caption.pos-state-closing {
+  color: #fb923c;
+}
+
+.pos-state-caption.pos-state-failed {
+  color: #f87171;
+}
+
+/* Tiny spinner used inside the state caption */
+.pos-state-spinner {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  border: 2px solid rgb(255, 255, 255, 0.25);
+  border-top-color: currentcolor;
+  border-radius: var(--radius-full);
+  animation: pos-state-spin 0.7s linear infinite;
+}
+
+@keyframes pos-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Left status bar — drawn on the first cell of each open-list row */
+.pos-row-open > td:first-child,
+.pos-row-buying > td:first-child,
+.pos-row-selling > td:first-child,
+.pos-row-closing > td:first-child,
+.pos-row-failed > td:first-child {
+  position: relative;
+}
+
+.pos-row-open > td:first-child::before,
+.pos-row-buying > td:first-child::before,
+.pos-row-selling > td:first-child::before,
+.pos-row-closing > td:first-child::before,
+.pos-row-failed > td:first-child::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--pos-bar-color, var(--text-muted));
+}
+
+/* Healthy open — subtle static green bar */
+.pos-row-open > td:first-child::before {
+  --pos-bar-color: rgb(16, 185, 129, 0.55);
+}
+
+/* In-flight buy — amber pulsing bar + faint tint */
+.pos-row-buying > td:first-child::before {
+  --pos-bar-color: #f59e0b;
+
+  animation: pos-bar-pulse 1.4s ease-in-out infinite;
+}
+
+.pos-row-buying > td {
+  background-image: linear-gradient(0deg, rgb(245, 158, 11, 0.09), rgb(245, 158, 11, 0.09));
+}
+
+/* In-flight sell / closing — orange pulsing bar + faint tint */
+.pos-row-selling > td:first-child::before,
+.pos-row-closing > td:first-child::before {
+  --pos-bar-color: #fb923c;
+
+  animation: pos-bar-pulse 1.4s ease-in-out infinite;
+}
+
+.pos-row-selling > td,
+.pos-row-closing > td {
+  background-image: linear-gradient(0deg, rgb(251, 146, 60, 0.09), rgb(251, 146, 60, 0.09));
+}
+
+/* Failed buy — static red bar + tint */
+.pos-row-failed > td:first-child::before {
+  --pos-bar-color: #ef4444;
+}
+
+.pos-row-failed > td {
+  background-image: linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1));
+}
+
+/* Pending (synthetic) rows are non-interactive placeholders */
+.pos-row-buying,
+.pos-row-failed {
+  cursor: default;
+}
+
+.row-actions-busy {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+@keyframes pos-bar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Arrival glow when a position lands in the Closed list */
+.pos-row-just-closed > td {
+  animation: pos-arrive 1.6s ease-out;
+}
+
+@keyframes pos-arrive {
+  0% {
+    background-image: linear-gradient(0deg, rgb(34, 197, 94, 0.22), rgb(34, 197, 94, 0.22));
+  }
+
+  100% {
+    background-image: linear-gradient(0deg, rgb(34, 197, 94, 0), rgb(34, 197, 94, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-state-spinner,
+  .pos-row-buying > td:first-child::before,
+  .pos-row-selling > td:first-child::before,
+  .pos-row-closing > td:first-child::before {
+    animation: none;
+  }
+
+  .pos-row-just-closed > td {
+    animation: none;
+  }
+}

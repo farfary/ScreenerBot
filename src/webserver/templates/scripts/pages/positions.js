@@ -7,11 +7,45 @@ import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
+import { notificationManager } from "../core/notifications.js";
 
 const SUB_TABS = [
   { id: "open", label: '<i class="icon-trending-up"></i> Open' },
   { id: "closed", label: '<i class="icon-trending-down"></i> Closed' },
 ];
+
+// Live-action wiring: the actions system streams every in-flight buy/sell as an
+// Action (SSE -> notificationManager) long before the on-chain position is
+// created/closed. We surface those as transient "pending" rows / state badges in
+// the Open list so a freshly clicked buy is visible immediately, and a selling
+// position keeps showing until it is fully closed.
+const ACTION_BUY_TYPES = new Set(["swap_buy", "position_open"]);
+const ACTION_SELL_TYPES = new Set(["swap_sell", "position_close", "position_partial_exit"]);
+
+// Keep showing a just-finished buy as pending for a short grace window so the row
+// doesn't flicker out between "swap done" and the position appearing on next poll.
+const BUY_GRACE_MS = 10000;
+// How long a failed buy lingers as a red row before it disappears.
+const FAILED_LINGER_MS = 8000;
+// A closed position keeps its arrival highlight for this long after exit.
+const JUST_CLOSED_MS = 12000;
+
+// Map a backend step name to a short, user-friendly label for the state caption.
+const shortStep = (step) => {
+  const s = String(step || "").toLowerCase();
+  if (s.includes("valid")) return "Checking";
+  if (s.includes("quote")) return "Quote";
+  if (s.includes("swap")) return "Swapping";
+  if (s.includes("verif")) return "Confirming";
+  return step || "Working";
+};
+
+const actionMint = (n) => n?.entity_id || n?.metadata?.mint || "";
+const actionStatus = (n) => n?.state?.status || "";
+const parseTs = (v) => {
+  const t = v ? Date.parse(v) : NaN;
+  return Number.isFinite(t) ? t : NaN;
+};
 
 const getPositionsTableStateKey = (view) => `positions-table.${view}`;
 const normalizeSortDirection = (direction) => (direction === "desc" ? "desc" : "asc");
@@ -44,11 +78,44 @@ function createLifecycle() {
   let tradeDialog = null;
   let positionDetailsDialog = null;
   let walletBalance = 0;
+  let liveUnsub = null;
+  let liveDebounce = null;
 
   const state = {
     view: "open", // 'open' | 'closed'
     total: 0,
+    // Most recent server-side rows (already token-mapped) for the active view.
+    // Live action updates re-merge against this without a network round-trip.
+    lastServerRows: [],
     sort: getInitialSortForView("open"),
+  };
+
+  // Compact caption describing a row's live state (buying / selling / failed).
+  // Open rows stay clean — the left status bar + tint carry the state there.
+  const stateCaption = (row) => {
+    const st = row?._state;
+    if (!st || st === "open") return "";
+    const step = row?._stepLabel ? Utils.escapeHtml(row._stepLabel) : "";
+    let label;
+    let icon;
+    if (st === "buying") {
+      label = step ? `Buying · ${step}` : "Buying";
+      icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
+    } else if (st === "selling") {
+      label = step ? `Selling · ${step}` : "Selling";
+      icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
+    } else if (st === "closing") {
+      label = "Closing";
+      icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
+    } else if (st === "failed") {
+      label = row?._error ? `Failed · ${Utils.escapeHtml(String(row._error))}` : "Failed";
+      icon = '<i class="icon-alert-triangle" aria-hidden="true"></i>';
+    } else {
+      return "";
+    }
+    return `<div class="pos-state-caption pos-state-${Utils.escapeHtml(st)}" title="${Utils.escapeHtml(
+      label
+    )}">${icon}<span class="pos-state-text">${label}</span></div>`;
   };
 
   const tokenCell = (row) => {
@@ -60,9 +127,10 @@ function createLifecycle() {
           symbol
         )}"/>`
       : '<i class="token-logo icon-coins"></i>';
-    return `<div class="position-token">${logoHtml}<div>
+    return `<div class="position-token">${logoHtml}<div class="position-token-meta">
       <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
       <div class="token-name">${Utils.escapeHtml(name)}</div>
+      ${stateCaption(row)}
     </div></div>`;
   };
 
@@ -116,14 +184,23 @@ function createLifecycle() {
 
             if (!mint || !isOpen) return "—";
 
+            // Pending (in-flight buy) rows have no on-chain position yet.
+            if (row?._pending) {
+              return '<span class="row-actions-busy">In progress…</span>';
+            }
+
+            // While selling/closing, keep the buttons visible but disabled so the
+            // user can see the trade is in flight without being able to double-fire.
+            const busy = row?._state === "selling" || row?._state === "closing";
+            const dis = busy ? " disabled" : "";
             return `
               <div class="row-actions">
                 <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
                   mint
-                )}" title="Add to position (DCA)"><i class="icon-circle-plus"></i> Add</button>
+                )}" title="Add to position (DCA)"${dis}><i class="icon-circle-plus"></i> Add</button>
                 <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
                   mint
-                )}" title="Sell (full or % partial)"><i class="icon-trending-down"></i> Sell</button>
+                )}" title="Sell (full or % partial)"${dis}><i class="icon-trending-down"></i> Sell</button>
               </div>
             `;
           },
@@ -277,6 +354,152 @@ function createLifecycle() {
 
   };
 
+  // Pull in-flight buy/sell actions from the live notification stream and index
+  // them by mint. Buys are shown for their whole lifecycle (in-progress, plus a
+  // short grace window after completion until the position appears, plus a brief
+  // linger on failure). Active sells flag their position as "selling".
+  const deriveLive = () => {
+    const now = Date.now();
+    const buyByMint = new Map();
+    const sellByMint = new Map();
+
+    const considerBuy = (n, kind) => {
+      if (!ACTION_BUY_TYPES.has(n?.action_type)) return;
+      const mint = actionMint(n);
+      if (!mint) return;
+      if (kind === "completed") {
+        const ts = parseTs(n.completed_at);
+        if (!Number.isFinite(ts) || now - ts > BUY_GRACE_MS) return;
+      } else if (kind === "failed") {
+        const ts = parseTs(n.completed_at);
+        if (!Number.isFinite(ts) || now - ts > FAILED_LINGER_MS) return;
+      }
+      const rank = kind === "active" ? 3 : kind === "completed" ? 2 : 1;
+      const existing = buyByMint.get(mint);
+      if (existing && existing._rank >= rank) return;
+      const symbol =
+        n.metadata?.symbol && n.metadata.symbol !== "Unknown" ? n.metadata.symbol : null;
+      const failedStep = Array.isArray(n.steps)
+        ? n.steps.find((s) => s?.status === "failed")
+        : null;
+      buyByMint.set(mint, {
+        actionId: n.id,
+        mint,
+        symbol,
+        size: Number(n.metadata?.size_sol) || null,
+        step: shortStep(n.state?.current_step),
+        kind,
+        _rank: rank,
+        error: kind === "failed" ? n.state?.error || failedStep?.error || null : null,
+      });
+    };
+
+    const considerSell = (n) => {
+      if (!ACTION_SELL_TYPES.has(n?.action_type)) return;
+      const mint = actionMint(n);
+      if (!mint) return;
+      sellByMint.set(mint, { step: shortStep(n.state?.current_step) });
+    };
+
+    try {
+      notificationManager.getActive().forEach((n) => {
+        considerBuy(n, "active");
+        considerSell(n);
+      });
+      notificationManager.getCompleted({ includeDismissed: false }).forEach((n) => {
+        considerBuy(n, "completed");
+      });
+      notificationManager.getFailed({ includeDismissed: false }).forEach((n) => {
+        considerBuy(n, "failed");
+      });
+    } catch (err) {
+      console.warn("[Positions] deriveLive failed:", err);
+    }
+
+    return { buyByMint, sellByMint };
+  };
+
+  // Merge live action state into the server rows: annotate real rows with their
+  // live state (selling/closing), prepend synthetic pending-buy rows for mints
+  // that have no position yet, and tag freshly-closed rows for the arrival glow.
+  const mergeLiveIntoRows = (rows) => {
+    const base = Array.isArray(rows) ? rows : [];
+
+    if (state.view !== "open") {
+      const now = Date.now();
+      return base.map((r) => {
+        const exitMs = r.exit_time ? r.exit_time * 1000 : NaN;
+        return Number.isFinite(exitMs) && now - exitMs < JUST_CLOSED_MS
+          ? { ...r, _justClosed: true }
+          : r;
+      });
+    }
+
+    const { buyByMint, sellByMint } = deriveLive();
+    const presentMints = new Set(base.map((r) => r.mint));
+
+    const annotated = base.map((r) => {
+      let st = "open";
+      let step = null;
+      const sell = sellByMint.get(r.mint);
+      if (sell) {
+        st = "selling";
+        step = sell.step;
+      } else if (r.exit_transaction_signature && !r.transaction_exit_verified) {
+        st = "closing";
+      }
+      return { ...r, _state: st, _stepLabel: step };
+    });
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const pending = [];
+    buyByMint.forEach((info, mint) => {
+      if (presentMints.has(mint)) return; // real position exists -> it supersedes
+      const failed = info.kind === "failed";
+      const shortMint = `${mint.slice(0, 4)}…${mint.slice(-4)}`;
+      pending.push({
+        id: `pending:${info.actionId}`,
+        mint,
+        symbol: info.symbol || mint.slice(0, 4),
+        name: failed ? "Buy failed" : "Buying…",
+        token: `${info.symbol || mint.slice(0, 4)} (${shortMint})`,
+        _pending: true,
+        _state: failed ? "failed" : "buying",
+        _stepLabel: failed ? null : info.step,
+        _error: info.error || null,
+        entry_time: nowSec,
+        total_size_sol: info.size,
+        average_entry_price: null,
+        current_price: null,
+        dca_count: 0,
+        partial_exit_count: 0,
+        unrealized_pnl: null,
+        unrealized_pnl_percent: null,
+        transaction_exit_verified: false,
+      });
+    });
+
+    return [...pending, ...annotated];
+  };
+
+  // Re-merge live state into the cached server rows and push to the table with no
+  // network call. Driven by notification-stream events between poll ticks.
+  const applyLiveUpdate = () => {
+    if (!table || state.view !== "open") return;
+    const merged = mergeLiveIntoRows(state.lastServerRows);
+    state.total = merged.length;
+    table.setData(merged, { preserveScroll: true });
+    updateToolbar();
+  };
+
+  const scheduleLiveUpdate = () => {
+    if (liveDebounce) return;
+    liveDebounce = window.setTimeout(() => {
+      liveDebounce = null;
+      applyLiveUpdate();
+    }, 120);
+  };
+
   const loadPositionsPage = async ({ reason, signal }) => {
     const status = state.view;
     const url = `/api/positions?status=${encodeURIComponent(status)}&limit=500`;
@@ -285,20 +508,23 @@ function createLifecycle() {
         priority: "normal",
         signal,
       });
-      state.total = Array.isArray(rows) ? rows.length : 0;
 
-      const mapped = rows.map((row) => ({
+      const mapped = (Array.isArray(rows) ? rows : []).map((row) => ({
         ...row,
         token: `${row.symbol} (${row.mint.slice(0, 4)}…${row.mint.slice(-4)})`,
       }));
+      state.lastServerRows = mapped;
+
+      const finalRows = mergeLiveIntoRows(mapped);
+      state.total = finalRows.length;
 
       return {
-        rows: mapped,
+        rows: finalRows,
         cursorNext: null,
         cursorPrev: null,
         hasMoreNext: false,
         hasMorePrev: false,
-        total: mapped.length,
+        total: finalRows.length,
         preserveScroll: reason === "poll",
       };
     } catch (err) {
@@ -316,6 +542,8 @@ function createLifecycle() {
     if (view !== "open" && view !== "closed") return;
     state.view = view;
     state.sort = getInitialSortForView(view);
+    // Drop the previous view's cached rows so a live tick can't merge stale data.
+    state.lastServerRows = [];
     if (table) {
       const nextStateKey = getPositionsTableStateKey(view);
       table.setStateKey(nextStateKey, { render: false });
@@ -385,6 +613,19 @@ function createLifecycle() {
         zebra: true,
         fitToContainer: true,
         uniformRowHeight: 2,
+        // State-driven row styling: left status bar + tint for pending/selling/
+        // closing/failed rows, and a brief arrival glow for just-closed rows.
+        rowClass: (row) => {
+          if (row?._state) return `pos-row-${row._state}`;
+          if (row?._justClosed) return "pos-row-just-closed";
+          return "";
+        },
+        // Animate rows leaving the Open list as they finish closing or a pending
+        // buy resolves into a real position.
+        rowExitAnimation: (tr) =>
+          tr.classList.contains("pos-row-selling") ||
+          tr.classList.contains("pos-row-closing") ||
+          tr.classList.contains("pos-row-buying"),
         pagination: {
           threshold: 160,
           maxRows: 5000,
@@ -523,7 +764,8 @@ function createLifecycle() {
           // data-row-id is now the unique position id (see rowIdField above).
           const rowId = row.dataset.rowId;
           const position = table?.getData()?.find((p) => String(p.id) === rowId);
-          if (position && positionDetailsDialog) {
+          // Pending (in-flight buy) rows have no real position record yet.
+          if (position && !position._pending && positionDetailsDialog) {
             positionDetailsDialog.show(position);
           }
         };
@@ -564,13 +806,35 @@ function createLifecycle() {
       if ((table?.getData?.() ?? []).length === 0) {
         table.refresh({ reason: "initial" });
       }
+
+      // Subscribe to the live action stream so in-flight buys/sells reflect on the
+      // Open list between poll ticks (instant pending row on click, live step text).
+      if (!liveUnsub) {
+        liveUnsub = notificationManager.subscribe(() => scheduleLiveUpdate());
+      }
     },
 
     deactivate() {
       table?.cancelPendingLoad?.();
+      if (liveUnsub) {
+        liveUnsub();
+        liveUnsub = null;
+      }
+      if (liveDebounce) {
+        window.clearTimeout(liveDebounce);
+        liveDebounce = null;
+      }
     },
 
     dispose() {
+      if (liveUnsub) {
+        liveUnsub();
+        liveUnsub = null;
+      }
+      if (liveDebounce) {
+        window.clearTimeout(liveDebounce);
+        liveDebounce = null;
+      }
       if (tradeDialog) {
         tradeDialog.destroy();
         tradeDialog = null;
@@ -588,6 +852,7 @@ function createLifecycle() {
       TabBarManager.unregister("positions");
       state.view = "open";
       state.total = 0;
+      state.lastServerRows = [];
       walletBalance = 0;
     },
   };
