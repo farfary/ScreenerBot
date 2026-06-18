@@ -525,26 +525,7 @@
   font-size: 0.7rem;
 }
 
-/* Analytics loading state */
-.analytics-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--spacing-xl);
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-
-.analytics-loading::before {
-  content: "";
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--link-color);
-  border-radius: var(--radius-full);
-  animation: spin 0.8s linear infinite;
-  margin-inline-end: var(--spacing-sm);
-}
+/* Analytics loading uses the centralized .loading-spinner (components.css) */
 
 /* Analytics empty state */
 .analytics-empty {

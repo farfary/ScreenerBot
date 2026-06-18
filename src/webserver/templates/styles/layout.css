@@ -207,3 +207,34 @@
   flex-direction: column;
   overflow: auto; /* Allow scrolling at page container level */
 }
+
+/* Router page-transition loader — only shown briefly on first (uncached) visit of a
+   tab; cached tabs reattach instantly with no loader. Uses the centralized
+   .loading-spinner (components.css). A short delayed fade-in avoids flashing the
+   spinner on fast loads. */
+.page-loading {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  padding: 2rem;
+  animation: page-loading-fade-in 0.25s ease both;
+  animation-delay: 0.12s; /* hold blank for fast loads, then fade the spinner in */
+}
+
+@keyframes page-loading-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-loading {
+    animation: none;
+  }
+}

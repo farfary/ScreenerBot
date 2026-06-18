@@ -180,12 +180,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   function renderAnalyticsView() {
     // Show loading state when switching time ranges or initially loading
     if (state.isLoadingAnalytics || !state.analytics) {
-      return `
-      <div class="analytics-loading">
-        <div class="loading-spinner"></div>
-        <p>Loading analytics for ${getTimeRangeLabel(state.timeRange)}...</p>
-      </div>
-    `;
+      return `<div class="loading-spinner">Loading analytics for ${getTimeRangeLabel(state.timeRange)}…</div>`;
     }
 
     const data = state.analytics;
@@ -487,12 +482,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
   function renderExplorerView() {
     if (!state.analytics) {
-      return `
-      <div class="analytics-loading">
-        <div class="loading-spinner"></div>
-        <p>Loading...</p>
-      </div>
-    `;
+      return `<div class="loading-spinner">Loading…</div>`;
     }
 
     const data = state.analytics;
