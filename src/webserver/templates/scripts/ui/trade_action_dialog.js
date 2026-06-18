@@ -148,11 +148,6 @@ export class TradeActionDialog {
       <div class="trade-action-dialog" role="dialog" aria-modal="true" aria-labelledby="trade-action-title" tabindex="-1">
         <header class="trade-action-header">
           <div class="trade-action-header-content">
-            <div class="trade-action-icon-wrapper">
-              <svg class="trade-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-              </svg>
-            </div>
             <div class="trade-action-title-group">
               <h2 id="trade-action-title" class="trade-action-title"></h2>
               <p class="trade-action-subtitle"></p>
@@ -177,7 +172,10 @@ export class TradeActionDialog {
               <button type="button" class="trade-action-input-max" data-action="max" aria-label="Use maximum">MAX</button>
             </div>
             <div class="trade-action-slider-row" data-visible="false">
-              <input type="range" class="trade-action-slider" min="0" max="100" step="1" value="0" aria-label="Amount slider" />
+              <div class="trade-action-slider-wrap">
+                <input type="range" class="trade-action-slider" min="0" max="100" step="1" value="0" aria-label="Amount slider" />
+                <div class="trade-action-slider-ticks" aria-hidden="true"></div>
+              </div>
               <span class="trade-action-slider-readout"></span>
             </div>
             <div class="trade-action-input-hint"></div>
@@ -256,7 +254,7 @@ export class TradeActionDialog {
                   <span class="quote-value quote-route-path"></span>
                 </div>
                 <div class="quote-row" data-min="advanced">
-                  <span class="quote-label">Quote expires</span>
+                  <span class="quote-label">Auto-refresh</span>
                   <span class="quote-value quote-expiry"></span>
                 </div>
               </div>
@@ -373,6 +371,7 @@ export class TradeActionDialog {
     this.sliderRow = overlay.querySelector(".trade-action-slider-row");
     this.sliderEl = overlay.querySelector(".trade-action-slider");
     this.sliderReadoutEl = overlay.querySelector(".trade-action-slider-readout");
+    this.sliderTicksEl = overlay.querySelector(".trade-action-slider-ticks");
     this.maxBtn = overlay.querySelector(".trade-action-input-max");
 
     // Quick trade step elements
@@ -620,11 +619,7 @@ export class TradeActionDialog {
     // Set action-specific class on dialog
     this.dialog.className = `trade-action-dialog ${config.colorClass}`;
 
-    // Update icon based on action
-    const iconSvg = this._getActionIcon(config.icon);
-    this.iconWrapper.innerHTML = iconSvg;
-
-    // Set title and subtitle
+    // Set title and subtitle (header is minimal — no icon)
     this.titleEl.textContent = config.title;
     this.subtitleEl.textContent = config.subtitle;
 
@@ -944,13 +939,81 @@ export class TradeActionDialog {
       this.sliderRow.dataset.visible = typeof context.balance === "number" ? "true" : "false";
     }
     this.sliderEl.value = "0";
+
+    // Build magnetic snap points + visible ticks (presets/round values + ends)
+    this._buildSnapPoints(action, context);
+    this._renderSliderTicks();
+
     this._updateSliderFill();
     this._updateSliderReadout(0);
   }
 
+  /** Snap points the slider gently magnetizes to (0, presets, quarters, max). */
+  _buildSnapPoints(action, context) {
+    const max = this._sliderMax || 0;
+    const set = new Set([0, max]);
+    if (action === "sell") {
+      [25, 50, 75].forEach((p) => set.add(p));
+    } else {
+      // Config/preset amounts that fit under the balance ceiling …
+      const presets = ACTION_CONFIG[action]?.presets || [];
+      presets.forEach((p) => {
+        if (typeof p.value === "number" && p.value > 0 && p.value <= max) set.add(p.value);
+      });
+      if (Array.isArray(context.entrySizes)) {
+        context.entrySizes.forEach((v) => {
+          if (typeof v === "number" && v > 0 && v <= max) set.add(v);
+        });
+      }
+      // … plus quarter steps of the balance for a sense of proportion.
+      [0.25, 0.5, 0.75].forEach((f) => set.add(parseFloat((max * f).toFixed(6))));
+    }
+    this._snapPoints = Array.from(set)
+      .filter((v) => v >= 0 && v <= max)
+      .sort((a, b) => a - b);
+  }
+
+  /** Render tick marks on the track at each snap point. */
+  _renderSliderTicks() {
+    if (!this.sliderTicksEl) return;
+    const max = this._sliderMax || 0;
+    if (max <= 0 || !this._snapPoints?.length) {
+      this.sliderTicksEl.innerHTML = "";
+      return;
+    }
+    this.sliderTicksEl.innerHTML = this._snapPoints
+      .map((v) => {
+        const pct = Math.min(Math.max((v / max) * 100, 0), 100);
+        const strong = v === 0 || v === max ? " is-strong" : "";
+        return `<span class="trade-action-slider-tick${strong}" style="left:${pct}%"></span>`;
+      })
+      .join("");
+  }
+
+  /** Apply a small magnetic pull toward the nearest snap point. */
+  _magnetize(value) {
+    const max = this._sliderMax || 0;
+    if (max <= 0 || !this._snapPoints?.length) return value;
+    const threshold = max * 0.03; // ~3% of the range
+    let best = value;
+    let bestDist = Infinity;
+    for (const p of this._snapPoints) {
+      const d = Math.abs(p - value);
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+      }
+    }
+    return bestDist <= threshold ? best : value;
+  }
+
   _handleSliderInput() {
     const raw = parseFloat(this.sliderEl.value);
-    const value = Number.isFinite(raw) ? raw : 0;
+    const value = this._magnetize(Number.isFinite(raw) ? raw : 0);
+    // Reflect the magnetized value back onto the slider thumb.
+    if (this.sliderEl.value !== String(value)) {
+      this.sliderEl.value = String(value);
+    }
     // Slider acts like typing: clear presets, fill input, fetch.
     this.presetsContainer.querySelectorAll(".trade-action-preset-btn").forEach((b) => {
       b.classList.remove("selected");

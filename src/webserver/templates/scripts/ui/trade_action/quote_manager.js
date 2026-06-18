@@ -7,6 +7,10 @@ import * as Utils from "../../core/utils.js";
 export function applyQuoteManagerMixin(TradeActionDialog) {
   const proto = TradeActionDialog.prototype;
 
+  // Single source of truth for the quote auto-refresh cadence. The countdown
+  // shown in the UI and the actual refresh both use this, so they always agree.
+  const QUOTE_REFRESH_SECS = 15;
+
   // ============================================
   // Recent Trades Methods
   // ============================================
@@ -218,11 +222,9 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         : `${trimSol(quote.input_amount)} SOL`;
     }
 
-    // Quote expiry (advanced)
+    // Auto-refresh countdown (advanced) — kept live by the refresh timer.
     if (this.quoteExpiryEl) {
-      const secs = quote.expires_in_secs;
-      this.quoteExpiryEl.textContent =
-        typeof secs === "number" && secs > 0 ? `in ${secs}s (auto-refreshes)` : "auto-refreshes";
+      this.quoteExpiryEl.textContent = `in ${QUOTE_REFRESH_SECS}s`;
     }
   };
 
@@ -300,11 +302,16 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     this._quoteRefreshTimer = setInterval(() => {
       if (this._isOpen && this._quoteData) {
         const age = Math.floor((Date.now() - this._quoteTimestamp) / 1000);
+        const remaining = Math.max(0, QUOTE_REFRESH_SECS - age);
+        // Both the header badge and the Auto-refresh row count down to the same
+        // moment the quote actually refreshes.
         if (this.quoteAgeEl) {
-          this.quoteAgeEl.textContent = `${age}s`;
+          this.quoteAgeEl.textContent = `${remaining}s`;
         }
-        // Auto-refresh after 15 seconds
-        if (age >= 15) {
+        if (this.quoteExpiryEl) {
+          this.quoteExpiryEl.textContent = remaining > 0 ? `in ${remaining}s` : "refreshing…";
+        }
+        if (age >= QUOTE_REFRESH_SECS) {
           this._fetchQuote();
         }
       }
