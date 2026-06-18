@@ -134,6 +134,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "toast.js" => Some(embeds::TOAST_UI),
         "events_dialog.js" => Some(embeds::EVENTS_DIALOG_UI),
         "confirmation_dialog.js" => Some(embeds::CONFIRMATION_DIALOG_UI),
+        "position_remove_dialog.js" => Some(embeds::POSITION_REMOVE_DIALOG_UI),
         "setup_dialog.js" => Some(embeds::SETUP_DIALOG_UI),
         "trade_action_dialog.js" => Some(embeds::TRADE_ACTION_DIALOG_UI),
         "trade_action/quick_trade.js" => Some(embeds::TRADE_ACTION_QUICK_TRADE_JS),

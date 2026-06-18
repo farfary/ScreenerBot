@@ -699,8 +699,37 @@ Tracks total trading performance:
 | `add_position(position)` | Add to global state |
 | `update_position_state(mint, updater)` | Update position |
 | `get_position_by_mint(mint)` | Read position |
-| `get_open_positions()` | All open positions |
+| `get_open_positions()` | Open positions (excludes archived) |
+| `get_closed_positions()` | Closed positions (excludes archived) |
+| `get_archived_positions()` | Archived positions only |
 | `get_all_positions()` | All positions |
+
+### Archival & Removal
+
+A position can be removed from the dashboard in two ways. **Archive** is a
+reversible flag (`archived` / `archived_at` columns on `positions`) that hides the
+row from the Open/Closed lists and surfaces it in the **Archived** sub-tab.
+**Delete** is a permanent hard-delete that cascades (via `ON DELETE CASCADE`) only
+to the position's own child tables — `position_states`, `position_exits`,
+`position_entries`, `position_tracking`, `token_snapshots`. Transactions and tokens
+live in **separate SQLite databases** and are never touched.
+
+| Function / Endpoint | Purpose |
+|---------------------|---------|
+| `set_position_archived_db(id, bool)` / `set_position_archived_in_memory(id, bool)` | Toggle archive flag (DB + memory) |
+| `delete_position_by_id(id)` / `remove_position_by_id(id)` | Hard delete (DB + memory) |
+| `delete_archived_positions()` | Bulk hard-delete all archived |
+| `POST /api/positions/:id/archive` | Archive a position |
+| `POST /api/positions/:id/unarchive` | Restore a position |
+| `DELETE /api/positions/:id` | Permanently delete a position |
+| `DELETE /api/positions/archived` | Permanently delete all archived |
+| `GET /api/positions?status=archived` | List archived positions |
+
+**Trade-slot accounting:** archiving or deleting a position that is still *open*
+frees its global semaphore permit (`release_global_position_permit`) so a new
+position can be opened; unarchiving an open position reclaims a permit
+(`try_consume_global_position_permit`). Removing does **not** sell — tokens stay
+in the wallet.
 
 ### System
 

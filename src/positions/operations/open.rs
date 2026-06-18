@@ -272,6 +272,9 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         dca_count: 0,
         average_entry_price: entry_price, // Initial entry price
         last_dca_time: None,
+        // New positions are never archived
+        archived: false,
+        archived_at: None,
     };
 
     // Save to database (with retry) and get ID

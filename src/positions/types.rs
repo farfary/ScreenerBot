@@ -118,6 +118,15 @@ pub struct Position {
     pub dca_count: u32,                       // Number of additional entries (DCA)
     pub average_entry_price: f64,             // Weighted average entry price (all entries)
     pub last_dca_time: Option<DateTime<Utc>>, // Last DCA timestamp for cooldown
+
+    // ==================== ARCHIVAL ====================
+    // User-driven "Remove -> Archive" from the dashboard. Reversible: archived
+    // positions are hidden from the open/closed lists and surfaced in the Archived
+    // tab. Not persisted by price/state updates — only by the dedicated archive ops.
+    #[serde(default)]
+    pub archived: bool, // True when the user archived this position
+    #[serde(default)]
+    pub archived_at: Option<DateTime<Utc>>, // When it was archived
 }
 
 // ==================== EXIT & ENTRY HISTORY ====================

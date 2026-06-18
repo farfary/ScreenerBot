@@ -84,6 +84,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ACTION_BAR_STYLES,
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,
+        POSITION_REMOVE_DIALOG_STYLES,
         SETUP_DIALOG_STYLES,
         CONTEXT_MENU_STYLES,
         ADVANCED_CHART_STYLES,

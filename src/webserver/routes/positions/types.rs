@@ -62,6 +62,9 @@ pub struct PositionResponse {
     pub average_exit_price: Option<f64>,
     pub remaining_token_amount: Option<u64>,
     pub total_exited_amount: u64,
+    // Archival
+    pub archived: bool,
+    pub archived_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]

@@ -19,6 +19,68 @@ impl PositionsDatabase {
         Ok(rows_affected > 0)
     }
 
+    /// Archive or unarchive a position by ID.
+    ///
+    /// Archival is a reversible flag — it does NOT delete any data. Archived
+    /// positions are hidden from the open/closed lists and surfaced in the
+    /// Archived tab. `archived_at` is stamped when archiving and cleared when
+    /// unarchiving. Deliberately separate from `update_position` so routine
+    /// price/state writes never clobber the flag.
+    pub async fn set_position_archived(&self, id: i64, archived: bool) -> Result<bool, String> {
+        let conn = self.get_connection()?;
+
+        let archived_at = if archived {
+            Some(Utc::now().to_rfc3339())
+        } else {
+            None
+        };
+
+        let rows_affected = conn
+            .execute(
+                "UPDATE positions SET archived = ?2, archived_at = ?3, updated_at = datetime('now') WHERE id = ?1",
+                params![id, archived, archived_at],
+            )
+            .map_err(|e| format!("Failed to set position archived flag: {e}"))?;
+
+        // Force WAL checkpoint so other pooled connections see the change immediately.
+        if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
+            let _ = stmt.query([]);
+        }
+
+        if rows_affected > 0 {
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Position {id} {}",
+                    if archived { "archived" } else { "unarchived" }
+                ),
+            );
+        }
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Delete all archived positions (hard delete). Returns the number removed.
+    ///
+    /// Cascades only to this position's own child rows (states, exits, entries,
+    /// tracking, snapshots) via `ON DELETE CASCADE`. Transactions/tokens untouched.
+    pub async fn delete_archived_positions(&self) -> Result<usize, String> {
+        let conn = self.get_connection()?;
+
+        let rows_affected = conn
+            .execute("DELETE FROM positions WHERE archived = 1", [])
+            .map_err(|e| format!("Failed to delete archived positions: {e}"))?;
+
+        if rows_affected > 0 {
+            logger::info(
+                LogTag::Positions,
+                &format!("Deleted {rows_affected} archived position(s)"),
+            );
+        }
+
+        Ok(rows_affected)
+    }
+
     /// Delete position by entry signature
     pub async fn delete_position_by_entry_signature(
         &self,

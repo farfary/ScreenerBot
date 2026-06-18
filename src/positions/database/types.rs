@@ -28,7 +28,8 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
   pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-  dca_count, average_entry_price, last_dca_time
+  dca_count, average_entry_price, last_dca_time,
+  archived, archived_at
 "#;
 
 pub(super) const SCHEMA_POSITIONS: &str = r#"
@@ -86,6 +87,9 @@ CREATE TABLE IF NOT EXISTS positions (
   dca_count INTEGER NOT NULL DEFAULT 0, -- Number of additional entries (DCA)
   average_entry_price REAL NOT NULL DEFAULT 0, -- Weighted average entry price
   last_dca_time TEXT, -- Last DCA timestamp for cooldown
+  -- Archival (dashboard "Remove -> Archive"; reversible, hides from open/closed lists)
+  archived BOOLEAN NOT NULL DEFAULT 0, -- True when user archived the position
+  archived_at TEXT, -- When the position was archived (RFC3339)
   -- Timestamps
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -222,6 +226,12 @@ ALTER TABLE positions ADD COLUMN unrealized_pnl REAL;
 ALTER TABLE positions ADD COLUMN unrealized_pnl_percent REAL;
 "#;
 
+pub(super) const MIGRATION_ADD_ARCHIVE_FIELDS: &str = r#"
+-- Add archival fields to positions table (safe migration - columns are nullable/defaulted)
+ALTER TABLE positions ADD COLUMN archived BOOLEAN NOT NULL DEFAULT 0;
+ALTER TABLE positions ADD COLUMN archived_at TEXT;
+"#;
+
 // Performance indexes
 pub(super) const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_positions_wallet ON positions(wallet_address);",
@@ -232,6 +242,7 @@ pub(super) const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_positions_entry_signature ON positions(entry_transaction_signature);",
     "CREATE INDEX IF NOT EXISTS idx_positions_exit_signature ON positions(exit_transaction_signature);",
     "CREATE INDEX IF NOT EXISTS idx_positions_state ON positions(id, position_type, exit_time);",
+    "CREATE INDEX IF NOT EXISTS idx_positions_archived ON positions(archived);",
     "CREATE INDEX IF NOT EXISTS idx_position_states_position_id ON position_states(position_id, changed_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_states_state ON position_states(state, changed_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_tracking_position_id ON position_tracking(position_id, tracked_at DESC);",

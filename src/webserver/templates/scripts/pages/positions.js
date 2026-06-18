@@ -7,11 +7,14 @@ import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
+import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { notificationManager } from "../core/notifications.js";
 
 const SUB_TABS = [
   { id: "open", label: '<i class="icon-trending-up"></i> Open' },
   { id: "closed", label: '<i class="icon-trending-down"></i> Closed' },
+  { id: "archived", label: '<i class="icon-archive"></i> Archived' },
 ];
 
 // Live-action wiring: the actions system streams every in-flight buy/sell as an
@@ -63,7 +66,8 @@ const loadPersistedSort = (stateKey) => {
 };
 
 const getInitialSortForView = (view) => {
-  const fallbackColumn = view === "closed" ? "exit_time" : "entry_time";
+  const fallbackColumn =
+    view === "archived" ? "archived_at" : view === "closed" ? "exit_time" : "entry_time";
   const persisted = loadPersistedSort(getPositionsTableStateKey(view));
   if (persisted?.column) {
     return { column: persisted.column, direction: persisted.direction || "desc" };
@@ -157,8 +161,95 @@ function createLifecycle() {
     return `<span class="chip ${cls}">${pct}%</span>`;
   };
 
+  // Compact "Remove" (archive/delete) button for closed rows.
+  const removeActionCell = (row) => {
+    const id = row?.id;
+    if (id == null) return "—";
+    return `<div class="row-actions">
+      <button class="btn row-action row-action--icon" data-action="remove" data-id="${Utils.escapeHtml(
+        String(id)
+      )}" data-mint="${Utils.escapeHtml(
+        row?.mint || ""
+      )}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
+    </div>`;
+  };
+
+  // Restore + permanent-delete buttons for archived rows.
+  const archivedActionCell = (row) => {
+    const id = row?.id;
+    if (id == null) return "—";
+    const idAttr = Utils.escapeHtml(String(id));
+    const mintAttr = Utils.escapeHtml(row?.mint || "");
+    return `<div class="row-actions">
+      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" title="Restore to Open/Closed"><i class="icon-rotate-ccw"></i> Restore</button>
+      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" title="Delete permanently" aria-label="Delete permanently"><i class="icon-trash-2"></i></button>
+    </div>`;
+  };
+
+  const buildArchivedColumns = () => [
+    {
+      id: "token",
+      label: "Token",
+      sortable: true,
+      minWidth: 180,
+      wrap: false,
+      render: (_v, r) => tokenCell(r),
+    },
+    {
+      id: "actions",
+      label: "Actions",
+      sortable: false,
+      minWidth: 170,
+      wrap: false,
+      render: (_v, row) => archivedActionCell(row),
+    },
+    {
+      id: "archived_at",
+      label: "Archived",
+      sortable: true,
+      minWidth: 140,
+      render: (v, r) => timeCell(v ?? r.exit_time ?? r.entry_time),
+    },
+    {
+      id: "entry_time",
+      label: "Entry Time",
+      sortable: true,
+      minWidth: 140,
+      render: (v) => timeCell(v),
+    },
+    {
+      id: "average_entry_price",
+      label: "Avg Entry (SOL)",
+      sortable: true,
+      minWidth: 140,
+      render: (v, r) => priceCell(v || r.entry_price),
+    },
+    {
+      id: "total_size_sol",
+      label: "Total Invested",
+      sortable: true,
+      minWidth: 120,
+      render: (v) => solCell(v),
+    },
+    {
+      id: "sol_received",
+      label: "Proceeds",
+      sortable: true,
+      minWidth: 110,
+      render: (v) => (v == null ? "—" : solCell(v)),
+    },
+    { id: "pnl", label: "PnL", sortable: true, minWidth: 110, render: (v) => pnlCell(v) },
+    {
+      id: "pnl_percent",
+      label: "PnL %",
+      sortable: true,
+      minWidth: 100,
+      render: (v) => percentCell(v),
+    },
+  ];
+
   /**
-   * Build columns array based on current view (open/closed)
+   * Build columns array based on current view (open/closed/archived)
    * Different views show different columns (open has unrealized PnL, closed has exit data)
    */
   const buildColumns = () => {
@@ -193,14 +284,13 @@ function createLifecycle() {
             // user can see the trade is in flight without being able to double-fire.
             const busy = row?._state === "selling" || row?._state === "closing";
             const dis = busy ? " disabled" : "";
+            const mintAttr = Utils.escapeHtml(mint);
+            const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
             return `
               <div class="row-actions">
-                <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
-                  mint
-                )}" title="Add to position (DCA)"${dis}><i class="icon-circle-plus"></i> Add</button>
-                <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
-                  mint
-                )}" title="Sell (full or % partial)"${dis}><i class="icon-trending-down"></i> Sell</button>
+                <button class="btn row-action" data-action="add" data-mint="${mintAttr}" title="Add to position (DCA)"${dis}><i class="icon-circle-plus"></i> Add</button>
+                <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="Sell (full or % partial)"${dis}><i class="icon-trending-down"></i> Sell</button>
+                <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
               </div>
             `;
           },
@@ -269,6 +359,8 @@ function createLifecycle() {
           render: (v) => percentCell(v),
         },
       ];
+    } else if (state.view === "archived") {
+      return buildArchivedColumns();
     } else {
       // closed view
       return [
@@ -279,6 +371,14 @@ function createLifecycle() {
           minWidth: 180,
           wrap: false,
           render: (_v, r) => tokenCell(r),
+        },
+        {
+          id: "actions",
+          label: "Actions",
+          sortable: false,
+          minWidth: 90,
+          wrap: false,
+          render: (_v, row) => removeActionCell(row),
         },
         {
           id: "exit_time",
@@ -344,10 +444,12 @@ function createLifecycle() {
   const updateToolbar = () => {
     if (!table) return;
 
+    const viewLabel =
+      state.view === "open" ? "Open" : state.view === "archived" ? "Archived" : "Closed";
     table.updateToolbarSummary([
       {
         id: "positions-total",
-        label: state.view === "open" ? "Open" : "Closed",
+        label: viewLabel,
         value: Utils.formatNumber(state.total, 0),
       },
     ]);
@@ -538,8 +640,95 @@ function createLifecycle() {
     }
   };
 
+  // Handle remove (archive/delete) / restore / delete actions on a position row.
+  const handleLifecycleAction = async (action, row, btn) => {
+    if (!row || row.id == null) {
+      Utils.showToast("Position data not found", "error");
+      return;
+    }
+    const id = row.id;
+    const symbol = row.symbol || "?";
+
+    try {
+      if (action === "remove") {
+        const isOpen = !row.transaction_exit_verified;
+        const choice = await PositionRemoveDialog.show({ symbol, mint: row.mint, isOpen });
+        if (!choice?.confirmed) return;
+
+        if (btn) btn.disabled = true;
+        if (choice.mode === "delete") {
+          await requestManager.fetch(`/api/positions/${id}`, { method: "DELETE", priority: "high" });
+          Utils.showToast("Position deleted", "success");
+        } else {
+          await requestManager.fetch(`/api/positions/${id}/archive`, {
+            method: "POST",
+            priority: "high",
+          });
+          Utils.showToast("Position archived", "success");
+        }
+      } else if (action === "restore") {
+        if (btn) btn.disabled = true;
+        await requestManager.fetch(`/api/positions/${id}/unarchive`, {
+          method: "POST",
+          priority: "high",
+        });
+        Utils.showToast("Position restored", "success");
+      } else if (action === "delete") {
+        const confirmed = await ConfirmationDialog.show({
+          title: "Delete position permanently",
+          message: `Permanently delete ${symbol}? This removes the position and its history from the database and cannot be undone. Your transactions and token data are not affected.`,
+          confirmLabel: "Delete permanently",
+          cancelLabel: "Cancel",
+          variant: "danger",
+        });
+        if (!confirmed?.confirmed) return;
+        if (btn) btn.disabled = true;
+        await requestManager.fetch(`/api/positions/${id}`, { method: "DELETE", priority: "high" });
+        Utils.showToast("Position deleted", "success");
+      }
+      table.refresh({ reason: "manual", preserveScroll: true });
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      Utils.showToast(err?.message || "Action failed", "error");
+    }
+  };
+
+  // Bulk permanent delete of every archived position.
+  const handleDeleteAllArchived = async () => {
+    const count = state.total;
+    const confirmed = await ConfirmationDialog.show({
+      title: "Delete all archived positions",
+      message:
+        count > 0
+          ? `Permanently delete all ${count} archived position(s)? This cannot be undone. Transactions and token data are not affected.`
+          : "Permanently delete all archived positions? This cannot be undone.",
+      confirmLabel: "Delete all",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
+    if (!confirmed?.confirmed) return;
+    try {
+      const res = await requestManager.fetch("/api/positions/archived", {
+        method: "DELETE",
+        priority: "high",
+      });
+      Utils.showToast(`Deleted ${res?.deleted ?? 0} archived position(s)`, "success");
+      table.refresh({ reason: "manual", preserveScroll: true });
+    } catch (err) {
+      Utils.showToast(err?.message || "Failed to delete archived positions", "error");
+    }
+  };
+
+  // Show the "Delete all archived" toolbar button only in the archived view.
+  const syncArchivedTools = () => {
+    const btn = document.querySelector(
+      '#positions-root .table-toolbar-btn[data-btn-id="delete-all-archived"]'
+    );
+    if (btn) btn.hidden = state.view !== "archived";
+  };
+
   const switchView = (view) => {
-    if (view !== "open" && view !== "closed") return;
+    if (view !== "open" && view !== "closed" && view !== "archived") return;
     state.view = view;
     state.sort = getInitialSortForView(view);
     // Drop the previous view's cached rows so a live tick can't merge stale data.
@@ -565,6 +754,7 @@ function createLifecycle() {
       table.reload({ reason: "view-change", resetScroll: true }).catch(() => {});
     }
     updateToolbar();
+    syncArchivedTools();
   };
 
   return {
@@ -641,10 +831,22 @@ function createLifecycle() {
             mode: "client",
             placeholder: "Search by symbol or mint...",
           },
+          buttons: [
+            {
+              id: "delete-all-archived",
+              label: "Delete all",
+              icon: "icon-trash-2",
+              variant: "danger",
+              tooltip: "Permanently delete all archived positions",
+              onClick: () => handleDeleteAllArchived(),
+            },
+          ],
         },
       });
 
       updateToolbar();
+      // The delete-all button only applies to the Archived view.
+      syncArchivedTools();
 
       // Row actions: delegate clicks on the table container
       const containerEl = document.querySelector("#positions-root");
@@ -653,7 +855,19 @@ function createLifecycle() {
         if (!btn) return;
         const action = btn.getAttribute("data-action");
         const mint = btn.getAttribute("data-mint");
-        if (!action || !mint) return;
+        if (!action) return;
+
+        // ID-based lifecycle actions (mint is not unique — a token can have many
+        // positions, so these must target the exact row by id).
+        if (action === "remove" || action === "restore" || action === "delete") {
+          const id = btn.getAttribute("data-id");
+          if (!id) return;
+          const target = table.getData().find((r) => String(r.id) === id);
+          await handleLifecycleAction(action, target, btn);
+          return;
+        }
+
+        if (!mint) return;
 
         // Find row data
         const row = table.getData().find((r) => r.mint === mint);

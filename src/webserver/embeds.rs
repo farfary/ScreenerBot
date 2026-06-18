@@ -125,6 +125,8 @@ pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
 pub(super) const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
+pub(super) const POSITION_REMOVE_DIALOG_STYLES: &str =
+    include_str!("templates/styles/ui/position_remove_dialog.css");
 pub(super) const SETUP_DIALOG_STYLES: &str = include_str!("templates/styles/ui/setup_dialog.css");
 pub(super) const CONTEXT_MENU_STYLES: &str = include_str!("templates/styles/ui/context_menu.css");
 pub(super) const ADVANCED_CHART_STYLES: &str =
@@ -260,6 +262,8 @@ pub const TOAST_UI: &str = include_str!("templates/scripts/ui/toast.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");
 pub const CONFIRMATION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/confirmation_dialog.js");
+pub const POSITION_REMOVE_DIALOG_UI: &str =
+    include_str!("templates/scripts/ui/position_remove_dialog.js");
 pub const TRADE_ACTION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/trade_action_dialog.js");
 pub const TRADE_ACTION_QUICK_TRADE_JS: &str =

@@ -118,6 +118,36 @@ impl PositionsDatabase {
             }
         }
 
+        // Migrate existing database to add archival fields if needed
+        match conn.execute_batch(MIGRATION_ADD_ARCHIVE_FIELDS) {
+            Ok(_) => {
+                if log_initialization {
+                    crate::logger::info(
+                        crate::logger::LogTag::Positions,
+                        "Archival columns migration completed successfully",
+                    );
+                }
+            }
+            Err(e) => {
+                let err_msg = e.to_string().to_lowercase();
+                // SQLite returns "duplicate column name" if columns already exist - this is OK
+                if err_msg.contains("duplicate column") {
+                    if log_initialization {
+                        crate::logger::debug(
+                            crate::logger::LogTag::Positions,
+                            "Archival columns already exist, skipping migration",
+                        );
+                    }
+                } else {
+                    crate::logger::error(
+                        crate::logger::LogTag::Positions,
+                        &format!("CRITICAL: Failed to migrate archival columns: {e}"),
+                    );
+                    return Err(format!("Database migration failed: {e}"));
+                }
+            }
+        }
+
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {
             conn.execute(index_sql, [])
@@ -664,6 +694,11 @@ impl PositionsDatabase {
             None
         };
 
+        let archived_at = match row.get::<_, Option<String>>("archived_at") {
+            Ok(Some(archived_str)) => Self::parse_datetime_lenient(&archived_str).ok(),
+            _ => None,
+        };
+
         Ok(Position {
             id: Some(row.get("id")?),
             mint: row.get("mint")?,
@@ -720,6 +755,13 @@ impl PositionsDatabase {
             dca_count: row.get::<_, i64>("dca_count")? as u32,
             average_entry_price: row.get("average_entry_price")?,
             last_dca_time,
+            // Archival (default false for legacy rows / pre-migration reads)
+            archived: row
+                .get::<_, Option<bool>>("archived")
+                .ok()
+                .flatten()
+                .unwrap_or(false),
+            archived_at,
         })
     }
 }

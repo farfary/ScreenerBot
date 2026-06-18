@@ -125,6 +125,46 @@
   color: #6ee7b7;
 }
 
+/* Restore button (archived view) - neutral accent */
+.row-actions .btn.row-action[data-action="restore"] {
+  background: rgb(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border-color: rgb(148, 163, 184, 0.28);
+}
+
+.row-actions .btn.row-action[data-action="restore"]:hover {
+  background: rgb(148, 163, 184, 0.2);
+  border-color: rgb(148, 163, 184, 0.45);
+  color: #e2e8f0;
+}
+
+/* Remove (archive/delete) icon button - muted until hover */
+.row-actions .btn.row-action--icon {
+  padding: 6px 8px;
+  background: rgb(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border-color: rgb(148, 163, 184, 0.22);
+}
+
+.row-actions .btn.row-action--icon:hover {
+  background: rgb(148, 163, 184, 0.18);
+  border-color: rgb(148, 163, 184, 0.4);
+  color: #e2e8f0;
+}
+
+/* Permanent-delete icon button - red accent */
+.row-actions .btn.row-action--danger {
+  background: rgb(239, 68, 68, 0.12);
+  color: #f87171;
+  border-color: rgb(239, 68, 68, 0.28);
+}
+
+.row-actions .btn.row-action--danger:hover {
+  background: rgb(239, 68, 68, 0.25);
+  border-color: rgb(239, 68, 68, 0.55);
+  color: #fca5a5;
+}
+
 /* Disabled state */
 .row-actions .btn:disabled {
   opacity: 0.4;

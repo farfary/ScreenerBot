@@ -161,6 +161,21 @@ pub fn release_global_position_permit() {
     );
 }
 
+/// Try to consume one global position permit at runtime (e.g. when an already-open
+/// position is unarchived and re-enters active management). Returns true if a slot
+/// was available. The permit is `forget()`-ten so it stays consumed for the
+/// position's lifetime, matching how open positions hold their slot.
+pub fn try_consume_global_position_permit() -> bool {
+    let semaphore = get_global_position_semaphore();
+    match semaphore.try_acquire() {
+        Ok(permit) => {
+            permit.forget();
+            true
+        }
+        Err(_) => false,
+    }
+}
+
 /// Add position to state
 pub async fn add_position(position: Position) -> usize {
     let mut positions = POSITIONS.write().await;
@@ -283,6 +298,51 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
     }
 }
 
+/// Set the archived flag (and archived_at) on an in-memory position by ID.
+/// Returns true if a matching position was found and updated.
+pub async fn set_position_archived_in_memory(position_id: i64, archived: bool) -> bool {
+    update_position_state_by_id(position_id, |p| {
+        p.archived = archived;
+        p.archived_at = if archived { Some(Utc::now()) } else { None };
+    })
+    .await
+}
+
+/// Remove a position from state by database ID (mint is not unique — a token can
+/// have multiple positions, so deletes must target the exact row).
+pub async fn remove_position_by_id(position_id: i64) -> Option<Position> {
+    let mut positions = POSITIONS.write().await;
+
+    if let Some(index) = positions.iter().position(|p| p.id == Some(position_id)) {
+        let removed = positions.remove(index);
+
+        // Update indexes (mirror remove_position)
+        if let Some(ref sig) = removed.entry_transaction_signature {
+            SIG_TO_MINT_INDEX.write().await.remove(sig);
+        }
+        if let Some(ref sig) = removed.exit_transaction_signature {
+            SIG_TO_MINT_INDEX.write().await.remove(sig);
+        }
+        MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
+
+        {
+            let mut locks = POSITION_LOCKS.write().await;
+            locks.remove(&removed.mint);
+        }
+
+        {
+            let mut pending = PENDING_OPEN_SWAPS.write().await;
+            pending.remove(&removed.mint);
+        }
+
+        rebuild_position_indexes(&positions).await;
+
+        Some(removed)
+    } else {
+        None
+    }
+}
+
 /// Rebuild position indexes after removal
 async fn rebuild_position_indexes(positions: &[Position]) {
     let mut mint_to_index = MINT_TO_POSITION_INDEX.write().await;
@@ -306,13 +366,14 @@ pub async fn get_position_by_mint(mint: &str) -> Option<Position> {
     positions.iter().find(|p| p.mint == mint).cloned()
 }
 
-/// Get all open positions
+/// Get all open positions (archived positions are excluded — they live in the Archived tab)
 pub async fn get_open_positions() -> Vec<Position> {
     let positions = POSITIONS.read().await;
     positions
         .iter()
         .filter(|p| {
-            p.position_type == "buy"
+            !p.archived
+                && p.position_type == "buy"
                 && p.exit_time.is_none()
                 && (p.exit_transaction_signature.is_none() || !p.transaction_exit_verified)
         })
@@ -320,14 +381,20 @@ pub async fn get_open_positions() -> Vec<Position> {
         .collect()
 }
 
-/// Get all closed positions
+/// Get all closed positions (archived positions are excluded — they live in the Archived tab)
 pub async fn get_closed_positions() -> Vec<Position> {
     let positions = POSITIONS.read().await;
     positions
         .iter()
-        .filter(|p| p.transaction_exit_verified)
+        .filter(|p| !p.archived && p.transaction_exit_verified)
         .cloned()
         .collect()
+}
+
+/// Get all archived positions (user removed them from the open/closed lists)
+pub async fn get_archived_positions() -> Vec<Position> {
+    let positions = POSITIONS.read().await;
+    positions.iter().filter(|p| p.archived).cloned().collect()
 }
 
 /// Get count of open positions

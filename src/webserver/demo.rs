@@ -318,6 +318,8 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 average_exit_price: None,
                 remaining_token_amount: Some((size / entry * 1e9) as u64),
                 total_exited_amount: 0,
+                archived: false,
+                archived_at: None,
             });
             id_counter += 1;
         }
@@ -376,6 +378,8 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 average_exit_price: Some(*exit),
                 remaining_token_amount: None,
                 total_exited_amount: (size / entry * 1e9) as u64,
+                archived: false,
+                archived_at: None,
             });
             id_counter += 1;
         }

@@ -32,9 +32,11 @@ pub async fn load_positions_with_filters(
     let positions: Vec<positions::Position> = match status {
         "open" => positions::get_open_positions().await,
         "closed" => positions::get_closed_positions().await,
+        "archived" => positions::get_archived_positions().await,
         _ => {
+            // "all" excludes archived so they only appear in the Archived tab.
             let positions_guard = positions::POSITIONS.read().await;
-            positions_guard.clone()
+            positions_guard.iter().filter(|p| !p.archived).cloned().collect()
         }
     };
 
@@ -116,6 +118,8 @@ fn map_position_to_response_with_logo(
         average_exit_price: p.average_exit_price,
         remaining_token_amount: p.remaining_token_amount,
         total_exited_amount: p.total_exited_amount,
+        archived: p.archived,
+        archived_at: p.archived_at.map(|dt| dt.timestamp()),
     }
 }
 
