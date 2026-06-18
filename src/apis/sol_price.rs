@@ -1,14 +1,22 @@
 //! SOL Price Service
 //!
-//! Provides real-time SOL price data from Jupiter API for accurate USD conversions
-//! and trading calculations. This service runs as a background task and maintains
-//! cached SOL price data for the entire bot ecosystem.
+//! Provides real-time SOL/USD price for USD conversions and trading calculations.
+//! Runs as a background task and maintains a cached price for the whole bot.
+//!
+//! **Source cascade (in priority order):**
+//! 1. DexScreener — primary (highest-liquidity WSOL pair `priceUsd`)
+//! 2. GeckoTerminal — secondary (`simple/.../token_price`)
+//! 3. Jupiter — last-resort fallback (`lite-api.jup.ag/price/v3`)
+//!
+//! Keeping SOL price OFF Jupiter by default is deliberate: Jupiter's free
+//! lite-api rate-limits per-IP across all endpoints, and that budget must be
+//! reserved for swap quote/swap. Each source is tried in order so one provider's
+//! outage or rate-limit never blocks trading.
 //!
 //! **Key Features:**
-//! - Real-time SOL price fetching from Jupiter API
+//! - Multi-source price fetching with automatic failover
 //! - Automatic price caching and refresh cycles
 //! - Graceful shutdown handling
-//! - Error resilience with fallback mechanisms
 //! - Thread-safe price access for concurrent operations
 
 use crate::logger::{self, LogTag};
@@ -24,7 +32,18 @@ use tokio::time::{interval, sleep};
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// Jupiter API endpoint for SOL price
+/// WSOL mint (SOL/USD is quoted as the price of wrapped SOL).
+const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
+
+/// DexScreener token endpoint for WSOL — PRIMARY source.
+const DEXSCREENER_SOL_URL: &str =
+    "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112";
+
+/// GeckoTerminal simple token-price endpoint for WSOL — SECONDARY source.
+const GECKOTERMINAL_SOL_URL: &str =
+    "https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/So11111111111111111111111111111111111111112";
+
+/// Jupiter price endpoint — LAST-RESORT fallback (shares the swap rate budget).
 const JUPITER_PRICE_API: &str =
     "https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112";
 
@@ -167,7 +186,7 @@ pub fn is_sol_price_service_running() -> bool {
 /// Manually fetch and cache SOL price (useful for debug tools)
 /// Returns the fetched price on success
 pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
-    let price = fetch_sol_price_from_jupiter().await?;
+    let (price, source) = fetch_sol_price().await?;
 
     // Update cache
     match SOL_PRICE_CACHE.write() {
@@ -175,7 +194,7 @@ pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
             *cache = SolPriceData {
                 price_usd: price,
                 last_updated: Instant::now(),
-                source: "Jupiter API (manual)".to_owned(),
+                source: format!("{source} (manual)"),
                 is_valid: true,
                 fetch_count: cache.fetch_count + 1,
                 error_count: cache.error_count,
@@ -277,16 +296,16 @@ async fn sol_price_task(shutdown: Arc<Notify>) {
 
 /// Fetch SOL price from Jupiter API and update cache
 async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
-    logger::debug(LogTag::SolPrice, "Fetching SOL price from Jupiter API");
+    logger::debug(LogTag::SolPrice, "Fetching SOL price (DexScreener -> GeckoTerminal -> Jupiter)");
 
-    match fetch_sol_price_from_jupiter().await {
-        Ok(price) => {
+    match fetch_sol_price().await {
+        Ok((price, source)) => {
             if validate_price_change(price) {
-                update_price_cache(price, "jupiter_api".to_owned(), true).await;
+                update_price_cache(price, source.to_owned(), true).await;
                 *consecutive_errors = 0; // Reset error counter on success
                 logger::debug(
                     LogTag::SolPrice,
-                    &format!("SOL price updated: ${:.4}", price),
+                    &format!("SOL price updated: ${:.4} (source: {})", price, source),
                 );
             } else {
                 logger::warning(
@@ -319,7 +338,140 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
     }
 }
 
-/// Fetch SOL price from Jupiter API
+/// Fetch SOL/USD using the source cascade: DexScreener -> GeckoTerminal -> Jupiter.
+/// Returns `(price_usd, source_label)`. Each source is tried in order; on failure
+/// the next is used so a single provider's outage/rate-limit never blocks trading.
+async fn fetch_sol_price() -> Result<(f64, &'static str), String> {
+    let mut errors: Vec<String> = Vec::new();
+
+    match fetch_from_dexscreener().await {
+        Ok(price) => return Ok((price, "dexscreener")),
+        Err(e) => {
+            logger::debug(LogTag::SolPrice, &format!("DexScreener SOL price failed: {e}"));
+            errors.push(format!("dexscreener: {e}"));
+        }
+    }
+
+    match fetch_from_geckoterminal().await {
+        Ok(price) => return Ok((price, "geckoterminal")),
+        Err(e) => {
+            logger::debug(
+                LogTag::SolPrice,
+                &format!("GeckoTerminal SOL price failed: {e}"),
+            );
+            errors.push(format!("geckoterminal: {e}"));
+        }
+    }
+
+    match fetch_sol_price_from_jupiter().await {
+        Ok(price) => {
+            logger::warning(
+                LogTag::SolPrice,
+                "SOL price fell back to Jupiter (DexScreener + GeckoTerminal both failed)",
+            );
+            return Ok((price, "jupiter"));
+        }
+        Err(e) => errors.push(format!("jupiter: {e}")),
+    }
+
+    Err(format!("All SOL price sources failed: {}", errors.join("; ")))
+}
+
+/// PRIMARY: fetch SOL/USD from DexScreener — the `priceUsd` of the highest-liquidity
+/// pair whose BASE token is WSOL (so the price is SOL's, not the quote token's).
+async fn fetch_from_dexscreener() -> Result<f64, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(DEXSCREENER_SOL_URL)
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("JSON parsing failed: {e}"))?;
+
+    let pairs = json
+        .get("pairs")
+        .and_then(|p| p.as_array())
+        .ok_or("no pairs in response")?;
+
+    let mut best: Option<(f64, f64)> = None; // (price_usd, liquidity_usd)
+    for pair in pairs {
+        let base_is_wsol = pair
+            .get("baseToken")
+            .and_then(|b| b.get("address"))
+            .and_then(|a| a.as_str())
+            == Some(WSOL_MINT);
+        if !base_is_wsol {
+            continue;
+        }
+        let price = pair
+            .get("priceUsd")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<f64>().ok());
+        let liquidity = pair
+            .get("liquidity")
+            .and_then(|l| l.get("usd"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        if let Some(price) = price {
+            if price > 0.0 && price.is_finite() && best.map_or(true, |(_, l)| liquidity > l) {
+                best = Some((price, liquidity));
+            }
+        }
+    }
+
+    match best {
+        Some((price, _)) => Ok(price),
+        None => Err("no valid WSOL pair price".to_owned()),
+    }
+}
+
+/// SECONDARY: fetch SOL/USD from GeckoTerminal's simple token-price endpoint.
+async fn fetch_from_geckoterminal() -> Result<f64, String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(GECKOTERMINAL_SOL_URL)
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("JSON parsing failed: {e}"))?;
+
+    let price_str = json
+        .pointer("/data/attributes/token_prices")
+        .and_then(|m| m.as_object())
+        .and_then(|m| m.values().next())
+        .and_then(|v| v.as_str())
+        .ok_or("no token price in response")?;
+
+    let price: f64 = price_str
+        .parse()
+        .map_err(|e| format!("price parse failed: {e}"))?;
+
+    if price > 0.0 && price.is_finite() {
+        Ok(price)
+    } else {
+        Err(format!("invalid price: {price}"))
+    }
+}
+
+/// LAST-RESORT: fetch SOL price from Jupiter API
 async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
     // Yield to in-flight swaps and space against other background Jupiter calls
     // so price polling never starves the swap rate budget (lite-api is per-IP).

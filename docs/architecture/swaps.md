@@ -317,46 +317,57 @@ Enabling:
 
 - `is_enabled()` reads `cfg.swaps.jupiter.enabled` (default true)
 
-API key model:
+API key model (key is OPTIONAL):
 
-- The header `x-api-key` is always sent.
-- The key is read from `cfg.swaps.jupiter.api_key`.
-- If missing, a placeholder `"YOUR_JUPITER_API_KEY"` is used (this is intentional and will typically fail until configured).
+- Default (no key): requests go to the FREE endpoint `https://lite-api.jup.ag`.
+- If `cfg.swaps.jupiter.api_key` is set: requests go to `https://api.jup.ag` and the
+  `x-api-key` header is added (higher rate-limit tier from portal.jup.ag).
+- The API key ONLY affects rate limits. It does NOT affect swap fees or the
+  referral revenue share — referral works fully keyless.
+
+Rate-limit resilience (free tier limits hard, per-IP, across all endpoints):
+
+- `jupiter_send_with_retry(...)` wraps both the quote (GET) and swap (POST) calls
+  with retry + exponential backoff on HTTP 429, 5xx, and network errors. It honors
+  a `Retry-After` header when present. 4xx (e.g. 400 = no route) is NOT retried.
+  Retrying the `/swap` call is safe because it only BUILDS an unsigned transaction.
+- A swap holds a `crate::apis::jupiter::throttle::swap_guard()` for the whole
+  quote/swap so background Jupiter callers (SOL price fallback, token discovery,
+  health monitor, multi-wallet tool) defer to it and don't steal the shared budget.
+  See `src/apis/jupiter/throttle.rs`.
 
 #### 9.1.1 Quote flow (GET `/swap/v1/quote`)
 
-1. Compute slippage bps:
+1. Acquire a `swap_guard()` (priority over background Jupiter traffic).
+2. Compute slippage bps:
    - `slippage_bps = ((slippage_pct * 100.0).round() as u16).max(1)`
-2. Token2022 detection:
-   - calls `tokens::decimals::is_token_2022(mint)` for input and output
-   - if either is Token2022:
-     - skip platform fee (`platformFeeBps = None`)
-3. Build `JupiterQuoteRequest` and send:
-   - `GET https://api.jup.ag/swap/v1/quote`
-   - query params include `inputMint`, `outputMint`, `amount`, `slippageBps`, `swapMode`, and optional `platformFeeBps`
+3. Build `JupiterQuoteRequest` and send (via `jupiter_send_with_retry`):
+   - `GET {base}/swap/v1/quote` where base = lite-api (keyless) or api.jup.ag (keyed)
+   - query params: `inputMint`, `outputMint`, `amount`, `slippageBps`, `swapMode`,
+     `platformFeeBps` (always `REFERRAL_FEE_BPS` = 50), optional `excludeDexes`, and
+     **`instructionVersion=V2`** (REQUIRED so the platform fee can be collected on
+     Token2022 tokens — see §10).
 4. Read the response body as text.
-5. Parse a limited struct (`JupiterQuoteResponse`) to extract:
-   - `outAmount` (output amount)
-   - `priceImpactPct`
-   - `routePlan` (converted to a human-readable label chain)
-6. Store the *raw* JSON bytes as `Quote.execution_data`.
+5. Parse a limited struct (`JupiterQuoteResponse`) for `outAmount`, `priceImpactPct`,
+   `routePlan`.
+6. Store the *raw* JSON bytes as `Quote.execution_data` (preserves `platformFee` etc.).
 
 #### 9.1.2 Swap flow (POST `/swap/v1/swap`)
 
-1. Deserialize `Quote.execution_data` into `serde_json::Value` (quoteResponse).
-2. Token2022 detection is repeated (current implementation does not carry it from quote).
-3. Referral fee account selection:
-   - if Token2022: `feeAccount = None`
-   - otherwise `feeAccount` is selected based on whether input/output is WSOL or USDC
+1. Acquire a `swap_guard()`.
+2. Deserialize `Quote.execution_data` into `serde_json::Value` (quoteResponse).
+3. Referral fee account selection via the shared `referral_fee_account(input, output)`
+   helper: always returns the WSOL or USDC referral token account (we always trade
+   against SOL/USDC, so one side matches). Token2022 is NOT skipped anymore.
 4. Build `JupiterSwapRequest` including:
    - `userPublicKey`
    - `quoteResponse`
    - `dynamicComputeUnitLimit = cfg.swaps.jupiter.dynamic_compute_unit_limit`
    - `prioritizationFeeLamports = cfg.swaps.jupiter.default_priority_fee`
-   - `feeAccount` (optional)
-5. Send:
-   - `POST https://api.jup.ag/swap/v1/swap`
-   - JSON body, `Content-Type: application/json`, `x-api-key` header
+   - `feeAccount` (the referral token account)
+5. Send (via `jupiter_send_with_retry`):
+   - `POST {base}/swap/v1/swap`, JSON body, `Content-Type: application/json`,
+     `x-api-key` header only when a key is configured
 6. Parse `swapTransaction` (base64 string).
 7. Submit via RPC:
    - `rpc_client.sign_send_and_confirm_transaction_simple(&swapTransaction)`
@@ -432,23 +443,37 @@ The router stores `SwapData` as JSON in `Quote.execution_data`.
 
 **File:** `src/swaps/routers/jupiter.rs`
 
-Fee collection is intentionally hardcoded and not configurable:
+Fee collection is intentionally hardcoded and not configurable (it is the revenue):
 
 - `REFERRAL_FEE_BPS = 50` (0.5%)
+- Referral token accounts (proper Jupiter Referral Program PDAs):
+  - WSOL: `9yiZThTzanryu3mg1VVu6Qy4HiqKhydCAUqcasLHPxWB`
+  - USDC: `3kmcF3DFGFRKXeC5v5AMzwpsdj2Uc3Z7a5KrojtWv2GW`
+  - Both have token authority `FnTdf2xmCUXrW7PMRtsSiQsnCzGZ31HTY2Sb36vfWtVn`, which is
+    owned by the Jupiter Referral Program `REFER4ZgmyYx9c6He5XfaTMiGfdLwRnkV4RPp9t9iF3`.
 
 Jupiter fee mechanics used:
 
-- Quote request includes `platformFeeBps` (unless Token2022).
-- Swap request includes `feeAccount` (unless Token2022).
+- Quote request: `platformFeeBps = 50` (always) + `instructionVersion = V2`.
+- Swap request: `feeAccount` = the WSOL/USDC referral account (always).
+- The fee is charged on the SOL/USDC side of the pair, so a single WSOL referral
+  account collects on BOTH directions:
+  - Buy (SOL→token): fee taken on input WSOL.
+  - Sell (token→SOL): fee taken on output WSOL.
+- The quote's `platformFee` field is displayed in the OUTPUT mint, but the actual
+  collection side follows the `feeAccount` mint we pass (WSOL).
 
-Token2022 handling:
+Token2022 handling (FIXED — was previously skipped):
 
-- If either side of the swap is Token2022:
-  - platform fee is skipped
-  - fee account is skipped
+- Older code skipped fees entirely for Token2022 to avoid `IncorrectTokenProgramID`
+  (custom error `0x177e` / 6014). Since most pump.fun tokens are now Token2022, that
+  leaked the majority of referral revenue.
+- Adding `instructionVersion=V2` to the quote lets Jupiter collect the fee on the
+  SOL/USDC side even when the other side is Token2022, with no `0x177e`. Verified by
+  simulation (default → `0x177e`; V2 → ok) and by real on-chain swaps.
 
-This avoids failures like `IncorrectTokenProgramID` when Jupiter attempts to collect fees
-on Token2022 mints.
+API access: referral fees work on the FREE `lite-api.jup.ag` (no API key). The key
+only changes the rate-limit tier, never the fee/referral.
 
 ---
 
@@ -467,7 +492,13 @@ matches!(
 
 Everything else is treated as non-retryable and fails immediately.
 
-Routers can also implement internal retry logic (GMGN does).
+Routers also implement internal retry logic:
+
+- Jupiter: `jupiter_send_with_retry` retries quote/swap on HTTP 429 / 5xx / network
+  with exponential backoff (honors `Retry-After`). This matters because Jupiter is
+  usually the only enabled router, so the cross-router fallback above can't help —
+  the in-router retry is what survives lite-api rate limits.
+- GMGN: a 3-attempt linear-backoff retry loop (see §9.2.1).
 
 ---
 
@@ -478,8 +509,8 @@ The swaps module depends on:
 - `config` (`cfg.swaps.*` for router enablement + per-router parameters)
 - `rpc` (`sign_send_and_confirm_transaction_simple`)
 - `tokens`:
-  - Jupiter uses `tokens::decimals::is_token_2022` to decide fee compatibility
   - opening quote helper can blacklist tokens on no-route failures
+- `apis::jupiter::throttle`: swap-priority gate shared with all Jupiter callers
 - `connectivity`:
   - GMGN is gated on internet+rpc health
 - `events`:

@@ -24,6 +24,7 @@
 The `apis` module is ScreenerBot's integration layer for **external HTTP APIs** (anything that is not Solana RPC):
 
 * **Market data / pool discovery**: DexScreener, GeckoTerminal
+* **SOL/USD price**: DexScreener → GeckoTerminal → Jupiter (cascade, see §7)
 * **Security**: Rugcheck
 * **Token discovery / trends**: Jupiter
 * **Reference datasets**: CoinGecko, DefiLlama
@@ -267,6 +268,20 @@ Implemented endpoints:
 * `/toptraded/{interval}`
 * `/toptrending/{interval}`
 
+#### Jupiter shared rate-budget throttle
+
+**File:** `src/apis/jupiter/throttle.rs`
+
+Jupiter's free `lite-api.jup.ag` rate-limits **per-IP across all endpoints**, so
+background callers (SOL price fallback, this discovery client's 4 list fetches, the
+health monitor, the multi-wallet tool) can starve swap quote/swap — the revenue path.
+The throttle gives swaps priority:
+
+* Swaps hold `throttle::swap_guard()` for the whole quote/swap (see swaps.md §9.1).
+* Background Jupiter callers call `throttle::acquire_background().await` first: they
+  defer while any swap is in flight (bounded) and are spaced by a minimum interval.
+* The 4 discovery fetches each call `acquire_background()` before their request.
+
 ### 5.4 CoinGecko (reference dataset)
 
 **Files:** `src/apis/coingecko/mod.rs`, `src/apis/coingecko/types.rs`  
@@ -311,9 +326,22 @@ Key traits:
 
 **File:** `src/apis/sol_price.rs`
 
-This is a special-case module living under `apis/` but acting as a **background service** that maintains a global SOL/USD cache:
+This is a special-case module living under `apis/` but acting as a **background service** that maintains a global SOL/USD cache.
 
-* Fetch URL: `https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112`
+**Source cascade (priority order) — `fetch_sol_price()`:**
+
+1. **DexScreener** (primary) — `https://api.dexscreener.com/latest/dex/tokens/{WSOL}`;
+   uses the `priceUsd` of the highest-liquidity pair whose BASE token is WSOL.
+2. **GeckoTerminal** (secondary) —
+   `https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/{WSOL}`.
+3. **Jupiter** (last-resort) — `https://lite-api.jup.ag/price/v3?ids={WSOL}`.
+
+Each source is tried in order; on failure the next is used, and the active source is
+stored in `SolPriceData.source`. Keeping SOL price OFF Jupiter by default is
+deliberate: Jupiter's free lite-api shares one per-IP rate budget that must be
+reserved for swap quote/swap. The Jupiter fallback still routes through the
+`apis::jupiter::throttle` (see §5.3) so it yields to in-flight swaps.
+
 * Refresh interval: `PRICE_REFRESH_INTERVAL_SECS = 30`
 * Cache expiry: `CACHE_EXPIRY_SECS = 300`
 * Guardrails: rejects unrealistic changes (`MAX_PRICE_CHANGE_PERCENT = 50.0`)
