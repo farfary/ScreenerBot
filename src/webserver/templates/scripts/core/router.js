@@ -279,6 +279,13 @@ export function initRouter() {
   }
   window.__ROUTER_INITIALIZED__ = true;
 
+  // Install the global auto-enhancer so every `select[data-custom-select]` across
+  // the dashboard (current and dynamically-added) becomes the custom dropdown,
+  // without each page having to call enhanceAllSelects() itself.
+  import(`../ui/custom_select.js${assetQuery}`)
+    .then((m) => m.installGlobalSelectEnhancer && m.installGlobalSelectEnhancer())
+    .catch((err) => console.error("[Router] select enhancer install failed", err));
+
   // Handle navigation links (main nav tabs)
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[data-page]");

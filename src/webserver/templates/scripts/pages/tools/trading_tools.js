@@ -64,7 +64,7 @@ function renderTradeWatcherTool(container, actionsContainer) {
             <div class="form-row">
               <div class="form-group">
                 <label for="tw-watch-type">Watch Type</label>
-                <select id="tw-watch-type">
+                <select id="tw-watch-type" data-custom-select>
                   <option value="buy-on-sell">Buy on Sell</option>
                   <option value="sell-on-buy">Sell on Buy</option>
                   <option value="notify-only">Notify Only</option>

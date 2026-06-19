@@ -409,7 +409,7 @@ function customizeTemplate(templateId) {
         </div>
         <div class="form-group">
           <label>Category</label>
-          <select id="inst-category">
+          <select id="inst-category" data-custom-select>
             <option value="filtering" ${template.category === "filtering" ? "selected" : ""}>Filtering</option>
             <option value="trading" ${template.category === "trading" ? "selected" : ""}>Trading</option>
             <option value="analysis" ${template.category === "analysis" ? "selected" : ""}>Analysis</option>
@@ -479,7 +479,7 @@ async function createInstruction() {
         </div>
         <div class="form-group">
           <label>Category</label>
-          <select id="inst-category">
+          <select id="inst-category" data-custom-select>
             <option value="filtering">Filtering</option>
             <option value="trading">Trading</option>
             <option value="analysis">Analysis</option>
@@ -615,7 +615,7 @@ async function editInstruction(id) {
           </div>
           <div class="form-group">
             <label>Category</label>
-            <select id="edit-inst-category">
+            <select id="edit-inst-category" data-custom-select>
               <option value="filtering" ${inst.category === "filtering" ? "selected" : ""}>Filtering</option>
               <option value="trading" ${inst.category === "trading" ? "selected" : ""}>Trading</option>
               <option value="analysis" ${inst.category === "analysis" ? "selected" : ""}>Analysis</option>

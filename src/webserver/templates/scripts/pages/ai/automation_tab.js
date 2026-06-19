@@ -179,7 +179,7 @@ async function createAutomationTask() {
         <div class="form-row">
           <div class="form-group form-group-half">
             <label>Schedule Type</label>
-            <select id="auto-schedule-type" onchange="window.aiPage.updateScheduleHint()">
+            <select id="auto-schedule-type" data-custom-select onchange="window.aiPage.updateScheduleHint()">
               <option value="interval">Interval</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
@@ -194,7 +194,7 @@ async function createAutomationTask() {
         <div class="form-row">
           <div class="form-group form-group-half">
             <label>Tool Permissions</label>
-            <select id="auto-tool-permissions">
+            <select id="auto-tool-permissions" data-custom-select>
               <option value="read_only">Read Only (safe)</option>
               <option value="full">Full Access (can trade)</option>
             </select>
@@ -402,7 +402,7 @@ async function editAutomationTask(id) {
         <div class="form-row">
           <div class="form-group form-group-half">
             <label>Schedule Type</label>
-            <select id="edit-auto-schedule-type">
+            <select id="edit-auto-schedule-type" data-custom-select>
               <option value="interval" ${task.schedule_type === "interval" ? "selected" : ""}>Interval</option>
               <option value="daily" ${task.schedule_type === "daily" ? "selected" : ""}>Daily</option>
               <option value="weekly" ${task.schedule_type === "weekly" ? "selected" : ""}>Weekly</option>
@@ -416,7 +416,7 @@ async function editAutomationTask(id) {
         <div class="form-row">
           <div class="form-group form-group-half">
             <label>Tool Permissions</label>
-            <select id="edit-auto-tool-permissions">
+            <select id="edit-auto-tool-permissions" data-custom-select>
               <option value="read_only" ${task.tool_permissions !== "full" ? "selected" : ""}>Read Only</option>
               <option value="full" ${task.tool_permissions === "full" ? "selected" : ""}>Full Access</option>
             </select>

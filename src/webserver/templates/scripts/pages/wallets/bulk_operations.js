@@ -267,7 +267,7 @@ export function createBulkOperations({ $, Utils, on, showModal, hideModal, enhan
         return `
           <div class="mapping-field">
             <label>${field.label} ${requiredMark}</label>
-            <select data-field="${field.id}">
+            <select data-field="${field.id}" data-custom-select>
               <option value="">-- Select column --</option>
               ${optionsList}
             </select>

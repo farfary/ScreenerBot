@@ -131,6 +131,25 @@ export class CustomSelect {
     // Store reference to CustomSelect instance on original select for later access
     selectElement._customSelectInstance = customSelect;
 
+    // Keep the custom UI in sync when the underlying <select>'s options are
+    // populated or replaced AFTER enhancement. The global auto-enhancer upgrades a
+    // select as soon as it enters the DOM, but many pages fill the option list
+    // asynchronously (provider/category lists, etc.) — without this the custom
+    // dropdown would be stuck showing the empty initial snapshot.
+    if (typeof MutationObserver !== "undefined") {
+      const optionObserver = new MutationObserver(() => {
+        const opts = Array.from(selectElement.options).map((opt) => ({
+          value: opt.value,
+          label: opt.textContent,
+          selected: opt.selected,
+          disabled: opt.disabled,
+        }));
+        customSelect.setOptions(opts);
+      });
+      optionObserver.observe(selectElement, { childList: true, subtree: true });
+      customSelect._optionObserver = optionObserver;
+    }
+
     return customSelect;
   }
 
@@ -730,6 +749,12 @@ export class CustomSelect {
     this.close();
     this._detachEvents();
 
+    // Stop syncing from the original <select> (enhanced instances only).
+    if (this._optionObserver) {
+      this._optionObserver.disconnect();
+      this._optionObserver = null;
+    }
+
     // Ensure dropdown is removed from body if still attached
     this._removeDropdownFromBody();
 
@@ -777,4 +802,54 @@ export function enhanceAllSelects(container = document, selector = "select[data-
   });
 
   return instances;
+}
+
+let _globalEnhancerInstalled = false;
+
+/**
+ * Install a one-time, document-wide auto-enhancer so EVERY
+ * `select[data-custom-select]` becomes a CustomSelect automatically — including
+ * selects rendered later by dynamically-built pages, dialogs and repeating rows
+ * (e.g. the auto-trader time rules). Previously `data-custom-select` was a no-op
+ * unless a page happened to call enhanceAllSelects(), so most pages still showed
+ * the native browser dropdown. With this installed, no page needs to call it.
+ * Idempotent: a MutationObserver enhances only newly-added selects, and the
+ * per-select `data-enhanced` guard prevents double-enhancement.
+ */
+export function installGlobalSelectEnhancer() {
+  if (_globalEnhancerInstalled || typeof document === "undefined") return;
+  _globalEnhancerInstalled = true;
+
+  const enhanceWithin = (root) => {
+    if (!root || root.nodeType !== 1) return;
+    if (
+      root.matches &&
+      root.matches("select[data-custom-select]") &&
+      root.dataset.enhanced !== "true"
+    ) {
+      if (CustomSelect.enhance(root)) root.dataset.enhanced = "true";
+    }
+    if (root.querySelectorAll) {
+      root.querySelectorAll("select[data-custom-select]:not([data-enhanced])").forEach((s) => {
+        if (CustomSelect.enhance(s)) s.dataset.enhanced = "true";
+      });
+    }
+  };
+
+  const initialSweep = () => enhanceWithin(document.body || document.documentElement);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initialSweep, { once: true });
+  } else {
+    initialSweep();
+  }
+
+  // Enhance any select added anywhere later. Scoped to the added subtrees so it
+  // stays cheap even while live tables re-render constantly.
+  const observer = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (!m.addedNodes || m.addedNodes.length === 0) continue;
+      m.addedNodes.forEach(enhanceWithin);
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 }
