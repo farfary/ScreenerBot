@@ -287,14 +287,20 @@
  * pairs with the floating/pinned actions column, which can be resized narrow.
  */
 .dt-actions-flex {
+  /* Deterministic geometry — kept in sync with actionsMinWidth() in the page
+     scripts (positions.js / tokens.js / favorites.js) so the column's computed
+     min-width ALWAYS fits every collapsed button with zero clipping. */
+  --dt-action-btn: 32px;
+  --dt-action-gap: 6px;
+
   container-type: inline-size;
   display: flex;
-  gap: 6px;
+  gap: var(--dt-action-gap);
   align-items: center;
   flex-wrap: nowrap;
 }
 
-/* Text label hidden by default — shown only when the container is wide. */
+/* Text label hidden by default — shown only when the column is wide enough. */
 .row-action-label {
   display: none;
 }
@@ -302,19 +308,24 @@
 @container (min-width: 220px) {
   .row-action-label {
     display: inline;
+    margin-left: 4px;
   }
 }
 
-/* Icon-only (label hidden) buttons stay square with symmetric padding so they
-   never clip at the minimum width. */
 .dt-actions-flex .btn {
   flex-shrink: 0;
 }
 
+/* Collapsed (narrow column): fixed icon-only squares. box-sizing:border-box
+   makes the rendered width exactly --dt-action-btn regardless of border/padding,
+   so n buttons + gaps fit precisely inside the column min-width. */
 @container (max-width: 219px) {
   .dt-actions-flex .btn {
-    padding: 6px;
-    min-width: 32px;
+    box-sizing: border-box;
+    width: var(--dt-action-btn);
+    min-width: var(--dt-action-btn);
+    height: var(--dt-action-btn);
+    padding: 0;
     justify-content: center;
   }
 }

@@ -41,9 +41,11 @@ import {
 import { createOhlcvModule } from "./tokens/ohlcv.js";
 import { createFavoritesModule } from "./tokens/favorites.js";
 
-// Minimum width for an actions column at its icon-only (collapsed) size so the
-// buttons never clip: n square 32px buttons + (n-1) 6px gaps + 16px cell padding.
-const actionsMinWidth = (n) => n * 32 + (n - 1) * 6 + 16;
+// Minimum width for an actions column at its collapsed (icon-only) size so every
+// button is fully visible — never clipped. Mirrors the CSS geometry in
+// column_types.css (`--dt-action-btn` 32px squares, `--dt-action-gap` 6px) plus
+// the cell's horizontal padding (~24px) and a small safety margin.
+const actionsMinWidth = (n) => n * 32 + (n - 1) * 6 + 30;
 
 function createLifecycle() {
   let table = null;

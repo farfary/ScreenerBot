@@ -21,8 +21,11 @@ export function createFavoritesModule(deps) {
         label: "",
         sortable: false,
         floating: true,
-        minWidth: 120,
-        maxWidth: 120,
+        // 3 collapsed icon buttons: 3*32 + 2*6 gaps + ~24 cell padding + safety.
+        // Matches actionsMinWidth(3) used by the other tables; no hard maxWidth so
+        // the column stays resizable like every other pinned actions column.
+        minWidth: 138,
+        width: 138,
         wrap: false,
         render: (_value, row) => {
           return `

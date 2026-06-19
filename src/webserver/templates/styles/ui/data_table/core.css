@@ -862,18 +862,26 @@ body.dt-column-resizing * {
   background: linear-gradient(rgb(0, 0, 0, 0.02), rgb(0, 0, 0, 0.02)), var(--bg-primary);
 }
 
-/* Hover + selected states win over the base/zebra background. */
+/* Hover + selected states win over the base/zebra background. These MUST stay
+   fully opaque: a sticky cell paints over the columns scrolling beneath it, so
+   any translucency lets them show through. The hover color carries an explicit
+   opaque fallback, and the selected tints are composited over an opaque surface
+   instead of being used as bare low-alpha colors. */
 .data-table tbody tr:hover td.dt-col-sticky,
 .data-table.zebra tbody tr:nth-child(even):hover td.dt-col-sticky {
-  background: var(--bg-hover);
+  background: var(--bg-hover, var(--bg-card-hover));
 }
 
 .data-table tbody tr.selected td.dt-col-sticky {
-  background: rgb(59, 130, 246, 0.1);
+  background:
+    linear-gradient(0deg, rgb(59, 130, 246, 0.1), rgb(59, 130, 246, 0.1)),
+    var(--bg-primary);
 }
 
 .data-table tbody tr.selected:hover td.dt-col-sticky {
-  background: rgb(59, 130, 246, 0.15);
+  background:
+    linear-gradient(0deg, rgb(59, 130, 246, 0.15), rgb(59, 130, 246, 0.15)),
+    var(--bg-primary);
 }
 
 /* Depth cue — a soft right-edge shadow on the last pinned cell, revealed only

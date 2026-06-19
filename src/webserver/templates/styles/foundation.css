@@ -48,6 +48,13 @@
   --bg-secondary: #fff;
   --bg-card: #fff;
   --bg-card-hover: #f0f2f6;
+
+  /* Generic hover surface. Defined as an alias so the ~18 `var(--bg-hover)`
+     usages (row hover, action buttons, dropdowns, sticky pinned cells) resolve
+     to a real OPAQUE color. Without this the variable was undefined and every
+     `background: var(--bg-hover)` (no fallback) collapsed to `transparent`,
+     which made hovered pinned/floating cells see-through during scroll. */
+  --bg-hover: var(--bg-card-hover);
   --text-primary: #1f2937;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
@@ -227,6 +234,7 @@
   --bg-secondary: #161b22;
   --bg-card: #161b22;
   --bg-card-hover: #1c2128;
+  --bg-hover: var(--bg-card-hover);
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
