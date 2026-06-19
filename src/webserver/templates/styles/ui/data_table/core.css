@@ -824,6 +824,13 @@ body.dt-column-resizing * {
   position: sticky;
   left: var(--dt-pin-left-0, 0);
   z-index: 3;
+
+  /* `left`/`width` MUST update instantly — they track the scroll sync and a live
+     column resize. The base `.data-table th` rule sets `transition: all`, which
+     would animate `left`/`width` and make the pinned HEADER cells ease/lag behind
+     the body (whose td only transitions `color`) while a pinned column is resized.
+     Restrict pinned cells to paint-only transitions so position has zero lag. */
+  transition-property: background-color, color;
 }
 
 .data-table th.dt-col-sticky[data-sticky-index="1"],
