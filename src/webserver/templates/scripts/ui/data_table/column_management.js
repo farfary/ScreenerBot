@@ -426,6 +426,19 @@ export function applyColumnManagementMixin(DataTable) {
         this.state.tableWidth = total;
         this._applyTableWidth();
       }
+
+      // When the column being dragged is pinned/floating, the cumulative left
+      // offsets of every pinned column to its right change continuously as its
+      // width changes. Recompute them on each animation frame so the rest of the
+      // pinned group tracks the drag smoothly and stays aligned, instead of being
+      // stuck at the old offset (overlapping) until mouse-up.
+      if (
+        Array.isArray(this.state.floatingColumns) &&
+        this.state.floatingColumns.includes(columnId) &&
+        typeof this._updateStickyOffsets === "function"
+      ) {
+        this._updateStickyOffsets();
+      }
     });
   };
 
