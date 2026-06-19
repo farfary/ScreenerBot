@@ -10,6 +10,8 @@
  * - Form submission support via hidden input
  */
 
+import { openMenu, closeMenu } from "../core/menu_manager.js";
+
 export class CustomSelect {
   /**
    * @param {Object} options Configuration options
@@ -57,6 +59,15 @@ export class CustomSelect {
     this._handleOptionClick = this._handleOptionClick.bind(this);
     this._handleScrollResize = this._handleScrollResize.bind(this);
     this._handleSearchInput = this._handleSearchInput.bind(this);
+
+    // Stable descriptor for the global menu coordinator. `owns` must also cover
+    // the portaled dropdown (rendered in document.body), so clicks/focus inside
+    // the option list don't dismiss it.
+    this._menuHandle = {
+      close: () => this.close(),
+      owns: (t) =>
+        (this.el && this.el.contains(t)) || (this.dropdownEl && this.dropdownEl.contains(t)),
+    };
 
     // Find initially selected option
     const selectedOpt = this.options.find((o) => o.selected);
@@ -499,6 +510,8 @@ export class CustomSelect {
   open() {
     if (this.disabled || this.isOpen) return;
 
+    // Register first so any other open menu is dismissed before this one shows.
+    openMenu(this._menuHandle);
     this.isOpen = true;
     this.el.classList.add("open");
     this.el.setAttribute("aria-expanded", "true");
@@ -529,6 +542,7 @@ export class CustomSelect {
   close() {
     if (!this.isOpen) return;
 
+    closeMenu(this._menuHandle);
     this.isOpen = false;
     this.el.classList.remove("open");
     this.el.setAttribute("aria-expanded", "false");

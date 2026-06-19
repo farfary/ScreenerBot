@@ -12,6 +12,7 @@
  */
 
 import { playPanelOpen, playPanelClose, playSuccess } from "../core/sounds.js";
+import { closeAllMenus } from "../core/menu_manager.js";
 
 class ConfirmationDialog {
   static activeDialog = null;
@@ -28,6 +29,9 @@ class ConfirmationDialog {
    * @returns {Promise<{confirmed: boolean, checkboxChecked: boolean}>}
    */
   static async show(config) {
+    // A dialog takes over the viewport — dismiss any open dropdown/menu underneath.
+    closeAllMenus();
+
     // Close any existing dialog
     if (ConfirmationDialog.activeDialog) {
       ConfirmationDialog.activeDialog.destroy();

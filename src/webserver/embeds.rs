@@ -223,6 +223,7 @@ pub const ORBITRON_VARIABLE: &[u8] = include_bytes!("assets/fonts/Orbitron-Varia
 
 // Core JavaScript modules - Public for asset_serving.rs
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
+pub const CORE_MENU_MANAGER: &str = include_str!("templates/scripts/core/menu_manager.js");
 pub const CORE_APP_STATE: &str = include_str!("templates/scripts/core/app_state.js");
 pub const CORE_POLLER: &str = include_str!("templates/scripts/core/poller.js");
 pub const CORE_DOM: &str = include_str!("templates/scripts/core/dom.js");

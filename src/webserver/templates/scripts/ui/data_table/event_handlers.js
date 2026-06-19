@@ -3,6 +3,8 @@
  * Handles all event listener attachments for the DataTable component
  */
 
+import { openMenu, closeMenu } from "../../core/menu_manager.js";
+
 export function applyEventHandlersMixin(DataTable) {
   const proto = DataTable.prototype;
 
@@ -409,6 +411,29 @@ export function applyEventHandlersMixin(DataTable) {
     });
 
     // Dropdown toggle handlers
+    // Shared descriptor so the global menu coordinator treats this table's open
+    // row-action dropdown like any other dropdown: opening a select/menu anywhere
+    // (or clicking an input/checkbox, changing page, etc.) auto-closes it.
+    const closeAllActionDropdowns = () => {
+      const allMenus = this.elements.tbody?.querySelectorAll(".dt-actions-dropdown-menu") || [];
+      const allTriggers =
+        this.elements.tbody?.querySelectorAll(".dt-actions-dropdown-trigger") || [];
+      allMenus.forEach((m) => {
+        m.style.display = "none";
+        m.classList.remove("open");
+        m.setAttribute("aria-hidden", "true");
+      });
+      allTriggers.forEach((t) => {
+        t.classList.remove("active");
+        t.setAttribute("aria-expanded", "false");
+      });
+      closeMenu(this._actionDropdownHandle);
+    };
+    this._actionDropdownHandle = {
+      close: closeAllActionDropdowns,
+      owns: (t) => !!(t && t.closest && t.closest(".dt-actions-dropdown")),
+    };
+
     const dropdownTriggers = this.elements.tbody.querySelectorAll(
       ".dt-actions-dropdown-trigger[data-action='dropdown-toggle']"
     );
@@ -441,7 +466,10 @@ export function applyEventHandlersMixin(DataTable) {
             menu.setAttribute("aria-hidden", "true");
             trigger.classList.remove("active");
             trigger.setAttribute("aria-expanded", "false");
+            closeMenu(this._actionDropdownHandle);
           } else {
+            // Register first so any other open menu elsewhere is dismissed.
+            openMenu(this._actionDropdownHandle);
             menu.style.display = "block";
             menu.classList.add("open");
             menu.setAttribute("aria-hidden", "false");
@@ -628,6 +656,7 @@ export function applyEventHandlersMixin(DataTable) {
           trigger.classList.remove("active");
           trigger.setAttribute("aria-expanded", "false");
         });
+        closeMenu(this._actionDropdownHandle);
       }
     };
     this._addEventListener(document, "click", closeDropdownsHandler);

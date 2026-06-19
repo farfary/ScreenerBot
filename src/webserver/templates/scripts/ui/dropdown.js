@@ -3,6 +3,8 @@
  * Reusable dropdown for power menu, trader controls, etc.
  */
 
+import { openMenu, closeMenu } from "../core/menu_manager.js";
+
 export class Dropdown {
   constructor(options = {}) {
     this.trigger = options.trigger; // Button element that triggers dropdown
@@ -11,6 +13,15 @@ export class Dropdown {
     this.align = options.align || "right"; // 'left' or 'right'
     this.isOpen = false;
     this.dropdownEl = null;
+
+    // Stable descriptor for the global menu coordinator (single-open + dismiss on
+    // outside pointer / focus / Escape / route change).
+    this._menuHandle = {
+      close: () => this.close(),
+      owns: (t) =>
+        (this.trigger && this.trigger.contains(t)) ||
+        (this.dropdownEl && this.dropdownEl.contains(t)),
+    };
 
     // Store bound handlers for cleanup
     this._triggerListener = null;
@@ -172,6 +183,8 @@ export class Dropdown {
   }
 
   open() {
+    // Register first so any other open menu is dismissed before this one shows.
+    openMenu(this._menuHandle);
     this.isOpen = true;
     this.dropdownEl.classList.add("open");
     this.trigger.setAttribute("aria-expanded", "true");
@@ -185,6 +198,7 @@ export class Dropdown {
   }
 
   close() {
+    closeMenu(this._menuHandle);
     this.isOpen = false;
     this.dropdownEl.classList.remove("open");
     this.trigger.setAttribute("aria-expanded", "false");

@@ -1,4 +1,6 @@
 // Page Lifecycle Registry - centralized init/activate/deactivate/dispose flows
+import { closeAllMenus } from "./menu_manager.js";
+
 const lifecycles = new Map();
 const contexts = new Map();
 let visibilityHandlerAdded = false;
@@ -271,6 +273,8 @@ export const PageLifecycleRegistry = {
     if (!context.__initialized) {
       return;
     }
+    // Leaving a page must never leave a stray dropdown/menu floating over the next.
+    closeAllMenus();
     try {
       await runHook("deactivate", pageName, lifecycle.deactivate, context);
     } finally {

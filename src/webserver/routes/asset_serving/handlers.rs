@@ -41,6 +41,7 @@ fn serve_js(content: &str) -> Response {
 pub async fn get_core_script(Path(file): Path<String>) -> Response {
     let content = match file.as_str() {
         "lifecycle.js" => Some(embeds::CORE_LIFECYCLE),
+        "menu_manager.js" => Some(embeds::CORE_MENU_MANAGER),
         "app_state.js" => Some(embeds::CORE_APP_STATE),
         "poller.js" => Some(embeds::CORE_POLLER),
         "dom.js" => Some(embeds::CORE_DOM),
