@@ -54,23 +54,33 @@ export function applyColumnManagementMixin(DataTable) {
     const maxWidth = this._getColumnMaxWidth(columnId);
     const w = Math.min(maxWidth, Math.max(minWidth, Math.round(widthPx)));
 
-    // Update <col> element in body table (primary width control)
-    const col = this.elements.cols?.[columnId];
-    if (col) {
-      col.style.width = `${w}px`;
-      col.style.minWidth = `${w}px`;
-      col.style.maxWidth = `${w}px`;
-    }
+    const applyTo = (colEl) => {
+      if (!colEl) return;
+      colEl.style.width = `${w}px`;
+      colEl.style.minWidth = `${w}px`;
+      colEl.style.maxWidth = `${w}px`;
+    };
 
-    // Mirror width to header table's <col> element
-    const headerCol = this.elements.headerColgroup?.querySelector(`col[data-column-id="${columnId}"]`);
-    if (headerCol) {
-      headerCol.style.width = `${w}px`;
-      headerCol.style.minWidth = `${w}px`;
-      headerCol.style.maxWidth = `${w}px`;
-    }
+    // Resolve the <col> elements LIVE from the STABLE table elements each call.
+    // `this.elements.table` / `.headerTable` are created once and never replaced
+    // (only their colgroup/thead contents are swapped), whereas the cached
+    // `this.elements.cols` map and `headerColgroup` reference can point at a
+    // DETACHED colgroup after an `outerHTML` swap. Writing a width to a detached
+    // <col> silently does nothing — which is exactly how the HEADER column could
+    // stay stuck at its old width while the BODY column (resolved via a freshly
+    // rebuilt map) updated, desyncing the two during a live resize. Querying live
+    // from the stable tables keeps header and body column widths in lockstep.
+    const bodyCol =
+      this.elements.table?.querySelector(`colgroup col[data-column-id="${columnId}"]`) ||
+      this.elements.cols?.[columnId];
+    applyTo(bodyCol);
 
-    // Update header for proper pointer events hit-box
+    const headerCol = this.elements.headerTable?.querySelector(
+      `colgroup col[data-column-id="${columnId}"]`
+    );
+    applyTo(headerCol);
+
+    // Update header <th> too for a correct pointer-events hit-box on the handle.
     const th = this.elements.thead?.querySelector(`th[data-column-id="${columnId}"]`);
     if (th) {
       th.style.width = `${w}px`;

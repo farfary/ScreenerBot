@@ -1874,13 +1874,25 @@ export class DataTable {
       return;
     }
 
-    // The floating columns are the first `floatingCount` ordered columns; read
-    // their offsetWidth from the header and accumulate the left offset.
+    // The floating columns are the first `floatingCount` ordered columns. Their
+    // widths come from `state.columnWidths` — the single source of truth that
+    // `_applyColumnWidth` writes IDENTICALLY to both the header and body <col>
+    // elements. Using it (instead of reading a header <th> offsetWidth) keeps the
+    // header and body pinned cells in exact lockstep during a live resize: the
+    // measured `offsetWidth` of a position:sticky cell mid-drag can lag the width
+    // just applied, which left the header pinned columns stuck while the body
+    // followed. We fall back to a live header measurement only when a stored width
+    // is missing (e.g. before the first sizing pass).
+    const orderedColumns = this._getOrderedColumns();
     let cumulative = 0;
     for (let i = 0; i < floatingCount; i++) {
       wrapper.style.setProperty(`--dt-pin-left-${i}`, `${cumulative}px`);
-      const th = headerThead.querySelector(`th[data-sticky-index="${i}"]`);
-      const width = th ? th.offsetWidth : 0;
+      const colId = orderedColumns[i]?.id;
+      let width = colId != null ? this.state.columnWidths[colId] : undefined;
+      if (!Number.isFinite(width)) {
+        const th = headerThead.querySelector(`th[data-sticky-index="${i}"]`);
+        width = th ? th.offsetWidth : 0;
+      }
       cumulative += Number.isFinite(width) ? width : 0;
     }
   }
