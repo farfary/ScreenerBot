@@ -7,6 +7,13 @@
     toastManager = module.toastManager;
   });
 
+  // Global menu coordinator (single-open + auto-dismiss). Loaded the same dynamic
+  // way as the toast manager so this IIFE stays a plain script.
+  let menuManager = null;
+  import("./menu_manager.js").then((module) => {
+    menuManager = module;
+  });
+
   function coerceNumber(value) {
     if (value === null || value === undefined || value === "") {
       return Number.NaN;
@@ -437,6 +444,16 @@
     return el;
   }
 
+  // Tracks the trigger of the currently-open generic dropdown so the coordinator
+  // can tell whether an interaction happened inside it.
+  let currentDropdownBtn = null;
+  const dropdownMenuHandle = {
+    owns: (t) =>
+      !!(t && t.closest && t.closest(".dropdown-menu.show")) ||
+      !!(currentDropdownBtn && currentDropdownBtn.contains(t)),
+    close: () => closeDropdownMenus(),
+  };
+
   function closeDropdownMenus() {
     document.querySelectorAll(".dropdown-menu.show").forEach((menu) => {
       menu.classList.remove("show");
@@ -446,6 +463,8 @@
       menu.style.right = "";
       menu.style.width = "";
     });
+    currentDropdownBtn = null;
+    if (menuManager) menuManager.closeMenu(dropdownMenuHandle);
   }
 
   function toggleDropdown(event) {
@@ -477,6 +496,11 @@
       menu.style.right = "";
     }
     menu.style.width = `${menuWidth}px`;
+
+    // Register so opening any other menu / clicking an input / changing page
+    // dismisses this dropdown too.
+    currentDropdownBtn = btn;
+    if (menuManager) menuManager.openMenu(dropdownMenuHandle);
   }
 
   document.addEventListener("click", closeDropdownMenus);

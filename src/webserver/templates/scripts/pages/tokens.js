@@ -1,4 +1,5 @@
 import { registerPage } from "../core/lifecycle.js";
+import { openMenu, closeMenu } from "../core/menu_manager.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
@@ -1387,6 +1388,19 @@ function createLifecycle() {
 
       container.appendChild(menu);
 
+      // Register with the global menu coordinator so opening any other menu, or
+      // clicking an input/checkbox, or changing page auto-dismisses this one too.
+      const menuHandle = {
+        owns: (t) => menu.contains(t) || (trigger && trigger.contains(t)),
+        close: () => {
+          menu.remove();
+          document.removeEventListener("click", closeHandler);
+          document.removeEventListener("keydown", escapeHandler);
+          closeMenu(menuHandle);
+        },
+      };
+      openMenu(menuHandle);
+
       // Handle menu item clicks
       const menuClickHandler = (e) => {
         const item = e.target.closest(".dropdown-item");
@@ -1396,18 +1410,14 @@ function createLifecycle() {
         if (action) {
           handleLinkAction(action, mint);
         }
-        menu.remove();
-        document.removeEventListener("click", closeHandler);
-        document.removeEventListener("keydown", escapeHandler);
+        menuHandle.close();
       };
       menu.addEventListener("click", menuClickHandler);
 
-      // Close on outside click
+      // Close on outside click (coordinator also covers this; kept as a fallback).
       const closeHandler = (e) => {
         if (!menu.contains(e.target) && e.target !== trigger) {
-          menu.remove();
-          document.removeEventListener("click", closeHandler);
-          document.removeEventListener("keydown", escapeHandler);
+          menuHandle.close();
         }
       };
       setTimeout(() => document.addEventListener("click", closeHandler), 0);
@@ -1415,9 +1425,7 @@ function createLifecycle() {
       // Close on escape
       const escapeHandler = (e) => {
         if (e.key === "Escape") {
-          menu.remove();
-          document.removeEventListener("click", closeHandler);
-          document.removeEventListener("keydown", escapeHandler);
+          menuHandle.close();
         }
       };
       document.addEventListener("keydown", escapeHandler);
