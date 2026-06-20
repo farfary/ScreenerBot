@@ -47,8 +47,17 @@ impl ApiManager {
             dexscreener_cfg.enabled && discovery_enabled && discovery_cfg.dexscreener.enabled;
         let geckoterminal_enabled =
             geckoterminal_cfg.enabled && discovery_enabled && discovery_cfg.geckoterminal.enabled;
-        let rug_enabled =
-            sources_cfg.rugcheck.enabled && discovery_enabled && discovery_cfg.rugcheck.enabled;
+        // The Rugcheck CLIENT powers per-token security reports (fetch_report) used
+        // by both filtering and the token-details Security tab. Its enablement must
+        // follow ONLY the security-source toggle `[tokens.sources.rugcheck].enabled`
+        // (plus the master discovery switch), NOT the discovery-LIST toggle
+        // `[tokens.discovery.rugcheck].enabled`. Those are different concerns: the
+        // discovery toggle only controls whether we pull Rugcheck's new/trending
+        // token lists (enforced separately in tokens/discovery.rs). Previously the
+        // discovery flag was ANDed in here, so turning off Rugcheck as a discovery
+        // source silently disabled ALL security lookups — leaving the Security tab
+        // stuck "fetching" and tokens with no cached rugcheck data forever.
+        let rug_enabled = sources_cfg.rugcheck.enabled && discovery_enabled;
 
         let dex_timeout = if dexscreener_cfg.timeout_seconds == 0 {
             DEX_TIMEOUT

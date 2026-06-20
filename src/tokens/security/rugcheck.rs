@@ -105,9 +105,17 @@ pub async fn fetch_rugcheck_data(
     db: &TokenDatabase,
 ) -> TokenResult<Option<RugcheckData>> {
     // Check connectivity before API call - fallback to cache/DB if unhealthy
-    let connectivity_ok = crate::connectivity::check_endpoints_healthy(&["rugcheck"])
+    // Only treat the endpoint as unusable when it is EXPLICITLY Unhealthy. An
+    // `Unknown` state (the health monitor hasn't recorded a probe result into this
+    // store yet) must NOT suppress fetches: otherwise every on-demand and
+    // background Rugcheck fetch is skipped for any token without cached data, and
+    // the security tab shows "fetching" forever even though the API is reachable.
+    // (Previously this used `check_endpoints_healthy`, which maps Unknown→unhealthy
+    // via `is_available()`, so an un-probed endpoint blocked all fetches.)
+    let connectivity_ok = !crate::connectivity::get_endpoint_health("rugcheck")
         .await
-        .is_none();
+        .map(|h| h.is_unhealthy())
+        .unwrap_or(false);
 
     if !connectivity_ok {
         logger::debug(
