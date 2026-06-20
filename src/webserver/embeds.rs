@@ -291,6 +291,8 @@ pub const TOKEN_DETAILS_CHART_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/chart_tab.js");
 pub const TOKEN_DETAILS_UTILITIES_UI: &str =
     include_str!("templates/scripts/ui/token_details/utilities.js");
+pub const TOKEN_DETAILS_STATE_HANDLING_UI: &str =
+    include_str!("templates/scripts/ui/token_details/state_handling.js");
 pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =
