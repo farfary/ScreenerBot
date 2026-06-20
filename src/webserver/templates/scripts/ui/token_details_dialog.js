@@ -10,7 +10,7 @@ import { requestManager } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
-import { renderOverviewTab } from "./token_details/overview_tab.js";
+import { renderOverviewTab, renderOverviewLeft } from "./token_details/overview_tab.js";
 import { renderSecurityTab } from "./token_details/security_tab.js";
 import {
   renderPoolsTab,
@@ -22,6 +22,7 @@ import { applyTradeActionsMixin } from "./token_details/trade_actions.js";
 import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
 import { applyChartTabMixin } from "./token_details/chart_tab.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
+import { applyStateHandlingMixin } from "./token_details/state_handling.js";
 
 // Data source status constants
 const DATA_SOURCE_STATUS = {
@@ -62,6 +63,11 @@ export class TokenDetailsDialog {
     this._initialLoadComplete = false;
     this._retryCount = 0;
     this._maxRetries = 3;
+    // Connection-drop tracking: "online" | "reconnecting" | "offline".
+    // Transient poll failures after the initial load surface here (subtle chip)
+    // instead of wiping content or flipping source dots to a hard error.
+    this._connectionState = "online";
+    this._consecutiveFailures = 0;
   }
 
   /**
@@ -251,44 +257,57 @@ export class TokenDetailsDialog {
         this._updateHeader(this.fullTokenData);
         this._initialLoadComplete = true;
         this._retryCount = 0;
+        // Poll succeeded — clear any reconnect chip / failure streak.
+        this._recordPollOutcome(true);
 
         // Update data source statuses based on what data we have
         this._updateDataSourceStatus("token", DATA_SOURCE_STATUS.SUCCESS);
         this._updateDataSourceFromToken(newData);
 
-        if (isInitialLoad && this.currentTab === "overview") {
+        if (isInitialLoad) {
+          // First data arrived: populate whatever tab is active (any tab may have
+          // been showing a waiting/error placeholder), so every tab recovers, not
+          // just overview.
           this._loadTabContent(this.currentTab);
-        } else if (!isInitialLoad && this.currentTab === "overview") {
+        } else if (this.currentTab === "overview") {
           this._refreshOverviewTab();
-        }
-
-        // Also refresh security tab if it's active and was waiting for data
-        if (this.currentTab === "security") {
+        } else if (this.currentTab === "security") {
+          // Keep the security tab in sync. The loader is idempotent (it only
+          // repaints when the produced HTML actually changes), so calling it on
+          // every poll is free and never restarts the card entry animations while
+          // we are still waiting on Rugcheck data.
           const content = this.dialogEl?.querySelector('[data-tab-content="security"]');
-          if (content && content.dataset.loaded !== "true") {
+          if (content) {
             this._loadSecurityTab(content);
           }
         }
       }
     } catch (error) {
       console.error("Error loading token details:", error);
-      this._updateDataSourceStatus("token", DATA_SOURCE_STATUS.ERROR);
 
-      // Retry with exponential backoff for initial load
-      if (!this._initialLoadComplete && this._retryCount < this._maxRetries) {
-        this._retryCount++;
-        const delay = 1000 * Math.pow(2, this._retryCount - 1); // 1s, 2s, 4s
-        console.log(`Retrying token fetch (${this._retryCount}/${this._maxRetries}) in ${delay}ms`);
-        setTimeout(() => {
-          this.isRefreshing = false;
-          this._fetchTokenData();
-        }, delay);
-        return;
-      }
-
-      const headerMetrics = this.dialogEl?.querySelector(".header-metrics");
-      if (headerMetrics) {
-        headerMetrics.innerHTML = '<div class="error-text">Failed to load details</div>';
+      if (!this._initialLoadComplete) {
+        // Initial load failed: retry with exponential backoff, then show a
+        // friendly error state (with Retry) in the active tab.
+        this._updateDataSourceStatus("token", DATA_SOURCE_STATUS.ERROR);
+        if (this._retryCount < this._maxRetries) {
+          this._retryCount++;
+          const delay = 1000 * Math.pow(2, this._retryCount - 1); // 1s, 2s, 4s
+          console.log(
+            `Retrying token fetch (${this._retryCount}/${this._maxRetries}) in ${delay}ms`
+          );
+          setTimeout(() => {
+            this.isRefreshing = false;
+            this._fetchTokenData();
+          }, delay);
+          return;
+        }
+        this._recordPollOutcome(false);
+        const content = this.dialogEl?.querySelector(`[data-tab-content="${this.currentTab}"]`);
+        this._renderTabError(content, { title: "Couldn't load token data" });
+      } else {
+        // Already showing good data — treat this as a transient connection blip.
+        // Keep the last good content; the connection chip surfaces the state.
+        this._recordPollOutcome(false);
       }
     } finally {
       this.isRefreshing = false;
@@ -482,9 +501,20 @@ export class TokenDetailsDialog {
     if (content.dataset.loaded !== "true") return;
 
     const overviewTable = content.querySelector(".overview-left");
-    if (overviewTable) {
-      overviewTable.innerHTML = this._buildOverviewContent(this.fullTokenData);
-    }
+    if (!overviewTable) return;
+
+    // Repaint only the left column (live metrics/details) and only when its
+    // markup changed, so the chart on the right is untouched and unchanged polls
+    // cause no flicker. Previously this called a non-existent
+    // `_buildOverviewContent`, which threw on every poll and falsely flipped the
+    // "Token" source dot to an error.
+    const html = renderOverviewLeft(this.fullTokenData, {
+      renderHintTrigger: this._renderHintTrigger.bind(this),
+      escapeHtml: this._escapeHtml.bind(this),
+      formatShortAddress: this._formatShortAddress.bind(this),
+      getRejectionDisplayLabel: this._getRejectionDisplayLabel.bind(this),
+    });
+    this._renderHtmlIfChanged(overviewTable, html, "__ovHtml");
   }
 
   close() {
@@ -538,6 +568,14 @@ export class TokenDetailsDialog {
             element.removeEventListener("click", handler);
           });
           this._tabHandlers = null;
+        }
+
+        if (this._retryHandler) {
+          const body = this.dialogEl.querySelector(".dialog-body");
+          if (body) {
+            body.removeEventListener("click", this._retryHandler);
+          }
+          this._retryHandler = null;
         }
 
         // Clean up buy/sell button handlers
@@ -599,6 +637,8 @@ export class TokenDetailsDialog {
       this._initialLoadComplete = false;
       this._retryCount = 0;
       this._chartErrorCount = 0;
+      this._connectionState = "online";
+      this._consecutiveFailures = 0;
 
       this.onClose();
     }, 300);
@@ -679,6 +719,10 @@ export class TokenDetailsDialog {
                   <span class="status-icon pending" aria-hidden="true"></span>
                   <span class="status-label">Chart</span>
                 </span>
+              </div>
+              <div class="tdd-connection-chip" data-state="online" role="status" hidden>
+                <span class="tdd-connection-dot" aria-hidden="true"></span>
+                <span class="tdd-connection-text">Reconnecting…</span>
               </div>
               <div class="last-updated" id="lastUpdatedTime"></div>
             </div>
@@ -909,6 +953,18 @@ export class TokenDetailsDialog {
       sellBtn.addEventListener("click", this._sellHandler);
     }
 
+    // Delegated retry handler for the initial-load error state's Retry button.
+    const body = this.dialogEl.querySelector(".dialog-body");
+    if (body) {
+      this._retryHandler = (e) => {
+        const btn = e.target.closest('[data-action="tdd-retry"]');
+        if (btn) {
+          this._retryInitialLoad();
+        }
+      };
+      body.addEventListener("click", this._retryHandler);
+    }
+
     const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
     this._tabHandlers = [];
     tabButtons.forEach((btn) => {
@@ -957,27 +1013,33 @@ export class TokenDetailsDialog {
   // =========================================================================
 
   _loadSecurityTab(content) {
+    if (!content) return;
     // Use whatever data we have - show partial content rather than blocking
     const tokenToUse = this.fullTokenData || this.tokenData;
 
     if (!tokenToUse || !tokenToUse.mint) {
-      content.innerHTML = '<div class="loading-spinner">Waiting for token data...</div>';
+      this._renderTabWaiting(content, "Waiting for token data…");
       return;
     }
 
-    content.innerHTML = renderSecurityTab(tokenToUse, {
+    const html = renderSecurityTab(tokenToUse, {
       renderHintTrigger: this._renderHintTrigger.bind(this),
       escapeHtml: this._escapeHtml.bind(this),
       formatShortAddress: this._formatShortAddress.bind(this),
     });
 
+    // Only repaint when the markup actually changed. While Rugcheck data is still
+    // pending the loading markup is identical every poll, so this is a no-op and
+    // the staggered card animations never restart. Re-init hints only on repaint.
+    const changed = this._renderHtmlIfChanged(content, html, "__stateHtml");
+    if (changed) {
+      HintTrigger.initAll();
+    }
+
     // Check if we have security data
     const hasSecurityData =
       tokenToUse.safety_score !== undefined && tokenToUse.safety_score !== null;
-
-    if (hasSecurityData) {
-      content.dataset.loaded = "true";
-    }
+    content.dataset.loaded = hasSecurityData ? "true" : "false";
   }
 
   // =========================================================================
@@ -1472,6 +1534,7 @@ applyTradeActionsMixin(TokenDetailsDialog);
 applyTransactionsTabMixin(TokenDetailsDialog);
 applyChartTabMixin(TokenDetailsDialog);
 applyUtilitiesMixin(TokenDetailsDialog);
+applyStateHandlingMixin(TokenDetailsDialog);
 
 // ============================================================================
 // Global Event Listener for Context Menu "View Details" Action

@@ -223,7 +223,9 @@ export function applyTradeActionsMixin(DialogClass) {
     const content = this.dialogEl.querySelector(`[data-tab-content="${tabId}"]`);
     if (!content) return;
 
-    if (content.dataset.loaded === "true") return;
+    // Security re-evaluates on every switch: its loader is idempotent (repaints
+    // only on real change), so this keeps it current without re-flashing.
+    if (tabId !== "security" && content.dataset.loaded === "true") return;
 
     switch (tabId) {
       case "overview":

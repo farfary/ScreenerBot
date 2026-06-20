@@ -15,13 +15,12 @@ import * as Utils from "../../core/utils.js";
  * @returns {string} HTML string for overview tab
  */
 export function renderOverviewTab(token, options = {}) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
+  const { renderHintTrigger } = options;
 
   return `
     <div class="overview-split-layout">
       <div class="overview-left">
-        ${buildQuickStats(token)}
-        ${buildOverviewContent(token, { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel })}
+        ${renderOverviewLeft(token, options)}
       </div>
       <div class="overview-right">
         <div class="chart-container">
@@ -60,6 +59,24 @@ export function renderOverviewTab(token, options = {}) {
       </div>
     </div>
   `;
+}
+
+/**
+ * Render just the left column of the overview tab (quick stats + details).
+ * Exposed so the dialog can repaint live-updating metrics in place without
+ * rebuilding the chart on the right. Used by `_refreshOverviewTab`.
+ * @param {Object} token - Token data object
+ * @param {Object} options - Same options bag as renderOverviewTab
+ * @returns {string} HTML string for the overview left column
+ */
+export function renderOverviewLeft(token, options = {}) {
+  const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
+  return `${buildQuickStats(token)}${buildOverviewContent(token, {
+    renderHintTrigger,
+    escapeHtml,
+    formatShortAddress,
+    getRejectionDisplayLabel,
+  })}`;
 }
 
 function buildQuickStats(token) {

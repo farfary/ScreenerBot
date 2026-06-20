@@ -657,3 +657,120 @@
   height: auto;
   padding: var(--spacing-lg);
 }
+
+/* =============================================================================
+   Shared tab state blocks (loading / error) + connection chip
+   Used by the state-handling mixin so every tab presents loading/error the
+   same way and a dropped connection is shown without wiping content.
+   ============================================================================= */
+.tdd-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  gap: var(--spacing-sm);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.tdd-state-icon {
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.tdd-state-error .tdd-state-icon {
+  color: var(--warning-color);
+}
+
+.tdd-state-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tdd-state-message {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  max-width: 360px;
+}
+
+.tdd-state-retry {
+  margin-top: var(--spacing-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.tdd-state-retry:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--primary-alpha-30);
+}
+
+/* Connection chip in the header status area */
+.tdd-connection-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border-radius: var(--radius-full);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.tdd-connection-chip[hidden] {
+  display: none;
+}
+
+.tdd-connection-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: currentcolor;
+  animation: tdd-connection-pulse 1.2s ease-in-out infinite;
+}
+
+.tdd-connection-chip[data-state="reconnecting"] {
+  color: var(--warning-color);
+  background: var(--warning-alpha-10);
+  border-color: var(--warning-alpha-20);
+}
+
+.tdd-connection-chip[data-state="offline"] {
+  color: var(--error-color);
+  background: rgb(248, 81, 73, 0.1);
+  border-color: rgb(248, 81, 73, 0.2);
+}
+
+@keyframes tdd-connection-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tdd-connection-dot {
+    animation: none;
+  }
+}
