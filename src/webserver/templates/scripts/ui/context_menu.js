@@ -151,8 +151,12 @@ class ContextMenuManager {
    * Determine context based on clicked element
    */
   _determineContext(target) {
-    // Check for DataTable row (has data-row-id attribute)
-    const tableRow = target.closest("[data-row-id]");
+    // Resolve the DataTable ROW. NOTE: the table stamps `data-row-id` on the <tr> AND
+    // on its <td> cells (for sticky-column diffing), so a plain `closest("[data-row-id]")`
+    // returns the <td> — which lacks row-level classes like `pos-ind-manual` and only
+    // contains its own cell. Always resolve the <tr> so row state (manual-management) and
+    // a row-wide `data-mint` lookup work regardless of which cell was clicked.
+    const tableRow = target.closest("tr[data-row-id]") || target.closest("[data-row-id]");
 
     // Also check for regular table rows that may have data-mint
     const walletRow = target.closest("tr[data-mint], .dt-row");
