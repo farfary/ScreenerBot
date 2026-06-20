@@ -137,6 +137,17 @@ export class TokenDetailsDialog {
         // Silent - focus is best-effort
       });
 
+      // Fetch the full token detail IMMEDIATELY (fire and forget). The row data
+      // we opened with has no security fields (safety_score, risks, holders live
+      // only on /api/tokens/{mint}), and the Poller below only fires after its
+      // first interval — so without this, cached Rugcheck/chart data wouldn't
+      // appear for ~5s and the security tab would sit on "fetching" even for
+      // tokens that already passed filtering. This loads the cached detail now;
+      // the refresh + poller then keep it fresh.
+      this._fetchTokenData().catch(() => {
+        // Errors are handled inside _fetchTokenData (retry/connection state)
+      });
+
       // Trigger backend refresh endpoints in parallel (fire and forget)
       // These trigger high-priority data fetching on backend
       // Don't await - let them run in background while dialog shows

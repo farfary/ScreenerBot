@@ -33,6 +33,16 @@ export function applyChartTabMixin(DialogClass) {
       return;
     }
 
+    // Guard against duplicate initialization. The overview tab can be (re)loaded
+    // more than once in quick succession — it renders with partial row data on
+    // open, then again the moment the immediate detail fetch resolves. Recreating
+    // the chart would orphan the previous instance (leak + duplicate pollers), so
+    // if one already exists just refresh its data for the current timeframe.
+    if (this.advancedChart) {
+      await this._loadChartData(mint, this.currentTimeframe, false);
+      return;
+    }
+
     // Determine current theme
     const isDarkMode = document.documentElement.getAttribute("data-theme") === "dark";
 
