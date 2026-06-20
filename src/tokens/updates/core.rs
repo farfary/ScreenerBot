@@ -523,6 +523,14 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
 ///
 /// # Returns
 /// UpdateResult with success/failure details from each source
+/// Max time an on-demand (user-initiated) force update waits for a per-minute
+/// rate-limit permit before proceeding without one. The background loop drains
+/// the shared budget across thousands of tokens, so a blocking `acquire().await`
+/// here could stall a freshly-opened token-details dialog for up to a minute.
+/// Proceeding after a short wait is safe: each API client self-rate-limits
+/// internally (1 concurrent request + min interval), so we never burst the API.
+const ON_DEMAND_PERMIT_WAIT: Duration = Duration::from_secs(3);
+
 pub async fn force_update_token(
     mint: &str,
     db: std::sync::Arc<TokenDatabase>,
@@ -545,42 +553,52 @@ pub async fn force_update_token(
     let (dex_result, gecko_result, rug_result) = tokio::join!(
         // DexScreener market data
         async {
-            match coord_ref.acquire_dexscreener_batch().await {
-                Ok(permit) => {
-                    let result = dexscreener::fetch_dexscreener_data(&mint_str, db_ref).await;
-                    if result.is_ok() && matches!(result, Ok(Some(_))) {
-                        permit.forget();
-                    }
-                    result
+            let permit =
+                match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_dexscreener_batch())
+                    .await
+                {
+                    Ok(Ok(p)) => Some(p),
+                    _ => None,
+                };
+            let result = dexscreener::fetch_dexscreener_data(&mint_str, db_ref).await;
+            if let Some(p) = permit {
+                if result.is_ok() && matches!(result, Ok(Some(_))) {
+                    p.forget();
                 }
-                Err(e) => Err(e),
             }
+            result
         },
         // GeckoTerminal market data
         async {
-            match coord_ref.acquire_geckoterminal().await {
-                Ok(permit) => {
-                    let result = geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref).await;
-                    if result.is_ok() && matches!(result, Ok(Some(_))) {
-                        permit.forget();
-                    }
-                    result
+            let permit =
+                match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_geckoterminal())
+                    .await
+                {
+                    Ok(Ok(p)) => Some(p),
+                    _ => None,
+                };
+            let result = geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref).await;
+            if let Some(p) = permit {
+                if result.is_ok() && matches!(result, Ok(Some(_))) {
+                    p.forget();
                 }
-                Err(e) => Err(e),
             }
+            result
         },
         // Rugcheck security data
         async {
-            match coord_ref.acquire_rugcheck().await {
-                Ok(permit) => {
-                    let result = rugcheck::fetch_rugcheck_data(&mint_str, db_ref).await;
-                    if result.is_ok() && matches!(result, Ok(Some(_))) {
-                        permit.forget();
-                    }
-                    result
+            let permit =
+                match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_rugcheck()).await {
+                    Ok(Ok(p)) => Some(p),
+                    _ => None,
+                };
+            let result = rugcheck::fetch_rugcheck_data(&mint_str, db_ref).await;
+            if let Some(p) = permit {
+                if result.is_ok() && matches!(result, Ok(Some(_))) {
+                    p.forget();
                 }
-                Err(e) => Err(e),
             }
+            result
         }
     );
 

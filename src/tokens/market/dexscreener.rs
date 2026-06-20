@@ -115,10 +115,17 @@ pub async fn fetch_dexscreener_data_batch(
     mints: &[String],
     db: &TokenDatabase,
 ) -> TokenResult<HashMap<String, Option<DexScreenerData>>> {
-    // Check connectivity before API call - fallback to cache/DB if unhealthy
-    let connectivity_ok = crate::connectivity::check_endpoints_healthy(&["dexscreener"])
+    // Check connectivity before API call - fall back to cache/DB only when the
+    // endpoint is EXPLICITLY Unhealthy. An `Unknown` state (the health monitor
+    // hasn't completed its first probe yet — every endpoint starts Unknown at
+    // boot) must NOT suppress fetches: otherwise, right after the app launches,
+    // a user opening a token dialog gets all DexScreener fetches skipped until
+    // the first health check lands, making token details look empty/"stuck".
+    // (Previously used `check_endpoints_healthy`, which maps Unknown→unhealthy.)
+    let connectivity_ok = !crate::connectivity::get_endpoint_health("dexscreener")
         .await
-        .is_none();
+        .map(|h| h.is_unhealthy())
+        .unwrap_or(false);
 
     if !connectivity_ok {
         logger::debug(
