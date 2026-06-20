@@ -209,6 +209,10 @@
   margin-left: 2px;
   min-width: 180px;
   padding: 5px 0;
+  /* Never exceed the frame: a long submenu (e.g. "View on Explorer") scrolls instead
+     of running off-screen. JS also shifts it up to stay fully visible. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   background: var(--floating-bg);
   border: 1px solid var(--floating-border);
   border-radius: var(--floating-panel-radius);

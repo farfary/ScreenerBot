@@ -730,16 +730,28 @@ class ContextMenuManager {
   }
 
   _positionSubmenu(parentEl, submenuEl) {
+    // Clear prior adjustments so measurements reflect the default open position.
+    submenuEl.classList.remove("left");
+    submenuEl.style.top = "";
+
     const parentRect = parentEl.getBoundingClientRect();
     const submenuRect = submenuEl.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
     const padding = 8;
 
-    // Check if submenu fits on the right
+    // Horizontal: open to the left when the submenu would overflow the right edge.
     if (parentRect.right + submenuRect.width > viewportWidth - padding) {
       submenuEl.classList.add("left");
-    } else {
-      submenuEl.classList.remove("left");
+    }
+
+    // Vertical: the submenu opens aligned with its parent item. If it would run past
+    // the bottom of the frame, shift it up just enough to stay fully visible — never
+    // letting its top go above the frame. (Long submenus also scroll via CSS max-height.)
+    const overflowBottom = submenuRect.top + submenuRect.height - (viewportHeight - padding);
+    if (overflowBottom > 0) {
+      const shift = Math.min(overflowBottom, Math.max(0, submenuRect.top - padding));
+      if (shift > 0) submenuEl.style.top = `${-shift}px`;
     }
   }
 
@@ -762,23 +774,22 @@ class ContextMenuManager {
     let originX = "left";
     let originY = "top";
 
-    // Adjust horizontal position
+    // Adjust horizontal position — flip to the left of the cursor near the right edge.
     if (x + rect.width > viewportWidth - padding) {
       finalX = x - rect.width;
       originX = "right";
-      if (finalX < padding) {
-        finalX = viewportWidth - rect.width - padding;
-      }
     }
 
-    // Adjust vertical position
+    // Adjust vertical position — flip above the cursor near the bottom edge.
     if (y + rect.height > viewportHeight - padding) {
       finalY = y - rect.height;
       originY = "bottom";
-      if (finalY < padding) {
-        finalY = viewportHeight - rect.height - padding;
-      }
     }
+
+    // Final clamp so the menu is ALWAYS within the frame, even when it is larger than
+    // the cursor's distance to an edge or taller/wider than the viewport itself.
+    finalX = Math.max(padding, Math.min(finalX, viewportWidth - rect.width - padding));
+    finalY = Math.max(padding, Math.min(finalY, viewportHeight - rect.height - padding));
 
     this.menuEl.style.left = `${finalX}px`;
     this.menuEl.style.top = `${finalY}px`;
