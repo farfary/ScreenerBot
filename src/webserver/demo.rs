@@ -320,6 +320,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 total_exited_amount: 0,
                 archived: false,
                 archived_at: None,
+                manual_management: false,
             });
             id_counter += 1;
         }
@@ -380,6 +381,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 total_exited_amount: (size / entry * 1e9) as u64,
                 archived: false,
                 archived_at: None,
+                manual_management: false,
             });
             id_counter += 1;
         }

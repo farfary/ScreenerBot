@@ -34,8 +34,8 @@ pub use state::{
     get_open_positions_count, get_position_by_id, get_position_by_mint,
     init_global_position_semaphore, is_open_position, is_token_in_cooldown,
     parse_position_slot_error, reconcile_global_position_semaphore, remove_position_by_id,
-    set_position_archived_in_memory, MINT_TO_POSITION_INDEX, POSITIONS,
-    POSITION_SLOT_UNAVAILABLE_ERR, SIG_TO_MINT_INDEX,
+    set_position_archived_in_memory, set_position_manual_management_in_memory,
+    MINT_TO_POSITION_INDEX, POSITIONS, POSITION_SLOT_UNAVAILABLE_ERR, SIG_TO_MINT_INDEX,
 };
 
 pub use tracking::update_position_tracking;
@@ -55,7 +55,8 @@ pub use loss_detection::{
 // Database and library exports
 pub use db::{
     delete_archived_positions, delete_position_by_id, force_database_sync,
-    set_position_archived_db, get_closed_positions as get_db_closed_positions,
+    set_position_archived_db, set_position_manual_management_db,
+    get_closed_positions as get_db_closed_positions,
     get_closed_positions_count_since as get_db_closed_positions_count_since,
     get_closed_positions_since as get_db_closed_positions_since, get_entry_history,
     get_exit_history, get_open_positions as get_db_open_positions, get_period_trading_stats,

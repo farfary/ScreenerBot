@@ -81,6 +81,18 @@ pub async fn set_position_archived_db(id: i64, archived: bool) -> Result<bool, S
     }
 }
 
+/// Enable or disable manual management for a position by ID (reversible flag).
+pub async fn set_position_manual_management_db(
+    id: i64,
+    manual_management: bool,
+) -> Result<bool, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.set_position_manual_management(id, manual_management).await,
+        None => Err("Positions database not initialized".to_owned()),
+    }
+}
+
 /// Hard-delete all archived positions (cascades only to this position's child rows)
 pub async fn delete_archived_positions() -> Result<usize, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;

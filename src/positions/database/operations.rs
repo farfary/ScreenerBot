@@ -148,6 +148,36 @@ impl PositionsDatabase {
             }
         }
 
+        // Migrate existing database to add the manual-management flag if needed
+        match conn.execute_batch(MIGRATION_ADD_MANUAL_MANAGEMENT) {
+            Ok(_) => {
+                if log_initialization {
+                    crate::logger::info(
+                        crate::logger::LogTag::Positions,
+                        "Manual-management column migration completed successfully",
+                    );
+                }
+            }
+            Err(e) => {
+                let err_msg = e.to_string().to_lowercase();
+                // SQLite returns "duplicate column name" if the column already exists - this is OK
+                if err_msg.contains("duplicate column") {
+                    if log_initialization {
+                        crate::logger::debug(
+                            crate::logger::LogTag::Positions,
+                            "Manual-management column already exists, skipping migration",
+                        );
+                    }
+                } else {
+                    crate::logger::error(
+                        crate::logger::LogTag::Positions,
+                        &format!("CRITICAL: Failed to migrate manual-management column: {e}"),
+                    );
+                    return Err(format!("Database migration failed: {e}"));
+                }
+            }
+        }
+
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {
             conn.execute(index_sql, [])
@@ -299,11 +329,11 @@ impl PositionsDatabase {
         phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
         pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
         remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-        dca_count, average_entry_price, last_dca_time
+        dca_count, average_entry_price, last_dca_time, manual_management
       ) VALUES (
         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32,
-        ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43
+        ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44
       ) RETURNING id
       "#,
                 params![
@@ -349,7 +379,8 @@ impl PositionsDatabase {
                     position.partial_exit_count as i64,
                     position.dca_count as i64,
                     position.average_entry_price,
-                    position.last_dca_time.map(|t| t.to_rfc3339())
+                    position.last_dca_time.map(|t| t.to_rfc3339()),
+                    position.manual_management
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -762,6 +793,12 @@ impl PositionsDatabase {
                 .flatten()
                 .unwrap_or(false),
             archived_at,
+            // Manual management (default false for legacy rows / pre-migration reads)
+            manual_management: row
+                .get::<_, Option<bool>>("manual_management")
+                .ok()
+                .flatten()
+                .unwrap_or(false),
         })
     }
 }

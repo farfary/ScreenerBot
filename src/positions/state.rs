@@ -308,6 +308,19 @@ pub async fn set_position_archived_in_memory(position_id: i64, archived: bool) -
     .await
 }
 
+/// Toggle the in-memory manual-management flag for a position by ID. Keeps the cached
+/// position in sync with the DB so the auto-trader's exit monitor sees the change at
+/// once (it reads from the in-memory list).
+pub async fn set_position_manual_management_in_memory(
+    position_id: i64,
+    manual_management: bool,
+) -> bool {
+    update_position_state_by_id(position_id, |p| {
+        p.manual_management = manual_management;
+    })
+    .await
+}
+
 /// Remove a position from state by database ID (mint is not unique — a token can
 /// have multiple positions, so deletes must target the exact row).
 pub async fn remove_position_by_id(position_id: i64) -> Option<Position> {

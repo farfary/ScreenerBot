@@ -9,8 +9,8 @@
 //! permit) so the bot can open a new position; it does NOT sell — tokens stay in
 //! the wallet.
 
-use axum::{extract::Path, http::StatusCode, response::Response};
-use serde::Serialize;
+use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use serde::{Deserialize, Serialize};
 
 use crate::logger::{self, LogTag};
 use crate::positions;
@@ -30,6 +30,19 @@ pub struct DeleteResponse {
     pub success: bool,
     pub position_id: i64,
     pub freed_slot: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ManualManagementRequest {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ManualManagementResponse {
+    pub success: bool,
+    pub position_id: i64,
+    pub manual_management: bool,
     pub message: String,
 }
 
@@ -169,6 +182,59 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
         archived: false,
         freed_slot: false,
         message: "Position restored".to_owned(),
+    })
+}
+
+/// POST /positions/:id/manual-management — enable/disable manual management.
+///
+/// When enabled the auto-trader leaves the position alone (no auto take-profit/
+/// stop-loss/strategy exit or DCA). Reversible; no data is deleted and no trading slot
+/// changes (the position stays open either way).
+pub(super) async fn set_manual_management(
+    Path(position_id): Path<i64>,
+    Json(req): Json<ManualManagementRequest>,
+) -> Response {
+    let position = match positions::get_position_by_id(position_id).await {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                "POSITION_NOT_FOUND",
+                "Position not found",
+                Some(&format!("No position found with ID {position_id}")),
+            );
+        }
+    };
+
+    // Persist first, then mirror into memory so a failed write doesn't desync state.
+    if let Err(e) = positions::set_position_manual_management_db(position_id, req.enabled).await {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "MANUAL_MANAGEMENT_FAILED",
+            "Failed to update manual management",
+            Some(&e),
+        );
+    }
+    positions::set_position_manual_management_in_memory(position_id, req.enabled).await;
+
+    logger::info(
+        LogTag::Positions,
+        &format!(
+            "Position {position_id} ({}) manual management {}",
+            position.symbol,
+            if req.enabled { "enabled" } else { "disabled" }
+        ),
+    );
+
+    success_response(ManualManagementResponse {
+        success: true,
+        position_id,
+        manual_management: req.enabled,
+        message: if req.enabled {
+            "Manual management enabled — auto-trader will not sell this position".to_owned()
+        } else {
+            "Manual management disabled — auto-trader now manages this position".to_owned()
+        },
     })
 }
 

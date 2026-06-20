@@ -85,8 +85,9 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
         size_sol: Some(size_sol),
     };
 
-    // Execute trade (includes quote + swap)
-    let result = match executors::execute_trade(&decision).await {
+    // Execute trade (includes quote + swap). A force buy is always manually managed —
+    // the auto-trader must not auto-sell it out from under the user.
+    let result = match executors::execute_buy_managed(&decision, true).await {
         Ok(result) => result,
         Err(e) => {
             if e.contains("Quote") || e.contains("quote") {

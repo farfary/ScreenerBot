@@ -171,3 +171,47 @@ pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
 
     updates::force_update_token(mint, db, coordinator).await
 }
+
+/// Ensure a token is available for manual trading, fetching it on demand if missing.
+///
+/// Manual/force buys allow trading tokens that aren't tracked by the pool service or
+/// that failed filtering — those already live in the DB and resolve immediately. For a
+/// token the bot has never seen (e.g. a future paste-by-address flow) this bootstraps
+/// it best-effort: it stamps a metadata row (decimals fetched from chain) and triggers
+/// an immediate API fetch, then retries assembly.
+///
+/// Returns the assembled [`Token`] or an error if the token still has no market data
+/// (in which case it cannot be priced or swapped anyway).
+pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
+    // Fast path: token already known (discovered, has market data) — covers
+    // not-pool-tracked and filter-failed tokens shown in the dashboard.
+    if let Some(token) = store::get_full_token_async(mint).await? {
+        return Ok(token);
+    }
+
+    crate::logger::info(
+        crate::logger::LogTag::Tokens,
+        &format!("Token {mint} not in DB — bootstrapping on demand for manual trade"),
+    );
+
+    // Stamp a metadata row so the token is persisted, fetching decimals from chain.
+    if let Some(db) = get_global_database() {
+        let decimals = decimals::get_token_decimals_from_chain(mint).await.ok();
+        let _ = db.upsert_token(mint, None, None, decimals);
+    }
+
+    // Best-effort: pull market/security data from APIs (failure is non-fatal).
+    if let Err(e) = request_immediate_update(mint).await {
+        crate::logger::warning(
+            crate::logger::LogTag::Tokens,
+            &format!("On-demand market fetch for {mint} failed: {e}"),
+        );
+    }
+
+    // Retry assembly now that market data may exist.
+    store::get_full_token_async(mint).await?.ok_or_else(|| {
+        TokenError::Database(format!(
+            "Token {mint} has no market data available (cannot price/swap)"
+        ))
+    })
+}

@@ -65,6 +65,8 @@ pub struct PositionResponse {
     // Archival
     pub archived: bool,
     pub archived_at: Option<i64>,
+    // Manual management: true when opened by a manual/force buy (auto-trader skips it)
+    pub manual_management: bool,
 }
 
 #[derive(Debug, Serialize)]

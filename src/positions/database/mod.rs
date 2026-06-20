@@ -34,5 +34,5 @@ pub use convenience::{
     get_position_by_id, get_position_by_mint, get_recent_closed_positions_for_mint,
     get_token_snapshot, get_token_snapshots, load_all_positions, save_entry_record,
     save_exit_record, save_position, save_token_snapshot, set_metadata, set_position_archived_db,
-    update_position, update_position_price_fields,
+    set_position_manual_management_db, update_position, update_position_price_fields,
 };

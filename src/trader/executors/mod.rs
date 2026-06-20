@@ -3,7 +3,7 @@
 mod buy;
 mod sell;
 
-pub use buy::{execute_buy, execute_dca};
+pub use buy::{execute_buy, execute_buy_managed, execute_dca};
 pub use sell::execute_sell;
 
 use crate::logger::{self, LogTag};

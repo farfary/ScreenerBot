@@ -452,10 +452,20 @@ pub struct TokenSearchResponse {
 // FAVORITES TYPES
 // =============================================================================
 
+/// A favorite token enriched with trading-state flags so the dashboard can show the
+/// right row actions (Buy vs Add/Sell) and disable trading for blacklisted tokens.
+#[derive(Debug, Serialize)]
+pub struct FavoriteRow {
+    #[serde(flatten)]
+    pub favorite: crate::tokens::favorites::FavoriteToken,
+    pub has_open_position: bool,
+    pub blacklisted: bool,
+}
+
 /// Response for favorites list
 #[derive(Debug, Serialize)]
 pub struct FavoritesListResponse {
-    pub favorites: Vec<crate::tokens::favorites::FavoriteToken>,
+    pub favorites: Vec<FavoriteRow>,
     pub total: usize,
 }
 

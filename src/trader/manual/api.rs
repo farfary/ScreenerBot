@@ -18,7 +18,14 @@ use chrono::Utc;
 /// Creates a high-priority buy decision with manual entry reason.
 /// Records the trade for tracking purposes.
 /// Action progress is broadcast to dashboard via SSE.
-pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String> {
+///
+/// `manual_management` controls whether the resulting position is left to the user
+/// (true: auto-trader will not auto-sell/DCA it) or handed to the auto-trader (false).
+pub async fn manual_buy(
+    mint: &str,
+    size_sol: f64,
+    manual_management: bool,
+) -> Result<TradeResult, String> {
     // Get token symbol for action display
     let symbol = crate::tokens::get_full_token_async(mint)
         .await
@@ -81,8 +88,9 @@ pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String
         size_sol: Some(size_sol),
     };
 
-    // Execute trade (includes quote + swap)
-    let result = match executors::execute_trade(&decision).await {
+    // Execute trade (includes quote + swap). A manual buy is always a Buy, so route
+    // straight to the buy executor with the explicit manual-management choice.
+    let result = match executors::execute_buy_managed(&decision, manual_management).await {
         Ok(result) => result,
         Err(e) => {
             // Check if this is a quote error or later

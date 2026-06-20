@@ -60,6 +60,44 @@ impl PositionsDatabase {
         Ok(rows_affected > 0)
     }
 
+    /// Enable or disable manual management for a position by ID.
+    ///
+    /// When manual management is on, the auto-trader leaves the position alone (no auto
+    /// take-profit/stop-loss/strategy exit or DCA). Reversible flag — does NOT touch any
+    /// other data. Deliberately separate from `update_position` so routine price/state
+    /// writes never clobber the flag.
+    pub async fn set_position_manual_management(
+        &self,
+        id: i64,
+        manual_management: bool,
+    ) -> Result<bool, String> {
+        let conn = self.get_connection()?;
+
+        let rows_affected = conn
+            .execute(
+                "UPDATE positions SET manual_management = ?2, updated_at = datetime('now') WHERE id = ?1",
+                params![id, manual_management],
+            )
+            .map_err(|e| format!("Failed to set position manual_management flag: {e}"))?;
+
+        // Force WAL checkpoint so other pooled connections see the change immediately.
+        if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
+            let _ = stmt.query([]);
+        }
+
+        if rows_affected > 0 {
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Position {id} manual management {}",
+                    if manual_management { "enabled" } else { "disabled" }
+                ),
+            );
+        }
+
+        Ok(rows_affected > 0)
+    }
+
     /// Delete all archived positions (hard delete). Returns the number removed.
     ///
     /// Cascades only to this position's own child rows (states, exits, entries,

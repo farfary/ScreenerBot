@@ -107,6 +107,20 @@ pub async fn monitor_positions(
 
         // Phase 1: Spawn concurrent evaluation tasks for all positions
         for position in open_positions {
+            // Manual/force buys are manually managed — the auto-trader never auto-sells
+            // or auto-DCAs them. Skip exit evaluation entirely so the user keeps control.
+            // Price/PnL tracking happens elsewhere, so the position stays visible/updated.
+            if position.manual_management {
+                logger::debug(
+                    LogTag::Trader,
+                    &format!(
+                        "Skipping auto-exit for manually managed position {} ({})",
+                        position.symbol, position.mint
+                    ),
+                );
+                continue;
+            }
+
             let sem = semaphore.clone();
             let shutdown_check = shutdown.clone();
             let position_mint = position.mint.clone();

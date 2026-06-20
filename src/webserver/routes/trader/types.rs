@@ -35,6 +35,10 @@ pub struct ManualBuyRequest {
     pub size_sol: Option<f64>,
     #[serde(default)]
     pub force: Option<bool>,
+    /// Whether the resulting position is manually managed (auto-trader leaves it alone).
+    /// Defaults to true: dashboard manual buys are protected unless the user opts out.
+    #[serde(default)]
+    pub manual_management: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

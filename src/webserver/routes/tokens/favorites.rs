@@ -18,8 +18,24 @@ pub async fn get_favorites(
     match crate::tokens::get_favorites_async().await {
         Ok(favorites) => {
             let total = favorites.len();
+            // Enrich each favorite with trading state so the dashboard can pick the
+            // right row actions (Buy vs Add/Sell) and disable blacklisted tokens.
+            let mut rows = Vec::with_capacity(total);
+            for favorite in favorites {
+                let has_open_position =
+                    crate::positions::state::is_open_position(&favorite.mint).await;
+                let blacklisted = crate::trader::safety::is_blacklisted(&favorite.mint).await;
+                rows.push(FavoriteRow {
+                    favorite,
+                    has_open_position,
+                    blacklisted,
+                });
+            }
             logger::info(LogTag::Webserver, &format!("Fetched {total} favorites"));
-            Ok(Json(FavoritesListResponse { favorites, total }))
+            Ok(Json(FavoritesListResponse {
+                favorites: rows,
+                total,
+            }))
         }
         Err(e) => {
             logger::warning(

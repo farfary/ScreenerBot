@@ -3,10 +3,30 @@
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::config;
-use crate::trader::types::{TradeDecision, TradeResult};
+use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
 
-/// Execute a buy trade
+/// Execute a buy trade (auto/strategy path).
+///
+/// Manual management is derived from the decision reason: manual/force buys are
+/// protected from the auto-trader by default. Dashboard manual buys that need an
+/// explicit choice call [`execute_buy_managed`] instead.
 pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String> {
+    let manual_management = matches!(
+        decision.reason,
+        TradeReason::ManualEntry | TradeReason::ForceBuy
+    );
+    execute_buy_managed(decision, manual_management).await
+}
+
+/// Execute a buy trade with an explicit manual-management choice.
+///
+/// `manual_management` controls whether the auto-trader leaves the resulting position
+/// alone (no auto take-profit/stop-loss/strategy exit or DCA). Used by manual/force
+/// buys where the user can opt the position into or out of auto-trader management.
+pub async fn execute_buy_managed(
+    decision: &TradeDecision,
+    manual_management: bool,
+) -> Result<TradeResult, String> {
     // Check connectivity before executing trade - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute buy - Unhealthy endpoints: {unhealthy}");
@@ -33,8 +53,11 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
         config::get_trade_size_sol() * crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
     let trade_size_sol = trade_size_sol.min(max_allowed);
 
-    // Call positions open with size so manual size is honored
-    match positions::open_position_with_size(&decision.mint, trade_size_sol).await {
+    // Call positions open with size so manual size is honored. `manual_management`
+    // flags the position so the auto-trader never auto-sells or auto-DCAs it.
+    match positions::open_position_with_size(&decision.mint, trade_size_sol, manual_management)
+        .await
+    {
         Ok(transaction_signature) => {
             logger::info(
                 LogTag::Trader,

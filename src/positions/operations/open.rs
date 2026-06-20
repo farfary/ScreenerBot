@@ -19,29 +19,40 @@ use crate::utils::{get_wallet_address, sol_to_lamports};
 use chrono::Utc;
 use serde_json::json;
 
-/// Open a new position using trade size from configuration
+/// Open a new position using trade size from configuration (auto-trader path)
 pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
-    open_position_impl(token_mint, trade_size_sol).await
+    open_position_impl(token_mint, trade_size_sol, false).await
 }
 
-/// Open a new position with an explicit SOL size (used by manual buys)
+/// Open a new position with an explicit SOL size (used by manual buys).
+///
+/// `manual_management` marks the position as manually managed: when true the
+/// auto-trader will never auto-sell or auto-DCA it (manual/force buys), leaving the
+/// user in full control.
 pub async fn open_position_with_size(
     token_mint: &str,
     trade_size_sol: f64,
+    manual_management: bool,
 ) -> Result<String, String> {
     if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
         return Err(format!("Invalid trade size: {trade_size_sol}"));
     }
-    open_position_impl(token_mint, trade_size_sol).await
+    open_position_impl(token_mint, trade_size_sol, manual_management).await
 }
 
 /// Internal helper to open a new position with an explicit SOL size
-async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<String, String> {
-    let api_token = crate::tokens::get_full_token_async(token_mint)
+async fn open_position_impl(
+    token_mint: &str,
+    trade_size_sol: f64,
+    manual_management: bool,
+) -> Result<String, String> {
+    // Ensure the token exists in the local DB. For manual/force buys this lets the user
+    // trade tokens that were never tracked by the pool service or that failed filtering
+    // (decimals fetched from chain + metadata fetched from APIs on demand).
+    let api_token = crate::tokens::ensure_token_available(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
+        .map_err(|e| format!("Token unavailable for trading: {e}"))?;
 
     // Get price with fallback to API when pool price unavailable
     // This enables trading for tokens not yet tracked by pool service
@@ -275,6 +286,8 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         // New positions are never archived
         archived: false,
         archived_at: None,
+        // Manual/force buys are flagged so the auto-trader leaves them alone
+        manual_management,
     };
 
     // Save to database (with retry) and get ID

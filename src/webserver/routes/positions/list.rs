@@ -120,6 +120,7 @@ fn map_position_to_response_with_logo(
         total_exited_amount: p.total_exited_amount,
         archived: p.archived,
         archived_at: p.archived_at.map(|dt| dt.timestamp()),
+        manual_management: p.manual_management,
     }
 }
 

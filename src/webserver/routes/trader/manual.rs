@@ -91,8 +91,12 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         ),
     );
 
+    // Default to manually managed (auto-trader leaves the position alone) unless the
+    // user explicitly opted into auto-trader handling via the trade dialog checkbox.
+    let manual_management = req.manual_management.unwrap_or(true);
+
     // Use standard manual_buy - action tracking is handled inside
-    let result = crate::trader::manual::manual_buy(&req.mint, size).await;
+    let result = crate::trader::manual::manual_buy(&req.mint, size, manual_management).await;
 
     match result {
         Ok(tr) => {
