@@ -138,48 +138,11 @@
   font-family: var(--font-mono, monospace);
 }
 
-/* ===== IMPROVED SELECTS ===== */
-.ai-native-select {
-  position: relative;
-  min-width: 180px;
-}
-
-.ai-native-select select {
-  width: 100%;
-  padding: 10px 36px 10px 14px;
-  font-size: 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  transition: all var(--transition-fast);
-}
-
-.ai-native-select select:hover {
-  border-color: #4b5563;
-}
-
-.ai-native-select select:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.15);
-}
-
-.ai-native-select::after {
-  content: "";
-  position: absolute;
-  inset-inline-end: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 0;
-  height: 0;
-  border-inline-start: 5px solid transparent;
-  border-inline-end: 5px solid transparent;
-  border-top: 5px solid var(--text-secondary);
-  pointer-events: none;
-}
+/* NOTE: the old `.ai-native-select` CSS-only wrapper (with its own ::after triangle)
+   was removed. Its <select> is now upgraded to the shared CustomSelect by the global
+   enhancer, so the wrapper's triangle painted a SECOND arrow on top of .cs-arrow
+   (the double arrow on the AI settings page). Style the dropdown via the shared
+   .custom-select component, never a per-page select wrapper. */
 
 /* ===== IMPROVED TEXT INPUTS ===== */
 .text-input {
