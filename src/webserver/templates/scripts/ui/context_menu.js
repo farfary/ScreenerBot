@@ -662,9 +662,12 @@ class ContextMenuManager {
           this._renderItems(submenuEl, item.submenu, false);
           el.appendChild(submenuEl);
 
-          // Submenu hover handling
+          // Submenu hover handling. Position immediately so the CSS :hover-opened
+          // submenu never flashes off the frame before the open-intent delay elapses.
           el.addEventListener("mouseenter", () => {
             this._clearTimeouts();
+            const submenu = el.querySelector(".context-menu-submenu");
+            if (submenu) this._positionSubmenu(el, submenu);
             this.submenuTimeout = setTimeout(() => {
               this._openSubmenuForItem(el);
             }, 150);
@@ -734,6 +737,10 @@ class ContextMenuManager {
     submenuEl.classList.remove("left");
     submenuEl.style.top = "";
 
+    // The submenu's CSS top within its parent item (e.g. -5px). We adjust RELATIVE to
+    // this so the shift math is correct (the previous version overwrote it, leaving the
+    // submenu only a few px off and still overflowing).
+    const baseTop = submenuEl.offsetTop;
     const parentRect = parentEl.getBoundingClientRect();
     const submenuRect = submenuEl.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
@@ -745,13 +752,14 @@ class ContextMenuManager {
       submenuEl.classList.add("left");
     }
 
-    // Vertical: the submenu opens aligned with its parent item. If it would run past
-    // the bottom of the frame, shift it up just enough to stay fully visible — never
-    // letting its top go above the frame. (Long submenus also scroll via CSS max-height.)
-    const overflowBottom = submenuRect.top + submenuRect.height - (viewportHeight - padding);
-    if (overflowBottom > 0) {
-      const shift = Math.min(overflowBottom, Math.max(0, submenuRect.top - padding));
-      if (shift > 0) submenuEl.style.top = `${-shift}px`;
+    // Vertical: clamp the submenu's viewport top so its bottom stays inside the frame,
+    // never letting its top go above it. (A submenu taller than the frame is capped by
+    // CSS max-height + scroll, so its height is already <= the available space.)
+    const maxTop = viewportHeight - padding - submenuRect.height;
+    const desiredTop = Math.max(padding, Math.min(submenuRect.top, maxTop));
+    const delta = desiredTop - submenuRect.top;
+    if (Math.abs(delta) > 0.5) {
+      submenuEl.style.top = `${baseTop + delta}px`;
     }
   }
 

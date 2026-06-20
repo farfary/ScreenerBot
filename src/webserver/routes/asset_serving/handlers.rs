@@ -23,15 +23,28 @@ fn version_js_imports(js: &str) -> String {
     .into_owned()
 }
 
-/// Serve a JS module with versioned imports
+/// Serve a JS module with versioned imports.
+///
+/// Dashboard assets are embedded in the binary and served over localhost, so there is
+/// no benefit to browser caching them — and stale caching is actively harmful: the
+/// cache-buster is the (intentionally frozen) app version, so a rebuilt binary would
+/// otherwise keep serving the previously cached JS (CSS is inlined in the page HTML, so
+/// it is always fresh — this is why CSS changes appeared but JS changes did not). Send
+/// `no-store` so every load fetches the current embedded script.
 fn serve_js(content: &str) -> Response {
     let versioned = version_js_imports(content);
     (
         StatusCode::OK,
-        [(
-            http_header::CONTENT_TYPE,
-            "application/javascript; charset=utf-8",
-        )],
+        [
+            (
+                http_header::CONTENT_TYPE,
+                "application/javascript; charset=utf-8",
+            ),
+            (
+                http_header::CACHE_CONTROL,
+                "no-store, no-cache, must-revalidate",
+            ),
+        ],
         versioned,
     )
         .into_response()
