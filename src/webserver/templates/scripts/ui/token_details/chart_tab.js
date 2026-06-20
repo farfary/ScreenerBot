@@ -222,6 +222,10 @@ export function applyChartTabMixin(DialogClass) {
         loadingOverlay.classList.add("hidden");
       }
       this.chartDataLoaded = true;
+      // Clear any "no data" backoff so a timeframe that does have candles polls
+      // at the normal cadence again.
+      this._chartEmptyCount = 0;
+      this._chartPollBackedOff = false;
 
       // Update OHLCV display with latest candle
       this._updateOhlcvDisplay(chartData);

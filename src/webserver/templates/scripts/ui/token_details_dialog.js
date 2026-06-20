@@ -407,8 +407,15 @@ export class TokenDetailsDialog {
 
   _startChartPolling() {
     this._stopChartPolling();
-    // Use 3s polling when waiting for data, 10s when data loaded (reduced from 1.5s/5s)
-    const interval = this.chartDataLoaded ? 10000 : 3000;
+    // 10s once data is loaded; 3s while actively waiting; but back off to 15s once
+    // it's clear the token simply has no OHLCV yet, so we don't hammer the OHLCV
+    // endpoint every 3s for the whole time the dialog stays open on a dead chart.
+    let interval = 3000;
+    if (this.chartDataLoaded) {
+      interval = 10000;
+    } else if (this._chartPollBackedOff) {
+      interval = 15000;
+    }
     this.chartPoller = new Poller(
       () => {
         this._refreshChartData();
@@ -448,14 +455,25 @@ export class TokenDetailsDialog {
       );
 
       if (!Array.isArray(data) || data.length === 0) {
-        // No data yet - keep showing waiting message
+        // No data yet. After a streak of empty responses, switch to a clearer
+        // message (an unchanging "Waiting…" spinner reads as "broken") and back
+        // off the 3s poll so a token that simply has no OHLCV stops hammering the
+        // endpoint. We keep polling (slower) because data may still arrive.
+        this._chartEmptyCount = (this._chartEmptyCount || 0) + 1;
         if (loadingText) {
-          loadingText.textContent = "Waiting for chart data...";
+          loadingText.textContent =
+            this._chartEmptyCount >= 6
+              ? "No chart data available yet — still checking…"
+              : "Waiting for chart data...";
         }
         if (loadingOverlay) {
           loadingOverlay.classList.remove("hidden");
         }
         this.chartDataLoaded = false;
+        if (this._chartEmptyCount === 6 && !this._chartPollBackedOff) {
+          this._chartPollBackedOff = true;
+          this._startChartPolling();
+        }
         return;
       }
 
@@ -476,6 +494,8 @@ export class TokenDetailsDialog {
       }
       this.chartDataLoaded = true;
       this._chartErrorCount = 0; // Reset error counter on success
+      this._chartEmptyCount = 0;
+      this._chartPollBackedOff = false;
 
       // Update OHLCV status to success
       this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.SUCCESS);
@@ -648,6 +668,8 @@ export class TokenDetailsDialog {
       this._initialLoadComplete = false;
       this._retryCount = 0;
       this._chartErrorCount = 0;
+      this._chartEmptyCount = 0;
+      this._chartPollBackedOff = false;
       this._connectionState = "online";
       this._consecutiveFailures = 0;
 
@@ -819,7 +841,10 @@ export class TokenDetailsDialog {
       if (token.blacklisted) badges.push('<span class="badge badge-danger">Blacklisted</span>');
       if (token.has_ohlcv) badges.push('<span class="badge badge-secondary">OHLCV</span>');
 
-      badgesContainer.innerHTML = badges.join("");
+      // Only repaint when the badge set changed. _updateHeader runs on every 5s
+      // poll, and an unconditional innerHTML write would drop any text selection
+      // in the header and dismiss the Auth tooltip every tick.
+      this._renderHtmlIfChanged(badgesContainer, badges.join(""), "__badgesHtml");
       // Always show badges row for layout consistency (contains status now)
       badgesRow.style.display = "flex";
     }
@@ -860,11 +885,11 @@ export class TokenDetailsDialog {
       }
     }
 
-    // Update price section
+    // Update price section (idempotent: only repaints when the price/metrics
+    // markup actually changes, avoiding per-poll churn and selection loss).
     const priceContainer = this.dialogEl.querySelector("#headerPrice");
     if (priceContainer) {
-      const priceHtml = this._buildHeaderPrice(token);
-      priceContainer.innerHTML = priceHtml;
+      this._renderHtmlIfChanged(priceContainer, this._buildHeaderPrice(token), "__priceHtml");
     }
 
     // Update sell button state based on open positions
