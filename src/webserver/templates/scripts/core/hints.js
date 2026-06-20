@@ -298,6 +298,18 @@ Benefits:
 
 Each partial exit is recorded separately for accurate P&L tracking.`,
     },
+
+    manualManagement: {
+      id: "positions.manual_management",
+      title: "Manual Management",
+      content: `When **Manual management** is on, the auto-trader leaves this position alone:
+
+• No automatic take-profit, stop-loss, or trailing exit
+• No strategy/AI exit
+• No automatic DCA
+
+You sell or add to it yourself. Manual buys default to manual management so the bot can't sell a token you bought on purpose. Turn it off to hand the position back to the auto-trader.`,
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -131,6 +131,38 @@ function createLifecycle() {
     )}">${icon}<span class="pos-state-text">${label}</span></div>`;
   };
 
+  // Systematic per-position row indicators.
+  //
+  // These surface persistent per-position status (e.g. "Manual management") as a compact
+  // vertical label on the ROW's left edge (the first/actions cell), drawn purely in CSS.
+  // The token logo/symbol column is never touched, so logos stay aligned across every row
+  // whether or not a row has an indicator.
+  //
+  // To add a new indicator: append ONE descriptor here AND one CSS rule
+  // (`.pos-ind-<id> > td:first-child::after { content: "<Label>"; }`) in positions.css.
+  // Indicators are priority-ordered; the first matching one is shown (a single row has
+  // room for one vertical label).
+  //   { id, test(row)->bool, label }
+  const POSITION_INDICATORS = [
+    {
+      id: "manual",
+      test: (row) => Boolean(row?.manual_management),
+      label: "Manual management",
+    },
+  ];
+
+  // The `pos-ind pos-ind-<id>` row class for the highest-priority active indicator (or "").
+  const positionIndicatorClass = (row) => {
+    const primary = POSITION_INDICATORS.find((d) => {
+      try {
+        return d.test(row);
+      } catch {
+        return false;
+      }
+    });
+    return primary ? `pos-ind pos-ind-${primary.id}` : "";
+  };
+
   const tokenCell = (row) => {
     const logo = row.logo_url || row.image_url || "";
     const symbol = row.symbol || "?";
@@ -824,9 +856,14 @@ function createLifecycle() {
         // State-driven row styling: left status bar + tint for pending/selling/
         // closing/failed rows, and a brief arrival glow for just-closed rows.
         rowClass: (row) => {
-          if (row?._state) return `pos-row-${row._state}`;
-          if (row?._justClosed) return "pos-row-just-closed";
-          return "";
+          const classes = [];
+          if (row?._state) classes.push(`pos-row-${row._state}`);
+          else if (row?._justClosed) classes.push("pos-row-just-closed");
+          // Persistent per-position indicators (e.g. manual management) — row-level left
+          // edge label, independent of the transient state classes above.
+          const indicator = positionIndicatorClass(row);
+          if (indicator) classes.push(indicator);
+          return classes.join(" ");
         },
         // Animate rows leaving the Open list as they finish closing or a pending
         // buy resolves into a real position.
@@ -1005,6 +1042,23 @@ function createLifecycle() {
         containerEl.addEventListener("click", handleRowClick);
         ctx.onDispose(() => containerEl.removeEventListener("click", handleRowClick));
       }
+
+      // Update the row in place after manual management is toggled (from the row context
+      // menu or the position details dialog). Updating the cached row re-applies the
+      // row class immediately (the backend already persisted it), so the Manual ribbon
+      // flips without waiting on a poll/refetch round-trip.
+      const handleManagementChanged = (e) => {
+        const { id, enabled } = e?.detail || {};
+        if (id == null) return;
+        table?.updateRow(id, { manual_management: !!enabled });
+      };
+      window.addEventListener("screenerbot:position-management-changed", handleManagementChanged);
+      ctx.onDispose(() =>
+        window.removeEventListener(
+          "screenerbot:position-management-changed",
+          handleManagementChanged
+        )
+      );
     },
 
     activate(ctx) {

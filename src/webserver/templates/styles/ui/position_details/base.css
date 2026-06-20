@@ -395,6 +395,44 @@
   color: var(--warning-color);
 }
 
+/* Manual management: position opened by a manual/force buy; auto-trader skips it. */
+.position-details-dialog .pdd-badge-manual {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+  border: 1px solid var(--warning-color);
+}
+
+/* Interactive manual-management toggle (open positions). */
+.position-details-dialog .pdd-manual-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.position-details-dialog .pdd-manual-toggle i {
+  font-size: 0.85em;
+}
+
+/* ON: manually managed (auto-trader off) — warning accent like the row badge. */
+.position-details-dialog .pdd-manual-toggle.is-on {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+  border: 1px solid var(--warning-color);
+}
+
+/* OFF: auto-managed — muted/neutral so it reads as the non-protected state. */
+.position-details-dialog .pdd-manual-toggle.is-off {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.position-details-dialog .pdd-manual-toggle:hover {
+  filter: brightness(1.1);
+}
+
 /* Close Button */
 .position-details-dialog .dialog-close {
   display: inline-flex;

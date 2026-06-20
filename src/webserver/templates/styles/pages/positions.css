@@ -328,6 +328,58 @@
   background-image: linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1));
 }
 
+/* ===========================================================================
+   Per-position row indicators — a vertical "ribbon" tab on the row's LEFT edge
+   (the first/actions cell). Driven by a `pos-ind-<id>` class on the <tr>, set from
+   the POSITION_INDICATORS registry in positions.js.
+
+   The ribbon fills the row height (tiny offset), reads bottom-to-top, and is
+   highlighted with a tinted background. Left padding is reserved ONLY on indicator
+   rows so the ribbon keeps a small gap from the action buttons; the column width is
+   unchanged, so the token logo column never moves and every row's logo stays aligned.
+   Add a new indicator: one registry descriptor + one `.pos-ind-<id> ... content` rule.
+   =========================================================================== */
+.pos-ind > td:first-child:not(.dt-col-sticky) {
+  position: relative;
+}
+
+/* Reserve room so the ribbon doesn't sit under the action buttons (small gap). */
+.pos-ind > td:first-child {
+  padding-left: 26px;
+}
+
+/* The ribbon owns the left edge — hide the transient state bar underneath it so the
+   highlight stays clean (state is still shown via the row tint + caption). */
+.pos-ind > td:first-child::before {
+  display: none;
+}
+
+.pos-ind > td:first-child::after {
+  position: absolute;
+  inset: 0 auto 0 0; /* fill the full row height, flush to the left edge */
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg); /* read bottom-to-top, first letter at the bottom */
+  border-radius: 0 4px 4px 0;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Manual management — the auto-trader leaves this position alone. */
+.pos-ind-manual > td:first-child::after {
+  content: "Manual";
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
 /* Pending (synthetic) rows are non-interactive placeholders */
 .pos-row-buying,
 .pos-row-failed {
@@ -392,19 +444,16 @@
 
 .pos-row-buying > td.dt-col-sticky {
   background:
-    linear-gradient(0deg, rgb(245, 158, 11, 0.09), rgb(245, 158, 11, 0.09)),
-    var(--bg-primary);
+    linear-gradient(0deg, rgb(245, 158, 11, 0.09), rgb(245, 158, 11, 0.09)), var(--bg-primary);
 }
 
 .pos-row-selling > td.dt-col-sticky,
 .pos-row-closing > td.dt-col-sticky {
   background:
-    linear-gradient(0deg, rgb(251, 146, 60, 0.09), rgb(251, 146, 60, 0.09)),
-    var(--bg-primary);
+    linear-gradient(0deg, rgb(251, 146, 60, 0.09), rgb(251, 146, 60, 0.09)), var(--bg-primary);
 }
 
 .pos-row-failed > td.dt-col-sticky {
   background:
-    linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1)),
-    var(--bg-primary);
+    linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1)), var(--bg-primary);
 }

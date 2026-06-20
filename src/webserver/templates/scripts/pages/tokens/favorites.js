@@ -21,22 +21,35 @@ export function createFavoritesModule(deps) {
         label: "",
         sortable: false,
         floating: true,
-        // 3 collapsed icon buttons: 3*32 + 2*6 gaps + ~24 cell padding + safety.
-        // Matches actionsMinWidth(3) used by the other tables; no hard maxWidth so
-        // the column stays resizable like every other pinned actions column.
-        minWidth: 138,
-        width: 138,
+        // Trade buttons (Buy, or Add + Sell when a position is open) + 3 utility icons.
+        // Up to 5 collapsed icon buttons: 5*32 + 4*6 gaps + ~24 cell padding + safety.
+        // No hard maxWidth so the column stays resizable like every other pinned column.
+        minWidth: 210,
+        width: 210,
         wrap: false,
         render: (_value, row) => {
+          const mint = Utils.escapeHtml(row.mint);
+          const isBlacklisted = Boolean(row.blacklisted);
+          const hasOpen = Boolean(row.has_open_position);
+          const disabledAttr = isBlacklisted ? ' disabled aria-disabled="true"' : "";
+
+          // Manual trade buttons reuse the shared handler (deps.performManualTrade).
+          const tradeButtons = hasOpen
+            ? `
+              <button class="btn btn-small btn-icon favorites-trade-btn" data-action="add" data-mint="${mint}" title="Add to position (DCA)"${disabledAttr}><i class="icon-circle-plus"></i></button>
+              <button class="btn btn-small btn-icon favorites-trade-btn" data-action="sell" data-mint="${mint}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i></button>`
+            : `
+              <button class="btn btn-small btn-icon favorites-trade-btn" data-action="buy" data-mint="${mint}" title="Buy position"${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
+
           return `
-            <div class="favorites-actions dt-actions-flex">
-              <button class="btn btn-small btn-icon favorites-action-btn" data-action="copy" data-mint="${Utils.escapeHtml(row.mint)}" title="Copy Mint">
+            <div class="favorites-actions dt-actions-flex">${tradeButtons}
+              <button class="btn btn-small btn-icon favorites-action-btn" data-action="copy" data-mint="${mint}" title="Copy Mint">
                 <i class="icon-copy"></i>
               </button>
-              <button class="btn btn-small btn-icon favorites-action-btn" data-action="external" data-mint="${Utils.escapeHtml(row.mint)}" title="View on DexScreener">
+              <button class="btn btn-small btn-icon favorites-action-btn" data-action="external" data-mint="${mint}" title="View on DexScreener">
                 <i class="icon-external-link"></i>
               </button>
-              <button class="btn btn-small btn-icon btn-danger favorites-action-btn" data-action="remove" data-mint="${Utils.escapeHtml(row.mint)}" title="Remove from favorites">
+              <button class="btn btn-small btn-icon btn-danger favorites-action-btn" data-action="remove" data-mint="${mint}" title="Remove from favorites">
                 <i class="icon-trash-2"></i>
               </button>
             </div>
@@ -247,6 +260,25 @@ export function createFavoritesModule(deps) {
 
     // Add click handler for action buttons
     favoritesContainer.addEventListener("click", (e) => {
+      // Manual trade buttons (Buy / Add / Sell) reuse the shared trade handler and
+      // refresh favorites afterwards so the row's Buy<->Add/Sell state stays correct.
+      const tradeBtn = e.target.closest(".favorites-trade-btn");
+      if (tradeBtn) {
+        const action = tradeBtn.getAttribute("data-action");
+        const mint = tradeBtn.getAttribute("data-mint");
+        const row = favoritesState.favorites.find((f) => f.mint === mint) || {};
+        if (action && mint && typeof deps.performManualTrade === "function") {
+          deps.performManualTrade({
+            action,
+            mint,
+            row,
+            btn: tradeBtn,
+            onReload: () => fetchFavorites().then(() => updateFavoritesTable()),
+          });
+        }
+        return;
+      }
+
       const actionBtn = e.target.closest(".favorites-action-btn");
       if (actionBtn) {
         const action = actionBtn.getAttribute("data-action");

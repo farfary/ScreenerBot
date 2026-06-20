@@ -209,6 +209,20 @@
       );
     };
 
+    // Toggle manual management for a position. The positions page owns the position
+    // id + reload, so we dispatch a decoupled event it listens for (same pattern as
+    // open-position-details).
+    manager._toggleManualManagement = function (context, enabled) {
+      // The positions table keys rows by position id (data-row-id), so read it from the
+      // row element for an unambiguous target.
+      const id = context.element?.dataset?.rowId || null;
+      window.dispatchEvent(
+        new CustomEvent("screenerbot:toggle-position-management", {
+          detail: { id, mint: context.mint, enabled },
+        })
+      );
+    };
+
     // =========================================================================
     // External Links
     // =========================================================================

@@ -194,6 +194,17 @@
         action: () => this._viewPositionDetails(context),
       });
 
+      // Manual-management toggle. Current state is read straight from the row DOM
+      // (the row carries the `pos-ind-manual` class only when manual management is on),
+      // so the menu label is always accurate without extra plumbing.
+      const isManual = !!context.element?.classList?.contains("pos-ind-manual");
+      items.push({
+        type: "item",
+        label: isManual ? "Disable manual management" : "Enable manual management",
+        icon: "shield",
+        action: () => this._toggleManualManagement(context, !isManual),
+      });
+
       // Favorites toggle
       const isFavorite = this._isFavorite(context.mint);
       items.push({

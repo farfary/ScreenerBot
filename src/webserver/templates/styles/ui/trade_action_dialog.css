@@ -411,6 +411,53 @@ body.trade-action-dialog-open {
   flex-shrink: 0;
 }
 
+/* Manual-management toggle (buy action only) */
+.trade-action-manage-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: rgb(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+}
+
+.trade-action-manage-row[data-visible="false"] {
+  display: none;
+}
+
+.trade-action-manage-checkbox {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.trade-action-manage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trade-action-manage-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trade-action-manage-sub {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
 /* Footer Actions */
 .trade-action-footer {
   display: flex;
@@ -955,8 +1002,8 @@ body.trade-action-dialog-open {
   height: 6px;
   border-radius: 999px;
   background:
-    linear-gradient(var(--action-color, #10b981), var(--action-color, #10b981)) 0 / var(--slider-fill)
-      100% no-repeat,
+    linear-gradient(var(--action-color, #10b981), var(--action-color, #10b981)) 0 /
+      var(--slider-fill) 100% no-repeat,
     rgb(255, 255, 255, 0.1);
   cursor: pointer;
   outline: none;

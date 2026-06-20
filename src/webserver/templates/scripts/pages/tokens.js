@@ -863,54 +863,161 @@ function createLifecycle() {
   };
 
   /**
+   * Shared manual trade handler (buy / add / sell) used by every token-list table AND
+   * the favorites table. Opens the TradeActionDialog then POSTs to the manual endpoints.
+   * `onReload` lets each caller refresh its own view after the trade completes.
+   * @param {{action:string, mint:string, row?:object, btn?:HTMLElement, onReload?:Function}} opts
+   */
+  const performManualTrade = async ({ action, mint, row = {}, btn = null, onReload }) => {
+    if (!action || !mint) return;
+    // Lazily ensure the dialog exists (favorites can be opened before the main init).
+    if (!tradeDialog) tradeDialog = new TradeActionDialog();
+    const symbol = row.symbol || "?";
+    const reload = typeof onReload === "function" ? onReload : () => {};
+
+    try {
+      if (action === "buy") {
+        const result = await tradeDialog.open({
+          action: "buy",
+          mint,
+          symbol,
+          context: { mint, balance: walletBalance },
+        });
+        if (!result) return; // User cancelled
+
+        if (btn) btn.disabled = true;
+        await requestManager.fetch("/api/trader/manual/buy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mint,
+            ...(result.amount ? { size_sol: result.amount } : {}),
+            // Manual-management choice from the dialog checkbox (default true).
+            ...(typeof result.manual_management === "boolean"
+              ? { manual_management: result.manual_management }
+              : {}),
+          }),
+          priority: "high",
+        });
+        if (btn) btn.disabled = false;
+        Utils.showToast("Buy placed", "success");
+        reload();
+      } else if (action === "add") {
+        // Fetch config for entry sizes (DCA presets)
+        let entrySizes = [0.005, 0.01, 0.02, 0.05];
+        try {
+          const configData = await requestManager.fetch("/api/config/trader", {
+            priority: "normal",
+          });
+          if (Array.isArray(configData?.data?.entry_sizes)) {
+            entrySizes = configData.data.entry_sizes;
+          }
+        } catch (err) {
+          console.warn("Failed to fetch entry_sizes config:", err);
+        }
+
+        const result = await tradeDialog.open({
+          action: "add",
+          mint,
+          symbol,
+          context: { mint, balance: walletBalance, entrySize: row.entry_sol || 0.005, entrySizes },
+        });
+        if (!result) return;
+
+        if (btn) btn.disabled = true;
+        await requestManager.fetch("/api/trader/manual/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mint,
+            ...(result.amount ? { size_sol: result.amount } : {}),
+          }),
+          priority: "high",
+        });
+        if (btn) btn.disabled = false;
+        Utils.showToast("Added to position", "success");
+        reload();
+      } else if (action === "sell") {
+        const result = await tradeDialog.open({
+          action: "sell",
+          mint,
+          symbol,
+          context: { mint, holdings: row.token_amount },
+        });
+        if (!result) return;
+
+        const body =
+          result.percentage === 100
+            ? { mint, close_all: true }
+            : { mint, percentage: result.percentage };
+
+        if (btn) btn.disabled = true;
+        await requestManager.fetch("/api/trader/manual/sell", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          priority: "high",
+        });
+        if (btn) btn.disabled = false;
+        Utils.showToast("Sell placed", "success");
+        reload();
+      }
+    } catch (err) {
+      if (btn) btn.disabled = false;
+      Utils.showToast(err?.message || "Action failed", "error");
+    }
+  };
+
+  // Expose the shared trade handler to sub-modules (favorites table reuses it).
+  deps.performManualTrade = performManualTrade;
+
+  /**
    * Build columns array based on current view
    * Different views show different conditional columns (Actions, reject_reason, blacklist_reason)
    */
   const buildColumns = () => {
     return [
-      // Conditionally add Actions column for Pool view (pinned/floating, leftmost).
-      ...(state.view === "pool"
-        ? [
-            {
-              id: "actions",
-              label: "Actions",
-              sortable: false,
-              floating: true,
-              minWidth: actionsMinWidth(2),
-              width: actionsMinWidth(2),
-              wrap: false,
-              render: (_v, row) => {
-                const mint = row?.mint || "";
-                const isBlacklisted = Boolean(row?.blacklisted);
-                const hasOpen = Boolean(row?.has_open_position);
-                const disabledAttr = isBlacklisted ? ' disabled aria-disabled="true"' : "";
+      // Actions column (Buy / Add + Sell) on every token-list view, pinned/floating
+      // leftmost. Manual buys work for any token even if it isn't pool-tracked or
+      // failed filtering; rows with an open position get Add + Sell instead of Buy.
+      {
+        id: "actions",
+        label: "Actions",
+        sortable: false,
+        floating: true,
+        minWidth: actionsMinWidth(2),
+        width: actionsMinWidth(2),
+        wrap: false,
+        render: (_v, row) => {
+          const mint = row?.mint || "";
+          const isBlacklisted = Boolean(row?.blacklisted);
+          const hasOpen = Boolean(row?.has_open_position);
+          const disabledAttr = isBlacklisted ? ' disabled aria-disabled="true"' : "";
 
-                if (!mint) return "—";
+          if (!mint) return "—";
 
-                if (hasOpen) {
-                  return `
-                    <div class="row-actions dt-actions-flex">
-                      <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
-                        mint
-                      )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-circle-plus"></i><span class="row-action-label">Add</span></button>
-                      <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
-                        mint
-                      )}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i><span class="row-action-label">Sell</span></button>
-                    </div>
-                  `;
-                }
+          if (hasOpen) {
+            return `
+              <div class="row-actions dt-actions-flex">
+                <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
+                  mint
+                )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-circle-plus"></i><span class="row-action-label">Add</span></button>
+                <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
+                  mint
+                )}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i><span class="row-action-label">Sell</span></button>
+              </div>
+            `;
+          }
 
-                return `
-                  <div class="row-actions dt-actions-flex">
-                    <button class="btn row-action" data-action="buy" data-mint="${Utils.escapeHtml(
-                      mint
-                    )}" title="Buy position"${disabledAttr}><i class="icon-shopping-cart"></i><span class="row-action-label">Buy</span></button>
-                  </div>
-                `;
-              },
-            },
-          ]
-        : []),
+          return `
+            <div class="row-actions dt-actions-flex">
+              <button class="btn row-action" data-action="buy" data-mint="${Utils.escapeHtml(
+                mint
+              )}" title="Buy position"${disabledAttr}><i class="icon-shopping-cart"></i><span class="row-action-label">Buy</span></button>
+            </div>
+          `;
+        },
+      },
       {
         id: "token",
         label: "Token",
@@ -1762,113 +1869,14 @@ function createLifecycle() {
           return;
         }
 
-        try {
-          if (action === "buy") {
-            // Open dialog
-            const result = await tradeDialog.open({
-              action: "buy",
-              mint: mint,
-              symbol: row.symbol || "?",
-              context: {
-                mint: mint,
-                balance: walletBalance,
-              },
-            });
-
-            if (!result) return; // User cancelled
-
-            // Proceed with API call
-            btn.disabled = true;
-            const data = await requestManager.fetch("/api/trader/manual/buy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mint,
-                ...(result.amount ? { size_sol: result.amount } : {}),
-              }),
-              priority: "high",
-            });
-            btn.disabled = false;
-            Utils.showToast("Buy placed", "success");
-            requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
-          } else if (action === "add") {
-            // Fetch config for entry sizes
-            let entrySizes = [0.005, 0.01, 0.02, 0.05];
-            try {
-              const configData = await requestManager.fetch("/api/config/trader", {
-                priority: "normal",
-              });
-              if (Array.isArray(configData?.data?.entry_sizes)) {
-                entrySizes = configData.data.entry_sizes;
-              }
-            } catch (err) {
-              console.warn("Failed to fetch entry_sizes config:", err);
-            }
-
-            // Open dialog
-            const result = await tradeDialog.open({
-              action: "add",
-              mint: mint,
-              symbol: row.symbol || "?",
-              context: {
-                mint: mint,
-                balance: walletBalance,
-                entrySize: row.entry_sol || 0.005,
-                entrySizes: entrySizes,
-              },
-            });
-
-            if (!result) return; // User cancelled
-
-            // Proceed with API call
-            btn.disabled = true;
-            const data = await requestManager.fetch("/api/trader/manual/add", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mint,
-                ...(result.amount ? { size_sol: result.amount } : {}),
-              }),
-              priority: "high",
-            });
-            btn.disabled = false;
-            Utils.showToast("Added to position", "success");
-            requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
-          } else if (action === "sell") {
-            // Open dialog
-            const result = await tradeDialog.open({
-              action: "sell",
-              mint: mint,
-              symbol: row.symbol || "?",
-              context: {
-                mint: mint,
-                holdings: row.token_amount,
-              },
-            });
-
-            if (!result) return; // User cancelled
-
-            // Build request body
-            const body =
-              result.percentage === 100
-                ? { mint, close_all: true }
-                : { mint, percentage: result.percentage };
-
-            btn.disabled = true;
-            const data = await requestManager.fetch("/api/trader/manual/sell", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-              priority: "high",
-            });
-            btn.disabled = false;
-            Utils.showToast("Sell placed", "success");
-            requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
-          }
-        } catch (err) {
-          btn.disabled = false;
-          Utils.showToast(err?.message || "Action failed", "error");
-        }
+        await performManualTrade({
+          action,
+          mint,
+          row,
+          btn,
+          onReload: () =>
+            requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {}),
+        });
       };
 
       if (containerEl) {

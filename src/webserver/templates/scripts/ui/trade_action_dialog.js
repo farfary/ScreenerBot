@@ -1,6 +1,8 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
+import * as Hints from "../core/hints.js";
+import { HintTrigger } from "./hint_popover.js";
 import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
 import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 
@@ -187,6 +189,17 @@ export class TradeActionDialog {
               <span class="trade-action-error-text"></span>
             </div>
           </div>
+          <!-- Manual management (buy only): keep this position off the auto-trader. -->
+          <label class="trade-action-manage-row" data-visible="false">
+            <input type="checkbox" class="trade-action-manage-checkbox" checked />
+            <span class="trade-action-manage-copy">
+              <span class="trade-action-manage-title">
+                Manual management
+                <span class="trade-action-manage-hint"></span>
+              </span>
+              <span class="trade-action-manage-sub">Auto-trader won't sell or DCA this position. Uncheck to let it manage exits.</span>
+            </span>
+          </label>
           </div>
           <div class="trade-action-pane trade-action-pane-preview">
           <div class="trade-action-quote-section" data-state="idle" data-refreshing="false">
@@ -343,6 +356,9 @@ export class TradeActionDialog {
     this.inputSuffix = overlay.querySelector(".trade-action-input-suffix");
     this.inputLabelEl = overlay.querySelector(".trade-action-input-label");
     this.inputHintEl = overlay.querySelector(".trade-action-input-hint");
+    this.manageRowEl = overlay.querySelector(".trade-action-manage-row");
+    this.manageCheckboxEl = overlay.querySelector(".trade-action-manage-checkbox");
+    this.manageHintEl = overlay.querySelector(".trade-action-manage-hint");
     this.errorEl = overlay.querySelector(".trade-action-error-msg");
     this.errorTextEl = overlay.querySelector(".trade-action-error-text");
     this.confirmBtn = overlay.querySelector('[data-action="confirm"]');
@@ -643,6 +659,9 @@ export class TradeActionDialog {
     this.inputSuffix.textContent = action === "sell" ? "%" : "SOL";
     this.inputSuffix.style.display = "block";
 
+    // Manual-management choice is only meaningful when opening a position (buy).
+    this._renderManageOption(action);
+
     // Set confirm button label and reset loading state
     const btnText = this.confirmBtn.querySelector(".btn-text");
     if (btnText) btnText.textContent = config.confirmLabel;
@@ -651,6 +670,32 @@ export class TradeActionDialog {
 
     // Clear error
     this._clearError();
+  }
+
+  /**
+   * Show/hide and reset the "Manual management" checkbox. Only the buy action opens a
+   * new position, so it's the only place the choice applies. Defaults to checked
+   * (protected) so the auto-trader won't sell a token the user bought on purpose.
+   */
+  _renderManageOption(action) {
+    if (!this.manageRowEl) return;
+    const isBuy = action === "buy";
+    this.manageRowEl.setAttribute("data-visible", isBuy ? "true" : "false");
+    if (!isBuy) return;
+
+    this.manageCheckboxEl.checked = true;
+
+    // Inject the hint trigger once (idempotent) and wire the global popover handler.
+    if (this.manageHintEl && !this.manageHintEl.firstChild) {
+      const hint = Hints.getHint("positions.manualManagement");
+      if (hint) {
+        this.manageHintEl.innerHTML = HintTrigger.render(hint, "positions.manualManagement", {
+          size: "sm",
+          position: "bottom",
+        });
+        HintTrigger.initAll();
+      }
+    }
   }
 
   _getActionIcon(iconName) {
@@ -1209,6 +1254,10 @@ export class TradeActionDialog {
     } else {
       // buy or add
       result = value === "" ? {} : { amount: value };
+      // Buy opens a position: carry the manual-management choice (default true).
+      if (this.currentAction === "buy" && this.manageCheckboxEl) {
+        result.manual_management = this.manageCheckboxEl.checked;
+      }
     }
 
     // Save to recent trades (for quick mode or any trade with mint)
