@@ -695,6 +695,13 @@
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
+
+  /* Positioning context for the absolutely-positioned #chartLoadingOverlay
+     (inset:0). Without this the overlay escapes to the nearest positioned
+     ancestor and spans the WHOLE overview body, covering the left info column
+     with its solid background — so a token with no chart data showed a blank
+     overview. Containing it keeps the "no chart data" state inside the chart. */
+  position: relative;
 }
 
 .chart-header {
