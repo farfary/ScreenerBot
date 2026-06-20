@@ -3,6 +3,14 @@
    Beautiful, sleek dropdown with smooth animations
    ============================================================================= */
 
+/* The native <select> that was enhanced into a CustomSelect. Hard-hidden so it can
+   never repaint the global var(--select-arrow) chevron under the wrapper's .cs-arrow
+   (the double/native-looking arrow). !important defeats page logic / CSS that toggles
+   `display` on the select to show a field. Single-arrow-source rule (commit 20626fd4). */
+select.cs-enhanced-source {
+  display: none !important;
+}
+
 /* Wrapper */
 .custom-select {
   position: relative;

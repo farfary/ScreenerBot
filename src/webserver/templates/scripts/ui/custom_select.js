@@ -104,7 +104,14 @@ export class CustomSelect {
     const container = document.createElement("div");
     selectElement.parentNode.insertBefore(container, selectElement);
 
-    // Hide the original select
+    // Hide the original select. A bare inline `display:none` is NOT enough: page
+    // logic and CSS frequently toggle `display` on a select (or its container) to
+    // show/hide a field. Re-showing the enhanced source select makes it paint the
+    // global `var(--select-arrow)` chevron again UNDER the wrapper's own .cs-arrow
+    // -> the double/native-looking arrow. The `cs-enhanced-source` class hard-hides
+    // it with `display:none !important` so it can never reappear as a second arrow
+    // source. (Single-arrow-source rule — see commit 20626fd4.)
+    selectElement.classList.add("cs-enhanced-source");
     selectElement.style.display = "none";
 
     // Create custom select
@@ -760,6 +767,7 @@ export class CustomSelect {
 
     // Restore original select if enhanced
     if (this._originalSelect) {
+      this._originalSelect.classList.remove("cs-enhanced-source");
       this._originalSelect.style.display = "";
     }
 
