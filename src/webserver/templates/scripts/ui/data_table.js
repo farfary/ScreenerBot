@@ -1563,7 +1563,10 @@ export class DataTable {
     this._invalidateRenderedCells();
     this._saveState();
     this._pendingColumnMenuOpen = shouldReopen;
-    this._renderTable();
+    // `force` is required: we just emptied the tbody, but the column menu is open
+    // (and being interacted with), so the interaction guard would otherwise skip
+    // the render and leave the body blank until the next unrelated render.
+    this._renderTable({ force: true });
     this._updateStickyOffsets();
 
     this._log("info", "Column order updated", {
@@ -2478,7 +2481,12 @@ export class DataTable {
       });
     }
 
-    // Update current state before opening
+    // Update current state before opening. The dialog instance is created once and
+    // reused, but the table's COLUMN SET can change between opens (e.g. switching
+    // Tokens sub-tabs swaps the columns via setColumns — the Actions column only
+    // exists in some views). Re-sync the columns reference too, or the dialog would
+    // list/operate on a stale column set and Apply would drop or misorder columns.
+    this._settingsDialog.options.columns = this.options.columns;
     this._settingsDialog.options.currentOrder = this.state.columnOrder;
     this._settingsDialog.options.currentVisibility = this.state.visibleColumns;
     this._settingsDialog.options.currentFloating = this.state.floatingColumns;
@@ -2543,18 +2551,37 @@ export class DataTable {
       );
       if (!this._arraysEqual(validFloating, this.state.floatingColumns)) {
         this.state.floatingColumns = validFloating;
-        const floatingSet = new Set(validFloating);
-        this.state.columnOrder = this.state.columnOrder.filter(
-          (colId) => !floatingSet.has(colId)
-        );
         hasChanges = true;
         this.state.hasAutoFitted = false;
       }
     }
 
+    // Reconcile groups: a column lives in exactly ONE group. The dialog reports
+    // columnOrder as the full id list (pinned columns included at their natural
+    // slot), so always strip the pinned ids out of columnOrder regardless of
+    // whether the floating set itself changed — otherwise a column that was
+    // already pinned would persist in both arrays.
+    if (Array.isArray(this.state.floatingColumns) && this.state.floatingColumns.length > 0) {
+      const floatingSet = new Set(this.state.floatingColumns);
+      this.state.columnOrder = this.state.columnOrder.filter((colId) => !floatingSet.has(colId));
+    }
+
     if (hasChanges) {
+      // The settings dialog can change the column SET (visibility), ORDER, and
+      // pinned (floating) membership all at once — every one of these is a
+      // structural change. The in-place body diff (`_updateTableBody`) only swaps
+      // each reused <td>'s innerHTML; it never inserts cells for newly-visible
+      // columns, removes cells for hidden ones, reorders cells, or refreshes the
+      // sticky classes. So we MUST drop the rendered rows and rebuild them fully,
+      // exactly like the pin/move paths do — otherwise the header + colgroup pick
+      // up the new structure while the body keeps its old <td> set in the old
+      // order (column "not showing" / "wrong position"). `force` also bypasses the
+      // interaction guard so an explicit Apply is never silently skipped while a
+      // control still holds focus/hover.
+      this._invalidateRenderedCells();
+      this.state.hasAutoFitted = false;
       this._saveState();
-      this._renderTable();
+      this._renderTable({ force: true });
       this._updateStickyOffsets();
       this._log("info", "Table settings applied", {
         columnOrder: this.state.columnOrder,
@@ -3002,6 +3029,13 @@ export class DataTable {
 
     // Save updated state
     this._saveState();
+
+    // The column SET/ORDER just changed (e.g. a sub-tab switch swapping columns).
+    // Drop the rendered rows so the body is rebuilt from scratch against the new
+    // structure — the in-place body diff reuses each row's existing <td> set and
+    // would otherwise leave any surviving row (same id across views) with the old
+    // columns' cells in the old order. Mirrors the reorder/pin paths.
+    this._invalidateRenderedCells();
 
     // Re-render table structure with new columns
     if (preserveData && this.state.data.length > 0) {
