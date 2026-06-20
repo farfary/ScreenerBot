@@ -132,6 +132,25 @@ impl SolanaTrackerClient {
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
+
+            // A 403 "insufficient credits" is an account-level, persistent
+            // condition — not a per-token failure. Latch remaining_credits to 0 so
+            // `ensure_enabled` short-circuits every subsequent call instead of
+            // hammering the API (and spamming OHLCV logs) with the same 403 for
+            // the thousands of pool-less tokens that fall back to SolanaTracker.
+            // Credits reset on the next successful `fetch_credits()` (e.g. after a
+            // top-up) or on restart.
+            if status == reqwest::StatusCode::FORBIDDEN
+                && body.to_lowercase().contains("credit")
+                && self.remaining_credits.swap(0, Ordering::Relaxed) != 0
+            {
+                crate::logger::warning(
+                    crate::logger::LogTag::Tokens,
+                    "SolanaTracker credits exhausted (HTTP 403) - pausing SolanaTracker \
+                     calls until credits are refreshed",
+                );
+            }
+
             self.stats
                 .record_error_with_event(
                     "SolanaTracker",
