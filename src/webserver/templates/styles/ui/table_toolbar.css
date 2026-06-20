@@ -526,6 +526,14 @@
   white-space: nowrap;
 }
 
+/* The explicit `display: inline-flex` above overrides the browser's `[hidden]`
+   default, so `btn.hidden = true` (e.g. the positions "Delete all" button shown only
+   in the Archived sub-tab) would not hide the button. Restore it — this attribute
+   selector (0,2,0) wins over the base `.table-toolbar-btn` rule (0,1,0). */
+.table-toolbar-btn[hidden] {
+  display: none;
+}
+
 .table-toolbar-btn:hover {
   background: var(--bg-hover);
   border-color: var(--primary-color);

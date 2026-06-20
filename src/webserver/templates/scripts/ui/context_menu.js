@@ -195,14 +195,20 @@ class ContextMenuManager {
     // Check for positions table rows
     const positionsTable = target.closest("#positions-root, [data-context='positions']");
     if (tableRow && positionsTable) {
-      const mint = tableRow.dataset.rowId;
+      // Positions rows are keyed by the unique position id (rowIdField "id"), NOT the
+      // mint. Pass the id so "View Details" fetches by id:<n>, and read the REAL token
+      // mint from an action button's data-mint so mint-based items (Sell / Add /
+      // explorer / favorites) target the right token instead of the position id.
+      const id = tableRow.dataset.rowId;
+      const mint = tableRow.querySelector("[data-mint]")?.dataset.mint || null;
       const symbolEl = tableRow.querySelector(
         ".token-symbol, .position-symbol, [data-field='symbol']"
       );
 
       return {
         type: "position",
-        mint: mint,
+        id,
+        mint,
         symbol: symbolEl?.textContent?.trim() || "Unknown",
         element: tableRow,
       };
@@ -331,18 +337,25 @@ class ContextMenuManager {
     this.isShowing = true;
 
     try {
-      // Clean up any existing menu FIRST, before async operations
+      // Clean up any existing menu FIRST, before async operations.
+      // NOTE: _hideImmediate() -> _cleanup() resets `isShowing` to false, so we must
+      // re-assert it AFTER these cleanup calls. Otherwise the `if (!this.isShowing)`
+      // guard below always trips and the menu never renders (broke every context menu).
       this._hideImmediate();
 
       // Also clean up any orphaned elements from previous instances
       this._cleanupOrphanedElements();
+
+      // Re-assert after cleanup cleared it (see note above).
+      this.isShowing = true;
 
       // Load favorites cache for token/position contexts
       if (context.type === "token" || context.type === "position") {
         await this._loadFavoritesCache();
       }
 
-      // Double-check we're still supposed to show (another show() could have been called)
+      // Double-check we're still supposed to show (hide()/another show() could have
+      // reset the flag DURING the await above).
       if (!this.isShowing) {
         return;
       }
