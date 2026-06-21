@@ -418,10 +418,6 @@ export class PositionDetailsDialog {
             <i class="icon-list"></i>
             Transactions
           </button>
-          <button class="tab-button" data-tab="token">
-            <i class="icon-info"></i>
-            Token
-          </button>
           <button class="tab-button" data-tab="analytics">
             <i class="icon-trending-up"></i>
             Analytics
@@ -439,9 +435,6 @@ export class PositionDetailsDialog {
             <div class="loading-spinner">Loading...</div>
           </div>
           <div class="tab-content" data-tab-content="transactions">
-            <div class="loading-spinner">Loading...</div>
-          </div>
-          <div class="tab-content" data-tab-content="token">
             <div class="loading-spinner">Loading...</div>
           </div>
           <div class="tab-content" data-tab-content="analytics">
@@ -674,9 +667,6 @@ export class PositionDetailsDialog {
         break;
       case "transactions":
         this._renderTransactionsTab(content);
-        break;
-      case "token":
-        this._renderTokenTab(content);
         break;
       case "analytics":
         this._renderAnalyticsTab(content);

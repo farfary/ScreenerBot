@@ -30,23 +30,27 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     const externalLinks = this.fullDetails?.external_links;
     const positionAge = this.fullDetails?.position_age_seconds;
     const solPriceUsd = this.fullDetails?.sol_price_usd;
+    const tokenInfo = this.fullDetails?.token_info;
+    const poolInfo = this.fullDetails?.pool_info;
 
     content.innerHTML = `
       <div class="pdd-overview-layout">
         ${this._buildSummaryBanner(pos, isOpen, marketData, solPriceUsd)}
-        
+
+        ${this._buildTokenInfoCard(pos, tokenInfo, poolInfo)}
+
         <div class="pdd-overview-grid">
           ${this._buildEntryInfoCard(pos, positionAge)}
           ${this._buildCurrentStateCard(pos, isOpen)}
         </div>
-        
+
         ${this._buildPnLAnalysisCard(pos, isOpen, solPriceUsd)}
-        
+
         <div class="pdd-overview-grid">
           ${this._buildMarketDataCard(marketData)}
           ${this._buildSecurityCard(security)}
         </div>
-        
+
         ${this._buildQuickActionsCard(pos, isOpen, externalLinks)}
       </div>
     `;
@@ -125,6 +129,76 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
               ${pnlUsdHtml}
             </div>
           </div>
+        </div>
+      </div>
+    `;
+  };
+
+  /**
+   * Build the Token Info card (merged in from the old Token tab): mint address,
+   * pool/DEX, description and social links — the identity context that doesn't
+   * already live in the banner or the market/security cards.
+   */
+  proto._buildTokenInfoCard = function (pos, tokenInfo, poolInfo) {
+    const mint = pos.mint;
+    const description = tokenInfo?.description;
+
+    const poolRows = [];
+    if (poolInfo?.dex_name) {
+      poolRows.push(
+        `<div class="pdd-stat-row"><span class="pdd-stat-label">DEX</span><span class="pdd-stat-value"><span class="pdd-dex-badge">${Utils.escapeHtml(poolInfo.dex_name)}</span></span></div>`
+      );
+    }
+    if (poolInfo?.pool_address) {
+      poolRows.push(
+        `<div class="pdd-stat-row"><span class="pdd-stat-label">Pool</span><span class="pdd-stat-value">${Utils.renderAddressChip(poolInfo.pool_address)}</span></div>`
+      );
+    }
+    if (poolInfo?.liquidity_sol !== null && poolInfo?.liquidity_sol !== undefined) {
+      poolRows.push(
+        `<div class="pdd-stat-row"><span class="pdd-stat-label">Pool Liquidity</span><span class="pdd-stat-value">${Utils.formatSol(poolInfo.liquidity_sol, { decimals: 2, suffix: "" })} SOL</span></div>`
+      );
+    }
+
+    const socials = [];
+    if (tokenInfo?.website) {
+      socials.push(
+        `<a href="${Utils.escapeHtml(tokenInfo.website)}" target="_blank" rel="noopener" class="pdd-social-link"><i class="icon-globe"></i> Website</a>`
+      );
+    }
+    if (tokenInfo?.twitter) {
+      socials.push(
+        `<a href="${Utils.escapeHtml(tokenInfo.twitter)}" target="_blank" rel="noopener" class="pdd-social-link"><i class="icon-twitter"></i> Twitter</a>`
+      );
+    }
+    if (tokenInfo?.telegram) {
+      socials.push(
+        `<a href="${Utils.escapeHtml(tokenInfo.telegram)}" target="_blank" rel="noopener" class="pdd-social-link"><i class="icon-send"></i> Telegram</a>`
+      );
+    }
+
+    return `
+      <div class="pdd-stat-card pdd-token-info-card">
+        <h3 class="pdd-stat-card-title">
+          <i class="icon-info"></i>
+          Token Info
+        </h3>
+        <div class="pdd-stat-card-content">
+          <div class="pdd-stat-row">
+            <span class="pdd-stat-label">Mint</span>
+            <span class="pdd-stat-value">${Utils.renderAddressChip(mint, { kind: "token" })}</span>
+          </div>
+          ${poolRows.join("")}
+          ${
+            description
+              ? `<p class="pdd-token-desc">${Utils.escapeHtml(description)}</p>`
+              : ""
+          }
+          ${
+            socials.length > 0
+              ? `<div class="pdd-social-links">${socials.join("")}</div>`
+              : ""
+          }
         </div>
       </div>
     `;
