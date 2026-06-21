@@ -28,6 +28,11 @@ export function applyPositionsTabMixin(DialogClass) {
       return;
     }
 
+    // Guard against overlapping fetches: the 5s poller calls this live while the
+    // tab is open, so skip if a previous fetch is still in flight.
+    if (this._positionsFetching) return;
+    this._positionsFetching = true;
+
     // Show a spinner only on the very first paint (no cached markup yet), so
     // refreshes after a trade don't flash.
     if (!content.__posHtml) {
@@ -43,6 +48,8 @@ export function applyPositionsTabMixin(DialogClass) {
     } catch {
       // Network/HTTP error (incl. 404 "no position"); fall through to empty state.
       data = null;
+    } finally {
+      this._positionsFetching = false;
     }
 
     const position = data && !data.error ? data.position : null;

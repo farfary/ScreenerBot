@@ -292,6 +292,22 @@ export class TokenDetailsDialog {
           if (content) {
             this._loadSecurityTab(content);
           }
+        } else if (this.currentTab === "positions") {
+          // Live position: re-fetch so PnL / current price update while watching.
+          // The loader is idempotent (_renderHtmlIfChanged), so unchanged data
+          // causes no repaint/flash. Throttle to ~3s because this poller actually
+          // ticks at the global interval (~1s) and the position-details endpoint
+          // is heavier than a token fetch — 3s is plenty "live" for PnL. Tab
+          // switches and post-trade refreshes still load immediately (they call
+          // _loadPositionsTab directly, bypassing this throttle).
+          const now = Date.now();
+          if (now - (this._positionsLastPoll || 0) >= 3000) {
+            this._positionsLastPoll = now;
+            const content = this.dialogEl?.querySelector('[data-tab-content="positions"]');
+            if (content) {
+              this._loadPositionsTab(content);
+            }
+          }
         }
       }
     } catch (error) {
@@ -673,6 +689,9 @@ export class TokenDetailsDialog {
       this._chartPollBackedOff = false;
       this._connectionState = "online";
       this._consecutiveFailures = 0;
+      this.positionsData = null;
+      this._positionsFetching = false;
+      this._positionsLastPoll = 0;
 
       this.onClose();
     }, 300);
