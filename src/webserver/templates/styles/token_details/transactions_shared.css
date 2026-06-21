@@ -631,3 +631,17 @@
   font-weight: 600;
   font-size: 0.55rem;
 }
+
+/* Clickable transaction rows (whole row links to Solscan tx) */
+.txn-row {
+  transition: background var(--transition-fast);
+}
+
+.txn-row:hover {
+  background: var(--bg-secondary);
+  text-decoration: none;
+}
+
+.txn-row:hover .icon-external-link {
+  color: var(--link-color, var(--primary-color));
+}

@@ -87,3 +87,73 @@
   gap: var(--spacing-lg);
   padding: var(--spacing-lg);
 }
+
+/* ADDRESS CHIP ----------------------------------------------------
+   Reusable wallet/pool/authority address: clickable Solscan link + copy
+   button. Rendered via Utils.renderAddressChip() so every dialog handles
+   addresses identically. */
+.addr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.addr-chip-link {
+  color: var(--link-color, var(--primary-color));
+  font-size: 0.72rem;
+  line-height: 1.3;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  padding: 1px 3px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* When the caller asks for the full address, let it wrap rather than overflow. */
+.addr-chip-full .addr-chip-link {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.addr-chip-link:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  text-decoration: none;
+}
+
+.addr-chip-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.addr-chip-copy:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.addr-chip-empty {
+  color: var(--text-muted);
+}

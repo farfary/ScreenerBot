@@ -33,30 +33,34 @@ function buildSecurityLoadingContent(token, options) {
           <div class="loading-spinner-small"></div>
           <span>Rugcheck analysis in progress...</span>
         </div>
-        <div class="security-header security-loading" style="--i:0">
-          <div class="security-header-title">
-            <span class="section-title"><i class="icon-shield-check"></i> Security Pulse</span>
-            ${renderHintTrigger("tokenDetails.security")}
+        <div class="security-card security-summary" style="--i:0">
+          <div class="card-header">
+            <span class="section-title"><i class="icon-shield-check"></i> Security Pulse ${renderHintTrigger("tokenDetails.security")}</span>
           </div>
-          <div class="security-score-container">
-            <div class="security-score-circle">
-              <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
-                <circle class="score-bg" cx="60" cy="60" r="46"></circle>
-              </svg>
-              <div class="score-content">
-                <span class="score-value" style="opacity: 0.3;">—</span>
+          <div class="card-body security-summary__body">
+            <div class="security-summary__score">
+              <div class="security-score-circle">
+                <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
+                  <circle class="score-bg" cx="60" cy="60" r="46"></circle>
+                </svg>
+                <div class="score-content">
+                  <span class="score-value" style="opacity: 0.3;">—</span>
+                  <span class="score-max">SCORE</span>
+                </div>
+              </div>
+              <div class="safety-badge" style="background: var(--bg-secondary); color: var(--text-muted);">
+                Analyzing...
               </div>
             </div>
-            <div class="safety-badge" style="background: var(--bg-secondary); color: var(--text-muted);">
-              Analyzing...
+            <div class="security-summary__section">
+              <div class="sec-section-head">
+                <span>Token Control</span>
+                <span class="sec-section-sub">Authority status</span>
+              </div>
+              ${buildAuthorityGrid(token)}
             </div>
           </div>
         </div>
-        <div class="security-bento-grid">
-           <div class="security-bento-card security-loading" style="--i:1"></div>
-           <div class="security-bento-card security-loading" style="--i:2"></div>
-        </div>
-        ${buildAuthoritiesCard(token, options)}
       </div>
       <div class="security-right-col">
         <div class="security-card security-loading" style="height: 400px; --i:3">
@@ -78,13 +82,11 @@ function buildSecurityContent(token, options) {
   return `
     <div class="security-container">
       <div class="security-left-col">
-        ${buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel, { renderHintTrigger })}
-        ${buildSecurityOverview(token)}
-        ${buildAuthoritiesCard(token, { escapeHtml, formatShortAddress })}
+        ${buildSecuritySummaryCard(token, safetyScore, scoreClass, scoreLabel, { renderHintTrigger })}
       </div>
       <div class="security-right-col">
         ${buildHoldersCard(token)}
-        ${buildTransferFeeCard(token, { escapeHtml, formatShortAddress })}
+        ${buildTransferFeeCard(token)}
         ${buildRisksSection(token.security_risks, { escapeHtml })}
         ${buildTopHoldersSection(token, { escapeHtml, formatShortAddress })}
       </div>
@@ -92,7 +94,12 @@ function buildSecurityContent(token, options) {
   `;
 }
 
-function buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel, options) {
+/**
+ * Single unified left-column card: score hero + key stats + token control.
+ * Replaces the three separate cards (header / bento grid / authorities) with
+ * one cohesive panel divided into sections.
+ */
+function buildSecuritySummaryCard(token, safetyScore, scoreClass, scoreLabel, options) {
   const { renderHintTrigger } = options;
 
   const lastUpdated = token.security_last_updated
@@ -105,58 +112,63 @@ function buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel, options
   const circumference = 2 * Math.PI * 46; // radius = 46 for 120px ring
   const offset = circumference - (scorePercent / 100) * circumference;
 
-  // Map score label to safety badge
-  const badgeConfigs = {
-    "score-good": { label: "Shielded", class: "good" },
-    "score-ok": { label: "Safe", class: "good" },
-    "score-warn": { label: "Caution", class: "warning" },
-    "score-danger": { label: "Vulnerable", class: "critical" },
+  // Badge colour follows the score class (good/warn/critical). Keys must match
+  // getSafetyScoreClass() output — previously they didn't, so a "Safe" token
+  // was rendered with the amber fallback instead of green.
+  const badgeClassMap = {
+    "score-safe": "good",
+    "score-caution": "warning",
+    "score-vulnerable": "critical",
   };
-  const badge = badgeConfigs[scoreClass] || { label: scoreLabel, class: "warning" };
+  const badge = { label: scoreLabel, class: badgeClassMap[scoreClass] || "warning" };
+
+  const statsHtml = buildSummaryStats(token);
 
   return `
-    <div class="security-header" style="--i:0">
-      <div class="security-header-title">
-        <span class="section-title"><i class="icon-shield-check"></i> Security Pulse</span>
-        ${renderHintTrigger("tokenDetails.security")}
+    <div class="security-card security-summary" style="--i:0">
+      <div class="card-header">
+        <span class="section-title"><i class="icon-shield-check"></i> Security Pulse ${renderHintTrigger("tokenDetails.security")}</span>
+        ${lastUpdated && !token.rugged ? `<span class="card-subtitle">Updated ${lastUpdated}</span>` : ""}
       </div>
-      <div class="security-score-container">
-        <div class="security-score-circle">
-          <div class="score-glow ${scoreClass}"></div>
-          <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
-            <circle class="score-bg" cx="60" cy="60" r="46"></circle>
-            <circle class="score-ring ${scoreClass}" cx="60" cy="60" r="46" 
-              style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset};"></circle>
-          </svg>
-          <div class="score-content">
-            <span class="score-value">${score}</span>
-            <span class="score-max">SCORE</span>
+      <div class="card-body security-summary__body">
+        <div class="security-summary__score">
+          <div class="security-score-circle">
+            <div class="score-glow ${scoreClass}"></div>
+            <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
+              <circle class="score-bg" cx="60" cy="60" r="46"></circle>
+              <circle class="score-ring ${scoreClass}" cx="60" cy="60" r="46"
+                style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset};"></circle>
+            </svg>
+            <div class="score-content">
+              <span class="score-value">${score}</span>
+              <span class="score-max">SCORE</span>
+            </div>
           </div>
+          <div class="safety-badge ${badge.class}">${badge.label}</div>
+          ${
+            token.rugged
+              ? `<div class="rugged-warning" style="margin-top: 4px; border-radius: 10px;">
+                  <i class="icon-skull" style="font-size: 20px;"></i>
+                  <span style="font-size: 1rem; letter-spacing: 0.1em; font-weight: 800;">RUGGED</span>
+                </div>`
+              : ""
+          }
         </div>
-        <div class="safety-badge ${badge.class}">
-          ${badge.label}
+        ${statsHtml}
+        <div class="security-summary__section">
+          <div class="sec-section-head">
+            <span>Token Control</span>
+            <span class="sec-section-sub">Authority status</span>
+          </div>
+          ${buildAuthorityGrid(token)}
         </div>
       </div>
-      ${
-        token.rugged
-          ? `
-      <div class="rugged-warning" style="margin-top: 15px; border-radius: 10px;">
-        <i class="icon-skull" style="font-size: 20px;"></i>
-        <span style="font-size: 1rem; letter-spacing: 0.1em; font-weight: 800;">RUGGED</span>
-      </div>
-      `
-          : ""
-      }
-      ${
-        lastUpdated && !token.rugged
-          ? `<div style="text-align: center; font-size: 0.65rem; color: var(--text-muted); margin-top: 10px;">Updated ${lastUpdated}</div>`
-          : ""
-      }
     </div>
   `;
 }
 
-function buildSecurityOverview(token) {
+/** Compact inline stat strip (holders / LP providers / graph insiders / type). */
+function buildSummaryStats(token) {
   const items = [];
 
   if (token.token_type) {
@@ -188,7 +200,7 @@ function buildSecurityOverview(token) {
     items.push({
       label: "Graph Insiders",
       value: `${isDangerous ? "Detected" : "Clean"} ${token.graph_insiders_detected > 0 ? `(${token.graph_insiders_detected})` : ""}`,
-      icon: isDangerous ? '<i class="icon-alert-triangle"></i>' : '<i class="icon-search"></i>',
+      icon: isDangerous ? '<i class="icon-triangle-alert"></i>' : '<i class="icon-search"></i>',
       class: isDangerous ? "warning" : "good",
     });
   }
@@ -196,14 +208,13 @@ function buildSecurityOverview(token) {
   if (items.length === 0) return "";
 
   return `
-    <div class="security-bento-grid" style="margin-top: 8px;">
+    <div class="security-summary__stats">
       ${items
         .map(
-          (item, idx) => `
-        <div class="security-bento-card" style="--i:${idx + 1}">
-          <div class="bento-icon">${item.icon}</div>
-          <div class="bento-label">${item.label}</div>
-          <div class="bento-value">${item.value}</div>
+          (item) => `
+        <div class="sec-stat ${item.class || ""}">
+          <span class="sec-stat__label">${item.icon} ${item.label}</span>
+          <span class="sec-stat__value">${item.value}</span>
         </div>
       `
         )
@@ -212,54 +223,36 @@ function buildSecurityOverview(token) {
   `;
 }
 
-function buildAuthoritiesCard(token, options = {}) {
-  const { escapeHtml, formatShortAddress } = options;
-
+/** Token-control authority grid (mint + freeze), shared by summary + loading. */
+function buildAuthorityGrid(token) {
   return `
-    <div class="security-card" style="--i:2">
-      <div class="card-header">
-        <span>Token Control</span>
-        <span class="card-subtitle">Authority status</span>
-      </div>
-      <div class="card-body">
         <div class="authority-grid">
-          <div class="authority-item ${token.mint_authority ? "danger" : "safe"}">
-            <div class="authority-header">
-              <span class="authority-label">Mint <i class="icon-wrench"></i></span>
-              ${renderAuthorityBadge(token.mint_authority)}
-            </div>
-            ${
-              token.mint_authority
-                ? `
-            <div class="authority-address">
-              <span class="address-value" title="${token.mint_authority}">${formatShortAddress ? formatShortAddress(token.mint_authority) : token.mint_authority}</span>
-              <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.mint_authority}')"><i class="icon-copy"></i></button>
-            </div>
-            <div class="authority-status-text">At Risk</div>
-            `
-                : '<div class="authority-status-text">Immutable</div>'
-            }
-          </div>
-          
-          <div class="authority-item ${token.freeze_authority ? "danger" : "safe"}">
-            <div class="authority-header">
-              <span class="authority-label">Freeze <i class="icon-snowflake"></i></span>
-              ${renderAuthorityBadge(token.freeze_authority)}
-            </div>
-            ${
-              token.freeze_authority
-                ? `
-            <div class="authority-address">
-              <span class="address-value" title="${token.freeze_authority}">${formatShortAddress ? formatShortAddress(token.freeze_authority) : token.freeze_authority}</span>
-              <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.freeze_authority}')"><i class="icon-copy"></i></button>
-            </div>
-            <div class="authority-status-text">At Risk</div>
-            `
-                : '<div class="authority-status-text">Revoked</div>'
-            }
-          </div>
+          ${buildAuthorityTile("Mint", "icon-wrench", token.mint_authority, "Immutable", "Mutable")}
+          ${buildAuthorityTile("Freeze", "icon-snowflake", token.freeze_authority, "Revoked", "Active")}
         </div>
+  `;
+}
+
+/**
+ * One authority tile. Minimal: an icon chip + label, a soft status pill, and
+ * the address chip only when the authority is still live (a risk).
+ */
+function buildAuthorityTile(label, icon, authority, safeWord, riskWord) {
+  const isRisk = !!authority;
+  const state = isRisk ? "risk" : "ok";
+  const pillIcon = isRisk ? "icon-triangle-alert" : "icon-circle-check";
+  return `
+    <div class="authority-item ${state}">
+      <div class="authority-top">
+        <span class="authority-icon"><i class="${icon}"></i></span>
+        <span class="authority-label">${label}</span>
       </div>
+      <span class="auth-pill ${state}"><i class="${pillIcon}"></i>${isRisk ? riskWord : safeWord}</span>
+      ${
+        isRisk
+          ? `<div class="authority-address">${Utils.renderAddressChip(authority, { full: true })}</div>`
+          : ""
+      }
     </div>
   `;
 }
@@ -362,9 +355,7 @@ function buildHolderGauge(percent, colorClass) {
    `;
 }
 
-function buildTransferFeeCard(token, options = {}) {
-  const { escapeHtml, formatShortAddress } = options;
-
+function buildTransferFeeCard(token) {
   // Only show if token has transfer fee data
   if (token.transfer_fee_pct === null && token.transfer_fee_pct === undefined) {
     return "";
@@ -376,7 +367,7 @@ function buildTransferFeeCard(token, options = {}) {
     <div class="security-card ${hasFee ? "has-fee" : ""}" style="--i:2.5">
       <div class="card-header">
         <span>Transfer Tax</span>
-        ${hasFee ? `<span class="fee-badge"><i class="icon-alert-triangle"></i> ${token.transfer_fee_pct}%</span>` : '<span class="no-fee-badge"><i class="icon-check"></i> No Fee</span>'}
+        ${hasFee ? `<span class="fee-badge"><i class="icon-triangle-alert"></i> ${token.transfer_fee_pct}%</span>` : '<span class="no-fee-badge"><i class="icon-check"></i> No Fee</span>'}
       </div>
       <div class="card-body" style="padding: 0;">
         ${
@@ -402,7 +393,7 @@ function buildTransferFeeCard(token, options = {}) {
               ? `
           <div class="fee-row">
             <span class="fee-label">Fee Authority</span>
-            <span class="fee-value" title="${token.transfer_fee_authority}">${formatShortAddress ? formatShortAddress(token.transfer_fee_authority) : token.transfer_fee_authority}</span>
+            <span class="fee-value">${Utils.renderAddressChip(token.transfer_fee_authority)}</span>
           </div>
           `
               : ""
@@ -454,14 +445,15 @@ function buildTopHoldersSection(token, options = {}) {
               : formatShortAddress
                 ? formatShortAddress(h.address)
                 : h.address;
+          const solscanUrl = Utils.solscanAccountUrl(h.address);
           return `
-          <div class="podium-spot rank-${rank}" title="${escapeHtml ? escapeHtml(h.address) : h.address}">
+          <a class="podium-spot rank-${rank}" href="${solscanUrl}" target="_blank" rel="noopener noreferrer" title="${escapeHtml ? escapeHtml(h.address) : h.address} — open in Solscan">
             <div class="podium-avatar">${rank === 1 ? '<i class="icon-crown"></i>' : rank}</div>
             <div class="podium-pedestal">
               <span class="podium-value">${h.percentage.toFixed(1)}%</span>
             </div>
             <div class="podium-name">${escapeHtml ? escapeHtml(name) : name}</div>
-          </div>
+          </a>
         `;
         })
         .join("")}
@@ -493,7 +485,7 @@ function buildTopHoldersSection(token, options = {}) {
         <div class="holder-row ${insiderClass}" style="--i: ${idx + 4}">
           <div class="holder-rank">#${idx + 4}</div>
           <div class="holder-address-container">
-            <span class="holder-address mono">${formatShortAddress ? formatShortAddress(holder.address) : holder.address}</span>
+            ${Utils.renderAddressChip(holder.address, { full: true })}
             <div class="holder-badges">${badges.join("")}</div>
           </div>
           <div class="holder-share">${holder.percentage.toFixed(2)}%</div>
@@ -508,7 +500,7 @@ function buildTopHoldersSection(token, options = {}) {
         <span>Top 10 Holders Concentration</span>
         <span class="concentration-value">${concentration.toFixed(2)}%</span>
       </div>
-      <div class="card-body" style="padding: 10px 16px;">
+      <div class="card-body" style="padding: 26px 16px 12px;">
         ${podiumHtml}
         <div class="holders-list-small">
           ${holderRows}
@@ -516,13 +508,6 @@ function buildTopHoldersSection(token, options = {}) {
       </div>
     </div>
   `;
-}
-
-function renderAuthorityBadge(value) {
-  if (value === null || value === undefined || value === "") {
-    return '<span class="status-badge status-safe">Revoked</span>';
-  }
-  return '<span class="status-badge status-danger">Present</span>';
 }
 
 function buildRisksSection(risks, options = {}) {
@@ -543,23 +528,52 @@ function buildRisksSection(risks, options = {}) {
     `;
   }
 
-  const riskItems = risks
-    .map((risk, idx) => {
-      const level = risk.level?.toLowerCase() || "info";
-      const riskClass = level === "danger" ? "risk-danger" : level === "warn" ? "risk-warn" : "";
-      const icon =
-        level === "danger" ? '<i class="icon-ban"></i>' : '<i class="icon-alert-triangle"></i>';
+  // Severity metadata: deterministic icon (verified against the Lucide font),
+  // colour class, weight for ordering, and a human label for the badge.
+  const SEVERITY = {
+    danger: { cls: "danger", label: "Critical", icon: "icon-octagon-alert", weight: 0 },
+    warn: { cls: "warn", label: "Warning", icon: "icon-triangle-alert", weight: 1 },
+    info: { cls: "info", label: "Info", icon: "icon-info", weight: 2 },
+  };
+  const sevOf = (risk) => {
+    const level = risk.level?.toLowerCase();
+    if (level === "danger") return SEVERITY.danger;
+    if (level === "warn" || level === "warning") return SEVERITY.warn;
+    return SEVERITY.info;
+  };
 
+  // Most severe first so the worst risks are read first.
+  const sorted = [...risks].sort((a, b) => sevOf(a).weight - sevOf(b).weight);
+
+  // Header breakdown ("2 critical · 1 warning") instead of a flat count.
+  const counts = sorted.reduce((acc, r) => {
+    const cls = sevOf(r).cls;
+    acc[cls] = (acc[cls] || 0) + 1;
+    return acc;
+  }, {});
+  const breakdown =
+    [
+      counts.danger ? `${counts.danger} critical` : "",
+      counts.warn ? `${counts.warn} warning${counts.warn > 1 ? "s" : ""}` : "",
+      counts.info ? `${counts.info} info` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ") || `${sorted.length} incidents found`;
+
+  const riskItems = sorted
+    .map((risk, idx) => {
+      const sev = sevOf(risk);
       const name = escapeHtml ? escapeHtml(risk.name) : risk.name;
       const description = escapeHtml ? escapeHtml(risk.description) : risk.description;
 
       return `
-      <div class="risk-row ${riskClass}" style="--i:${idx}">
-        <div class="risk-icon">${icon}</div>
+      <div class="risk-row risk-${sev.cls}" style="--i:${idx}">
+        <div class="risk-icon"><i class="${sev.icon}"></i></div>
         <div class="risk-details">
           <div class="risk-name">${name}</div>
-          <div class="risk-description">${description}</div>
+          ${description ? `<div class="risk-description">${description}</div>` : ""}
         </div>
+        <span class="risk-sev-badge sev-${sev.cls}">${sev.label}</span>
       </div>
     `;
     })
@@ -568,8 +582,8 @@ function buildRisksSection(risks, options = {}) {
   return `
     <div class="security-card" style="--i:3">
       <div class="card-header">
-        <span>Security Risks</span>
-        <span class="card-subtitle">${risks.length} incidents found</span>
+        <span><i class="icon-shield-alert"></i> Security Risks</span>
+        <span class="card-subtitle">${breakdown}</span>
       </div>
       <div class="card-body" style="padding: 0;">
         <div class="risks-list">

@@ -456,7 +456,7 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
           <h4>Pool Information</h4>
           <div class="pdd-pool-grid">
             ${poolInfo.dex_name ? `<div class="pdd-pool-row"><span class="label">DEX:</span><span class="value">${Utils.escapeHtml(poolInfo.dex_name)}</span></div>` : ""}
-            ${poolInfo.pool_address ? `<div class="pdd-pool-row"><span class="label">Pool:</span><span class="value pdd-address" data-address="${poolInfo.pool_address}">${poolInfo.pool_address.slice(0, 8)}...${poolInfo.pool_address.slice(-8)}</span></div>` : ""}
+            ${poolInfo.pool_address ? `<div class="pdd-pool-row"><span class="label">Pool:</span><span class="value">${Utils.renderAddressChip(poolInfo.pool_address)}</span></div>` : ""}
             ${poolInfo.liquidity_sol !== null && poolInfo.liquidity_sol !== undefined ? `<div class="pdd-pool-row"><span class="label">Liquidity:</span><span class="value">${Utils.formatSol(poolInfo.liquidity_sol, { suffix: "" })} SOL</span></div>` : ""}
           </div>
         </div>`
@@ -519,10 +519,7 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
           <div class="pdd-token-details">
             <h3>${Utils.escapeHtml(pos.name || pos.symbol || "Unknown Token")} ${pos.symbol ? `(${Utils.escapeHtml(pos.symbol)})` : ""}</h3>
             <div class="pdd-token-address-row">
-              <span class="pdd-token-address" title="${pos.mint}">${pos.mint.slice(0, 12)}...${pos.mint.slice(-12)}</span>
-              <button class="pdd-copy-btn" data-copy="${pos.mint}" title="Copy address">
-                <i class="icon-copy"></i>
-              </button>
+              ${Utils.renderAddressChip(pos.mint, { full: true, kind: "token" })}
             </div>
             ${descriptionHtml}
           </div>

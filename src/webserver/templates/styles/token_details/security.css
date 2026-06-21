@@ -30,46 +30,6 @@
   gap: 16px;
 }
 
-/* Security Header - Now a dynamic dashboard section */
-.security-header {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: 16px;
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.1);
-  position: relative;
-  overflow: hidden;
-}
-
-.security-header-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.security-header-title .section-title {
-  font-size: 0.75rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.security-score-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
 .security-score-circle {
   position: relative;
   width: 120px;
@@ -236,81 +196,6 @@
   border-color: rgb(248, 81, 73, 0.4);
 }
 
-/* Bento Grid for Security Overview */
-.security-bento-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  width: 100%;
-}
-
-.security-bento-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
-  overflow: hidden;
-  opacity: 0;
-  animation: slideInRow 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: calc(var(--i, 0) * 0.08s);
-}
-
-.security-bento-card:hover {
-  border-color: var(--primary-alpha-30);
-  background: var(--bg-card-hover);
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.15);
-}
-
-.bento-icon {
-  font-size: 1.2rem;
-  opacity: 0.9;
-  margin-bottom: 2px;
-}
-
-.bento-label {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
-  font-weight: 700;
-}
-
-.bento-value {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.bento-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  display: inline-block;
-}
-
-.bento-status-dot.active {
-  background: #3fb950;
-  box-shadow: 0 0 8px #3fb950;
-}
-
-.bento-status-dot.inactive {
-  background: var(--text-muted);
-}
-
-.bento-status-dot.warning {
-  background: #d29922;
-  box-shadow: 0 0 8px #d29922;
-}
-
 /* Refined Security Detail Cards */
 .security-card {
   background: var(--bg-primary);
@@ -319,7 +204,7 @@
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   opacity: 0;
-  animation: slideInRow 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slide-in-row 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   animation-delay: calc(var(--i, 0) * 0.1s);
 }
 
@@ -355,7 +240,8 @@
   letter-spacing: normal;
 }
 
-/* Refined Authority Grid */
+/* Token-control authority tiles — minimal: icon chip + label + soft status pill.
+   No left accent bar (intentional — it looks heavy on small tiles). */
 .authority-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -365,114 +251,216 @@
 .authority-item {
   padding: 12px;
   background: var(--bg-secondary);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  position: relative;
-  overflow: hidden;
-}
-
-.authority-item.danger {
-  border-left: 3px solid var(--danger);
-}
-
-.authority-item.safe {
-  border-left: 3px solid var(--success-color);
+  gap: 10px;
+  min-width: 0;
 }
 
 .authority-item:hover {
-  background: var(--bg-card-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.1);
+  border-color: var(--border-color-hover, var(--text-muted));
 }
 
-.authority-header {
+.authority-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.authority-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.authority-item.ok .authority-icon {
+  background: var(--success-alpha-10);
+  color: var(--success-color);
+}
+
+.authority-item.risk .authority-icon {
+  background: var(--danger-alpha-10);
+  color: var(--danger);
 }
 
 .authority-label {
-  font-size: 0.65rem;
-  font-weight: 800;
+  font-size: 0.68rem;
+  font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
 }
 
-.auth-badge {
+.auth-pill {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
   gap: 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: var(--radius-xl);
-  text-transform: uppercase;
-}
-
-.auth-badge.revoked {
-  color: #3fb950;
-  background: rgb(63, 185, 80, 0.15);
-  border: 1px solid rgb(63, 185, 80, 0.3);
-}
-
-.auth-badge.present {
-  color: #f85149;
-  background: rgb(248, 81, 73, 0.15);
-  border: 1px solid rgb(248, 81, 73, 0.3);
-}
-
-.authority-status-text {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 800;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-top: auto;
-  padding-top: 4px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
 }
 
-.authority-item.danger .authority-status-text {
-  color: var(--danger);
+.auth-pill i {
+  font-size: 0.7rem;
 }
 
-.authority-item.safe .authority-status-text {
+.auth-pill.ok {
   color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.auth-pill.risk {
+  color: var(--danger);
+  background: var(--danger-alpha-10);
 }
 
 .authority-address {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgb(0, 0, 0, 0.2);
+  background: var(--bg-primary);
   padding: 5px 8px;
   border-radius: var(--radius-md);
-  font-family: var(--font-data);
+  border: 1px solid var(--border-subtle, var(--border-color));
+  min-width: 0;
 }
 
-.authority-address .address-value {
-  font-size: 0.75rem;
+/* =============================================================================
+   UNIFIED SECURITY SUMMARY CARD (score + key stats + token control in one)
+   ============================================================================= */
+.security-summary:hover {
+  /* It's a container, not an interactive tile — no lift. */
+  transform: none;
+  box-shadow: none;
+  border-color: var(--border-color);
+}
+
+.security-summary .card-header {
+  align-items: center;
+}
+
+.security-summary .card-header .section-title {
+  font-size: 0.7rem;
+  font-weight: 800;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  gap: 6px;
 }
 
-.authority-warning {
-  font-size: 0.6rem;
-  color: var(--danger);
-  font-style: italic;
-  opacity: 0.8;
-}
-
-.authority-safe {
-  font-size: 0.6rem;
+.security-summary .card-header .section-title i {
+  font-size: 0.85rem;
   color: var(--success-color);
-  font-style: italic;
-  opacity: 0.8;
+}
+
+.security-summary__body {
+  padding: 0;
+}
+
+/* Score hero */
+.security-summary__score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 22px 16px;
+}
+
+/* Key-stats list — full-width rows survive any value length ("Detected (15)") */
+.security-summary__stats {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-color);
+}
+
+.sec-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+.sec-stat:not(:last-child) {
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.sec-stat__label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.sec-stat__label i {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.sec-stat__value {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.sec-stat.warning .sec-stat__value {
+  color: var(--warning-color);
+}
+
+.sec-stat.warning .sec-stat__label i {
+  color: var(--warning-color);
+  opacity: 1;
+}
+
+.sec-stat.good .sec-stat__value {
+  color: var(--success-color);
+}
+
+/* Token-control section inside the summary card */
+.security-summary__section {
+  border-top: 1px solid var(--border-color);
+  padding: 14px 16px 16px;
+}
+
+.sec-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.sec-section-head > span:first-child {
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+
+.sec-section-sub {
+  font-size: 0.6rem;
+  color: var(--text-muted);
 }
 
 /* Transfer Fee Styles */

@@ -1123,6 +1123,62 @@
     openExternal(`https://solscan.io/token/${mint}`);
   }
 
+  // --- Solscan URL builders (single source of truth for explorer links) -------
+  function solscanTokenUrl(mint) {
+    return `https://solscan.io/token/${mint}`;
+  }
+
+  function solscanAccountUrl(address) {
+    return `https://solscan.io/account/${address}`;
+  }
+
+  function solscanTxUrl(signature) {
+    return `https://solscan.io/tx/${signature}`;
+  }
+
+  function openSolscanAccount(address) {
+    openExternal(solscanAccountUrl(address));
+  }
+
+  // Copy an address and surface a toast (use for wallet/pool/authority addresses).
+  function copyAddress(address) {
+    return copyToClipboard(address)
+      .then(() => showToast({ type: "success", title: "Address copied to clipboard" }))
+      .catch((err) => {
+        showToast({ type: "error", title: "Failed to copy", message: String(err) });
+        throw err;
+      });
+  }
+
+  /**
+   * Render a reusable address chip: the address itself links to Solscan and a
+   * copy button sits beside it. Used across dialogs so every wallet / pool /
+   * authority address is consistently clickable + copyable.
+   * @param {string} address base58 account address (or signature when kind="tx")
+   * @param {Object} [opts]
+   * @param {boolean} [opts.full=false] show the whole address instead of a short form
+   * @param {string} [opts.kind="account"] "account" | "tx" | "token"
+   * @returns {string} HTML string
+   */
+  function renderAddressChip(address, opts = {}) {
+    if (!address) return '<span class="addr-chip addr-chip-empty">—</span>';
+    const { full = false, kind = "account" } = opts;
+    const raw = String(address);
+    const safe = escapeHtml(raw);
+    const display = full
+      ? safe
+      : escapeHtml(formatAddressCompact(raw, { start: 6, end: 6 }));
+    const url =
+      kind === "tx"
+        ? solscanTxUrl(raw)
+        : kind === "token"
+          ? solscanTokenUrl(raw)
+          : solscanAccountUrl(raw);
+    // base58 addresses contain no quotes/HTML-special chars, so inlining is safe.
+    const onclick = `event.preventDefault();event.stopPropagation();Utils.copyAddress('${raw}')`;
+    return `<span class="addr-chip${full ? " addr-chip-full" : ""}"><a class="addr-chip-link mono" href="${url}" target="_blank" rel="noopener noreferrer" title="${safe} — open in Solscan">${display}</a><button type="button" class="addr-chip-copy" title="Copy address" onclick="${onclick}"><i class="icon-copy"></i></button></span>`;
+  }
+
   function formatSignatureCompact(signature, options = {}) {
     if (!signature) return "—";
     const start = options.start ?? 6;
@@ -1361,6 +1417,12 @@
     openGMGN,
     openDexScreener,
     openSolscan,
+    solscanTokenUrl,
+    solscanAccountUrl,
+    solscanTxUrl,
+    openSolscanAccount,
+    copyAddress,
+    renderAddressChip,
     debounce,
     throttle,
     createFocusTrap,
@@ -1421,6 +1483,12 @@ export const {
   openGMGN,
   openDexScreener,
   openSolscan,
+  solscanTokenUrl,
+  solscanAccountUrl,
+  solscanTxUrl,
+  openSolscanAccount,
+  copyAddress,
+  renderAddressChip,
   debounce,
   throttle,
   createFocusTrap,

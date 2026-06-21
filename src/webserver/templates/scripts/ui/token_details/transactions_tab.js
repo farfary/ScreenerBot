@@ -177,13 +177,23 @@ export function applyTransactionsTabMixin(DialogClass) {
         const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);
         const total = Utils.formatNumber(amount, { decimals: 2 });
 
-        return `
-         <div style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 13px;">
+        const rowInner = `
            <span style="color: var(--text-secondary);">${timeDisplay}</span>
            <span style="font-weight: 600; ${typeStyle}">${typeLabel}</span>
            <span style="font-family: monospace;">${price}</span>
            <span>${total} SOL</span>
-           <a href="https://solscan.io/tx/${tx.signature}" target="_blank" style="color: var(--text-secondary); text-align: right;"><i class="icon-external-link"></i></a>
+           <span style="color: var(--text-muted); text-align: right;"><i class="icon-external-link"></i></span>`;
+
+        // Whole row links to the transaction on Solscan (clearer than a tiny icon).
+        return tx.signature
+          ? `
+         <a class="txn-row" href="${Utils.solscanTxUrl(tx.signature)}" target="_blank" rel="noopener noreferrer" title="View transaction on Solscan" style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 13px; color: inherit; text-decoration: none;">
+           ${rowInner}
+         </a>
+       `
+          : `
+         <div style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 13px;">
+           ${rowInner}
          </div>
        `;
       })
