@@ -1,118 +1,223 @@
 /* =============================================================================
-   CHART TAB
+   CHART TAB — advanced lightweight-charts engine, fills the whole subtab
    ============================================================================= */
 
-.pdd-chart-container {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  height: 100%;
+/* Remove the default tab padding so the chart can use the full area. */
+.position-details-dialog .tab-content[data-tab-content="chart"] {
+  padding: 10px;
 }
 
-.pdd-chart-controls {
+.pdd-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+
+.pdd-chart-wrap .pdd-chart-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.pdd-chart-wrap .pdd-chart-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pdd-chart-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.pdd-tf-buttons {
-  display: flex;
-  gap: var(--spacing-xs);
-  background: var(--bg-secondary);
-  padding: 4px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
+/* The advanced chart canvas fills all remaining space. */
+.pdd-chart-wrap .pdd-chart-canvas {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  width: 100%;
 }
 
-.pdd-tf-btn {
-  padding: 6px 12px;
-  font-size: 0.75rem;
-  font-family: "JetBrains Mono", monospace;
-  font-weight: 500;
+/* Chart-type segmented control */
+.pdd-chart-type {
+  display: inline-flex;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.pdd-ct-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  border: none;
   background: transparent;
   color: var(--text-secondary);
-  border: none;
   border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.pdd-ct-btn:hover {
+  color: var(--text-primary);
+}
+
+.pdd-ct-btn.active {
+  background: var(--link-color);
+  color: #fff;
+}
+
+.pdd-ema-toggle {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition:
     background 0.15s ease,
     color 0.15s ease;
 }
 
-.pdd-tf-btn:hover {
-  background: var(--bg-card-hover);
+.pdd-ema-toggle:hover {
   color: var(--text-primary);
 }
 
-.pdd-tf-btn.active {
+.pdd-ema-toggle.active {
   background: var(--link-color);
-  color: var(--bg-primary);
+  color: #fff;
+  border-color: var(--link-color);
 }
 
+/* Marker legend (bottom-left of the chart) */
 .pdd-chart-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  z-index: 3;
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  font-size: 0.75rem;
+  gap: 12px;
+  padding: 5px 10px;
+  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  font-size: 0.65rem;
   color: var(--text-secondary);
+  pointer-events: none;
+  backdrop-filter: blur(4px);
 }
 
 .pdd-legend-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .pdd-legend-dot {
   width: 8px;
   height: 8px;
   border-radius: var(--radius-full);
-  background: var(--link-color);
 }
 
-.pdd-legend-price .pdd-legend-dot {
-  background: var(--text-secondary);
+.pdd-legend-dot.entry {
+  background: #22c55e;
 }
 
-.pdd-legend-marker {
-  font-size: 0.625rem;
+.pdd-legend-dot.dca {
+  background: #eab308;
 }
 
-.pdd-legend-entry .pdd-legend-marker {
-  color: var(--success);
+.pdd-legend-dot.exit {
+  background: #ef4444;
 }
 
-.pdd-legend-exit .pdd-legend-marker {
-  color: var(--error);
+.pdd-legend-line {
+  width: 12px;
+  height: 0;
+  border-top: 2px dashed #3b82f6;
 }
 
-.pdd-chart-area {
-  flex: 1;
-  min-height: 280px;
-  max-height: 350px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
+/* Position summary bar under the chart */
+.pdd-chart-posbar {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1px;
+  background: var(--border-color);
   border: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
-.pdd-chart-svg {
-  width: 100%;
-  height: 100%;
+.pdd-posbar-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 6px;
+  background: var(--bg-secondary);
 }
 
+.pdd-posbar-cell .label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.pdd-posbar-cell .value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: var(--font-data, "JetBrains Mono", monospace);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.pdd-posbar-cell .value.pdd-positive {
+  color: var(--success);
+}
+
+.pdd-posbar-cell .value.pdd-negative {
+  color: var(--error);
+}
+
+/* Empty / error fallback */
 .pdd-chart-empty {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-xl);
   color: var(--text-secondary);
   text-align: center;
 }
@@ -128,73 +233,17 @@
   color: var(--text-primary);
 }
 
-.pdd-chart-empty-hint {
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-
 .pdd-chart-error i {
   color: var(--error);
 }
 
-.pdd-chart-stats {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  padding: var(--spacing-md);
-}
-
-.pdd-chart-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: var(--spacing-md);
-}
-
-.pdd-chart-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.pdd-chart-stat .label {
-  font-size: 0.625rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-}
-
-.pdd-chart-stat .value {
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-family: "JetBrains Mono", monospace;
-  color: var(--text-primary);
-}
-
-/* Chart responsive */
-@media (width <= 800px) {
-  .pdd-chart-stat-grid {
+@media (width <= 640px) {
+  .pdd-chart-posbar {
     grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (width <= 500px) {
-  .pdd-chart-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .pdd-tf-buttons {
-    justify-content: center;
   }
 
   .pdd-chart-legend {
-    justify-content: center;
-  }
-
-  .pdd-chart-stat-grid {
-    grid-template-columns: repeat(2, 1fr);
+    display: none;
   }
 }
 

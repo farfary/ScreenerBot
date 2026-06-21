@@ -1,16 +1,18 @@
 /**
  * Chart Tab Mixin for Position Details Dialog
- * Adds chart tab rendering functionality with OHLCV candlestick charts
+ *
+ * Uses the same advanced lightweight-charts engine as the Token Details
+ * overview chart (window.createAdvancedChart), and overlays this position's
+ * entries, DCAs and exits as markers + price lines so the chart doubles as a
+ * full trade-analysis view. Fills the whole subtab.
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
 
-/**
- * Apply chart tab methods to PositionDetailsDialog prototype
- * @param {class} PositionDetailsDialog - The PositionDetailsDialog class
- */
 export function applyChartTabMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
+
+  const TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
   // ===========================================================================
   // CHART TAB
@@ -19,295 +21,374 @@ export function applyChartTabMixin(PositionDetailsDialog) {
   proto._renderChartTab = async function (content) {
     const pos = this.fullDetails?.position || this.positionData;
     const mint = pos?.mint || this.positionData?.mint;
-    const entries = this.fullDetails?.entries || [];
-    const exits = this.fullDetails?.exits || [];
 
     if (!mint) {
       content.innerHTML = '<div class="pdd-empty-state">No mint address available</div>';
       return;
     }
 
-    // Build chart UI structure
+    // The dialog's 5s refresh poller re-invokes this on every tick. If the chart
+    // is already built and still in the DOM, refresh data/markers/stats IN PLACE
+    // instead of tearing it down and redrawing — that flicker + zoom reset was
+    // the "keeps refreshing every few seconds" bug.
+    if (this._pddChart && this.dialogEl?.querySelector("#pddChart")) {
+      await this._loadPositionChartData(mint, this._chartTimeframe, false);
+      return;
+    }
+
+    // First build (or returning to the tab) — start clean.
+    this._destroyPositionChart();
+
+    this._chartTimeframe = this._chartTimeframe || "5m";
+    this._pddChartType = this._pddChartType || "candlestick";
+
     content.innerHTML = `
-      <div class="pdd-chart-container">
-        <div class="pdd-chart-controls">
-          <div class="pdd-tf-buttons">
-            <button class="pdd-tf-btn${this._chartTimeframe === "1m" ? " active" : ""}" data-tf="1m">1m</button>
-            <button class="pdd-tf-btn${this._chartTimeframe === "5m" ? " active" : ""}" data-tf="5m">5m</button>
-            <button class="pdd-tf-btn${this._chartTimeframe === "15m" ? " active" : ""}" data-tf="15m">15m</button>
-            <button class="pdd-tf-btn${this._chartTimeframe === "1h" ? " active" : ""}" data-tf="1h">1h</button>
-            <button class="pdd-tf-btn${this._chartTimeframe === "4h" ? " active" : ""}" data-tf="4h">4h</button>
-            <button class="pdd-tf-btn${this._chartTimeframe === "1d" ? " active" : ""}" data-tf="1d">1d</button>
+      <div class="pdd-chart-wrap">
+        <div class="chart-container pdd-chart-container">
+          <div class="chart-header pdd-chart-header">
+            <div class="chart-header-left">
+              <span class="chart-title">Price Chart</span>
+              <div class="chart-ohlcv-display" id="pddOhlcv">
+                <span class="ohlcv-item"><span class="ohlcv-label">O</span> <span class="ohlcv-value" id="pddO">—</span></span>
+                <span class="ohlcv-item"><span class="ohlcv-label">H</span> <span class="ohlcv-value" id="pddH">—</span></span>
+                <span class="ohlcv-item"><span class="ohlcv-label">L</span> <span class="ohlcv-value" id="pddL">—</span></span>
+                <span class="ohlcv-item"><span class="ohlcv-label">C</span> <span class="ohlcv-value" id="pddC">—</span></span>
+                <span class="ohlcv-change" id="pddChg">—</span>
+              </div>
+            </div>
+            <div class="chart-controls pdd-chart-controls-row">
+              <div class="pdd-chart-type" id="pddChartType">
+                <button class="pdd-ct-btn${this._pddChartType === "candlestick" ? " active" : ""}" data-ct="candlestick" title="Candles"><i class="icon-chart-candlestick"></i></button>
+                <button class="pdd-ct-btn${this._pddChartType === "line" ? " active" : ""}" data-ct="line" title="Line"><i class="icon-chart-line"></i></button>
+                <button class="pdd-ct-btn${this._pddChartType === "area" ? " active" : ""}" data-ct="area" title="Area"><i class="icon-chart-area"></i></button>
+              </div>
+              <button class="pdd-ema-toggle${this._pddEma ? " active" : ""}" id="pddEmaToggle" title="Toggle EMA 9/21">EMA</button>
+              <div class="timeframe-buttons" id="pddTimeframes">
+                ${TIMEFRAMES.map(
+                  (tf) =>
+                    `<button class="timeframe-btn${tf === this._chartTimeframe ? " active" : ""}" data-tf="${tf}">${tf.toUpperCase()}</button>`
+                ).join("")}
+              </div>
+            </div>
           </div>
-          <div class="pdd-chart-legend">
-            <span class="pdd-legend-item pdd-legend-price"><span class="pdd-legend-dot"></span> Price</span>
-            <span class="pdd-legend-item pdd-legend-entry"><span class="pdd-legend-marker">▲</span> Entry</span>
-            <span class="pdd-legend-item pdd-legend-exit"><span class="pdd-legend-marker">▼</span> Exit</span>
+          <div id="pddChart" class="tradingview-chart pdd-chart-canvas"></div>
+          <div class="pdd-chart-legend" id="pddChartLegend">
+            <span class="pdd-legend-item"><span class="pdd-legend-dot entry"></span> Entry</span>
+            <span class="pdd-legend-item"><span class="pdd-legend-dot dca"></span> DCA</span>
+            <span class="pdd-legend-item"><span class="pdd-legend-dot exit"></span> Exit</span>
+            <span class="pdd-legend-item"><span class="pdd-legend-line avg"></span> Avg Entry</span>
+          </div>
+          <div id="pddChartLoading" class="chart-loading-overlay">
+            <div class="chart-loading-content">
+              <div class="chart-loading-spinner"></div>
+              <div class="chart-loading-text">Loading chart data...</div>
+            </div>
           </div>
         </div>
-        <div class="pdd-chart-area" id="pddChartArea">
-          <div class="loading-spinner">Loading chart data...</div>
-        </div>
-        <div class="pdd-chart-stats" id="pddChartStats"></div>
+        <div class="pdd-chart-posbar" id="pddPosBar"></div>
       </div>
     `;
 
-    // Attach timeframe button handlers
-    this._attachChartEventHandlers(content, mint, entries, exits);
-
-    // Fetch and render chart data
-    await this._fetchAndRenderChart(mint, entries, exits);
+    this._renderPositionChartStats();
+    await this._initPositionChart(mint);
   };
 
-  /**
-   * Attach event handlers for timeframe buttons
-   */
-  proto._attachChartEventHandlers = function (content, mint, entries, exits) {
-    // Clean up old handlers
-    if (this._tfButtonHandlers) {
-      this._tfButtonHandlers.forEach(({ element, handler }) => {
-        element.removeEventListener("click", handler);
-      });
+  /** Create the advanced chart and wire controls. */
+  proto._initPositionChart = async function (mint) {
+    const container = this.dialogEl?.querySelector("#pddChart");
+    if (!container) return;
+
+    if (!window.createAdvancedChart) {
+      container.innerHTML =
+        '<div class="pdd-chart-empty"><i class="icon-circle-alert"></i><p>Chart engine unavailable</p></div>';
+      return;
     }
-    this._tfButtonHandlers = [];
 
-    const tfButtons = content.querySelectorAll(".pdd-tf-btn");
-    tfButtons.forEach((btn) => {
-      const handler = async () => {
-        const tf = btn.dataset.tf;
-        if (tf === this._chartTimeframe) return;
+    const isDark = document.documentElement.getAttribute("data-theme") !== "light";
+    const pos = this.fullDetails?.position || this.positionData || {};
 
-        // Update active state
-        tfButtons.forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-
-        this._chartTimeframe = tf;
-        await this._fetchAndRenderChart(mint, entries, exits);
-      };
-      btn.addEventListener("click", handler);
-      this._tfButtonHandlers.push({ element: btn, handler });
+    this._pddChart = window.createAdvancedChart(container, {
+      theme: isDark ? "dark" : "light",
+      chartType: this._pddChartType,
+      showVolume: true,
+      showGrid: true,
+      showCrosshair: true,
+      showLegend: false,
+      showTooltip: true,
+      priceFormat: "auto",
+      pricePrecision: 12,
+      barSpacing: 10,
+      minBarSpacing: 3,
+      watermark: {
+        text: pos.symbol || "",
+        fontSize: 34,
+        color: isDark ? "rgba(128,128,128,0.10)" : "rgba(128,128,128,0.08)",
+      },
     });
+
+    await this._loadPositionChartData(mint, this._chartTimeframe, true);
+
+    // Timeframe buttons
+    const tfWrap = this.dialogEl.querySelector("#pddTimeframes");
+    this._pddTfHandler = async (e) => {
+      const btn = e.target.closest(".timeframe-btn");
+      if (!btn || btn.dataset.tf === this._chartTimeframe) return;
+      tfWrap.querySelectorAll(".timeframe-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      this._chartTimeframe = btn.dataset.tf;
+      await this._loadPositionChartData(mint, this._chartTimeframe, true);
+    };
+    tfWrap?.addEventListener("click", this._pddTfHandler);
+
+    // Chart-type toggle
+    const ctWrap = this.dialogEl.querySelector("#pddChartType");
+    this._pddCtHandler = (e) => {
+      const btn = e.target.closest(".pdd-ct-btn");
+      if (!btn || !this._pddChart) return;
+      ctWrap.querySelectorAll(".pdd-ct-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      this._pddChartType = btn.dataset.ct;
+      this._pddChart.setChartType(this._pddChartType);
+      this._updatePositionChartMarkers();
+      if (this._pddEma) {
+        this._pddChart.addIndicator("ema9");
+        this._pddChart.addIndicator("ema21");
+      }
+    };
+    ctWrap?.addEventListener("click", this._pddCtHandler);
+
+    // EMA indicator toggle
+    const emaBtn = this.dialogEl.querySelector("#pddEmaToggle");
+    this._pddEmaHandler = () => {
+      if (!this._pddChart) return;
+      this._pddEma = !this._pddEma;
+      emaBtn.classList.toggle("active", this._pddEma);
+      if (this._pddEma) {
+        this._pddChart.addIndicator("ema9");
+        this._pddChart.addIndicator("ema21");
+      } else {
+        this._pddChart.removeIndicator("ema9");
+        this._pddChart.removeIndicator("ema21");
+      }
+    };
+    emaBtn?.addEventListener("click", this._pddEmaHandler);
+    if (this._pddEma) {
+      this._pddChart.addIndicator("ema9");
+      this._pddChart.addIndicator("ema21");
+    }
+
+    // Theme sync
+    this._pddThemeObserver = new MutationObserver(() => {
+      const t = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+      this._pddChart?.setTheme(t);
+    });
+    this._pddThemeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    // Live updates are driven by the dialog's existing 5s refresh poller, which
+    // re-enters _renderChartTab and refreshes this chart in place. No separate
+    // interval here (that caused double refreshes).
   };
 
-  /**
-   * Fetch OHLCV data and render chart
-   */
-  proto._fetchAndRenderChart = async function (mint, entries, exits) {
-    const chartArea = this.dialogEl?.querySelector("#pddChartArea");
-    const statsArea = this.dialogEl?.querySelector("#pddChartStats");
-    if (!chartArea) return;
-
-    // Only show loading state if we don't have cached chart data
-    // This prevents the annoying flash when switching back to chart tab
-    const hasCachedData = this._chartData && this._chartData.length > 0;
-    if (!hasCachedData) {
-      chartArea.innerHTML = '<div class="loading-spinner">Loading chart data...</div>';
-    }
+  /** Fetch OHLCV and push into the chart. */
+  proto._loadPositionChartData = async function (mint, timeframe, isInitial) {
+    const overlay = this.dialogEl?.querySelector("#pddChartLoading");
+    const loadingText = overlay?.querySelector(".chart-loading-text");
 
     try {
-      const data = await requestManager.fetch(
-        `/api/ohlcv/${mint}?timeframe=${this._chartTimeframe}&limit=200`,
-        { priority: "normal" }
-      );
+      const data = await requestManager.fetch(`/api/tokens/${mint}/ohlcv?timeframe=${timeframe}`, {
+        priority: isInitial ? "high" : "normal",
+      });
 
-      if (!data?.data || data.data.length === 0) {
-        chartArea.innerHTML = `
-          <div class="pdd-chart-empty">
-            <i class="icon-chart-bar"></i>
-            <p>No OHLCV data available for this timeframe</p>
-            <span class="pdd-chart-empty-hint">Data may not be collected for this token yet</span>
-          </div>
-        `;
-        if (statsArea) statsArea.innerHTML = "";
+      if (!Array.isArray(data) || data.length === 0) {
+        if (loadingText) loadingText.textContent = "Waiting for chart data...";
+        overlay?.classList.remove("hidden");
         return;
       }
+      if (!this._pddChart) return;
 
-      this._chartData = data.data;
-      this._renderChartSVG(chartArea, data.data, entries, exits);
-      this._renderChartStats(statsArea, data.data);
-    } catch (error) {
-      console.error("Error fetching OHLCV data:", error);
-      chartArea.innerHTML = `
-        <div class="pdd-chart-empty pdd-chart-error">
-          <i class="icon-circle-alert"></i>
-          <p>Failed to load chart data</p>
-          <span class="pdd-chart-empty-hint">${Utils.escapeHtml(error?.message || "Unknown error")}</span>
-        </div>
-      `;
-      if (statsArea) statsArea.innerHTML = "";
+      const chartData = data.map((c) => ({
+        time: c.timestamp,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume || 0,
+      }));
+
+      this._pddChart.setData(chartData);
+      this._pddChartData = chartData;
+      overlay?.classList.add("hidden");
+
+      this._updatePddOhlc(chartData);
+      this._updatePositionChartMarkers();
+      this._renderPositionChartStats(chartData[chartData.length - 1]?.close);
+
+      if (isInitial) {
+        this._pddChart.resetUserInteraction();
+        this._pddChart.setVisibleRange(90);
+      }
+    } catch {
+      if (loadingText) loadingText.textContent = "Waiting for chart data...";
+      overlay?.classList.remove("hidden");
     }
   };
 
-  /**
-   * Render candlestick chart as SVG with entry/exit markers
-   */
-  proto._renderChartSVG = function (container, candles, entries, exits) {
-    const width = container.clientWidth || 700;
-    const height = 280;
-    const padding = { top: 20, right: 60, bottom: 30, left: 10 };
-    const chartWidth = width - padding.left - padding.right;
-    const chartHeight = height - padding.top - padding.bottom;
+  /** Overlay this position's entries / DCAs / exits + key price lines. */
+  proto._updatePositionChartMarkers = function () {
+    if (!this._pddChart) return;
+    const pos = this.fullDetails?.position || this.positionData || {};
+    const entries = this.fullDetails?.entries || [];
+    const exits = this.fullDetails?.exits || [];
 
-    // Get price range
-    const prices = candles.flatMap((c) => [c.high, c.low]);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const priceRange = maxPrice - minPrice || 1;
-    const pricePadding = priceRange * 0.05;
-    const yMin = minPrice - pricePadding;
-    const yMax = maxPrice + pricePadding;
+    this._pddChart.clearPositionMarkers();
+    this._pddChart.clearOverlays();
 
-    // Time range
-    const timestamps = candles.map((c) => c.timestamp);
-    const minTime = Math.min(...timestamps);
-    const maxTime = Math.max(...timestamps);
-    const timeRange = maxTime - minTime || 1;
+    // lightweight-charts only renders a marker when its `time` matches a bar, so
+    // snap each event to the candle that contains it (largest bar time <= event).
+    // Events outside the loaded window are skipped (switch timeframe to see them).
+    const bars = this._pddChartData || [];
+    const firstBar = bars.length ? bars[0].time : null;
+    const lastBar = bars.length ? bars[bars.length - 1].time : null;
+    const snapToBar = (ts) => {
+      if (firstBar === null || ts < firstBar) return null;
+      if (ts >= lastBar) return lastBar;
+      let chosen = firstBar;
+      for (let i = 0; i < bars.length; i++) {
+        if (bars[i].time <= ts) chosen = bars[i].time;
+        else break;
+      }
+      return chosen;
+    };
 
-    // Scale functions
-    const scaleX = (t) => padding.left + ((t - minTime) / timeRange) * chartWidth;
-    const scaleY = (p) => padding.top + (1 - (p - yMin) / (yMax - yMin)) * chartHeight;
+    // Build one combined list so markers can be added in strict ascending time
+    // order — lightweight-charts requires that, and interleaved DCA/exit events
+    // would otherwise be dropped or misplaced.
+    const markers = [];
+    let dcaIdx = 0;
+    entries.forEach((e) => {
+      if (!e.price || !e.timestamp) return;
+      const isDca = !!e.is_dca;
+      if (isDca) dcaIdx += 1;
+      const barTime = snapToBar(Number(e.timestamp));
+      if (barTime === null) return;
+      markers.push({
+        type: isDca ? "dca" : "entry",
+        price: e.price,
+        timestamp: barTime,
+        label: isDca ? `DCA ${dcaIdx}` : "Entry",
+      });
+    });
+    exits.forEach((e, i) => {
+      if (!e.price || !e.timestamp) return;
+      const barTime = snapToBar(Number(e.timestamp));
+      if (barTime === null) return;
+      markers.push({
+        type: "exit",
+        price: e.price,
+        timestamp: barTime,
+        label: exits.length > 1 ? `Exit ${i + 1}` : "Exit",
+      });
+    });
 
-    // Build candlestick bars
-    const candleWidth = Math.max(2, (chartWidth / candles.length) * 0.7);
-    const candlesHtml = candles
-      .map((c) => {
-        const x = scaleX(c.timestamp);
-        const isGreen = c.close >= c.open;
-        const color = isGreen ? "var(--success)" : "var(--error)";
-        const yHigh = scaleY(c.high);
-        const yLow = scaleY(c.low);
-        const yOpen = scaleY(c.open);
-        const yClose = scaleY(c.close);
-        const bodyTop = Math.min(yOpen, yClose);
-        const bodyHeight = Math.max(1, Math.abs(yClose - yOpen));
+    markers
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .forEach((m) => this._pddChart.addPositionMarker(m));
 
-        return `
-          <line x1="${x}" y1="${yHigh}" x2="${x}" y2="${yLow}" stroke="${color}" stroke-width="1" />
-          <rect x="${x - candleWidth / 2}" y="${bodyTop}" width="${candleWidth}" height="${bodyHeight}" fill="${color}" />
-        `;
-      })
-      .join("");
-
-    // Build entry markers
-    const entryMarkersHtml = entries
-      .map((entry) => {
-        const ts = entry.timestamp;
-        if (ts < minTime || ts > maxTime) return "";
-        const x = scaleX(ts);
-        const price = entry.price;
-        const y = scaleY(price);
-        return `
-          <polygon points="${x},${y + 8} ${x - 6},${y + 16} ${x + 6},${y + 16}" fill="var(--success)" stroke="#fff" stroke-width="1" />
-          <title>Entry: ${this._formatPrice(price)} SOL at ${Utils.formatTimestamp(ts)}</title>
-        `;
-      })
-      .join("");
-
-    // Build exit markers
-    const exitMarkersHtml = exits
-      .map((exit) => {
-        const ts = exit.timestamp;
-        if (ts < minTime || ts > maxTime) return "";
-        const x = scaleX(ts);
-        const price = exit.price;
-        const y = scaleY(price);
-        return `
-          <polygon points="${x},${y - 8} ${x - 6},${y - 16} ${x + 6},${y - 16}" fill="var(--error)" stroke="#fff" stroke-width="1" />
-          <title>Exit: ${this._formatPrice(price)} SOL at ${Utils.formatTimestamp(ts)}</title>
-        `;
-      })
-      .join("");
-
-    // Y-axis labels
-    const yAxisSteps = 5;
-    const yAxisLabels = [];
-    for (let i = 0; i <= yAxisSteps; i++) {
-      const price = yMin + ((yMax - yMin) * i) / yAxisSteps;
-      const y = scaleY(price);
-      yAxisLabels.push(`
-        <text x="${width - padding.right + 5}" y="${y + 4}" fill="var(--text-secondary)" font-size="10" font-family="JetBrains Mono, monospace">${this._formatPrice(price)}</text>
-        <line x1="${padding.left}" y1="${y}" x2="${width - padding.right}" y2="${y}" stroke="var(--border-color)" stroke-width="1" stroke-dasharray="2,2" opacity="0.3" />
-      `);
+    // Average entry reference line.
+    const avgEntry = pos.average_entry_price || pos.entry_price;
+    if (avgEntry) {
+      this._pddChart.addHorizontalLine({
+        price: avgEntry,
+        color: "#3b82f6",
+        label: "Avg Entry",
+        style: 2,
+      });
     }
+  };
 
-    // X-axis labels (show a few timestamps)
-    const xAxisLabels = [];
-    const xLabelCount = Math.min(6, candles.length);
-    const step = Math.floor(candles.length / xLabelCount) || 1;
-    for (let i = 0; i < candles.length; i += step) {
-      const c = candles[i];
-      const x = scaleX(c.timestamp);
-      const date = new Date(c.timestamp * 1000);
-      const label = `${date.getHours().toString().padStart(2, "0")}:${date.getMinutes().toString().padStart(2, "0")}`;
-      xAxisLabels.push(`
-        <text x="${x}" y="${height - 5}" fill="var(--text-secondary)" font-size="10" font-family="JetBrains Mono, monospace" text-anchor="middle">${label}</text>
-      `);
+  /** Update the O/H/L/C header from the latest candle. */
+  proto._updatePddOhlc = function (chartData) {
+    if (!chartData?.length) return;
+    const last = chartData[chartData.length - 1];
+    const set = (id, v) => {
+      const el = this.dialogEl?.querySelector(id);
+      if (el) el.textContent = Utils.formatPriceSol(v, { decimals: 9 });
+    };
+    set("#pddO", last.open);
+    set("#pddH", last.high);
+    set("#pddL", last.low);
+    set("#pddC", last.close);
+
+    const chg = this.dialogEl?.querySelector("#pddChg");
+    if (chg && last.open) {
+      const pct = ((last.close - last.open) / last.open) * 100;
+      chg.textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+      chg.className = `ohlcv-change ${pct >= 0 ? "positive" : "negative"}`;
     }
+  };
 
-    // Current price line
-    const currentPrice = candles[candles.length - 1]?.close;
-    const currentPriceLine = currentPrice
-      ? `<line x1="${padding.left}" y1="${scaleY(currentPrice)}" x2="${width - padding.right}" y2="${scaleY(currentPrice)}" stroke="var(--link-color)" stroke-width="1" stroke-dasharray="4,2" />`
-      : "";
+  /** Position summary bar under the chart (avg entry, current, PnL, counts). */
+  proto._renderPositionChartStats = function (livePrice) {
+    const bar = this.dialogEl?.querySelector("#pddPosBar");
+    if (!bar) return;
+    const pos = this.fullDetails?.position || this.positionData || {};
+    const entries = this.fullDetails?.entries || [];
+    const exits = this.fullDetails?.exits || [];
 
-    container.innerHTML = `
-      <svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" class="pdd-chart-svg">
-        ${yAxisLabels.join("")}
-        ${xAxisLabels.join("")}
-        ${candlesHtml}
-        ${currentPriceLine}
-        <g class="pdd-chart-markers">
-          ${entryMarkersHtml}
-          ${exitMarkersHtml}
-        </g>
-      </svg>
+    const avgEntry = pos.average_entry_price || pos.entry_price;
+    const current = livePrice || pos.current_price;
+    const dcaCount = entries.filter((e) => e.is_dca).length;
+
+    let pnlPct = pos.unrealized_pnl_percent ?? pos.pnl_percent;
+    if ((pnlPct === null || pnlPct === undefined) && avgEntry && current) {
+      pnlPct = ((current - avgEntry) / avgEntry) * 100;
+    }
+    const pnlClass =
+      pnlPct === null || pnlPct === undefined
+        ? ""
+        : pnlPct >= 0
+          ? "pdd-positive"
+          : "pdd-negative";
+    const pnlText =
+      pnlPct === null || pnlPct === undefined
+        ? "—"
+        : `${pnlPct >= 0 ? "+" : ""}${Utils.formatNumber(pnlPct, 2)}%`;
+
+    const cell = (label, value, cls = "") =>
+      `<div class="pdd-posbar-cell"><span class="label">${label}</span><span class="value ${cls}">${value}</span></div>`;
+
+    bar.innerHTML = `
+      ${cell("Avg Entry", avgEntry ? `${this._formatPrice(avgEntry)} SOL` : "—")}
+      ${cell("Current", current ? `${this._formatPrice(current)} SOL` : "—")}
+      ${cell("PnL", pnlText, pnlClass)}
+      ${cell("Entries", String(entries.length))}
+      ${cell("DCAs", String(dcaCount))}
+      ${cell("Exits", String(exits.length))}
     `;
   };
 
-  /**
-   * Render chart statistics below chart
-   */
-  proto._renderChartStats = function (container, candles) {
-    if (!container || !candles || candles.length === 0) return;
-
-    const first = candles[0];
-    const last = candles[candles.length - 1];
-    const high = Math.max(...candles.map((c) => c.high));
-    const low = Math.min(...candles.map((c) => c.low));
-    const priceChange = last.close - first.open;
-    const priceChangePct = first.open !== 0 ? (priceChange / first.open) * 100 : 0;
-    const totalVolume = candles.reduce((sum, c) => sum + c.volume, 0);
-
-    const changeClass = priceChange >= 0 ? "pdd-positive" : "pdd-negative";
-    const changeSign = priceChange >= 0 ? "+" : "";
-
-    container.innerHTML = `
-      <div class="pdd-chart-stat-grid">
-        <div class="pdd-chart-stat">
-          <span class="label">Open</span>
-          <span class="value">${this._formatPrice(first.open)}</span>
-        </div>
-        <div class="pdd-chart-stat">
-          <span class="label">High</span>
-          <span class="value pdd-positive">${this._formatPrice(high)}</span>
-        </div>
-        <div class="pdd-chart-stat">
-          <span class="label">Low</span>
-          <span class="value pdd-negative">${this._formatPrice(low)}</span>
-        </div>
-        <div class="pdd-chart-stat">
-          <span class="label">Close</span>
-          <span class="value">${this._formatPrice(last.close)}</span>
-        </div>
-        <div class="pdd-chart-stat">
-          <span class="label">Change</span>
-          <span class="value ${changeClass}">${changeSign}${Utils.formatNumber(priceChangePct, 2)}%</span>
-        </div>
-        <div class="pdd-chart-stat">
-          <span class="label">Volume</span>
-          <span class="value">${Utils.formatCompactNumber(totalVolume)}</span>
-        </div>
-      </div>
-    `;
+  /** Tear down chart, poller and observers. */
+  proto._destroyPositionChart = function () {
+    if (this._pddChartPoll) {
+      clearInterval(this._pddChartPoll);
+      this._pddChartPoll = null;
+    }
+    if (this._pddThemeObserver) {
+      this._pddThemeObserver.disconnect();
+      this._pddThemeObserver = null;
+    }
+    if (this._pddChart) {
+      try {
+        this._pddChart.destroy();
+      } catch {
+        /* already gone */
+      }
+      this._pddChart = null;
+    }
+    this._pddTfHandler = null;
+    this._pddCtHandler = null;
+    this._pddEmaHandler = null;
   };
 }

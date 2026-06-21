@@ -298,6 +298,7 @@ export class PositionDetailsDialog {
    */
   destroy() {
     this._stopPolling();
+    this._destroyPositionChart?.();
 
     // Remove event handlers
     if (this._escapeHandler) {
@@ -629,6 +630,11 @@ export class PositionDetailsDialog {
    */
   _switchTab(tabId) {
     if (tabId === this.currentTab) return;
+
+    // Leaving the chart tab — release the chart, poller and observers.
+    if (this.currentTab === "chart" && tabId !== "chart") {
+      this._destroyPositionChart?.();
+    }
 
     const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
     tabButtons.forEach((btn) => {
