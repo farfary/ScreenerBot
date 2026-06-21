@@ -10,7 +10,6 @@ import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { applyOverviewTabMixin } from "./position_details/overview_tab.js";
 import { applyChartTabMixin } from "./position_details/chart_tab.js";
-import { applyAnalyticsTabMixin } from "./position_details/analytics_tab.js";
 import { applySecondaryTabsMixin } from "./position_details/secondary_tabs.js";
 import { applyUtilitiesMixin } from "./position_details/utilities.js";
 
@@ -418,10 +417,6 @@ export class PositionDetailsDialog {
             <i class="icon-list"></i>
             Transactions
           </button>
-          <button class="tab-button" data-tab="analytics">
-            <i class="icon-trending-up"></i>
-            Analytics
-          </button>
           <div class="pdd-trade-actions">
             ${
               isOpen
@@ -448,9 +443,6 @@ export class PositionDetailsDialog {
             <div class="loading-spinner">Loading...</div>
           </div>
           <div class="tab-content" data-tab-content="transactions">
-            <div class="loading-spinner">Loading...</div>
-          </div>
-          <div class="tab-content" data-tab-content="analytics">
             <div class="loading-spinner">Loading...</div>
           </div>
         </div>
@@ -685,9 +677,6 @@ export class PositionDetailsDialog {
       case "transactions":
         this._renderTransactionsTab(content);
         break;
-      case "analytics":
-        this._renderAnalyticsTab(content);
-        break;
     }
   }
 
@@ -700,11 +689,6 @@ export class PositionDetailsDialog {
   // CHART TAB
   // ===========================================================================
   // Methods are added via applyChartTabMixin()
-
-  // ===========================================================================
-  // ANALYTICS TAB
-  // ===========================================================================
-  // Methods are added via applyAnalyticsTabMixin()
 
   // ===========================================================================
   // TOKEN TAB
@@ -720,7 +704,6 @@ export class PositionDetailsDialog {
 // Apply mixins to add tab rendering methods
 applyOverviewTabMixin(PositionDetailsDialog);
 applyChartTabMixin(PositionDetailsDialog);
-applyAnalyticsTabMixin(PositionDetailsDialog);
 applySecondaryTabsMixin(PositionDetailsDialog);
 applyUtilitiesMixin(PositionDetailsDialog);
 

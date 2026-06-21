@@ -32,6 +32,8 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     const solPriceUsd = this.fullDetails?.sol_price_usd;
     const tokenInfo = this.fullDetails?.token_info;
     const poolInfo = this.fullDetails?.pool_info;
+    const entries = this.fullDetails?.entries || [];
+    const exits = this.fullDetails?.exits || [];
 
     content.innerHTML = `
       <div class="pdd-overview-layout">
@@ -39,13 +41,13 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
 
         <div class="pdd-cards-grid">
           ${this._buildTokenInfoCard(pos, tokenInfo, poolInfo, externalLinks)}
-          ${this._buildEntryInfoCard(pos, positionAge)}
-          ${this._buildCurrentStateCard(pos, isOpen)}
+          ${this._buildEntryInfoCard(pos, positionAge, entries)}
+          ${this._buildCurrentStateCard(pos, isOpen, exits)}
           ${this._buildMarketDataCard(marketData)}
           ${this._buildSecurityCard(security)}
         </div>
 
-        ${this._buildPnLAnalysisCard(pos, isOpen, solPriceUsd)}
+        ${this._buildPnLAnalysisCard(pos, isOpen, solPriceUsd, entries, exits)}
       </div>
     `;
   };
@@ -214,7 +216,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
   /**
    * Build entry info card (left column of stats grid)
    */
-  proto._buildEntryInfoCard = function (pos, positionAge) {
+  proto._buildEntryInfoCard = function (pos, positionAge, entries = []) {
     const entryPrice = pos.entry_price;
     const avgEntryPrice = pos.average_entry_price;
     const totalInvested = pos.total_size_sol;
@@ -226,6 +228,19 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
 
     // Show both entry and average if DCA
     const showAvgEntry = dcaCount > 0 && avgEntryPrice && avgEntryPrice !== entryPrice;
+
+    // DCA extra detail: price range and total tokens (only when multiple entries)
+    let minEntry = null;
+    let maxEntry = null;
+    let totalTokensAcquired = 0;
+    if (entries.length > 1) {
+      const prices = entries.map((e) => e.price).filter((p) => p != null && p > 0);
+      if (prices.length > 0) {
+        minEntry = Math.min(...prices);
+        maxEntry = Math.max(...prices);
+      }
+      totalTokensAcquired = entries.reduce((sum, e) => sum + (e.amount || 0), 0);
+    }
 
     return `
       <div class="pdd-stat-card">
@@ -248,6 +263,16 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
           `
               : ""
           }
+          ${
+            minEntry !== null && maxEntry !== null && minEntry !== maxEntry
+              ? `
+          <div class="pdd-stat-row">
+            <span class="pdd-stat-label">Entry Price Range</span>
+            <span class="pdd-stat-value">${this._formatPrice(minEntry)} – ${this._formatPrice(maxEntry)} SOL</span>
+          </div>
+          `
+              : ""
+          }
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Total Invested</span>
             <span class="pdd-stat-value">${Utils.formatSol(totalInvested, { decimals: 4 })}</span>
@@ -256,6 +281,16 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
             <span class="pdd-stat-label">Position Size</span>
             <span class="pdd-stat-value">${tokenAmount ? Utils.formatCompactNumber(tokenAmount) + " tokens" : "—"}</span>
           </div>
+          ${
+            totalTokensAcquired > 0
+              ? `
+          <div class="pdd-stat-row">
+            <span class="pdd-stat-label">Total Acquired</span>
+            <span class="pdd-stat-value">${Utils.formatCompactNumber(totalTokensAcquired)} tokens</span>
+          </div>
+          `
+              : ""
+          }
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Position Age</span>
             <span class="pdd-stat-value">${ageFormatted}</span>
@@ -275,7 +310,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
   /**
    * Build current state card (right column of stats grid)
    */
-  proto._buildCurrentStateCard = function (pos, isOpen) {
+  proto._buildCurrentStateCard = function (pos, isOpen, exits = []) {
     const currentPrice = pos.current_price;
     const remainingTokens = pos.remaining_token_amount;
     const originalTokens = pos.token_amount;
@@ -292,6 +327,11 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     const currentValue = this._calculateCurrentValue(pos);
 
     if (isOpen) {
+      // Partial exit stats (tokens sold + SOL recovered so far)
+      const tokensSold = exits.reduce((sum, e) => sum + (e.amount || 0), 0);
+      const pctSold = originalTokens > 0 ? (tokensSold / originalTokens) * 100 : 0;
+      const solRecoveredSoFar = exits.reduce((sum, e) => sum + (e.sol_received || 0), 0);
+
       return `
         <div class="pdd-stat-card">
           <h3 class="pdd-stat-card-title">
@@ -318,6 +358,20 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
                 ${partialExitCount > 0 ? `<span class="pdd-badge pdd-badge-warning">${partialExitCount} exits</span>` : ""}
               </span>
             </div>
+            ${
+              partialExitCount > 0 && tokensSold > 0
+                ? `
+            <div class="pdd-stat-row">
+              <span class="pdd-stat-label">Tokens Sold</span>
+              <span class="pdd-stat-value">${Utils.formatCompactNumber(tokensSold)} <span class="pdd-stat-pct">(${Utils.formatNumber(pctSold, 1)}%)</span></span>
+            </div>
+            <div class="pdd-stat-row">
+              <span class="pdd-stat-label">SOL Recovered</span>
+              <span class="pdd-stat-value">${Utils.formatSol(solRecoveredSoFar, { decimals: 4 })}</span>
+            </div>
+            `
+                : ""
+            }
             <div class="pdd-stat-row">
               <span class="pdd-stat-label">Verification</span>
               <span class="pdd-stat-value">
@@ -333,6 +387,8 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     const exitPrice = pos.average_exit_price || pos.exit_price;
     const solReceived = pos.sol_received;
     const closedReason = pos.closed_reason;
+    const totalExited = pos.total_exited_amount || exits.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const pctExited = originalTokens > 0 ? (totalExited / originalTokens) * 100 : 0;
 
     return `
       <div class="pdd-stat-card">
@@ -344,6 +400,10 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Exit Price</span>
             <span class="pdd-stat-value">${exitPrice ? this._formatPrice(exitPrice) + " SOL" : "—"}</span>
+          </div>
+          <div class="pdd-stat-row">
+            <span class="pdd-stat-label">Tokens Sold</span>
+            <span class="pdd-stat-value">${totalExited ? Utils.formatCompactNumber(totalExited) + (pctExited > 0 ? ` <span class="pdd-stat-pct">(${Utils.formatNumber(pctExited, 1)}%)</span>` : "") : "—"}</span>
           </div>
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">SOL Received</span>
@@ -367,25 +427,53 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
   /**
    * Build P&L analysis card (full width)
    */
-  proto._buildPnLAnalysisCard = function (pos, isOpen, solPriceUsd) {
+  proto._buildPnLAnalysisCard = function (pos, isOpen, solPriceUsd, entries = [], exits = []) {
     const unrealizedPnl = pos.unrealized_pnl;
     const unrealizedPnlPct = pos.unrealized_pnl_percent;
     const realizedPnl = pos.pnl;
     const realizedPnlPct = pos.pnl_percent;
     const highestPrice = pos.price_highest;
     const lowestPrice = pos.price_lowest;
+    const currentPrice = pos.current_price;
     const entryPrice = pos.average_entry_price || pos.entry_price;
 
-    // Calculate peak deviation from entry
+    // ROI (same calculation as unrealized/realized pnl_percent, explicit label)
+    const roiPct = isOpen ? unrealizedPnlPct : realizedPnlPct;
+
+    // Peak deviation from entry %
     let peakDeviation = null;
     if (highestPrice && entryPrice) {
       peakDeviation = ((highestPrice - entryPrice) / entryPrice) * 100;
     }
 
-    // Entry/exit fees
-    const entryFeeSol = pos.entry_fee_lamports ? pos.entry_fee_lamports / 1e9 : null;
-    const exitFeeSol = pos.exit_fee_lamports ? pos.exit_fee_lamports / 1e9 : null;
-    const totalFees = (entryFeeSol || 0) + (exitFeeSol || 0);
+    // Low deviation from entry %
+    let lowDeviation = null;
+    if (lowestPrice && entryPrice && entryPrice > 0) {
+      lowDeviation = ((lowestPrice - entryPrice) / entryPrice) * 100;
+    }
+
+    // Drawdown: current vs peak
+    let drawdown = null;
+    if (isOpen && currentPrice && highestPrice && highestPrice > 0) {
+      drawdown = ((currentPrice - highestPrice) / highestPrice) * 100;
+    }
+
+    // Fee breakdown
+    let entryFees = 0;
+    if (pos.entry_fee_lamports) {
+      entryFees = pos.entry_fee_lamports / 1e9;
+    } else if (entries.length > 0) {
+      entryFees = entries.reduce((sum, e) => sum + (e.fee_lamports || 0) / 1e9, 0);
+    }
+    let exitFees = 0;
+    if (pos.exit_fee_lamports) {
+      exitFees = pos.exit_fee_lamports / 1e9;
+    } else if (exits.length > 0) {
+      exitFees = exits.reduce((sum, e) => sum + (e.fee_lamports || 0) / 1e9, 0);
+    }
+    const totalFees = entryFees + exitFees;
+    const totalInvested = pos.total_size_sol || 0;
+    const feePct = totalInvested > 0 && totalFees > 0 ? (totalFees / totalInvested) * 100 : 0;
 
     const formatPnlRow = (label, pnl, pct, solPrice) => {
       if (pnl === null || pnl === undefined) return "";
@@ -420,22 +508,70 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
             ${!isOpen || pos.total_exited_amount ? formatPnlRow("Realized P&L", realizedPnl, realizedPnlPct, solPriceUsd) : ""}
           </div>
           <div class="pdd-pnl-stats">
+            ${
+              roiPct !== null && roiPct !== undefined
+                ? `<div class="pdd-pnl-stat">
+              <span class="pdd-pnl-stat-label">ROI</span>
+              <span class="pdd-pnl-stat-value ${roiPct >= 0 ? "pdd-positive" : "pdd-negative"}">${roiPct >= 0 ? "+" : ""}${Utils.formatNumber(roiPct, 2)}%</span>
+            </div>`
+                : ""
+            }
             <div class="pdd-pnl-stat">
               <span class="pdd-pnl-stat-label">Peak Price</span>
               <span class="pdd-pnl-stat-value">${highestPrice ? this._formatPrice(highestPrice) + " SOL" : "—"}</span>
-            </div>
-            <div class="pdd-pnl-stat">
-              <span class="pdd-pnl-stat-label">Low Price</span>
-              <span class="pdd-pnl-stat-value">${lowestPrice ? this._formatPrice(lowestPrice) + " SOL" : "—"}</span>
             </div>
             <div class="pdd-pnl-stat">
               <span class="pdd-pnl-stat-label">Peak from Entry</span>
               <span class="pdd-pnl-stat-value ${peakDeviation && peakDeviation > 0 ? "pdd-positive" : ""}">${peakDeviation !== null ? "+" + Utils.formatNumber(peakDeviation, 1) + "%" : "—"}</span>
             </div>
             <div class="pdd-pnl-stat">
+              <span class="pdd-pnl-stat-label">Low Price</span>
+              <span class="pdd-pnl-stat-value">${lowestPrice ? this._formatPrice(lowestPrice) + " SOL" : "—"}</span>
+            </div>
+            ${
+              lowDeviation !== null
+                ? `<div class="pdd-pnl-stat">
+              <span class="pdd-pnl-stat-label">Low from Entry</span>
+              <span class="pdd-pnl-stat-value ${lowDeviation < 0 ? "pdd-negative" : "pdd-positive"}">${lowDeviation >= 0 ? "+" : ""}${Utils.formatNumber(lowDeviation, 1)}%</span>
+            </div>`
+                : ""
+            }
+            ${
+              drawdown !== null
+                ? `<div class="pdd-pnl-stat">
+              <span class="pdd-pnl-stat-label">Drawdown (vs Peak)</span>
+              <span class="pdd-pnl-stat-value ${drawdown < 0 ? "pdd-negative" : ""}">${Utils.formatNumber(drawdown, 1)}%</span>
+            </div>`
+                : ""
+            }
+            ${
+              entryFees > 0
+                ? `<div class="pdd-pnl-stat">
+              <span class="pdd-pnl-stat-label">Entry Fees</span>
+              <span class="pdd-pnl-stat-value">${Utils.formatSol(entryFees, { decimals: 6 })}</span>
+            </div>`
+                : ""
+            }
+            ${
+              exitFees > 0
+                ? `<div class="pdd-pnl-stat">
+              <span class="pdd-pnl-stat-label">Exit Fees</span>
+              <span class="pdd-pnl-stat-value">${Utils.formatSol(exitFees, { decimals: 6 })}</span>
+            </div>`
+                : ""
+            }
+            <div class="pdd-pnl-stat">
               <span class="pdd-pnl-stat-label">Total Fees</span>
               <span class="pdd-pnl-stat-value">${totalFees > 0 ? Utils.formatSol(totalFees, { decimals: 6 }) : "—"}</span>
             </div>
+            ${
+              feePct > 0
+                ? `<div class="pdd-pnl-stat">
+              <span class="pdd-pnl-stat-label">Fees / Investment</span>
+              <span class="pdd-pnl-stat-value">${Utils.formatNumber(feePct, 3)}%</span>
+            </div>`
+                : ""
+            }
           </div>
         </div>
       </div>
