@@ -1159,7 +1159,7 @@ export class DataTable {
   _prefersReducedMotion() {
     try {
       return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    } catch (_error) {
+    } catch {
       return false;
     }
   }
@@ -1173,7 +1173,7 @@ export class DataTable {
     window.setTimeout(() => {
       try {
         tr.remove();
-      } catch (_error) {
+      } catch {
         /* row already detached */
       }
     }, dur);
@@ -1246,7 +1246,7 @@ export class DataTable {
     if (typeof config.alt === "function") {
       try {
         alt = config.alt(row);
-      } catch (_error) {
+      } catch {
         alt = "Image";
       }
     } else {
@@ -1258,7 +1258,7 @@ export class DataTable {
     if (typeof config.title === "function") {
       try {
         title = config.title(row);
-      } catch (_error) {
+      } catch {
         title = "";
       }
     } else {

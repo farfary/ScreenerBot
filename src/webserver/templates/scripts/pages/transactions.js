@@ -1,6 +1,5 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
@@ -210,7 +209,7 @@ function createLifecycle() {
 
   };
 
-  const fetchSummary = async ({ signal } = {}) => {
+  const fetchSummary = async ({ signal: _signal } = {}) => {
     try {
       const data = await requestManager.fetch("/api/transactions/summary", {
         method: "POST",
@@ -233,7 +232,7 @@ function createLifecycle() {
     }
   };
 
-  const loadTransactionsPage = async ({ direction, cursor, reason, signal }) => {
+  const loadTransactionsPage = async ({ direction, cursor, reason, signal: _signal }) => {
     const payloadCursor = direction === "prev" ? null : (cursor ?? null);
     const payload = buildRequestPayload(payloadCursor);
 

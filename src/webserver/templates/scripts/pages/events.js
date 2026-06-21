@@ -1,8 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
-import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { EventDetailsDialog } from "../ui/events_dialog.js";
 import { requestManager } from "../core/request_manager.js";

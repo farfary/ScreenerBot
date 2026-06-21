@@ -5,7 +5,7 @@
 
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { $, $$ } from "../core/dom.js";
+import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 
 // =============================================================================
@@ -306,7 +306,7 @@ function createLifecycle() {
       els.retryBtn?.addEventListener("click", () => handleCheckUpdates(els));
     },
 
-    async activate(ctx) {
+    async activate(_ctx) {
       const els = getElements();
 
       // Fetch initial version info

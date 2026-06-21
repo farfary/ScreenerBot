@@ -423,7 +423,7 @@
     /**
      * Build menu items for default page context
      */
-    manager._buildDefaultMenu = function (items, context) {
+    manager._buildDefaultMenu = function (items, _context) {
       items.push({
         type: "item",
         label: "Back",

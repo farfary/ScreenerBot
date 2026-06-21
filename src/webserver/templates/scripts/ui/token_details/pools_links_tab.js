@@ -272,7 +272,7 @@ export function initPoolsTabEvents(container) {
  * @returns {string} HTML string for links tab
  */
 export function renderLinksTab(token, options = {}) {
-  const { escapeHtml, formatShortAddress } = options;
+  const { escapeHtml } = options;
 
   const mint = token.mint;
   const hasWebsites = token.websites && token.websites.length > 0;

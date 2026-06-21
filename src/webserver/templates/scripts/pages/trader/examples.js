@@ -13,7 +13,7 @@
  * @param {Object} deps.Utils - Utility functions module
  * @returns {Object} Example updater functions
  */
-export function createExampleUpdaters({ $, Utils }) {
+export function createExampleUpdaters({ $, Utils: _Utils }) {
   /**
    * Convert time duration to human-readable format
    */

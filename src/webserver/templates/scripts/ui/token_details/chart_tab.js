@@ -3,7 +3,6 @@
  * Extracted from token_details_dialog.js to reduce file size
  * Handles price chart rendering with lightweight-charts
  */
-/* global createAdvancedChart, MutationObserver */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
 
@@ -240,7 +239,7 @@ export function applyChartTabMixin(DialogClass) {
         this.advancedChart.resetUserInteraction();
         this.advancedChart.setVisibleRange(80);
       }
-    } catch (error) {
+    } catch {
       // On error, show waiting message
       if (loadingText) {
         loadingText.textContent = "Waiting for chart data...";

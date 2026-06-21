@@ -612,7 +612,7 @@
       }
     }
 
-    _addMACDIndicator(macdData, options) {
+    _addMACDIndicator(macdData, _options) {
       const colors = this.theme.indicatorColors;
 
       // MACD Line
@@ -664,7 +664,7 @@
       this.indicatorSeries.macd = [macdLine, signalLine, histogram];
     }
 
-    _addBollingerIndicator(bollingerData, options) {
+    _addBollingerIndicator(bollingerData, _options) {
       const colors = this.theme.indicatorColors;
 
       // Upper band
@@ -1310,7 +1310,7 @@
      * @param {number} timestamp - Unix timestamp in seconds
      * @param {boolean} animate - Whether to animate the scroll
      */
-    scrollToTime(timestamp, animate = true) {
+    scrollToTime(timestamp, _animate = true) {
       if (!this.chart || !this.data.length) return;
 
       // Find the logical index for this timestamp

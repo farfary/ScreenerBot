@@ -19,10 +19,10 @@
  * @returns {Object} Control functions
  */
 export function createTraderControls({
-  state,
+  state: _state,
   $,
   Utils,
-  requestManager,
+  requestManager: _requestManager,
   ConfirmationDialog,
   playToggleOn,
   playToggleOff,

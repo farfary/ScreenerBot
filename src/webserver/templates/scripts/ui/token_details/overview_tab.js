@@ -209,7 +209,7 @@ function buildTokenInfoCard(token, options) {
 }
 
 function buildLiquidityCard(token, options) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
+  const { renderHintTrigger, formatShortAddress } = options;
 
   return `
     <div class="info-card compact">

@@ -482,7 +482,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
   function renderExplorerView() {
     if (!state.analytics) {
-      return `<div class="loading-spinner">Loading…</div>`;
+      return "<div class=\"loading-spinner\">Loading…</div>";
     }
 
     const data = state.analytics;

@@ -120,7 +120,7 @@ export function playClick() {
 
     osc.start(now);
     osc.stop(now + 0.03);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -153,7 +153,7 @@ export function playTabSwitch() {
 
     osc.start(now);
     osc.stop(now + 0.035);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -184,7 +184,7 @@ export function playToggleOn() {
 
     osc.start(now);
     osc.stop(now + 0.07);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -215,7 +215,7 @@ export function playToggleOff() {
 
     osc.start(now);
     osc.stop(now + 0.07);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -246,7 +246,7 @@ export function playPanelOpen() {
 
     osc.start(now);
     osc.stop(now + 0.1);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -277,7 +277,7 @@ export function playPanelClose() {
 
     osc.start(now);
     osc.stop(now + 0.09);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -317,7 +317,7 @@ export function playSuccess() {
     gain2.connect(ctx.destination);
     osc2.start(now + 0.05);
     osc2.stop(now + 0.15);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -348,7 +348,7 @@ export function playError() {
 
     osc.start(now);
     osc.stop(now + 0.18);
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -428,7 +428,7 @@ async function saveSoundPreference() {
         },
       }),
     });
-  } catch (err) {
+  } catch {
     // Silent fail
   }
 }
@@ -449,7 +449,7 @@ export async function loadSoundPreference() {
         state.enabled = true;
       }
     }
-  } catch (err) {
+  } catch {
     // Silent fail - default to enabled
     state.enabled = true;
   }

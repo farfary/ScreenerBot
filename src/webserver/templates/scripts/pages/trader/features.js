@@ -59,7 +59,7 @@ export const STATUS_CONFIG = {
  * @param {Object} requestManager - Request manager instance (not used, kept for future)
  * @returns {Promise<Object>} Feature status by feature key
  */
-export async function fetchFeatureStatus(requestManager) {
+export async function fetchFeatureStatus(_requestManager) {
   try {
     const response = await fetch("/api/features");
     if (!response.ok) {

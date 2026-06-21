@@ -3,12 +3,10 @@
  * Contains trading-related utilities: trade watcher and volume aggregator
  */
 
-import { $, $$, on } from "../../core/dom.js";
+import { $, on } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
-import { DataTable } from "../../ui/data_table.js";
-import { ToolFavorites } from "../../ui/tool_favorites.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
 import { PoolSelector } from "../../ui/pool_selector.js";
 

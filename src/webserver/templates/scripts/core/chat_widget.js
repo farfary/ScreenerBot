@@ -881,7 +881,7 @@ export class ChatWidget {
 
     let parsedToolCalls = msg.tool_calls;
     if (typeof parsedToolCalls === "string") {
-      try { parsedToolCalls = JSON.parse(parsedToolCalls); } catch (_e) { parsedToolCalls = null; }
+      try { parsedToolCalls = JSON.parse(parsedToolCalls); } catch { parsedToolCalls = null; }
     }
 
     const toolCallsHtml =

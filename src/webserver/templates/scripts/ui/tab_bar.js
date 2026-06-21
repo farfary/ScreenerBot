@@ -586,7 +586,7 @@ class TabBarManagerClass {
     }
   }
 
-  onPageSwitch(newPage, oldPage) {
+  onPageSwitch(newPage, _oldPage) {
     // Use queueMicrotask to ensure DOM is ready after router innerHTML replacement
     queueMicrotask(() => {
       // Hide all registered tab bars first (defensive — catches cases where

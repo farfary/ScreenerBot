@@ -2,12 +2,10 @@
  * Token Details Dialog
  * Full-screen dialog showing comprehensive token information with multiple tabs
  */
-/* global createAdvancedChart, MutationObserver */
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
-import { TradeActionDialog } from "./trade_action_dialog.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { renderOverviewTab, renderOverviewLeft } from "./token_details/overview_tab.js";
@@ -202,7 +200,7 @@ export class TokenDetailsDialog {
         console.log("OHLCV data refresh triggered:", response);
         return response;
       }
-    } catch (error) {
+    } catch {
       // Silently ignore - OHLCV may not be available for new tokens
     }
     return null;
@@ -242,7 +240,7 @@ export class TokenDetailsDialog {
         console.log("Token unfocused:", response);
       }
       return response;
-    } catch (error) {
+    } catch {
       // Silent - unfocus is best-effort
     }
     return null;
@@ -524,7 +522,7 @@ export class TokenDetailsDialog {
       if (!wasDataLoaded && this.chartDataLoaded) {
         this._startChartPolling();
       }
-    } catch (error) {
+    } catch {
       // On error when no data yet, keep showing waiting message
       if (!this.chartDataLoaded && loadingText) {
         loadingText.textContent = "Waiting for chart data...";

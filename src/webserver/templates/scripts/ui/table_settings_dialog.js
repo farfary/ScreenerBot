@@ -612,7 +612,7 @@ export class TableSettingsDialog {
         }
       };
 
-      const dragEndHandler = (e) => {
+      const dragEndHandler = (_e) => {
         item.classList.remove("is-dragging");
         item.classList.remove("is-drag-over");
         // Clean up any other potential drag-over classes

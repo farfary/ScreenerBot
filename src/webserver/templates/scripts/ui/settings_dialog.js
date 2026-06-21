@@ -8,7 +8,7 @@ import { getCurrentPage } from "../core/router.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
-import { setSoundsEnabled, playPanelOpen, playPanelClose, playTabSwitch } from "../core/sounds.js";
+import { playPanelOpen, playPanelClose, playTabSwitch } from "../core/sounds.js";
 import { loadSecurityTab } from "./settings/security_tab.js";
 import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
 import { buildUpdatesTab, attachUpdatesHandlers } from "./settings/updates_tab.js";

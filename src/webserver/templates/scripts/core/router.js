@@ -215,7 +215,7 @@ export async function loadPage(pageName) {
 
   const loadingEl = document.createElement("div");
   loadingEl.className = "page-loading";
-  loadingEl.innerHTML = `<div class="loading-spinner">Loading…</div>`;
+  loadingEl.innerHTML = "<div class=\"loading-spinner\">Loading…</div>";
 
   Object.values(_state.pageCache).forEach((el) => {
     el.style.display = "none";

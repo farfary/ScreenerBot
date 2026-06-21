@@ -205,7 +205,7 @@ export class EventDetailsDialog {
     ) {
       try {
         this._previousActiveElement.focus();
-      } catch (_error) {
+      } catch {
         // Ignore focus errors silently
       }
     }
@@ -387,7 +387,7 @@ export class EventDetailsDialog {
     if (payload && typeof payload === "object") {
       try {
         this.payloadCodeEl.textContent = JSON.stringify(payload, null, 2);
-      } catch (_error) {
+      } catch {
         this.payloadCodeEl.textContent = coerceText(payload);
       }
       this.payloadSection.setAttribute("data-visible", "true");
@@ -454,7 +454,7 @@ export class EventDetailsDialog {
       try {
         document.execCommand("copy");
         this._showCopyFeedback(true);
-      } catch (_error) {
+      } catch {
         this._showCopyFeedback(false);
       }
       document.body.removeChild(textarea);
@@ -517,7 +517,7 @@ export class EventDetailsDialog {
       lines.push("-".repeat(60));
       try {
         lines.push(JSON.stringify(event.payload, null, 2));
-      } catch (_error) {
+      } catch {
         lines.push(String(event.payload));
       }
     } else if (event.payload !== null && event.payload !== undefined) {

@@ -628,7 +628,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
           attempts++;
           setTimeout(poll, interval * 1000);
         } else {
-          const errorMsg = typeof data.error === 'string' ? data.error : 
+          const errorMsg = typeof data.error === "string" ? data.error : 
             (data.error?.message || JSON.stringify(data.error) || "Authentication failed");
           throw new Error(errorMsg);
         }

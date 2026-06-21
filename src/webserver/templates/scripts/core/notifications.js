@@ -518,7 +518,7 @@ class NotificationManager {
 
     try {
       return JSON.stringify(a) === JSON.stringify(b);
-    } catch (_error) {
+    } catch {
       return false;
     }
   }

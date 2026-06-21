@@ -9,7 +9,7 @@
  * - Partial config support
  */
 
-import { $, on, off, create, show, hide } from "../core/dom.js";
+import { on, create, show, hide } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { playPanelOpen, playPanelClose, playSuccess, playError } from "../core/sounds.js";
 import { requestManager } from "../core/request_manager.js";

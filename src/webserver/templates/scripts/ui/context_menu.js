@@ -886,7 +886,7 @@ class ContextMenuManager {
     if (!this.menuEl) return;
 
     const items = this.menuEl.querySelectorAll(":scope > .context-menu-item");
-    items.forEach((item, i) => {
+    items.forEach((item, _i) => {
       const isActive = parseInt(item.dataset.index) === index;
       item.classList.toggle("active", isActive);
     });
