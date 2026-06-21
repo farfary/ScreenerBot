@@ -23,6 +23,7 @@ import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
 import { applyChartTabMixin } from "./token_details/chart_tab.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin } from "./token_details/state_handling.js";
+import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
 
 // Data source status constants
 const DATA_SOURCE_STATUS = {
@@ -1571,6 +1572,7 @@ applyTransactionsTabMixin(TokenDetailsDialog);
 applyChartTabMixin(TokenDetailsDialog);
 applyUtilitiesMixin(TokenDetailsDialog);
 applyStateHandlingMixin(TokenDetailsDialog);
+applyPositionsTabMixin(TokenDetailsDialog);
 
 // ============================================================================
 // Global Event Listener for Context Menu "View Details" Action
