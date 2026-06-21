@@ -122,7 +122,7 @@ function createLifecycle() {
       icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
     } else if (st === "failed") {
       label = row?._error ? `Failed · ${Utils.escapeHtml(String(row._error))}` : "Failed";
-      icon = '<i class="icon-alert-triangle" aria-hidden="true"></i>';
+      icon = '<i class="icon-triangle-alert" aria-hidden="true"></i>';
     } else {
       return "";
     }

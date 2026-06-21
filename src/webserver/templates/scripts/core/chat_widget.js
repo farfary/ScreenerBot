@@ -127,7 +127,7 @@ export class ChatWidget {
           <div class="modal-overlay cw-tool-modal" style="display:none">
             <div class="modal-dialog modal-sm">
               <div class="modal-header">
-                <h3><i class="icon-alert-triangle"></i> Confirm Tool Execution</h3>
+                <h3><i class="icon-triangle-alert"></i> Confirm Tool Execution</h3>
                 <button class="modal-close cw-tool-modal-close" type="button"><i class="icon-x"></i></button>
               </div>
               <div class="modal-body">
@@ -509,7 +509,7 @@ export class ChatWidget {
         setTimeout(() => container.classList.remove("has-error"), 400);
       }
 
-      this._updateInputStatus(`<i class="icon-alert-circle"></i> ${error.message || "Failed to send"}`, "error");
+      this._updateInputStatus(`<i class="icon-circle-alert"></i> ${error.message || "Failed to send"}`, "error");
       setTimeout(() => this._updateInputStatus(""), 5000);
 
       Utils.showToast({ type: "error", title: "Error", message: error.message || "Failed to send message" });
@@ -583,7 +583,7 @@ export class ChatWidget {
       console.error("[ChatWidget] Error regenerating:", error);
       playError();
       this._hideTypingIndicator();
-      this._updateInputStatus(`<i class="icon-alert-circle"></i> ${error.message || "Failed to regenerate"}`, "error");
+      this._updateInputStatus(`<i class="icon-circle-alert"></i> ${error.message || "Failed to regenerate"}`, "error");
       setTimeout(() => this._updateInputStatus(""), 5000);
       Utils.showToast({ type: "error", title: "Error", message: error.message || "Failed to regenerate response" });
     } finally {

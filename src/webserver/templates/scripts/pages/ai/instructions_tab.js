@@ -159,7 +159,7 @@ function showInstructionMenu(event, id) {
   menu.style.zIndex = "10000";
   menu.innerHTML = `
     <div class="context-menu-item" onclick="window.aiPage.editInstruction('${id}'); this.parentElement.remove();">
-      <i class="icon-edit"></i> Edit
+      <i class="icon-square-pen"></i> Edit
     </div>
     <div class="context-menu-item" onclick="window.aiPage.duplicateInstruction('${id}'); this.parentElement.remove();">
       <i class="icon-copy"></i> Duplicate
@@ -193,9 +193,9 @@ function showInstructionMenu(event, id) {
  */
 function getCategoryLabel(category) {
   const labels = {
-    filtering: '<i class="icon-filter"></i> Filtering',
+    filtering: '<i class="icon-funnel"></i> Filtering',
     trading: '<i class="icon-trending-up"></i> Trading',
-    analysis: '<i class="icon-bar-chart"></i> Analysis',
+    analysis: '<i class="icon-chart-bar"></i> Analysis',
     general: '<i class="icon-info"></i> General',
   };
   return labels[category] || category;
@@ -378,7 +378,7 @@ function previewTemplate(templateId) {
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
         <button class="btn btn-primary" onclick="window.aiPage.customizeTemplate('${template.id}'); this.closest('.modal-overlay').remove();">
-          <i class="icon-edit"></i> Customize & Add
+          <i class="icon-square-pen"></i> Customize & Add
         </button>
       </div>
     </div>
@@ -399,7 +399,7 @@ function customizeTemplate(templateId) {
   modal.innerHTML = `
     <div class="modal instruction-modal">
       <div class="modal-header">
-        <h3><i class="icon-edit"></i> Customize Template</h3>
+        <h3><i class="icon-square-pen"></i> Customize Template</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
@@ -605,7 +605,7 @@ async function editInstruction(id) {
     modal.innerHTML = `
       <div class="modal instruction-modal">
         <div class="modal-header">
-          <h3><i class="icon-edit"></i> Edit Instruction</h3>
+          <h3><i class="icon-square-pen"></i> Edit Instruction</h3>
           <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
         </div>
         <div class="modal-body">

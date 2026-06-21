@@ -120,7 +120,7 @@ function renderAutomationRuns(runs) {
   }
 
   container.innerHTML = runs.slice(0, 20).map(run => {
-    const statusIcon = run.status === "success" ? "icon-check-circle" : run.status === "running" ? "icon-loader" : "icon-x-circle";
+    const statusIcon = run.status === "success" ? "icon-circle-check" : run.status === "running" ? "icon-loader" : "icon-circle-x";
     const statusClass = run.status === "success" ? "success" : run.status === "running" ? "running" : "failed";
     const taskName = state.automationTasks.find(t => t.id === run.task_id)?.name || `Task #${run.task_id}`;
     const time = run.started_at ? Utils.formatTimeAgo(new Date(run.started_at)) : "";
@@ -387,7 +387,7 @@ async function editAutomationTask(id) {
   modal.innerHTML = `
     <div class="modal automation-modal">
       <div class="modal-header">
-        <h3><i class="icon-edit"></i> Edit Task</h3>
+        <h3><i class="icon-square-pen"></i> Edit Task</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
@@ -524,7 +524,7 @@ async function viewAutomationRun(runId) {
             ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label">Provider</span><span class="run-detail-value">${Utils.escapeHtml(String(run.provider))}</span></div>` : ""}
             ${run.tokens_used ? `<div class="run-detail-item"><span class="run-detail-label">Tokens</span><span class="run-detail-value">${Utils.escapeHtml(String(run.tokens_used))}</span></div>` : ""}
           </div>
-          ${run.error_message ? `<div class="run-error-box"><i class="icon-alert-triangle"></i> ${Utils.escapeHtml(run.error_message)}</div>` : ""}
+          ${run.error_message ? `<div class="run-error-box"><i class="icon-triangle-alert"></i> ${Utils.escapeHtml(run.error_message)}</div>` : ""}
           ${toolCalls.length > 0 ? `
             <div class="run-tools-section">
               <h4>Tool Calls (${toolCalls.length})</h4>
@@ -570,7 +570,7 @@ function showAutomationMenu(event, id) {
   menu.style.left = `${rect.left - 120}px`;
   menu.innerHTML = `
     <button onclick="window.aiPage.editAutomationTask(${id}); this.closest('.automation-context-menu').remove();">
-      <i class="icon-edit"></i> Edit
+      <i class="icon-square-pen"></i> Edit
     </button>
     <button onclick="window.aiPage.viewAutomationTaskRuns(${id}); this.closest('.automation-context-menu').remove();">
       <i class="icon-clock"></i> View Runs
@@ -612,7 +612,7 @@ async function viewAutomationTaskRuns(id) {
           ${runs.length === 0 ? '<div class="automation-runs-empty">No runs yet for this task</div>' :
             `<div class="automation-runs-list modal-runs-list">
               ${runs.map(run => {
-                const statusIcon = run.status === "success" ? "icon-check-circle" : "icon-x-circle";
+                const statusIcon = run.status === "success" ? "icon-circle-check" : "icon-circle-x";
                 const statusClass = run.status === "success" ? "success" : "failed";
                 const time = run.started_at ? new Date(run.started_at).toLocaleString() : "";
                 const duration = run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "";

@@ -257,7 +257,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
           <div class="form-group">
             <label for="modal-api-key">
               API Key
-              ${hasApiKey ? '<span class="key-status key-saved"><i class="icon-check-circle"></i> Key saved</span>' : '<span class="key-status key-missing"><i class="icon-alert-circle"></i> No key set</span>'}
+              ${hasApiKey ? '<span class="key-status key-saved"><i class="icon-circle-check"></i> Key saved</span>' : '<span class="key-status key-missing"><i class="icon-circle-alert"></i> No key set</span>'}
             </label>
             <div class="api-key-input-wrapper">
               <input type="password" id="modal-api-key" class="form-control" 
@@ -381,7 +381,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
 
         if (response.ok && data.success) {
           testResult.className = "test-connection-result visible success";
-          testMessage.innerHTML = '<i class="icon-check-circle"></i> Connection successful!';
+          testMessage.innerHTML = '<i class="icon-circle-check"></i> Connection successful!';
           testDetails.innerHTML = `
             <dt>Model:</dt><dd>${Utils.escapeHtml(String(data.model || "N/A"))}</dd>
             <dt>Latency:</dt><dd>${Math.round(data.latency_ms || 0)}ms</dd>
@@ -393,7 +393,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         }
       } catch (error) {
         testResult.className = "test-connection-result visible error";
-        testMessage.innerHTML = `<i class="icon-x-circle"></i> ${Utils.escapeHtml(String(error.message))}`;
+        testMessage.innerHTML = `<i class="icon-circle-x"></i> ${Utils.escapeHtml(String(error.message))}`;
         testDetails.innerHTML = "";
         playError();
       } finally {
@@ -571,7 +571,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         const statusDiv = modal.querySelector(".Assistant-auth-status");
         statusDiv.innerHTML = `
           <div class="auth-error">
-            <i class="icon-x-circle"></i>
+            <i class="icon-circle-x"></i>
             Authentication timed out. Please try again.
           </div>
         `;
@@ -601,7 +601,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
           const statusDiv = modal.querySelector(".Assistant-auth-status");
           statusDiv.innerHTML = `
             <div class="auth-success">
-              <i class="icon-check-circle"></i>
+              <i class="icon-circle-check"></i>
               Successfully connected to an LLM provider!
             </div>
           `;
@@ -638,7 +638,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         const statusDiv = modal.querySelector(".Assistant-auth-status");
         statusDiv.innerHTML = `
           <div class="auth-error">
-            <i class="icon-x-circle"></i>
+            <i class="icon-circle-x"></i>
             ${errorMessage}
           </div>
         `;
@@ -723,7 +723,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         testResult.className = "test-connection-result visible success";
         testResult.innerHTML = `
           <span class="test-result-message">
-            <i class="icon-check-circle"></i> Connection successful!
+            <i class="icon-circle-check"></i> Connection successful!
           </span>
           <dl class="test-result-details">
             <dt>Model:</dt><dd>${Utils.escapeHtml(String(data.model || "N/A"))}</dd>
@@ -740,7 +740,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       testResult.className = "test-connection-result visible error";
       testResult.innerHTML = `
         <span class="test-result-message">
-          <i class="icon-x-circle"></i> ${Utils.escapeHtml(String(error.message))}
+          <i class="icon-circle-x"></i> ${Utils.escapeHtml(String(error.message))}
         </span>
       `;
       playError();
@@ -781,7 +781,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
               isAuthenticated
                 ? `
               <div class="auth-success">
-                <i class="icon-check-circle"></i>
+                <i class="icon-circle-check"></i>
                 Connected to an LLM provider
               </div>
             `
