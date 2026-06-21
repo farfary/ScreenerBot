@@ -480,6 +480,79 @@
   overflow-x: auto;
 }
 
+/* Trade actions live on the right of the tab bar (top of the dialog). */
+.position-details-dialog .pdd-trade-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 12px;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-trade-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.position-details-dialog .pdd-trade-btn i {
+  font-size: 14px;
+}
+
+.position-details-dialog .pdd-trade-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.position-details-dialog .pdd-trade-add {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+  border-color: var(--success-alpha-30);
+}
+
+.position-details-dialog .pdd-trade-add:hover:not(:disabled) {
+  background: var(--success-alpha-20);
+}
+
+.position-details-dialog .pdd-trade-partial {
+  color: var(--warning-color);
+  background: var(--warning-alpha-10);
+  border-color: var(--warning-alpha-30);
+}
+
+.position-details-dialog .pdd-trade-partial:hover:not(:disabled) {
+  background: var(--warning-alpha-20);
+}
+
+.position-details-dialog .pdd-trade-close {
+  color: var(--danger);
+  background: var(--danger-alpha-10);
+  border-color: var(--danger-alpha-30);
+}
+
+.position-details-dialog .pdd-trade-close:hover:not(:disabled) {
+  background: var(--danger-alpha-20);
+}
+
+.position-details-dialog .pdd-trade-view {
+  color: var(--link-color);
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
+}
+
+.position-details-dialog .pdd-trade-view:hover:not(:disabled) {
+  border-color: var(--link-color);
+}
+
 .position-details-dialog .tab-button {
   display: flex;
   align-items: center;

@@ -37,26 +37,17 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       <div class="pdd-overview-layout">
         ${this._buildSummaryBanner(pos, isOpen, marketData, solPriceUsd)}
 
-        ${this._buildTokenInfoCard(pos, tokenInfo, poolInfo)}
-
-        <div class="pdd-overview-grid">
+        <div class="pdd-cards-grid">
+          ${this._buildTokenInfoCard(pos, tokenInfo, poolInfo, externalLinks)}
           ${this._buildEntryInfoCard(pos, positionAge)}
           ${this._buildCurrentStateCard(pos, isOpen)}
-        </div>
-
-        ${this._buildPnLAnalysisCard(pos, isOpen, solPriceUsd)}
-
-        <div class="pdd-overview-grid">
           ${this._buildMarketDataCard(marketData)}
           ${this._buildSecurityCard(security)}
         </div>
 
-        ${this._buildQuickActionsCard(pos, isOpen, externalLinks)}
+        ${this._buildPnLAnalysisCard(pos, isOpen, solPriceUsd)}
       </div>
     `;
-
-    // Attach action button handlers
-    this._attachActionHandlers(content, pos, isOpen);
   };
 
   /**
@@ -139,9 +130,10 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
    * pool/DEX, description and social links — the identity context that doesn't
    * already live in the banner or the market/security cards.
    */
-  proto._buildTokenInfoCard = function (pos, tokenInfo, poolInfo) {
+  proto._buildTokenInfoCard = function (pos, tokenInfo, poolInfo, externalLinks) {
     const mint = pos.mint;
     const description = tokenInfo?.description;
+    const links = externalLinks || {};
 
     const poolRows = [];
     if (poolInfo?.dex_name) {
@@ -199,6 +191,21 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
               ? `<div class="pdd-social-links">${socials.join("")}</div>`
               : ""
           }
+          <div class="pdd-explorer-row">
+            ${[
+              ["Solscan", links.solscan],
+              ["DexScreener", links.dexscreener],
+              ["Birdeye", links.birdeye],
+              ["RugCheck", links.rugcheck],
+              ["Photon", links.photon],
+            ]
+              .filter(([, url]) => url)
+              .map(
+                ([label, url]) =>
+                  `<a href="${Utils.escapeHtml(url)}" target="_blank" rel="noopener" class="pdd-explorer-chip"><i class="icon-external-link"></i> ${label}</a>`
+              )
+              .join("")}
+          </div>
         </div>
       </div>
     `;
@@ -551,65 +558,6 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
   };
 
   /**
-   * Build quick actions card with external links
-   */
-  proto._buildQuickActionsCard = function (pos, isOpen, externalLinks) {
-    const actionButtons = isOpen
-      ? `
-        <button class="pdd-action-btn pdd-action-add" id="pddAddBtn">
-          <i class="icon-circle-plus"></i>
-          <span>Add to Position</span>
-        </button>
-        <button class="pdd-action-btn pdd-action-partial" id="pddPartialBtn">
-          <i class="icon-scissors"></i>
-          <span>Partial Sell</span>
-        </button>
-        <button class="pdd-action-btn pdd-action-close" id="pddCloseBtn">
-          <i class="icon-circle-x"></i>
-          <span>Close Position</span>
-        </button>
-      `
-      : `
-        <button class="pdd-action-btn pdd-action-view pdd-action-full-width" id="pddViewTokenBtn">
-          <i class="icon-external-link"></i>
-          <span>View Token Details</span>
-        </button>
-      `;
-
-    const links = externalLinks || {};
-
-    return `
-      <div class="pdd-actions-card">
-        <h3 class="pdd-actions-title">
-          <i class="icon-zap"></i>
-          Quick Actions
-        </h3>
-        <div class="pdd-actions-row${!isOpen ? " pdd-actions-single" : ""}">
-          ${actionButtons}
-        </div>
-        <div class="pdd-external-links">
-          <span class="pdd-links-label">View on:</span>
-          <a href="${links.solscan || "#"}" target="_blank" class="pdd-external-link" title="Solscan">
-            <i class="icon-external-link"></i> Solscan
-          </a>
-          <a href="${links.dexscreener || "#"}" target="_blank" class="pdd-external-link" title="DexScreener">
-            <i class="icon-external-link"></i> DexScreener
-          </a>
-          <a href="${links.birdeye || "#"}" target="_blank" class="pdd-external-link" title="Birdeye">
-            <i class="icon-external-link"></i> Birdeye
-          </a>
-          <a href="${links.rugcheck || "#"}" target="_blank" class="pdd-external-link" title="Rugcheck">
-            <i class="icon-external-link"></i> Rugcheck
-          </a>
-          <a href="${links.photon || "#"}" target="_blank" class="pdd-external-link" title="Photon">
-            <i class="icon-external-link"></i> Photon
-          </a>
-        </div>
-      </div>
-    `;
-  };
-
-  /**
    * Get CSS class for risk level
    */
   proto._getRiskLevelClass = function (level) {
@@ -642,10 +590,11 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
   };
 
   /**
-   * Attach event handlers for action buttons
+   * Bind the top trade-action buttons (in the tab bar). Bound once at dialog
+   * creation; `pos` is resolved fresh at click time. Buttons live in the header
+   * so they are reachable from every tab, not just Overview.
    */
-  proto._attachActionHandlers = function (content, pos, isOpen) {
-    // Clean up old handlers first
+  proto._attachTradeButtons = function () {
     if (this._actionHandlers) {
       this._actionHandlers.forEach(({ element, handler }) => {
         element.removeEventListener("click", handler);
@@ -653,45 +602,26 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     }
     this._actionHandlers = [];
 
-    if (isOpen) {
-      const addBtn = content.querySelector("#pddAddBtn");
-      const partialBtn = content.querySelector("#pddPartialBtn");
-      const closeBtn = content.querySelector("#pddCloseBtn");
+    const bind = (id, fn) => {
+      const btn = this.dialogEl?.querySelector(id);
+      if (!btn) return;
+      const handler = () => fn(btn);
+      btn.addEventListener("click", handler);
+      this._actionHandlers.push({ element: btn, handler });
+    };
+    const pos = () => this.fullDetails?.position || this.positionData;
 
-      if (addBtn) {
-        const handler = () => this._handleAddPosition(pos, addBtn);
-        addBtn.addEventListener("click", handler);
-        this._actionHandlers.push({ element: addBtn, handler });
-      }
-      if (partialBtn) {
-        const handler = () => this._handlePartialSell(pos, partialBtn);
-        partialBtn.addEventListener("click", handler);
-        this._actionHandlers.push({ element: partialBtn, handler });
-      }
-      if (closeBtn) {
-        const handler = () => this._handleClosePosition(pos, closeBtn);
-        closeBtn.addEventListener("click", handler);
-        this._actionHandlers.push({ element: closeBtn, handler });
-      }
-    } else {
-      const viewBtn = content.querySelector("#pddViewTokenBtn");
-      if (viewBtn) {
-        const handler = () => {
-          // Close this dialog and open token details via global event
-          const mint = pos.mint;
-          const symbol = pos.symbol;
-          this.close();
-          // Dispatch global event to open token details dialog
-          window.dispatchEvent(
-            new CustomEvent("screenerbot:open-token-details", {
-              detail: { mint, symbol },
-            })
-          );
-        };
-        viewBtn.addEventListener("click", handler);
-        this._actionHandlers.push({ element: viewBtn, handler });
-      }
-    }
+    bind("#pddAddBtn", (btn) => this._handleAddPosition(pos(), btn));
+    bind("#pddPartialBtn", (btn) => this._handlePartialSell(pos(), btn));
+    bind("#pddCloseBtn", (btn) => this._handleClosePosition(pos(), btn));
+    bind("#pddViewTokenBtn", () => {
+      const p = pos();
+      const { mint, symbol } = p;
+      this.close();
+      window.dispatchEvent(
+        new CustomEvent("screenerbot:open-token-details", { detail: { mint, symbol } })
+      );
+    });
   };
 
   /**

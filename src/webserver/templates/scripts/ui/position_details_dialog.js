@@ -422,6 +422,19 @@ export class PositionDetailsDialog {
             <i class="icon-trending-up"></i>
             Analytics
           </button>
+          <div class="pdd-trade-actions">
+            ${
+              isOpen
+                ? `
+              <button class="pdd-trade-btn pdd-trade-add" id="pddAddBtn"><i class="icon-circle-plus"></i> Add</button>
+              <button class="pdd-trade-btn pdd-trade-partial" id="pddPartialBtn"><i class="icon-scissors"></i> Partial</button>
+              <button class="pdd-trade-btn pdd-trade-close" id="pddCloseBtn"><i class="icon-circle-x"></i> Close</button>
+            `
+                : `
+              <button class="pdd-trade-btn pdd-trade-view" id="pddViewTokenBtn"><i class="icon-external-link"></i> Token Details</button>
+            `
+            }
+          </div>
         </div>
 
         <div class="dialog-body">
@@ -550,6 +563,10 @@ export class PositionDetailsDialog {
       };
       copyBtn.addEventListener("click", this._copyMintHandler);
     }
+
+    // Trade action buttons (now in the top tab bar). Bound once; pos is resolved
+    // fresh at click time so it always reflects the latest details.
+    this._attachTradeButtons();
 
     // Tab buttons
     const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
