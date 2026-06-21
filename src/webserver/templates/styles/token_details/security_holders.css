@@ -298,14 +298,15 @@
   border-bottom: none;
 }
 
-/* Podium Styles for Creative UI */
+/* Podium — top 3 holders */
 .holders-podium {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  gap: 16px;
-  margin: 30px 0 40px;
-  height: 140px;
+  gap: 12px;
+  margin: 6px 0 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .podium-spot {
@@ -313,36 +314,42 @@
   flex-direction: column;
   align-items: center;
   position: relative;
-  width: 80px;
+  width: 104px;
+  min-width: 0;
   transition: transform var(--transition-base);
 }
 
 .podium-spot:hover {
-  transform: translateY(-4px);
+  transform: translateY(-3px);
 }
 
 .podium-avatar {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: var(--radius-full);
   background: var(--bg-tertiary);
   border: 2px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
   margin-bottom: 8px;
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.25);
   z-index: 2;
+  flex-shrink: 0;
 }
 
 .rank-1 .podium-avatar {
-  width: 50px;
-  height: 50px;
+  width: 46px;
+  height: 46px;
   border-color: #d29922;
   background: radial-gradient(circle at 30% 30%, #f0b745, #b07808);
   color: #fff;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
+  box-shadow:
+    0 0 0 4px rgb(210, 153, 34, 0.12),
+    0 6px 16px rgb(210, 153, 34, 0.28);
 }
 
 .rank-2 .podium-avatar {
@@ -359,48 +366,84 @@
 
 .podium-pedestal {
   width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10px;
   background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
   border: 1px solid var(--border-color);
   border-bottom: none;
-  border-radius: var(--radius-lg) 8px 0 0;
+  border-radius: 8px 8px 0 0;
   position: relative;
+  overflow: hidden;
+}
+
+/* Rank-colored top accent strip on each pedestal */
+.podium-pedestal::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--border-color);
 }
 
 .rank-1 .podium-pedestal {
-  height: 80px;
-  background: linear-gradient(180deg, rgb(210, 153, 34, 0.15) 0%, rgb(210, 153, 34, 0.05) 100%);
+  height: 84px;
+  background: linear-gradient(180deg, rgb(210, 153, 34, 0.16) 0%, rgb(210, 153, 34, 0.03) 100%);
   border-color: rgb(210, 153, 34, 0.3);
 }
 
+.rank-1 .podium-pedestal::before {
+  background: #d29922;
+}
+
 .rank-2 .podium-pedestal {
-  height: 55px;
+  height: 62px;
+  background: linear-gradient(180deg, rgb(168, 174, 184, 0.12) 0%, rgb(168, 174, 184, 0.02) 100%);
+  border-color: rgb(168, 174, 184, 0.25);
+}
+
+.rank-2 .podium-pedestal::before {
+  background: #a8aeb8;
 }
 
 .rank-3 .podium-pedestal {
-  height: 35px;
+  height: 46px;
+  background: linear-gradient(180deg, rgb(219, 166, 131, 0.12) 0%, rgb(219, 166, 131, 0.02) 100%);
+  border-color: rgb(219, 166, 131, 0.25);
+}
+
+.rank-3 .podium-pedestal::before {
+  background: #dba683;
 }
 
 .podium-value {
-  font-weight: 700;
+  font-weight: 800;
   font-size: 0.9rem;
-  margin-bottom: 4px;
   color: var(--text-primary);
   font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  line-height: 1;
+}
+
+.rank-1 .podium-value {
+  color: #f0b745;
+  font-size: 1rem;
 }
 
 .podium-name {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   color: var(--text-secondary);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 6px;
+  margin-top: 8px;
   font-family: var(--font-mono);
   background: var(--bg-secondary);
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   text-align: center;
 }
 
@@ -497,24 +540,9 @@
   font-feature-settings: "tnum";
 }
 
-/* Rank Colors (Header is child 1, so rows are 2,3,4) */
-.holder-row:nth-child(2) .holder-rank {
-  color: #ffd700;
-  background: rgb(255, 215, 0, 0.1);
-  box-shadow: 0 0 0 1px rgb(255, 215, 0, 0.2);
-}
-
-.holder-row:nth-child(3) .holder-rank {
-  color: #e0e0e0;
-  background: rgb(224, 224, 224, 0.1);
-  box-shadow: 0 0 0 1px rgb(224, 224, 224, 0.2);
-}
-
-.holder-row:nth-child(4) .holder-rank {
-  color: #cd7f32;
-  background: rgb(205, 127, 50, 0.1);
-  box-shadow: 0 0 0 1px rgb(205, 127, 50, 0.2);
-}
+/* (Removed the nth-child medal coloring: the top 3 holders now live in the
+   podium, so this list only holds #4+ — coloring rows 2/3/4 gold/silver/bronze
+   was painting #5/#6/#7 as medalists, which was wrong and confusing.) */
 
 .holder-address {
   font-family: var(--font-mono);

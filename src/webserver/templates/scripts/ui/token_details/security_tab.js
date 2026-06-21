@@ -442,11 +442,12 @@ function buildTopHoldersSection(token, options = {}) {
   // Top 3 Podium
   const top3 = topHolders.slice(0, 3);
   const podiumHtml = `
-    <div class="holders-podium small" style="margin: 20px 0;">
+    <div class="holders-podium">
       ${[1, 0, 2]
         .map((idx) => {
           const h = top3[idx];
           if (!h) return '<div class="podium-spot empty"></div>';
+          const rank = idx + 1;
           const name =
             h.owner_type && h.owner_type.length < 15
               ? h.owner_type
@@ -454,11 +455,12 @@ function buildTopHoldersSection(token, options = {}) {
                 ? formatShortAddress(h.address)
                 : h.address;
           return `
-          <div class="podium-spot rank-${idx + 1}" title="${h.address}">
-            <div class="podium-avatar">${idx + 1 === 1 ? '<i class="icon-crown"></i>' : idx + 1}</div>
-            <div class="podium-value">${h.percentage.toFixed(1)}%</div>
-            <div class="podium-pedestal"></div>
-            <div class="podium-name">${name}</div>
+          <div class="podium-spot rank-${rank}" title="${escapeHtml ? escapeHtml(h.address) : h.address}">
+            <div class="podium-avatar">${rank === 1 ? '<i class="icon-crown"></i>' : rank}</div>
+            <div class="podium-pedestal">
+              <span class="podium-value">${h.percentage.toFixed(1)}%</span>
+            </div>
+            <div class="podium-name">${escapeHtml ? escapeHtml(name) : name}</div>
           </div>
         `;
         })
