@@ -138,13 +138,14 @@ impl PositionsDatabase {
         Ok(positions)
     }
 
-    /// Get open positions (no exit_time)
+    /// Get open positions (not archived, no exit recorded, exit tx not verified).
+    /// Mirrors the in-memory filter in state::get_open_positions().
     pub async fn get_open_positions(&self) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 0 ORDER BY entry_time DESC",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND exit_time IS NULL AND transaction_exit_verified = 0 ORDER BY entry_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
@@ -165,13 +166,14 @@ impl PositionsDatabase {
         Ok(positions)
     }
 
-    /// Get closed positions (have exit_time)
+    /// Get closed positions (exit verified, not archived).
+    /// Mirrors the in-memory filter in state::get_closed_positions().
     pub async fn get_closed_positions(&self) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 1 ORDER BY exit_time DESC",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND transaction_exit_verified = 1 ORDER BY exit_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
@@ -201,7 +203,7 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 1 AND datetime(exit_time) >= datetime(?2) ORDER BY exit_time DESC",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND transaction_exit_verified = 1 AND datetime(exit_time) >= datetime(?2) ORDER BY exit_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
@@ -236,6 +238,7 @@ impl PositionsDatabase {
       SELECT COUNT(1)
       FROM positions
       WHERE wallet_address = ?1
+       AND archived = 0
        AND transaction_exit_verified = 1
        AND exit_time IS NOT NULL
        AND datetime(exit_time) >= datetime(?2)
