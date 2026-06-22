@@ -104,8 +104,9 @@ function createLifecycle() {
       // Load initial data
       await loadAllData();
 
-      // Update panel visibility
+      // Update panel visibility and tab-specific toolbar buttons
       updatePanelVisibility();
+      updateToolbarActions();
     },
 
     activate(ctx) {
@@ -141,6 +142,7 @@ function switchTab(tabId) {
 
   currentTab = tabId;
   updatePanelVisibility();
+  updateToolbarActions();
 
   // Re-render content for the active tab (delegated to renderers)
   renderers.renderCurrentPanel();
@@ -158,20 +160,33 @@ function updatePanelVisibility() {
   });
 }
 
+function updateToolbarActions() {
+  document.querySelectorAll(".wallets-tab-actions").forEach((group) => {
+    const tab = group.dataset.tabActions;
+    if (tab === currentTab) {
+      group.classList.remove("hidden");
+    } else {
+      group.classList.add("hidden");
+    }
+  });
+}
+
 // =============================================================================
 // Event Handlers Setup
 // =============================================================================
 
 function setupEventHandlers() {
-  // Header buttons
-  const refreshBtn = $("#refresh-wallets-btn");
+  // Refresh buttons (one per tab, all call the same handler)
+  ["#refresh-wallets-btn", "#refresh-wallets-btn-sec", "#refresh-wallets-btn-arc"].forEach((sel) => {
+    const btn = $(sel);
+    if (btn) on(btn, "click", handleRefresh);
+  });
+
+  // Secondaries-tab buttons
   const addBtn = $("#add-wallet-btn");
   const importBtn = $("#import-wallets-btn");
   const exportBtn = $("#export-wallets-btn");
 
-  if (refreshBtn) {
-    on(refreshBtn, "click", handleRefresh);
-  }
   if (addBtn) {
     on(addBtn, "click", () => showModal("add-wallet-modal"));
   }
@@ -450,8 +465,8 @@ function updateWalletCountBadge() {
 // Action Handlers
 // =============================================================================
 
-async function handleRefresh() {
-  const btn = $("#refresh-wallets-btn");
+async function handleRefresh(e) {
+  const btn = e?.currentTarget ?? $("#refresh-wallets-btn");
   if (!btn) return;
 
   const icon = btn.querySelector("i");
