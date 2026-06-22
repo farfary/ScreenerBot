@@ -1,50 +1,35 @@
 <div class="wallets-page">
-  <!-- Header Section -->
-  <header class="wallets-header">
-    <div class="header-left">
-      <div class="page-badge">
-        <i class="icon-wallet"></i>
-      </div>
-      <div class="page-info">
-        <div class="page-title-row">
-          <h1>Wallet Manager</h1>
-          <span class="wallet-count-badge" id="wallet-count-badge">0 wallets</span>
-        </div>
-        <p>Securely manage multiple Solana wallets for trading and tools</p>
-      </div>
-    </div>
-    <div class="header-right">
-      <div class="header-actions">
-        <button
-          class="hint-trigger hint-trigger--header"
-          id="security-hint-btn"
-          type="button"
-          aria-label="Security information"
-          data-tooltip="Bank-Grade Encryption"
-        >
-          <i class="icon-shield-check"></i>
-        </button>
-        <button
-          class="btn"
-          id="refresh-wallets-btn"
-          type="button"
-          data-tooltip="Refresh wallet list"
-          aria-label="Refresh wallet list"
-        >
-          <i class="icon-refresh-cw"></i>
-        </button>
-        <button class="btn" id="import-wallets-btn" type="button">
-          <i class="icon-upload"></i> Import
-        </button>
-        <button class="btn" id="export-wallets-btn" type="button">
-          <i class="icon-download"></i> Export
-        </button>
-        <button class="btn primary" id="add-wallet-btn" type="button">
-          <i class="icon-plus"></i> Add Wallet
-        </button>
-      </div>
-    </div>
-  </header>
+  <!-- Compact Toolbar -->
+  <div class="wallets-toolbar">
+    <span class="wallet-count-badge" id="wallet-count-badge">0 wallets</span>
+    <button
+      class="hint-trigger hint-trigger--header"
+      id="security-hint-btn"
+      type="button"
+      aria-label="Security information"
+      data-tooltip="Bank-Grade Encryption"
+    >
+      <i class="icon-shield-check"></i>
+    </button>
+    <button
+      class="btn"
+      id="refresh-wallets-btn"
+      type="button"
+      data-tooltip="Refresh wallet list"
+      aria-label="Refresh wallet list"
+    >
+      <i class="icon-refresh-cw"></i>
+    </button>
+    <button class="btn" id="import-wallets-btn" type="button">
+      <i class="icon-upload"></i> Import
+    </button>
+    <button class="btn" id="export-wallets-btn" type="button">
+      <i class="icon-download"></i> Export
+    </button>
+    <button class="btn primary" id="add-wallet-btn" type="button">
+      <i class="icon-plus"></i> Add Wallet
+    </button>
+  </div>
 
   <!-- Sub-tabs Container (outside main for full-width) -->
   <div id="wallets-tabs-container" class="sub-tabs-container wallets-tabs"></div>
@@ -55,70 +40,9 @@
     <div class="wallets-tab-panels">
       <!-- Main Wallet Tab Panel -->
       <div class="wallet-tab-panel" id="panel-main" data-panel="main">
-        <!-- Main Wallet Card -->
-        <div class="main-wallet-section">
-          <div class="main-wallet-card" id="main-wallet-card">
-            <div class="loading-state">
-              <i class="icon-loader spin"></i>
-              <p>Loading main wallet...</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Wallet Stats -->
-        <div class="wallets-stats" id="wallets-stats">
-          <div class="stat-card">
-            <div class="stat-icon sol">
-              <i class="icon-coins"></i>
-            </div>
-            <div class="stat-content">
-              <span class="stat-value" id="stat-sol-balance">0.0000</span>
-              <span class="stat-label">SOL Balance</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon tokens">
-              <i class="icon-circle-dot"></i>
-            </div>
-            <div class="stat-content">
-              <span class="stat-value" id="stat-token-count">0</span>
-              <span class="stat-label">Token Holdings</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon secondary">
-              <i class="icon-wallet"></i>
-            </div>
-            <div class="stat-content">
-              <span class="stat-value" id="stat-secondary-count">0</span>
-              <span class="stat-label">Secondary Wallets</span>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon activity">
-              <i class="icon-activity"></i>
-            </div>
-            <div class="stat-content">
-              <span class="stat-value" id="stat-last-activity">—</span>
-              <span class="stat-label">Last Activity</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Token Holdings Table -->
-        <div class="token-holdings-section">
-          <div class="section-header">
-            <h3><i class="icon-coins"></i> Token Holdings</h3>
-          </div>
-          <div class="token-holdings-table" id="token-holdings-table">
-            <div class="empty-state">
-              <div class="empty-state-icon">
-                <i class="icon-coins"></i>
-              </div>
-              <h4 class="empty-state-title">No token holdings</h4>
-              <p class="empty-state-description">Tokens in this wallet will appear here</p>
-            </div>
-          </div>
+        <div id="main-wallet-info"></div>
+        <div class="wt-tokens-section">
+          <div id="tokens-datatable-root"></div>
         </div>
       </div>
 

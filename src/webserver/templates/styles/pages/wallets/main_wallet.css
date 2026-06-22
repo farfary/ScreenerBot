@@ -1,166 +1,185 @@
 /* =============================================================================
-   Main Wallet Section - Enhanced Design
+   Main Wallet Info Bar
    ============================================================================= */
 
-.main-wallet-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.main-wallet-card {
-  background: var(--card-bg);
-  border: 1px solid var(--warning-alpha-40);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  position: relative;
-  transition: all var(--transition-base);
-}
-
-.main-wallet-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--warning-color),
-    var(--warning-alpha-50),
-    var(--warning-color)
-  );
-}
-
-.main-wallet-card:hover {
-  border-color: var(--warning-alpha-60);
-  box-shadow: 0 4px 20px var(--warning-alpha-10);
-}
-
-.main-wallet-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-}
-
-.main-wallet-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacing-lg);
-}
-
-.main-wallet-identity {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-}
-
-.main-wallet-icon {
+.wt-info-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  background: var(--warning-alpha-15);
-  color: var(--warning-color);
-  font-size: 1.5rem;
   flex-shrink: 0;
 }
 
-.main-wallet-icon i {
-  line-height: 0;
+.wt-info-identity {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.main-wallet-info {
+.wt-info-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.wt-info-address-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wt-info-address {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.wt-info-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.wt-info-stat {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 2px;
+  flex-shrink: 0;
 }
 
-.main-wallet-name-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
-.main-wallet-name {
-  font-size: 1.1rem;
+.wt-info-stat .label {
+  font-size: 0.6rem;
   font-weight: 600;
-  color: var(--text-primary);
-}
-
-.main-wallet-address {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.main-wallet-address code {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: transparent;
-}
-
-.main-wallet-balance {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-xs);
-}
-
-.main-wallet-balance .balance-value {
-  font-family: var(--font-mono);
-  font-size: 2rem;
-  font-weight: 700;
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  color: var(--text-primary);
-}
-
-.main-wallet-balance .balance-label {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-secondary);
   text-transform: uppercase;
-}
-
-.main-wallet-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-lg);
-  flex-wrap: wrap;
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color);
-}
-
-.main-wallet-meta .meta-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.main-wallet-meta .meta-item i {
-  font-size: 0.85rem;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
-.main-wallet-meta .meta-item.notes {
-  flex-basis: 100%;
+.wt-info-stat .value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  white-space: nowrap;
 }
 
-.main-wallet-actions {
+.wt-info-actions {
   display: flex;
-  gap: var(--spacing-sm);
-  padding-top: var(--spacing-sm);
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
+/* =============================================================================
+   Tokens DataTable Section
+   ============================================================================= */
+
+.wt-tokens-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* =============================================================================
+   Token Cell
+   ============================================================================= */
+
+.wt-token-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.wt-symbol {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.wt-name {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* =============================================================================
+   Type Badge
+   ============================================================================= */
+
+.wt-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.wt-type-badge.spl {
+  background: var(--info-alpha-10);
+  color: var(--info-color);
+}
+
+.wt-type-badge.token2022 {
+  background: var(--warning-alpha-10);
+  color: var(--warning-color);
+}
+
+/* =============================================================================
+   Mint Cell
+   ============================================================================= */
+
+.wt-mint-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wt-mint-addr {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.wt-mint-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.wt-mint-link:hover {
+  color: var(--primary-color);
+}
+
+/* =============================================================================
+   Responsive
+   ============================================================================= */
+
+@media (width <= 900px) {
+  .wt-info-bar {
+    gap: 10px;
+  }
+
+  .wt-info-divider {
+    display: none;
+  }
+
+  .wt-info-stat:nth-child(n + 5) {
+    display: none;
+  }
+}

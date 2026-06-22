@@ -385,7 +385,6 @@ function setupDeleteModal() {
 async function loadAllData() {
   await Promise.all([loadWallets(), loadTokenHoldings()]);
   renderers.renderCurrentPanel();
-  renderers.updateStats();
   updateWalletCountBadge();
 }
 
@@ -789,6 +788,9 @@ function capitalizeFirst(str) {
 }
 
 function cleanup() {
+  if (renderers) {
+    renderers.destroyTokenTable();
+  }
   walletsData = [];
   tokenHoldings = [];
   currentTab = "main";

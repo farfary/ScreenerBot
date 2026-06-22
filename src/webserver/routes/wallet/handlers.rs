@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use crate::logger::{self, LogTag};
 use crate::wallet::{
     clear_dashboard_api_cache, get_current_wallet_status, get_dashboard_cache_metrics,
-    get_flow_cache_stats, get_wallet_dashboard_data, refresh_dashboard_cache,
+    get_flow_cache_stats, get_snapshot_token_balances, get_wallet_dashboard_data,
+    refresh_dashboard_cache,
 };
 use super::types::*;
 
@@ -18,8 +19,14 @@ pub(super) async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> 
 
     match get_current_wallet_status().await {
         Ok(Some(snapshot)) => {
-            let token_balances = snapshot
-                .token_balances
+            // token_balances is not populated by get_recent_snapshots — load separately
+            let raw_balances = if let Some(id) = snapshot.id {
+                get_snapshot_token_balances(id).await.unwrap_or_default()
+            } else {
+                vec![]
+            };
+
+            let token_balances = raw_balances
                 .iter()
                 .map(|tb| TokenBalanceInfo {
                     mint: tb.mint.clone(),
@@ -69,12 +76,15 @@ pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
         }
     };
 
+    // token_balances is not populated by get_recent_snapshots — load separately
+    let token_balances = if let Some(id) = snapshot.id {
+        get_snapshot_token_balances(id).await.unwrap_or_default()
+    } else {
+        vec![]
+    };
+
     // Collect mints from token balances
-    let mints: Vec<String> = snapshot
-        .token_balances
-        .iter()
-        .map(|tb| tb.mint.clone())
-        .collect();
+    let mints: Vec<String> = token_balances.iter().map(|tb| tb.mint.clone()).collect();
 
     // Fetch token metadata in batch
     let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
@@ -89,8 +99,7 @@ pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
     }
 
     // Build response with enriched data
-    let tokens: Vec<WalletTokenHolding> = snapshot
-        .token_balances
+    let tokens: Vec<WalletTokenHolding> = token_balances
         .iter()
         .map(|tb| {
             let (symbol, name) = metadata_map.get(&tb.mint).cloned().unwrap_or((None, None));

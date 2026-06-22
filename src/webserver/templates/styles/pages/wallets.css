@@ -24,79 +24,17 @@
 }
 
 /* =============================================================================
-   Header Section - Enhanced Design
+   Compact Toolbar
    ============================================================================= */
 
-.wallets-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-lg);
-  padding: var(--spacing-md) var(--spacing-lg);
-  min-height: 72px;
-  border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(180deg, var(--card-bg), var(--bg-primary));
-  flex-shrink: 0;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-}
-
-.page-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--primary-alpha-20), var(--primary-alpha-5));
-  color: var(--primary-color);
-  font-size: 1.35rem;
-  position: relative;
-  transition: transform var(--transition-base);
-}
-
-.page-badge i {
-  line-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.page-badge::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: calc(var(--radius-lg) + 2px);
-  background: linear-gradient(135deg, var(--primary-alpha-20), transparent);
-  z-index: -1;
-}
-
-.page-badge:hover {
-  transform: scale(1.05);
-}
-
-.page-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.page-title-row {
+.wallets-toolbar {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-}
-
-.page-title-row h1 {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
+  padding: 8px var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  min-height: 48px;
 }
 
 .wallet-count-badge {
@@ -111,33 +49,7 @@
   background: linear-gradient(135deg, var(--primary-alpha-15), var(--primary-alpha-10));
   color: var(--primary-color);
   border: 1px solid var(--primary-alpha-20);
-}
-
-.page-info p {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.header-actions .btn {
-  transition: all var(--transition-fast);
-}
-
-.header-actions .btn:hover {
-  transform: translateY(-1px);
+  margin-right: auto;
 }
 
 /* =============================================================================
@@ -154,10 +66,10 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
   scrollbar-gutter: stable;
 }
 
@@ -191,262 +103,6 @@
 
 /* Extracted to wallets/main_wallet.css */
 
-/* =============================================================================
-   Stats Summary - Enhanced Design
-   ============================================================================= */
-
-.wallets-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-md);
-}
-
-@media (width <= 1200px) {
-  .wallets-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (width <= 600px) {
-  .wallets-stats {
-    grid-template-columns: 1fr;
-  }
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-lg) var(--spacing-md);
-  border-radius: var(--radius-lg);
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  transition: all var(--transition-base);
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, var(--primary-alpha-30), transparent);
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-.stat-card:hover {
-  border-color: var(--primary-alpha-30);
-  box-shadow: 0 4px 16px var(--shadow-sm);
-  transform: translateY(-2px);
-}
-
-.stat-card:hover::before {
-  opacity: 1;
-}
-
-.stat-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
-  font-size: 1.25rem;
-  flex-shrink: 0;
-  transition: transform var(--transition-base);
-}
-
-.stat-icon i {
-  line-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.stat-card:hover .stat-icon {
-  transform: scale(1.05);
-}
-
-.stat-icon.sol {
-  background: linear-gradient(135deg, var(--solana-alpha-20), var(--solana-green-alpha-20));
-  color: var(--solana-purple);
-}
-
-.stat-icon.secondary {
-  background: var(--success-alpha-10);
-  color: var(--success-color);
-}
-
-.stat-icon.tokens {
-  background: var(--info-alpha-10);
-  color: var(--info-color);
-}
-
-.stat-icon.activity {
-  background: var(--warning-alpha-10);
-  color: var(--warning-color);
-}
-
-.stat-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.stat-value {
-  font-family: var(--font-data);
-  font-size: 1.5rem;
-  font-weight: 700;
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
-}
-
-.stat-label {
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-}
-
-/* =============================================================================
-   Token Holdings Section - Enhanced Design
-   ============================================================================= */
-
-.token-holdings-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-.token-holdings-section .section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-}
-
-.token-holdings-section .section-header h3 {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.token-holdings-section .section-header h3 i {
-  font-size: 1rem;
-  color: var(--primary-color);
-}
-
-.token-holdings-table {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: border-color var(--transition-base);
-}
-
-.token-holdings-table:hover {
-  border-color: var(--primary-alpha-20);
-}
-
-/* Token Holdings Empty State */
-.token-holdings-table .empty-state {
-  min-height: 160px;
-  padding: var(--spacing-xl);
-}
-
-.token-holdings-table .empty-state-icon {
-  width: 56px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.token-holdings-table .empty-state-icon i {
-  font-size: 1.5rem;
-  line-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.holdings-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.holdings-table th,
-.holdings-table td {
-  padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.holdings-table th {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-}
-
-.holdings-table td {
-  font-size: 0.85rem;
-  color: var(--text-primary);
-}
-
-.holdings-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.holdings-table tbody tr:hover {
-  background: var(--hover-bg);
-}
-
-.holdings-table .token-symbol {
-  font-weight: 600;
-}
-
-.holdings-table .token-balance {
-  font-family: var(--font-mono);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.holdings-table .token-mint {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.holdings-table .token-mint code {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: transparent;
-}
 
 /* =============================================================================
    Wallets Table (Secondaries & Archive) - Enhanced Design
@@ -839,43 +495,16 @@
    ============================================================================= */
 
 @media (width <= 900px) {
-  .wallets-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--spacing-md);
-    padding: var(--spacing-md);
-  }
-
-  .header-right {
-    width: 100%;
-  }
-
-  .header-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
-  .wallets-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .main-wallet-header {
-    flex-direction: column;
-    gap: var(--spacing-md);
-  }
-
-  .main-wallet-balance {
-    align-self: flex-start;
+  .wallets-toolbar {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+    padding: 8px var(--spacing-md);
   }
 }
 
 @media (width <= 600px) {
   .wallets-main {
     padding: var(--spacing-md);
-  }
-
-  .wallets-stats {
-    grid-template-columns: 1fr;
   }
 
   .modal-dialog {
