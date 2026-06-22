@@ -38,6 +38,7 @@ export class PositionDetailsDialog {
     this._manualToggleHandler = null;
     this._managementChangedHandler = null;
     this._focusTrap = null;
+    this._lastRenderedFp = null;
   }
 
   /**
@@ -66,6 +67,7 @@ export class PositionDetailsDialog {
       this.positionData = positionData;
       this.fullDetails = null;
       this.currentTab = "overview";
+      this._lastRenderedFp = null;
 
       this._createDialog();
       this._attachEventHandlers();
@@ -750,13 +752,35 @@ export class PositionDetailsDialog {
       case "chart":
         this._renderChartTab(content);
         break;
-      case "history":
-        this._renderHistoryTab(content);
+      case "history": {
+        const fp = this._historyFingerprint();
+        if ((this._lastRenderedFp ??= {}).history !== fp) {
+          this._renderHistoryTab(content);
+          this._lastRenderedFp.history = fp;
+        }
         break;
-      case "transactions":
-        this._renderTransactionsTab(content);
+      }
+      case "transactions": {
+        const fp = this._txFingerprint();
+        if ((this._lastRenderedFp ??= {}).transactions !== fp) {
+          this._renderTransactionsTab(content);
+          this._lastRenderedFp.transactions = fp;
+        }
         break;
+      }
     }
+  }
+
+  _historyFingerprint() {
+    const entries = this.fullDetails?.entries || [];
+    const exits = this.fullDetails?.exits || [];
+    return `e${entries.length}:${entries.at(-1)?.timestamp ?? 0}|x${exits.length}:${exits.at(-1)?.timestamp ?? 0}`;
+  }
+
+  _txFingerprint() {
+    const txs = this.fullDetails?.transactions || [];
+    const sh = this.fullDetails?.state_history || [];
+    return `t${txs.length}:${txs.at(-1)?.signature?.slice(0, 8) ?? ""}|s${sh.length}`;
   }
 
   // ===========================================================================
