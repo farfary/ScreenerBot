@@ -18,8 +18,9 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
   proto._renderHistoryTab = function (content) {
     const entries = this.fullDetails?.entries || [];
     const exits = this.fullDetails?.exits || [];
+    const symbol = this.fullDetails?.position?.symbol || "tokens";
 
-    // Combine and sort by timestamp (newest first)
+    // Combine and sort newest first
     const timeline = [
       ...entries.map((e) => ({ ...e, type: "entry" })),
       ...exits.map((e) => ({ ...e, type: "exit" })),
@@ -35,18 +36,20 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
         const isEntry = item.type === "entry";
         const typeClass = isEntry ? "pdd-timeline-entry" : "pdd-timeline-exit";
         const icon = isEntry ? "icon-circle-arrow-down" : "icon-circle-arrow-up";
-        const label = isEntry ? "Entry" : "Exit";
+        const label = isEntry
+          ? item.is_dca ? "DCA Entry" : "Entry"
+          : item.is_partial ? "Partial Exit" : "Exit";
 
         let badges = "";
-        if (isEntry && item.is_dca) {
-          badges += '<span class="pdd-badge pdd-badge-info">DCA</span>';
-        }
         if (!isEntry && item.is_partial) {
           badges += `<span class="pdd-badge pdd-badge-warning">${item.percentage}%</span>`;
         }
 
         const signature = item.transaction_signature;
-        const shortSig = signature ? `${signature.slice(0, 8)}...${signature.slice(-8)}` : "—";
+        const hasSig = !!signature;
+        const shortSig = hasSig ? `${signature.slice(0, 8)}…${signature.slice(-8)}` : "—";
+
+        const solCostVal = isEntry ? item.sol_spent : item.sol_received;
 
         return `
           <div class="pdd-timeline-item ${typeClass}">
@@ -62,22 +65,20 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
               <div class="pdd-timeline-details">
                 <div class="pdd-timeline-stat">
                   <span class="label">Amount</span>
-                  <span class="value">${Utils.formatCompactNumber(item.amount)} tokens</span>
+                  <span class="value">${Utils.formatCompactNumber(item.amount)} ${Utils.escapeHtml(symbol)}</span>
                 </div>
                 <div class="pdd-timeline-stat">
                   <span class="label">Price</span>
-                  <span class="value">${this._formatPrice(item.price)} SOL</span>
+                  <span class="value">${item.price ? `${this._formatPrice(item.price)} SOL` : "—"}</span>
                 </div>
                 <div class="pdd-timeline-stat">
                   <span class="label">${isEntry ? "SOL Spent" : "SOL Received"}</span>
-                  <span class="value">${Utils.formatSol(isEntry ? item.sol_spent : item.sol_received, { decimals: 4 })}</span>
+                  <span class="value">${solCostVal != null ? Utils.formatSol(solCostVal, { decimals: 4 }) : "—"}</span>
                 </div>
               </div>
               <div class="pdd-timeline-signature">
-                <span class="pdd-signature-text" data-signature="${signature || ""}" title="Click to copy">${shortSig}</span>
-                <a href="https://solscan.io/tx/${signature || ""}" target="_blank" class="pdd-signature-link" title="View on Solscan">
-                  <i class="icon-external-link"></i>
-                </a>
+                <span class="pdd-signature-text${hasSig ? "" : " pdd-sig-unavailable"}" data-signature="${hasSig ? signature : ""}" title="${hasSig ? "Click to copy" : "No signature"}">${shortSig}</span>
+                ${hasSig ? `<a href="https://solscan.io/tx/${signature}" target="_blank" class="pdd-signature-link" title="View on Solscan"><i class="icon-external-link"></i></a>` : ""}
               </div>
             </div>
           </div>
@@ -85,14 +86,10 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
       })
       .join("");
 
-    content.innerHTML = `
-      <div class="pdd-timeline">
-        ${timelineHtml}
-      </div>
-    `;
+    content.innerHTML = `<div class="pdd-timeline">${timelineHtml}</div>`;
 
-    // Attach copy handlers for signatures
-    content.querySelectorAll(".pdd-signature-text").forEach((el) => {
+    // Copy handlers — only on items with an actual signature
+    content.querySelectorAll(".pdd-signature-text:not(.pdd-sig-unavailable)").forEach((el) => {
       el.addEventListener("click", () => {
         const sig = el.dataset.signature;
         if (sig) {
@@ -114,11 +111,13 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
     const stateHistory = this.fullDetails?.state_history || [];
     const symbol = this.fullDetails?.position?.symbol || "tokens";
 
-    // Filter out placeholder exit entries when there are no real exits
-    const transactions = allTransactions.filter((tx) => {
-      if (tx.available !== false) return true;
-      return !(tx.kind === "exit" && exits.length === 0);
-    });
+    // Filter out placeholder exit entries when there are no real exits, then sort newest first
+    const transactions = allTransactions
+      .filter((tx) => {
+        if (tx.available !== false) return true;
+        return !(tx.kind === "exit" && exits.length === 0);
+      })
+      .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
     if (transactions.length === 0 && stateHistory.length === 0) {
       content.innerHTML = '<div class="pdd-empty-state">No transactions available</div>';
@@ -199,7 +198,7 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
             ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-label">Received</span><span class="pdd-tx-meta-val">${Utils.formatSol(exitRecord.sol_received, { decimals: 4 })}</span></span>`
             : "";
 
-        const feeSol = tx.fee_sol ? Utils.formatSol(tx.fee_sol, { decimals: 6 }) : null;
+        const feeSol = tx.fee_sol != null && tx.fee_sol > 0 ? Utils.formatSol(tx.fee_sol, { decimals: 6 }) : null;
         const feeHtml = feeSol
           ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-label">Fee</span><span class="pdd-tx-meta-val">${feeSol}</span></span>`
           : "";
@@ -242,13 +241,14 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
             ${metaSection}
             <div class="pdd-tx-foot">
               <div class="pdd-tx-sig-group">
-                <span class="pdd-tx-sig" data-signature="${signature}" title="Click to copy">${shortSig}</span>
-                <button class="pdd-tx-copy-btn" data-signature="${signature}" title="Copy signature"><i class="icon-copy"></i></button>
+                ${signature
+                  ? `<span class="pdd-tx-sig" data-signature="${signature}" title="Click to copy">${shortSig}</span>
+                     <button class="pdd-tx-copy-btn" data-signature="${signature}" title="Copy signature"><i class="icon-copy"></i></button>`
+                  : `<span class="pdd-tx-sig-na">No signature</span>`}
               </div>
-              <a href="https://solscan.io/tx/${signature}" target="_blank" class="pdd-tx-link">
-                <i class="icon-external-link"></i>
-                <span>Solscan</span>
-              </a>
+              ${signature
+                ? `<a href="https://solscan.io/tx/${signature}" target="_blank" class="pdd-tx-link"><i class="icon-external-link"></i><span>Solscan</span></a>`
+                : ""}
             </div>
           </div>
         `;

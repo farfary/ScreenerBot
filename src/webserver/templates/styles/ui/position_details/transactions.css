@@ -493,6 +493,17 @@
   text-decoration: underline;
 }
 
+.position-details-dialog .pdd-tx-sig-na {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.position-details-dialog .pdd-sig-unavailable {
+  color: var(--text-muted);
+  cursor: default;
+}
+
 .position-details-dialog .pdd-tx-copy-btn {
   width: 20px;
   height: 20px;
