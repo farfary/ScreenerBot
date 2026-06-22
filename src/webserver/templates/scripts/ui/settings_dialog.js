@@ -294,6 +294,11 @@ export class SettingsDialog {
       const result = await response.json();
       // API returns { success: true, data: { data: GuiConfig, timestamp: ... } }
       this.settings = result.data?.data || result.data || result;
+      // Overlay the live DOM theme — header toggle may have changed it without updating gui config
+      const liveTheme = document.documentElement.getAttribute("data-theme");
+      if (liveTheme && this.settings?.dashboard?.interface) {
+        this.settings.dashboard.interface.theme = liveTheme;
+      }
       this.originalSettings = JSON.parse(JSON.stringify(this.settings));
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -432,15 +437,18 @@ export class SettingsDialog {
     // Apply theme
     if (iface.theme) {
       document.documentElement.setAttribute("data-theme", iface.theme);
-      // Save theme to server (no localStorage)
+      // Keep localStorage in sync for FOUC prevention
+      try { localStorage.setItem("theme", iface.theme); } catch (e) { /* storage unavailable */ }
+      // Save theme to server
       fetch("/api/ui-state/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "theme", value: iface.theme }),
       }).catch((e) => console.warn("[Settings] Failed to save theme:", e));
+      // Sync header toggle icon: dark → show sun (to switch to light); light → show moon
       const themeIcon = document.getElementById("themeIcon");
       if (themeIcon) {
-        themeIcon.className = iface.theme === "dark" ? "icon-moon" : "icon-sun";
+        themeIcon.className = iface.theme === "dark" ? "action-icon icon-sun" : "action-icon icon-moon";
       }
     }
 

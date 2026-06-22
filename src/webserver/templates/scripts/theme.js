@@ -79,6 +79,8 @@
   async function setTheme(theme) {
     console.log("[Theme] Setting theme to:", theme);
     html.setAttribute("data-theme", theme);
+    // Keep localStorage in sync so FOUC-prevention script in base.html sees the right value
+    try { localStorage.setItem("theme", theme); } catch (e) { /* storage unavailable */ }
 
     // Update UI elements
     if (theme === "dark") {

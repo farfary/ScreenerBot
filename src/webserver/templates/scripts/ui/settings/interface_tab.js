@@ -10,6 +10,9 @@ import { setSoundsEnabled } from "../../core/sounds.js";
  */
 export function buildInterfaceTab(settings) {
   const iface = settings?.dashboard?.interface || {};
+  // Use the live DOM value as source of truth — the header toggle may have changed theme
+  // without the gui config being updated (they're separate stores)
+  const activeTheme = document.documentElement.getAttribute("data-theme") || iface.theme || "dark";
 
   return `
     <div class="settings-section">
@@ -22,8 +25,8 @@ export function buildInterfaceTab(settings) {
           </div>
           <div class="settings-field-control">
             <select id="settingTheme" class="settings-select" data-custom-select>
-              <option value="dark" ${iface.theme === "dark" ? "selected" : ""}>Dark</option>
-              <option value="light" ${iface.theme === "light" ? "selected" : ""}>Light</option>
+              <option value="dark" ${activeTheme === "dark" ? "selected" : ""}>Dark</option>
+              <option value="light" ${activeTheme === "light" ? "selected" : ""}>Light</option>
             </select>
           </div>
         </div>
