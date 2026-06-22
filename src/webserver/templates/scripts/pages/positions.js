@@ -172,7 +172,8 @@ function createLifecycle() {
           symbol
         )}"/>`
       : '<i class="token-logo icon-coins"></i>';
-    return `<div class="position-token">${logoHtml}<div class="position-token-meta">
+    const manualTag = `<span class="pos-manual-tag${row.manual_management ? "" : " pos-manual-tag--hidden"}" aria-label="Manual management">MANUAL</span>`;
+    return `<div class="position-token">${manualTag}${logoHtml}<div class="position-token-meta">
       <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
       <div class="token-name">${Utils.escapeHtml(name)}</div>
       ${stateCaption(row)}

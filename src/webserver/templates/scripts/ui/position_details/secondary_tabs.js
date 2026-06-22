@@ -112,14 +112,12 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
     const entries = this.fullDetails?.entries || [];
     const exits = this.fullDetails?.exits || [];
     const stateHistory = this.fullDetails?.state_history || [];
+    const symbol = this.fullDetails?.position?.symbol || "tokens";
 
-    // Filter out unavailable exit transactions (shown for open positions with no actual exit)
+    // Filter out placeholder exit entries when there are no real exits
     const transactions = allTransactions.filter((tx) => {
-      // Keep all available transactions
       if (tx.available !== false) return true;
-      // For unavailable ones, only keep if it's NOT an exit with no actual exits
-      if (tx.kind === "exit" && exits.length === 0) return false;
-      return true;
+      return !(tx.kind === "exit" && exits.length === 0);
     });
 
     if (transactions.length === 0 && stateHistory.length === 0) {
@@ -127,145 +125,129 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
       return;
     }
 
-    // Merge entry/exit info with transactions for enhanced display
     const entrySignatures = new Set(entries.map((e) => e.transaction_signature));
     const exitSignatures = new Set(exits.map((e) => e.transaction_signature));
 
-    // Build filter buttons
-    const filterButtonsHtml = `
-      <div class="pdd-tx-filters">
-        <button class="pdd-filter-btn active" data-filter="all">All</button>
-        <button class="pdd-filter-btn" data-filter="entry">Entries</button>
-        <button class="pdd-filter-btn" data-filter="exit">Exits</button>
-      </div>
-    `;
-
-    // Build transaction cards
     const txCardsHtml = transactions
       .map((tx) => {
         const signature = tx.signature || "";
-        const shortSig = signature ? `${signature.slice(0, 8)}...${signature.slice(-8)}` : "—";
+        const shortSig = signature ? `${signature.slice(0, 8)}…${signature.slice(-8)}` : "—";
 
-        // Determine transaction type
+        // Resolve type and matching record in one pass
+        const entryRecord = entrySignatures.has(signature)
+          ? entries.find((e) => e.transaction_signature === signature)
+          : null;
+        const exitRecord = exitSignatures.has(signature)
+          ? exits.find((e) => e.transaction_signature === signature)
+          : null;
+
         let txType = "unknown";
         let txTypeLabel = "Transaction";
         let txTypeClass = "";
 
-        if (entrySignatures.has(signature)) {
-          const entryRecord = entries.find((e) => e.transaction_signature === signature);
+        if (entryRecord) {
           txType = "entry";
-          txTypeLabel = entryRecord?.is_dca ? "DCA Entry" : "Entry";
+          txTypeLabel = entryRecord.is_dca ? "DCA Entry" : "Entry";
           txTypeClass = "pdd-tx-type-entry";
-        } else if (exitSignatures.has(signature)) {
-          const exitRecord = exits.find((e) => e.transaction_signature === signature);
+        } else if (exitRecord) {
           txType = "exit";
-          txTypeLabel = exitRecord?.is_partial ? "Partial Exit" : "Exit";
+          txTypeLabel = exitRecord.is_partial ? "Partial Exit" : "Exit";
           txTypeClass = "pdd-tx-type-exit";
         } else if (tx.kind) {
           txType = tx.kind.toLowerCase();
           txTypeLabel = this._formatTransactionType(tx.kind);
         }
 
-        // Status
-        const isSuccess = tx.success !== false;
-        const isPending = tx.status === "pending";
-        const statusClass = isPending
-          ? "pdd-status-pending"
-          : isSuccess
-            ? "pdd-status-success"
-            : "pdd-status-failed";
-        const statusLabel = isPending ? "Pending" : isSuccess ? "Confirmed" : "Failed";
-        const statusIcon = isPending
-          ? "icon-clock"
-          : isSuccess
-            ? "icon-circle-check"
-            : "icon-circle-x";
+        const typeIcon =
+          txType === "entry" ? "icon-circle-arrow-down" :
+          txType === "exit"  ? "icon-circle-arrow-up"   :
+                               "icon-activity";
 
-        // Amount info
+        // Status
+        const isPending = tx.status === "pending";
+        const isSuccess = tx.success !== false && !isPending;
+        const statusClass = isPending ? "pdd-status-pending" : isSuccess ? "pdd-status-success" : "pdd-status-failed";
+        const statusLabel = isPending ? "Pending" : isSuccess ? "Confirmed" : "Failed";
+        const statusIcon  = isPending ? "icon-clock" : isSuccess ? "icon-circle-check" : "icon-circle-x";
+
+        // Token amount
+        let tokenAmountHtml = "";
+        if (txType === "entry" && entryRecord?.amount)
+          tokenAmountHtml = `<div class="pdd-tx-token positive">+${Utils.formatCompactNumber(entryRecord.amount)} ${Utils.escapeHtml(symbol)}</div>`;
+        else if (txType === "exit" && exitRecord?.amount)
+          tokenAmountHtml = `<div class="pdd-tx-token negative">-${Utils.formatCompactNumber(exitRecord.amount)} ${Utils.escapeHtml(symbol)}</div>`;
+
+        // SOL change
         const solChange = tx.sol_change;
-        const solChangeHtml = solChange
-          ? `<div class="pdd-tx-sol-change ${solChange > 0 ? "positive" : "negative"}">
-              ${solChange > 0 ? "+" : ""}${Utils.formatSol(solChange, { decimals: 6, suffix: "" })} SOL
-            </div>`
+        const solChangeHtml = solChange != null
+          ? `<div class="pdd-tx-sol ${solChange >= 0 ? "positive" : "negative"}">${solChange >= 0 ? "+" : ""}${Utils.formatSol(solChange, { decimals: 6, suffix: "" })} SOL</div>`
           : "";
 
-        // Get token amount from entry/exit records
-        let tokenAmountHtml = "";
-        if (txType === "entry") {
-          const entryRecord = entries.find((e) => e.transaction_signature === signature);
-          if (entryRecord?.amount) {
-            const symbol = this.fullDetails?.position?.symbol || "tokens";
-            tokenAmountHtml = `<div class="pdd-tx-token-amount">+${Utils.formatCompactNumber(entryRecord.amount)} ${symbol}</div>`;
-          }
-        } else if (txType === "exit") {
-          const exitRecord = exits.find((e) => e.transaction_signature === signature);
-          if (exitRecord?.amount) {
-            const symbol = this.fullDetails?.position?.symbol || "tokens";
-            tokenAmountHtml = `<div class="pdd-tx-token-amount">-${Utils.formatCompactNumber(exitRecord.amount)} ${symbol}</div>`;
-          }
-        }
+        // Meta: price, exit %, fee, P&L, router
+        const txPrice = entryRecord?.price ?? exitRecord?.price;
+        const priceHtml = txPrice
+          ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-label">Price</span><span class="pdd-tx-meta-val">${this._formatPrice(txPrice)} SOL</span></span>`
+          : "";
 
-        // Fee display
+        const exitPctHtml = txType === "exit" && exitRecord?.percentage != null
+          ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-label">Exit</span><span class="pdd-tx-meta-val">${exitRecord.percentage}%</span></span>`
+          : "";
+
+        const solCostHtml = txType === "entry" && entryRecord?.sol_spent != null
+          ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-label">Spent</span><span class="pdd-tx-meta-val">${Utils.formatSol(entryRecord.sol_spent, { decimals: 4 })}</span></span>`
+          : txType === "exit" && exitRecord?.sol_received != null
+            ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-label">Received</span><span class="pdd-tx-meta-val">${Utils.formatSol(exitRecord.sol_received, { decimals: 4 })}</span></span>`
+            : "";
+
         const feeSol = tx.fee_sol ? Utils.formatSol(tx.fee_sol, { decimals: 6 }) : null;
         const feeHtml = feeSol
-          ? `<div class="pdd-tx-fee"><span class="label">Fee:</span> ${feeSol}</div>`
+          ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-label">Fee</span><span class="pdd-tx-meta-val">${feeSol}</span></span>`
           : "";
 
-        // P&L for exits
         let pnlHtml = "";
-        if (txType === "exit") {
-          const exitRecord = exits.find((e) => e.transaction_signature === signature);
-          if (exitRecord?.sol_received) {
-            // Find matching entry to calculate P&L
-            const entryPrice = this.fullDetails?.position?.effective_entry_price || 0;
-            if (entryPrice && exitRecord.price) {
-              const pnlPercent = ((exitRecord.price - entryPrice) / entryPrice) * 100;
-              pnlHtml = `<div class="pdd-tx-pnl ${pnlPercent >= 0 ? "positive" : "negative"}">
-                P&L: ${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(2)}%
-              </div>`;
-            }
+        if (txType === "exit" && exitRecord?.price) {
+          const entryPrice = this.fullDetails?.position?.effective_entry_price || 0;
+          if (entryPrice) {
+            const pnlPct = ((exitRecord.price - entryPrice) / entryPrice) * 100;
+            const pnlClass = pnlPct >= 0 ? "positive" : "negative";
+            pnlHtml = `<span class="pdd-tx-meta-item pdd-tx-pnl-item ${pnlClass}"><span class="pdd-tx-meta-label">P&amp;L</span><span class="pdd-tx-meta-val">${pnlPct >= 0 ? "+" : ""}${pnlPct.toFixed(2)}%</span></span>`;
           }
         }
 
-        // Router info
         const routerHtml = tx.router
-          ? `<div class="pdd-tx-router">${Utils.escapeHtml(tx.router)}</div>`
+          ? `<span class="pdd-tx-meta-item"><span class="pdd-tx-meta-val pdd-tx-router-name">${Utils.escapeHtml(tx.router)}</span></span>`
           : "";
+
+        const amountsSection = tokenAmountHtml || solChangeHtml
+          ? `<div class="pdd-tx-amounts">${tokenAmountHtml}${solChangeHtml}</div>` : "";
+        const metaSection = priceHtml || exitPctHtml || solCostHtml || feeHtml || pnlHtml || routerHtml
+          ? `<div class="pdd-tx-meta">${priceHtml}${exitPctHtml}${solCostHtml}${feeHtml}${pnlHtml}${routerHtml}</div>` : "";
 
         return `
           <div class="pdd-tx-card" data-tx-type="${txType}">
-            <div class="pdd-tx-card-header">
-              <div class="pdd-tx-type-badge ${txTypeClass}">${txTypeLabel}</div>
-              <div class="pdd-tx-status-badge ${statusClass}">
-                <i class="${statusIcon}"></i>
-                <span>${statusLabel}</span>
-              </div>
-            </div>
-            <div class="pdd-tx-card-body">
-              <div class="pdd-tx-amounts">
-                ${tokenAmountHtml}
-                ${solChangeHtml}
-              </div>
-              <div class="pdd-tx-details">
-                ${feeHtml}
-                ${pnlHtml}
-                ${routerHtml}
-              </div>
-            </div>
-            <div class="pdd-tx-card-footer">
-              <div class="pdd-tx-signature-row">
-                <span class="pdd-tx-sig" data-signature="${signature}" title="Click to copy">
-                  ${shortSig}
+            <div class="pdd-tx-top">
+              <span class="pdd-tx-label ${txTypeClass}">
+                <i class="${typeIcon}"></i>
+                ${txTypeLabel}
+              </span>
+              <div class="pdd-tx-top-right">
+                <span class="pdd-tx-time" title="${Utils.formatTimestamp(tx.timestamp)}">${Utils.formatTimeAgo(tx.timestamp)}</span>
+                <span class="pdd-tx-status ${statusClass}">
+                  <i class="${statusIcon}"></i>
+                  ${statusLabel}
                 </span>
-                <button class="pdd-tx-copy-btn" data-signature="${signature}" title="Copy signature">
-                  <i class="icon-copy"></i>
-                </button>
               </div>
-              <div class="pdd-tx-time" title="${Utils.formatTimestamp(tx.timestamp)}">
-                ${Utils.formatTimeAgo(tx.timestamp)}
+            </div>
+            ${amountsSection}
+            ${metaSection}
+            <div class="pdd-tx-foot">
+              <div class="pdd-tx-sig-group">
+                <span class="pdd-tx-sig" data-signature="${signature}" title="Click to copy">${shortSig}</span>
+                <button class="pdd-tx-copy-btn" data-signature="${signature}" title="Copy signature"><i class="icon-copy"></i></button>
               </div>
-              <a href="https://solscan.io/tx/${signature}" target="_blank" class="pdd-tx-explorer" title="View on Solscan">
+              <a href="https://solscan.io/tx/${signature}" target="_blank" class="pdd-tx-link">
                 <i class="icon-external-link"></i>
+                <span>Solscan</span>
               </a>
             </div>
           </div>
@@ -273,30 +255,26 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
       })
       .join("");
 
-    // State history timeline
-    const stateHistoryHtml =
-      stateHistory.length > 0
-        ? `
-        <div class="pdd-section-header">State History</div>
-        <div class="pdd-state-history">
-          ${stateHistory
-            .map((state) => {
-              return `
-              <div class="pdd-state-item">
-                <span class="pdd-state-name">${Utils.escapeHtml(state.state)}</span>
-                <span class="pdd-state-time" title="${Utils.formatTimestamp(state.changed_at)}">${Utils.formatTimeAgo(state.changed_at)}</span>
-                ${state.reason ? `<span class="pdd-state-reason">${Utils.escapeHtml(state.reason)}</span>` : ""}
-              </div>
-            `;
-            })
-            .join("")}
-        </div>
-      `
-        : "";
+    const stateHistoryHtml = stateHistory.length > 0
+      ? `<div class="pdd-section-header">State History</div>
+         <div class="pdd-state-history">
+           ${stateHistory.map((s) => `
+             <div class="pdd-state-item">
+               <span class="pdd-state-name">${Utils.escapeHtml(s.state)}</span>
+               <span class="pdd-state-time" title="${Utils.formatTimestamp(s.changed_at)}">${Utils.formatTimeAgo(s.changed_at)}</span>
+               ${s.reason ? `<span class="pdd-state-reason">${Utils.escapeHtml(s.reason)}</span>` : ""}
+             </div>
+           `).join("")}
+         </div>`
+      : "";
 
     content.innerHTML = `
       <div class="pdd-transactions-container">
-        ${filterButtonsHtml}
+        <div class="pdd-tx-filters">
+          <button class="pdd-filter-btn active" data-filter="all">All</button>
+          <button class="pdd-filter-btn" data-filter="entry">Entries</button>
+          <button class="pdd-filter-btn" data-filter="exit">Exits</button>
+        </div>
         <div class="pdd-tx-cards">
           ${txCardsHtml || '<div class="pdd-empty-state">No transactions</div>'}
         </div>
@@ -306,39 +284,25 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
 
     // Clean up old filter handlers
     if (this._filterHandlers) {
-      this._filterHandlers.forEach(({ element, handler }) => {
-        element.removeEventListener("click", handler);
-      });
+      this._filterHandlers.forEach(({ element, handler }) => element.removeEventListener("click", handler));
     }
     this._filterHandlers = [];
 
-    // Attach filter handlers with tracking
+    // Filter handlers
     content.querySelectorAll(".pdd-filter-btn").forEach((btn) => {
       const handler = () => {
-        // Update active button
         content.querySelectorAll(".pdd-filter-btn").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
-
-        // Filter transactions
         const filter = btn.dataset.filter;
         content.querySelectorAll(".pdd-tx-card").forEach((card) => {
-          const txType = card.dataset.txType;
-          if (filter === "all") {
-            card.style.display = "";
-          } else if (filter === "entry" && txType === "entry") {
-            card.style.display = "";
-          } else if (filter === "exit" && txType === "exit") {
-            card.style.display = "";
-          } else if (filter !== "all") {
-            card.style.display = "none";
-          }
+          card.style.display = filter === "all" || card.dataset.txType === filter ? "" : "none";
         });
       };
       btn.addEventListener("click", handler);
       this._filterHandlers.push({ element: btn, handler });
     });
 
-    // Attach copy handlers for signatures
+    // Copy handlers
     content.querySelectorAll(".pdd-tx-sig, .pdd-tx-copy-btn").forEach((el) => {
       el.addEventListener("click", (e) => {
         e.preventDefault();

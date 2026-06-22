@@ -399,6 +399,7 @@ export class PositionDetailsDialog {
             </div>
           </div>
         </div>
+        <div class="header-meta-row" id="pddHeaderMeta"></div>
 
         <div class="dialog-tabs">
           <button class="tab-button active" data-tab="overview">
@@ -461,6 +462,84 @@ export class PositionDetailsDialog {
     if (priceContainer) {
       priceContainer.innerHTML = this._buildHeaderPrice(pos);
     }
+
+    const metaContainer = this.dialogEl?.querySelector("#pddHeaderMeta");
+    if (metaContainer) {
+      metaContainer.innerHTML = this._buildHeaderMeta();
+    }
+  }
+
+  _buildHeaderMeta() {
+    const pos = this.fullDetails?.position;
+    const tokenInfo = this.fullDetails?.token_info;
+    const poolInfo = this.fullDetails?.pool_info;
+    const links = this.fullDetails?.external_links || {};
+    const security = this.fullDetails?.security;
+    const mint = pos?.mint;
+
+    // Mint chip + DEX badge + pool liquidity
+    const dexBadge = poolInfo?.dex_name
+      ? `<span class="pdd-dex-badge">${Utils.escapeHtml(poolInfo.dex_name)}</span>`
+      : "";
+    const poolLiqHtml =
+      poolInfo?.liquidity_sol !== null && poolInfo?.liquidity_sol !== undefined
+        ? `<span class="meta-metric"><span class="meta-metric-label">Liq</span><span class="meta-metric-value">${Utils.formatSol(poolInfo.liquidity_sol, { decimals: 2, suffix: "" })} SOL</span></span>`
+        : "";
+
+    // Social links — icon-only, compact
+    const socials = [];
+    if (tokenInfo?.website)
+      socials.push(`<a href="${Utils.escapeHtml(tokenInfo.website)}" target="_blank" rel="noopener" class="meta-social-link" title="Website"><i class="icon-globe"></i></a>`);
+    if (tokenInfo?.twitter)
+      socials.push(`<a href="${Utils.escapeHtml(tokenInfo.twitter)}" target="_blank" rel="noopener" class="meta-social-link" title="Twitter / X"><i class="icon-twitter"></i></a>`);
+    if (tokenInfo?.telegram)
+      socials.push(`<a href="${Utils.escapeHtml(tokenInfo.telegram)}" target="_blank" rel="noopener" class="meta-social-link" title="Telegram"><i class="icon-send"></i></a>`);
+
+    // Explorer chips
+    const explorers = [
+      ["Solscan", links.solscan],
+      ["DexScreener", links.dexscreener],
+      ["Birdeye", links.birdeye],
+      ["RugCheck", links.rugcheck],
+      ["Photon", links.photon],
+    ]
+      .filter(([, url]) => url)
+      .map(
+        ([label, url]) =>
+          `<a href="${Utils.escapeHtml(url)}" target="_blank" rel="noopener" class="pdd-explorer-chip"><i class="icon-external-link"></i>${label}</a>`
+      );
+
+    const sep = socials.length > 0 && explorers.length > 0 ? '<span class="meta-sep"></span>' : "";
+    const linksGroupHtml =
+      socials.length > 0 || explorers.length > 0
+        ? `<div class="meta-links-group">${socials.join("")}${sep}${explorers.join("")}</div>`
+        : "";
+
+    // Security badge — compact score + risk level + authority warnings
+    let securityHtml = "";
+    if (security) {
+      const score = security.score_normalized;
+      const riskLevel = security.risk_level || "unknown";
+      const riskClass = this._getRiskLevelClass(riskLevel);
+      const riskLabel = this._getRiskLevelLabel(riskLevel);
+      const scoreStr = score !== null && score !== undefined ? `${score} · ` : "";
+      const authorityBadges = [];
+      if (security.has_mint_authority)
+        authorityBadges.push(`<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Mint Auth</span>`);
+      if (security.has_freeze_authority)
+        authorityBadges.push(`<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Freeze Auth</span>`);
+      securityHtml = `<div class="meta-security-group"><span class="meta-security-badge ${riskClass}"><i class="icon-shield"></i> ${scoreStr}${riskLabel}</span>${authorityBadges.join("")}</div>`;
+    }
+
+    return `
+      <div class="meta-token-group">
+        ${mint ? Utils.renderAddressChip(mint, { kind: "token" }) : ""}
+        ${dexBadge}
+        ${poolLiqHtml}
+      </div>
+      ${linksGroupHtml}
+      ${securityHtml}
+    `;
   }
 
   /**
