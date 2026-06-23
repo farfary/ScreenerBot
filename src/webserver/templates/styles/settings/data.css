@@ -116,7 +116,8 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .config-actions-row .btn {
@@ -126,53 +127,42 @@
 }
 
 .config-info-box {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 12px 20px;
 }
 
 .config-info-item {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .config-info-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .config-info-value {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-family: var(--font-data);
   color: var(--text-secondary);
-  max-width: 350px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   transition:
     background-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .config-info-value:hover {
   background: var(--bg-card-hover);
   color: var(--link-color);
-}
-
-.config-info-value::after {
-  content: " 📋";
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.config-info-value:hover::after {
-  opacity: 0.7;
+  border-color: var(--primary-alpha-20);
 }
 
 /* Presets Grid */
