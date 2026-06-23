@@ -123,7 +123,12 @@ export function createLifecycle() {
 
   const conditionCatalog = createConditionCatalog({
     conditionSchemas: new Proxy({}, {
-      get: (_, prop) => conditionSchemas?.[prop]
+      get: (_, prop) => conditionSchemas?.[prop],
+      ownKeys: () => (conditionSchemas ? Reflect.ownKeys(conditionSchemas) : []),
+      getOwnPropertyDescriptor: (_, prop) =>
+        conditionSchemas && prop in conditionSchemas
+          ? { configurable: true, enumerable: true, writable: false }
+          : undefined,
     }),
     categoryStates,
     $,
