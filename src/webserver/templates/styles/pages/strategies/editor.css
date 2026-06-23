@@ -171,17 +171,6 @@
   border-color: var(--primary-alpha-20);
 }
 
-.strategy-item.active::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: 0;
-  top: 20%;
-  height: 60%;
-  width: 2px;
-  background: var(--link-color);
-  border-radius: 0 2px 2px 0;
-}
-
 .strategy-item-name {
   font-size: 0.82rem;
   font-weight: 600;
@@ -193,7 +182,7 @@
 }
 
 .strategy-item.active .strategy-item-name {
-  color: var(--link-color);
+  color: var(--primary-color);
 }
 
 .strategy-item-row {
@@ -222,13 +211,13 @@
 }
 
 .strategy-type-tag.entry {
-  background: rgb(16, 185, 129, 0.15);
+  background: var(--success-alpha-15);
   color: var(--success-color);
 }
 
 .strategy-type-tag.exit {
-  background: rgb(239, 68, 68, 0.15);
-  color: var(--danger-color);
+  background: var(--danger-alpha-15);
+  color: var(--error-color);
 }
 
 .strategy-state-tag {
