@@ -15,9 +15,61 @@ export function createWalletRenderers({
   capitalizeFirst,
   handleWalletAction,
 }) {
-  // DataTable instance for token holdings — persists between renders
+  // DataTable instance — created once, updated via setData() on every poll
   let tokenTable = null;
   let tokenTableClickHandler = null;
+
+  // Track which wallet is currently rendered in the toolbar so we can do
+  // fast in-place updates instead of rebuilding the entire info bar each poll.
+  let lastRenderedWalletId = null;
+
+  // Column definitions are stable across renders — define once at closure level
+  const TOKEN_COLUMNS = [
+    {
+      id: "symbol",
+      label: "Token",
+      sortable: true,
+      render: (value, row) => {
+        const sym = Utils.escapeHtml(row.symbol || "Unknown");
+        const name = row.name ? Utils.escapeHtml(row.name) : null;
+        return `<div class="wt-token-cell"><span class="wt-symbol">${sym}</span>${name ? `<span class="wt-name">${name}</span>` : ""}</div>`;
+      },
+    },
+    {
+      id: "ui_amount",
+      label: "Balance",
+      sortable: true,
+      render: (value) => (value != null ? Utils.formatNumber(value, { decimals: 4 }) : "—"),
+    },
+    {
+      id: "is_token_2022",
+      label: "Type",
+      sortable: true,
+      value: (row) => (row.is_token_2022 ? "Token-2022" : "SPL"),
+      render: (value, row) =>
+        row.is_token_2022
+          ? "<span class=\"wt-type-badge token2022\">Token-2022</span>"
+          : "<span class=\"wt-type-badge spl\">SPL</span>",
+    },
+    {
+      id: "decimals",
+      label: "Decimals",
+      sortable: true,
+      render: (value) => (value != null ? value : "—"),
+    },
+    {
+      id: "mint",
+      label: "Mint",
+      sortable: false,
+      render: (value) => {
+        if (!value) return "—";
+        const escaped = Utils.escapeHtml(value);
+        const short = `${value.slice(0, 6)}...${value.slice(-4)}`;
+        const url = `https://solscan.io/token/${encodeURIComponent(value)}`;
+        return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" data-tooltip="Copy mint"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" data-tooltip="View on Solscan"><i class="icon-external-link"></i></a></div>`;
+      },
+    },
+  ];
 
   // =============================================================================
   // Main Render Function
@@ -28,8 +80,11 @@ export function createWalletRenderers({
     if (tab === "main") {
       renderMainWalletPanel();
     } else {
+      // Clear toolbar inline slot and reset tracked wallet so the next visit
+      // to the main tab performs a full structural render.
       const inline = document.querySelector("#wt-info-inline");
       if (inline) inline.innerHTML = "";
+      lastRenderedWalletId = null;
       if (tab === "secondaries") renderSecondariesPanel();
       else if (tab === "archive") renderArchivePanel();
     }
@@ -47,7 +102,10 @@ export function createWalletRenderers({
     if (!container) return;
 
     if (!mainWallet) {
-      container.innerHTML = "<span class=\"wt-no-wallet\">No main wallet configured</span>";
+      if (lastRenderedWalletId !== null) {
+        container.innerHTML = "<span class=\"wt-no-wallet\">No main wallet configured</span>";
+        lastRenderedWalletId = null;
+      }
       renderTokenHoldingsTable();
       return;
     }
@@ -57,6 +115,21 @@ export function createWalletRenderers({
     const lastUsed = mainWallet.last_used_at
       ? Utils.formatTimestamp(mainWallet.last_used_at, { variant: "relative" })
       : "Never";
+
+    if (lastRenderedWalletId === mainWallet.id) {
+      // Silent in-place update — only values that can change between polls
+      const balanceEl = document.querySelector("#wt-balance-value");
+      if (balanceEl) balanceEl.textContent = balance;
+      const lastUsedEl = document.querySelector("#wt-last-used-value");
+      if (lastUsedEl) lastUsedEl.textContent = lastUsed;
+      // Token count is updated by renderTokenHoldingsTable via #wt-token-count
+      renderTokenHoldingsTable();
+      return;
+    }
+
+    // Full structural render — first time or wallet changed
+    lastRenderedWalletId = mainWallet.id;
+
     const shortAddress = mainWallet.address
       ? `${mainWallet.address.slice(0, 6)}...${mainWallet.address.slice(-4)}`
       : "—";
@@ -78,7 +151,7 @@ export function createWalletRenderers({
       <div class="wt-info-divider"></div>
       <div class="wt-info-stat">
         <span class="label">SOL Balance</span>
-        <span class="value">${balance}</span>
+        <span class="value" id="wt-balance-value">${balance}</span>
       </div>
       <div class="wt-info-stat">
         <span class="label">Tokens</span>
@@ -86,7 +159,7 @@ export function createWalletRenderers({
       </div>
       <div class="wt-info-stat">
         <span class="label">Last Used</span>
-        <span class="value">${lastUsed}</span>
+        <span class="value" id="wt-last-used-value">${lastUsed}</span>
       </div>
       <div class="wt-info-actions">
         <button type="button" class="btn" data-action="export" data-id="${mainWallet.id}">
@@ -109,7 +182,7 @@ export function createWalletRenderers({
       on(btn, "click", () => handleWalletAction("export", btn.dataset.id));
     });
 
-    // Render the DataTable for token holdings
+    // Render the DataTable for token holdings (first time creates it)
     renderTokenHoldingsTable();
   }
 
@@ -123,67 +196,21 @@ export function createWalletRenderers({
 
     const tokens = tokenHoldings();
 
-    // Update token count stat in info bar
+    // Update token count in the info bar
     const countEl = document.querySelector("#wt-token-count");
     if (countEl) countEl.textContent = tokens.length;
 
-    const columns = [
-      {
-        id: "symbol",
-        label: "Token",
-        sortable: true,
-        render: (value, row) => {
-          const sym = Utils.escapeHtml(row.symbol || "Unknown");
-          const name = row.name ? Utils.escapeHtml(row.name) : null;
-          return `<div class="wt-token-cell"><span class="wt-symbol">${sym}</span>${name ? `<span class="wt-name">${name}</span>` : ""}</div>`;
-        },
-      },
-      {
-        id: "ui_amount",
-        label: "Balance",
-        sortable: true,
-        render: (value) =>
-          value != null ? Utils.formatNumber(value, { decimals: 4 }) : "—",
-      },
-      {
-        id: "is_token_2022",
-        label: "Type",
-        sortable: true,
-        value: (row) => (row.is_token_2022 ? "Token-2022" : "SPL"),
-        render: (value, row) =>
-          row.is_token_2022
-            ? "<span class=\"wt-type-badge token2022\">Token-2022</span>"
-            : "<span class=\"wt-type-badge spl\">SPL</span>",
-      },
-      {
-        id: "decimals",
-        label: "Decimals",
-        sortable: true,
-        render: (value) => (value != null ? value : "—"),
-      },
-      {
-        id: "mint",
-        label: "Mint",
-        sortable: false,
-        render: (value) => {
-          if (!value) return "—";
-          const escaped = Utils.escapeHtml(value);
-          const short = `${value.slice(0, 6)}...${value.slice(-4)}`;
-          const url = `https://solscan.io/token/${encodeURIComponent(value)}`;
-          return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" data-tooltip="Copy mint"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" data-tooltip="View on Solscan"><i class="icon-external-link"></i></a></div>`;
-        },
-      },
-    ];
-
-    // Destroy existing instance before recreating
     if (tokenTable) {
-      tokenTable.destroy();
-      tokenTable = null;
+      // Silent data refresh — no DOM teardown, no visual flash, settings dialog stays open
+      tokenTable.setData(tokens);
+      tokenTable.updateToolbarSummary?.([{ id: "wt-tokens-count", value: String(tokens.length) }]);
+      return;
     }
 
+    // First-time creation only
     tokenTable = new DataTable({
       container: "#tokens-datatable-root",
-      columns,
+      columns: TOKEN_COLUMNS,
       rowIdField: "mint",
       stateKey: "wallets.tokens-table",
       compact: true,
@@ -206,14 +233,9 @@ export function createWalletRenderers({
     });
 
     tokenTable.setData(tokens);
-
-    // Update summary count
     tokenTable.updateToolbarSummary?.([{ id: "wt-tokens-count", value: String(tokens.length) }]);
 
-    // Event delegation for copy buttons inside DataTable cells — remove old before adding
-    if (tokenTableClickHandler) {
-      dtRoot.removeEventListener("click", tokenTableClickHandler);
-    }
+    // Event delegation for copy buttons inside DataTable cells — wired once
     tokenTableClickHandler = (e) => {
       const btn = e.target.closest("[data-copy-mint]");
       if (btn) {
@@ -226,7 +248,7 @@ export function createWalletRenderers({
   }
 
   // =============================================================================
-  // Destroy token table (called from wallets.js cleanup)
+  // Destroy token table (called from wallets.js cleanup / page dispose)
   // =============================================================================
 
   function destroyTokenTable() {
@@ -239,6 +261,7 @@ export function createWalletRenderers({
       dtRoot.removeEventListener("click", tokenTableClickHandler);
       tokenTableClickHandler = null;
     }
+    lastRenderedWalletId = null;
   }
 
   // =============================================================================
@@ -271,7 +294,6 @@ export function createWalletRenderers({
           </div>
         </div>
       `;
-      // Attach click handler to the empty state button
       const emptyBtn = container.querySelector("#add-wallet-empty-btn");
       if (emptyBtn) {
         emptyBtn.addEventListener("click", () => {
@@ -435,7 +457,6 @@ export function createWalletRenderers({
   // =============================================================================
 
   function wireTableActions(container) {
-    // Copy buttons
     container.querySelectorAll(".copy-btn-mini").forEach((btn) => {
       on(btn, "click", (e) => {
         e.stopPropagation();
@@ -444,7 +465,6 @@ export function createWalletRenderers({
       });
     });
 
-    // Action buttons
     container.querySelectorAll("[data-action]").forEach((btn) => {
       on(btn, "click", (e) => {
         e.stopPropagation();

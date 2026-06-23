@@ -1673,6 +1673,11 @@ export class DataTable {
       return true;
     }
 
+    // Settings dialog is appended to document.body (outside container) — detect via body class
+    if (document.body.classList.contains("table-settings-open")) {
+      return true;
+    }
+
     const container = this.elements?.container;
     if (!container) return false;
 
