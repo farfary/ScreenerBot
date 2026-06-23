@@ -8,10 +8,26 @@
 use super::types::PriceSource;
 use crate::logger::{self, LogTag};
 use crate::pools::{get_pool_price, PriceResult};
-use std::time::Instant;
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 /// Maximum age (in seconds) for API price to be considered valid for trading
 const API_PRICE_MAX_AGE_SECS: i64 = 60;
+
+/// Minimum interval between force-fetch attempts for the same mint. This is the
+/// single throttle shared by every caller of the resolver (the 1s position price
+/// updater plus the trading paths) — without it a token whose API fetch keeps
+/// failing (e.g. delisted) would be force-fetched on every updater cycle.
+const FORCE_FETCH_COOLDOWN_SECS: u64 = 30;
+
+/// Bounded set of mints with a recent force-fetch attempt. Presence = in cooldown
+/// (entries auto-expire after `FORCE_FETCH_COOLDOWN_SECS` via TTL).
+static FORCE_FETCH_COOLDOWN: LazyLock<moka::sync::Cache<String, ()>> = LazyLock::new(|| {
+    moka::sync::Cache::builder()
+        .max_capacity(10_000)
+        .time_to_live(Duration::from_secs(FORCE_FETCH_COOLDOWN_SECS))
+        .build()
+});
 
 /// Get price with fallback to API when pool price unavailable
 ///
@@ -156,6 +172,14 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
 
 /// Force fetch fresh price data from API and return updated token
 async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Token> {
+    // Throttle: skip if we force-fetched this mint within the cooldown window.
+    // request_immediate_update has no dedup of its own, so this is the only guard
+    // against hammering the API for a perpetually-stale (e.g. delisted) token.
+    if FORCE_FETCH_COOLDOWN.get(token_mint).is_some() {
+        return None;
+    }
+    FORCE_FETCH_COOLDOWN.insert(token_mint.to_string(), ());
+
     // Request immediate market data update from tokens system
     match crate::tokens::request_immediate_update(token_mint).await {
         Ok(result) => {
