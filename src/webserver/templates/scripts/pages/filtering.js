@@ -1011,24 +1011,9 @@ window.filteringPage = {
 
     if (!container || !reason) return;
 
-    // Initial render with compact header and search
-    if (page === 0 && !container.querySelector(".explorer-detail-header")) {
+    // Initial render — just table + pagination, no header
+    if (page === 0 && !container.querySelector(".explorer-table-wrapper")) {
       container.innerHTML = `
-        <div class="explorer-detail-header">
-          <div class="detail-title-group">
-            <span class="reason-badge large">${Utils.escapeHtml(label)}</span>
-            <div class="explorer-search-input-wrapper width-180">
-              <i class="icon-search"></i>
-              <input type="text" placeholder="Filter..." value="${Utils.escapeHtml(searchQuery)}" 
-                     oninput="window.filteringPage.filterTokens(this.value)">
-            </div>
-          </div>
-          <div class="detail-actions">
-            <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export CSV">
-              <i class="icon-download"></i>
-            </button>
-          </div>
-        </div>
         <div class="explorer-table-wrapper">
           <div class="explorer-empty-state">Loading...</div>
         </div>

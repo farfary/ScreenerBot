@@ -4,6 +4,7 @@
   padding: 4px 28px 4px 8px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
+
   /* background-color (not the `background` shorthand) so the global select arrow survives. */
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -342,137 +343,94 @@
   overflow-y: auto;
 }
 
-/* Compact Dashboard - No scrolling, data-focused */
-.explorer-empty-dashboard {
-  padding: 12px;
+/* Overview: two side-by-side scrollable lists, no cards or titles */
+.explorer-overview {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex: 1;
-  overflow: hidden;
-  width: 100%;
-}
-
-.dashboard-welcome {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.dashboard-welcome h2 {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin: 0 0 2px;
-  color: var(--text-primary);
-}
-
-.dashboard-welcome p {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  margin: 0;
-}
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
   flex: 1;
   min-height: 0;
-}
-
-.dashboard-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   overflow: hidden;
 }
 
-.dashboard-card h3 {
-  font-size: 0.75rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.dashboard-card h3 i {
-  color: var(--link-color);
-  font-size: 0.8rem;
-}
-
-.top-reasons-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.explorer-overview-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
-  flex: 1;
-  min-height: 0;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
 }
 
-.top-reason-item {
+.explorer-overview-col--sep {
+  border-inline-start: 1px solid var(--border-color);
+}
+
+.overview-list-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
-  background: var(--bg-primary);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  padding: 7px 10px;
   cursor: pointer;
-  transition: all 0.12s ease;
+  border-bottom: 1px solid var(--border-color);
+  transition: background var(--transition-fast);
+  gap: 8px;
 }
 
-.top-reason-item:hover {
-  border-color: var(--link-color);
+.overview-list-item:hover {
   background: var(--bg-card-hover);
 }
 
-.top-reason-label {
+.overview-list-item:last-child {
+  border-bottom: none;
+}
+
+.overview-item-label {
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.top-reason-count {
+.overview-item-count {
   font-family: var(--font-data);
   font-size: 0.7rem;
   color: var(--text-muted);
-}
-
-/* Detail View - Compact header and scrollable table */
-.explorer-detail-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
   flex-shrink: 0;
 }
 
-.detail-title-group {
+.overview-item-info {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
-.reason-badge.large {
-  padding: 4px 12px;
+.overview-item-symbol {
   font-size: 0.8rem;
   font-weight: 600;
-  background: var(--primary-alpha-10);
-  color: var(--link-color);
-  border: 1px solid var(--primary-alpha-20);
-  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-item-reason {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overview-item-time {
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 /* Token table wrapper - this is the scrollable area */
@@ -705,17 +663,6 @@
   color: var(--text-muted);
   max-width: 300px;
   line-height: 1.4;
-}
-
-/* Detail actions */
-.detail-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.detail-actions .btn {
-  padding: 4px 10px;
-  font-size: 0.75rem;
 }
 
 /* ============================================================================
