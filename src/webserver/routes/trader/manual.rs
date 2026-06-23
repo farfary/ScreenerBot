@@ -448,8 +448,8 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             return error_response(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "NoTokensInWallet",
-                "No tokens found in wallet — this position may be rugged",
-                Some("Token balance is 0; use Force Close to record as total loss"),
+                "No tokens found in wallet for this position",
+                Some("Token balance is 0; the position cannot be closed via swap"),
             );
         }
         // Convert token amount to smallest units based on decimals

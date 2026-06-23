@@ -43,7 +43,7 @@ pub async fn close_position_direct(
             logger::warning(
                 LogTag::Positions,
                 &format!(
-                    "No valid price data for {} — using 0.0 as exit price (token may be rugged)",
+                    "No valid price data for {} — using 0.0 as exit price for record",
                     api_token.symbol
                 ),
             );
