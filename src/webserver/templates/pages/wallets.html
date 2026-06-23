@@ -6,6 +6,9 @@
   <div class="wallets-toolbar">
     <span class="wallet-count-badge" id="wallet-count-badge">0 wallets</span>
 
+    <!-- Main wallet inline info (rendered by JS on main tab) -->
+    <div id="wt-info-inline" class="wt-info-inline"></div>
+
     <!-- Main wallet tab actions -->
     <div class="wallets-tab-actions" data-tab-actions="main">
       <button
@@ -69,7 +72,6 @@
     <div class="wallets-tab-panels">
       <!-- Main Wallet Tab Panel -->
       <div class="wallet-tab-panel" id="panel-main" data-panel="main">
-        <div id="main-wallet-info"></div>
         <div class="wt-tokens-section">
           <div id="tokens-datatable-root"></div>
         </div>

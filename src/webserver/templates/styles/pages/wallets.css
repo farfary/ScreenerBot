@@ -58,7 +58,22 @@
   background: linear-gradient(135deg, var(--primary-alpha-15), var(--primary-alpha-10));
   color: var(--primary-color);
   border: 1px solid var(--primary-alpha-20);
-  margin-right: auto;
+  flex-shrink: 0;
+}
+
+/* Inline wallet info — fills space between count badge and action buttons */
+.wt-info-inline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wt-no-wallet {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 .wallets-tab-actions {

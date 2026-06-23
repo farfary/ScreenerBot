@@ -1,23 +1,6 @@
 /* =============================================================================
-   Main Wallet Info Bar
+   Main Wallet Info — flat inline items inside .wt-info-inline toolbar slot
    ============================================================================= */
-
-/* Info bar sits inside the zero-padding panel — give it its own inset */
-#main-wallet-info {
-  padding: var(--spacing-sm) var(--spacing-md) 0;
-  flex-shrink: 0;
-}
-
-.wt-info-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 10px 14px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-}
 
 .wt-info-identity {
   display: flex;

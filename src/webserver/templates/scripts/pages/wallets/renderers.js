@@ -27,10 +27,11 @@ export function createWalletRenderers({
     const tab = currentTab();
     if (tab === "main") {
       renderMainWalletPanel();
-    } else if (tab === "secondaries") {
-      renderSecondariesPanel();
-    } else if (tab === "archive") {
-      renderArchivePanel();
+    } else {
+      const inline = document.querySelector("#wt-info-inline");
+      if (inline) inline.innerHTML = "";
+      if (tab === "secondaries") renderSecondariesPanel();
+      else if (tab === "archive") renderArchivePanel();
     }
   }
 
@@ -41,18 +42,13 @@ export function createWalletRenderers({
   function renderMainWalletPanel() {
     const wallets = walletsData();
     const mainWallet = wallets.find((w) => w.role === "main");
-    const container = $("#main-wallet-info");
+    const container = document.querySelector("#wt-info-inline");
 
     if (!container) return;
 
     if (!mainWallet) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-wallet"></i>
-          <p>No main wallet configured</p>
-          <small>Click "Add Wallet" to create or import your first wallet</small>
-        </div>
-      `;
+      container.innerHTML = "<span class=\"wt-no-wallet\">No main wallet configured</span>";
+      renderTokenHoldingsTable();
       return;
     }
 
@@ -67,37 +63,35 @@ export function createWalletRenderers({
     const typeLabel = capitalizeFirst(mainWallet.wallet_type || "");
 
     container.innerHTML = `
-      <div class="wt-info-bar">
-        <div class="wt-info-identity">
-          <span class="wt-info-name">${Utils.escapeHtml(mainWallet.name)}</span>
-          <span class="wallet-badge main"><i class="icon-star"></i> Main</span>
-          <span class="wallet-badge ${mainWallet.wallet_type}">${typeLabel}</span>
-        </div>
-        <div class="wt-info-divider"></div>
-        <div class="wt-info-address-group">
-          <code class="wt-info-address">${shortAddress}</code>
-          <button type="button" class="copy-btn" data-address="${mainWallet.address}" data-tooltip="Copy address">
-            <i class="icon-copy"></i>
-          </button>
-        </div>
-        <div class="wt-info-divider"></div>
-        <div class="wt-info-stat">
-          <span class="label">SOL Balance</span>
-          <span class="value">${balance} SOL</span>
-        </div>
-        <div class="wt-info-stat">
-          <span class="label">Tokens</span>
-          <span class="value" id="wt-token-count">—</span>
-        </div>
-        <div class="wt-info-stat">
-          <span class="label">Last Used</span>
-          <span class="value">${lastUsed}</span>
-        </div>
-        <div class="wt-info-actions">
-          <button type="button" class="btn" data-action="export" data-id="${mainWallet.id}">
-            <i class="icon-key"></i> Export Key
-          </button>
-        </div>
+      <div class="wt-info-identity">
+        <span class="wt-info-name">${Utils.escapeHtml(mainWallet.name)}</span>
+        <span class="wallet-badge main"><i class="icon-star"></i> Main</span>
+        <span class="wallet-badge ${mainWallet.wallet_type}">${typeLabel}</span>
+      </div>
+      <div class="wt-info-divider"></div>
+      <div class="wt-info-address-group">
+        <code class="wt-info-address">${shortAddress}</code>
+        <button type="button" class="copy-btn" data-address="${mainWallet.address}" data-tooltip="Copy address">
+          <i class="icon-copy"></i>
+        </button>
+      </div>
+      <div class="wt-info-divider"></div>
+      <div class="wt-info-stat">
+        <span class="label">SOL Balance</span>
+        <span class="value">${balance}</span>
+      </div>
+      <div class="wt-info-stat">
+        <span class="label">Tokens</span>
+        <span class="value" id="wt-token-count">—</span>
+      </div>
+      <div class="wt-info-stat">
+        <span class="label">Last Used</span>
+        <span class="value">${lastUsed}</span>
+      </div>
+      <div class="wt-info-actions">
+        <button type="button" class="btn" data-action="export" data-id="${mainWallet.id}">
+          <i class="icon-key"></i> Export Key
+        </button>
       </div>
     `;
 
