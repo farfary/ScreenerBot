@@ -10,7 +10,8 @@ use crate::{
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{
-        get_global_transaction_manager, get_transaction, Transaction, TransactionStatus,
+        get_global_transaction_manager, get_transaction, reprocess_transaction, Transaction,
+        TransactionStatus,
     },
     utils::{get_token_balance, get_total_token_balance, get_wallet_address, sol_to_lamports},
 };
@@ -464,12 +465,38 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
         }
     };
 
-    // Get swap analysis
-    // Prefer attached swap analysis if present; otherwise defer
+    // Get swap analysis. The transaction may have been stored at submit time
+    // (before it landed) without swap analysis, and the fallback skips already-known
+    // signatures — so swap_pnl_info can be missing for a fully-confirmed exit. In that
+    // case re-process the signature from RPC (fetch + analyze + persist) so we obtain
+    // real proceeds and can finalize, rather than looping forever.
     let swap_info = if let Some(pnl) = transaction.swap_pnl_info.clone() {
         pnl
     } else {
-        return VerificationOutcome::RetryTransient("No valid swap analysis".to_owned());
+        match reprocess_transaction(&item.signature).await {
+            Ok(Some(reanalyzed)) => match reanalyzed.swap_pnl_info.clone() {
+                Some(pnl) => {
+                    logger::info(
+                        LogTag::Positions,
+                        &format!(
+                            "Re-analyzed {} on demand to recover swap proceeds for finalization",
+                            item.signature
+                        ),
+                    );
+                    pnl
+                }
+                None => {
+                    return VerificationOutcome::RetryTransient(
+                        "No valid swap analysis (re-analysis produced none)".to_owned(),
+                    );
+                }
+            },
+            Ok(None) | Err(_) => {
+                return VerificationOutcome::RetryTransient(
+                    "No valid swap analysis (re-analysis unavailable)".to_owned(),
+                );
+            }
+        }
     };
 
     // Verify token mint matches

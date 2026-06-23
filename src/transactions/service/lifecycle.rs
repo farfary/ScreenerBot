@@ -184,6 +184,41 @@ pub async fn get_global_transaction_manager() -> Option<Arc<Mutex<TransactionsMa
 /// Get transaction by signature (for positions.rs integration) - cache-first approach with status validation
 /// CRITICAL: Only returns transactions that are in Finalized or Confirmed status with complete analysis
 /// This is the single function that handles ALL transaction requests properly
+/// Force a full re-process of a transaction from RPC (fetch + analyze + persist),
+/// bypassing the DB cache. Used when a cached row exists but lacks swap analysis
+/// (e.g. it was stored at submit time before the tx landed), so the verifier can
+/// obtain real proceeds and finalize the position.
+pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction>, String> {
+    if let Some(manager_arc) = get_global_transaction_manager().await {
+        let manager = manager_arc.lock().await;
+        let processor = TransactionProcessor::new(manager.get_wallet_pubkey());
+        drop(manager); // Avoid holding lock across RPC
+
+        let mut attempts = 0u32;
+        let max_attempts = 3u32;
+        let mut delay_ms = 300u64;
+        loop {
+            match processor.process_transaction(signature).await {
+                Ok(tx) => return Ok(Some(tx)),
+                Err(e) => {
+                    let el = e.to_lowercase();
+                    let indexing_delay = el.contains("not yet indexed")
+                        || el.contains("not found")
+                        || el.contains("transaction not available");
+                    if indexing_delay && attempts < max_attempts - 1 {
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        attempts += 1;
+                        delay_ms = ((delay_ms as f64) * 1.8) as u64;
+                        continue;
+                    }
+                    return Err(e);
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
 pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, String> {
     // Try database first
     if let Some(db) = crate::transactions::database::get_transaction_database().await {

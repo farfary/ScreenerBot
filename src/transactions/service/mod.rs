@@ -21,6 +21,6 @@ pub mod websocket;
 
 // Re-export public API for backward compatibility
 pub use lifecycle::{
-    get_global_transaction_manager, get_transaction, is_global_transaction_service_running,
+    get_global_transaction_manager, get_transaction, is_global_transaction_service_running, reprocess_transaction,
     start_global_transaction_service, stop_global_transaction_service,
 };

@@ -49,7 +49,7 @@ pub mod websocket;
 // Public API exports - Core functionality
 pub use manager::TransactionsManager;
 pub use service::{
-    get_global_transaction_manager, get_transaction, is_global_transaction_service_running,
+    get_global_transaction_manager, get_transaction, is_global_transaction_service_running, reprocess_transaction,
     start_global_transaction_service, stop_global_transaction_service,
 };
 
