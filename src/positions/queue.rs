@@ -6,18 +6,26 @@ use std::collections::VecDeque;
 use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
-/// Maximum verification attempts before giving up
-const MAX_VERIFICATION_ATTEMPTS: u8 = 20;
+/// Maximum verification attempts before giving up. Sized to span ~24h together
+/// with the long-tail backoff table below.
+const MAX_VERIFICATION_ATTEMPTS: u8 = 40;
 
-/// Maximum age for verification item in hours before giving up
-const MAX_VERIFICATION_AGE_HOURS: i64 = 2;
+/// Maximum age for a verification item before giving up. A swap can be confirmed
+/// on-chain within seconds, but on a flaky/proxied network confirmation may be
+/// delayed; we keep verifying (across restarts) for a full day rather than
+/// abandoning a position whose exit already landed.
+const MAX_VERIFICATION_AGE_HOURS: i64 = 24;
 
-/// Backoff intervals in seconds for verification retries (tiered exponential)
-/// Conservative timing to reduce RPC pressure: 5, 10, 20, 40, 60, 90, 120, 150, 180, 210, 240, 300
-const BACKOFF_INTERVALS_SECS: [i64; 12] = [5, 10, 20, 40, 60, 90, 120, 150, 180, 210, 240, 300];
+/// Backoff intervals in seconds for verification retries (dynamic, widening).
+/// Front-loaded for sub-minute confirmation in the common case, then ramping up
+/// to hourly so a position is still re-checked many times across 24h without
+/// hammering RPC: 5s..1m fast, then minutes, then hours up to 12h.
+const BACKOFF_INTERVALS_SECS: [i64; 16] = [
+    5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400, 28800, 43200, 86400,
+];
 
-/// Maximum backoff interval in seconds (used when attempts exceed table size)
-const BACKOFF_MAX_SECS: i64 = 300;
+/// Maximum backoff interval in seconds (used when attempts exceed table size): 12h.
+const BACKOFF_MAX_SECS: i64 = 43200;
 
 /// Jitter fraction for backoff randomization (±10%)
 const BACKOFF_JITTER_FRACTION: f64 = 0.1;
@@ -183,10 +191,14 @@ impl VerificationItem {
         if let (Some(expiry), Some(current)) = (self.expiry_height, current_height) {
             current > expiry
         } else {
-            // Time-based fallback by kind: Entries 10m, Exits 3m
+            // Time-based fallback by kind. Exits whose swap may already be on-chain
+            // must NOT be dropped after a few minutes (slow/flaky network) — that
+            // strands the position in pending_verification forever. Keep exits alive
+            // for the full retry window so the verifier can confirm and finalize
+            // with real proceeds. Entry orphan detection stays short (10m).
             let fallback_secs = match self.kind {
                 VerificationKind::Entry => 600,
-                VerificationKind::Exit => 180,
+                VerificationKind::Exit => MAX_VERIFICATION_AGE_HOURS * 3600,
             };
             Utc::now()
                 .signed_duration_since(self.created_at)
@@ -343,6 +355,14 @@ pub async fn remove_verification(signature: &str) -> Option<VerificationItem> {
 pub async fn gc_expired_verifications(current_height: Option<u64>) -> Vec<VerificationItem> {
     let mut queue = VERIFICATION_QUEUE.write().await;
     queue.gc_expired(current_height)
+}
+
+/// Diagnostic: (total items, items currently due) — for debugging stuck queues.
+pub async fn get_queue_due_diagnostic() -> (usize, usize) {
+    let queue = VERIFICATION_QUEUE.read().await;
+    let total = queue.items.len();
+    let due = queue.items.iter().filter(|i| i.is_due()).count();
+    (total, due)
 }
 
 /// Get queue status

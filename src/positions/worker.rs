@@ -428,12 +428,45 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                        };
                        let _ = apply_transition(transition).await;
                      }
+                   } else if item.kind == VerificationKind::Exit {
+                     // An exit that reached the 24h cap without confirming. Never drop
+                     // it silently — the swap may still be on-chain. Re-enqueue with a
+                     // fresh window so verification keeps trying (and surfaces in the
+                     // position status UI) instead of stranding the position forever.
+                     logger::warning(
+                       LogTag::Positions,
+                       &format!(
+                         "Exit verification for {} (sig {}) hit the retry cap unconfirmed — re-enqueueing to keep verifying",
+                         item.mint, item.signature
+                       ),
+                     );
+                     let mut renewed = VerificationItem::new(
+                       item.signature.clone(),
+                       item.mint.clone(),
+                       item.position_id,
+                       VerificationKind::Exit,
+                       item.expiry_height,
+                     );
+                     renewed.is_partial_exit = item.is_partial_exit;
+                     renewed.expected_exit_amount = item.expected_exit_amount;
+                     renewed.requested_exit_percentage = item.requested_exit_percentage;
+                     enqueue_verification(renewed).await;
                    }
                  }
                }
 
                // Process verification batch
                let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
+
+               // Diagnostic: surface why a non-empty queue may yield an empty batch.
+               let (q_diag, due_diag) = super::queue::get_queue_due_diagnostic().await;
+               logger::debug(
+                 LogTag::Positions,
+                 &format!(
+                   "[VERIFY_POLL] cycle={cycle_count} queue={q_diag} due={due_diag} batch={}",
+                   batch.len()
+                 ),
+               );
 
                if !batch.is_empty() {
                  logger::debug(
@@ -672,10 +705,10 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                        // Increment retry metrics
                        crate::positions::metrics::VERIFICATION_METRICS.retries.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                       logger::debug(
+                       logger::info(
                          LogTag::Positions,
                          &format!(
-        "Retrying verification for {} (mint {} kind {:?} attempts {}): {}",
+        "[VERIFY_RETRY] {} (mint {} kind {:?} attempts {}): {}",
                            item.signature,
                            item.mint,
                            item.kind,
