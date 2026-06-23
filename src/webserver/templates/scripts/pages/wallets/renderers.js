@@ -342,9 +342,6 @@ export function createWalletRenderers({
             <td class="wallet-created-cell">${created}</td>
             <td class="wallet-actions-cell">
               <div class="table-actions">
-                <button type="button" class="btn btn-sm" data-action="set-main" data-id="${wallet.id}" data-tooltip="Set as main wallet">
-                  <i class="icon-star"></i>
-                </button>
                 <button type="button" class="btn btn-sm" data-action="export" data-id="${wallet.id}" data-tooltip="Export private key">
                   <i class="icon-key"></i>
                 </button>

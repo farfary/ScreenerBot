@@ -487,7 +487,6 @@ async function handleCreateWallet(e) {
       body: JSON.stringify({
         name: $("#create-name").value.trim(),
         notes: $("#create-notes").value.trim() || null,
-        set_as_main: $("#create-set-main").checked,
       }),
     });
 
@@ -526,7 +525,6 @@ async function handleImportWallet(e) {
         name: $("#import-name").value.trim(),
         private_key: $("#import-private-key").value.trim(),
         notes: $("#import-notes").value.trim() || null,
-        set_as_main: $("#import-set-main").checked,
       }),
     });
 
@@ -550,9 +548,6 @@ async function handleImportWallet(e) {
 
 function handleWalletAction(action, id) {
   switch (action) {
-    case "set-main":
-      setMainWallet(id);
-      break;
     case "export":
       showExportModal(id);
       break;
@@ -565,19 +560,6 @@ function handleWalletAction(action, id) {
     case "delete":
       showDeleteModal(id);
       break;
-  }
-}
-
-async function setMainWallet(id) {
-  try {
-    const response = await fetch(`/api/wallets/${id}/set-main`, { method: "POST" });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed");
-
-    Utils.showToast(`${data.wallet.name} is now the main wallet`, "success");
-    await loadAllData();
-  } catch (error) {
-    Utils.showToast(`Failed: ${error.message}`, "error");
   }
 }
 
