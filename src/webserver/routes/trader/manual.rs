@@ -436,6 +436,22 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 );
             }
         };
+
+        // Verify actual wallet balance before quoting. The frontend passes the
+        // DB-stored token_amount which may be stale — after a rug the wallet can
+        // hold 0 tokens while the position record still shows the purchase amount.
+        // A quote against phantom tokens is misleading and will fail at execution.
+        let actual_balance = crate::utils::get_total_token_balance(&wallet_address, &req.mint)
+            .await
+            .unwrap_or(0);
+        if actual_balance == 0 {
+            return error_response(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "NoTokensInWallet",
+                "No tokens found in wallet — this position may be rugged",
+                Some("Token balance is 0; use Force Close to record as total loss"),
+            );
+        }
         // Convert token amount to smallest units based on decimals
         let amount_raw = (amount_tokens * 10f64.powi(token_decimals as i32)) as u64;
         (

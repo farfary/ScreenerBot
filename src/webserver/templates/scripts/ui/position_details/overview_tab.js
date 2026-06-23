@@ -560,11 +560,12 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       }
 
       try {
-        const response = await requestManager.fetch("/api/trader/add-to-position", {
+        const response = await requestManager.fetch("/api/trader/manual/add", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mint: pos.mint,
-            amount_sol: result.amount,
+            size_sol: result.amount,
           }),
           priority: "high",
         });
@@ -614,8 +615,9 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       }
 
       try {
-        const response = await requestManager.fetch("/api/trader/sell", {
+        const response = await requestManager.fetch("/api/trader/manual/sell", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mint: pos.mint,
             percentage: result.percentage,
@@ -670,8 +672,9 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       }
 
       try {
-        const response = await requestManager.fetch("/api/trader/sell", {
+        const response = await requestManager.fetch("/api/trader/manual/sell", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mint: pos.mint,
             percentage: 100,
