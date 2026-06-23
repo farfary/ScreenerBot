@@ -276,42 +276,21 @@
 }
 
 /* Responsive */
-@media (width <= 1400px) {
-  .strategies-page {
-    grid-template-columns: 280px 1fr;
-  }
-
-  .header-main {
-    padding: 0.625rem 1rem;
-  }
-
-  .strategy-name-input {
-    max-width: 250px;
-    font-size: 1rem;
-  }
-}
-
 @media (width <= 1200px) {
   .strategies-page {
     grid-template-columns: 260px 1fr;
-  }
-
-  .sidebar-header h2 {
-    font-size: 1rem;
   }
 
   .category-items {
     grid-template-columns: 1fr;
   }
 
-  .header-actions .btn span {
+  .editor-controls .btn span {
     display: none;
   }
 
-  .header-actions .btn {
-    width: 32px;
-    padding: 6px;
-    min-width: 32px;
+  .strategy-name-input {
+    max-width: 220px;
   }
 }
 
@@ -322,21 +301,12 @@
 }
 
 @media (width <= 768px) {
-  .header-main {
-    gap: 0.5rem;
-  }
-
-  .strategy-identity {
-    gap: 0.5rem;
-  }
-
   .strategy-name-input {
-    max-width: 180px;
-    font-size: 0.95rem;
+    max-width: 160px;
+    font-size: 0.9rem;
   }
 
-  .strategy-status-badge {
-    font-size: 10px;
-    padding: 3px 10px;
+  .enable-toggle .toggle-label {
+    display: none;
   }
 }

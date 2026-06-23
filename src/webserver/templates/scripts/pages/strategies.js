@@ -29,6 +29,10 @@ export function createLifecycle() {
   let _lastStrategiesKey = null;
   let _lastTemplatesKey = null;
 
+  // Dirty tracking — unsaved editor changes
+  let _isDirty = false;
+  let _loadingStrategy = false; // suppress dirty during load
+
   // Event listener cleanup tracking
   const eventCleanups = [];
   const CleanupScope = {
@@ -65,6 +69,42 @@ export function createLifecycle() {
     }
   }
 
+  // Editor visibility + dirty state helpers
+  function showEditor() {
+    const header = $("#editor-header");
+    const empty = $("#editor-empty");
+    const scrollArea = $("#editor-scroll-area");
+    const footer = $("#editor-footer");
+    if (header) header.style.display = "flex";
+    if (empty) empty.style.display = "none";
+    if (scrollArea) scrollArea.style.display = "";
+    if (footer) footer.style.display = "";
+  }
+
+  function hideEditor() {
+    const header = $("#editor-header");
+    const empty = $("#editor-empty");
+    const scrollArea = $("#editor-scroll-area");
+    const footer = $("#editor-footer");
+    if (header) header.style.display = "none";
+    if (empty) empty.style.display = "";
+    if (scrollArea) scrollArea.style.display = "none";
+    if (footer) footer.style.display = "none";
+  }
+
+  function markDirty() {
+    if (_isDirty) return;
+    _isDirty = true;
+    const header = $("#editor-header");
+    if (header) header.classList.add("dirty");
+  }
+
+  function clearDirty() {
+    _isDirty = false;
+    const header = $("#editor-header");
+    if (header) header.classList.remove("dirty");
+  }
+
   // Initialize sub-modules
   const conditionEditor = createConditionEditor({
     state: { get currentStrategy() { return currentStrategy; }, set currentStrategy(val) { currentStrategy = val; } },
@@ -95,9 +135,21 @@ export function createLifecycle() {
     CleanupScope,
   });
 
+  // Wrap conditionEditor.renderConditionsList to mark dirty on user edits
+  {
+    const _origRender = conditionEditor.renderConditionsList.bind(conditionEditor);
+    conditionEditor.renderConditionsList = (...args) => {
+      if (currentStrategy && !_loadingStrategy) markDirty();
+      return _origRender(...args);
+    };
+  }
+
   return {
     async init(_ctx) {
       console.log("[Strategies] Initializing page");
+
+      // Hide editor area until a strategy is selected
+      hideEditor();
 
       // Setup strategy type toggle
       setupTypeToggle();
@@ -171,6 +223,8 @@ export function createLifecycle() {
       conditions = [];
       _lastStrategiesKey = null;
       _lastTemplatesKey = null;
+      _isDirty = false;
+      _loadingStrategy = false;
     },
   };
 
@@ -372,6 +426,7 @@ export function createLifecycle() {
       addTrackedListener(nameInput, "input", (e) => {
         if (currentStrategy) {
           currentStrategy.name = e.target.value.trim();
+          markDirty();
         }
       });
     }
@@ -1041,9 +1096,14 @@ export function createLifecycle() {
     const enableToggle = $("#strategy-enabled-toggle");
     if (enableToggle) enableToggle.checked = true;
 
-    // Clear editor conditions
-    conditions.length = 0; // Clear array (mutable reference)
+    // Clear editor conditions (suppress dirty during reset)
+    _loadingStrategy = true;
+    conditions.length = 0;
     conditionEditor.renderConditionsList();
+    _loadingStrategy = false;
+
+    showEditor();
+    markDirty(); // new strategy is always unsaved
     renderPropertiesPanel(null);
 
     Utils.showToast({
@@ -1093,9 +1153,14 @@ export function createLifecycle() {
       const enableToggle = $("#strategy-enabled-toggle");
       if (enableToggle) enableToggle.checked = currentStrategy.enabled;
 
-      // Render strategy into vertical editor
+      // Render strategy into vertical editor (suppress dirty during load)
+      _loadingStrategy = true;
       conditionEditor.parseRuleTreeToConditions(currentStrategy.rules);
       conditionEditor.renderConditionsList();
+      _loadingStrategy = false;
+
+      showEditor();
+      clearDirty();
 
       // Update active state in list
       $$(".strategy-item").forEach((item) => {
@@ -1179,6 +1244,7 @@ export function createLifecycle() {
         currentStrategy.id = data.id;
       }
 
+      clearDirty();
       await loadStrategies();
       Utils.showToast({
         type: "success",
@@ -1455,9 +1521,14 @@ export function createLifecycle() {
     if (nameInput) nameInput.value = currentStrategy.name;
     if (typeSelect) typeSelect.value = currentStrategy.type;
 
-    // Render into vertical editor
+    // Render into vertical editor (suppress dirty during load)
+    _loadingStrategy = true;
     conditionEditor.parseRuleTreeToConditions(currentStrategy.rules);
     conditionEditor.renderConditionsList();
+    _loadingStrategy = false;
+
+    showEditor();
+    markDirty(); // template is not yet saved
 
     // Switch to strategies tab
     const strategiesTab = $(".tab-btn[data-tab='strategies']");

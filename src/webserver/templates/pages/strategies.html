@@ -31,41 +31,45 @@
 
   <!-- Main Editor Area -->
   <main class="strategy-editor">
-    <!-- Sticky Header -->
-    <header class="editor-header">
-      <div class="header-main">
-        <div class="strategy-identity">
-          <span class="strategy-type-badge entry" id="strategy-type-badge">
-            <i class="icon-trending-up"></i> ENTRY
-          </span>
-          <input
-            type="text"
-            id="strategy-name"
-            placeholder="Strategy Name"
-            class="strategy-name-input"
-          />
-        </div>
-        <div class="header-actions">
-          <label class="enable-toggle">
-            <input type="checkbox" id="strategy-enabled-toggle" />
-            <span class="toggle-track"></span>
-            <span class="toggle-label">Enabled</span>
-          </label>
-          <span class="header-divider"></span>
-          <div class="header-action-group">
-            <button type="button" class="btn ghost" id="validate-strategy" title="Validate Strategy">
-              <i class="icon-circle-check"></i> Validate
-            </button>
-            <button type="button" class="btn primary" id="save-strategy" title="Save Strategy">
-              <i class="icon-save"></i> Save
-            </button>
-          </div>
-        </div>
+    <!-- Header: only shown when a strategy is loaded -->
+    <header class="editor-header" id="editor-header">
+      <div class="editor-identity">
+        <span class="strategy-type-badge entry" id="strategy-type-badge">
+          <i class="icon-trending-up"></i> ENTRY
+        </span>
+        <input
+          type="text"
+          id="strategy-name"
+          placeholder="Strategy name"
+          class="strategy-name-input"
+          spellcheck="false"
+        />
+        <span class="editor-dirty-dot" id="editor-dirty-dot" title="Unsaved changes"></span>
+      </div>
+      <div class="editor-controls">
+        <label class="enable-toggle">
+          <input type="checkbox" id="strategy-enabled-toggle" />
+          <span class="toggle-track"></span>
+          <span class="toggle-label">Enabled</span>
+        </label>
+        <span class="editor-sep"></span>
+        <button type="button" class="btn ghost btn-sm" id="validate-strategy">
+          <i class="icon-circle-check"></i> Validate
+        </button>
+        <button type="button" class="btn primary btn-sm editor-save-btn" id="save-strategy">
+          <i class="icon-save"></i> Save
+        </button>
       </div>
     </header>
 
+    <!-- Empty state: shown when no strategy is selected -->
+    <div class="editor-empty" id="editor-empty">
+      <i class="icon-square-pen"></i>
+      <p>Select a strategy to edit, or create a new one</p>
+    </div>
+
     <!-- Scrollable Content Area -->
-    <div class="editor-scroll-area">
+    <div class="editor-scroll-area" id="editor-scroll-area">
       <div class="conditions-container">
         <div class="conditions-list" id="conditions-list">
           <div class="empty-state">
@@ -78,7 +82,7 @@
     </div>
 
     <!-- Sticky Footer -->
-    <footer class="editor-footer">
+    <footer class="editor-footer" id="editor-footer">
       <button type="button" class="btn dashed full-width" id="add-condition">
         <i class="icon-plus"></i> Add Condition
       </button>
