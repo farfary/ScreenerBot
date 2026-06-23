@@ -36,14 +36,15 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
         // For SOL-paired pools, priceNative IS the SOL price
         parse_f64(&pool.price_native).unwrap_or_default()
     } else {
-        // For non-SOL pairs, calculate: price_sol = price_usd / sol_usd_price
+        // For non-SOL pairs, derive SOL price from USD: price_sol = price_usd / sol_usd_price.
+        // priceNative here is denominated in the quote token (e.g. USDC), NOT SOL — using it as
+        // a fallback would emit a USDC value mislabelled as SOL and corrupt P&L/quotes. When the
+        // SOL price is unavailable we leave price_sol at 0.0 so downstream treats it as unpriced.
         let sol_price = crate::sol_price::get_sol_price();
         if sol_price > 0.0 {
             price_usd / sol_price
         } else {
-            // Fallback: use priceNative as-is (may be wrong but better than 0)
-            // This happens when SOL price service isn't running (e.g., in debug tools)
-            parse_f64(&pool.price_native).unwrap_or_default()
+            0.0
         }
     };
 
