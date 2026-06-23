@@ -146,8 +146,8 @@ pub async fn close_position_direct(
     logger::info(
         LogTag::Positions,
         &format!(
-            "Selling ALL tokens for {}: {} total units across all accounts",
-            api_token.symbol, total_token_balance
+            "Selling tokens for {}: {} units (wallet total across all accounts: {})",
+            api_token.symbol, sell_amount, total_token_balance
         ),
     );
 
