@@ -7,7 +7,6 @@
 
 import {
   CONFIG_CATEGORIES,
-  TIME_RANGE_PRESETS,
   formatTimestampForInput,
   getTimeRangeLabel,
   getStatusMessage,
@@ -80,95 +79,87 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const priceRate = total_tokens > 0 ? (with_pool_price / total_tokens) * 100 : 0;
     const passedRate = total_tokens > 0 ? (passed_filtering / total_tokens) * 100 : 0;
 
-    // Render rejection breakdown if available
-    let rejectionBreakdown = "";
-    if (state.rejectionStats && state.rejectionStats.stats && state.rejectionStats.stats.length > 0) {
-      const topReasons = state.rejectionStats.stats.slice(0, 15); // Show top 15 reasons
-      const bySource = state.rejectionStats.by_source || {};
-
-      rejectionBreakdown = `
-      <div class="rejection-breakdown">
-        <h4>Rejection Breakdown</h4>
-        <div class="rejection-sources">
-          ${Object.entries(bySource)
-            .sort((a, b) => b[1] - a[1])
-            .map(
-              ([source, count]) => `
-            <div class="source-badge ${source}">
-              <span class="source-name">${Utils.escapeHtml(source)}</span>
-              <span class="source-count">${Utils.formatNumber(count, 0)}</span>
-            </div>
-          `
-            )
-            .join("")}
+    const metricsHtml = `
+      <div class="status-view">
+        <div class="status-card dominant">
+          <span class="metric-label">Total Tokens</span>
+          <span class="metric-value">${Utils.formatNumber(total_tokens, 0)}</span>
+          <span class="metric-meta">In filtering cache</span>
         </div>
-        <div class="rejection-list">
-          ${topReasons
-            .map(
-              ({ reason, display_label, source, count }) => `
-            <div class="rejection-item">
-              <span class="rejection-reason">${Utils.escapeHtml(display_label || reason)}</span>
-              <span class="rejection-source ${source}">${Utils.escapeHtml(source)}</span>
-              <span class="rejection-count">${Utils.formatNumber(count, 0)}</span>
-            </div>
-          `
-            )
-            .join("")}
-          ${
-            state.rejectionStats.stats.length > 15
-              ? `<div class="rejection-more">+ ${state.rejectionStats.stats.length - 15} more reasons</div>`
-              : ""
-          }
+        <div class="status-card">
+          <span class="metric-label">With Price</span>
+          <span class="metric-value">${Utils.formatNumber(with_pool_price, 0)}</span>
+          <span class="metric-meta">${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing</span>
+        </div>
+        <div class="status-card dominant">
+          <span class="metric-label">Passed Filters</span>
+          <span class="metric-value">${Utils.formatNumber(passed_filtering, 0)}</span>
+          <span class="metric-meta">${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed</span>
+        </div>
+        <div class="status-card">
+          <span class="metric-label">Open Positions</span>
+          <span class="metric-value">${Utils.formatNumber(open_positions, 0)}</span>
+          <span class="metric-meta">Active trades</span>
+        </div>
+        <div class="status-card warning">
+          <span class="metric-label">Blacklisted</span>
+          <span class="metric-value">${Utils.formatNumber(blacklisted, 0)}</span>
+          <span class="metric-meta">Flagged tokens</span>
+        </div>
+        <div class="status-card">
+          <span class="metric-label">With OHLCV</span>
+          <span class="metric-value">${Utils.formatNumber(with_ohlcv, 0)}</span>
+          <span class="metric-meta">Historical data</span>
+        </div>
+        <div class="status-card">
+          <span class="metric-label">Last Refresh</span>
+          <span class="metric-value">${updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never"}</span>
+          <span class="metric-meta">${updated_at ? new Date(updated_at).toLocaleString() : "No refresh yet"}</span>
         </div>
       </div>
     `;
+
+    let rejectionHtml = '<div class="status-rejection-empty">No rejection data available</div>';
+
+    if (state.rejectionStats?.stats?.length > 0) {
+      const bySource = state.rejectionStats.by_source || {};
+      const topReasons = state.rejectionStats.stats.slice(0, 20);
+      const maxCount = topReasons[0]?.count || 1;
+
+      const sourcePills = Object.entries(bySource)
+        .sort((a, b) => b[1] - a[1])
+        .map(
+          ([src, cnt]) => `
+          <div class="rej-source-pill ${Utils.escapeHtml(src)}">
+            <span class="rej-source-name">${Utils.escapeHtml(src)}</span>
+            <span class="rej-source-count">${Utils.formatNumber(cnt, 0)}</span>
+          </div>`
+        )
+        .join("");
+
+      const rejItems = topReasons
+        .map(({ reason, display_label, source, count }) => {
+          const barWidth = Math.min((count / maxCount) * 100, 100).toFixed(1);
+          return `
+          <div class="rejection-item">
+            <div class="rej-bar" style="width: ${barWidth}%"></div>
+            <span class="rej-label">${Utils.escapeHtml(display_label || reason)}</span>
+            <span class="rej-source-tag ${Utils.escapeHtml(source)}">${Utils.escapeHtml(source)}</span>
+            <span class="rej-count">${Utils.formatNumber(count, 0)}</span>
+          </div>`;
+        })
+        .join("");
+
+      rejectionHtml = `
+        <div class="rej-source-row">${sourcePills}</div>
+        <div class="rejection-list">${rejItems}</div>
+      `;
     }
 
     return `
     <div class="filtering-status-layout">
-      <div class="status-metrics-section">
-        <h4 class="section-title">Overview</h4>
-        <div class="status-view">
-          <div class="status-card dominant">
-            <span class="metric-label">Total Tokens</span>
-            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
-            <span class="metric-meta">In filtering cache</span>
-          </div>
-          <div class="status-card">
-            <span class="metric-label">With Price</span>
-            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))}</span>
-            <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing`)}</span>
-          </div>
-          <div class="status-card dominant">
-            <span class="metric-label">Passed Filters</span>
-            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))}</span>
-            <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed`)}</span>
-          </div>
-          <div class="status-card">
-            <span class="metric-label">Open Positions</span>
-            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions, 0))}</span>
-            <span class="metric-meta">Active trades</span>
-          </div>
-          <div class="status-card warning">
-            <span class="metric-label">Blacklisted</span>
-            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(blacklisted, 0))}</span>
-            <span class="metric-meta">Flagged tokens</span>
-          </div>
-          <div class="status-card">
-            <span class="metric-label">With OHLCV</span>
-            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_ohlcv, 0))}</span>
-            <span class="metric-meta">Historical data ready</span>
-          </div>
-          <div class="status-card">
-            <span class="metric-label">Last Updated</span>
-            <span class="metric-value">${updated_at ? Utils.escapeHtml(Utils.formatTimeAgo(new Date(updated_at))) : "Never"}</span>
-            <span class="metric-meta">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : "No refresh yet"}</span>
-          </div>
-        </div>
-      </div>
-      <div class="status-rejection-section">
-        ${rejectionBreakdown}
-      </div>
+      <div class="status-metrics-section">${metricsHtml}</div>
+      <div class="status-rejection-section">${rejectionHtml}</div>
     </div>
   `;
   }
@@ -185,28 +176,8 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const data = state.analytics;
 
-    // Time range info text
-    const timeRangeText =
-      state.timeRange.preset === "all"
-        ? "Showing all-time rejection statistics"
-        : state.timeRange.preset === "custom"
-          ? "Showing rejections from custom range"
-          : `Showing rejections from last ${TIME_RANGE_PRESETS[state.timeRange.preset]?.label || "period"}`;
-
-    // Header with time range filter (no refresh button - use footer refresh)
+    // Time range filter (no title header — data only)
     const headerHtml = `
-    <div class="analytics-header">
-      <div class="analytics-title-group">
-        <div class="analytics-title">
-          <i class="icon-chart-pie"></i> Analytics
-        </div>
-        <div class="analytics-subtitle">
-          ${Utils.escapeHtml(timeRangeText)}
-        </div>
-      </div>
-    </div>
-    
-    <!-- Time Range Filter -->
     <div class="time-range-filter">
       <div class="time-range-presets">
         <button class="time-preset-btn ${state.timeRange.preset === "1h" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('1h')">1H</button>
@@ -408,13 +379,14 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     </div>
   `;
 
-    // Trigger initial load of explorer data if not already loaded
     return `
-    <div class="analytics-view">
-      ${headerHtml}
-      ${kpiHtml}
-      ${chartsHtml}
-      ${bottomHtml}
+    <div class="analytics-scroll-area">
+      <div class="analytics-view">
+        ${headerHtml}
+        ${kpiHtml}
+        ${chartsHtml}
+        ${bottomHtml}
+      </div>
     </div>
   `;
   }
@@ -704,7 +676,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       return '<div class="filtering-config-empty">No settings match your search</div>';
     }
 
-    return `<div class="cards-grid">${cards}</div>`;
+    return `<div class="config-scroll-area"><div class="cards-grid">${cards}</div></div>`;
   }
 
   function renderSourceToggle(source) {

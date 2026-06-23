@@ -32,11 +32,11 @@
 
 /* Explorer Tree View - Desktop App Style (matches config page pattern) */
 .explorer-view-container {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
-  height: 100%;
-  min-height: 0;
   background: var(--bg-primary);
   overflow: hidden;
 }

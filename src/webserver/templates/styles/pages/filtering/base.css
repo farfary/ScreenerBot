@@ -1,11 +1,10 @@
-/* Filtering Page - Refined Layout */
+/* Filtering Page */
 
 .filtering-page-wrapper {
   overflow: hidden !important;
   height: 100%;
   display: flex;
   flex-direction: column;
-  position: relative; /* Ensure it establishes a positioning context */
 }
 
 #filtering-root {
@@ -17,7 +16,7 @@
 }
 
 .filtering-page {
-  flex: 1 1 auto;
+  flex: 1;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -34,25 +33,7 @@
   min-height: 0;
 }
 
-/* Header - Removed for cleaner look, tab bar is the primary nav */
-.filtering-top {
-  display: none;
-}
-
-.filtering-top h1 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-/* Tab Bar */
-.filtering-tab-bar {
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-/* Info/Metrics Bar - Streamlined */
+/* Info/Metrics Bar */
 .filtering-info-bar {
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-secondary);
@@ -64,8 +45,6 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-
-/* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
 .filtering-info-bar .info-item {
   display: flex;
@@ -85,9 +64,7 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .filtering-info-bar .info-item.highlight .value {
@@ -98,7 +75,7 @@
   color: var(--error-color);
 }
 
-/* Search Bar - Cleaner design */
+/* Search Bar */
 .filtering-search-bar {
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-secondary);
@@ -118,9 +95,7 @@
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 0.875rem;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .filtering-search-bar input::placeholder {
@@ -133,7 +108,7 @@
   box-shadow: 0 0 0 3px var(--primary-alpha-10);
 }
 
-/* Source Toggle - Pill style */
+/* Source Toggle */
 .source-toggle-wrapper {
   display: flex;
   align-items: center;
@@ -183,7 +158,7 @@
   background: var(--text-primary);
   border-radius: var(--radius-full);
   transition: transform var(--transition-base);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
 }
 
 .source-switch input:checked + .slider {
@@ -198,50 +173,50 @@
   box-shadow: 0 0 0 3px var(--primary-alpha-20);
 }
 
-/* Main Content Area */
+/* =============================================================================
+   Main Content Area
+   Parent NEVER scrolls — each tab view owns its own scroll.
+   ============================================================================= */
+
 .filtering-content {
-  flex: 1 1 auto;
+  flex: 1;
   min-height: 0;
   min-width: 0;
-  overflow: hidden auto;
-  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-primary);
 }
 
-/* Status View Grid Layout */
+/* =============================================================================
+   Status Tab — two-column layout, each column scrolls independently
+   ============================================================================= */
+
 .filtering-status-layout {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(300px, 1.2fr);
-  gap: var(--spacing-lg);
-  padding: var(--spacing-lg);
-  max-width: 1400px;
-  width: 100%;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.2fr);
+  overflow: hidden;
 }
 
 .status-metrics-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  min-width: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  min-height: 0;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 
 .status-rejection-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  min-width: 0;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  border-inline-start: 1px solid var(--border-color);
 }
 
-.section-title {
-  margin: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-}
-
-/* Status View (for status tab) - Dashboard metrics */
+/* Status metric cards grid */
 .status-view {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -257,9 +232,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .status-card:hover {
@@ -280,9 +253,7 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
   line-height: 1.2;
 }
 
@@ -310,153 +281,165 @@
   color: var(--error-color);
 }
 
-/* Common Analytics Utilities */
-.text-success {
-  color: var(--success-color) !important;
-}
+/* =============================================================================
+   Rejection Breakdown (right column of status tab)
+   ============================================================================= */
 
-.text-error {
-  color: var(--error-color) !important;
-}
-
-.text-warning {
-  color: var(--warning-color) !important;
-}
-
-.text-end {
-  text-align: end !important;
-}
-
-.font-medium {
-  font-weight: 500 !important;
-}
-
-.font-data {
-  font-family: var(--font-data) !important;
-}
-
-.span-2 {
-  grid-column: span 2 !important;
-}
-
-/* Analytics Components */
-.pass-rate-visual {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 8px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  display: flex;
-  margin-top: var(--spacing-sm);
-}
-
-.analytics-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-md);
-}
-
-.explorer-controls {
-  display: flex;
-  gap: var(--spacing-sm);
-  align-items: center;
-}
-
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-  margin-top: var(--spacing-md);
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color);
-}
-
-.pagination-info {
-  align-self: center;
-  font-family: var(--font-data);
-}
-
-.explorer-search-input-wrapper.width-180 {
-  width: 180px;
-}
-
-.explorer-loading-full {
-  padding: 40px 0;
-}
-
-.explorer-empty-state {
-  padding: 32px;
+.status-rejection-empty {
+  padding: var(--spacing-xl);
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
 }
 
-.table-time-cell {
-  text-align: right;
+/* Source pills row */
+.rej-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md) var(--spacing-md) var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.rej-source-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  font-size: 0.7rem;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.rej-source-pill .rej-source-name {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.62rem;
+}
+
+.rej-source-pill .rej-source-count {
   font-family: var(--font-data);
-  color: var(--text-muted);
-  font-size: 0.75rem;
+  font-weight: 700;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
-.token-logo-placeholder {
+.rej-source-pill.dexscreener {
+  background: rgb(88 166 255 / 0.1);
+  color: var(--link-color);
+  border-color: rgb(88 166 255 / 0.25);
+}
+
+.rej-source-pill.geckoterminal {
+  background: rgb(63 185 80 / 0.1);
+  color: var(--success-color);
+  border-color: rgb(63 185 80 / 0.25);
+}
+
+.rej-source-pill.rugcheck {
+  background: rgb(248 81 73 / 0.1);
+  color: var(--error-color);
+  border-color: rgb(248 81 73 / 0.25);
+}
+
+/* Rejection list */
+.rejection-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.rejection-item {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 8px;
+  gap: var(--spacing-sm);
+  padding: 7px var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.rejection-item:last-child {
+  border-bottom: none;
+}
+
+/* Background progress bar — visual weight without taking space */
+.rej-bar {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--primary-alpha-5);
+  pointer-events: none;
+  transition: width 0.35s ease;
+}
+
+.rej-label {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+  min-width: 0;
+}
+
+.rej-source-tag {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  position: relative;
   background: var(--bg-tertiary);
   color: var(--text-muted);
 }
 
-.analytics-empty-compact {
-  padding: 12px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  text-align: center;
+.rej-source-tag.dexscreener {
+  background: rgb(88 166 255 / 0.15);
+  color: var(--link-color);
 }
 
-.text-xs {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+.rej-source-tag.geckoterminal {
+  background: rgb(63 185 80 / 0.15);
+  color: var(--success-color);
 }
 
-.p-lg {
-  padding: var(--spacing-lg) !important;
+.rej-source-tag.rugcheck {
+  background: rgb(248 81 73 / 0.15);
+  color: var(--error-color);
 }
 
-.m-t-lg {
-  margin-top: var(--spacing-lg) !important;
+.rej-count {
+  font-family: var(--font-data);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  flex-shrink: 0;
+  position: relative;
+  min-width: 48px;
+  text-align: end;
 }
 
-.m-0 {
-  margin: 0 !important;
+/* =============================================================================
+   Config Tabs — cards inside their own scroll area
+   ============================================================================= */
+
+.config-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 
-.p-20 {
-  padding: 20px !important;
-}
-
-.text-center {
-  text-align: center !important;
-}
-
-.min-w-0 {
-  min-width: 0 !important;
-}
-
-.w-auto {
-  width: auto !important;
-}
-
-.font-bold {
-  font-weight: 600 !important;
-}
-
-/* Config Cards - Clean grid layout */
 .cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
@@ -471,21 +454,13 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   min-width: 0;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .filter-card:hover {
   border-color: var(--primary-alpha-30);
 }
 
-.filter-card.disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-/* Disable card body (fields) but keep header interactive for toggles */
 .filter-card .card-body.disabled {
   opacity: 0.5;
   pointer-events: none;
@@ -505,8 +480,6 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-primary);
-  text-transform: none;
-  letter-spacing: normal;
 }
 
 .category-switch {
@@ -542,7 +515,7 @@
   background: var(--text-primary);
   border-radius: var(--radius-full);
   transition: transform var(--transition-base);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
 }
 
 .category-switch input:checked + .slider {
@@ -557,7 +530,6 @@
   box-shadow: 0 0 0 3px var(--primary-alpha-20);
 }
 
-/* Scoped to filtering page to avoid conflicts with other pages */
 .filter-card .card-body {
   padding: var(--spacing-md) var(--spacing-md) var(--spacing-lg);
   display: flex;
@@ -567,7 +539,10 @@
   overflow: hidden;
 }
 
-/* Config Fields - Clean inline layout */
+/* =============================================================================
+   Config Fields
+   ============================================================================= */
+
 .filtering-config-field {
   display: flex;
   justify-content: space-between;
@@ -616,7 +591,6 @@
   overflow-wrap: break-word;
 }
 
-/* Field control container - right side */
 .filtering-config-field > div:last-child {
   display: flex;
   flex-direction: column;
@@ -637,13 +611,9 @@
   color: var(--text-primary);
   font-size: 0.8rem;
   font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
   text-align: end;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .filtering-config-field input[type="number"]:focus,
@@ -708,7 +678,45 @@
   color: var(--text-secondary);
 }
 
-/* Footer - Clean action bar */
+/* =============================================================================
+   Analytics Tab — scrollable wrapper
+   ============================================================================= */
+
+.analytics-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.analytics-view {
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+/* Analytics type utilities */
+.text-success { color: var(--success-color) !important; }
+.text-error   { color: var(--error-color)   !important; }
+.text-warning { color: var(--warning-color) !important; }
+.text-end     { text-align: end !important; }
+.font-medium  { font-weight: 500 !important; }
+.font-data    { font-family: var(--font-data) !important; }
+.font-bold    { font-weight: 600 !important; }
+.span-2       { grid-column: span 2 !important; }
+.min-w-0      { min-width: 0 !important; }
+.w-auto       { width: auto !important; }
+.text-center  { text-align: center !important; }
+.text-xs      { font-size: 0.65rem; color: var(--text-muted); }
+.p-lg         { padding: var(--spacing-lg) !important; }
+.p-20         { padding: 20px !important; }
+
+/* =============================================================================
+   Footer
+   ============================================================================= */
+
 .filtering-footer {
   padding: var(--spacing-sm) var(--spacing-md);
   border-top: 1px solid var(--border-color);
@@ -787,7 +795,10 @@
   cursor: not-allowed;
 }
 
-/* Empty states */
+/* =============================================================================
+   Empty / loading states
+   ============================================================================= */
+
 .no-matches {
   padding: var(--spacing-md);
   text-align: center;
@@ -797,6 +808,7 @@
 }
 
 .filtering-config-empty {
+  flex: 1;
   min-height: 160px;
   display: flex;
   align-items: center;
@@ -806,18 +818,23 @@
   border: 1px dashed var(--border-color);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
+  margin: var(--spacing-md);
 }
 
-/* Responsive */
+/* =============================================================================
+   Responsive
+   ============================================================================= */
+
 @media (width <= 1100px) {
   .filtering-status-layout {
     grid-template-columns: 1fr;
+    /* Stack vertically; each row still scrolls independently */
+    grid-template-rows: 1fr 1fr;
   }
 
-  .status-metrics-section,
   .status-rejection-section {
-    width: 100%;
-    min-width: 0;
+    border-inline-start: none;
+    border-top: 1px solid var(--border-color);
   }
 }
 
@@ -868,3 +885,11 @@
   }
 }
 
+/* Force visibility of sub-tabs on filtering page */
+.sub-tabs-container[data-page="filtering"] {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  min-height: 35px;
+  z-index: 10;
+}

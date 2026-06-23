@@ -250,14 +250,19 @@ function updateConfigPanels(options = {}) {
   const container = $("#filtering-config-panels");
   if (!container) return;
 
-  const previousScroll = container.scrollTop;
+  // Scroll lives on the inner .config-scroll-area for config tabs;
+  // for status/analytics/explorer the container itself is overflow:hidden.
+  const prevScrollEl = container.querySelector(".config-scroll-area") || container;
+  const previousScroll = prevScrollEl.scrollTop;
+
   container.innerHTML = renderers.renderConfigPanels();
   bindConfigHandlers();
 
+  const nextScrollEl = container.querySelector(".config-scroll-area") || container;
   if (options.scrollTop === 0) {
-    container.scrollTo({ top: 0, behavior: options.smooth ? "smooth" : "auto" });
+    nextScrollEl.scrollTo({ top: 0, behavior: options.smooth ? "smooth" : "auto" });
   } else if (options.preserveScroll) {
-    container.scrollTop = previousScroll;
+    nextScrollEl.scrollTop = previousScroll;
   }
 }
 
