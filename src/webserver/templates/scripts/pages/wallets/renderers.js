@@ -23,6 +23,15 @@ export function createWalletRenderers({
   // fast in-place updates instead of rebuilding the entire info bar each poll.
   let lastRenderedWalletId = null;
 
+  // Fingerprints for secondaries/archive tables — skip re-render when data unchanged
+  let lastSecondariesHash = null;
+  let lastArchiveHash = null;
+
+  // Build a compact fingerprint for a wallet row covering all rendered fields
+  function _walletHash(w) {
+    return `${w.id}|${w.name}|${w.address}|${w.balance}|${w.wallet_type}|${w.role}|${w.is_active}|${w.created_at}`;
+  }
+
   // Column definitions are stable across renders — define once at closure level
   const TOKEN_COLUMNS = [
     {
@@ -262,6 +271,8 @@ export function createWalletRenderers({
       tokenTableClickHandler = null;
     }
     lastRenderedWalletId = null;
+    lastSecondariesHash = null;
+    lastArchiveHash = null;
   }
 
   // =============================================================================
@@ -274,6 +285,10 @@ export function createWalletRenderers({
 
     const wallets = walletsData();
     const secondaryWallets = wallets.filter((w) => w.role === "secondary" && w.is_active);
+
+    const hash = secondaryWallets.map(_walletHash).join(";");
+    if (hash === lastSecondariesHash) return;
+    lastSecondariesHash = hash;
 
     if (secondaryWallets.length === 0) {
       container.innerHTML = `
@@ -374,6 +389,10 @@ export function createWalletRenderers({
 
     const wallets = walletsData();
     const archivedWallets = wallets.filter((w) => w.role === "archive" || !w.is_active);
+
+    const hash = archivedWallets.map(_walletHash).join(";");
+    if (hash === lastArchiveHash) return;
+    lastArchiveHash = hash;
 
     if (archivedWallets.length === 0) {
       container.innerHTML = `
