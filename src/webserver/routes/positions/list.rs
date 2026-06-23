@@ -53,16 +53,25 @@ pub async fn load_positions_with_filters(
         filtered_positions.truncate(limit);
     }
 
-    // Batch fetch all logo URLs in a single query (performance optimization)
+    // Batch fetch all logo URLs and decimals in single queries (performance optimization)
     let mints: Vec<String> = filtered_positions.iter().map(|p| p.mint.clone()).collect();
-    let logo_map = tokens::database::get_token_images_batch_async(mints)
+    let logo_map = tokens::database::get_token_images_batch_async(mints.clone())
+        .await
+        .unwrap_or_default();
+    let decimals_map = tokens::database::get_token_decimals_batch_async(mints)
         .await
         .unwrap_or_default();
 
-    // Map positions to responses using pre-fetched logos
+    // Map positions to responses using pre-fetched logos and decimals
     filtered_positions
         .iter()
-        .map(|p| map_position_to_response_with_logo(p, logo_map.get(&p.mint).cloned()))
+        .map(|p| {
+            map_position_to_response_with_logo(
+                p,
+                logo_map.get(&p.mint).cloned(),
+                decimals_map.get(&p.mint).copied(),
+            )
+        })
         .collect()
 }
 
@@ -70,6 +79,7 @@ pub async fn load_positions_with_filters(
 fn map_position_to_response_with_logo(
     p: &positions::Position,
     logo_url: Option<String>,
+    token_decimals: Option<u8>,
 ) -> PositionResponse {
     let entry_time_ts = p.entry_time.timestamp();
     let exit_time_ts = p.exit_time.map(|dt| dt.timestamp());
@@ -118,6 +128,7 @@ fn map_position_to_response_with_logo(
         average_exit_price: p.average_exit_price,
         remaining_token_amount: p.remaining_token_amount,
         total_exited_amount: p.total_exited_amount,
+        token_decimals,
         archived: p.archived,
         archived_at: p.archived_at.map(|dt| dt.timestamp()),
         manual_management: p.manual_management,
@@ -126,14 +137,13 @@ fn map_position_to_response_with_logo(
 
 /// Map position to response with async logo fetch (used for single position lookups)
 pub async fn map_position_to_response_async(p: &positions::Position) -> PositionResponse {
-    // Fetch logo from tokens database
-    let logo_url = match tokens::database::get_full_token_async(&p.mint).await {
-        Ok(Some(token)) => token.image_url.clone(),
-        Ok(None) => None,
-        Err(_) => None,
+    // Fetch logo + decimals from tokens database (single token load)
+    let (logo_url, token_decimals) = match tokens::database::get_full_token_async(&p.mint).await {
+        Ok(Some(token)) => (token.image_url.clone(), Some(token.decimals)),
+        Ok(None) | Err(_) => (None, None),
     };
 
-    map_position_to_response_with_logo(p, logo_url)
+    map_position_to_response_with_logo(p, logo_url, token_decimals)
 }
 
 pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {

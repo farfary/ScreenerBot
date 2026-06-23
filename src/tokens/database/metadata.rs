@@ -249,6 +249,46 @@ impl TokenDatabase {
         Ok(result)
     }
 
+    /// Get token decimals for multiple mints in a single query.
+    /// Returns HashMap<mint, decimals> (only mints with a non-null decimals value).
+    pub fn get_token_decimals_batch(&self, mints: &[String]) -> TokenResult<HashMap<String, u8>> {
+        if mints.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+
+        let placeholders: String = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let query = format!(
+            "SELECT mint, decimals FROM tokens WHERE mint IN ({placeholders}) AND decimals IS NOT NULL"
+        );
+
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            TokenError::Database(format!("Failed to prepare batch decimals query: {e}"))
+        })?;
+
+        let mint_refs: Vec<&str> = mints.iter().map(String::as_str).collect();
+        let rows = stmt
+            .query_map(params_from_iter(mint_refs), |row| {
+                let mint: String = row.get(0)?;
+                let decimals: u8 = row.get(1)?;
+                Ok((mint, decimals))
+            })
+            .map_err(|e| TokenError::Database(format!("Batch decimals query failed: {e}")))?;
+
+        let mut result = HashMap::with_capacity(mints.len());
+        for row in rows {
+            let (mint, decimals) =
+                row.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
+            result.insert(mint, decimals);
+        }
+
+        Ok(result)
+    }
+
     /// Get basic token info (symbol, name, image_url) for multiple tokens in a single query
     /// Returns HashMap<mint, (symbol, name, image_url)> - optimized for display purposes
     pub fn get_token_info_batch(

@@ -603,6 +603,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       context: {
         mint: pos.mint,
         holdings: pos.remaining_token_amount || pos.token_amount,
+        decimals: pos.token_decimals,
       },
     });
 

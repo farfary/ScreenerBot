@@ -757,7 +757,14 @@ export class TradeActionDialog {
     }
 
     if (action === "sell" && context.holdings != null) {
-      const formatted = Utils.formatCompactNumber(context.holdings, 2);
+      // holdings is in raw token units; convert to whole tokens for display when
+      // decimals are known (the percentage-based quote/execution use the real
+      // on-chain balance directly, so this is display-only).
+      const wholeHoldings =
+        context.decimals != null
+          ? context.holdings / 10 ** context.decimals
+          : context.holdings;
+      const formatted = Utils.formatCompactNumber(wholeHoldings, 2);
       rows.push(`
         <div class="trade-action-context-item">
           <span class="trade-action-context-label">Holdings</span>

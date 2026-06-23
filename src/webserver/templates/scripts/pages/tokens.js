@@ -942,7 +942,7 @@ function createLifecycle() {
           action: "sell",
           mint,
           symbol,
-          context: { mint, holdings: row.token_amount },
+          context: { mint, holdings: row.token_amount, decimals: row.decimals },
         });
         if (!result) return;
 

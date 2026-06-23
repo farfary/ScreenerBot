@@ -36,6 +36,18 @@ pub async fn get_token_images_batch_async(
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
 }
 
+/// Async wrapper for get_token_decimals_batch (returns HashMap<mint, decimals>)
+pub async fn get_token_decimals_batch_async(
+    mints: Vec<String>,
+) -> TokenResult<HashMap<String, u8>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
+
+    tokio::task::spawn_blocking(move || db.get_token_decimals_batch(&mints))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
+}
+
 /// Async wrapper for get_token_info_batch (returns HashMap<mint, (symbol, name, image_url)>)
 /// Fetches basic token info for multiple tokens in a single query - use for display purposes
 pub async fn get_token_info_batch_async(

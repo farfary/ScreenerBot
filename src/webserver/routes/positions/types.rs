@@ -62,6 +62,8 @@ pub struct PositionResponse {
     pub average_exit_price: Option<f64>,
     pub remaining_token_amount: Option<u64>,
     pub total_exited_amount: u64,
+    // Token decimals (for converting raw token_amount to whole tokens in the UI)
+    pub token_decimals: Option<u8>,
     // Archival
     pub archived: bool,
     pub archived_at: Option<i64>,
