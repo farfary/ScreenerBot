@@ -380,7 +380,7 @@ async fn fetch_sol_price() -> Result<(f64, &'static str), String> {
 /// PRIMARY: fetch SOL/USD from DexScreener — the `priceUsd` of the highest-liquidity
 /// pair whose BASE token is WSOL (so the price is SOL's, not the quote token's).
 async fn fetch_from_dexscreener() -> Result<f64, String> {
-    let client = reqwest::Client::new();
+    let client = crate::net::client();
     let response = client
         .get(DEXSCREENER_SOL_URL)
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
@@ -436,7 +436,7 @@ async fn fetch_from_dexscreener() -> Result<f64, String> {
 
 /// SECONDARY: fetch SOL/USD from GeckoTerminal's simple token-price endpoint.
 async fn fetch_from_geckoterminal() -> Result<f64, String> {
-    let client = reqwest::Client::new();
+    let client = crate::net::client();
     let response = client
         .get(GECKOTERMINAL_SOL_URL)
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
@@ -477,7 +477,7 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
     // so price polling never starves the swap rate budget (lite-api is per-IP).
     crate::apis::jupiter::throttle::acquire_background().await;
 
-    let client = reqwest::Client::new();
+    let client = crate::net::client();
 
     let response = client
         .get(JUPITER_PRICE_API)

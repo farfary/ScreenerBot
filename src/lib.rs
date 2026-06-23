@@ -22,6 +22,7 @@ pub mod features;
 pub mod filtering;
 pub mod global;
 pub mod logger;
+pub mod net;
 pub mod nfts;
 pub mod ohlcvs;
 pub mod paths;

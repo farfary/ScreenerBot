@@ -84,7 +84,7 @@ impl DexScreenerClient {
         }
 
         Ok(Self {
-            client: Client::new(),
+            client: crate::net::client(),
             stats: Arc::new(ApiStatsTracker::new()),
             timeout: Duration::from_secs(timeout_seconds),
             enabled,

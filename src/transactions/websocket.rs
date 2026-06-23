@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Notify};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::tungstenite::Message;
 
 use crate::logger::{self, LogTag};
 
@@ -114,10 +114,9 @@ impl SolanaWebSocketClient {
             ),
         );
 
-        // Connect to WebSocket endpoint
-        let (ws_stream, _) = connect_async(ws_url)
-            .await
-            .map_err(|e| format!("Failed to connect to WebSocket: {e}"))?;
+        // Connect to WebSocket endpoint (tunnels through the system proxy if one
+        // is detected — required behind v2rayN/system proxy).
+        let ws_stream = crate::net::connect_ws(ws_url).await?;
 
         let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 

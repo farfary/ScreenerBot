@@ -74,7 +74,7 @@ impl GroqClient {
 
         Ok(Self {
             api_key,
-            client: Client::new(),
+            client: crate::net::client(),
             model: model.unwrap_or_else(|| DEFAULT_MODEL.to_string()),
             timeout: Duration::from_secs(TIMEOUT_SECS),
             rate_limiter: RateLimiter::new(DEFAULT_RATE_LIMIT_PER_MINUTE),

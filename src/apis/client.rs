@@ -87,7 +87,7 @@ pub struct HttpClient {
 impl HttpClient {
     /// Create a new HTTP client with the given timeout in seconds
     pub fn new(timeout_secs: u64) -> Result<Self, String> {
-        let client = Client::builder()
+        let client = crate::net::apply_proxy(Client::builder())
             .timeout(Duration::from_secs(timeout_secs))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {e}"))?;

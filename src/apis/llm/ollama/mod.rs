@@ -56,7 +56,7 @@ impl OllamaClient {
     ) -> Result<Self, String> {
         Ok(Self {
             base_url: base_url.unwrap_or_else(|| DEFAULT_BASE_URL.to_string()),
-            client: Client::new(),
+            client: crate::net::client(),
             model: model.unwrap_or_else(|| DEFAULT_MODEL.to_string()),
             timeout: Duration::from_secs(TIMEOUT_SECS),
             stats: Arc::new(ApiStatsTracker::new()),

@@ -49,7 +49,7 @@ impl EndpointMonitor for JupiterMonitor {
         let cfg = get_config_clone();
         let timeout_secs = cfg.connectivity.endpoints.jupiter.timeout_secs.max(1);
 
-        let client = match reqwest::Client::builder()
+        let client = match crate::net::client_builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
         {

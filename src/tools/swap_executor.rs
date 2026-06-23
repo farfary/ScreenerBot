@@ -187,7 +187,7 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
     let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
 
     // Call Jupiter swap endpoint (API key only if configured)
-    let client = reqwest::Client::new();
+    let client = crate::net::client();
     let api_key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
     let api_base = if api_key.is_empty() {
         "https://lite-api.jup.ag"

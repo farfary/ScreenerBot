@@ -58,7 +58,7 @@ impl InternetMonitor {
             return Err("No HTTP check endpoints configured".to_owned());
         }
 
-        let client = reqwest::Client::builder()
+        let client = crate::net::client_builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {e}"))?;

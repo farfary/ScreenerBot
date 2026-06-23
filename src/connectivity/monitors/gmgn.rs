@@ -83,7 +83,7 @@ impl EndpointMonitor for GmgnMonitor {
             partner
         );
 
-        let client = match reqwest::Client::builder()
+        let client = match crate::net::client_builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
         {

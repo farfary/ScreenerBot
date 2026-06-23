@@ -233,7 +233,7 @@ async fn fetch_json_metadata(uri: &str) -> Result<JsonMetadata, NftMetadataError
         uri.to_string()
     };
 
-    let client = reqwest::Client::builder()
+    let client = crate::net::client_builder()
         .timeout(Duration::from_secs(10))
         .build()
         .map_err(|e| NftMetadataError::JsonFetchFailed(e.to_string()))?;

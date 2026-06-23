@@ -103,7 +103,7 @@ impl GmgnRouter {
     /// Create a new GMGN swap router instance
     pub fn new() -> Self {
         Self {
-            client: Client::new(),
+            client: crate::net::client(),
         }
     }
 

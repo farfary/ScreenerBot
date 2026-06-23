@@ -126,7 +126,7 @@ impl RpcManager {
         });
 
         // Create shared HTTP client with connection pooling
-        let http_client = reqwest::Client::builder()
+        let http_client = crate::net::apply_proxy(reqwest::Client::builder())
             .timeout(Duration::from_secs(request_timeout_secs))
             .connect_timeout(Duration::from_secs(connection_timeout_secs))
             .pool_max_idle_per_host(pool_connections_per_host as usize)

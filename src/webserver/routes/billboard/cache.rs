@@ -36,7 +36,7 @@ const WEBSITE_BILLBOARD_URL: &str = "https://screenerbot.io/api/billboard";
 
 /// Fetch billboard tokens from website
 async fn fetch_from_website() -> Result<Vec<BillboardToken>, String> {
-    let client = reqwest::Client::new();
+    let client = crate::net::client();
     let response = client
         .get(WEBSITE_BILLBOARD_URL)
         .timeout(Duration::from_secs(10))

@@ -93,7 +93,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
     );
     logger::debug(LogTag::System, &format!("Update check URL: {url}"));
 
-    let client = reqwest::Client::new();
+    let client = crate::net::client();
     let response = client
         .get(&url)
         .header("User-Agent", format!("ScreenerBot/{VERSION}"))

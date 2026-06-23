@@ -43,7 +43,7 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
     });
 
     // Use 10s timeout to handle cold starts where TLS initialization takes longer
-    let client = match reqwest::Client::builder()
+    let client = match crate::net::client_builder()
         .timeout(Duration::from_secs(10))
         .build()
     {
@@ -162,7 +162,7 @@ pub async fn validate_mainnet(url: &str) -> Result<bool, String> {
         "method": "getGenesisHash"
     });
 
-    let client = reqwest::Client::builder()
+    let client = crate::net::client_builder()
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("Failed to create client: {e}"))?;
@@ -200,7 +200,7 @@ pub async fn get_rpc_version(url: &str) -> Result<String, String> {
         "method": "getVersion"
     });
 
-    let client = reqwest::Client::builder()
+    let client = crate::net::client_builder()
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("Failed to create client: {e}"))?;

@@ -44,7 +44,7 @@ impl EndpointMonitor for DexScreenerMonitor {
         let cfg = get_config_clone();
         let timeout_secs = cfg.connectivity.endpoints.dexscreener.timeout_secs.max(1);
 
-        let client = match reqwest::Client::builder()
+        let client = match crate::net::client_builder()
             .timeout(Duration::from_secs(timeout_secs))
             .build()
         {

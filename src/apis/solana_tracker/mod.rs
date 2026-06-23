@@ -46,7 +46,7 @@ impl SolanaTrackerClient {
         }
 
         Ok(Self {
-            client: Client::new(),
+            client: crate::net::client(),
             rate_limiter: RateLimiter::new(rate_limit),
             stats: Arc::new(ApiStatsTracker::new()),
             timeout: Duration::from_secs(timeout_seconds),

@@ -188,6 +188,8 @@ async fn main() {
 
     // Initialize logger
     screenerbot::logger::init();
+    // Detect and log the system/network proxy once (used by HTTP, RPC and WS).
+    screenerbot::net::log_detected_proxy();
     info(
         LogTag::System,
         "Logger initialized, attempting to load config...",

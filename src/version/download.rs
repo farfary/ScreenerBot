@@ -44,7 +44,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
     logger::debug(LogTag::System, &format!("Downloading from: {download_url}"));
 
     // Download file with timeout
-    let client = reqwest::Client::builder()
+    let client = crate::net::client_builder()
         .timeout(Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
         .build()
         .map_err(|e| {

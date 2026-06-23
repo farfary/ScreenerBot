@@ -294,7 +294,7 @@ impl JupiterRouter {
     /// Create a new Jupiter swap router instance
     pub fn new() -> Self {
         Self {
-            client: Client::new(),
+            client: crate::net::client(),
         }
     }
 
