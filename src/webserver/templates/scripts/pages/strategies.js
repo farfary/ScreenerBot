@@ -234,14 +234,6 @@ export function createLifecycle() {
       });
     }
 
-    // Refresh strategies
-    const refreshBtn = $("#refresh-strategies");
-    if (refreshBtn) {
-      addTrackedListener(refreshBtn, "click", async () => {
-        await loadStrategies();
-        // Removed success toast - silent refresh, only show errors
-      });
-    }
   }
 
   function showCreateStrategyModal() {
@@ -580,28 +572,19 @@ export function createLifecycle() {
     listContainer.innerHTML = strategies
       .map(
         (strategy) => `
-      <div class="strategy-item ${currentStrategy?.id === strategy.id ? "active" : ""}" 
+      <div class="strategy-item ${currentStrategy?.id === strategy.id ? "active" : ""}"
            data-strategy-id="${strategy.id}">
-        <div class="strategy-item-header">
-          <span class="strategy-type-icon ${strategy.type.toLowerCase()}">
-            <i class="${strategy.type === "ENTRY" ? "icon-trending-up" : "icon-trending-down"}"></i>
-          </span>
-          <div class="strategy-item-info">
-            <div class="strategy-item-title">
-              ${Utils.escapeHtml(strategy.name)}
-            </div>
-            <div class="strategy-item-meta">
-              <span class="strategy-badge ${strategy.type.toLowerCase()}">${strategy.type}</span>
-              <span class="strategy-badge ${strategy.enabled ? "enabled" : "disabled"}">
-                ${strategy.enabled ? "Enabled" : "Disabled"}
-              </span>
-            </div>
+        <div class="strategy-item-name">${Utils.escapeHtml(strategy.name)}</div>
+        <div class="strategy-item-row">
+          <div class="strategy-item-tags">
+            <span class="strategy-type-tag ${strategy.type.toLowerCase()}">${strategy.type}</span>
+            <span class="strategy-state-tag ${strategy.enabled ? "enabled" : "disabled"}">${strategy.enabled ? "Enabled" : "Disabled"}</span>
           </div>
-          <div class="strategy-item-actions">
-            <button class="btn-icon" data-action="toggle" title="${strategy.enabled ? "Disable" : "Enable"}">
-              ${strategy.enabled ? '<i class="icon-toggle-right"></i>' : '<i class="icon-toggle-left"></i>'}
+          <div class="strategy-item-btns">
+            <button class="btn-icon btn-icon-sm" data-action="toggle" title="${strategy.enabled ? "Disable" : "Enable"}">
+              <i class="${strategy.enabled ? "icon-toggle-right" : "icon-toggle-left"}"></i>
             </button>
-            <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
+            <button class="btn-icon btn-icon-sm" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
           </div>
         </div>
       </div>
