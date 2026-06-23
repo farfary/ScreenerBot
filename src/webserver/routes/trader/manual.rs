@@ -424,23 +424,11 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             amount_sol,
         )
     } else {
-        // SELL: Token → SOL
-        let amount_tokens = match req.amount_tokens {
-            Some(amt) if amt > 0.0 && amt.is_finite() => amt,
-            _ => {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "InvalidAmount",
-                    "amount_tokens is required for sell and must be positive",
-                    None,
-                );
-            }
-        };
-
-        // Verify actual wallet balance before quoting. The frontend passes the
-        // DB-stored token_amount which may be stale — after a rug the wallet can
-        // hold 0 tokens while the position record still shows the purchase amount.
-        // A quote against phantom tokens is misleading and will fail at execution.
+        // SELL: Token → SOL. Quote against the REAL on-chain balance (raw units),
+        // not the frontend's holdings. The DB-stored token_amount is in raw units
+        // and can be stale, so trusting it (and re-scaling by decimals) produced a
+        // wildly inflated, misleading quote. Execution is already percentage-based
+        // against the real balance — the preview now matches it exactly.
         let actual_balance = crate::utils::get_total_token_balance(&wallet_address, &req.mint)
             .await
             .unwrap_or(0);
@@ -452,13 +440,49 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 Some("Token balance is 0; the position cannot be closed via swap"),
             );
         }
-        // Convert token amount to smallest units based on decimals
-        let amount_raw = (amount_tokens * 10f64.powi(token_decimals as i32)) as u64;
+
+        // Percentage of the real balance (default = full close). Legacy callers may
+        // still send amount_tokens (whole tokens); honour it only as a fallback.
+        let amount_raw = if let Some(pct) = req.percentage {
+            if !pct.is_finite() || pct <= 0.0 || pct > 100.0 {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    "InvalidAmount",
+                    "percentage must be in (0, 100]",
+                    None,
+                );
+            }
+            ((actual_balance as f64) * pct / 100.0).floor() as u64
+        } else if let Some(tokens) = req.amount_tokens {
+            if !tokens.is_finite() || tokens <= 0.0 {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    "InvalidAmount",
+                    "amount_tokens must be positive",
+                    None,
+                );
+            }
+            // Clamp to the real balance so we never quote more than exists.
+            ((tokens * 10f64.powi(token_decimals as i32)) as u64).min(actual_balance)
+        } else {
+            actual_balance // No amount given → quote a full close.
+        };
+
+        if amount_raw == 0 {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "InvalidAmount",
+                "Computed sell amount is zero",
+                None,
+            );
+        }
+
+        let amount_tokens_display = amount_raw as f64 / 10f64.powi(token_decimals as i32);
         (
             req.mint.clone(),
             SOL_MINT.to_string(),
             amount_raw,
-            amount_tokens,
+            amount_tokens_display,
         )
     };
 

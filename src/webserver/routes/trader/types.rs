@@ -157,7 +157,9 @@ pub struct QuotePreviewRequest {
     #[serde(default)]
     pub amount_sol: Option<f64>, // For buy: SOL amount to spend
     #[serde(default)]
-    pub amount_tokens: Option<f64>, // For sell: token amount to sell
+    pub amount_tokens: Option<f64>, // For sell: token amount to sell (whole tokens; legacy)
+    #[serde(default)]
+    pub percentage: Option<f64>, // For sell: percentage of the real on-chain balance (preferred)
     #[serde(default)]
     pub direction: String, // "buy" or "sell", defaults to "buy"
 }

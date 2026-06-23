@@ -122,13 +122,10 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       // Build URL based on direction
       let url;
       if (direction === "sell") {
-        // For sell, amount is percentage, calculate token amount from holdings
-        const holdings = this.currentContext.holdings || 0;
-        if (holdings <= 0) {
-          throw new Error("No holdings available to sell");
-        }
-        const tokenAmount = holdings * (amount / 100);
-        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&amount_tokens=${tokenAmount}&direction=sell`;
+        // For sell, amount is the percentage of holdings. Send the percentage and
+        // let the backend apply it to the REAL on-chain balance — the stale DB
+        // holdings (raw units) must never drive the quoted amount.
+        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&percentage=${amount}&direction=sell`;
       } else {
         // For buy/add, amount is SOL
         url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&amount_sol=${amount}&direction=buy`;
