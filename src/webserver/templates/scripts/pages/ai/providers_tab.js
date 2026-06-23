@@ -18,6 +18,9 @@ const PROVIDER_NAMES = {
 };
 
 export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
+  // Hash guard — skip re-render when polled providers data is unchanged
+  let _lastProvidersKey = null;
+
   // ============================================================================
   // Providers Tab
   // ============================================================================
@@ -53,6 +56,10 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
    * Render provider list view
    */
   function renderProviders(providers) {
+    const key = JSON.stringify({ providers, default: state.defaultProvider });
+    if (key === _lastProvidersKey) return;
+    _lastProvidersKey = key;
+
     const container = $("#providers-list");
     if (!container) return;
 

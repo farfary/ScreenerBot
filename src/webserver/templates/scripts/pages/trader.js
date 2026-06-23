@@ -39,6 +39,9 @@ function createLifecycle() {
   let configPoller = null;
   let strategiesPoller = null;
 
+  // Hash guard — skip positions summary re-render when data is unchanged
+  let _lastPositionsKey = null;
+
   // Event cleanup tracking
   const eventCleanups = [];
 
@@ -915,6 +918,10 @@ function createLifecycle() {
         priority: "normal",
       });
 
+      const key = JSON.stringify(data.positions?.map(p => ({ id: p.id, roi: p.roi_percent, size: p.size_sol })) ?? null);
+      if (key === _lastPositionsKey) return;
+      _lastPositionsKey = key;
+
       if (!data.positions || data.positions.length === 0) {
         positionsSummary.innerHTML = `
           <div class="info-state">
@@ -1651,6 +1658,7 @@ function createLifecycle() {
       state.config = null;
       state.stats = null;
       state.strategies = [];
+      _lastPositionsKey = null;
     },
   };
 }

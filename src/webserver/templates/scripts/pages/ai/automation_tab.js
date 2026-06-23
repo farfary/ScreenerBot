@@ -3,6 +3,10 @@ import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 
 export function createAutomationTab({ state, _eventCleanups, addTrackedListener }) {
+// Hash guards — skip re-render when polled data is unchanged
+let _lastTasksKey = null;
+let _lastRunsKey = null;
+
 // Automation Tab
 // ============================================================================
 
@@ -54,6 +58,10 @@ function renderAutomationStats(stats) {
 }
 
 function renderAutomationList(tasks) {
+  const key = JSON.stringify(tasks);
+  if (key === _lastTasksKey) return;
+  _lastTasksKey = key;
+
   const container = $("#automation-list");
   if (!container) return;
 
@@ -109,6 +117,10 @@ function renderAutomationList(tasks) {
 }
 
 function renderAutomationRuns(runs) {
+  const key = JSON.stringify(runs);
+  if (key === _lastRunsKey) return;
+  _lastRunsKey = key;
+
   const container = $("#automation-runs-list");
   const countEl = $("#auto-runs-count");
   if (!container) return;

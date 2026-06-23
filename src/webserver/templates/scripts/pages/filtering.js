@@ -84,6 +84,9 @@ async function setTimeRangePreset(preset) {
   AppState.save("filtering_timeRangeStart", state.timeRange.startTime);
   AppState.save("filtering_timeRangeEnd", state.timeRange.endTime);
 
+  // Force a fresh analytics render when the time range changes
+  _lastAnalyticsKey = null;
+
   // Show loading state immediately
   state.isLoadingAnalytics = true;
   render();
@@ -213,6 +216,9 @@ function bindConfigHandlers() {
 }
 
 function updateInfoBar() {
+  const key = JSON.stringify(state.stats);
+  if (key === _lastInfoBarKey) return;
+  _lastInfoBarKey = key;
   const container = $("#filtering-info-bar");
   if (container) {
     container.innerHTML = renderers.renderInfoBar();
@@ -250,19 +256,26 @@ function updateConfigPanels(options = {}) {
   const container = $("#filtering-config-panels");
   if (!container) return;
 
-  // Scroll lives on the inner .config-scroll-area for config tabs;
-  // for status/analytics/explorer the container itself is overflow:hidden.
-  const prevScrollEl = container.querySelector(".config-scroll-area") || container;
+  // Scroll lives on the inner .config-scroll-area (config tabs), .analytics-scroll-area
+  // (analytics tab), or the two independent status columns (.status-metrics-section /
+  // .status-rejection-section). Save them all before the innerHTML replacement.
+  const prevScrollEl = container.querySelector(".config-scroll-area, .analytics-scroll-area") || container;
   const previousScroll = prevScrollEl.scrollTop;
+  const prevLeftScroll = container.querySelector(".status-metrics-section")?.scrollTop ?? 0;
+  const prevRightScroll = container.querySelector(".status-rejection-section")?.scrollTop ?? 0;
 
   container.innerHTML = renderers.renderConfigPanels();
   bindConfigHandlers();
 
-  const nextScrollEl = container.querySelector(".config-scroll-area") || container;
+  const nextScrollEl = container.querySelector(".config-scroll-area, .analytics-scroll-area") || container;
   if (options.scrollTop === 0) {
     nextScrollEl.scrollTo({ top: 0, behavior: options.smooth ? "smooth" : "auto" });
   } else if (options.preserveScroll) {
     nextScrollEl.scrollTop = previousScroll;
+    const leftEl = container.querySelector(".status-metrics-section");
+    const rightEl = container.querySelector(".status-rejection-section");
+    if (leftEl) leftEl.scrollTop = prevLeftScroll;
+    if (rightEl) rightEl.scrollTop = prevRightScroll;
   }
 }
 
@@ -547,9 +560,13 @@ async function loadAnalytics() {
       return; // A newer request was made, discard this response
     }
 
+    const key = JSON.stringify(response);
+    if (key === _lastAnalyticsKey) return; // data unchanged — skip redraw, scroll preserved
+    _lastAnalyticsKey = key;
+
     state.analytics = response.data || response;
-    // Re-render to show analytics data
-    updateConfigPanels({ preserveScroll: false });
+    // Preserve scroll position on incremental updates; only reset on explicit user action
+    updateConfigPanels({ preserveScroll: true });
   } catch (error) {
     // Only log error if this is still the active request
     if (thisRequestId === state.analyticsRequestId) {
@@ -575,6 +592,10 @@ async function loadData() {
 // ============================================================================
 
 let poller = null;
+// Hash guards — prevent DOM rebuilds when polled data is unchanged
+let _lastInfoBarKey = null;
+let _lastAnalyticsKey = null;
+let _lastStatusKey = null;
 
 export function createLifecycle() {
   return {
@@ -654,8 +675,16 @@ export function createLifecycle() {
             async () => {
               await loadStats();
               updateInfoBar();
+              // Keep the status tab live — only re-render when data actually changed
+              if (state.activeTab === "status") {
+                const statusKey = JSON.stringify({ s: state.stats, r: state.rejectionStats });
+                if (statusKey !== _lastStatusKey) {
+                  _lastStatusKey = statusKey;
+                  updateConfigPanels({ preserveScroll: true });
+                }
+              }
             },
-            { label: "Filtering Stats" }
+            { label: "Filtering Stats", intervalMs: 5000 }
           )
         );
       }
@@ -685,6 +714,9 @@ export function createLifecycle() {
       TabBarManager.unregister("filtering");
       state.initialized = false;
       globalHandlersBound = false;
+      _lastInfoBarKey = null;
+      _lastAnalyticsKey = null;
+      _lastStatusKey = null;
     },
   };
 }

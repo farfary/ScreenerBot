@@ -37,6 +37,9 @@ function createLifecycle() {
   let automationPoller = null;
   let _chatWidget = null;
 
+  // Hash guards — skip re-render when polled data is unchanged
+  let _lastDecisionsKey = null;
+
   // Event cleanup tracking
   const eventCleanups = [];
 
@@ -272,6 +275,10 @@ function createLifecycle() {
    * Update recent decisions feed
    */
   function updateRecentDecisions(decisions) {
+    const key = JSON.stringify(decisions);
+    if (key === _lastDecisionsKey) return;
+    _lastDecisionsKey = key;
+
     const container = $("#recent-decisions-container");
     if (!container) return;
 
@@ -959,6 +966,7 @@ function createLifecycle() {
       // Clean up event listeners
       eventCleanups.forEach((cleanup) => cleanup());
       eventCleanups.length = 0;
+      _lastDecisionsKey = null;
     },
 
     // Expose API for external access

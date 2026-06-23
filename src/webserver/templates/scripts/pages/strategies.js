@@ -25,6 +25,10 @@ export function createLifecycle() {
   let strategiesPoller = null;
   let templatesPoller = null;
 
+  // Hash guards — skip re-render when polled data is unchanged
+  let _lastStrategiesKey = null;
+  let _lastTemplatesKey = null;
+
   // Event listener cleanup tracking
   const eventCleanups = [];
   const CleanupScope = {
@@ -126,7 +130,7 @@ export function createLifecycle() {
           async () => {
             await loadStrategies();
           },
-          { label: "Strategies" }
+          { label: "Strategies", intervalMs: 10000 }
         )
       );
 
@@ -135,7 +139,7 @@ export function createLifecycle() {
           async () => {
             await loadTemplates();
           },
-          { label: "Templates" }
+          { label: "Templates", intervalMs: 30000 }
         )
       );
 
@@ -165,6 +169,8 @@ export function createLifecycle() {
       strategies = [];
       templates = [];
       conditions = [];
+      _lastStrategiesKey = null;
+      _lastTemplatesKey = null;
     },
   };
 
@@ -551,6 +557,10 @@ export function createLifecycle() {
 
   // Render Functions
   function renderStrategies() {
+    const key = JSON.stringify(strategies.map(s => ({ ...s, active: currentStrategy?.id === s.id })));
+    if (key === _lastStrategiesKey) return;
+    _lastStrategiesKey = key;
+
     clearScope(CleanupScope.STRATEGIES_LIST);
 
     const listContainer = $("#strategy-list");
@@ -650,6 +660,10 @@ export function createLifecycle() {
   }
 
   function renderTemplates() {
+    const key = JSON.stringify(templates);
+    if (key === _lastTemplatesKey) return;
+    _lastTemplatesKey = key;
+
     clearScope(CleanupScope.TEMPLATE_LIST);
 
     const listContainer = $("#template-list");
