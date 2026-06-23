@@ -285,16 +285,21 @@ impl TokenDatabase {
     pub fn get_recent_rejections(
         &self,
         limit: usize,
-    ) -> TokenResult<Vec<(String, String, String, i64, Option<String>)>> {
+    ) -> TokenResult<Vec<(String, String, String, i64, Option<String>, Option<String>, Option<String>)>> {
         let conn = self
             .conn
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
-        let query = "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at, t.symbol 
-                     FROM update_tracking ut 
-                     LEFT JOIN tokens t ON ut.mint = t.mint 
-                     WHERE ut.last_rejection_reason IS NOT NULL 
+        let query = "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at,
+                            t.symbol, t.name,
+                            COALESCE(
+                              (SELECT image_url FROM market_dexscreener WHERE mint = ut.mint AND image_url IS NOT NULL AND image_url != '' LIMIT 1),
+                              (SELECT image_url FROM market_geckoterminal WHERE mint = ut.mint AND image_url IS NOT NULL AND image_url != '' LIMIT 1)
+                            ) AS image_url
+                     FROM update_tracking ut
+                     LEFT JOIN tokens t ON ut.mint = t.mint
+                     WHERE ut.last_rejection_reason IS NOT NULL
                      ORDER BY ut.last_rejection_at DESC LIMIT :limit";
 
         let mut stmt = conn
@@ -310,6 +315,8 @@ impl TokenDatabase {
                     row.get::<_, String>(2).unwrap_or_default(),
                     row.get::<_, Option<i64>>(3)?.unwrap_or_default(),
                     row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;

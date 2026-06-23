@@ -123,6 +123,8 @@ pub struct TimeRangeInfo {
 pub struct RecentRejectionEntry {
     pub mint: String,
     pub symbol: Option<String>,
+    pub name: Option<String>,
+    pub image_url: Option<String>,
     pub reason: String,
     pub display_label: String,
     pub source: String,

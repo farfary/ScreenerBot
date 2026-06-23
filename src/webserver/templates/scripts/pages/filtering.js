@@ -869,20 +869,6 @@ window.filteringPage = {
     window.filteringPage.debouncedFilterExplorerTree(query);
   },
 
-  selectSummary: () => {
-    window.filteringPage.currentReason = null;
-    window.filteringPage.currentReasonLabel = null;
-
-    document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
-    const summaryItem = document.querySelector(".explorer-summary-item");
-    if (summaryItem) summaryItem.classList.add("active");
-
-    const container = document.getElementById("explorer-detail-view");
-    if (container && state.analytics) {
-      container.innerHTML = renderers.renderExplorerDashboard(state.analytics);
-    }
-  },
-
   toggleCategory: (category) => {
     const el = document.getElementById(`reasons-${category}`);
     const toggle = document.getElementById(`toggle-${category}`);
@@ -896,10 +882,19 @@ window.filteringPage = {
   },
 
   selectReason: (reason, label) => {
-    // Update active state
+    // Toggle deselect: clicking the active reason returns to overview
+    if (window.filteringPage.currentReason === reason) {
+      window.filteringPage.currentReason = null;
+      window.filteringPage.currentReasonLabel = null;
+      document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
+      const container = document.getElementById("explorer-detail-view");
+      if (container && state.analytics) {
+        container.innerHTML = renderers.renderExplorerDashboard(state.analytics);
+      }
+      return;
+    }
+
     document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
-    const summaryItem = document.querySelector(".explorer-summary-item");
-    if (summaryItem) summaryItem.classList.remove("active");
 
     const activeEl = document.getElementById(`reason-${reason}`);
     if (activeEl) {

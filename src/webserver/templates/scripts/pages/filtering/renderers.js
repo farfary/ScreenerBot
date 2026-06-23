@@ -402,35 +402,53 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     return `
     <div class="explorer-overview">
       <div class="explorer-overview-col">
-        ${topReasons
-          .slice(0, 30)
-          .map(
-            (r) => `
-          <div class="overview-list-item" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')">
-            <span class="overview-item-label">${Utils.escapeHtml(r.display_label)}</span>
-            <span class="overview-item-count">${Utils.formatNumber(r.count, 0)}</span>
-          </div>
-        `
-          )
-          .join("")}
-        ${topReasons.length === 0 ? '<div class="analytics-empty-compact">No data</div>' : ""}
+        <div class="overview-col-header">
+          <span class="overview-col-title">Top Reasons</span>
+          <span class="overview-col-count">${topReasons.length}</span>
+        </div>
+        <div class="overview-col-list">
+          ${topReasons
+            .slice(0, 30)
+            .map(
+              (r) => `
+            <div class="overview-list-item" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')">
+              <span class="overview-item-label">${Utils.escapeHtml(r.display_label)}</span>
+              <span class="overview-item-count">${Utils.formatNumber(r.count, 0)}</span>
+            </div>
+          `
+            )
+            .join("")}
+          ${topReasons.length === 0 ? '<div class="analytics-empty-compact">No data</div>' : ""}
+        </div>
       </div>
       <div class="explorer-overview-col explorer-overview-col--sep">
-        ${recentRejections
-          .slice(0, 30)
-          .map(
-            (t) => `
-          <div class="overview-list-item" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
-            <div class="overview-item-info">
-              <span class="overview-item-symbol">${Utils.escapeHtml(t.symbol || "Unknown")}</span>
-              <span class="overview-item-reason">${Utils.escapeHtml(t.display_label)}</span>
-            </div>
-            <span class="overview-item-time">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
-          </div>
-        `
-          )
-          .join("")}
-        ${recentRejections.length === 0 ? '<div class="analytics-empty-compact">No recent</div>' : ""}
+        <div class="overview-col-header">
+          <span class="overview-col-title">Recent Rejections</span>
+          <span class="overview-col-count">${recentRejections.length}</span>
+        </div>
+        <div class="overview-col-list">
+          ${recentRejections
+            .slice(0, 30)
+            .map((t) => {
+              const sym = t.symbol || "?";
+              const initial = sym.charAt(0).toUpperCase();
+              const logoHtml = t.image_url
+                ? `<img src="${Utils.escapeHtml(t.image_url)}" alt="${Utils.escapeHtml(sym)}" class="overview-token-logo" onerror="this.parentElement.innerHTML='<span class=\\'overview-token-initial\\'>${initial}</span>'">`
+                : `<span class="overview-token-initial">${initial}</span>`;
+              return `
+              <div class="overview-list-item overview-list-item--token" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
+                <div class="overview-token-avatar">${logoHtml}</div>
+                <div class="overview-item-info">
+                  <span class="overview-item-symbol">${Utils.escapeHtml(sym)}${t.name ? ` <span class="overview-item-name">${Utils.escapeHtml(t.name)}</span>` : ""}</span>
+                  <span class="overview-item-reason">${Utils.escapeHtml(t.display_label)}</span>
+                </div>
+                <span class="overview-item-time">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
+              </div>
+            `;
+            })
+            .join("")}
+          ${recentRejections.length === 0 ? '<div class="analytics-empty-compact">No recent</div>' : ""}
+        </div>
       </div>
     </div>
   `;
@@ -451,14 +469,6 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <div class="explorer-search-input-wrapper">
             <i class="icon-search"></i>
             <input type="text" placeholder="Search reasons..." oninput="window.filteringPage.filterExplorerTree(this.value)">
-          </div>
-        </div>
-
-        <div class="explorer-summary-item ${!window.filteringPage.currentReason ? "active" : ""}" onclick="window.filteringPage.selectSummary()">
-          <i class="icon-layout-dashboard"></i>
-          <div class="explorer-summary-info">
-            <span class="explorer-summary-label">Overview</span>
-            <span class="explorer-summary-desc">Summary & recent</span>
           </div>
         </div>
 
