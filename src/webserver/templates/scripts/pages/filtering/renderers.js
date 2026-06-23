@@ -461,6 +461,9 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const data = state.analytics;
 
+    const totalRejected = data.total_rejected || 0;
+    const rejectionRate = data.rejection_rate ? `${data.rejection_rate.toFixed(1)}%` : "";
+
     // Compact Tree View
     const treeHtml = `
     <div class="explorer-layout">
@@ -472,7 +475,14 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           </div>
         </div>
 
-        <div class="explorer-tree">
+        <div class="explorer-nav-overview ${!window.filteringPage.currentReason ? "active" : ""}" onclick="window.filteringPage.selectSummary()">
+          <i class="icon-chart-bar tree-icon"></i>
+          <span class="tree-label">Overview</span>
+          ${rejectionRate ? `<span class="explorer-nav-rate">${rejectionRate}</span>` : ""}
+          <span class="tree-count">${Utils.formatCompactNumber(totalRejected)}</span>
+        </div>
+
+        <div class="explorer-tree" id="explorer-tree">
           ${data.by_category
             .map(
               (cat) => `
@@ -487,8 +497,8 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                 ${cat.reasons
                   .map(
                     (r) => `
-                  <div class="tree-reason ${window.filteringPage.currentReason === r.reason ? "active" : ""}" 
-                       onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')" 
+                  <div class="tree-reason ${window.filteringPage.currentReason === r.reason ? "active" : ""}"
+                       onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')"
                        id="reason-${r.reason}"
                        data-label="${Utils.escapeHtml(r.display_label.toLowerCase())}">
                     <span class="tree-reason-label">${Utils.escapeHtml(r.display_label)}</span>
@@ -502,6 +512,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           `
             )
             .join("")}
+          <div class="tree-empty-state" id="explorer-tree-empty" style="display: none">No matching reasons</div>
         </div>
       </div>
       <div class="explorer-content">

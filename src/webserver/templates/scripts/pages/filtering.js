@@ -844,29 +844,50 @@ window.filteringPage = {
     if (!window.filteringPage.debouncedFilterExplorerTree) {
       window.filteringPage.debouncedFilterExplorerTree = Utils.debounce((q) => {
         const lowerQ = q.toLowerCase();
+        let anyVisible = false;
         document.querySelectorAll(".tree-category").forEach((cat) => {
           let hasVisibleReason = false;
           const reasons = cat.querySelectorAll(".tree-reason");
           reasons.forEach((r) => {
             const label = r.getAttribute("data-label") || "";
-            const visible = label.includes(lowerQ);
+            const visible = lowerQ === "" || label.includes(lowerQ);
             r.style.display = visible ? "flex" : "none";
             if (visible) hasVisibleReason = true;
           });
 
-          cat.style.display = hasVisibleReason || lowerQ === "" ? "block" : "none";
+          cat.style.display = hasVisibleReason ? "block" : "none";
+          if (hasVisibleReason) anyVisible = true;
 
-          // Auto-expand if searching
           const reasonsList = cat.querySelector(".tree-reasons");
           const toggle = cat.querySelector(".tree-toggle");
           if (lowerQ !== "" && hasVisibleReason) {
             if (reasonsList) reasonsList.style.display = "block";
             if (toggle) toggle.style.transform = "rotate(180deg)";
+          } else if (lowerQ === "" && reasonsList) {
+            // Re-collapse on clear (preserve last explicit toggle state isn't tracked, so collapse all)
+            reasonsList.style.display = "none";
+            if (toggle) toggle.style.transform = "rotate(0deg)";
           }
         });
+        const emptyEl = document.getElementById("explorer-tree-empty");
+        if (emptyEl) emptyEl.style.display = lowerQ !== "" && !anyVisible ? "block" : "none";
       }, 150);
     }
     window.filteringPage.debouncedFilterExplorerTree(query);
+  },
+
+  selectSummary: () => {
+    window.filteringPage.currentReason = null;
+    window.filteringPage.currentReasonLabel = null;
+
+    document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
+    const navOverview = document.querySelector(".explorer-nav-overview");
+    if (navOverview) navOverview.classList.add("active");
+
+    const container = document.getElementById("explorer-detail-view");
+    if (container && state.analytics) {
+      container.innerHTML = renderers.renderExplorerDashboard(state.analytics);
+    }
   },
 
   toggleCategory: (category) => {
@@ -884,17 +905,13 @@ window.filteringPage = {
   selectReason: (reason, label) => {
     // Toggle deselect: clicking the active reason returns to overview
     if (window.filteringPage.currentReason === reason) {
-      window.filteringPage.currentReason = null;
-      window.filteringPage.currentReasonLabel = null;
-      document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
-      const container = document.getElementById("explorer-detail-view");
-      if (container && state.analytics) {
-        container.innerHTML = renderers.renderExplorerDashboard(state.analytics);
-      }
+      window.filteringPage.selectSummary();
       return;
     }
 
     document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
+    const navOverview = document.querySelector(".explorer-nav-overview");
+    if (navOverview) navOverview.classList.remove("active");
 
     const activeEl = document.getElementById(`reason-${reason}`);
     if (activeEl) {

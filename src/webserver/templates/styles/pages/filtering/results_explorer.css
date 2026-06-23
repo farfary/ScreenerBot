@@ -76,6 +76,60 @@
   flex-shrink: 0;
 }
 
+/* Overview nav item — minimal, same design language as tree-category-header */
+.explorer-nav-overview {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  margin: 4px 4px 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.explorer-nav-overview:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.explorer-nav-overview.active {
+  background: var(--primary-alpha-10);
+  color: var(--link-color);
+}
+
+.explorer-nav-overview.active::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 14px;
+  background: var(--link-color);
+  border-start-end-radius: 1px;
+  border-end-end-radius: 1px;
+}
+
+.explorer-nav-rate {
+  font-size: 0.65rem;
+  color: var(--error-color);
+  font-family: var(--font-data);
+  margin-inline-end: 4px;
+  opacity: 0.8;
+}
+
+/* Empty state when search yields no results */
+.tree-empty-state {
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* Tree container - only this scrolls within sidebar */
 .explorer-tree {
   flex: 1;
