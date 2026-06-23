@@ -400,7 +400,6 @@ function setupDeleteModal() {
 async function loadAllData() {
   await Promise.all([loadWallets(), loadTokenHoldings()]);
   renderers.renderCurrentPanel();
-  updateWalletCountBadge();
 }
 
 async function loadWallets() {
@@ -446,18 +445,6 @@ async function fetchMainWalletBalance() {
     }
   } catch (error) {
     console.debug("[Wallets] Balance fetch failed:", error);
-  }
-}
-
-// =============================================================================
-// Render Functions (delegated to renderers module)
-// =============================================================================
-
-function updateWalletCountBadge() {
-  const countBadge = $("#wallet-count-badge");
-  if (countBadge) {
-    const activeCount = walletsData.filter((w) => w.is_active).length;
-    countBadge.textContent = `${activeCount} wallet${activeCount !== 1 ? "s" : ""}`;
   }
 }
 

@@ -2,17 +2,15 @@
   <!-- Sub-tabs first — matches positions/trader page pattern -->
   <div id="wallets-tabs-container" class="sub-tabs-container wallets-tabs"></div>
 
-  <!-- Tab-contextual toolbar: count badge always left, tab-specific buttons right -->
+  <!-- Toolbar: wallet info inline left, tab-specific buttons right -->
   <div class="wallets-toolbar">
-    <span class="wallet-count-badge" id="wallet-count-badge">0 wallets</span>
-
     <!-- Main wallet inline info (rendered by JS on main tab) -->
     <div id="wt-info-inline" class="wt-info-inline"></div>
 
     <!-- Main wallet tab actions -->
     <div class="wallets-tab-actions" data-tab-actions="main">
       <button
-        class="hint-trigger hint-trigger--header"
+        class="btn-icon"
         id="security-hint-btn"
         type="button"
         aria-label="Security information"
@@ -21,7 +19,7 @@
         <i class="icon-shield-check"></i>
       </button>
       <button
-        class="btn"
+        class="btn-icon"
         id="refresh-wallets-btn"
         type="button"
         data-tooltip="Refresh"
@@ -33,15 +31,6 @@
 
     <!-- Secondaries tab actions -->
     <div class="wallets-tab-actions hidden" data-tab-actions="secondaries">
-      <button
-        class="btn"
-        id="refresh-wallets-btn-sec"
-        type="button"
-        data-tooltip="Refresh"
-        aria-label="Refresh"
-      >
-        <i class="icon-refresh-cw"></i>
-      </button>
       <button class="btn" id="import-wallets-btn" type="button">
         <i class="icon-upload"></i> Import
       </button>
@@ -51,12 +40,21 @@
       <button class="btn primary" id="add-wallet-btn" type="button">
         <i class="icon-plus"></i> Add Wallet
       </button>
+      <button
+        class="btn-icon"
+        id="refresh-wallets-btn-sec"
+        type="button"
+        data-tooltip="Refresh"
+        aria-label="Refresh"
+      >
+        <i class="icon-refresh-cw"></i>
+      </button>
     </div>
 
     <!-- Archive tab actions -->
     <div class="wallets-tab-actions hidden" data-tab-actions="archive">
       <button
-        class="btn"
+        class="btn-icon"
         id="refresh-wallets-btn-arc"
         type="button"
         data-tooltip="Refresh"

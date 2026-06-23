@@ -46,22 +46,7 @@
   min-height: 42px;
 }
 
-.wallet-count-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  background: linear-gradient(135deg, var(--primary-alpha-15), var(--primary-alpha-10));
-  color: var(--primary-color);
-  border: 1px solid var(--primary-alpha-20);
-  flex-shrink: 0;
-}
-
-/* Inline wallet info — fills space between count badge and action buttons */
+/* Inline wallet info — fills available toolbar width, action buttons sit right */
 .wt-info-inline {
   flex: 1;
   display: flex;
