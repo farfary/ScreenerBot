@@ -13,34 +13,14 @@
   position: relative;
 }
 
-.condition-card::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--primary-color);
-  opacity: 0;
-  transition: opacity var(--transition-normal);
-}
-
 .condition-card:hover {
   border-color: var(--primary-color);
   box-shadow: 0 8px 16px rgb(0, 0, 0, 0.1);
   transform: translateY(-2px);
 }
 
-.condition-card:hover::before {
-  opacity: 1;
-}
-
 .condition-card.expanded {
   border-color: var(--primary-color);
-}
-
-.condition-card.expanded::before {
-  opacity: 1;
 }
 
 /* Status States */
@@ -271,7 +251,7 @@
   background: rgb(0, 0, 0, 0.02);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-md);
-  border-left: 3px solid var(--primary-color-alpha);
+  border-top: 1px solid var(--border-color);
 }
 
 /* Condition Actions */
