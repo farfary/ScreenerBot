@@ -11,7 +11,6 @@ use crate::positions::PENDING_VERIFICATION_SUFFIX;
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::{get_token_balance, get_total_token_balance, get_wallet_address};
-use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 
@@ -138,65 +137,10 @@ pub async fn close_position_direct(
     };
 
     if sell_amount == 0 {
-        // Tokens are gone from the wallet (rug, burn, or prior transfer).
-        // A swap is impossible — record a synthetic total-loss close directly.
-        logger::warning(
-            LogTag::Positions,
-            &format!(
-                "No tokens in wallet for {} (mint: {}) — recording as synthetic total loss",
-                api_token.symbol, token_mint
-            ),
-        );
-
-        let position = crate::positions::state::get_position_by_mint(token_mint)
-            .await
-            .ok_or_else(|| format!("Position not found for mint: {token_mint}"))?;
-
-        let position_id = position.id.unwrap_or_default();
-        let now = Utc::now();
-        let pnl_sol = -position.total_size_sol;
-
-        crate::positions::state::update_position_state_by_id(position_id, |pos| {
-            pos.exit_time = Some(now);
-            pos.exit_price = Some(exit_price);
-            pos.effective_exit_price = Some(0.0);
-            pos.transaction_exit_verified = true;
-            pos.closed_reason = Some(exit_reason.clone());
-            pos.sol_received = Some(0.0);
-            pos.synthetic_exit = true;
-            pos.pnl = Some(pnl_sol);
-            pos.pnl_percent = Some(-100.0);
-            pos.unrealized_pnl = None;
-            pos.unrealized_pnl_percent = None;
-        })
-        .await;
-
-        let mut db_pos = position;
-        db_pos.exit_time = Some(now);
-        db_pos.exit_price = Some(exit_price);
-        db_pos.effective_exit_price = Some(0.0);
-        db_pos.transaction_exit_verified = true;
-        db_pos.closed_reason = Some(exit_reason);
-        db_pos.sol_received = Some(0.0);
-        db_pos.synthetic_exit = true;
-        db_pos.pnl = Some(pnl_sol);
-        db_pos.pnl_percent = Some(-100.0);
-        db_pos.unrealized_pnl = None;
-        db_pos.unrealized_pnl_percent = None;
-
-        if let Err(e) = crate::positions::update_position(&db_pos).await {
-            logger::error(
-                LogTag::Positions,
-                &format!(
-                    "Synthetic close: DB persist failed for position {position_id}: {e}"
-                ),
-            );
-        }
-
-        // Release the global position semaphore (normally released by the verification worker)
-        crate::positions::state::release_global_position_permit();
-
-        return Ok("synthetic:closed".to_owned());
+        return Err(format!(
+            "No tokens to sell: wallet balance is 0 for {}",
+            api_token.symbol
+        ));
     }
 
     logger::info(
