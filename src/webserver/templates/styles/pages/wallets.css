@@ -24,16 +24,7 @@
 }
 
 /* =============================================================================
-   Sub-Tabs (first row, matches positions/trader page order)
-   ============================================================================= */
-
-/* Sub-tabs sit directly below main tabs — no extra border needed (sub-tabs-container already has one) */
-.wallets-tabs {
-  flex-shrink: 0;
-}
-
-/* =============================================================================
-   Toolbar (second row — tab-contextual actions)
+   Toolbar (first row inside page — tab-contextual actions)
    ============================================================================= */
 
 .wallets-toolbar {

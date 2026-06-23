@@ -80,7 +80,7 @@ function createLifecycle() {
 
       // Initialize tab bar
       tabBar = new TabBar({
-        container: "#wallets-tabs-container",
+        container: "#subTabsContainer",
         tabs: WALLET_TABS,
         defaultTab: "main",
         stateKey: "wallets.activeTab",
@@ -111,6 +111,13 @@ function createLifecycle() {
 
     activate(ctx) {
       console.log("[Wallets] Activating...");
+
+      // Re-register deactivate cleanup (cleared after each deactivate) and
+      // force-show tab bar to handle race conditions with TabBarManager.
+      if (tabBar) {
+        ctx.manageTabBar(tabBar);
+        tabBar.show({ force: true });
+      }
 
       // Start polling for balance updates
       poller = new Poller(async () => {
