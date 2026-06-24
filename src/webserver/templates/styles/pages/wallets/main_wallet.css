@@ -46,6 +46,16 @@
   color: var(--primary-color);
 }
 
+/* Keep focus feedback contained to the button: the global *:focus-visible ring
+   uses outline-offset, which on this top-of-toolbar anchor bled upward past the
+   parent (visible after clicking the Solscan link). Replace it with a flat
+   in-bounds background so it never overflows the toolbar. */
+.wt-info-address-group .copy-btn:focus-visible {
+  outline: none;
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
+}
+
 .wt-info-divider {
   width: 1px;
   height: 20px;
