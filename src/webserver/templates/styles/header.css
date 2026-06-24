@@ -2,7 +2,12 @@
    ELECTRON TITLE BAR AREA - macOS/Windows/Linux Native Integration
    ============================================================================ */
 
-/* Title bar background area - matches header color, sits behind traffic lights */
+/* Title bar background area - sits behind traffic lights at the very top.
+   The topmost pixels start at --titlebar-top-color and gradient down into the
+   header background (--titlebar-bg), so the header blends seamlessly into the
+   native window chrome. The header's own colors/style are untouched. Only
+   rendered on macOS Electron (see .electron-macos rule below); browser and
+   non-macOS platforms keep the flat fallback. */
 .electron-titlebar-bg {
   display: none; /* Hidden by default (browser mode) */
   position: fixed;
@@ -11,7 +16,11 @@
   right: 0;
   height: 28px; /* Standard macOS title bar height */
   z-index: 999;
-  background: var(--titlebar-bg, #0d1117);
+  background: linear-gradient(
+    to bottom,
+    var(--titlebar-top-color, var(--titlebar-bg, #0d1117)),
+    var(--titlebar-bg, #0d1117)
+  );
   user-select: none;
   -webkit-app-region: drag; /* Enable native drag for this region */
   app-region: drag;
@@ -1216,6 +1225,10 @@
   --header-bg: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
   --header-solid-bg: #f1f5f9;
   --titlebar-bg: #f1f5f9;
+
+  /* Colour of the abovest pixel line of the title-bar area; blends down into
+     --titlebar-bg. macOS uses this today; Windows/Linux overrides below. */
+  --titlebar-top-color: rgb(235, 239, 243);
   --header-border: #d1d5db;
   --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.08);
   --ticker-bg: linear-gradient(180deg, #e2e8f0 0%, #f1f5f9 100%);
@@ -1228,6 +1241,10 @@
   --header-bg: linear-gradient(135deg, #0a192f 0%, #1e3a5f 50%, #0e2a47 100%);
   --header-solid-bg: #0d1117;
   --titlebar-bg: #0d1117;
+
+  /* Colour of the abovest pixel line of the title-bar area; blends down into
+     --titlebar-bg. macOS uses this today; Windows/Linux overrides below. */
+  --titlebar-top-color: rgb(11, 15, 20);
   --header-border: #30363d;
   --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   --ticker-bg: linear-gradient(180deg, rgb(15, 23, 42, 0.85) 0%, rgb(15, 23, 42, 0.7) 100%);
@@ -1235,6 +1252,21 @@
   --ticker-shadow: rgb(255, 255, 255, 0.02);
   --ticker-hover-bg: rgb(255, 255, 255, 0.04);
 }
+
+/* ----------------------------------------------------------------------------
+   Per-OS title-bar top colour overrides (FUTURE-READY)
+   ----------------------------------------------------------------------------
+   The blend only renders where a custom title-bar element is shown — macOS today
+   (.electron-titlebar-bg under .electron-macos). The values in the theme blocks
+   above are the macOS colours. Windows/Linux currently render no title-bar
+   element, so these overrides have no visual effect yet; uncomment and set real
+   per-platform colours when those title bars get styled. `data-theme` lives on
+   <html>, the platform class on <body>, so the override targets the body class
+   and cascades into .electron-titlebar-bg via CSS variable inheritance.
+
+[data-theme="light"] body.electron-window-controls { --titlebar-top-color: rgb(235, 239, 243); }
+[data-theme="dark"]  body.electron-window-controls { --titlebar-top-color: rgb(11, 15, 20); }
+   ---------------------------------------------------------------------------- */
 
 /* ============================================================================
    ACCESSIBILITY
