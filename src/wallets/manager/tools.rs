@@ -47,14 +47,6 @@ pub async fn get_wallets_with_keys() -> Result<Vec<WalletWithKey>, String> {
     Ok(result)
 }
 
-/// Update last used timestamp for a wallet
-pub async fn update_last_used(wallet_id: i64) -> Result<(), String> {
-    let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    db.update_last_used(wallet_id)
-}
-
 /// Get wallets summary for dashboard
 pub async fn get_wallets_summary() -> Result<WalletsSummary, String> {
     let db_guard = super::WALLETS_DB.read().await;

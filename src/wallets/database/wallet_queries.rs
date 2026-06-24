@@ -372,20 +372,6 @@ impl WalletsDatabase {
         Ok(())
     }
 
-    /// Update last used timestamp
-    pub fn update_last_used(&self, id: i64) -> Result<(), String> {
-        let conn = self.conn()?;
-        let now = Utc::now().to_rfc3339();
-
-        conn.execute(
-            "UPDATE wallets SET last_used_at = ?1 WHERE id = ?2",
-            params![now, id],
-        )
-        .map_err(|e| format!("Failed to update last used: {e}"))?;
-
-        Ok(())
-    }
-
     /// Get wallet count statistics
     pub fn get_wallet_counts(&self) -> Result<(u32, u32), String> {
         let conn = self.conn()?;

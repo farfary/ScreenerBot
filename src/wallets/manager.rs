@@ -97,4 +97,4 @@ pub use balance_ops::{
 // =============================================================================
 
 mod tools;
-pub use tools::{get_wallets_summary, get_wallets_with_keys, update_last_used};
+pub use tools::{get_wallets_summary, get_wallets_with_keys};

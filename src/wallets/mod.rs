@@ -87,7 +87,6 @@ pub use manager::{
     restore_wallet,
     set_main_wallet,
     update_all_wallet_balances,
-    update_last_used,
     update_wallet,
     update_wallet_balances,
     upsert_token_balance,

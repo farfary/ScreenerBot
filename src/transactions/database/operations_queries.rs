@@ -500,4 +500,40 @@ impl TransactionDatabase {
 
         Ok(count as u64)
     }
+
+    /// Get the timestamp of the most recent transaction for a wallet address.
+    ///
+    /// This is the canonical source for a wallet's "last used" time: the last
+    /// moment any on-chain transaction involving the wallet was recorded. Prefers
+    /// the on-chain `block_time` (unix seconds) and falls back to the stored
+    /// RFC3339 `timestamp` text when `block_time` is missing. Returns `None` when
+    /// the wallet has no recorded transactions.
+    pub async fn get_latest_transaction_time(
+        &self,
+        wallet_address: &str,
+    ) -> Result<Option<DateTime<Utc>>, String> {
+        let conn = self.get_connection()?;
+
+        let row: Option<(Option<i64>, String)> = conn
+            .query_row(
+                "SELECT block_time, timestamp FROM raw_transactions
+                 WHERE wallet_address = ?1
+                 ORDER BY COALESCE(block_time, 0) DESC, timestamp DESC
+                 LIMIT 1",
+                params![wallet_address],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to query latest transaction time: {e}"))?;
+
+        Ok(row.and_then(|(block_time, timestamp)| {
+            block_time
+                .and_then(|secs| DateTime::<Utc>::from_timestamp(secs, 0))
+                .or_else(|| {
+                    DateTime::parse_from_rfc3339(&timestamp)
+                        .ok()
+                        .map(|dt| dt.with_timezone(&Utc))
+                })
+        }))
+    }
 }

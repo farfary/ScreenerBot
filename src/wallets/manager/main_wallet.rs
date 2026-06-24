@@ -52,8 +52,18 @@ pub async fn get_main_address() -> Result<String, String> {
 
 /// Get the main wallet info
 pub async fn get_main_wallet() -> Result<Option<Wallet>, String> {
-    let cache = MAIN_WALLET_CACHE.read().await;
-    Ok(cache.as_ref().map(|c| c.wallet.clone()))
+    let mut wallet = {
+        let cache = MAIN_WALLET_CACHE.read().await;
+        cache.as_ref().map(|c| c.wallet.clone())
+    };
+
+    // Derive "last used" from the most recent recorded transaction (canonical
+    // source of wallet activity) rather than the rarely-written stored column.
+    if let Some(wallet) = wallet.as_mut() {
+        super::access::enrich_last_used(wallet).await;
+    }
+
+    Ok(wallet)
 }
 
 /// Check if a main wallet is configured
