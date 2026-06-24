@@ -709,13 +709,37 @@ impl TransactionProcessor {
                             "Failed"
                         };
 
+                        // Use the rent-excluded swap amount derived above (output_ui for
+                        // sells = WSOL credited to the wallet; input_ui for buys = SOL
+                        // spent). main.sol_amount_* comes from a naive "largest SOL change
+                        // anywhere" heuristic that picks up ATA rent reclaim (~0.00204 SOL)
+                        // and reports wildly wrong proceeds (e.g. a -99% exit looking like
+                        // -59%). For token->token, fall back to the analyzer value.
+                        let corrected_sol_amount = match direction {
+                            crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
+                                input_ui
+                            }
+                            crate::transactions::analyzer::classify::SwapDirection::TokenToSol => {
+                                output_ui
+                            }
+                            crate::transactions::analyzer::classify::SwapDirection::TokenToToken => {
+                                main.sol_amount_adjusted.abs()
+                            }
+                        };
+                        let token_amt = main.token_amount.abs();
+                        let corrected_price = if token_amt > 0.0 {
+                            corrected_sol_amount / token_amt
+                        } else {
+                            main.price_per_token
+                        };
+
                         Some(SwapPnLInfo {
                             token_mint: primary_mint.clone(),
                             token_symbol: String::new(),
                             swap_type: swap_type.to_string(),
-                            sol_amount: main.sol_amount_adjusted.abs(),
-                            token_amount: main.token_amount.abs(),
-                            calculated_price_sol: main.price_per_token,
+                            sol_amount: corrected_sol_amount,
+                            token_amount: token_amt,
+                            calculated_price_sol: corrected_price,
                             timestamp: transaction.timestamp,
                             signature: transaction.signature.clone(),
                             router: router_str.clone(),
@@ -728,7 +752,7 @@ impl TransactionProcessor {
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::SolToToken
                             ) {
-                                main.sol_amount_adjusted.abs()
+                                corrected_sol_amount
                             } else {
                                 0.0
                             },
@@ -736,7 +760,7 @@ impl TransactionProcessor {
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::TokenToSol
                             ) {
-                                main.sol_amount_adjusted.abs()
+                                corrected_sol_amount
                             } else {
                                 0.0
                             },
@@ -757,7 +781,7 @@ impl TransactionProcessor {
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::SolToToken
                             ) {
-                                main.sol_amount_raw.abs()
+                                corrected_sol_amount
                             } else {
                                 0.0
                             },
@@ -765,7 +789,7 @@ impl TransactionProcessor {
                                 direction,
                                 crate::transactions::analyzer::classify::SwapDirection::TokenToSol
                             ) {
-                                main.sol_amount_raw.abs()
+                                corrected_sol_amount
                             } else {
                                 0.0
                             },

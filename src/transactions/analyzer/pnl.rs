@@ -466,33 +466,28 @@ fn find_largest_token_change(
 /// Find the SOL change that corresponds to a token swap
 fn find_corresponding_sol_change(
     balance_analysis: &BalanceAnalysis,
-    token_change: &TokenBalanceChange,
+    _token_change: &TokenBalanceChange,
 ) -> Result<f64, String> {
-    // TODO: Implement proper SOL-token change correlation
-    // For now, use the largest SOL change (heuristic)
-    if let Some(largest_change) = balance_analysis.sol_changes.values().max_by(|a, b| {
-        a.change
-            .abs()
-            .partial_cmp(&b.change.abs())
-            .unwrap_or(std::cmp::Ordering::Equal)
-    }) {
-        return Ok(largest_change.change);
-    } else {
-        return Err("No SOL changes found".to_owned());
-    }
-    let largest_sol_change = balance_analysis
+    // Pick the largest SOL change by magnitude, EXCLUDING rent amounts (e.g. an
+    // ATA close reclaims ~0.00204 SOL). Rent movements are not swap value; counting
+    // them as proceeds reports wildly wrong P&L. Note: the authoritative swap amount
+    // for buys/sells is derived in the processor from the wallet's WSOL flow
+    // (output_ui/input_ui) — this balance-only value feeds secondary metrics.
+    balance_analysis
         .sol_changes
         .values()
+        .filter(|c| {
+            let lamports = (c.change.abs() * 1_000_000_000.0).round() as u64;
+            !crate::transactions::analyzer::balance::is_rent_amount(lamports)
+        })
         .max_by(|a, b| {
             a.change
                 .abs()
                 .partial_cmp(&b.change.abs())
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map(|change| change.change)
-        .unwrap_or_default();
-
-    Ok(largest_sol_change)
+        .map(|c| c.change)
+        .ok_or_else(|| "No SOL changes found".to_owned())
 }
 
 // =============================================================================
