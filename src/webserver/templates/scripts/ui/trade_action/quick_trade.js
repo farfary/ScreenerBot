@@ -357,13 +357,15 @@ export function applyQuickTradeMixin(TradeActionDialog) {
 
         const data = await response.json();
 
-        if (!data.success || !data.data?.position?.summary) {
+        // /details returns PositionDetailResponse directly; `position` flattens the
+        // summary fields onto itself (no {success,data} envelope).
+        const pos = data?.position;
+        if (!pos) {
           this._quickContinueBtnEl.classList.remove("loading");
           this._showQuickError("No position found for this token");
           return;
         }
 
-        const pos = data.data.position.summary;
         const holdings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
 
         if (holdings <= 0) {

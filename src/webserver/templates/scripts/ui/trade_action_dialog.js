@@ -1331,12 +1331,15 @@ export class TradeActionDialog {
       if (!res.ok) {
         return { ok: false, error: "Could not verify token balance" };
       }
+      // /api/positions/:key/details returns the PositionDetailResponse directly
+      // (no {success,data} envelope), and `position` flattens the summary fields
+      // (id, mint, token_amount, ...) onto itself via #[serde(flatten)].
       const data = await res.json();
-      if (!data.success || !data.data?.position?.summary) {
+      const pos = data?.position;
+      if (!pos) {
         return { ok: false, error: "Position not found - it may have been closed" };
       }
 
-      const pos = data.data.position.summary;
       const currentHoldings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
       const expectedHoldings = this.currentContext.holdings || 0;
 

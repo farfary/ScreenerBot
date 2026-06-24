@@ -91,8 +91,10 @@
           const posRes = await fetch(`/api/positions/${encodeURIComponent(context.mint)}/details`);
           if (posRes.ok) {
             const posData = await posRes.json();
-            if (posData.success && posData.data?.position?.summary) {
-              const pos = posData.data.position.summary;
+            // /details returns PositionDetailResponse directly; `position` flattens
+            // the summary fields onto itself (no {success,data} envelope).
+            const pos = posData?.position;
+            if (pos) {
               // Use remaining_token_amount if available (after partial exits), otherwise token_amount
               holdings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
             }
