@@ -31,14 +31,17 @@
 
 /* Embedded Strategies editor subtab: fill the content area edge-to-edge. The
    strategies-page layout is height:100% based and manages its own internal
-   scrolling, so cancel #trader-content's horizontal + bottom padding (via
-   negative margins) and the default subtab spacing instead of letting them
-   leave gutters on the sides and an empty strip at the bottom. */
+   scrolling, so when this subtab is the visible one, drop #trader-content's
+   horizontal + bottom padding entirely (negative margins can't stretch the
+   height, leaving an empty strip at the bottom). */
+#trader-content:has(> #strategies-tab[style*="display: block"]) {
+  padding: 0;
+  overflow: hidden;
+}
+
 #strategies-tab {
   height: 100%;
   padding: 0;
-  margin: 0 calc(var(--trader-horizontal-padding) * -1)
-    calc(var(--trader-vertical-gap) * -2);
   overflow: hidden;
 }
 
