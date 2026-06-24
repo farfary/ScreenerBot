@@ -54,19 +54,16 @@ pub(super) async fn get_wallet_balance() -> Json<Option<WalletCurrentResponse>> 
     get_wallet_current().await
 }
 
-/// Get wallet token holdings with enriched metadata
+/// Get wallet token holdings with enriched metadata (reads the latest snapshot).
 pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
     // Return demo data if demo mode is enabled
     if crate::webserver::demo::is_demo_mode() {
         return Json(crate::webserver::demo::get_demo_wallet_tokens());
     }
 
-    // Get current wallet snapshot
     let snapshot = match get_current_wallet_status().await {
         Ok(Some(s)) => s,
-        Ok(None) => {
-            return Json(WalletTokensResponse { tokens: vec![] });
-        }
+        Ok(None) => return Json(WalletTokensResponse { tokens: vec![] }),
         Err(err) => {
             logger::warning(
                 LogTag::Webserver,
@@ -76,20 +73,83 @@ pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
         }
     };
 
+    Json(WalletTokensResponse {
+        tokens: enrich_token_holdings(&snapshot).await,
+    })
+}
+
+/// Force a fresh on-chain wallet snapshot, then return the enriched holdings.
+///
+/// Drives the dashboard "refresh" button: the SOL balance and token balances are
+/// re-fetched from RPC (always), while token metadata is cache-first — only
+/// never-before-seen mints trigger a metadata fetch (see [`enrich_token_holdings`]).
+pub(super) async fn refresh_wallet_tokens() -> Json<WalletTokensResponse> {
+    if crate::webserver::demo::is_demo_mode() {
+        return Json(crate::webserver::demo::get_demo_wallet_tokens());
+    }
+
+    let snapshot = match crate::wallet::force_wallet_snapshot().await {
+        Ok(s) => s,
+        Err(err) => {
+            logger::warning(
+                LogTag::Wallet,
+                &format!("Forced wallet snapshot failed, falling back to latest: {err}"),
+            );
+            match get_current_wallet_status().await {
+                Ok(Some(s)) => s,
+                _ => return Json(WalletTokensResponse { tokens: vec![] }),
+            }
+        }
+    };
+
+    Json(WalletTokensResponse {
+        tokens: enrich_token_holdings(&snapshot).await,
+    })
+}
+
+/// Enrich a snapshot's token balances with metadata (symbol/name/logo) and decimals.
+///
+/// Cache-first by design: known mints (already a metadata row in the token DB) are
+/// served straight from cache. Mints the bot has never seen are bootstrapped once
+/// via `ensure_token_available` (fetches decimals + market data and stores them);
+/// after that first fetch the row exists and subsequent loads hit cache only.
+async fn enrich_token_holdings(
+    snapshot: &crate::wallet::WalletSnapshot,
+) -> Vec<WalletTokenHolding> {
     // token_balances is not populated by get_recent_snapshots — load separately
     let token_balances = if let Some(id) = snapshot.id {
         get_snapshot_token_balances(id).await.unwrap_or_default()
     } else {
-        vec![]
+        snapshot.token_balances.clone()
     };
 
-    // Collect mints from token balances
     let mints: Vec<String> = token_balances.iter().map(|tb| tb.mint.clone()).collect();
 
-    // Fetch token metadata in batch
-    let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
+    // Identify never-seen mints (no metadata row at all) and bootstrap them once.
+    // A mint already in the DB — even one whose market fetch previously failed and
+    // only has a stamped decimals row — is treated as cached and skipped.
+    if let Some(db) = crate::tokens::database::get_global_database() {
+        let unknown: Vec<String> = mints
+            .iter()
+            .filter(|m| !matches!(db.get_token(m), Ok(Some(_))))
+            .cloned()
+            .collect();
 
-    // Try to get metadata for each token from token database
+        if !unknown.is_empty() {
+            logger::info(
+                LogTag::Wallet,
+                &format!("Bootstrapping metadata for {} held token(s)", unknown.len()),
+            );
+            let fetches = unknown
+                .iter()
+                .map(|mint| crate::tokens::ensure_token_available(mint));
+            // Failures are non-fatal (no market data yet) — the row is still stamped.
+            let _ = futures::future::join_all(fetches).await;
+        }
+    }
+
+    // Batch-read metadata (symbol/name) and logos from the token DB cache.
+    let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
     if let Some(db) = crate::tokens::database::get_global_database() {
         for mint in &mints {
             if let Ok(Some(meta)) = db.get_token(mint) {
@@ -97,26 +157,26 @@ pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
             }
         }
     }
+    let logo_map = crate::tokens::database::get_token_images_batch_async(mints.clone())
+        .await
+        .unwrap_or_default();
 
-    // Build response with enriched data
-    let tokens: Vec<WalletTokenHolding> = token_balances
+    token_balances
         .iter()
         .map(|tb| {
             let (symbol, name) = metadata_map.get(&tb.mint).cloned().unwrap_or((None, None));
-
             WalletTokenHolding {
                 mint: tb.mint.clone(),
                 symbol,
                 name,
+                logo_url: logo_map.get(&tb.mint).cloned(),
                 balance: tb.balance,
                 ui_amount: tb.balance_ui,
                 decimals: tb.decimals,
                 is_token_2022: tb.is_token_2022,
             }
         })
-        .collect();
-
-    Json(WalletTokensResponse { tokens })
+        .collect()
 }
 
 pub(super) async fn get_wallet_dashboard(

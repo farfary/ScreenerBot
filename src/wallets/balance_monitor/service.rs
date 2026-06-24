@@ -413,6 +413,26 @@ pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, Strin
     Ok(snapshots.into_iter().next())
 }
 
+/// Force an immediate on-chain wallet snapshot and persist it.
+///
+/// Used by the dashboard "refresh" button so the user always gets a fresh
+/// holdings list (SOL balance + token balances straight from RPC) instead of
+/// waiting for the next periodic tick. Returns the freshly captured snapshot.
+pub async fn force_wallet_snapshot() -> Result<WalletSnapshot, String> {
+    let snapshot = collect_wallet_snapshot().await?;
+    increment_operations();
+    increment_snapshots();
+
+    let db_guard = GLOBAL_WALLET_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => {
+            db.save_wallet_snapshot(&snapshot)?;
+            Ok(snapshot)
+        }
+        None => Err("Wallet database not initialized".to_owned()),
+    }
+}
+
 /// Get SOL balance at or before a specific time (optimized single-value query)
 pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;

@@ -41,7 +41,11 @@ export function createWalletRenderers({
       render: (value, row) => {
         const sym = Utils.escapeHtml(row.symbol || "Unknown");
         const name = row.name ? Utils.escapeHtml(row.name) : null;
-        return `<div class="wt-token-cell"><span class="wt-symbol">${sym}</span>${name ? `<span class="wt-name">${name}</span>` : ""}</div>`;
+        const logo = row.logo_url || "";
+        const logoHtml = logo
+          ? `<img class="token-logo" src="${Utils.escapeHtml(logo)}" alt="${sym}" loading="lazy"/>`
+          : '<i class="token-logo icon-coins"></i>';
+        return `<div class="wt-token-cell">${logoHtml}<div class="wt-token-meta"><span class="wt-symbol">${sym}</span>${name ? `<span class="wt-name">${name}</span>` : ""}</div></div>`;
       },
     },
     {
@@ -139,23 +143,24 @@ export function createWalletRenderers({
     // Full structural render — first time or wallet changed
     lastRenderedWalletId = mainWallet.id;
 
-    const shortAddress = mainWallet.address
-      ? `${mainWallet.address.slice(0, 6)}...${mainWallet.address.slice(-4)}`
-      : "—";
-    const typeLabel = capitalizeFirst(mainWallet.wallet_type || "");
+    const fullAddress = mainWallet.address || "—";
+    const solscanUrl = mainWallet.address
+      ? `https://solscan.io/account/${encodeURIComponent(mainWallet.address)}`
+      : "#";
 
     container.innerHTML = `
       <div class="wt-info-identity">
         <span class="wt-info-name">${Utils.escapeHtml(mainWallet.name)}</span>
-        <span class="wallet-badge main"><i class="icon-star"></i> Main</span>
-        <span class="wallet-badge ${mainWallet.wallet_type}">${typeLabel}</span>
       </div>
       <div class="wt-info-divider"></div>
       <div class="wt-info-address-group">
-        <code class="wt-info-address">${shortAddress}</code>
+        <code class="wt-info-address">${Utils.escapeHtml(fullAddress)}</code>
         <button type="button" class="copy-btn" data-address="${mainWallet.address}" data-tooltip="Copy address">
           <i class="icon-copy"></i>
         </button>
+        <a class="copy-btn" href="${solscanUrl}" target="_blank" rel="noopener" data-tooltip="View on Solscan">
+          <i class="icon-external-link"></i>
+        </a>
       </div>
       <div class="wt-info-divider"></div>
       <div class="wt-info-stat">
@@ -177,8 +182,9 @@ export function createWalletRenderers({
       </div>
     `;
 
-    // Wire copy button on address
-    container.querySelectorAll(".copy-btn").forEach((btn) => {
+    // Wire copy button on address (scope to data-address so the adjacent
+    // Solscan link — which also carries .copy-btn for styling — is skipped).
+    container.querySelectorAll(".copy-btn[data-address]").forEach((btn) => {
       on(btn, "click", (e) => {
         e.stopPropagation();
         Utils.copyToClipboard(btn.dataset.address);

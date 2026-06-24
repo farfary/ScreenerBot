@@ -20,6 +20,7 @@ mod types;
 // Re-export public API
 pub use service::{
     clear_dashboard_api_cache,
+    force_wallet_snapshot,
     get_balance_at_time,
     get_current_wallet_status,
     get_dashboard_cache_metrics,

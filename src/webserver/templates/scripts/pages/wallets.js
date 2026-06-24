@@ -404,8 +404,8 @@ function setupDeleteModal() {
 // API Functions
 // =============================================================================
 
-async function loadAllData() {
-  await Promise.all([loadWallets(), loadTokenHoldings()]);
+async function loadAllData({ force = false } = {}) {
+  await Promise.all([loadWallets(), loadTokenHoldings({ force })]);
   renderers.renderCurrentPanel();
 }
 
@@ -425,9 +425,14 @@ async function loadWallets() {
   }
 }
 
-async function loadTokenHoldings() {
+async function loadTokenHoldings({ force = false } = {}) {
   try {
-    const response = await fetch("/api/wallet/tokens");
+    // force=true (refresh button) hits the POST endpoint that re-captures a
+    // fresh on-chain snapshot and bootstraps metadata for never-seen mints.
+    // The normal poll uses the cheap GET that just reads the latest snapshot.
+    const response = force
+      ? await fetch("/api/wallet/tokens/refresh", { method: "POST" })
+      : await fetch("/api/wallet/tokens");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
@@ -468,7 +473,7 @@ async function handleRefresh(e) {
   btn.disabled = true;
 
   try {
-    await loadAllData();
+    await loadAllData({ force: true });
     Utils.showToast("Wallets refreshed", "success");
   } catch {
     Utils.showToast("Failed to refresh", "error");

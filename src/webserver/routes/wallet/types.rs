@@ -28,6 +28,7 @@ pub struct WalletTokenHolding {
     pub mint: String,
     pub symbol: Option<String>,
     pub name: Option<String>,
+    pub logo_url: Option<String>,
     pub balance: u64,
     pub ui_amount: f64,
     pub decimals: u8,
