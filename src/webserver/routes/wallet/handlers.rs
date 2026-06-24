@@ -161,10 +161,28 @@ async fn enrich_token_holdings(
         .await
         .unwrap_or_default();
 
+    // Latest price in SOL per mint, sourced from the assembled token's market data
+    // (None for mints without market data — they simply show no value).
+    let price_fetches = mints
+        .iter()
+        .map(|mint| async move {
+            let price = crate::tokens::database::get_full_token_async(mint)
+                .await
+                .ok()
+                .flatten()
+                .map(|t| t.price_sol)
+                .filter(|p| *p > 0.0);
+            (mint.clone(), price)
+        });
+    let price_map: HashMap<String, Option<f64>> =
+        futures::future::join_all(price_fetches).await.into_iter().collect();
+
     token_balances
         .iter()
         .map(|tb| {
             let (symbol, name) = metadata_map.get(&tb.mint).cloned().unwrap_or((None, None));
+            let price_sol = price_map.get(&tb.mint).copied().flatten();
+            let value_sol = price_sol.map(|p| p * tb.balance_ui);
             WalletTokenHolding {
                 mint: tb.mint.clone(),
                 symbol,
@@ -174,6 +192,8 @@ async fn enrich_token_holdings(
                 ui_amount: tb.balance_ui,
                 decimals: tb.decimals,
                 is_token_2022: tb.is_token_2022,
+                price_sol,
+                value_sol,
             }
         })
         .collect()

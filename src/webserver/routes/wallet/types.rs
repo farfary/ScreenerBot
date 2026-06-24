@@ -33,6 +33,10 @@ pub struct WalletTokenHolding {
     pub ui_amount: f64,
     pub decimals: u8,
     pub is_token_2022: bool,
+    /// Latest known token price in SOL (None when no market data is available).
+    pub price_sol: Option<f64>,
+    /// Holding value in SOL (ui_amount * price_sol; None when price is unknown).
+    pub value_sol: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]

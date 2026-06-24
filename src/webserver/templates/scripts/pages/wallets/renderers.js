@@ -55,6 +55,12 @@ export function createWalletRenderers({
       render: (value) => (value != null ? Utils.formatNumber(value, { decimals: 4 }) : "—"),
     },
     {
+      id: "value_sol",
+      label: "Value (SOL)",
+      sortable: true,
+      render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
+    },
+    {
       id: "is_token_2022",
       label: "Type",
       sortable: true,

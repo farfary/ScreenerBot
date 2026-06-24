@@ -29,6 +29,23 @@
   white-space: nowrap;
 }
 
+/* Copy / Solscan shortcuts: hover highlights the button itself only, never the
+   surrounding address group. Fixed-size, self-contained, anchor defaults reset. */
+.wt-info-address-group .copy-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.wt-info-address-group .copy-btn:hover {
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
+}
+
 .wt-info-divider {
   width: 1px;
   height: 20px;
