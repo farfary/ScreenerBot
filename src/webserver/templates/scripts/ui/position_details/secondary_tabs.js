@@ -65,7 +65,7 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
               <div class="pdd-timeline-details">
                 <div class="pdd-timeline-stat">
                   <span class="label">Amount</span>
-                  <span class="value">${Utils.formatCompactNumber(item.amount)} ${Utils.escapeHtml(symbol)}</span>
+                  <span class="value">${Utils.formatCompactNumber(this._toUiAmount(item.amount))} ${Utils.escapeHtml(symbol)}</span>
                 </div>
                 <div class="pdd-timeline-stat">
                   <span class="label">Price</span>
@@ -172,9 +172,9 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
         // Token amount
         let tokenAmountHtml = "";
         if (txType === "entry" && entryRecord?.amount)
-          tokenAmountHtml = `<div class="pdd-tx-token positive">+${Utils.formatCompactNumber(entryRecord.amount)} ${Utils.escapeHtml(symbol)}</div>`;
+          tokenAmountHtml = `<div class="pdd-tx-token positive">+${Utils.formatCompactNumber(this._toUiAmount(entryRecord.amount))} ${Utils.escapeHtml(symbol)}</div>`;
         else if (txType === "exit" && exitRecord?.amount)
-          tokenAmountHtml = `<div class="pdd-tx-token negative">-${Utils.formatCompactNumber(exitRecord.amount)} ${Utils.escapeHtml(symbol)}</div>`;
+          tokenAmountHtml = `<div class="pdd-tx-token negative">-${Utils.formatCompactNumber(this._toUiAmount(exitRecord.amount))} ${Utils.escapeHtml(symbol)}</div>`;
 
         // SOL change
         const solChange = tx.sol_change;

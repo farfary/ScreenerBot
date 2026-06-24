@@ -137,11 +137,19 @@ fn map_position_to_response_with_logo(
 
 /// Map position to response with async logo fetch (used for single position lookups)
 pub async fn map_position_to_response_async(p: &positions::Position) -> PositionResponse {
-    // Fetch logo + decimals from tokens database (single token load)
-    let (logo_url, token_decimals) = match tokens::database::get_full_token_async(&p.mint).await {
-        Ok(Some(token)) => (token.image_url.clone(), Some(token.decimals)),
-        Ok(None) | Err(_) => (None, None),
+    // Logo comes from the assembled token (best-effort). Decimals come from the
+    // stable on-chain `tokens.decimals` column, NOT the assembled token: full-token
+    // assembly returns None once a token loses market data (e.g. a delisted/rugged
+    // token), which would drop decimals and make the UI render raw amounts (3.08B
+    // instead of 3,075). The decimals column survives that.
+    let logo_url = match tokens::database::get_full_token_async(&p.mint).await {
+        Ok(Some(token)) => token.image_url.clone(),
+        _ => None,
     };
+    let token_decimals = tokens::database::get_token_decimals_batch_async(vec![p.mint.clone()])
+        .await
+        .ok()
+        .and_then(|m| m.get(&p.mint).copied());
 
     map_position_to_response_with_logo(p, logo_url, token_decimals)
 }

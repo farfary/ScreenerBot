@@ -215,7 +215,7 @@ export function applyAnalyticsTabMixin(PositionDetailsDialog) {
               ? `
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">Total Tokens Acquired</span>
-            <span class="pdd-row-value">${Utils.formatCompactNumber(totalTokensAcquired)}</span>
+            <span class="pdd-row-value">${Utils.formatCompactNumber(this._toUiAmount(totalTokensAcquired))}</span>
           </div>
           `
               : ""
@@ -275,7 +275,7 @@ export function applyAnalyticsTabMixin(PositionDetailsDialog) {
           </div>
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">Tokens Sold</span>
-            <span class="pdd-row-value">${Utils.formatCompactNumber(tokensSold)} <span class="pdd-row-pct">(${Utils.formatNumber(pctSold, 1)}%)</span></span>
+            <span class="pdd-row-value">${Utils.formatCompactNumber(this._toUiAmount(tokensSold))} <span class="pdd-row-pct">(${Utils.formatNumber(pctSold, 1)}%)</span></span>
           </div>
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">SOL Recovered</span>

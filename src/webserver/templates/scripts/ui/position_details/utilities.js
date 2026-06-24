@@ -48,7 +48,14 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
    * Defaults to 9 (most Solana SPL tokens) if not available
    */
   proto._getDecimals = function () {
-    return this.fullDetails?.token_info?.decimals ?? 9;
+    // Prefer the position summary's token_decimals (sourced from the stable
+    // on-chain decimals column, so it survives market-data loss) over token_info,
+    // which is null when full-token assembly fails for a delisted/rugged token.
+    return (
+      this.fullDetails?.position?.token_decimals ??
+      this.fullDetails?.token_info?.decimals ??
+      9
+    );
   };
 
   /**
