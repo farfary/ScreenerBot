@@ -128,58 +128,6 @@
   color: var(--text-muted);
 }
 
-/* Control Toggle Switch */
-.control-toggle {
-  position: relative;
-  display: inline-flex;
-  cursor: pointer;
-}
-
-.control-toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-  position: absolute;
-}
-
-.control-toggle .toggle-track {
-  position: relative;
-  width: 40px;
-  height: 22px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  transition: all var(--transition-base);
-}
-
-.control-toggle .toggle-track::before {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  background: var(--text-muted);
-  border-radius: var(--radius-full);
-  transition: all var(--transition-base);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
-}
-
-.control-toggle input:checked + .toggle-track {
-  background: var(--success-color);
-  border-color: var(--success-color);
-}
-
-.control-toggle input:checked + .toggle-track::before {
-  left: calc(100% - 19px);
-  background: #fff;
-}
-
-.control-toggle input:disabled + .toggle-track {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* Loss Limit Panel */
 .loss-limit-panel {
   padding: 0.75rem;

@@ -91,47 +91,23 @@
 }
 
 .enable-toggle input {
-  display: none;
-}
-
-.toggle-track {
-  width: 40px;
-  height: 22px;
-  background: var(--border-color);
-  border-radius: var(--radius-xl);
-  position: relative;
-  transition: background var(--transition-base);
-}
-
-.toggle-track::after {
-  content: "";
   position: absolute;
-  width: 16px;
-  height: 16px;
-  background: white;
-  border-radius: var(--radius-full);
-  top: 3px;
-  left: 3px;
-  transition: transform var(--transition-base);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
+/* Switch visuals (track, knob, sizing) come from the central .toggle-track in
+   form_controls.css. Only the editor-header-specific checked colour + the label
+   colour are kept here. */
 .enable-toggle input:checked + .toggle-track {
   background: var(--success, #10b981);
 }
 
 .enable-toggle input:checked + .toggle-track::after {
-  transform: translateX(18px);
-}
-
-.enable-toggle input:focus-visible + .toggle-track {
-  box-shadow: 0 0 0 3px var(--primary-alpha-20);
-}
-
-.toggle-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-secondary);
+  transform: translateX(
+    calc(var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-knob-offset) * 2)
+  );
 }
 
 .enable-toggle input:checked ~ .toggle-label {

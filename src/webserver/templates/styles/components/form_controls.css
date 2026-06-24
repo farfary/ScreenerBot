@@ -462,8 +462,7 @@ input[type="radio"]:disabled {
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: var(--toggle-width);
-  height: var(--toggle-height);
+  gap: var(--spacing-sm);
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -476,10 +475,13 @@ input[type="radio"]:disabled {
   height: 0;
 }
 
-/* Track */
+/* Track — a fixed-size switch that lives inline next to an optional label, so
+   the same markup works switch-only or with a label sibling. */
 .toggle-track {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex-shrink: 0;
+  width: var(--toggle-width);
+  height: var(--toggle-height);
   background: var(--border-color);
   border-radius: calc(var(--toggle-height) / 2);
   transition:
@@ -529,9 +531,8 @@ input[type="radio"]:disabled {
   cursor: not-allowed;
 }
 
-/* Toggle with label */
+/* Toggle with label (spacing handled by .toggle gap) */
 .toggle-label {
-  margin-left: var(--spacing-sm);
   font-size: var(--input-font-size);
   color: var(--text-secondary);
   cursor: pointer;
