@@ -85,7 +85,7 @@ export function createWalletRenderers({
         const escaped = Utils.escapeHtml(value);
         const short = `${value.slice(0, 6)}...${value.slice(-4)}`;
         const url = `https://solscan.io/token/${encodeURIComponent(value)}`;
-        return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" data-tooltip="Copy mint"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" data-tooltip="View on Solscan"><i class="icon-external-link"></i></a></div>`;
+        return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" title="Copy mint"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="View on Solscan"><i class="icon-external-link"></i></a></div>`;
       },
     },
   ];
@@ -161,10 +161,10 @@ export function createWalletRenderers({
       <div class="wt-info-divider"></div>
       <div class="wt-info-address-group">
         <code class="wt-info-address">${Utils.escapeHtml(fullAddress)}</code>
-        <button type="button" class="copy-btn" data-address="${mainWallet.address}" data-tooltip="Copy address">
+        <button type="button" class="copy-btn" data-address="${mainWallet.address}" title="Copy address">
           <i class="icon-copy"></i>
         </button>
-        <a class="copy-btn" href="${solscanUrl}" target="_blank" rel="noopener" data-tooltip="View on Solscan">
+        <a class="copy-btn" href="${solscanUrl}" target="_blank" rel="noopener" title="View on Solscan">
           <i class="icon-external-link"></i>
         </a>
       </div>
@@ -343,7 +343,7 @@ export function createWalletRenderers({
             <td class="wallet-name-cell">${Utils.escapeHtml(wallet.name)}</td>
             <td class="wallet-address-cell">
               <code>${shortAddress}</code>
-              <button type="button" class="copy-btn-mini" data-address="${wallet.address}" data-tooltip="Copy address">
+              <button type="button" class="copy-btn-mini" data-address="${wallet.address}" title="Copy address">
                 <i class="icon-copy"></i>
               </button>
             </td>
@@ -354,10 +354,10 @@ export function createWalletRenderers({
             <td class="wallet-created-cell">${created}</td>
             <td class="wallet-actions-cell">
               <div class="table-actions">
-                <button type="button" class="btn btn-sm" data-action="export" data-id="${wallet.id}" data-tooltip="Export private key">
+                <button type="button" class="btn btn-sm" data-action="export" data-id="${wallet.id}" title="Export private key">
                   <i class="icon-key"></i>
                 </button>
-                <button type="button" class="btn btn-sm" data-action="archive" data-id="${wallet.id}" data-tooltip="Archive wallet">
+                <button type="button" class="btn btn-sm" data-action="archive" data-id="${wallet.id}" title="Archive wallet">
                   <i class="icon-archive"></i>
                 </button>
               </div>
@@ -432,7 +432,7 @@ export function createWalletRenderers({
             <td class="wallet-name-cell">${Utils.escapeHtml(wallet.name)}</td>
             <td class="wallet-address-cell">
               <code>${shortAddress}</code>
-              <button type="button" class="copy-btn-mini" data-address="${wallet.address}" data-tooltip="Copy address">
+              <button type="button" class="copy-btn-mini" data-address="${wallet.address}" title="Copy address">
                 <i class="icon-copy"></i>
               </button>
             </td>
@@ -443,13 +443,13 @@ export function createWalletRenderers({
             <td class="wallet-created-cell">${created}</td>
             <td class="wallet-actions-cell">
               <div class="table-actions">
-                <button type="button" class="btn btn-sm success" data-action="restore" data-id="${wallet.id}" data-tooltip="Restore wallet">
+                <button type="button" class="btn btn-sm success" data-action="restore" data-id="${wallet.id}" title="Restore wallet">
                   <i class="icon-archive-restore"></i>
                 </button>
-                <button type="button" class="btn btn-sm" data-action="export" data-id="${wallet.id}" data-tooltip="Export private key">
+                <button type="button" class="btn btn-sm" data-action="export" data-id="${wallet.id}" title="Export private key">
                   <i class="icon-key"></i>
                 </button>
-                <button type="button" class="btn btn-sm danger" data-action="delete" data-id="${wallet.id}" data-tooltip="Delete permanently">
+                <button type="button" class="btn btn-sm danger" data-action="delete" data-id="${wallet.id}" title="Delete permanently">
                   <i class="icon-trash-2"></i>
                 </button>
               </div>
