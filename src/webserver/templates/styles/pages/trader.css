@@ -297,11 +297,35 @@
    ============================================================================ */
 
 /* Stats Grid */
+
+/* Two-column Stats layout: left = controls, right = analysis + current config.
+   Collapses to a single column on narrow/!desktop screens. */
+.stats-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+  gap: var(--trader-vertical-gap);
+  align-items: start;
+  padding-top: 1rem;
+}
+
+.stats-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--trader-vertical-gap);
+  min-width: 0;
+}
+
+@media (width <= 1024px) {
+  .stats-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .stats-grid {
   display: flex;
   flex-direction: column;
   gap: var(--trader-vertical-gap);
-  padding: 1rem 0 0;
+  padding: 0;
 }
 
 /* ============================================================================

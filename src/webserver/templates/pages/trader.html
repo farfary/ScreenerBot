@@ -3,6 +3,9 @@
   <div id="trader-content">
     <!-- Stats Tab -->
     <div id="stats-tab" class="trader-tab-content" style="display: none">
+      <div class="stats-layout">
+        <!-- LEFT COLUMN — Controlling -->
+        <div class="stats-col stats-col-left">
       <!-- Auto Trader Status Control -->
       <div class="trader-status-bar" id="trader-status-bar">
         <div class="status-bar-main">
@@ -90,7 +93,11 @@
           <i class="icon-octagon"></i> Force Stop Everything
         </button>
       </div>
+        </div>
+        <!-- /LEFT COLUMN -->
 
+        <!-- RIGHT COLUMN — Analysis & Current Config -->
+        <div class="stats-col stats-col-right">
       <div class="stats-grid">
         <!-- Key Performance Indicators -->
         <div class="stats-section stats-section-primary">
@@ -243,44 +250,9 @@
                   <span class="label">Entry Concurrency:</span>
                   <span class="value" id="config-entry-concurrency">—</span>
                 </div>
-                <div class="config-item-compact">
-                  <i class="icon-activity status-icon enabled"></i>
-                  <span class="label">Entry Interval:</span>
-                  <span class="value">30s</span>
-                </div>
-                <div class="config-item-compact">
-                  <i class="icon-activity status-icon enabled"></i>
-                  <span class="label">Exit Interval:</span>
-                  <span class="value">5s</span>
-                </div>
               </div>
             </div>
 
-            <!-- System Status Column -->
-            <div class="config-column">
-              <div class="config-column-header">System Status</div>
-              <div class="config-items-compact">
-                <div class="config-item-compact">
-                  <span class="label">Mode:</span>
-                  <span class="value" id="config-mode">—</span>
-                </div>
-                <div class="config-item-compact">
-                  <i class="icon-puzzle status-icon enabled"></i>
-                  <span class="label">Strategies:</span>
-                  <span class="value" id="config-strategies-count">—</span>
-                </div>
-                <div class="config-item-compact">
-                  <i class="icon-cpu status-icon enabled"></i>
-                  <span class="label">Monitors:</span>
-                  <span class="value">Running</span>
-                </div>
-                <div class="config-item-compact">
-                  <i class="icon-clock status-icon enabled"></i>
-                  <span class="label">Last Check:</span>
-                  <span class="value" id="config-last-check">—</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -312,46 +284,11 @@
           </div>
         </div>
 
-        <!-- System Health & Activity -->
-        <div class="stats-section">
-          <div class="section-header">
-            <h3><i class="icon-cpu"></i> System Health</h3>
-            <p class="section-subtitle">Auto Trader components status and activity</p>
-          </div>
-          <div class="health-grid">
-            <div class="health-card">
-              <div class="health-icon" id="trader-icon">
-                <i class="icon-zap"></i>
-              </div>
-              <div class="health-content">
-                <div class="health-label">Auto Trader Engine</div>
-                <div class="health-value" id="trader-status">—</div>
-                <div class="health-detail" id="trader-detail"></div>
-              </div>
-            </div>
-            <div class="health-card">
-              <div class="health-icon" id="entry-icon">
-                <i class="icon-log-in"></i>
-              </div>
-              <div class="health-content">
-                <div class="health-label">Entry Monitor</div>
-                <div class="health-value" id="entry-monitor">—</div>
-                <div class="health-detail" id="entry-detail"></div>
-              </div>
-            </div>
-            <div class="health-card">
-              <div class="health-icon" id="exit-icon">
-                <i class="icon-log-out"></i>
-              </div>
-              <div class="health-content">
-                <div class="health-label">Exit Monitor</div>
-                <div class="health-value" id="exit-monitor">—</div>
-                <div class="health-detail" id="exit-detail"></div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
+        </div>
+        <!-- /RIGHT COLUMN -->
+      </div>
+      <!-- /stats-layout -->
     </div>
 
     <!-- Stop Loss Tab -->

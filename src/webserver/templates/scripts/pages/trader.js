@@ -977,6 +977,9 @@ function createLifecycle() {
         worstTradeDetail.textContent = data.worst_trade_token || "No trades yet";
       }
 
+      // Render the exit strategy breakdown (was previously never rendered)
+      renderExitBreakdown(data.exit_breakdown);
+
       // Update positions summary (if we have active positions)
       await updatePositionsSummary();
     } catch (error) {
@@ -989,6 +992,71 @@ function createLifecycle() {
       if (totalTrades) totalTrades.textContent = "—";
       if (avgHoldTime) avgHoldTime.textContent = "—";
     }
+  }
+
+  // Humanize a closed_reason / exit_type into a readable label.
+  const EXIT_TYPE_LABELS = {
+    stop_loss: "Stop Loss",
+    take_profit: "Take Profit",
+    roi: "ROI Target",
+    roi_exit: "ROI Target",
+    trailing_stop: "Trailing Stop",
+    time_override: "Time Override",
+    time_rule: "Time Rule",
+    manual: "Manual",
+    manual_close: "Manual",
+    dca: "DCA",
+    unknown: "Unknown",
+  };
+
+  function formatExitType(type) {
+    if (!type) return "Unknown";
+    return (
+      EXIT_TYPE_LABELS[type] ||
+      type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    );
+  }
+
+  /**
+   * Render the exit strategy breakdown list (how positions were closed).
+   */
+  function renderExitBreakdown(breakdown) {
+    const container = $("#exit-breakdown");
+    if (!container) return;
+
+    if (!Array.isArray(breakdown) || breakdown.length === 0) {
+      container.innerHTML =
+        '<div class="info-state"><i class="icon-inbox"></i><span>No closed trades in the last 30 days</span></div>';
+      return;
+    }
+
+    const totalCount = breakdown.reduce((sum, e) => sum + (e.count || 0), 0) || 1;
+
+    const rows = breakdown
+      .map((e) => {
+        const count = e.count || 0;
+        const pct = e.avg_profit_pct || 0;
+        const share = Math.round((count / totalCount) * 100);
+        const profitClass = pct >= 0 ? "positive" : "negative";
+        const profitText = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+        return `
+          <div class="exit-breakdown-row">
+            <div class="exit-breakdown-head">
+              <span class="exit-breakdown-type">${Utils.escapeHtml(formatExitType(e.exit_type))}</span>
+              <span class="exit-breakdown-count">${count} ${count === 1 ? "trade" : "trades"}</span>
+            </div>
+            <div class="exit-breakdown-bar">
+              <div class="exit-breakdown-fill ${profitClass}" style="width: ${share}%"></div>
+            </div>
+            <div class="exit-breakdown-meta">
+              <span class="exit-breakdown-share">${share}% of exits</span>
+              <span class="exit-breakdown-profit ${profitClass}">${profitText} avg</span>
+            </div>
+          </div>`;
+      })
+      .join("");
+
+    container.innerHTML = rows;
   }
 
   /**

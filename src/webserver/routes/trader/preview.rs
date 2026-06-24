@@ -75,17 +75,34 @@ pub async fn get_trader_stats() -> Response {
         0.0
     };
 
-    // Find best trade (using pnl_percent)
-    let best_trade_pct = recent_closed
+    // Find best/worst trades (by pnl_percent) and keep the token symbol for each
+    let best_trade = recent_closed
         .iter()
-        .filter_map(|p| p.pnl_percent)
-        .fold(f64::NEG_INFINITY, f64::max);
+        .filter(|p| p.pnl_percent.is_some())
+        .max_by(|a, b| {
+            a.pnl_percent
+                .unwrap_or(f64::NEG_INFINITY)
+                .total_cmp(&b.pnl_percent.unwrap_or(f64::NEG_INFINITY))
+        });
+    let worst_trade = recent_closed
+        .iter()
+        .filter(|p| p.pnl_percent.is_some())
+        .min_by(|a, b| {
+            a.pnl_percent
+                .unwrap_or(f64::INFINITY)
+                .total_cmp(&b.pnl_percent.unwrap_or(f64::INFINITY))
+        });
 
-    let best_trade_pct = if best_trade_pct == f64::NEG_INFINITY {
-        0.0
-    } else {
-        best_trade_pct
-    };
+    let best_trade_pct = best_trade.and_then(|p| p.pnl_percent).unwrap_or(0.0);
+    let best_trade_token = best_trade.map(|p| p.symbol.clone());
+    let worst_trade_pct = worst_trade.and_then(|p| p.pnl_percent).unwrap_or(0.0);
+    let worst_trade_token = worst_trade.map(|p| p.symbol.clone());
+
+    // Total realized P&L in SOL across the window (sol_received - entry size)
+    let total_pnl_sol: f64 = recent_closed
+        .iter()
+        .filter_map(|p| p.sol_received.map(|recv| recv - p.entry_size_sol))
+        .sum();
 
     // Build exit breakdown from closed_reason in closed positions
     use std::collections::HashMap;
@@ -128,6 +145,10 @@ pub async fn get_trader_stats() -> Response {
         total_trades,
         avg_hold_time_hours,
         best_trade_pct,
+        best_trade_token,
+        worst_trade_pct,
+        worst_trade_token,
+        total_pnl_sol,
         exit_breakdown,
     };
 

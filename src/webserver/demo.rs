@@ -464,6 +464,10 @@ pub fn get_demo_trader_stats() -> TraderStatsResponse {
         total_trades: DEMO_TOTAL_TRADES,
         avg_hold_time_hours: 2.4,
         best_trade_pct: 92.5,
+        best_trade_token: Some("BONK".to_owned()),
+        worst_trade_pct: -42.0,
+        worst_trade_token: Some("SAMO".to_owned()),
+        total_pnl_sol: 1.85,
         exit_breakdown: vec![
             ExitBreakdown {
                 exit_type: "trailing_stop".to_owned(),

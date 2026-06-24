@@ -351,3 +351,84 @@
     "tnum" 1,
     "zero" 1;
 }
+
+/* ============================================================================
+   Exit Strategy Breakdown
+   ============================================================================ */
+
+.exit-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.exit-breakdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.exit-breakdown-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.exit-breakdown-type {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.exit-breakdown-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  white-space: nowrap;
+}
+
+.exit-breakdown-bar {
+  height: 6px;
+  background: var(--background-secondary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.exit-breakdown-fill {
+  height: 100%;
+  border-radius: var(--radius-sm);
+  min-width: 2px;
+  transition: width var(--transition-base);
+}
+
+.exit-breakdown-fill.positive {
+  background: var(--success);
+}
+
+.exit-breakdown-fill.negative {
+  background: var(--danger);
+}
+
+.exit-breakdown-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+}
+
+.exit-breakdown-share {
+  color: var(--text-muted);
+}
+
+.exit-breakdown-profit {
+  font-family: var(--font-data);
+  font-weight: 600;
+}
+
+.exit-breakdown-profit.positive {
+  color: var(--success);
+}
+
+.exit-breakdown-profit.negative {
+  color: var(--danger);
+}

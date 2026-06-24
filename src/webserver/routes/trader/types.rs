@@ -79,6 +79,10 @@ pub struct TraderStatsResponse {
     pub total_trades: usize,
     pub avg_hold_time_hours: f64,
     pub best_trade_pct: f64,
+    pub best_trade_token: Option<String>,
+    pub worst_trade_pct: f64,
+    pub worst_trade_token: Option<String>,
+    pub total_pnl_sol: f64,
     pub exit_breakdown: Vec<ExitBreakdown>,
 }
 
