@@ -8,6 +8,17 @@ const AUTO_DISMISS_COMPLETED_MS = 10000; // 10 seconds
 const AUTO_DISMISS_FAILED_MS = 30000; // 30 seconds
 const RECONNECT_DELAY_MS = 3000;
 
+// Action types that represent an in-flight trade for a token. Used by the
+// positions list and the position-details dialog to disable Add/Sell/Close
+// while a buy or sell is processing in the background.
+const TRADE_BUY_ACTION_TYPES = new Set(["swap_buy", "position_open"]);
+const TRADE_SELL_ACTION_TYPES = new Set([
+  "swap_sell",
+  "position_close",
+  "position_partial_exit",
+]);
+const actionEntityMint = (n) => n?.entity_id || n?.metadata?.mint || "";
+
 class NotificationManager {
   constructor() {
     this.eventSource = null;
@@ -339,6 +350,20 @@ class NotificationManager {
    */
   getActive() {
     return this.getAll().filter((n) => this.getStatus(n) === "in_progress");
+  }
+
+  /**
+   * Return the kind of trade currently in-flight for a mint, or null.
+   * @returns {"buying"|"selling"|null}
+   */
+  getInFlightTradeForMint(mint) {
+    if (!mint) return null;
+    for (const n of this.getActive()) {
+      if (actionEntityMint(n) !== mint) continue;
+      if (TRADE_SELL_ACTION_TYPES.has(n?.action_type)) return "selling";
+      if (TRADE_BUY_ACTION_TYPES.has(n?.action_type)) return "buying";
+    }
+    return null;
   }
 
   /**

@@ -172,8 +172,7 @@ function createLifecycle() {
           symbol
         )}"/>`
       : '<i class="token-logo icon-coins"></i>';
-    const manualTag = `<span class="pos-manual-tag${row.manual_management ? "" : " pos-manual-tag--hidden"}" aria-label="Manual management">MANUAL</span>`;
-    return `<div class="position-token">${manualTag}${logoHtml}<div class="position-token-meta">
+    return `<div class="position-token">${logoHtml}<div class="position-token-meta">
       <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
       <div class="token-name">${Utils.escapeHtml(name)}</div>
       ${stateCaption(row)}
@@ -319,8 +318,8 @@ function createLifecycle() {
               return '<span class="row-actions-busy">In progress…</span>';
             }
 
-            // While selling/closing, keep the buttons visible but disabled so the
-            // user can see the trade is in flight without being able to double-fire.
+            // Disable Add/Sell while a trade is in-flight ("selling") or the exit tx
+            // is pending verification ("closing") to prevent double-firing.
             const busy = row?._state === "selling" || row?._state === "closing";
             const dis = busy ? " disabled" : "";
             const mintAttr = Utils.escapeHtml(mint);
@@ -986,7 +985,6 @@ function createLifecycle() {
               context: {
                 mint: mint,
                 holdings: row.token_amount,
-                decimals: row.token_decimals,
               },
             });
 

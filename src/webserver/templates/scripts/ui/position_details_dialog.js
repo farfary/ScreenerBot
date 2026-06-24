@@ -6,6 +6,7 @@ import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
+import { notificationManager } from "../core/notifications.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { applyOverviewTabMixin } from "./position_details/overview_tab.js";
@@ -149,6 +150,12 @@ export class PositionDetailsDialog {
       { label: "PositionDetails", interval: 5000 }
     );
     this.refreshPoller.start();
+
+    // React immediately to live buy/sell action events (SSE) so the trade
+    // buttons disable/enable without waiting for the 5s poll tick.
+    this._liveTradeUnsub = notificationManager.subscribe(() => {
+      this._updateTradeButtonsState();
+    });
   }
 
   /**
@@ -159,6 +166,10 @@ export class PositionDetailsDialog {
       this.refreshPoller.stop();
       this.refreshPoller.cleanup();
       this.refreshPoller = null;
+    }
+    if (this._liveTradeUnsub) {
+      this._liveTradeUnsub();
+      this._liveTradeUnsub = null;
     }
   }
 
@@ -183,7 +194,50 @@ export class PositionDetailsDialog {
   _updateDialogContent() {
     if (!this.fullDetails) return;
     this._updateHeader();
+    this._updateTradeButtonsState();
     this._loadTabContent(this.currentTab);
+  }
+
+  /**
+   * Detect whether a trade is processing in the background for this position.
+   * Mirrors the positions list: an exit tx pending verification ("closing"),
+   * or a live buy/sell action in-flight for this mint.
+   * @returns {"buying"|"selling"|"closing"|null}
+   */
+  _inFlightTradeState() {
+    const pos = this.fullDetails?.position || this.positionData;
+    if (!pos) return null;
+    if (pos.exit_transaction_signature && !pos.transaction_exit_verified) {
+      return "closing";
+    }
+    return notificationManager.getInFlightTradeForMint(pos.mint);
+  }
+
+  /**
+   * Disable the Add/Partial/Close buttons while a trade is in-flight so the user
+   * can't double-fire, and re-enable them once it settles. Runs on every poll tick.
+   */
+  _updateTradeButtonsState() {
+    const inFlight = this._inFlightTradeState();
+    const busy = inFlight !== null;
+    const label =
+      inFlight === "buying"
+        ? "Buy in progress\u2026"
+        : inFlight === "selling"
+          ? "Sell in progress\u2026"
+          : inFlight === "closing"
+            ? "Close in progress\u2026"
+            : "";
+    ["#pddAddBtn", "#pddPartialBtn", "#pddCloseBtn"].forEach((id) => {
+      const btn = this.dialogEl?.querySelector(id);
+      if (!btn) return;
+      btn.disabled = busy;
+      if (busy) {
+        btn.title = label;
+      } else {
+        btn.removeAttribute("title");
+      }
+    });
   }
 
   /**

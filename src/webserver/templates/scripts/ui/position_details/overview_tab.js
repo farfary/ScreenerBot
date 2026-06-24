@@ -114,14 +114,14 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
           </div>
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Position Size</span>
-            <span class="pdd-stat-value">${tokenAmount ? Utils.formatCompactNumber(tokenAmount) + " tokens" : "—"}</span>
+            <span class="pdd-stat-value">${tokenAmount ? Utils.formatCompactNumber(this._toUiAmount(tokenAmount)) + " tokens" : "—"}</span>
           </div>
           ${
             totalTokensAcquired > 0
               ? `
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Total Acquired</span>
-            <span class="pdd-stat-value">${Utils.formatCompactNumber(totalTokensAcquired)} tokens</span>
+            <span class="pdd-stat-value">${Utils.formatCompactNumber(this._toUiAmount(totalTokensAcquired))} tokens</span>
           </div>
           `
               : ""
@@ -184,7 +184,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
             </div>
             <div class="pdd-stat-row">
               <span class="pdd-stat-label">Remaining Tokens</span>
-              <span class="pdd-stat-value">${remainingTokens ? Utils.formatCompactNumber(remainingTokens) : "—"}</span>
+              <span class="pdd-stat-value">${remainingTokens ? Utils.formatCompactNumber(this._toUiAmount(remainingTokens)) : "—"}</span>
             </div>
             <div class="pdd-stat-row">
               <span class="pdd-stat-label">Holdings %</span>
@@ -198,7 +198,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
                 ? `
             <div class="pdd-stat-row">
               <span class="pdd-stat-label">Tokens Sold</span>
-              <span class="pdd-stat-value">${Utils.formatCompactNumber(tokensSold)} <span class="pdd-stat-pct">(${Utils.formatNumber(pctSold, 1)}%)</span></span>
+              <span class="pdd-stat-value">${Utils.formatCompactNumber(this._toUiAmount(tokensSold))} <span class="pdd-stat-pct">(${Utils.formatNumber(pctSold, 1)}%)</span></span>
             </div>
             <div class="pdd-stat-row">
               <span class="pdd-stat-label">SOL Recovered</span>
@@ -238,7 +238,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
           </div>
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Tokens Sold</span>
-            <span class="pdd-stat-value">${totalExited ? Utils.formatCompactNumber(totalExited) + (pctExited > 0 ? ` <span class="pdd-stat-pct">(${Utils.formatNumber(pctExited, 1)}%)</span>` : "") : "—"}</span>
+            <span class="pdd-stat-value">${totalExited ? Utils.formatCompactNumber(this._toUiAmount(totalExited)) + (pctExited > 0 ? ` <span class="pdd-stat-pct">(${Utils.formatNumber(pctExited, 1)}%)</span>` : "") : "—"}</span>
           </div>
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">SOL Received</span>
@@ -580,11 +580,10 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       } catch (error) {
         Utils.showToast(error?.message || "Failed to add to position", "error");
       } finally {
-        // Reset button state
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalText;
-        }
+        // Restore the label; the disabled state is reasserted from the live
+        // in-flight state so the button stays disabled while the trade processes.
+        if (btn) btn.innerHTML = originalText;
+        this._updateTradeButtonsState();
       }
     }
   };
@@ -636,11 +635,10 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       } catch (error) {
         Utils.showToast(error?.message || "Failed to execute sell", "error");
       } finally {
-        // Reset button state
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalText;
-        }
+        // Restore the label; the disabled state is reasserted from the live
+        // in-flight state so the button stays disabled while the trade processes.
+        if (btn) btn.innerHTML = originalText;
+        this._updateTradeButtonsState();
       }
     }
   };
@@ -693,11 +691,10 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       } catch (error) {
         Utils.showToast(error?.message || "Failed to close position", "error");
       } finally {
-        // Reset button state (in case close fails)
-        if (btn) {
-          btn.disabled = false;
-          btn.innerHTML = originalText;
-        }
+        // Restore the label; the disabled state is reasserted from the live
+        // in-flight state so the button stays disabled while the close processes.
+        if (btn) btn.innerHTML = originalText;
+        this._updateTradeButtonsState();
       }
     }
   };
