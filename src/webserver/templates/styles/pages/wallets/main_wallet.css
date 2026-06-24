@@ -29,29 +29,34 @@
   white-space: nowrap;
 }
 
-/* Copy / Solscan shortcuts: hover highlights the button itself only, never the
-   surrounding address group. Fixed-size, self-contained, anchor defaults reset. */
-.wt-info-address-group .copy-btn {
+/* Copy / Solscan shortcuts: any visual feedback stays fully inside the button.
+   The global *:focus-visible ring uses outline-offset, which on this
+   top-of-toolbar anchor bled upward past the parent (the blue box with a shadow
+   above it, seen after clicking the Solscan link). Neutralise every outline /
+   box-shadow on all states and use a flat in-bounds background only. */
+.wt-info-address-group .copy-btn,
+.wt-info-address-group .copy-btn:hover,
+.wt-info-address-group .copy-btn:focus,
+.wt-info-address-group .copy-btn:focus-visible,
+.wt-info-address-group .copy-btn:active {
   flex-shrink: 0;
   width: 22px;
   height: 22px;
   padding: 0;
+  border: none;
   border-radius: var(--radius-sm);
-  color: var(--text-muted);
   text-decoration: none;
-}
-
-.wt-info-address-group .copy-btn:hover {
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
-}
-
-/* Keep focus feedback contained to the button: the global *:focus-visible ring
-   uses outline-offset, which on this top-of-toolbar anchor bled upward past the
-   parent (visible after clicking the Solscan link). Replace it with a flat
-   in-bounds background so it never overflows the toolbar. */
-.wt-info-address-group .copy-btn:focus-visible {
   outline: none;
+  box-shadow: none;
+}
+
+.wt-info-address-group .copy-btn {
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.wt-info-address-group .copy-btn:hover,
+.wt-info-address-group .copy-btn:focus-visible {
   background: var(--primary-alpha-10);
   color: var(--primary-color);
 }

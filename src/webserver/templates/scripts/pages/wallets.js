@@ -9,7 +9,6 @@ import { Poller } from "../core/poller.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import * as Utils from "../core/utils.js";
 import * as Hints from "../core/hints.js";
-import { HintPopover } from "../ui/hint_popover.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 import { createBulkOperations } from "./wallets/bulk_operations.js";
 import { createWalletRenderers } from "./wallets/renderers.js";
@@ -97,9 +96,6 @@ function createLifecycle() {
 
       // Setup event handlers
       setupEventHandlers();
-
-      // Setup security hint button
-      setupSecurityHint();
 
       // Load initial data
       await loadAllData();
@@ -226,22 +222,6 @@ function setupEventHandlers() {
   // Bulk import/export modals
   bulk.setupBulkImportModal();
   bulk.setupBulkExportModal();
-}
-
-/**
- * Setup security hint button to show encryption details popover
- */
-function setupSecurityHint() {
-  const hintBtn = $("#security-hint-btn");
-  if (!hintBtn) return;
-
-  on(hintBtn, "click", () => {
-    const hint = Hints.getHint("wallets.security");
-    if (hint) {
-      const popover = new HintPopover(hint, hintBtn);
-      popover.show();
-    }
-  });
 }
 
 function setupAddWalletModal() {

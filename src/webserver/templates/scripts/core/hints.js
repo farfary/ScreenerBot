@@ -503,24 +503,6 @@ Empty token accounts can be cleaned up in Settings.`,
   // WALLETS PAGE
   // ═══════════════════════════════════════════════════════════════════════════
   wallets: {
-    security: {
-      id: "wallets.security",
-      title: "Wallet Security",
-      content: `**Bank-Grade Encryption**
-
-All private keys are encrypted with AES-256-GCM using a machine-bound key:
-
-• **AES-256-GCM** — military-grade encryption standard
-• **Machine-Bound Key** — derived from your device's unique identifier
-• **Local Storage Only** — keys never leave your device
-• **No Cloud Backup** — keys cannot be recovered if lost
-
-**What this means:**
-• Your keys are safe even if the database file is stolen
-• Only this specific machine can decrypt the keys
-• Always backup your private keys externally`,
-    },
-
     mainWallet: {
       id: "wallets.main",
       title: "Main Wallet",
