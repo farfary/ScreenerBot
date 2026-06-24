@@ -985,6 +985,7 @@ function createLifecycle() {
               context: {
                 mint: mint,
                 holdings: row.token_amount,
+                decimals: row.token_decimals,
               },
             });
 
