@@ -786,7 +786,7 @@ function initCardHandlers() {
   const walletCard = document.getElementById("walletCard");
   if (walletCard) {
     walletCard.addEventListener("click", () => {
-      loadPage("wallet");
+      loadPage("positions");
     });
     walletCard.style.cursor = "pointer";
   }
