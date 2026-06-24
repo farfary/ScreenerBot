@@ -357,14 +357,6 @@ pub async fn gc_expired_verifications(current_height: Option<u64>) -> Vec<Verifi
     queue.gc_expired(current_height)
 }
 
-/// Diagnostic: (total items, items currently due) — for debugging stuck queues.
-pub async fn get_queue_due_diagnostic() -> (usize, usize) {
-    let queue = VERIFICATION_QUEUE.read().await;
-    let total = queue.items.len();
-    let due = queue.items.iter().filter(|i| i.is_due()).count();
-    (total, due)
-}
-
 /// Get queue status
 pub async fn get_queue_status() -> (usize, Vec<String>) {
     let queue = VERIFICATION_QUEUE.read().await;

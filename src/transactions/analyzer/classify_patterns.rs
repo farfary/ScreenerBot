@@ -315,15 +315,35 @@ pub(super) async fn classify_from_patterns(
         return Ok((ClassifiedType::Unknown, None, None, None));
     }
 
-    // Find the highest confidence pattern
-    let dominant_pattern = patterns
-        .iter()
-        .max_by(|a, b| {
-            a.confidence
-                .partial_cmp(&b.confidence)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .unwrap();
+    let confidence_cmp = |a: &&FlowPattern, b: &&FlowPattern| {
+        a.confidence
+            .partial_cmp(&b.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    };
+
+    // When a swap-capable DEX/aggregator was detected, a token<->SOL flow IS a swap.
+    // A DEX swap emits many internal transfer legs (token + SOL hops), and those
+    // legs must never outrank the swap itself — otherwise a genuine sell whose net
+    // SOL is negative (fees > tiny proceeds, e.g. exiting a rugged token) gets
+    // misclassified as a Transfer, which drops it from P&L analysis and strands the
+    // position in pending verification. So prefer swap/liquidity patterns over plain
+    // transfer legs whenever a DEX was detected.
+    let dex_detected = dex_analysis.detected_dex.is_some() && dex_analysis.confidence >= 0.5;
+    let dominant_pattern = if dex_detected {
+        patterns
+            .iter()
+            .filter(|p| {
+                !matches!(
+                    p.pattern_type,
+                    PatternType::TokenTransfer | PatternType::SolTransfer
+                )
+            })
+            .max_by(confidence_cmp)
+            .or_else(|| patterns.iter().max_by(confidence_cmp))
+            .unwrap()
+    } else {
+        patterns.iter().max_by(confidence_cmp).unwrap()
+    };
     let sol_mint = WSOL_MINT;
 
     match dominant_pattern.pattern_type {

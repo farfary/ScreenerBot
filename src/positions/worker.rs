@@ -458,16 +458,6 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                // Process verification batch
                let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
 
-               // Diagnostic: surface why a non-empty queue may yield an empty batch.
-               let (q_diag, due_diag) = super::queue::get_queue_due_diagnostic().await;
-               logger::debug(
-                 LogTag::Positions,
-                 &format!(
-                   "[VERIFY_POLL] cycle={cycle_count} queue={q_diag} due={due_diag} batch={}",
-                   batch.len()
-                 ),
-               );
-
                if !batch.is_empty() {
                  logger::debug(
                    LogTag::Positions,
@@ -705,10 +695,10 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                        // Increment retry metrics
                        crate::positions::metrics::VERIFICATION_METRICS.retries.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-                       logger::info(
+                       logger::debug(
                          LogTag::Positions,
                          &format!(
-        "[VERIFY_RETRY] {} (mint {} kind {:?} attempts {}): {}",
+        "Retrying verification for {} (mint {} kind {:?} attempts {}): {}",
                            item.signature,
                            item.mint,
                            item.kind,
