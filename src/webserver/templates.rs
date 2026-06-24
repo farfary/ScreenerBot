@@ -201,17 +201,6 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
             .join("\n"),
         ),
         (
-            "strategies",
-            &[
-                STRATEGIES_PAGE_STYLES,
-                STRATEGIES_CONDITION_CARDS_STYLES,
-                STRATEGIES_MODALS_STYLES,
-                STRATEGIES_EDITOR_STYLES,
-                STRATEGIES_UI_COMPONENTS_STYLES,
-            ]
-            .join("\n"),
-        ),
-        (
             "trader",
             &[
                 TRADER_PAGE_STYLES,
@@ -316,7 +305,7 @@ fn nav_tabs(active: &str) -> String {
         .join("\n        ")
 }
 
-fn render_page(template: &'static str) -> String {
+fn render_page(template: &str) -> String {
     template.to_string()
 }
 
@@ -348,12 +337,12 @@ pub fn config_content() -> String {
     render_page(CONFIG_PAGE)
 }
 
-pub fn strategies_content() -> String {
-    render_page(STRATEGIES_PAGE)
-}
 
 pub fn trader_content() -> String {
-    render_page(TRADER_PAGE)
+    // The Strategies subtab embeds the full strategy-editor markup (formerly its
+    // own page) into the trader page via the {{STRATEGIES_PANEL}} placeholder.
+    let html = TRADER_PAGE.replace("{{STRATEGIES_PANEL}}", STRATEGIES_PAGE);
+    render_page(&html)
 }
 
 pub fn wallets_content() -> String {

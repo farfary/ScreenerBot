@@ -15,16 +15,19 @@ import {
   applyFeatureStatusToTabs,
   handleFeatureRestrictedTab,
 } from "./trader/features.js";
+import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
 
-// Sub-tabs configuration
+// Sub-tabs configuration. Strategy Control is second and the embedded Strategies
+// editor is third (Strategies was formerly its own top-level tab).
 const SUB_TABS = [
   { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
+  { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
+  { id: "strategies", label: '<i class="icon-square-pen"></i> Strategies' },
   { id: "stop-loss", label: '<i class="icon-shield-off"></i> Stop Loss' },
   { id: "trailing-stop", label: '<i class="icon-trending-up"></i> Trailing Stop' },
   { id: "roi", label: '<i class="icon-target"></i> Take Profit' },
   { id: "time-rules", label: '<i class="icon-timer"></i> Time Rules' },
   { id: "dca", label: '<i class="icon-dollar-sign"></i> DCA' },
-  { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
   { id: "general-settings", label: '<i class="icon-settings"></i> Settings' },
 ];
 
@@ -69,6 +72,73 @@ function createLifecycle() {
     playError,
     eventCleanups,
   });
+
+  // Embedded Strategies subtab — drives the strategies page module's lifecycle.
+  // A local ctx adapter owns the strategies pollers so they start when the
+  // subtab opens and stop when it is left (instead of running page-wide).
+  let strategiesLifecycle = null;
+  let strategiesInited = false;
+  let strategiesActive = false;
+  const strategiesSubtabPollers = [];
+  const strategiesCtx = {
+    managePoller(poller) {
+      strategiesSubtabPollers.push(poller);
+      return poller;
+    },
+  };
+
+  function stopStrategiesSubtabPollers() {
+    strategiesSubtabPollers.forEach((p) => {
+      try {
+        p.stop?.();
+        p.cleanup?.();
+      } catch {
+        /* ignore */
+      }
+    });
+    strategiesSubtabPollers.length = 0;
+  }
+
+  async function activateStrategiesSubtab() {
+    if (!strategiesLifecycle) strategiesLifecycle = createStrategiesLifecycle();
+    try {
+      if (!strategiesInited) {
+        await strategiesLifecycle.init(strategiesCtx);
+        strategiesInited = true;
+      }
+      if (!strategiesActive) {
+        await strategiesLifecycle.activate(strategiesCtx);
+        strategiesActive = true;
+      }
+    } catch (err) {
+      console.error("[Trader] Failed to activate Strategies subtab", err);
+    }
+  }
+
+  function deactivateStrategiesSubtab() {
+    if (strategiesLifecycle && strategiesActive) {
+      try {
+        strategiesLifecycle.deactivate();
+      } catch {
+        /* ignore */
+      }
+      strategiesActive = false;
+    }
+    stopStrategiesSubtabPollers();
+  }
+
+  function disposeStrategiesSubtab() {
+    deactivateStrategiesSubtab();
+    if (strategiesLifecycle) {
+      try {
+        strategiesLifecycle.dispose();
+      } catch {
+        /* ignore */
+      }
+    }
+    strategiesLifecycle = null;
+    strategiesInited = false;
+  }
 
   // ============================================================================
   // Helper Functions
@@ -427,6 +497,12 @@ function createLifecycle() {
         });
         break;
 
+      case "strategies":
+        // The embedded Strategies editor has its own in-panel toolbar (create,
+        // import, save, etc.), so the page-level ActionBar stays empty here.
+        actionBar.clear();
+        break;
+
       case "general-settings":
         actionBar.configure({
           title: "General Settings",
@@ -538,6 +614,7 @@ function createLifecycle() {
       "time-rules": "time-rules-tab",
       dca: "dca-tab",
       "strategy-control": "strategy-control-tab",
+      strategies: "strategies-tab",
       "general-settings": "general-settings-tab",
     };
 
@@ -545,6 +622,14 @@ function createLifecycle() {
     const content = $(`#${contentId}`);
     if (content) {
       content.style.display = "block";
+    }
+
+    // Embedded Strategies editor: activate its lifecycle when shown, stop it
+    // (and its pollers) when any other subtab is selected.
+    if (tabId === "strategies") {
+      activateStrategiesSubtab();
+    } else {
+      deactivateStrategiesSubtab();
     }
 
     // Start/stop pollers based on tab
@@ -1644,6 +1729,9 @@ function createLifecycle() {
      */
     dispose() {
       console.log("[Trader] Disposing page");
+
+      // Dispose the embedded Strategies editor lifecycle + its pollers
+      disposeStrategiesSubtab();
 
       // Unregister ActionBar from manager (lifecycle already disposes it via manageActionBar)
       ActionBarManager.unregister("trader");

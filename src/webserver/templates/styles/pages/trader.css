@@ -29,6 +29,19 @@
   padding-top: 1.5rem; /* Space below subtabs row */
 }
 
+/* Embedded Strategies editor subtab: fill the content area (the strategies-page
+   layout is height:100% based) and let it manage its own internal scrolling,
+   instead of the default flowing-content padding used by the other subtabs. */
+#strategies-tab {
+  height: 100%;
+  padding-top: 0;
+  overflow: hidden;
+}
+
+#strategies-tab > * {
+  animation: none; /* avoid the fade transform clipping the full-height editor */
+}
+
 .trader-tab-content > * {
   animation: trader-tab-fade 0.3s ease-out;
 }

@@ -1,4 +1,3 @@
-import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
@@ -1563,5 +1562,6 @@ export function createLifecycle() {
   }
 }
 
-// Register page so router can init/activate it
-registerPage("strategies", createLifecycle());
+// Strategies is no longer a standalone router page — it is embedded as the
+// third subtab of the Auto Trader page, which imports createLifecycle() and
+// drives init/activate/deactivate/dispose itself (see trader.js).

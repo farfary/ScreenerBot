@@ -58,7 +58,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/tools", get(tools_page))
         .route("/ai", get(ai_page))
         .route("/config", get(config_page))
-        .route("/strategies", get(strategies_page))
         .route("/trader", get(trader_page))
         .route("/initialization", get(initialization_page))
         .route("/updates", get(updates_page))
@@ -123,16 +122,6 @@ async fn filtering_page() -> Html<String> {
 async fn config_page() -> Html<String> {
     let content = templates::config_content();
     Html(templates::base_template("Config", "config", &content))
-}
-
-/// Strategies page handler
-async fn strategies_page() -> Html<String> {
-    let content = templates::strategies_content();
-    Html(templates::base_template(
-        "Strategies",
-        "strategies",
-        &content,
-    ))
 }
 
 /// Auto Trader page handler
@@ -236,7 +225,6 @@ async fn get_page_content(AxumPath(page): AxumPath<String>) -> Html<String> {
         "wallets" => templates::wallets_content(),
         "tools" => templates::tools_content(),
         "config" => templates::config_content(),
-        "strategies" => templates::strategies_content(),
         "trader" => templates::trader_content(),
         "initialization" => templates::initialization_content(),
         "updates" => templates::updates_content(),

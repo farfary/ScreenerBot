@@ -21,7 +21,6 @@ function getDefaultTabs() {
     { id: "tokens", label: "Tokens", icon: "icon-coins", order: 3, enabled: true },
     { id: "filtering", label: "Filtering", icon: "icon-list-filter", order: 4, enabled: true },
     { id: "trader", label: "Auto Trader", icon: "icon-bot", order: 5, enabled: true },
-    { id: "strategies", label: "Strategies", icon: "icon-target", order: 6, enabled: true },
     { id: "wallets", label: "Wallets", icon: "icon-wallet", order: 7, enabled: true },
     { id: "transactions", label: "Transactions", icon: "icon-activity", order: 8, enabled: true },
     { id: "tools", label: "Tools", icon: "icon-wrench", order: 9, enabled: true },

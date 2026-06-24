@@ -185,13 +185,6 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
-            id: "strategies".into(),
-            label: "Strategies".into(),
-            icon: "icon-target".into(),
-            order: 6,
-            enabled: true,
-        },
-        TabConfig {
             id: "wallets".into(),
             label: "Wallets".into(),
             icon: "icon-wallet".into(),
@@ -253,6 +246,11 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     // Create a map of default tabs for quick lookup
     let default_map: HashMap<String, &TabConfig> =
         defaults.iter().map(|t| (t.id.clone(), t)).collect();
+
+    // Drop any saved tab that is no longer a known default (e.g. the removed
+    // "strategies" tab, now a subtab of Auto Trader). The tab set is fixed —
+    // there are no user-defined tabs — so pruning unknowns is safe.
+    tabs.retain(|t| default_map.contains_key(&t.id));
 
     // Force icons and labels from defaults for existing tabs
     for tab in &mut tabs {
