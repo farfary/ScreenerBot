@@ -1174,8 +1174,6 @@ export function createLifecycle() {
           item.classList.remove("active");
         }
       });
-
-      Utils.showToast(`Loaded strategy: ${currentStrategy.name}`, "success");
     } catch (error) {
       console.error("Failed to load strategy:", error);
       Utils.showToast("Failed to load strategy", "error");
