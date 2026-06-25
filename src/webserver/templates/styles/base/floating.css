@@ -17,6 +17,11 @@
   --z-select: 1000;
   --z-tooltip: 1500;
   --z-popover: 2000;
+
+  /* Featured/billboard row is dashboard chrome: above page content but BELOW
+     every overlay (notification panel, dialogs, menus) so it never covers them.
+     Only the bottom status bar (--z-status-bar) stays above it. */
+  --z-billboard-row: 800;
   --z-notification-panel: 9000;
   --z-dialog: 10000;
   --z-dialog-overlay: 9999;

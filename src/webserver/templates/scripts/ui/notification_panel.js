@@ -369,7 +369,6 @@ function setupActions() {
 function subscribeToUpdates() {
   unsubscribe = notificationManager.subscribe((event) => {
     if (event.type === "summary") {
-      updateSummaryStats(event.summary);
       updateConnectionStatus(event.summary.connection);
     }
 
@@ -413,21 +412,6 @@ function subscribeToUpdates() {
       Utils.showToast(`Failed to refresh (${event.error || "unknown"})`, "warning");
     }
   });
-}
-
-/**
- * Update summary stats
- */
-function updateSummaryStats(summary) {
-  if (!summary) return;
-
-  const activeCountEl = document.getElementById("drawerActiveCount");
-  const completedCountEl = document.getElementById("drawerCompletedCount");
-  const failedCountEl = document.getElementById("drawerFailedCount");
-
-  if (activeCountEl) activeCountEl.textContent = summary.active || 0;
-  if (completedCountEl) completedCountEl.textContent = summary.completed24h || 0;
-  if (failedCountEl) failedCountEl.textContent = summary.failed24h || 0;
 }
 
 /**
@@ -724,22 +708,43 @@ function renderNotification(notification) {
     metadata && typeof metadata === "object" && metadata !== null ? metadata.symbol : "";
   const symbol = rawSymbol ? escapeText(rawSymbol) : "";
 
-  let descriptionHtml = "";
-  if (metadata && typeof metadata === "object" && metadata !== null) {
-    const { input_amount, router } = metadata;
-    const inputLamports = Number(input_amount);
+  // Build a compact set of detail chips from whatever metadata the action
+  // carries (amount, sell %, strategy reason, strategy id, auto/manual source,
+  // router). Each chip is "<label> value"; they render on one wrapped row.
+  const md = metadata && typeof metadata === "object" ? metadata : {};
+  const details = [];
 
-    if (Number.isFinite(inputLamports)) {
-      const amountSol = (inputLamports / 1_000_000_000).toFixed(4);
-      descriptionHtml = `<div class="notification-description">${escapeText(amountSol)} SOL</div>`;
-    }
-
-    if (isFailed && router) {
-      descriptionHtml += `<div class="notification-meta">via ${escapeText(router)}</div>`;
-    }
+  const sizeSol = Number(md.size_sol);
+  const inputLamports = Number(md.input_amount);
+  if (Number.isFinite(sizeSol) && sizeSol > 0) {
+    details.push(`${formatSol(sizeSol)} SOL`);
+  } else if (Number.isFinite(inputLamports) && inputLamports > 0) {
+    details.push(`${formatSol(inputLamports / 1_000_000_000)} SOL`);
   }
 
-  const timeLabel = escapeText(formatTime(completed_at || notification.timestamp || started_at));
+  const pct = Number(md.percentage);
+  if (Number.isFinite(pct) && pct > 0) {
+    details.push(`${pct % 1 === 0 ? pct : pct.toFixed(1)}%`);
+  }
+
+  if (md.reason) details.push(humanizeToken(md.reason));
+  if (md.strategy_id) details.push(escapeText(md.strategy_id));
+
+  const source = sourceFromOperation(md.operation);
+  const detailChips = details.length
+    ? `<div class="notification-details">${details
+        .map((d) => `<span class="notification-chip">${escapeText(d)}</span>`)
+        .join("")}</div>`
+    : "";
+
+  const ts = completed_at || notification.timestamp || started_at;
+  const timeLabel = escapeText(formatTime(ts));
+  const timeTitle = escapeText(formatAbsoluteTime(ts));
+  const durationMs = Number(notification.duration_ms);
+  const durationLabel =
+    (isCompleted || isFailed) && Number.isFinite(durationMs) && durationMs > 0
+      ? escapeText(formatDuration(durationMs))
+      : "";
 
   const progressInfo = isInProgress ? state : null;
   const totalSteps = progressInfo?.total_steps ?? steps?.length ?? 0;
@@ -776,7 +781,14 @@ function renderNotification(notification) {
   }
 
   const safeId = escapeText(id);
-  const timeHtml = `<div class="notification-time">${timeLabel}</div>`;
+  const sourceBadge = source
+    ? `<span class="notification-source notification-source--${source}">${source}</span>`
+    : "";
+  const footerHtml = `
+    <div class="notification-footer">
+      <span class="notification-time" title="${timeTitle}">${timeLabel}</span>
+      ${durationLabel ? `<span class="notification-duration">${durationLabel}</span>` : ""}
+    </div>`;
 
   return `
     <div class="notification-item ${statusClass} ${read ? "read" : "unread"}" data-id="${safeId}">
@@ -785,15 +797,51 @@ function renderNotification(notification) {
         <div class="notification-title">
           <strong>${actionTypeLabel}</strong>
           ${symbol ? `<span class="notification-symbol">${symbol}</span>` : ""}
+          ${sourceBadge}
         </div>
         <button class="notification-dismiss" data-id="${safeId}" title="Dismiss">×</button>
       </div>
-      ${descriptionHtml}
+      ${detailChips}
       ${progressHtml}
       ${errorHtml}
-      ${timeHtml}
+      ${footerHtml}
     </div>
   `;
+}
+
+/** Format a SOL amount compactly (trim trailing zeros, max 4 dp). */
+function formatSol(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "0";
+  return parseFloat(n.toFixed(4)).toString();
+}
+
+/** Humanize a CamelCase / snake_case token, e.g. "TakeProfit" -> "Take Profit". */
+function humanizeToken(value) {
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
+
+/** Derive an "auto" | "manual" source tag from the operation field. */
+function sourceFromOperation(operation) {
+  if (!operation) return "";
+  const op = String(operation).toLowerCase();
+  if (op.startsWith("auto")) return "auto";
+  if (op.startsWith("manual")) return "manual";
+  return "";
+}
+
+/** Compact duration: "820ms", "3.4s", "1m 12s". */
+function formatDuration(ms) {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const sec = ms / 1000;
+  if (sec < 60) return `${parseFloat(sec.toFixed(1))}s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}m ${s}s`;
 }
 
 /**
@@ -846,7 +894,8 @@ function formatActionType(actionType) {
 }
 
 /**
- * Format time for display
+ * Modern relative time: "just now", "5 min ago", "2 hours ago", "3 days ago",
+ * then an absolute "Jun 25" / "Jun 25, 2025" for anything older than a week.
  */
 function formatTime(timestamp) {
   if (!timestamp) return "";
@@ -857,18 +906,38 @@ function formatTime(timestamp) {
   }
 
   const now = new Date();
-  const diffMs = now - date;
-  const diffSec = Math.floor(diffMs / 1000);
+  const diffSec = Math.max(0, Math.floor((now - date) / 1000));
   const diffMin = Math.floor(diffSec / 60);
   const diffHr = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHr / 24);
 
-  if (diffSec < 60) return "now";
-  if (diffMin < 60) return `${diffMin}m`;
-  if (diffHr < 24) return `${diffHr}h`;
-  if (diffDay < 7) return `${diffDay}d`;
+  if (diffSec < 45) return "just now";
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHr < 24) return `${diffHr} ${diffHr === 1 ? "hour" : "hours"} ago`;
+  if (diffDay < 7) return `${diffDay} ${diffDay === 1 ? "day" : "days"} ago`;
 
-  return date.toLocaleDateString();
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+}
+
+/**
+ * Full, absolute timestamp for the item's hover title (tooltip).
+ */
+function formatAbsoluteTime(timestamp) {
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function resolveTimestamp(notification) {

@@ -104,9 +104,11 @@ pub(super) async fn get_action_history(
     filters.limit = Some(query.limit);
     filters.offset = Some(query.offset);
 
-    // Parse action type
+    // Parse action type. Accept both the DB form ("swapbuy") and the API/JSON
+    // snake_case form the UI sends ("swap_buy") by stripping underscores.
     if let Some(action_type_str) = query.action_type {
-        filters.action_type = match action_type_str.to_lowercase().as_str() {
+        let normalized = action_type_str.to_lowercase().replace('_', "");
+        filters.action_type = match normalized.as_str() {
             "swapbuy" => Some(crate::actions::ActionType::SwapBuy),
             "swapsell" => Some(crate::actions::ActionType::SwapSell),
             "positionopen" => Some(crate::actions::ActionType::PositionOpen),

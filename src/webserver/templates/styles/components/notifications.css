@@ -10,7 +10,10 @@
 
 .notification-drawer {
   position: fixed;
-  inset: 0;
+
+  /* Stop above the bottom status bar (26px) so the bar stays fully visible and
+     the panel's footer/list are never hidden behind it. */
+  inset: 0 0 26px;
   z-index: var(--z-notification-panel);
   display: flex;
   justify-content: flex-end;
@@ -49,7 +52,7 @@ body.notification-drawer-open {
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   transform: translateX(100%);
   transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
   border-left: 1px solid var(--border-color);
@@ -172,70 +175,6 @@ body.notification-drawer-open {
 
 .panel-close-btn:hover {
   background: var(--danger-alpha-10);
-  color: var(--error-color);
-}
-
-/* -----------------------------------------------------------------------------
-   Inline Summary Stats - Horizontal compact row
-   ----------------------------------------------------------------------------- */
-
-.notification-summary {
-  display: flex;
-  gap: 0;
-  padding: 0;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.summary-stat {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 12px;
-  border-right: 1px solid var(--border-color);
-  transition: background var(--transition-fast);
-}
-
-.summary-stat:last-child {
-  border-right: none;
-}
-
-.summary-stat:hover {
-  background: var(--hover-bg);
-}
-
-.summary-stat .summary-value {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  line-height: 1;
-}
-
-.summary-stat .summary-label {
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-
-/* Stat variants */
-.summary-stat.live .summary-value {
-  color: var(--primary-color);
-}
-
-.summary-stat.success .summary-value {
-  color: var(--success-color);
-}
-
-.summary-stat.danger .summary-value {
   color: var(--error-color);
 }
 
@@ -506,20 +445,47 @@ body.notification-drawer-open {
   color: var(--error-color);
 }
 
-/* Description */
-.notification-description {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin: 4px 0 0;
-  padding-left: 22px;
-  font-family: var(--font-data);
+/* Source tag (auto / manual) shown next to the title */
+.notification-source {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  line-height: 1.4;
 }
 
-.notification-meta {
-  font-size: 10px;
-  color: var(--text-muted);
+.notification-source--auto {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+}
+
+.notification-source--manual {
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
+}
+
+/* Detail chips row (amount, %, reason, strategy) */
+.notification-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 5px 0 0;
   padding-left: 22px;
+}
+
+.notification-chip {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* -----------------------------------------------------------------------------
@@ -594,12 +560,30 @@ body.notification-drawer-open {
    Timestamp
    ----------------------------------------------------------------------------- */
 
+.notification-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-left: 22px;
+}
+
 .notification-time {
   font-size: 10px;
   color: var(--text-muted);
-  margin-top: 4px;
-  padding-left: 22px;
   font-family: var(--font-data);
+}
+
+.notification-duration {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  opacity: 0.8;
+}
+
+.notification-duration::before {
+  content: "·";
+  margin-right: 8px;
 }
 
 /* -----------------------------------------------------------------------------
