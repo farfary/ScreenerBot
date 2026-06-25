@@ -235,18 +235,19 @@ impl MetricsCollector {
 
     /// Collect metrics for a specific service (async-safe, no &mut needed)
     pub async fn collect_for_service(&self, name: &str) -> ServiceMetrics {
-        // Refresh system info in blocking pool to avoid stalling async runtime
+        // Refresh ONLY our own process (the sole thing we read below). Refreshing
+        // the whole system here was needlessly expensive — see collect_all().
+        let pid = Pid::from_u32(std::process::id());
         {
             let sys_arc = self.system.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 let mut sys = sys_arc.blocking_lock();
-                sys.refresh_all();
+                sys.refresh_process(pid);
             })
             .await;
         }
 
         // Get current process (shared across all services) - async-safe
-        let pid = Pid::from_u32(std::process::id());
         let sys = self.system.lock().await;
 
         let (cpu, memory) = if let Some(process) = sys.process(pid) {
@@ -332,18 +333,22 @@ impl MetricsCollector {
         &self,
         service_names: &[&'static str],
     ) -> HashMap<&'static str, ServiceMetrics> {
-        // Refresh system info ONCE for all services in blocking pool
+        // Refresh ONLY our own process (we only read this process's cpu/memory).
+        // The previous `sys.refresh_all()` rescanned every process/disk/network on
+        // the machine and could take several seconds — long enough to blow the 3s
+        // timeout in the cache-update loop, which then left the whole services
+        // table frozen at its initial (pre-startup) snapshot (uptime stuck at 0).
+        let pid = Pid::from_u32(std::process::id());
         {
             let sys_arc = self.system.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 let mut sys = sys_arc.blocking_lock();
-                sys.refresh_all();
+                sys.refresh_process(pid);
             })
             .await;
         }
 
         // Get process info once
-        let pid = Pid::from_u32(std::process::id());
         let sys = self.system.lock().await;
         let (cpu, memory) = if let Some(process) = sys.process(pid) {
             (process.cpu_usage(), process.memory())
