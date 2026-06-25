@@ -485,18 +485,75 @@ impl ActionsDatabase {
         Ok(deleted)
     }
 
-    /// Get recent incomplete actions for startup sync
-    pub async fn get_recent_incomplete_actions(&self) -> Result<Vec<Action>, String> {
-        // NOTE: We intentionally do not time-box this query. Any action that is still
-        // running must be restored after a restart so the in-memory cache and SSE
-        // stream remain consistent with the database.
-        let filters = ActionFilters {
-            state: Some(vec!["in_progress".to_owned()]),
-            limit: Some(500),
-            ..Default::default()
+    /// Finalize any actions still marked `in_progress` in the database.
+    ///
+    /// In-memory action state never survives a process restart, so on startup
+    /// every `in_progress` row is an orphan from a previous run that died
+    /// mid-operation. The old code restored them as "active", which left them
+    /// stuck in the actions center forever (uncancellable, reappearing after any
+    /// client-side clear). Instead we mark them failed with a clear reason and
+    /// fail their non-terminal steps. Returns the number of actions finalized.
+    pub async fn finalize_orphaned_in_progress(&self, reason: &str) -> Result<usize, String> {
+        let mut conn = self.get_write_connection()?;
+
+        // Collect orphan ids first so we can also fail their non-terminal steps.
+        let ids: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM actions WHERE state = 'in_progress'")
+                .map_err(|e| format!("Failed to prepare orphan query: {e}"))?;
+            let rows = stmt
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|e| format!("Failed to query orphan actions: {e}"))?;
+            rows.filter_map(Result::ok).collect()
         };
 
-        self.get_actions(&filters).await
+        if ids.is_empty() {
+            return Ok(0);
+        }
+
+        let now = Utc::now().to_rfc3339();
+        let failed_state = ActionState::Failed {
+            error: reason.to_owned(),
+        };
+        let state_data = serde_json::to_string(&failed_state)
+            .map_err(|e| format!("Failed to serialize failed state: {e}"))?;
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+
+        for id in &ids {
+            tx.execute(
+                r#"
+                UPDATE actions
+                SET state = 'failed',
+                    state_data = ?1,
+                    completed_at = ?2,
+                    duration_ms = CAST((julianday(?2) - julianday(started_at)) * 86400000 AS INTEGER),
+                    updated_at = ?2
+                WHERE id = ?3
+                "#,
+                params![state_data, now, id],
+            )
+            .map_err(|e| format!("Failed to finalize orphan action {id}: {e}"))?;
+
+            tx.execute(
+                r#"
+                UPDATE action_steps
+                SET status = 'failed',
+                    error = ?1,
+                    completed_at = COALESCE(completed_at, ?2)
+                WHERE action_id = ?3 AND status IN ('pending', 'inprogress')
+                "#,
+                params![reason, now, id],
+            )
+            .map_err(|e| format!("Failed to finalize orphan steps for {id}: {e}"))?;
+        }
+
+        tx.commit()
+            .map_err(|e| format!("Failed to commit orphan finalize: {e}"))?;
+
+        Ok(ids.len())
     }
 
     /// Parse action type from string

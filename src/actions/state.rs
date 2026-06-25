@@ -50,21 +50,21 @@ pub async fn sync_from_db() -> Result<(), String> {
         None => return Err("Database not initialized".to_owned()),
     };
 
-    let actions = db.get_recent_incomplete_actions().await?;
-    let count = actions.len();
+    // Any action still marked in_progress in the DB at startup is an orphan from
+    // a previous run that died mid-operation — in-memory action state never
+    // survives a restart, so there is nothing to "resume". The old code restored
+    // these as active, which left them stuck in the actions center permanently
+    // (uncancellable, reappearing after every client-side clear). Finalize them
+    // as failed instead; the active set then starts empty, as it should.
+    let finalized = db
+        .finalize_orphaned_in_progress("Interrupted by application restart")
+        .await?;
 
-    let mut active_actions = ACTIVE_ACTIONS.write().await;
-    for action in actions {
-        active_actions.insert(action.id.clone(), action);
-    }
-    drop(active_actions);
-
-    if count > 0 {
+    if finalized > 0 {
         logger::info(
             LogTag::System,
             &format!(
-                "Synced {} incomplete actions from database to memory",
-                count
+                "Finalized {finalized} orphaned in-progress action(s) interrupted by a previous restart"
             ),
         );
     }
