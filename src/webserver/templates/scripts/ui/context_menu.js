@@ -162,9 +162,11 @@ class ContextMenuManager {
     const walletRow = target.closest("tr[data-mint], .dt-row");
     const rowEl = tableRow || walletRow;
 
-    // Token tables: tokens page, wallet holdings
+    // Token tables: tokens page (main + favorites subtab), wallet holdings.
+    // The favorites table reuses the token columns, so its rows get the same
+    // right-click menu (Remove from Favorites / Blacklist / View Details).
     const isTokensTable = target.closest(
-      "#tokens-root, #holdingsTableContainer, [data-context='tokens']"
+      "#tokens-root, #favorites-table-container, #holdingsTableContainer, [data-context='tokens']"
     );
 
     if (rowEl && isTokensTable) {

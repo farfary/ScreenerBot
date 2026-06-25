@@ -292,6 +292,11 @@ impl DexScreenerPairRaw {
             pool.base_token_address = base.address.clone().unwrap_or_default();
             pool.base_token_name = base.name.clone().unwrap_or_default();
             pool.base_token_symbol = base.symbol.clone().unwrap_or_default();
+            // The pool's token mint IS the base token address. Populate `mint`
+            // here so every reader (token search, etc.) gets it — it was left
+            // empty before, which made search results carry no mint (favoriting
+            // such a result created an unremovable empty-mint favorite).
+            pool.mint = pool.base_token_address.clone();
         }
 
         if let Some(ref quote) = self.quote_token {

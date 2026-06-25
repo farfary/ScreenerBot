@@ -52,6 +52,12 @@ pub fn add_favorite(
     conn: &Mutex<Connection>,
     request: &AddFavoriteRequest,
 ) -> TokenResult<FavoriteToken> {
+    // Reject blank mints up front — an empty-mint favorite is unaddressable (it
+    // can never map to a real token and can't be deleted by mint afterwards).
+    if request.mint.trim().is_empty() {
+        return Err(TokenError::InvalidMint(request.mint.clone()));
+    }
+
     let conn = conn
         .lock()
         .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
@@ -101,11 +107,19 @@ pub fn get_favorites(conn: &Mutex<Connection>) -> TokenResult<Vec<FavoriteToken>
         .lock()
         .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
+    // Self-heal: purge any corrupt rows with a blank mint (legacy bad data that
+    // can't be removed by mint and would otherwise show as an unremovable row).
+    let _ = conn.execute(
+        "DELETE FROM token_favorites WHERE mint IS NULL OR TRIM(mint) = ''",
+        [],
+    );
+
     let mut stmt = conn
         .prepare(
             r#"
             SELECT id, mint, name, symbol, logo_url, notes, created_at, updated_at
             FROM token_favorites
+            WHERE mint IS NOT NULL AND TRIM(mint) != ''
             ORDER BY created_at DESC
             "#,
         )

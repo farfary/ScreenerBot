@@ -155,7 +155,7 @@ function createDialog() {
       </div>
       <div class="search-dialog-footer">
         <span class="search-tip"><kbd>↑↓</kbd> Navigate</span>
-        <span class="search-tip"><kbd>Enter</kbd> Copy mint</span>
+        <span class="search-tip"><kbd>Enter</kbd> View details</span>
         <span class="search-tip"><kbd>Esc</kbd> Close</span>
       </div>
     </div>
@@ -321,9 +321,36 @@ function handleResultClick(e) {
     return;
   }
 
-  // Default: copy mint and close
-  copyMint(token);
+  // Default: open the token details dialog and close the search.
+  openTokenDetails(token);
+}
+
+/**
+ * Open the global token details dialog for a search result.
+ * Reuses the shared `screenerbot:open-token-details` event so we stay decoupled
+ * from the dialog implementation (same path the context menu uses).
+ */
+async function openTokenDetails(token) {
+  if (!token?.mint) {
+    showToast("Token has no mint address", "warning");
+    return;
+  }
   closeDialog();
+  // The token details dialog registers the global `screenerbot:open-token-details`
+  // listener on import. It is a heavy module (charts, tabs) loaded per-page, and
+  // the search dialog is global, so load it lazily here — only when the user
+  // actually opens details — then fire the event the listener handles.
+  try {
+    await import("./token_details_dialog.js");
+  } catch {
+    showToast("Failed to open token details", "error");
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("screenerbot:open-token-details", {
+      detail: { mint: token.mint, symbol: token.symbol || "" },
+    })
+  );
 }
 
 /**
@@ -469,8 +496,7 @@ function handleInputKeydown(e) {
     case "Enter":
       e.preventDefault();
       if (currentResults[selectedIndex]) {
-        copyMint(currentResults[selectedIndex]);
-        closeDialog();
+        openTokenDetails(currentResults[selectedIndex]);
       }
       break;
     case "Escape":
