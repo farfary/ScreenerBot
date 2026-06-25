@@ -123,7 +123,7 @@
   padding: var(--tab-bar-padding-y) 14px;
   background: transparent;
   border: none;
-  border-radius: var(--radius-md) 6px 0 0;
+  border-radius: 0;
   color: var(--tab-bar-text-color);
   font-weight: 500;
   font-size: var(--tab-bar-sub-font-size);
@@ -170,7 +170,12 @@
 .sub-tab.active {
   color: var(--tab-bar-text-active);
   border-bottom-color: var(--tab-bar-active-border);
-  font-weight: 600;
+
+  /* Keep the SAME font-weight as inactive (.sub-tab is 500). Bumping to 600 on
+     active makes the bold label wider, so every sub-tab visibly reflows/jumps
+     width when you switch between them. Active is already clearly marked by the
+     accent color, background tint and bottom border — no weight change needed,
+     so widths stay fixed across switches. */
   background: rgb(88, 166, 255, 0.06);
 }
 
