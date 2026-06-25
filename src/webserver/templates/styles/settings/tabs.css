@@ -16,7 +16,11 @@
   height: 80px;
   margin-bottom: 16px;
   padding: 14px;
-  background: var(--bg-secondary);
+
+  /* The logo SVG is solid white, so it must sit on a fixed dark tile — using the
+     themed --bg-secondary made it invisible (white-on-white) in light mode. The
+     brand navy keeps the white mark legible in BOTH themes. */
+  background: var(--brand-navy);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-2xl);
 }
