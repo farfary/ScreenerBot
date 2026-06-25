@@ -625,10 +625,16 @@ function createLifecycle() {
     }
 
     // Embedded Strategies editor: activate its lifecycle when shown, stop it
-    // (and its pollers) when any other subtab is selected.
+    // (and its pollers) when any other subtab is selected. Toggle the
+    // edge-to-edge layout class explicitly here (see trader.css) so the
+    // padding state is deterministic on every tab switch and re-entry —
+    // never left to a :has() inline-style selector that can go stale.
+    const traderContent = $("#trader-content");
     if (tabId === "strategies") {
+      traderContent?.classList.add("trader-content--fullbleed");
       activateStrategiesSubtab();
     } else {
+      traderContent?.classList.remove("trader-content--fullbleed");
       deactivateStrategiesSubtab();
     }
 

@@ -33,8 +33,15 @@
    strategies-page layout is height:100% based and manages its own internal
    scrolling, so when this subtab is the visible one, drop #trader-content's
    horizontal + bottom padding entirely (negative margins can't stretch the
-   height, leaving an empty strip at the bottom). */
-#trader-content:has(> #strategies-tab[style*="display: block"]) {
+   height, leaving an empty strip at the bottom).
+
+   This is driven by an explicit class toggled in switchTab(), NOT a
+   :has([style*="display: block"]) selector. The old :has form keyed off an
+   inline-style substring and failed to re-invalidate after the router detached
+   (display:none) and re-attached the cached trader subtree on tab switch —
+   leaving #trader-content stuck at padding:0 (all content flush to the edge)
+   when returning to Auto Trader from another main tab. */
+#trader-content.trader-content--fullbleed {
   padding: 0;
   overflow: hidden;
 }
