@@ -47,6 +47,14 @@
   margin: 2px;
 }
 
+/* "None" reuses the dependency tag shape so it lines up with real badges
+   instead of looking like loose plain text, but reads as muted/empty. */
+.dependency-badge--none {
+  background: transparent;
+  border: 1px dashed var(--border-color);
+  color: var(--text-muted);
+}
+
 @media (width <= 900px) {
   .services-summary {
     flex-direction: column;

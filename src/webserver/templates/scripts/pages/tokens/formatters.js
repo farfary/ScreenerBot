@@ -114,7 +114,7 @@ export function normalizeBlacklistReasons(mint, sourcesMap) {
     });
 }
 
-export function summarizeBlacklistReasons(sourceList) {
+export function summarizeBlacklistReasons(sourceList, separator = ", ") {
   if (!Array.isArray(sourceList) || sourceList.length === 0) return "";
   return sourceList
     .map((source) => {
@@ -124,7 +124,7 @@ export function summarizeBlacklistReasons(sourceList) {
       const detail = source.detail ? ` (${source.detail})` : "";
       return `${category}:${reason}${detail}`;
     })
-    .join(", ");
+    .join(separator);
 }
 
 export function resolveSortColumn(sortKey) {

@@ -36,6 +36,10 @@
   --z-pool-selector-overlay: 10005;
   --z-pool-selector: 10005;
   --z-toast: 10010;
+
+  /* Hover tooltip sits above dialogs/menus/toasts so a clamped value is always
+     readable, but below the always-on-top status bar. */
+  --z-app-tooltip: 10090;
   --z-status-bar: 10100;
   --z-exit-dialog: 10100;
   --z-setup: 50000;

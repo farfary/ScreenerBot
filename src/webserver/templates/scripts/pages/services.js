@@ -315,9 +315,15 @@ function createLifecycle() {
           minWidth: 160,
           render: (v, row) => {
             const deps = Array.isArray(row.dependencies) ? row.dependencies : [];
-            return deps.length > 0
-              ? deps.map((dep) => `<span class="dependency-badge">${dep}</span>`).join(" ")
-              : '<span class="detail-value">None</span>';
+            if (deps.length === 0) {
+              return '<span class="dependency-badge dependency-badge--none">None</span>';
+            }
+            // Clamp the badge list to a couple of rows; full list on hover.
+            const badges = deps
+              .map((dep) => `<span class="dependency-badge">${Utils.escapeHtml(String(dep))}</span>`)
+              .join(" ");
+            const full = deps.map((dep) => String(dep)).join("\n");
+            return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${badges}</div>`;
           },
         },
       ];

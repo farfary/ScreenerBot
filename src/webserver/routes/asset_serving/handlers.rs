@@ -62,6 +62,7 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
         "bootstrap.js" => Some(embeds::CORE_BOOTSTRAP),
         "router.js" => Some(embeds::CORE_ROUTER),
         "connectivity_watcher.js" => Some(embeds::CORE_CONNECTIVITY_WATCHER),
+        "tooltip.js" => Some(embeds::CORE_TOOLTIP),
         "header.js" => Some(embeds::CORE_HEADER),
         "notifications.js" => Some(embeds::CORE_NOTIFICATIONS),
         "toast.js" => Some(embeds::CORE_TOAST),

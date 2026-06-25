@@ -248,3 +248,38 @@
   background: var(--bg-card);
   border-color: var(--text-muted);
 }
+
+/* =============================================================================
+   Global hover tooltip (core/tooltip.js)
+   Shared floating tooltip for any element with data-tooltip — used by clamped
+   table cells (blacklist reasons, dependencies, rejection reasons) to reveal
+   their full value on hover. Themed via tokens, inherits [data-theme].
+   ============================================================================= */
+
+.app-tooltip {
+  position: fixed;
+  z-index: var(--z-app-tooltip, 10090);
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 8px 10px;
+  background: var(--bg-tooltip, var(--bg-elevated, #1c2128));
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: var(--shadow-floating-md, 0 8px 24px rgb(0, 0, 0, 0.35));
+  font-family: var(--font-data, var(--font-mono));
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+  transition:
+    opacity var(--transition-fast, 0.15s) ease,
+    transform var(--transition-fast, 0.15s) ease;
+}
+
+.app-tooltip--visible {
+  opacity: 1;
+  transform: translateY(0);
+}

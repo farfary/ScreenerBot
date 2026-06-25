@@ -1200,8 +1200,10 @@ function createLifecycle() {
               render: (value) => {
                 if (!value) return "—";
                 const displayLabel = getRejectionDisplayLabel(value);
-                // Show display label with original code as tooltip
-                return `<span title="${Utils.escapeHtml(String(value))}">${Utils.escapeHtml(displayLabel)}</span>`;
+                // Clamp long reasons; reveal the full label + raw code on hover.
+                const raw = String(value);
+                const full = displayLabel && displayLabel !== raw ? `${displayLabel}\n${raw}` : raw;
+                return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${Utils.escapeHtml(displayLabel)}</div>`;
               },
             },
           ]
@@ -1218,7 +1220,9 @@ function createLifecycle() {
               render: (_v, row) => {
                 const summary = summarizeBlacklistReasons(row.blacklist_reasons);
                 if (!summary) return "—";
-                return Utils.escapeHtml(summary);
+                // One reason per line in the hover tooltip for readability.
+                const full = summarizeBlacklistReasons(row.blacklist_reasons, "\n");
+                return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${Utils.escapeHtml(summary)}</div>`;
               },
             },
           ]

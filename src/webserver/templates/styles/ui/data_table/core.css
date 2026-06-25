@@ -579,6 +579,27 @@ body.dt-column-resizing * {
   text-overflow: ellipsis;
 }
 
+/* Long-text / many-badge cells: clamp to a fixed number of lines so a single
+   verbose value (blacklist reasons, service dependencies, rejection reasons)
+   never blows up the row height. The full value is revealed on hover through
+   the global tooltip (core/tooltip.js) via data-tooltip on the same element.
+   Line count is overridable per cell with --dt-longtext-lines. */
+.data-table td .dt-longtext {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  line-clamp: var(--dt-longtext-lines, 2);
+  -webkit-line-clamp: var(--dt-longtext-lines, 2);
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: help;
+}
+
+/* Badge rows inside a clamped cell keep their inline spacing while clamping. */
+.data-table td .dt-longtext > * {
+  vertical-align: middle;
+}
+
 .data-table td .mono-text {
   font-family: var(--font-mono);
   word-break: break-all;
