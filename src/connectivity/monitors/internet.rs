@@ -4,9 +4,16 @@ use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
 use async_trait::async_trait;
+use futures::future::select_ok;
 use std::time::Instant;
 use tokio::net::TcpStream;
 use tokio::time::{timeout, Duration};
+
+/// Upper bound for a single connectivity probe. A TCP connect to a DNS server
+/// (or a HEAD to a CDN) completes in well under a second when online, so capping
+/// the probe here keeps offline detection fast regardless of the larger general
+/// `health_check_timeout_secs` used for heavier API health checks.
+const MAX_PROBE_SECS: u64 = 2;
 
 /// Internet connectivity monitor - checks DNS and HTTP connectivity
 pub struct InternetMonitor;
@@ -17,69 +24,82 @@ impl InternetMonitor {
         Self
     }
 
-    /// Check DNS connectivity by attempting TCP connection to DNS servers
+    /// Check DNS connectivity by racing TCP connections to all configured DNS
+    /// servers concurrently. Resolves as soon as ANY connects (fast online
+    /// detection) and fails only once ALL fail or time out (bounded by
+    /// `MAX_PROBE_SECS`, so offline detection is ~one short timeout, not the sum
+    /// across servers).
     async fn check_dns(&self, timeout_secs: u64) -> Result<u64, String> {
         let cfg = get_config_clone();
-        let dns_servers = &cfg.connectivity.internet.dns_servers;
+        let dns_servers = cfg.connectivity.internet.dns_servers.clone();
 
         if dns_servers.is_empty() {
             return Err("No DNS servers configured".to_owned());
         }
 
-        let timeout_duration = Duration::from_secs(timeout_secs);
+        let timeout_duration = Duration::from_secs(timeout_secs.min(MAX_PROBE_SECS).max(1));
+        let start = Instant::now();
 
-        for dns_server in dns_servers {
-            let addr = format!("{dns_server}:53");
-            let start = Instant::now();
+        let connects: Vec<_> = dns_servers
+            .iter()
+            .map(|server| {
+                let addr = format!("{server}:53");
+                Box::pin(async move {
+                    match timeout(timeout_duration, TcpStream::connect(&addr)).await {
+                        Ok(Ok(_)) => Ok(()),
+                        Ok(Err(e)) => Err(e.to_string()),
+                        Err(_) => Err("timeout".to_owned()),
+                    }
+                })
+            })
+            .collect();
 
-            match timeout(timeout_duration, TcpStream::connect(&addr)).await {
-                Ok(Ok(_)) => {
-                    let latency = start.elapsed().as_millis() as u64;
-                    return Ok(latency);
-                }
-                Ok(Err(_e)) => {
-                    continue; // Try next DNS server
-                }
-                Err(_) => {
-                    continue; // Timeout, try next
-                }
-            }
+        match select_ok(connects).await {
+            Ok(_) => Ok(start.elapsed().as_millis() as u64),
+            Err(_) => Err(format!("All DNS servers unreachable: {:?}", dns_servers)),
         }
-
-        Err(format!("All DNS servers unreachable: {:?}", dns_servers))
     }
 
-    /// Check HTTP connectivity by making request to known endpoints
+    /// Check HTTP connectivity by racing HEAD requests to all configured check
+    /// endpoints concurrently (same fast-resolve / bounded-fail semantics as
+    /// `check_dns`).
     async fn check_http(&self, timeout_secs: u64) -> Result<u64, String> {
         let cfg = get_config_clone();
-        let http_checks = &cfg.connectivity.internet.http_checks;
+        let http_checks = cfg.connectivity.internet.http_checks.clone();
 
         if http_checks.is_empty() {
             return Err("No HTTP check endpoints configured".to_owned());
         }
 
+        let probe_secs = timeout_secs.min(MAX_PROBE_SECS).max(1);
         let client = crate::net::client_builder()
-            .timeout(Duration::from_secs(timeout_secs))
+            .timeout(Duration::from_secs(probe_secs))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
-        for url in http_checks {
-            let start = Instant::now();
+        let start = Instant::now();
+        let requests: Vec<_> = http_checks
+            .iter()
+            .map(|url| {
+                let client = client.clone();
+                let url = url.clone();
+                Box::pin(async move {
+                    match client.head(&url).send().await {
+                        Ok(response) if response.status().is_success() => Ok(()),
+                        Ok(response) => Err(format!("status {}", response.status())),
+                        Err(e) => Err(e.to_string()),
+                    }
+                })
+            })
+            .collect();
 
-            match client.head(url).send().await {
-                Ok(response) if response.status().is_success() => {
-                    let latency = start.elapsed().as_millis() as u64;
-                    return Ok(latency);
-                }
-                Ok(_) => continue,  // Non-success status, try next
-                Err(_) => continue, // Request failed, try next
-            }
+        match select_ok(requests).await {
+            Ok(_) => Ok(start.elapsed().as_millis() as u64),
+            Err(_) => Err(format!(
+                "All HTTP check endpoints unreachable: {:?}",
+                http_checks
+            )),
         }
-
-        Err(format!(
-            "All HTTP check endpoints unreachable: {:?}",
-            http_checks
-        ))
     }
 }
 

@@ -12,8 +12,15 @@ config_struct! {
         /// Enable connectivity monitoring
         enabled: bool = true,
 
-        /// Health check interval in seconds
+        /// Health check interval in seconds (used while all critical endpoints
+        /// are healthy — the steady-state cadence)
         check_interval_secs: u64 = 30,
+
+        /// Health check interval in seconds used while any critical endpoint is
+        /// unhealthy or unknown. The checker tightens to this fast cadence so an
+        /// outage (and its recovery) is detected within a few seconds instead of
+        /// waiting for the steady-state interval, then relaxes back once healthy.
+        degraded_check_interval_secs: u64 = 2,
 
         /// Timeout for health checks in seconds
         health_check_timeout_secs: u64 = 5,

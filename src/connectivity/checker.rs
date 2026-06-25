@@ -9,9 +9,11 @@ use crate::connectivity::monitors::{
 use crate::connectivity::state;
 use crate::events::{record_connectivity_event, Severity};
 use crate::logger::{self, LogTag};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Notify;
-use tokio::time::{interval, Duration};
+use tokio::time::Duration;
 
 /// ConnectivityChecker - business logic for monitoring health of all external endpoints
 ///
@@ -72,10 +74,12 @@ impl ConnectivityChecker {
         }
     }
 
-    /// Run health check for a single monitor
-    pub async fn check_monitor(monitor: &Box<dyn EndpointMonitor>) {
+    /// Run health check for a single monitor. Returns whether this check was
+    /// healthy, so the caller can tighten the polling cadence on the very first
+    /// failed round instead of waiting for the failure threshold to be crossed.
+    pub async fn check_monitor(monitor: &Box<dyn EndpointMonitor>) -> bool {
         if !monitor.is_enabled() {
-            return;
+            return true;
         }
 
         let name = monitor.name();
@@ -88,6 +92,7 @@ impl ConnectivityChecker {
         let previous_health = state::get_endpoint_health(name).await;
 
         let result = monitor.check_health().await;
+        let check_healthy = result.healthy;
 
         let cfg = get_config_clone();
         let failure_threshold = cfg.connectivity.failure_threshold;
@@ -107,7 +112,7 @@ impl ConnectivityChecker {
         // Get new health state after update
         let new_health = match state::get_endpoint_health(name).await {
             Some(h) => h,
-            None => return,
+            None => return check_healthy,
         };
 
         // Helper to get health state discriminant for comparison
@@ -254,70 +259,125 @@ impl ConnectivityChecker {
             }
             _ => {}
         }
+
+        check_healthy
     }
 
-    /// Background task that periodically checks all endpoints
+    /// Background task that periodically checks all endpoints.
+    ///
+    /// Two properties make detection fast without a separate "fast" checker:
+    /// - **Adaptive cadence:** the loop tightens to `degraded_check_interval_secs`
+    ///   whenever any critical endpoint is not healthy (including the Unknown
+    ///   startup state), and relaxes to `check_interval_secs` once everything is
+    ///   healthy. So an outage and its recovery are seen within a few seconds.
+    /// - **Concurrent checks:** all monitors are probed in parallel, so a round
+    ///   costs ~one timeout, not the sum of every monitor's timeout (critical
+    ///   when offline, where each check would otherwise serialize its timeout).
     pub async fn run_health_checks(monitors: Vec<Box<dyn EndpointMonitor>>, shutdown: Arc<Notify>) {
-        let cfg = get_config_clone();
-        let check_interval_secs = cfg.connectivity.check_interval_secs;
-
-        let mut interval_timer = interval(Duration::from_secs(check_interval_secs));
-        interval_timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
+        let initial_cfg = get_config_clone();
         logger::info(
             LogTag::Connectivity,
             &format!(
-                "Starting connectivity health checks (interval={}s)",
-                check_interval_secs
+                "Starting connectivity health checks (critical every {}s, others every {}s, concurrent)",
+                initial_cfg.connectivity.degraded_check_interval_secs,
+                initial_cfg.connectivity.check_interval_secs
             ),
         );
 
+        // Per-endpoint last-checked timestamps so each endpoint runs on its own
+        // cadence. Critical reachability probes (internet = a TCP connect, rpc =
+        // a local provider-health read) are cheap, so they run at the fast
+        // cadence for near-real-time outage detection; the rate-limited API
+        // health checks (Important/Optional) stay on the slow cadence so we don't
+        // burn their quotas. The whole loop ticks at the fast cadence and simply
+        // skips endpoints that are not due yet.
+        let mut last_checked: HashMap<&'static str, Instant> = HashMap::new();
+
+        // Signature of the last logged unhealthy set, so we log the CRITICAL line
+        // only on change — not every fast tick.
+        let mut last_unhealthy_sig: Option<String> = None;
+
         loop {
+            let cfg = get_config_clone();
+            let fast_secs = cfg.connectivity.degraded_check_interval_secs.max(1);
+            let slow_secs = cfg.connectivity.check_interval_secs.max(1);
+            let now = Instant::now();
+
+            // Select endpoints whose own cadence is due this tick.
+            let due: Vec<&Box<dyn EndpointMonitor>> = monitors
+                .iter()
+                .filter(|m| m.is_enabled())
+                .filter(|m| {
+                    let is_critical = m.criticality()
+                        == crate::connectivity::types::EndpointCriticality::Critical;
+                    let interval = if is_critical { fast_secs } else { slow_secs };
+                    match last_checked.get(m.name()) {
+                        Some(t) => now.duration_since(*t) >= Duration::from_secs(interval),
+                        None => true, // never checked → check immediately
+                    }
+                })
+                .collect();
+
+            // Probe the due endpoints in parallel so a tick costs ~one timeout,
+            // not the sum across endpoints (matters when offline).
+            let checks = due.iter().map(|m| Self::check_monitor(*m));
+            futures::future::join_all(checks).await;
+            for m in &due {
+                last_checked.insert(m.name(), now);
+            }
+
+            // Surface critical outages — only when the unhealthy set changes, so
+            // the fast cadence doesn't spam an identical line every couple seconds.
+            let unhealthy = state::get_unhealthy_critical_endpoints().await;
+            let sig = if unhealthy.is_empty() {
+                None
+            } else {
+                let mut names: Vec<&str> = unhealthy.clone();
+                names.sort_unstable();
+                Some(names.join(","))
+            };
+            if sig != last_unhealthy_sig {
+                last_unhealthy_sig = sig;
+                if !unhealthy.is_empty() {
+                    logger::error(
+                        LogTag::Connectivity,
+                        &format!(
+                            "CRITICAL: {} critical endpoint(s) unhealthy: {:?} - System should pause operations",
+                            unhealthy.len(),
+                            unhealthy
+                        ),
+                    );
+
+                    tokio::spawn({
+                        let unhealthy_list: Vec<String> =
+                            unhealthy.iter().map(|s| s.to_string()).collect();
+                        let count = unhealthy.len();
+                        async move {
+                            record_connectivity_event(
+                                "system",
+                                "critical_endpoints_unhealthy",
+                                Severity::Error,
+                                serde_json::json!({
+                                    "unhealthy_count": count,
+                                    "unhealthy_endpoints": unhealthy_list,
+                                    "message": format!("{count} critical endpoint(s) unhealthy - System should pause operations"),
+                                }),
+                            )
+                            .await;
+                        }
+                    });
+                }
+            }
+
+            // Tick at the fast cadence so critical endpoints are re-evaluated on
+            // time; non-critical endpoints are simply skipped until their slower
+            // cadence is due.
             tokio::select! {
                 _ = shutdown.notified() => {
                     logger::info(LogTag::Connectivity, "Connectivity health checks shutting down");
                     break;
                 }
-                _ = interval_timer.tick() => {
-                    // Check all monitors sequentially (they're already async and lightweight)
-                    for monitor in &monitors {
-                        if monitor.is_enabled() {
-                            Self::check_monitor(monitor).await;
-                        }
-                    }
-
-                    // Check if critical endpoints are unhealthy
-                    let unhealthy = state::get_unhealthy_critical_endpoints().await;
-                    if !unhealthy.is_empty() {
-                        logger::error(
-                            LogTag::Connectivity,
-                            &format!(
-                                "CRITICAL: {} critical endpoint(s) unhealthy: {:?} - System should pause operations",
-                                unhealthy.len(),
-                                unhealthy
-                            ),
-                        );
-
-                        // Record critical endpoints event
-                        tokio::spawn({
-                            let unhealthy_list: Vec<String> = unhealthy.iter().map(|s| s.to_string()).collect();
-                            let count = unhealthy.len();
-                            async move {
-                                record_connectivity_event(
-                                    "system",
-                                    "critical_endpoints_unhealthy",
-                                    Severity::Error,
-                                    serde_json::json!({
-                                        "unhealthy_count": count,
-                                        "unhealthy_endpoints": unhealthy_list,
-                                        "message": format!("{count} critical endpoint(s) unhealthy - System should pause operations"),
-                                    }),
-                                )
-                                .await;
-                            }
-                        });
-                    }
-                }
+                _ = tokio::time::sleep(Duration::from_secs(fast_secs)) => {}
             }
         }
     }
