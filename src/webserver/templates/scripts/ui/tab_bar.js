@@ -450,6 +450,12 @@ export class TabBar {
     // Skip if already visible unless force is true
     if (this.visible && !force) return;
 
+    // Re-claim the shared container for this page (hide() releases these), so the
+    // correct buttons render and page-specific CSS keyed on data-page applies.
+    this.container.setAttribute("data-page", this.pageName);
+    this.container.setAttribute("role", "tablist");
+    this.container.setAttribute("data-ui", "tab-bar");
+
     // Remount to ensure correct buttons are displayed (important for shared containers)
     this._remountButtons();
     this._updateTabButtons();
@@ -470,14 +476,22 @@ export class TabBar {
   hide(options = {}) {
     const { silent = false } = options;
 
+    // Always release ownership of the shared container, even if we think we're
+    // already hidden. #subTabsContainer is shared across pages; mount() stamps it
+    // with data-page/data-ui/role and page CSS keys on those (e.g. filtering
+    // forces `.sub-tabs-container[data-page="filtering"]` visible with
+    // !important). If those attributes linger after hide, that !important rule
+    // overrides our inline display:none and leaves an empty bar on screen when
+    // navigating to another page. Clearing them lets the bar actually hide.
+    this.container.style.display = "none";
+    this.container.innerHTML = "";
+    this.container.removeAttribute("data-page");
+    this.container.removeAttribute("data-ui");
+    this.container.removeAttribute("role");
+
     if (!this.visible) return;
 
-    this.container.style.display = "none";
     this.visible = false;
-
-    // Clear container content when hiding to prevent visual artifacts
-    // This is important for shared containers across pages
-    this.container.innerHTML = "";
 
     if (!silent) {
       this.context.emit("hide");
