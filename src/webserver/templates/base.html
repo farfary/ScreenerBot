@@ -61,8 +61,20 @@
     <!-- Theme initialization - MUST run before any rendering to prevent flash -->
     <script>
       (function () {
-        const savedTheme = localStorage.getItem("theme") || "dark";
-        document.documentElement.setAttribute("data-theme", savedTheme);
+        // Prefer the ?theme= URL param (Electron passes the last-run theme here):
+        // GUI mode loads on a new dynamic port each launch, so localStorage is
+        // empty every start and would fall back to dark, then flip to light once
+        // theme.js fetches the server value — a visible flash. The URL param lets
+        // us paint the correct theme synchronously before first render.
+        let theme;
+        try {
+          const p = new URLSearchParams(location.search).get("theme");
+          if (p === "light" || p === "dark") theme = p;
+        } catch { /* no query */ }
+        if (!theme) theme = localStorage.getItem("theme") || "dark";
+        document.documentElement.setAttribute("data-theme", theme);
+        // Seed localStorage so later reads (theme.js, FOUC) stay consistent.
+        try { localStorage.setItem("theme", theme); } catch { /* unavailable */ }
       })();
     </script>
 

@@ -1066,8 +1066,13 @@ Other:
  * Load the main application URL
  */
 function loadMainApp() {
-  // Add ?electron=1 to tell the dashboard to skip its splash screen
-  const appUrl = `http://${CONFIG.host}:${CONFIG.port}?electron=1`;
+  // Add ?electron=1 to tell the dashboard to skip its splash screen, and pass the
+  // last-run theme so the dashboard's pre-paint FOUC script renders the right
+  // theme immediately. GUI mode uses a NEW dynamic port each launch, so the
+  // dashboard's localStorage (origin-scoped, includes port) is empty on every
+  // start — without this it falls back to dark and then flips to light once
+  // theme.js fetches the server value (the visible dark→light flash).
+  const appUrl = `http://${CONFIG.host}:${CONFIG.port}?electron=1&theme=${currentTheme}`;
   console.log('[Electron] Loading main app:', appUrl);
   dashboardLoaded = true;
   mainWindow.loadURL(appUrl);
