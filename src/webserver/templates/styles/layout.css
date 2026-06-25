@@ -238,3 +238,68 @@
     animation: none;
   }
 }
+
+/* Page-level error / offline placeholders rendered by core/router.js when a
+   page fetch fails. Themed via tokens (light + dark); centered, no ribbon. */
+.page-load-error,
+.page-offline {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 240px;
+  padding: 2.5rem 2rem;
+  text-align: center;
+}
+
+.page-load-error h2,
+.page-offline h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.page-load-error h2 .icon-triangle-alert {
+  color: var(--color-error, #f85149);
+  margin-right: 0.4rem;
+}
+
+.page-load-error p,
+.page-offline p {
+  max-width: 420px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.page-offline-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent, #58a6ff);
+  border-radius: 50%;
+  animation: conn-overlay-spin 0.8s linear infinite;
+}
+
+.page-load-retry {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 0.15s) ease,
+    border-color var(--transition-fast, 0.15s) ease;
+}
+
+.page-load-retry:hover {
+  background: var(--bg-card);
+  border-color: var(--text-muted);
+}

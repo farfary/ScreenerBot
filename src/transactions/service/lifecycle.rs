@@ -63,33 +63,62 @@ pub async fn start_global_transaction_service(
         *global_manager = Some(manager.clone());
     }
 
-    // Perform initial cache bootstrap before allowing trader start
-    let bootstrap_stats = perform_initial_transaction_bootstrap(&manager).await?;
+    // Perform initial cache bootstrap before allowing trader start.
+    //
+    // A network/RPC outage here must NOT crash the whole app: the bootstrap is
+    // only a cache pre-fill optimization, and trading entries are already paused
+    // by the connectivity service while RPC/internet are unhealthy. So a network
+    // error is downgraded to a degraded boot — the service still starts and the
+    // periodic check loop catches up automatically once connectivity returns; a
+    // restart resumes any unfinished history backfill from the persisted cursor.
+    // Non-network errors (DB corruption, etc.) stay fatal.
+    match perform_initial_transaction_bootstrap(&manager).await {
+        Ok(bootstrap_stats) => {
+            logger::info(
+        LogTag::Transactions,
+        &format!(
+          "Initial transaction bootstrap complete: processed={}, skipped_known={}, fetched={}, pages={}, duration={}ms",
+          bootstrap_stats.newly_processed,
+          bootstrap_stats.known_signatures_skipped,
+          bootstrap_stats.total_signatures_fetched,
+          bootstrap_stats.total_rpc_pages,
+          bootstrap_stats.duration_ms
+        )
+      );
 
-    logger::info(
-    LogTag::Transactions,
-    &format!(
-      "Initial transaction bootstrap complete: processed={}, skipped_known={}, fetched={}, pages={}, duration={}ms",
-      bootstrap_stats.newly_processed,
-      bootstrap_stats.known_signatures_skipped,
-      bootstrap_stats.total_signatures_fetched,
-      bootstrap_stats.total_rpc_pages,
-      bootstrap_stats.duration_ms
-    )
-  );
-
-    if let Some(first_sig) = &bootstrap_stats.newest_signature {
-        logger::info(
-            LogTag::Transactions,
-            &format!(
-                "Newest observed signature: {} (oldest: {})",
-                first_sig,
-                bootstrap_stats
-                    .oldest_signature
-                    .as_ref()
-                    .map_or("unknown", |v| v)
-            ),
-        );
+            if let Some(first_sig) = &bootstrap_stats.newest_signature {
+                logger::info(
+                    LogTag::Transactions,
+                    &format!(
+                        "Newest observed signature: {} (oldest: {})",
+                        first_sig,
+                        bootstrap_stats
+                            .oldest_signature
+                            .as_ref()
+                            .map_or("unknown", |v| v)
+                    ),
+                );
+            }
+        }
+        Err(e) if is_network_bootstrap_error(&e) => {
+            logger::warning(
+                LogTag::Transactions,
+                &format!(
+                    "Initial transaction bootstrap skipped - network/RPC unavailable: {e}. \
+                     Starting in degraded mode; the cache will catch up automatically once \
+                     connectivity is restored."
+                ),
+            );
+        }
+        Err(e) => {
+            // Non-network failure is fatal: roll back the global registration we
+            // installed above so a later start attempt sees a clean slate.
+            {
+                let mut global_manager = GLOBAL_TRANSACTION_MANAGER.lock().await;
+                *global_manager = None;
+            }
+            return Err(e);
+        }
     }
 
     // Reset new transactions counter post-bootstrap to avoid double counting
@@ -134,6 +163,32 @@ pub async fn start_global_transaction_service(
     );
 
     Ok(service_handle)
+}
+
+/// Classify a bootstrap error string as a transient network/RPC failure.
+///
+/// Bootstrap errors are stringly-typed (they bubble up from the RPC fetcher as
+/// `String`), so we match on the well-known connectivity markers. A match means
+/// the failure is an outage we can recover from, not a permanent fault.
+fn is_network_bootstrap_error(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    [
+        "no providers available",
+        "network timeout",
+        "operation timed out",
+        "timed out",
+        "error sending request",
+        "error trying to connect",
+        "connection refused",
+        "connection reset",
+        "dns error",
+        "failed to lookup address",
+        "tcp connect error",
+        "request timeout",
+        "network error",
+    ]
+    .iter()
+    .any(|needle| m.contains(needle))
 }
 
 /// Stop the global transaction service

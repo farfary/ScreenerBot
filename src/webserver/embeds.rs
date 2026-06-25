@@ -230,6 +230,8 @@ pub const CORE_DOM: &str = include_str!("templates/scripts/core/dom.js");
 pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
 pub const CORE_BOOTSTRAP: &str = include_str!("templates/scripts/core/bootstrap.js");
 pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
+pub const CORE_CONNECTIVITY_WATCHER: &str =
+    include_str!("templates/scripts/core/connectivity_watcher.js");
 pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
 pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");

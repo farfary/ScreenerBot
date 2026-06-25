@@ -256,18 +256,69 @@ export async function loadPage(pageName) {
   } catch (error) {
     console.error("[Router] Failed to load page:", pageName, error);
 
+    // A connection error (backend crashed / network dropped / restart in
+    // progress) gets a calm, auto-recovering offline state rather than a hard
+    // error — the connectivity watcher already shows the global overlay, and we
+    // reload this page automatically the moment the backend answers again.
+    if (isConnectionError(error)) {
+      renderOfflinePlaceholder(loadingEl, pageName);
+      return;
+    }
+
     loadingEl.innerHTML = `
-      <div style="padding: 2rem; text-align: center;">
-        <h2 style="color: #ef4444;"><i class="icon-triangle-alert"></i> Failed to Load Page</h2>
-        <p style="color: #9ca3af; margin-top: 1rem;">
-          ${error.message}
-        </p>
-        <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 0.375rem; cursor: pointer;">
-          Reload Page
-        </button>
+      <div class="page-load-error">
+        <h2><i class="icon-triangle-alert"></i> Failed to Load Page</h2>
+        <p>${error.message}</p>
+        <button type="button" class="page-load-retry">Retry</button>
       </div>
     `;
+    const retryBtn = loadingEl.querySelector(".page-load-retry");
+    if (retryBtn) retryBtn.addEventListener("click", () => loadPage(pageName));
   }
+}
+
+// Heuristic: did the page fetch fail because the backend was unreachable
+// (vs. a real 4xx/5xx from a live server)? `fetch` rejects with a TypeError
+// (commonly "Failed to fetch") on connection refused / network down, and our
+// fetchPageContent maps an aborted request to "Request timeout".
+function isConnectionError(error) {
+  if (window.__SB_CONNECTIVITY__ && window.__SB_CONNECTIVITY__.isBackendOnline() === false) {
+    return true;
+  }
+  if (!navigator.onLine) return true;
+  const msg = (error && error.message) || "";
+  return (
+    error instanceof TypeError ||
+    msg.includes("Failed to fetch") ||
+    msg.includes("NetworkError") ||
+    msg.includes("Load failed") ||
+    msg === "Request timeout"
+  );
+}
+
+function renderOfflinePlaceholder(loadingEl, pageName) {
+  loadingEl.innerHTML = `
+    <div class="page-offline">
+      <span class="page-offline-spinner" aria-hidden="true"></span>
+      <h2>Waiting for ScreenerBot…</h2>
+      <p>The backend is unreachable right now. This page will load automatically once the connection is back.</p>
+      <button type="button" class="page-load-retry">Retry now</button>
+    </div>
+  `;
+  const retryBtn = loadingEl.querySelector(".page-load-retry");
+  if (retryBtn) {
+    retryBtn.addEventListener("click", () => {
+      if (window.__SB_CONNECTIVITY__) window.__SB_CONNECTIVITY__.pingNow();
+      loadPage(pageName);
+    });
+  }
+  // Auto-recover: reload this page the moment the backend comes back.
+  const onReconnect = () => {
+    window.removeEventListener("screenerbot:reconnected", onReconnect);
+    // Only reload if the user is still looking at this (failed) page.
+    if (_state.currentPage === pageName) loadPage(pageName);
+  };
+  window.addEventListener("screenerbot:reconnected", onReconnect, { once: true });
 }
 
 export function initRouter() {
