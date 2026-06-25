@@ -464,6 +464,21 @@
   color: var(--text-primary);
 }
 
+.action-btn.favorite-btn:hover {
+  border-color: var(--warning, #f0b429);
+  color: var(--warning, #f0b429);
+}
+
+.action-btn.favorite-btn.active {
+  background: color-mix(in srgb, var(--warning, #f0b429) 20%, transparent);
+  border-color: var(--warning, #f0b429);
+  color: var(--warning, #f0b429);
+}
+
+.action-btn.favorite-btn.active:hover {
+  filter: brightness(1.15);
+}
+
 .action-btn svg,
 .action-btn i {
   width: 14px;

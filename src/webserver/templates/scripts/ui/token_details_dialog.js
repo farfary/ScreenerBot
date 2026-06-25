@@ -640,6 +640,15 @@ export class TokenDetailsDialog {
           }
           this._sellHandler = null;
         }
+
+        // Clean up favorites-changed listener
+        if (this._favoritesChangedHandler) {
+          window.removeEventListener(
+            "screenerbot:favorites-changed",
+            this._favoritesChangedHandler
+          );
+          this._favoritesChangedHandler = null;
+        }
       }
 
       if (this.chartResizeObserver) {
@@ -738,6 +747,9 @@ export class TokenDetailsDialog {
                 </button>
               </div>
               <div class="header-actions">
+                <button class="action-btn favorite-btn" id="favoriteBtn" title="Add to Favorites" type="button">
+                  <i class="icon-star"></i>
+                </button>
                 <button class="action-btn" id="copyMintBtn" title="Copy Mint Address">
                   <i class="icon-copy"></i>
                 </button>
@@ -925,6 +937,107 @@ export class TokenDetailsDialog {
         Utils.showToast("Mint address copied!", "success");
       });
     }
+
+    // Setup favorite button
+    const favBtn = this.dialogEl.querySelector("#favoriteBtn");
+    if (favBtn && !favBtn._hasListener) {
+      favBtn._hasListener = true;
+      favBtn.addEventListener("click", () => this._toggleFavorite());
+      // Check initial favorite state once
+      this._checkFavoriteState();
+    }
+  }
+
+  /**
+   * Fetch the favorites list and update the button to reflect whether the
+   * current token is already favorited. Runs once per dialog open.
+   */
+  async _checkFavoriteState() {
+    const mint = this.tokenData?.mint;
+    if (!mint) return;
+    try {
+      const response = await fetch("/api/tokens/favorites");
+      if (!response.ok) return;
+      const data = await response.json();
+      const favorites = data.favorites || [];
+      const isFav = favorites.some((f) => f.mint === mint);
+      this._updateFavoriteButton(isFav);
+    } catch {
+      // Silent — best-effort initial state check
+    }
+  }
+
+  /**
+   * Update the favorite button visual state (active class + title).
+   * @param {boolean} isFavorite
+   */
+  _updateFavoriteButton(isFavorite) {
+    const btn = this.dialogEl?.querySelector("#favoriteBtn");
+    if (!btn) return;
+    btn.classList.toggle("active", isFavorite);
+    btn.title = isFavorite ? "Remove from Favorites" : "Add to Favorites";
+  }
+
+  /**
+   * Toggle favorite status for the current token. POST to add, DELETE to remove.
+   * Dispatches screenerbot:favorites-changed so other components stay in sync.
+   */
+  async _toggleFavorite() {
+    const btn = this.dialogEl?.querySelector("#favoriteBtn");
+    if (!btn || btn.disabled) return;
+    const mint = this.tokenData?.mint;
+    if (!mint) return;
+
+    const currentlyFavorite = btn.classList.contains("active");
+    const symbol =
+      this.fullTokenData?.symbol || this.tokenData?.symbol || "";
+    const name = this.fullTokenData?.name || this.tokenData?.name || null;
+    const logo_url =
+      this.fullTokenData?.logo_url || this.tokenData?.logo_url || null;
+
+    btn.disabled = true;
+    try {
+      if (currentlyFavorite) {
+        const response = await fetch(
+          `/api/tokens/favorites/${encodeURIComponent(mint)}`,
+          { method: "DELETE" }
+        );
+        if (!response.ok) throw new Error("Failed to remove favorite");
+        this._updateFavoriteButton(false);
+        Utils.showToast(
+          `${symbol || "Token"} removed from favorites`,
+          "success"
+        );
+      } else {
+        const response = await fetch("/api/tokens/favorites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mint,
+            symbol: symbol || null,
+            name,
+            logo_url,
+          }),
+        });
+        if (!response.ok) throw new Error("Failed to add favorite");
+        this._updateFavoriteButton(true);
+        Utils.showToast(
+          `${symbol || "Token"} added to favorites`,
+          "success"
+        );
+      }
+
+      // Emit event for other UI components (context menu, favorites tab, etc.)
+      window.dispatchEvent(
+        new CustomEvent("screenerbot:favorites-changed", {
+          detail: { mint, isFavorite: !currentlyFavorite },
+        })
+      );
+    } catch (error) {
+      Utils.showToast(error.message || "Failed to update favorites", "error");
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   _buildHeaderPrice(token) {
@@ -1006,6 +1119,17 @@ export class TokenDetailsDialog {
       this._sellHandler = () => this._handleSellClick();
       sellBtn.addEventListener("click", this._sellHandler);
     }
+
+    // Listen for favorite changes from other UI components (context menu, etc.)
+    this._favoritesChangedHandler = (e) => {
+      if (e.detail?.mint === this.tokenData?.mint) {
+        this._updateFavoriteButton(e.detail.isFavorite);
+      }
+    };
+    window.addEventListener(
+      "screenerbot:favorites-changed",
+      this._favoritesChangedHandler
+    );
 
     // Delegated retry handler for the initial-load error state's Retry button.
     const body = this.dialogEl.querySelector(".dialog-body");
