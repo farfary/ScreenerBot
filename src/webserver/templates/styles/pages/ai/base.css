@@ -321,13 +321,13 @@
   border-color: var(--danger-alpha-40);
 }
 
-.status-bar-main {
+.ai-page .status-bar-main {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.status-bar-icon {
+.ai-page .status-bar-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -350,19 +350,19 @@
   color: var(--text-muted);
 }
 
-.status-bar-info {
+.ai-page .status-bar-info {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
-.status-bar-title {
+.ai-page .status-bar-title {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.status-bar-status {
+.ai-page .status-bar-status {
   font-size: 0.85rem;
   color: var(--text-muted);
 }
@@ -371,7 +371,7 @@
   color: var(--success);
 }
 
-.status-bar-toggle {
+.ai-page .status-bar-toggle {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -388,21 +388,21 @@
    Stats Section
    ============================================================================ */
 
-.stats-section {
+.ai-page .stats-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--ai-card-radius);
   padding: var(--ai-card-padding);
 }
 
-.section-header {
+.ai-page .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1rem;
 }
 
-.section-header h3 {
+.ai-page .section-header h3 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -412,7 +412,7 @@
   margin: 0;
 }
 
-.section-header h4 {
+.ai-page .section-header h4 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -422,7 +422,7 @@
   margin: 0;
 }
 
-.section-subtitle {
+.ai-page .section-subtitle {
   font-size: 0.85rem;
   color: var(--text-muted);
 }
