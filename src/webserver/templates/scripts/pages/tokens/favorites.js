@@ -248,10 +248,6 @@ export function createFavoritesModule(deps) {
       autoSizeColumns: false,
       uniformRowHeight: 2,
       toolbar: {
-        title: {
-          icon: "icon-star",
-          text: "Favorite Tokens",
-        },
         summary: [
           { id: "favorites-total", label: "Total Favorites", value: "0", variant: "secondary" },
         ],

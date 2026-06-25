@@ -328,10 +328,6 @@ export function createOhlcvModule(deps) {
       autoSizeColumns: false,
       uniformRowHeight: 2,
       toolbar: {
-        title: {
-          icon: "icon-chart-candlestick",
-          text: "OHLCV Data",
-        },
         summary: [
           { id: "ohlcv-total", label: "Total Tokens", value: "0" },
           { id: "ohlcv-active", label: "Active", value: "0", variant: "success" },
