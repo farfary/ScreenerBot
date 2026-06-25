@@ -349,7 +349,7 @@
    LIGHT THEME
    ============================================ */
 
-body.light-theme .position-remove-dialog {
+[data-theme="light"] .position-remove-dialog {
   background: rgb(255, 255, 255, 0.98);
   border-color: rgb(0, 0, 0, 0.15);
   box-shadow:
@@ -357,28 +357,28 @@ body.light-theme .position-remove-dialog {
     0 0 0 1px rgb(0, 0, 0, 0.05) inset;
 }
 
-body.light-theme .position-remove-title {
+[data-theme="light"] .position-remove-title {
   color: rgb(0, 0, 0, 0.95);
 }
 
-body.light-theme .position-remove-subtitle {
+[data-theme="light"] .position-remove-subtitle {
   color: rgb(0, 0, 0, 0.7);
 }
 
-body.light-theme .position-remove-choice {
+[data-theme="light"] .position-remove-choice {
   background: rgb(0, 0, 0, 0.03);
   border-color: rgb(0, 0, 0, 0.1);
 }
 
-body.light-theme .position-remove-choice-title {
+[data-theme="light"] .position-remove-choice-title {
   color: rgb(0, 0, 0, 0.9);
 }
 
-body.light-theme .position-remove-choice-desc {
+[data-theme="light"] .position-remove-choice-desc {
   color: rgb(0, 0, 0, 0.6);
 }
 
-body.light-theme .position-remove-btn--cancel {
+[data-theme="light"] .position-remove-btn--cancel {
   background: rgb(0, 0, 0, 0.06);
   color: rgb(0, 0, 0, 0.9);
   border-color: rgb(0, 0, 0, 0.15);
