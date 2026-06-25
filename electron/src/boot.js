@@ -6,6 +6,18 @@
 // pushes a structured payload here and we render the dedicated error screen.
 
 (function () {
+  // Apply the last-run theme (passed by the main process as ?theme=light|dark)
+  // so the splash/loading screen renders in the same theme as the last session
+  // instead of always dark. Runs before the electronAPI guard since it only
+  // needs the query string. The window stays hidden until did-finish-load, so
+  // there is no flash even though boot.js loads at the end of <body>.
+  try {
+    const t = new URLSearchParams(window.location.search).get('theme');
+    if (t === 'light' || t === 'dark') {
+      document.documentElement.setAttribute('data-theme', t);
+    }
+  } catch (e) { /* query unavailable — keep default */ }
+
   if (!window.electronAPI) return;
 
   // Version badge.

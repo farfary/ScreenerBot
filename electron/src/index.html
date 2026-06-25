@@ -25,6 +25,19 @@
       --accent-glow: rgba(88, 166, 255, 0.4);
     }
     
+    /* Light theme — values mirror the dashboard's foundation.css :root (light)
+       so the splash matches the last-run theme set by the main process via
+       ?theme=light (applied in boot.js). Default (no attribute) stays dark. */
+    [data-theme="light"] {
+      --bg-primary: #f8f9fb;
+      --bg-secondary: #fff;
+      --bg-card: #fff;
+      --text-primary: #1f2937;
+      --text-secondary: #6b7280;
+      --text-muted: #9ca3af;
+      --border-color: #d1d5db;
+    }
+
     html, body {
       height: 100%;
       overflow: hidden;
@@ -35,7 +48,17 @@
       user-select: none;
       -webkit-app-region: drag;
     }
-    
+
+    html[data-theme="light"], html[data-theme="light"] body {
+      background: linear-gradient(135deg, #f8f9fb 0%, #fff 50%, #f0f2f6 100%);
+    }
+
+    /* The logo SVG hexagons are white (great on the dark gradient, invisible on
+       light) — recolor them to the brand navy for the light splash. */
+    html[data-theme="light"] .splash-logo g {
+      fill: #0d3b66;
+    }
+
     .splash-screen {
       display: flex;
       flex-direction: column;
@@ -83,7 +106,7 @@
       font-weight: 900;
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      color: #e6edf3;
+      color: var(--text-primary);
       text-shadow: 0 0 20px rgba(88, 166, 255, 0.5), 0 0 40px rgba(88, 166, 255, 0.3);
     }
     
@@ -99,8 +122,8 @@
     .splash-spinner {
       width: 40px;
       height: 40px;
-      border: 3px solid #30363d;
-      border-top-color: #58a6ff;
+      border: 3px solid var(--border-color);
+      border-top-color: var(--accent);
       border-radius: 50%;
       animation: splashSpin 0.8s linear infinite;
     }
@@ -111,7 +134,7 @@
     
     .splash-status {
       font-size: 0.875rem;
-      color: #8b949e;
+      color: var(--text-secondary);
       font-weight: 500;
       letter-spacing: 0.05em;
       transition: opacity 0.3s ease;
@@ -122,7 +145,7 @@
       position: fixed;
       bottom: 2rem;
       font-size: 0.75rem;
-      color: #6e7681;
+      color: var(--text-muted);
       font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Menlo', monospace;
     }
 

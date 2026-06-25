@@ -33,7 +33,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // App info
   getVersion: () => ipcRenderer.invoke('app:get-version'),
-  
+
+  // Persist the UI theme so the next launch's splash + window match it.
+  saveTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
+
   // Loading status listener (returns cleanup function)
   onLoadingStatus: (callback) => {
     const handler = (event, status) => callback(status);

@@ -44,6 +44,14 @@ let backendReadyResolve = null; // Promise resolver for SCREENERBOT_READY signal
 let startupError = null; // Structured fatal startup error (SCREENERBOT_ERROR payload), if any
 let isRecovering = false; // True while a one-click recovery (e.g. wallet reset) is in progress
 let dashboardLoaded = false; // True once the dashboard URL has been loaded successfully
+let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in window-state.json
+
+// Window/splash base color per theme — must match the dashboard's --bg-primary
+// (foundation.css: light #f8f9fb, dark #0d1117) so the splash and the brief
+// pre-paint window chrome render in the same theme as the last run.
+function themeBackgroundColor(theme) {
+  return theme === 'light' ? '#f8f9fb' : '#0d1117';
+}
 
 /**
  * Get the path to tray icon based on platform
@@ -499,7 +507,8 @@ function loadWindowState() {
     x: undefined,
     y: undefined,
     isMaximized: false,
-    zoomLevel: 0
+    zoomLevel: 0,
+    theme: 'dark'
   };
 }
 
@@ -517,7 +526,8 @@ function saveWindowState() {
       x: bounds.x,
       y: bounds.y,
       isMaximized: mainWindow.isMaximized(),
-      zoomLevel: mainWindow.webContents.getZoomLevel()
+      zoomLevel: mainWindow.webContents.getZoomLevel(),
+      theme: currentTheme
     };
     
     const statePath = getWindowStatePath();
@@ -657,9 +667,10 @@ async function checkAndInstallVCRedist() {
  * Create the main window
  */
 function createWindow() {
-  // Load saved window state
+  // Load saved window state (incl. last-run theme)
   const windowState = loadWindowState();
-  
+  currentTheme = windowState.theme === 'light' ? 'light' : 'dark';
+
   mainWindow = new BrowserWindow({
     width: windowState.width,
     height: windowState.height,
@@ -668,7 +679,7 @@ function createWindow() {
     minWidth: CONFIG.minWidth,
     minHeight: CONFIG.minHeight,
     show: false,
-    backgroundColor: '#0d1117',
+    backgroundColor: themeBackgroundColor(currentTheme),
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     autoHideMenuBar: process.platform === 'win32', // Hide menu bar on Windows only
     titleBarStyle: 'hiddenInset',
@@ -1107,7 +1118,8 @@ function showBootError(payload) {
  * Load the loading page
  */
 function loadLoadingPage() {
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  // Pass the last-run theme so the splash (boot.js) renders light/dark to match.
+  mainWindow.loadFile(path.join(__dirname, 'index.html'), { query: { theme: currentTheme } });
 }
 
 /**
@@ -1317,6 +1329,18 @@ ipcMain.handle('boot:quit', () => {
   isQuitting = true;
   app.quit();
   return true;
+});
+
+// Persist the UI theme chosen in the dashboard so the NEXT launch's splash and
+// window background match it (the dashboard renderer calls this via theme.js on
+// every theme set/toggle). Stored in window-state.json alongside bounds/zoom.
+ipcMain.handle('theme:set', (event, theme) => {
+  currentTheme = theme === 'light' ? 'light' : 'dark';
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBackgroundColor(themeBackgroundColor(currentTheme));
+  }
+  saveWindowState();
+  return currentTheme;
 });
 
 ipcMain.handle('app:minimize', () => {

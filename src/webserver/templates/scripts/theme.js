@@ -80,7 +80,16 @@
     console.log("[Theme] Setting theme to:", theme);
     html.setAttribute("data-theme", theme);
     // Keep localStorage in sync so FOUC-prevention script in base.html sees the right value
-    try { localStorage.setItem("theme", theme); } catch (e) { /* storage unavailable */ }
+    try { localStorage.setItem("theme", theme); } catch { /* storage unavailable */ }
+    // Mirror to the Electron main process so the NEXT launch's splash/loading
+    // screen and window background match this theme (server stays source of
+    // truth; this just keeps Electron's own persisted copy in sync). Called on
+    // initial load (with the server value) and on every toggle.
+    try {
+      if (window.electronAPI && typeof window.electronAPI.saveTheme === "function") {
+        window.electronAPI.saveTheme(theme);
+      }
+    } catch { /* not in Electron */ }
 
     // Update UI elements
     if (theme === "dark") {
