@@ -179,6 +179,20 @@ impl ConnectivityState {
             .unwrap_or_default()
     }
 
+    /// Check if an endpoint is CONFIRMED unhealthy.
+    ///
+    /// Unlike `is_healthy`, this returns true only for the `Unhealthy` state
+    /// (consecutive failures crossed the threshold). `Unknown` (not yet
+    /// checked), `Degraded`, and `Healthy` all return false. This is the safe
+    /// signal for "stop hammering the network" gates: it never blocks before
+    /// the first health check has run, so startup behavior is unchanged.
+    pub fn is_confirmed_unhealthy(&self, name: &str) -> bool {
+        self.health
+            .get(name)
+            .map(|h| h.is_unhealthy())
+            .unwrap_or(false)
+    }
+
     /// Check if all critical endpoints are healthy
     pub fn are_critical_endpoints_healthy(&self) -> bool {
         for (name, criticality) in &self.criticality {
@@ -274,6 +288,22 @@ pub async fn get_fallback_strategy(name: &str) -> Option<FallbackStrategy> {
     let state_arc = get_state();
     let state = state_arc.read().await;
     state.get_fallback(name)
+}
+
+/// Check if a specific endpoint is CONFIRMED unhealthy (see
+/// [`ConnectivityState::is_confirmed_unhealthy`]).
+pub async fn is_endpoint_offline(name: &str) -> bool {
+    let state_arc = get_state();
+    let state = state_arc.read().await;
+    state.is_confirmed_unhealthy(name)
+}
+
+/// Convenience gate for network-fetch loops: true only when the `internet`
+/// endpoint is confirmed unhealthy. Use this to skip periodic API/RPC fetches
+/// while offline instead of letting every task time out on DNS. Returns false
+/// at startup (Unknown) so the first fetches still run and seed health state.
+pub async fn is_network_offline() -> bool {
+    is_endpoint_offline("internet").await
 }
 
 /// Check if all critical endpoints are healthy

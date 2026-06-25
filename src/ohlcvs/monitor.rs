@@ -435,6 +435,13 @@ impl OhlcvMonitor {
                 break;
             }
 
+            // Skip the cycle while the internet is confirmed offline — candle
+            // fetches go to GeckoTerminal and would only time out. Resumes
+            // automatically on reconnect; never triggers at startup.
+            if crate::connectivity::is_network_offline().await {
+                continue;
+            }
+
             // Process each active token
             let tokens: Vec<String> = {
                 let active = self.active_tokens.read().await;

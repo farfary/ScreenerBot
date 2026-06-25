@@ -180,6 +180,14 @@ pub async fn run_discovery_once(
         ));
     }
 
+    // Skip the whole cycle when the internet is confirmed offline: every source
+    // would just time out on DNS and spam the log. The loop's skip_reason logging
+    // throttles to one line per state change, and we resume automatically once
+    // connectivity returns. Only triggers on a CONFIRMED outage, never at startup.
+    if crate::connectivity::is_network_offline().await {
+        return Ok(DiscoveryStats::skipped("network offline"));
+    }
+
     let start = Instant::now();
     let cfg = config::get_config_clone();
     let discovery_cfg = &cfg.tokens.discovery;

@@ -220,6 +220,18 @@ pub async fn update_token(
     db: &TokenDatabase,
     coordinator: &RateLimitCoordinator,
 ) -> TokenResult<UpdateResult> {
+    // Skip the network update while the internet is confirmed offline — the
+    // DexScreener fetch would only time out on DNS and spam the log. Reported as
+    // a no-op result; the loops resume automatically on reconnect. Never
+    // triggers at startup (Unknown state).
+    if crate::connectivity::is_network_offline().await {
+        return Ok(UpdateResult {
+            mint: mint.to_string(),
+            successes: Vec::new(),
+            failures: Vec::new(),
+        });
+    }
+
     let mut successes = Vec::new();
     let mut failures = Vec::new();
 
@@ -336,6 +348,12 @@ pub async fn update_tokens_batch(
         return Ok(Vec::new());
     }
 
+    // Skip the batch network update while the internet is confirmed offline (see
+    // update_token). Resumes automatically on reconnect; no-op at startup.
+    if crate::connectivity::is_network_offline().await {
+        return Ok(Vec::new());
+    }
+
     // Filter out tokens already being fetched by other loops
     let mints_to_fetch: Vec<String> = mints
         .iter()
@@ -432,6 +450,12 @@ pub async fn update_tokens_batch(
 /// Security data is static/rarely changing - fetch once and cache.
 /// Processes ONE token per cycle for better performance with large backlogs.
 pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    // Skip the Rugcheck fetch while the internet is confirmed offline — it would
+    // only time out and log errors. Resumes automatically on reconnect.
+    if crate::connectivity::is_network_offline().await {
+        return;
+    }
+
     let tokens = match db.get_tokens_without_security_data(1) {
         Ok(tokens) => tokens,
         Err(e) => {

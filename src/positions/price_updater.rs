@@ -3,8 +3,14 @@
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions::get_open_positions;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
+
+/// Tracks whether we have already logged the "skipping while offline" notice, so
+/// the per-second loop emits exactly one line on going offline and one on
+/// resuming, instead of spamming every tick.
+static OFFLINE_SKIP_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// Position price updater service
 /// Updates all open positions' current_price every second. Price resolution is
@@ -40,6 +46,26 @@ async fn update_all_position_prices() {
 
     if positions.is_empty() {
         return;
+    }
+
+    // While the internet is confirmed offline, both price sources (pool RPC and
+    // API) are unreachable, so a per-second refresh just times out on DNS and
+    // floods the log. Skip the cycle and keep the last known prices; positions
+    // refresh automatically once connectivity returns. Log once per transition.
+    if crate::connectivity::is_network_offline().await {
+        if !OFFLINE_SKIP_LOGGED.swap(true, Ordering::Relaxed) {
+            logger::info(
+                LogTag::Positions,
+                "Network offline - pausing position price updates (keeping last known prices)",
+            );
+        }
+        return;
+    }
+    if OFFLINE_SKIP_LOGGED.swap(false, Ordering::Relaxed) {
+        logger::info(
+            LogTag::Positions,
+            "Network restored - resuming position price updates",
+        );
     }
 
     let mut updated_count = 0;

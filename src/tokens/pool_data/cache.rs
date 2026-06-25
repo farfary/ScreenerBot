@@ -342,6 +342,21 @@ async fn refresh_token_pools_and_cache(
         }
     }
 
+    // When the internet is confirmed offline, skip the network fetch entirely —
+    // it would only time out on DNS and flood the log with per-token warnings.
+    // Serve the persisted snapshot (even if stale) when the caller allows it;
+    // otherwise report "no data" quietly. Resumes automatically on reconnect and
+    // never triggers at startup (Unknown state).
+    if crate::connectivity::is_network_offline().await {
+        if allow_stale {
+            if let Some(snapshot) = persisted_snapshot {
+                store_pool_snapshot(snapshot.clone());
+                return Ok(Some(snapshot));
+            }
+        }
+        return Ok(None);
+    }
+
     let coordinator = get_rate_coordinator()
         .ok_or_else(|| TokenError::Database("Rate limit coordinator not initialized".to_owned()))?;
 

@@ -296,6 +296,14 @@ async fn sol_price_task(shutdown: Arc<Notify>) {
 
 /// Fetch SOL price from Jupiter API and update cache
 async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
+    // Skip the refresh entirely while the internet is confirmed offline: all
+    // three price sources are unreachable, so this would only time out on DNS.
+    // The cached price stays (callers already handle staleness); we resume on
+    // reconnect. Never triggers at startup (Unknown state).
+    if crate::connectivity::is_network_offline().await {
+        return;
+    }
+
     logger::debug(LogTag::SolPrice, "Fetching SOL price (DexScreener -> GeckoTerminal -> Jupiter)");
 
     match fetch_sol_price().await {
