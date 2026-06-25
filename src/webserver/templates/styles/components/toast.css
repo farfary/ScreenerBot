@@ -17,19 +17,22 @@
 
 .toast-container {
   position: fixed;
-  top: 80px;
-  right: 20px;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: var(--z-toast); /* Must be above all dialogs */
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   pointer-events: none;
-  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   max-width: 340px;
 }
 
+/* Drawer state no longer shifts the toasts — they are centered at the top and
+   stay clear of the right-edge drawer. Class kept for JS compatibility. */
 .toast-container.drawer-open {
-  right: 520px; /* 480px drawer + 40px gap */
+  transform: translateX(-50%);
 }
 
 /* ============================================
@@ -64,7 +67,7 @@
     0 1px 0 0 rgb(255, 255, 255, 0.08) inset;
   pointer-events: auto;
   opacity: 0;
-  transform: translateX(100px) scale(0.9);
+  transform: translateY(-20px) scale(0.95);
   transition:
     transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
@@ -79,20 +82,20 @@
 
 .toast--visible {
   opacity: 1;
-  transform: translateX(0) scale(1);
+  transform: translateY(0) scale(1);
   animation: toastSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .toast--exiting {
   opacity: 0;
-  transform: translateX(100px) scale(0.95);
+  transform: translateY(-20px) scale(0.95);
   transition:
     transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .toast:hover {
-  transform: translateX(0) scale(1) translateY(-3px);
+  transform: translateY(-3px) scale(1);
   box-shadow:
     0 12px 48px rgb(0, 0, 0, 0.5),
     0 0 0 1px rgb(255, 255, 255, 0.12) inset,
@@ -445,12 +448,12 @@
 @keyframes toastSlideIn {
   from {
     opacity: 0;
-    transform: translateX(100px) scale(0.9);
+    transform: translateY(-20px) scale(0.95);
   }
 
   to {
     opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -541,6 +544,7 @@
   .toast-container {
     right: 12px;
     left: 12px;
+    transform: none; /* full-width band on mobile; centering via left/right */
     max-width: none;
     max-height: calc(100vh - 100px);
     overflow: hidden auto;
@@ -552,7 +556,7 @@
   /* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
   .toast-container.drawer-open {
-    right: 12px; /* Keep toasts visible on mobile, drawer is fullscreen */
+    transform: none;
   }
 
   .toast {
@@ -577,6 +581,7 @@
     top: 70px;
     right: 8px;
     left: 8px;
+    transform: none;
     gap: 8px;
   }
 

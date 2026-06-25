@@ -461,6 +461,14 @@ class NotificationManager {
       const payload = await response.json();
       const actions = Array.isArray(payload?.actions) ? payload.actions : [];
 
+      // Persisted totals across the whole DB (not just the in-memory cache) so
+      // the center's tab badges reflect full history.
+      this.serverCounts = {
+        in_progress: Number(payload?.in_progress) || 0,
+        completed: Number(payload?.completed) || 0,
+        failed: Number(payload?.failed) || 0,
+      };
+
       const changed = this.upsertActions(actions);
 
       if (changed) {
@@ -593,11 +601,24 @@ class NotificationManager {
       }
     }
 
+    // Prefer DB-accurate totals from the server when available (full history);
+    // fall back to the in-memory tally before the first sync.
+    const sc = this.serverCounts || null;
+    const totals = sc
+      ? {
+          in_progress: sc.in_progress,
+          completed: sc.completed,
+          failed: sc.failed,
+          all: sc.in_progress + sc.completed + sc.failed,
+        }
+      : null;
+
     return {
       total: all.filter((n) => !n.dismissed).length, // Total visible (non-dismissed)
       active,
       completed24h,
       failed24h,
+      totals,
       unread: this.getUnreadCount(),
       connection: {
         status: this.isConnected ? "connected" : "disconnected",

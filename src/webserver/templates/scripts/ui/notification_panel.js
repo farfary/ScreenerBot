@@ -65,6 +65,7 @@ export function init() {
   setupNotificationListDelegation();
   subscribeToUpdates();
   renderNotifications();
+  toggleHistoryControls(currentTab);
 
   isInitialized = true;
 }
@@ -80,6 +81,10 @@ export function open() {
   drawer.setAttribute("data-state", "open");
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("notification-drawer-open");
+
+  // Refresh with fresh data each time the drawer opens (DB-backed tabs refetch).
+  resetScrollState();
+  renderNotifications();
 
   // Play panel open sound
   playPanelOpen();
@@ -161,7 +166,7 @@ function setupTabs() {
       setActiveTab(tab);
       playTabSwitch(); // Sound feedback for tab switch
       renderNotifications();
-      toggleHistoryControls(currentTab === "completed" || currentTab === "failed");
+      toggleHistoryControls(currentTab);
     };
     handlers.tabs.push({ element: tab, handler });
     tab.addEventListener("click", handler);
@@ -221,7 +226,7 @@ function setupInfiniteScroll() {
 
   handlers.scroll = Utils.throttle(() => {
     if (!isOpen) return;
-    if (currentTab !== "completed" && currentTab !== "failed") return;
+    if (currentTab !== "all" && currentTab !== "completed" && currentTab !== "failed") return;
     if (isLoadingMore || !hasMoreData) return;
 
     const scrollTop = list.scrollTop;
@@ -281,18 +286,24 @@ function resetScrollState() {
 }
 
 /**
- * Toggle visibility of history controls (filters)
+ * Toggle visibility of history controls (filters) for the given tab.
+ *
+ * Filters show on the DB-backed tabs (all/completed/failed). The state filter is
+ * usable only on "all" — on completed/failed the state is fixed by the tab.
  */
-function toggleHistoryControls(show) {
+function toggleHistoryControls(tab) {
+  const showFilters = tab === "all" || tab === "completed" || tab === "failed";
+  const stateLocked = tab === "completed" || tab === "failed";
+
   const filtersEl = document.getElementById("notificationFilters");
   const stateFilterEl = document.getElementById("filterState");
 
   if (filtersEl) {
-    filtersEl.style.display = show ? "block" : "none";
+    filtersEl.style.display = showFilters ? "block" : "none";
   }
 
   if (stateFilterEl) {
-    if (show) {
+    if (stateLocked) {
       stateFilterEl.disabled = true;
       stateFilterEl.value = "";
       stateFilterEl.style.opacity = "0.5";
@@ -335,8 +346,9 @@ function setupActions() {
   if (clearAllBtn) {
     handlers.clearAll = async () => {
       const { confirmed } = await ConfirmationDialog.show({
-        title: "Clear All",
-        message: "Remove all notifications? This cannot be undone.",
+        title: "Clear notifications",
+        message:
+          "Dismiss all notifications from this list? They remain in the Completed/Failed history.",
         confirmLabel: "Clear",
         cancelLabel: "Cancel",
         variant: "warning",
@@ -344,7 +356,7 @@ function setupActions() {
 
       if (confirmed) {
         notificationManager.clearAll();
-        Utils.showToast("All cleared", "info");
+        Utils.showToast("Notifications cleared", "info");
       }
     };
     clearAllBtn.addEventListener("click", handlers.clearAll);
@@ -373,9 +385,17 @@ function subscribeToUpdates() {
       event.type === "bulk_update" ||
       event.type === "history_synced"
     ) {
-      // Only re-render for active/all tabs or on clear
-      if (currentTab === "active" || currentTab === "all" || event.type === "cleared") {
+      // The live "active" tab always re-renders. DB-backed tabs (all/completed/
+      // failed) are only refreshed when the list is scrolled to the top, so a
+      // live update never yanks the scroll position out from under the user.
+      if (currentTab === "active" || event.type === "cleared") {
         renderNotifications();
+      } else {
+        const list = document.getElementById("notificationList");
+        if (list && list.scrollTop < 40 && (event.type === "added" || event.type === "updated")) {
+          resetScrollState();
+          renderNotifications();
+        }
       }
     }
 
@@ -443,15 +463,22 @@ function setActiveTab(activeTab) {
  * Update tab counts
  */
 function updateTabCounts() {
-  const allCount = notificationManager.getAll().length;
-  const activeCount = notificationManager.getActive().length;
-  const completedCount = notificationManager.getCompleted().length;
-  const failedCount = notificationManager.getFailed().length;
+  // Prefer DB-accurate totals (full persisted history) from the server summary;
+  // fall back to the in-memory tally before the first sync completes.
+  const totals = notificationManager.getSummary().totals;
 
-  updateCount("allCount", allCount);
-  updateCount("activeCount", activeCount);
-  updateCount("completedCount", completedCount);
-  updateCount("failedCount", failedCount);
+  if (totals) {
+    updateCount("allCount", totals.all);
+    updateCount("activeCount", totals.in_progress);
+    updateCount("completedCount", totals.completed);
+    updateCount("failedCount", totals.failed);
+    return;
+  }
+
+  updateCount("allCount", notificationManager.getAll().length);
+  updateCount("activeCount", notificationManager.getActive().length);
+  updateCount("completedCount", notificationManager.getCompleted().length);
+  updateCount("failedCount", notificationManager.getFailed().length);
 }
 
 /**
@@ -476,8 +503,10 @@ async function renderNotifications() {
 
   let notifications = [];
 
-  // For completed/failed tabs, fetch from database with infinite scroll
-  if (currentTab === "completed" || currentTab === "failed") {
+  // All/Completed/Failed are DB-backed (full persisted history) with infinite
+  // scroll; only the live "active" tab uses the in-memory cache. "all" passes no
+  // state filter so every recorded action shows, newest first.
+  if (currentTab === "all" || currentTab === "completed" || currentTab === "failed") {
     if (currentOffset === 0) {
       // Initial load
       try {
@@ -493,6 +522,9 @@ async function renderNotifications() {
           options.state = "completed";
         } else if (currentTab === "failed") {
           options.state = "failed";
+        } else if (currentTab === "all" && currentFilters.state) {
+          // "All" honors the optional state dropdown filter.
+          options.state = currentFilters.state;
         }
 
         if (currentFilters.action_type) {
@@ -525,22 +557,16 @@ async function renderNotifications() {
 
     notifications = loadedNotifications.map(mergeWithStoredState);
   } else {
-    // For active/all tabs, use in-memory data
-    switch (currentTab) {
-      case "active":
-        notifications = notificationManager.getActive().map((n) => ({ ...n }));
-        break;
-      default:
-        notifications = notificationManager.getAll().map((n) => ({ ...n }));
-    }
+    // Only the live "active" tab uses the in-memory cache.
+    notifications = notificationManager.getActive().map((n) => ({ ...n }));
   }
 
   // Apply UI state from cache
   notifications = notifications.map(mergeWithStoredState);
 
-  // Hide dismissed notifications from all/active tabs
-  const hideDismissed = currentTab === "all" || currentTab === "active";
-  if (hideDismissed) {
+  // The live "active" tab hides client-dismissed items; the DB-backed history
+  // tabs always show the full persisted record.
+  if (currentTab === "active") {
     notifications = notifications.filter((n) => !n.dismissed);
   }
 
@@ -569,7 +595,7 @@ async function renderNotifications() {
  */
 async function loadMoreNotifications() {
   if (isLoadingMore || !hasMoreData) return;
-  if (currentTab !== "completed" && currentTab !== "failed") return;
+  if (currentTab !== "all" && currentTab !== "completed" && currentTab !== "failed") return;
 
   try {
     isLoadingMore = true;
@@ -584,6 +610,8 @@ async function loadMoreNotifications() {
       options.state = "completed";
     } else if (currentTab === "failed") {
       options.state = "failed";
+    } else if (currentTab === "all" && currentFilters.state) {
+      options.state = currentFilters.state;
     }
 
     if (currentFilters.action_type) {

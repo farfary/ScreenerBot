@@ -485,6 +485,35 @@ impl ActionsDatabase {
         Ok(deleted)
     }
 
+    /// Count actions grouped by state across the WHOLE database (not just the
+    /// in-memory cache). Returns (in_progress, completed, failed, cancelled) so
+    /// the notifications center tab badges reflect the full persisted history.
+    pub async fn count_by_state(&self) -> Result<(usize, usize, usize, usize), String> {
+        let conn = self.get_read_connection()?;
+        let mut stmt = conn
+            .prepare("SELECT state, COUNT(*) FROM actions GROUP BY state")
+            .map_err(|e| format!("Failed to prepare count query: {e}"))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|e| format!("Failed to count actions by state: {e}"))?;
+
+        let (mut in_progress, mut completed, mut failed, mut cancelled) = (0usize, 0, 0, 0);
+        for row in rows {
+            let (state, count) = row.map_err(|e| format!("Failed to read count row: {e}"))?;
+            let count = count.max(0) as usize;
+            match state.as_str() {
+                "in_progress" => in_progress = count,
+                "completed" => completed = count,
+                "failed" => failed = count,
+                "cancelled" => cancelled = count,
+                _ => {}
+            }
+        }
+        Ok((in_progress, completed, failed, cancelled))
+    }
+
     /// Finalize any actions still marked `in_progress` in the database.
     ///
     /// In-memory action state never survives a process restart, so on startup

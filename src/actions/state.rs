@@ -438,8 +438,21 @@ pub async fn cancel_action(action_id: &str) -> bool {
     true
 }
 
-/// Get count of actions by state (from memory)
+/// Get count of actions by state across the whole database, so the
+/// notifications center badges reflect full persisted history (not just the
+/// in-memory live cache). Falls back to the in-memory tally if the DB is
+/// unavailable. Returns (in_progress, completed, failed, cancelled).
 pub async fn get_action_counts() -> (usize, usize, usize, usize) {
+    if let Some(db_arc) = get_db().await {
+        let db_lock = db_arc.read().await;
+        if let Some(db) = db_lock.as_ref() {
+            if let Ok(counts) = db.count_by_state().await {
+                return counts;
+            }
+        }
+    }
+
+    // Fallback: in-memory tally (DB not yet initialized).
     let actions = ACTIVE_ACTIONS.read().await;
     let mut in_progress = 0;
     let mut completed = 0;
