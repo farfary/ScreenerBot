@@ -299,6 +299,17 @@ export class DataTable {
         ? Math.max(0, paginationOptions.threshold)
         : 320;
 
+    // Viewport-relative prefetch ratio: in scroll mode the next page is fetched
+    // once the un-scrolled remainder drops below `prefetchRatio` of the scrollable
+    // range (so loading starts ~30% before the end, not AT the end → smooth, no
+    // visible stall). The fixed `threshold` above acts as a pixel floor for short
+    // lists where 30% would be a tiny distance.
+    const prefetchRatio =
+      typeof paginationOptions.prefetchRatio === "number" &&
+      Number.isFinite(paginationOptions.prefetchRatio)
+        ? Math.min(0.9, Math.max(0, paginationOptions.prefetchRatio))
+        : 0.3;
+
     const maxRows =
       typeof paginationOptions.maxRows === "number" &&
       Number.isFinite(paginationOptions.maxRows) &&
@@ -322,6 +333,7 @@ export class DataTable {
       enabled: true,
       loadPage: paginationOptions.loadPage,
       threshold,
+      prefetchRatio,
       maxRows,
       autoLoad: paginationOptions.autoLoad !== false,
       initialCursor: paginationOptions.initialCursor ?? null,
@@ -527,6 +539,10 @@ export class DataTable {
             </tbody>
           </table>
         </div>
+        <div class="dt-scroll-loader" aria-hidden="true">
+          <i class="dt-scroll-loader__icon icon-loader-circle" aria-hidden="true"></i>
+          <span class="dt-scroll-loader__text">Loading more…</span>
+        </div>
         ${this._renderClientPaginationBar()}
         ${this._renderServerPaginationBar()}
       </div>
@@ -540,6 +556,7 @@ export class DataTable {
     this.elements.table = this.elements.scrollContainer?.querySelector(".data-table");
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
+    this.elements.scrollLoader = container.querySelector(".dt-scroll-loader");
     this.elements.blockingState = container.querySelector(".data-table-blocking-state");
     this.elements.blockingStateIcon = container.querySelector(".data-table-blocking-state__icon");
     this.elements.blockingStateTitle = container.querySelector(".data-table-blocking-state__title");
@@ -2109,6 +2126,13 @@ export class DataTable {
       hasMorePrev: this._pagination.hasMorePrev !== false,
       loadingNext: Boolean(this._pagination.loadingNext),
       loadingPrev: Boolean(this._pagination.loadingPrev),
+      // Expose the initial/replace load flag too. Silent poll reloads set
+      // `loadingInitial` (NOT loadingNext) and do not flip `state.isLoading`, so
+      // without this field a caller's in-flight guard can't see a poll fetch in
+      // progress — consecutive polls then abort each other (_cancelPaginationRequest)
+      // and a slow query (e.g. the 360k-row tokens list) never finishes → table
+      // appears frozen / not live.
+      loadingInitial: Boolean(this._pagination.loadingInitial),
       total: this._pagination.total,
       meta: this._pagination.meta,
       context: { ...this._pagination.context },

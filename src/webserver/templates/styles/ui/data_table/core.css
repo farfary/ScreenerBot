@@ -203,6 +203,48 @@
   }
 }
 
+/* Floating "Loading more…" indicator — pinned to the bottom of the scroll viewport
+   (sits over the body, offset from the bottom edge). Only shown during scroll-mode
+   next-page prefetches; pages mode uses the header loading bar instead. */
+.dt-scroll-loader {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translate(-50%, 8px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-xl, 12px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-md, 0 4px 16px rgb(0, 0, 0, 0.35));
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 3;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    visibility 0.18s ease;
+}
+
+.dt-scroll-loader.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.dt-scroll-loader__icon {
+  font-size: 1rem;
+  color: var(--primary-color);
+  animation: data-table-blocking-spin 0.9s linear infinite;
+}
+
 /* Fixed height support */
 .data-table-wrapper.fixed-height {
   height: 600px; /* Default fixed height */

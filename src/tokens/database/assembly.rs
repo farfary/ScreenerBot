@@ -233,14 +233,21 @@ impl TokenDatabase {
             String::new()
         };
 
+        // Stable tiebreaker: many tokens share the same (or NULL) value for the
+        // chosen sort column — especially timestamp sorts like "updated". Without a
+        // unique secondary key SQLite's order among ties is unspecified and can
+        // differ between consecutive OFFSET fetches, so infinite-scroll pages
+        // duplicate and skip rows (and the "updated" order looks wrong/jittery).
+        // `t.mint` is the primary key, so appending it makes the total order fully
+        // deterministic across every page request.
         let query = if limit == 0 {
             format!(
-                "{}{} ORDER BY {} {}",
+                "{}{} ORDER BY {} {}, t.mint ASC",
                 select_base, where_clause, order_column, direction
             )
         } else {
             format!(
-                "{}{} ORDER BY {} {} LIMIT {} OFFSET {}",
+                "{}{} ORDER BY {} {}, t.mint ASC LIMIT {} OFFSET {}",
                 select_base, where_clause, order_column, direction, limit, offset
             )
         };

@@ -1,6 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { openMenu, closeMenu } from "../core/menu_manager.js";
-import { Poller } from "../core/poller.js";
+import { Poller, getInterval as getGlobalPollInterval } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
@@ -437,6 +437,23 @@ function createLifecycle() {
     // If the table is already loading, never start a poll reload.
     // This avoids poll->abort->reload loops that delay UI updates.
     if (table.state?.isLoading) {
+      return true;
+    }
+
+    // In scroll mode a poll reload re-fetches only the FIRST page (cursor 0) and
+    // replaces the whole dataset — fine at the top (newly-updated tokens bubble in),
+    // but destructive once the user has scrolled deep: it would collapse the loaded
+    // window (e.g. 2000 rows) back to one page and yank the scroll position. The
+    // backend caps a single request at 200 rows, so the tail can't be refreshed in
+    // one shot anyway. So once scrolled past the first screen, skip the reset and
+    // leave the loaded rows stable; live top-of-list refresh resumes at the top.
+    const sc = table?.elements?.scrollContainer;
+    const loadedCount = table.getData?.().length ?? 0;
+    if (
+      sc &&
+      loadedCount > PAGE_LIMIT &&
+      sc.scrollTop > sc.clientHeight
+    ) {
       return true;
     }
 
@@ -2000,6 +2017,13 @@ function createLifecycle() {
         poller = deps.poller = ctx.managePoller(
           new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
             label: "Tokens",
+            // The tokens/list query scans the full token DB (300k+ rows, COALESCE
+            // sort) and takes ~2-4s. Polling faster than that just queues reloads
+            // that abort each other and pegs a core. Floor the interval at 4s so the
+            // table stays live (each poll completes, newest-updated bubbles to top)
+            // without hammering. The in-flight guard in shouldSkipPollReload still
+            // skips ticks while a fetch is running.
+            getInterval: () => Math.max(4000, getGlobalPollInterval() || 4000),
           }),
         );
       }

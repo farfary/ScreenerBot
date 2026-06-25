@@ -135,6 +135,9 @@ export function applyServerPaginationMixin(DataTable) {
 
     this._serverPaginationMode = newMode;
     this._saveServerPaginationMode(newMode);
+    this._scrollLoadingDisabled = newMode === "pages";
+    // Hide the floating scroll loader if we just left scroll mode.
+    this._updateScrollLoadingIndicator();
 
     // Update toggle button states
     this._updateModeToggleUI();
@@ -600,13 +603,33 @@ export function applyServerPaginationMixin(DataTable) {
       return;
     }
 
-    const distanceToBottom =
-      container.scrollHeight - (container.scrollTop + container.clientHeight);
+    const scrollTop = container.scrollTop;
+    const scrollable = Math.max(0, container.scrollHeight - container.clientHeight);
+    const distanceToBottom = container.scrollHeight - (scrollTop + container.clientHeight);
+
+    // Detect scroll direction. Next-page prefetch must only fire while moving DOWN
+    // (or on the very first check) — otherwise scrolling UP inside the bottom region
+    // keeps re-triggering loads (and flashing the loader) even though the user is
+    // moving away from the end. `prev` loading has its own (top-edge) trigger below.
+    const prevScrollTop = this._lastPrefetchScrollTop ?? scrollTop;
+    const scrollingDown = scrollTop >= prevScrollTop;
+    this._lastPrefetchScrollTop = scrollTop;
+
+    // Prefetch margin = ratio of the scrollable range (start loading ~30% before the
+    // end so rows are ready before the user arrives — smooth, no stall), but BOUNDED
+    // to a few viewports. Without the cap, a large loaded set makes 30% an enormous
+    // pixel distance, so the bottom third of everything counts as "near the end" and
+    // loads fire continuously. The pixel `threshold` is the floor for short lists.
+    const prefetchMargin = Math.max(
+      pagination.threshold,
+      Math.min(scrollable * (pagination.prefetchRatio ?? 0.3), container.clientHeight * 2)
+    );
 
     if (
       pagination.hasMoreNext !== false &&
       !pagination.loadingNext &&
-      distanceToBottom <= pagination.threshold
+      scrollingDown &&
+      distanceToBottom <= prefetchMargin
     ) {
       this.loadNext({ reason: "scroll", silent: true });
     }
@@ -707,6 +730,7 @@ export function applyServerPaginationMixin(DataTable) {
 
     if (normalizedDirection === "next") {
       pagination.loadingNext = true;
+      this._updateScrollLoadingIndicator();
     } else if (normalizedDirection === "prev") {
       pagination.loadingPrev = true;
     } else {
@@ -1193,9 +1217,29 @@ export function applyServerPaginationMixin(DataTable) {
   };
 
   /**
+   * Toggle the floating "Loading more…" indicator at the bottom of the table.
+   * Only shown for scroll-mode next-page fetches (which are silent and otherwise
+   * give no feedback). Pages mode keeps its own header-row loading bar, so this
+   * stays hidden there to avoid double indicators.
+   */
+  proto._updateScrollLoadingIndicator = function () {
+    const loader = this.elements?.scrollLoader;
+    if (!loader) {
+      return;
+    }
+    const pagination = this._pagination;
+    const visible = Boolean(
+      pagination?.enabled && !this._scrollLoadingDisabled && pagination.loadingNext
+    );
+    loader.classList.toggle("is-visible", visible);
+  };
+
+  /**
    * Notify pagination state change callback
    */
   proto._notifyPaginationStateChange = function () {
+    this._updateScrollLoadingIndicator();
+
     const pagination = this._pagination;
     if (!pagination?.enabled || typeof pagination.onStateChange !== "function") {
       return;
