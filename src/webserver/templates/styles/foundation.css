@@ -59,6 +59,12 @@
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
   --border-color: #d1d5db;
+
+  /* Hover tooltip surface — inverted (dark) in light mode so clamped values
+     read clearly; light mode --text-primary is dark and would vanish on it. */
+  --bg-tooltip: #1f2937;
+  --text-tooltip: #f9fafb;
+  --border-tooltip: #374151;
   --header-bg: linear-gradient(135deg, #0f4c81 0%, #1565c0 100%);
   --header-text: #fff;
   --link-color: #7ba8d1;
@@ -239,6 +245,12 @@
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
   --border-color: #30363d;
+
+  /* Hover tooltip surface — slightly elevated above the dark page so it reads
+     as a distinct floating layer. */
+  --bg-tooltip: #2d333b;
+  --text-tooltip: #e6edf3;
+  --border-tooltip: #444c56;
   --header-bg: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%);
   --header-border: #30363d;
   --header-text: #e6edf3;

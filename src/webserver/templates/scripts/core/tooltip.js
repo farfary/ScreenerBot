@@ -47,21 +47,31 @@ function resolveTooltipTarget(start) {
 
 function position(target) {
   const el = ensureElement();
+  const m = VIEWPORT_MARGIN;
+  // clientWidth/Height exclude the scrollbar so we never tuck under it.
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
   const trigger = target.getBoundingClientRect();
-  const tip = el.getBoundingClientRect();
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  // offsetWidth/Height are unaffected by the entrance transform.
+  const tw = el.offsetWidth;
+  const th = el.offsetHeight;
 
-  // Prefer below the trigger; flip above when there isn't room.
-  let top = trigger.bottom + GAP;
-  if (top + tip.height > vh - VIEWPORT_MARGIN && trigger.top - GAP - tip.height > VIEWPORT_MARGIN) {
-    top = trigger.top - GAP - tip.height;
+  // Vertical: prefer below; flip above when it fits there; otherwise pin to the
+  // side with more room and clamp — so it is always fully on-screen.
+  const spaceBelow = vh - trigger.bottom - GAP - m;
+  const spaceAbove = trigger.top - GAP - m;
+  let top;
+  if (th <= spaceBelow) {
+    top = trigger.bottom + GAP;
+  } else if (th <= spaceAbove) {
+    top = trigger.top - GAP - th;
+  } else {
+    top = spaceBelow >= spaceAbove ? trigger.bottom + GAP : trigger.top - GAP - th;
   }
-  top = Math.max(VIEWPORT_MARGIN, Math.min(top, vh - tip.height - VIEWPORT_MARGIN));
+  top = Math.max(m, Math.min(top, vh - th - m));
 
-  // Align left edges, then clamp horizontally inside the viewport.
-  let left = trigger.left;
-  left = Math.max(VIEWPORT_MARGIN, Math.min(left, vw - tip.width - VIEWPORT_MARGIN));
+  // Horizontal: align to the trigger's left edge, then clamp inside the viewport.
+  let left = Math.max(m, Math.min(trigger.left, vw - tw - m));
 
   el.style.top = `${Math.round(top)}px`;
   el.style.left = `${Math.round(left)}px`;
