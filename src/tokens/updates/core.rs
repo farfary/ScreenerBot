@@ -224,7 +224,7 @@ pub async fn update_token(
     // DexScreener fetch would only time out on DNS and spam the log. Reported as
     // a no-op result; the loops resume automatically on reconnect. Never
     // triggers at startup (Unknown state).
-    if crate::connectivity::is_network_offline().await {
+    if crate::connectivity::is_network_offline() {
         return Ok(UpdateResult {
             mint: mint.to_string(),
             successes: Vec::new(),
@@ -350,7 +350,7 @@ pub async fn update_tokens_batch(
 
     // Skip the batch network update while the internet is confirmed offline (see
     // update_token). Resumes automatically on reconnect; no-op at startup.
-    if crate::connectivity::is_network_offline().await {
+    if crate::connectivity::is_network_offline() {
         return Ok(Vec::new());
     }
 
@@ -452,7 +452,7 @@ pub async fn update_tokens_batch(
 pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
     // Skip the Rugcheck fetch while the internet is confirmed offline — it would
     // only time out and log errors. Resumes automatically on reconnect.
-    if crate::connectivity::is_network_offline().await {
+    if crate::connectivity::is_network_offline() {
         return;
     }
 

@@ -52,7 +52,7 @@ async fn update_all_position_prices() {
     // API) are unreachable, so a per-second refresh just times out on DNS and
     // floods the log. Skip the cycle and keep the last known prices; positions
     // refresh automatically once connectivity returns. Log once per transition.
-    if crate::connectivity::is_network_offline().await {
+    if crate::connectivity::is_network_offline() {
         if !OFFLINE_SKIP_LOGGED.swap(true, Ordering::Relaxed) {
             logger::info(
                 LogTag::Positions,

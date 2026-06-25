@@ -144,7 +144,11 @@ pub fn get_sol_price() -> f64 {
             if cache.is_fresh() {
                 cache.price_usd
             } else {
-                logger::warning(
+                // Debug, not warning: this is a hot getter called by many price
+                // consumers, and callers handle the 0.0 sentinel. The real cause
+                // (fetch failure / offline) is surfaced on the fetch side, so a
+                // per-read warning here is pure log spam.
+                logger::debug(
                     LogTag::SolPrice,
                     &format!(
                         "SOL price cache stale (age: {}s), returning 0.0",
@@ -300,7 +304,7 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
     // three price sources are unreachable, so this would only time out on DNS.
     // The cached price stays (callers already handle staleness); we resume on
     // reconnect. Never triggers at startup (Unknown state).
-    if crate::connectivity::is_network_offline().await {
+    if crate::connectivity::is_network_offline() {
         return;
     }
 

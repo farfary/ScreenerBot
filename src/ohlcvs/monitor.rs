@@ -438,7 +438,7 @@ impl OhlcvMonitor {
             // Skip the cycle while the internet is confirmed offline — candle
             // fetches go to GeckoTerminal and would only time out. Resumes
             // automatically on reconnect; never triggers at startup.
-            if crate::connectivity::is_network_offline().await {
+            if crate::connectivity::is_network_offline() {
                 continue;
             }
 

@@ -347,7 +347,7 @@ async fn refresh_token_pools_and_cache(
     // Serve the persisted snapshot (even if stale) when the caller allows it;
     // otherwise report "no data" quietly. Resumes automatically on reconnect and
     // never triggers at startup (Unknown state).
-    if crate::connectivity::is_network_offline().await {
+    if crate::connectivity::is_network_offline() {
         if allow_stale {
             if let Some(snapshot) = persisted_snapshot {
                 store_pool_snapshot(snapshot.clone());

@@ -3,8 +3,14 @@
 use super::types::{EndpointCriticality, EndpointHealth, FallbackStrategy};
 use chrono::Utc;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 use tokio::sync::RwLock;
+
+/// Lock-free mirror of "is the `internet` endpoint confirmed offline?", updated
+/// by `ConnectivityState::update_health`. Lets hot fetch loops gate with a cheap
+/// atomic load (see `is_network_offline`) instead of taking the async RwLock.
+static INTERNET_OFFLINE: AtomicBool = AtomicBool::new(false);
 
 /// Global endpoint health state storage
 pub struct ConnectivityState {
@@ -152,6 +158,13 @@ impl ConnectivityState {
                     },
                 );
             }
+        }
+
+        // Keep the lock-free `is_network_offline()` mirror in sync with the
+        // "internet" endpoint so hot fetch loops can gate with a cheap atomic
+        // load instead of taking the async RwLock on every iteration.
+        if name == "internet" {
+            INTERNET_OFFLINE.store(self.is_confirmed_unhealthy("internet"), Ordering::Relaxed);
         }
     }
 
@@ -302,8 +315,11 @@ pub async fn is_endpoint_offline(name: &str) -> bool {
 /// endpoint is confirmed unhealthy. Use this to skip periodic API/RPC fetches
 /// while offline instead of letting every task time out on DNS. Returns false
 /// at startup (Unknown) so the first fetches still run and seed health state.
-pub async fn is_network_offline() -> bool {
-    is_endpoint_offline("internet").await
+///
+/// Lock-free (reads an atomic mirror kept in sync by the health checker), so it
+/// is safe to call on every iteration of hot loops with no await/lock cost.
+pub fn is_network_offline() -> bool {
+    INTERNET_OFFLINE.load(Ordering::Relaxed)
 }
 
 /// Check if all critical endpoints are healthy

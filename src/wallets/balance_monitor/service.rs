@@ -235,6 +235,12 @@ pub async fn start_wallet_monitoring_service(
                     break;
                 }
                 _ = interval.tick() => {
+                    // Skip the RPC-backed snapshot while the network is confirmed
+                    // offline — it would only fail with "No providers available".
+                    // The last snapshot stays; resumes automatically on reconnect.
+                    if crate::connectivity::is_network_offline() {
+                        continue;
+                    }
                     // Collect wallet snapshot
                     match collect_wallet_snapshot().await {
                         Ok(snapshot) => {

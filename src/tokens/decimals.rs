@@ -51,6 +51,15 @@ static FAILED_CACHE: LazyLock<moka::sync::Cache<String, ()>> = LazyLock::new(|| 
 static TOKEN_2022_CACHE: LazyLock<moka::sync::Cache<String, bool>> =
     LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
 
+// Mints we have already warned about for invalid (>18) decimals, so the warning
+// fires once per mint instead of on every token upsert. Bounded + TTL'd.
+static INVALID_DECIMALS_WARNED: LazyLock<moka::sync::Cache<String, ()>> = LazyLock::new(|| {
+    moka::sync::Cache::builder()
+        .max_capacity(50_000)
+        .time_to_live(Duration::from_secs(86400)) // 24 hours
+        .build()
+});
+
 // =============================================================================
 // PUBLIC API
 // =============================================================================
@@ -336,13 +345,19 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
 pub fn cache(mint: &str, decimals: u8) {
     // Validate decimals is within reasonable bounds (SOL tokens use max 18 decimals)
     if decimals > 18 {
-        crate::logger::warning(
-            crate::logger::LogTag::Tokens,
-            &format!(
-                "Ignoring invalid decimals {} for mint {} (max 18)",
-                decimals, mint
-            ),
-        );
+        // Warn once per mint — this is called on every token upsert, so a token
+        // carrying a junk decimals value (from a bad data source) would otherwise
+        // re-log on every market update and flood the log (observed 1800+ lines).
+        if !INVALID_DECIMALS_WARNED.contains_key(mint) {
+            INVALID_DECIMALS_WARNED.insert(mint.to_string(), ());
+            crate::logger::warning(
+                crate::logger::LogTag::Tokens,
+                &format!(
+                    "Ignoring invalid decimals {} for mint {} (max 18)",
+                    decimals, mint
+                ),
+            );
+        }
         return;
     }
 

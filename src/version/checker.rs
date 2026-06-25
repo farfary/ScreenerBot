@@ -47,6 +47,10 @@ pub fn start_update_check_service(
         loop {
             tokio::select! {
                 _ = interval.tick() => {
+                    // Skip the update check while the network is confirmed offline.
+                    if crate::connectivity::is_network_offline() {
+                        continue;
+                    }
                     logger::debug(LogTag::System, "Running periodic update check...");
                     match check_for_update().await {
                         Ok(Some(update)) => {
