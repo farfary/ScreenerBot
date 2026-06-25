@@ -967,13 +967,24 @@ export function applyServerPaginationMixin(DataTable) {
           return false;
         }
 
-        // Compare all primitive fields to catch timestamp changes, computed values,
-        // and any data used by render functions (not just visible column IDs)
+        // Compare every field, including nested objects/arrays. Render functions
+        // frequently read nested data (e.g. row.health.status, row.metrics.*), so
+        // skipping objects here would report "unchanged" and freeze the table even
+        // though the live values changed. Nested values are compared by value via
+        // JSON so a new fetch's fresh object references don't falsely flag change.
         const keys = Object.keys(newRow);
         for (const key of keys) {
           const val = newRow[key];
-          // Skip objects/arrays — they may differ by reference without semantic change
-          if (val !== null && typeof val === "object") continue;
+          if (val !== null && typeof val === "object") {
+            const oldVal = oldRow?.[key];
+            if (oldVal === val) continue;
+            try {
+              if (JSON.stringify(oldVal) !== JSON.stringify(val)) return false;
+            } catch {
+              return false;
+            }
+            continue;
+          }
           if (oldRow?.[key] !== val) {
             return false;
           }
