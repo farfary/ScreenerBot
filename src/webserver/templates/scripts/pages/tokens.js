@@ -1442,13 +1442,15 @@ function createLifecycle() {
     }
   };
 
-  const initializeLinkDropdowns = () => {
+  const initializeLinkDropdowns = (tbl = table) => {
     // Use event delegation instead of creating Dropdown instances
-    // This works better with dynamic table data that re-renders
-    if (!table?.elements?.scrollContainer) return;
+    // This works better with dynamic table data that re-renders.
+    // tbl defaults to the main table but is parameterised so the Favorites
+    // table (same columns) can reuse the identical wiring.
+    if (!tbl?.elements?.scrollContainer) return;
 
     // Remove existing listener if any
-    const container = table.elements.scrollContainer;
+    const container = tbl.elements.scrollContainer;
     if (container._linksClickHandler) {
       container.removeEventListener("click", container._linksClickHandler);
     }
@@ -1563,11 +1565,11 @@ function createLifecycle() {
     container.addEventListener("click", clickHandler);
   };
 
-  const initializeImageLightbox = () => {
+  const initializeImageLightbox = (tbl = table) => {
     // Use event delegation for logo clicks
-    if (!table?.elements?.scrollContainer) return;
+    if (!tbl?.elements?.scrollContainer) return;
 
-    const container = table.elements.scrollContainer;
+    const container = tbl.elements.scrollContainer;
     if (container._logoClickHandler) {
       container.removeEventListener("click", container._logoClickHandler);
     }
@@ -1588,8 +1590,8 @@ function createLifecycle() {
 
       // Look up age from current table data instead of stale data attribute
       let ageText = "Unknown";
-      if (mint && table) {
-        const tableData = table.getData();
+      if (mint && tbl) {
+        const tableData = tbl.getData();
         const rowData = tableData.find((row) => row.mint === mint);
         if (rowData) {
           const timestamp = rowData.blockchain_created_at || rowData.first_discovered_at;
@@ -1670,13 +1672,13 @@ function createLifecycle() {
     container.addEventListener("click", clickHandler);
   };
 
-  const initializeRowClickHandler = () => {
+  const initializeRowClickHandler = (tbl = table) => {
     // Use event delegation for row clicks
-    if (!table?.elements?.scrollContainer) {
+    if (!tbl?.elements?.scrollContainer) {
       return;
     }
 
-    const container = table.elements.scrollContainer;
+    const container = tbl.elements.scrollContainer;
     if (container._rowClickHandler) {
       container.removeEventListener("click", container._rowClickHandler);
     }
@@ -1702,7 +1704,7 @@ function createLifecycle() {
       if (!mint) return;
 
       // Find token data in table
-      const tableData = table.getData();
+      const tableData = tbl.getData();
       const tokenData = tableData.find((token) => token.mint === mint);
       if (!tokenData) return;
 
@@ -1716,6 +1718,46 @@ function createLifecycle() {
     container._rowClickHandler = clickHandler;
     container.addEventListener("click", clickHandler);
   };
+
+  // Delegated Buy/Add/Sell row-action clicks for an arbitrary token table.
+  // Generalised from the main table's handler so the Favorites table (same
+  // columns) reuses the exact trade flow.
+  const attachRowActions = (tbl, onReload) => {
+    const container = tbl?.elements?.scrollContainer;
+    if (!container) return;
+    if (container._rowActionHandler) {
+      container.removeEventListener("click", container._rowActionHandler);
+    }
+    const handler = async (e) => {
+      const btn = e.target?.closest?.(".row-action");
+      if (!btn) return;
+      const action = btn.getAttribute("data-action");
+      const mint = btn.getAttribute("data-mint");
+      if (!action || !mint) return;
+      const row = tbl.getData().find((r) => r.mint === mint);
+      if (!row) {
+        Utils.showToast("Token data not found", "error");
+        return;
+      }
+      await performManualTrade({ action, mint, row, btn, onReload });
+    };
+    container._rowActionHandler = handler;
+    container.addEventListener("click", handler);
+  };
+
+  // One-shot wiring for any token table that uses buildColumns(): row actions,
+  // external-links dropdown, logo lightbox, and row-click -> token details.
+  const wireTokenTable = (tbl, { onReload } = {}) => {
+    attachRowActions(tbl, onReload);
+    initializeLinkDropdowns(tbl);
+    initializeImageLightbox(tbl);
+    initializeRowClickHandler(tbl);
+  };
+
+  // Share the column builder and wiring with sub-modules (Favorites) so their
+  // table is identical to the all/passed token lists.
+  deps.buildColumns = buildColumns;
+  deps.wireTokenTable = wireTokenTable;
 
   return {
     init(ctx) {

@@ -452,20 +452,17 @@ pub struct TokenSearchResponse {
 // FAVORITES TYPES
 // =============================================================================
 
-/// A favorite token enriched with trading-state flags so the dashboard can show the
-/// right row actions (Buy vs Add/Sell) and disable trading for blacklisted tokens.
-#[derive(Debug, Serialize)]
-pub struct FavoriteRow {
-    #[serde(flatten)]
-    pub favorite: crate::tokens::favorites::FavoriteToken,
-    pub has_open_position: bool,
-    pub blacklisted: bool,
-}
-
-/// Response for favorites list
+/// Response for favorites list.
+///
+/// Each entry is the full assembled `Token` (same shape as `/api/tokens/list`
+/// items, so the dashboard can render the identical column set) merged with the
+/// favorite's own fields (`notes`, `favorite_created_at`, `is_favorite`) and the
+/// trading-state flags (`has_open_position`, `blacklisted`). Built as
+/// `serde_json::Value` so the token JSON and the favorite extras flatten into one
+/// flat row object.
 #[derive(Debug, Serialize)]
 pub struct FavoritesListResponse {
-    pub favorites: Vec<FavoriteRow>,
+    pub favorites: Vec<serde_json::Value>,
     pub total: usize,
 }
 

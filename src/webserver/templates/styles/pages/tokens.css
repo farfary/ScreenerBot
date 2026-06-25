@@ -414,27 +414,6 @@
   color: var(--text-secondary);
 }
 
-/* Favorites action buttons */
-.favorites-actions {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.favorites-action-btn {
-  padding: 4px 6px !important;
-  min-width: 28px;
-  font-size: 0.75rem !important;
-}
-
-.favorites-action-btn:hover {
-  background: var(--bg-hover) !important;
-}
-
-.favorites-action-btn.btn-danger:hover {
-  background: rgb(239, 68, 68, 0.2) !important;
-}
-
 /* Favorites empty state */
 #favorites-empty-state {
   margin-top: var(--spacing-xl);
