@@ -315,6 +315,18 @@
   min-width: 0;
 }
 
+/* In the narrow left column the Entry/Exit monitor cards must stack — their
+   side-by-side grid is sized for full width and otherwise overflows into the
+   right column. Keep section content clipped to the column on all widths. */
+.stats-col-left .controls-grid {
+  grid-template-columns: 1fr;
+}
+
+.stats-col > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 @media (width <= 1024px) {
   .stats-layout {
     grid-template-columns: 1fr;
