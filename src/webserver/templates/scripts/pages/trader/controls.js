@@ -179,25 +179,21 @@ export function createTraderControls({
    */
   async function loadControlsStatus() {
     try {
-      // Load force stop status
+      // These endpoints return the status object directly (success_response =
+      // raw Json(data), no { success, data } envelope), so pass it as-is.
       const forceStopRes = await fetch("/api/trader/force-stop/status");
       if (forceStopRes.ok) {
-        const forceStopData = await forceStopRes.json();
-        updateForceStopBanner(forceStopData.data);
+        updateForceStopBanner(await forceStopRes.json());
       }
 
-      // Load monitors status
       const monitorsRes = await fetch("/api/trader/monitors/status");
       if (monitorsRes.ok) {
-        const monitorsData = await monitorsRes.json();
-        updateMonitorControls(monitorsData.data);
+        updateMonitorControls(await monitorsRes.json());
       }
 
-      // Load loss limit status
       const lossLimitRes = await fetch("/api/trader/loss-limit/status");
       if (lossLimitRes.ok) {
-        const lossLimitData = await lossLimitRes.json();
-        updateLossLimitPanel(lossLimitData.data);
+        updateLossLimitPanel(await lossLimitRes.json());
       }
     } catch (err) {
       console.error("[Trader] Failed to load controls status:", err);
@@ -337,13 +333,13 @@ export function createTraderControls({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ reason: "Manual force stop from dashboard" }),
           });
-          const data = await res.json();
-          if (data.success) {
+          if (res.ok) {
             Utils.showToast("Force stop activated", "warning");
             playError();
             await loadControlsStatus();
           } else {
-            Utils.showToast(data.error || "Failed to activate force stop", "error");
+            const data = await res.json().catch(() => null);
+            Utils.showToast(data?.error?.message || "Failed to activate force stop", "error");
           }
         } catch {
           Utils.showToast("Failed to activate force stop", "error");
@@ -357,13 +353,13 @@ export function createTraderControls({
       addTrackedListener(resumeBtn, "click", async () => {
         try {
           const res = await fetch("/api/trader/resume", { method: "POST" });
-          const data = await res.json();
-          if (data.success) {
+          if (res.ok) {
             Utils.showToast("Force stop cleared", "success");
             playToggleOn();
             await loadControlsStatus();
           } else {
-            Utils.showToast(data.error || "Failed to resume trading", "error");
+            const data = await res.json().catch(() => null);
+            Utils.showToast(data?.error?.message || "Failed to resume trading", "error");
           }
         } catch {
           Utils.showToast("Failed to resume trading", "error");
@@ -381,10 +377,10 @@ export function createTraderControls({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ enabled: e.target.checked }),
           });
-          const data = await res.json();
-          if (!data.success) {
+          if (!res.ok) {
             e.target.checked = !e.target.checked; // Revert
-            Utils.showToast("Failed to toggle entry monitor", "error");
+            const data = await res.json().catch(() => null);
+            Utils.showToast(data?.error?.message || "Failed to toggle entry monitor", "error");
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
@@ -405,10 +401,10 @@ export function createTraderControls({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ enabled: e.target.checked }),
           });
-          const data = await res.json();
-          if (!data.success) {
+          if (!res.ok) {
             e.target.checked = !e.target.checked; // Revert
-            Utils.showToast("Failed to toggle exit monitor", "error");
+            const data = await res.json().catch(() => null);
+            Utils.showToast(data?.error?.message || "Failed to toggle exit monitor", "error");
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
