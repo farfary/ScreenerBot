@@ -377,6 +377,8 @@ pub const STRATEGIES_CONDITION_CATALOG_JS: &str =
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
 pub const TRADER_EXAMPLES_JS: &str = include_str!("templates/scripts/pages/trader/examples.js");
 pub const TRADER_CONTROLS_JS: &str = include_str!("templates/scripts/pages/trader/controls.js");
+pub const TRADER_CONFIG_CARDS_JS: &str =
+    include_str!("templates/scripts/pages/trader/config_cards.js");
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
 pub const WALLETS_BULK_OPERATIONS_JS: &str =

@@ -7,7 +7,6 @@
   height: 100%;
   overflow: hidden;
 
-  --trader-max-width: 1280px;
   --trader-horizontal-padding: clamp(0.85rem, 1.8vw, 1.5rem);
   --trader-vertical-gap: clamp(0.75rem, 1.2vw, 1.3rem);
   --trader-card-radius: 8px;
@@ -436,34 +435,6 @@
 
 .stats-section-config .section-header {
   margin-bottom: 1rem;
-}
-
-/* ============================================================================
-   Configuration Components
-   ============================================================================ */
-
-/* Config Form */
-.config-form {
-  max-width: 900px;
-}
-
-.config-form h3 {
-  margin: 0 0 1.5rem;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-/* ============================================================================
-   Trailing Stop Tab - Container
-   ============================================================================ */
-
-.trailing-stop-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 /* ============================================================================

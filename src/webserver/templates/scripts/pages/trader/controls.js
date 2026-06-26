@@ -43,7 +43,8 @@ export function createTraderControls({
   // ============================================================================
 
   /**
-   * Update all auto trader status bars on the page
+   * Update the auto trader status bar (stats tab — the single source of the
+   * on/off control)
    */
   function updateAutoTraderStatusBars(status) {
     const isRunning = status?.running === true;
@@ -66,21 +67,6 @@ export function createTraderControls({
       const statsToggleLabel = $("#stats-toggle-label");
       if (statsToggleLabel) statsToggleLabel.textContent = toggleLabel;
     }
-
-    // Update settings tab status bar
-    const settingsBar = $("#settings-trader-status-bar");
-    if (settingsBar) {
-      settingsBar.setAttribute("data-status", statusAttr);
-      const settingsStatusText = $("#settings-trader-status-text");
-      if (settingsStatusText) settingsStatusText.textContent = statusText;
-      const settingsToggle = $("#settings-trader-toggle");
-      if (settingsToggle) {
-        settingsToggle.checked = isRunning;
-        settingsToggle.disabled = !isAvailable;
-      }
-      const settingsToggleLabel = $("#settings-toggle-label");
-      if (settingsToggleLabel) settingsToggleLabel.textContent = toggleLabel;
-    }
   }
 
   /**
@@ -88,7 +74,7 @@ export function createTraderControls({
    */
   async function toggleAutoTrader(shouldStart, _triggerElement) {
     // Disable all toggles while processing
-    const allToggles = [$("#stats-trader-toggle"), $("#settings-trader-toggle")];
+    const allToggles = [$("#stats-trader-toggle")];
     allToggles.forEach((toggle) => {
       if (toggle) toggle.disabled = true;
     });
@@ -137,17 +123,10 @@ export function createTraderControls({
    */
   function setupAutoTraderToggles() {
     const statsToggle = $("#stats-trader-toggle");
-    const settingsToggle = $("#settings-trader-toggle");
 
     if (statsToggle) {
       addTrackedListener(statsToggle, "change", (e) => {
         toggleAutoTrader(e.target.checked, statsToggle);
-      });
-    }
-
-    if (settingsToggle) {
-      addTrackedListener(settingsToggle, "change", (e) => {
-        toggleAutoTrader(e.target.checked, settingsToggle);
       });
     }
 

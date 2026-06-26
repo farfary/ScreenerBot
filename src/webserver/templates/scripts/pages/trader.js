@@ -5,7 +5,7 @@ import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
-import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
+import { createTraderConfigCards } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
 import { createTraderControls } from "./trader/controls.js";
@@ -37,7 +37,7 @@ const DEFAULT_TAB = "stats";
 function createLifecycle() {
   // Component references
   let tabBar = null;
-  let actionBar = null;
+  let configCards = null;
   let statsPoller = null;
   let configPoller = null;
   let strategiesPoller = null;
@@ -168,433 +168,6 @@ function createLifecycle() {
   }
 
   /**
-   * Configure ActionBar based on current subtab
-   */
-  function configureActionBar(tabId) {
-    if (!actionBar) return;
-
-    switch (tabId) {
-      case "stats":
-        // Stats tab is read-only, no actions needed
-        actionBar.clear();
-        break;
-
-      case "stop-loss":
-        actionBar.configure({
-          title: "Stop Loss Configuration",
-          subtitle: "Automatic exit when loss exceeds threshold",
-          icon: "icon-shield-off",
-          actions: [
-            {
-              id: "reset",
-              label: "Reset to Defaults",
-              icon: "icon-rotate-ccw",
-              variant: "secondary",
-              onClick: async () => {
-                const { confirmed } = await ConfirmationDialog.show({
-                  title: "Reset Stop Loss",
-                  message:
-                    "This will reset stop loss settings to default values:\n• Disabled\n• Threshold: 50%\n• Partial exits: Disabled\n• Min hold time: 0s",
-                  confirmLabel: "Reset",
-                  cancelLabel: "Cancel",
-                  variant: "warning",
-                });
-
-                if (confirmed) {
-                  await saveConfig({
-                    trader: {
-                      stop_loss_enabled: false,
-                      stop_loss_threshold_pct: 50.0,
-                      stop_loss_allow_partial: false,
-                      stop_loss_min_hold_seconds: 0,
-                    },
-                  });
-                }
-              },
-            },
-            {
-              id: "save",
-              label: "Save Configuration",
-              icon: "icon-save",
-              variant: "primary",
-              onClick: async () => {
-                const enabled = $("#stop-loss-enabled")?.checked || false;
-                const threshold = parseFloat($("#stop-loss-threshold")?.value || "50");
-                const allowPartial = $("#stop-loss-allow-partial")?.checked || false;
-                const minHoldSeconds = parseInt($("#stop-loss-min-hold")?.value || "0", 10);
-                await saveConfig({
-                  trader: {
-                    stop_loss_enabled: enabled,
-                    stop_loss_threshold_pct: threshold,
-                    stop_loss_allow_partial: allowPartial,
-                    stop_loss_min_hold_seconds: minHoldSeconds,
-                  },
-                });
-              },
-            },
-          ],
-        });
-        break;
-
-      case "trailing-stop":
-        actionBar.configure({
-          title: "Trailing Stop Configuration",
-          subtitle: "Automatically exit when price drops from peak",
-          icon: "icon-trending-up",
-          actions: [
-            {
-              id: "reset",
-              label: "Reset to Defaults",
-              icon: "icon-rotate-ccw",
-              variant: "secondary",
-              onClick: async () => {
-                const { confirmed } = await ConfirmationDialog.show({
-                  title: "Reset Trailing Stop",
-                  message:
-                    "This will reset trailing stop settings to default values:\n• Disabled\n• Activation: 10%\n• Distance: 5%",
-                  confirmLabel: "Reset",
-                  cancelLabel: "Cancel",
-                  variant: "warning",
-                });
-
-                if (confirmed) {
-                  await saveConfig({
-                    positions: {
-                      trailing_stop_enabled: false,
-                      trailing_stop_activation_pct: 10.0,
-                      trailing_stop_distance_pct: 5.0,
-                    },
-                  });
-                }
-              },
-            },
-            {
-              id: "save",
-              label: "Save Configuration",
-              icon: "icon-save",
-              variant: "primary",
-              onClick: async () => {
-                const enabled = $("#trailing-enabled")?.checked || false;
-                const activation = parseFloat($("#trail-activation")?.value || "10.0");
-                const distance = parseFloat($("#trail-distance")?.value || "5.0");
-                await saveConfig({
-                  positions: {
-                    trailing_stop_enabled: enabled,
-                    trailing_stop_activation_pct: activation,
-                    trailing_stop_distance_pct: distance,
-                  },
-                });
-              },
-            },
-          ],
-        });
-        break;
-
-      case "roi":
-        actionBar.configure({
-          title: "Take Profit Configuration",
-          subtitle: "Automatically exit at target profit levels",
-          icon: "icon-target",
-          actions: [
-            {
-              id: "reset",
-              label: "Reset to Defaults",
-              icon: "icon-rotate-ccw",
-              variant: "secondary",
-              onClick: async () => {
-                const { confirmed } = await ConfirmationDialog.show({
-                  title: "Reset ROI Exit",
-                  message:
-                    "This will reset ROI exit settings to default values:\n• Enabled\n• Target: 20%",
-                  confirmLabel: "Reset",
-                  cancelLabel: "Cancel",
-                  variant: "warning",
-                });
-
-                if (confirmed) {
-                  await saveConfig({
-                    trader: {
-                      roi_exit_enabled: true,
-                      roi_target_percent: 20,
-                    },
-                  });
-                }
-              },
-            },
-            {
-              id: "save",
-              label: "Save Configuration",
-              icon: "icon-save",
-              variant: "primary",
-              onClick: async () => {
-                const enabled = $("#roi-enabled")?.checked || false;
-                const target = parseFloat($("#roi-target")?.value || "20");
-                await saveConfig({
-                  trader: {
-                    roi_exit_enabled: enabled,
-                    roi_target_percent: target,
-                  },
-                });
-              },
-            },
-          ],
-        });
-        break;
-
-      case "time-rules":
-        actionBar.configure({
-          title: "Time Rules Configuration",
-          subtitle: "Exit positions based on holding duration and loss threshold",
-          icon: "icon-timer",
-          actions: [
-            {
-              id: "reset",
-              label: "Reset to Defaults",
-              icon: "icon-rotate-ccw",
-              variant: "secondary",
-              onClick: async () => {
-                const { confirmed } = await ConfirmationDialog.show({
-                  title: "Reset Time Override",
-                  message:
-                    "This will reset time override settings to default values:\n• Enabled\n• Duration: 168 hours (7 days)\n• Loss Threshold: -40%",
-                  confirmLabel: "Reset",
-                  cancelLabel: "Cancel",
-                  variant: "warning",
-                });
-
-                if (confirmed) {
-                  await saveConfig({
-                    trader: {
-                      time_override_enabled: true,
-                      time_override_duration: 168,
-                      time_override_unit: "hours",
-                      time_override_loss_threshold_percent: -40,
-                    },
-                  });
-                }
-              },
-            },
-            {
-              id: "save",
-              label: "Save Configuration",
-              icon: "icon-save",
-              variant: "primary",
-              onClick: async () => {
-                const enabled = $("#time-override-enabled")?.checked || false;
-                const duration = parseFloat($("#time-max-hold")?.value || "168");
-                const unit = $("#time-unit")?.value || "hours";
-                const lossThreshold = parseFloat($("#time-loss-threshold")?.value || "-40");
-                await saveConfig({
-                  trader: {
-                    time_override_enabled: enabled,
-                    time_override_duration: duration,
-                    time_override_unit: unit,
-                    time_override_loss_threshold_percent: lossThreshold,
-                  },
-                });
-              },
-            },
-          ],
-        });
-        break;
-
-      case "strategy-control":
-        actionBar.configure({
-          title: "Strategy Control",
-          subtitle: "Enable or disable automated trading strategies",
-          icon: "icon-puzzle",
-          actions: [
-            {
-              id: "refresh",
-              label: "Refresh List",
-              icon: "icon-refresh-cw",
-              variant: "secondary",
-              onClick: async () => {
-                await loadStrategies();
-                Utils.showToast({
-                  type: "info",
-                  title: "Strategies Refreshed",
-                  message: "Strategy list reloaded from server",
-                });
-              },
-            },
-            {
-              id: "save",
-              label: "Save Configuration",
-              icon: "icon-save",
-              variant: "primary",
-              onClick: async () => {
-                await loadStrategies();
-                Utils.showToast({
-                  type: "success",
-                  title: "Strategies Saved",
-                  message: "Strategy configuration updated successfully",
-                });
-              },
-            },
-          ],
-        });
-        break;
-
-      case "dca":
-        actionBar.configure({
-          title: "DCA Configuration",
-          subtitle: "Dollar Cost Averaging for position management",
-          icon: "icon-dollar-sign",
-          actions: [
-            {
-              id: "reset",
-              label: "Reset to Defaults",
-              icon: "icon-rotate-ccw",
-              variant: "secondary",
-              onClick: async () => {
-                const { confirmed } = await ConfirmationDialog.show({
-                  title: "Reset DCA Settings",
-                  message:
-                    "This will reset all DCA settings to default values.\n\nThis action cannot be undone.",
-                  confirmLabel: "Reset",
-                  cancelLabel: "Cancel",
-                  variant: "warning",
-                });
-
-                if (confirmed) {
-                  await saveConfig({
-                    trader: {
-                      dca_enabled: false,
-                      dca_threshold_pct: -10,
-                      dca_max_count: 2,
-                      dca_size_percentage: 50,
-                      dca_cooldown_minutes: 30,
-                    },
-                  });
-                }
-              },
-            },
-            {
-              id: "save",
-              label: "Save DCA Configuration",
-              icon: "icon-save",
-              variant: "primary",
-              onClick: async () => {
-                const dcaEnabled = $("#dca-enabled")?.checked || false;
-                const dcaThreshold = parseFloat($("#dca-threshold")?.value || "-10");
-                const dcaMaxCount = parseInt($("#dca-max-count")?.value || "2", 10);
-                const dcaSize = parseFloat($("#dca-size")?.value || "50");
-                const dcaCooldown = parseInt($("#dca-cooldown")?.value || "30", 10);
-
-                await saveConfig({
-                  trader: {
-                    dca_enabled: dcaEnabled,
-                    dca_threshold_pct: dcaThreshold,
-                    dca_max_count: dcaMaxCount,
-                    dca_size_percentage: dcaSize,
-                    dca_cooldown_minutes: dcaCooldown,
-                  },
-                });
-              },
-            },
-          ],
-        });
-        break;
-
-      case "strategies":
-        // The embedded Strategies editor has its own in-panel toolbar (create,
-        // import, save, etc.), so the page-level ActionBar stays empty here.
-        actionBar.clear();
-        break;
-
-      case "general-settings":
-        actionBar.configure({
-          title: "General Settings",
-          subtitle: "Position sizing, concurrency, and trading mode",
-          icon: "icon-settings",
-          actions: [
-            {
-              id: "export",
-              label: "Export Config",
-              icon: "icon-download",
-              variant: "secondary",
-              onClick: () => {
-                exportConfig();
-              },
-            },
-            {
-              id: "import",
-              label: "Import Config",
-              icon: "icon-upload",
-              variant: "secondary",
-              onClick: () => {
-                importConfig();
-              },
-            },
-            {
-              id: "reset",
-              label: "Reset to Defaults",
-              icon: "icon-rotate-ccw",
-              variant: "secondary",
-              onClick: async () => {
-                const { confirmed } = await ConfirmationDialog.show({
-                  title: "Reset General Settings",
-                  message:
-                    "This will reset all general settings to default values.\n\nThis action cannot be undone.",
-                  confirmLabel: "Reset",
-                  cancelLabel: "Cancel",
-                  variant: "warning",
-                });
-
-                if (confirmed) {
-                  await saveConfig({
-                    trader: {
-                      max_open_positions: 2,
-                      trade_size_sol: 0.005,
-                      entry_sizes: [0.005, 0.01, 0.02, 0.05],
-                      close_cooldown_seconds: 600,
-                      entry_monitor_concurrency: 10,
-                    },
-                  });
-                }
-              },
-            },
-            {
-              id: "save",
-              label: "Save Configuration",
-              icon: "icon-save",
-              variant: "primary",
-              onClick: async () => {
-                const maxPositions = parseInt($("#max-positions")?.value || "2", 10);
-                const tradeSize = parseFloat($("#trade-size")?.value || "0.005");
-                const entrySizesRaw = $("#entry-sizes")?.value || "0.005, 0.01, 0.02, 0.05";
-                const entrySizes = entrySizesRaw
-                  .split(",")
-                  .map((s) => parseFloat(s.trim()))
-                  .filter((n) => !isNaN(n));
-                const closeCooldownMinutes = parseInt($("#close-cooldown")?.value || "10", 10);
-                const closeCooldownSeconds = Number.isNaN(closeCooldownMinutes)
-                  ? 600
-                  : Math.max(0, closeCooldownMinutes) * 60;
-                const entryConcurrency = parseInt($("#entry-concurrency")?.value || "3", 10);
-
-                await saveConfig({
-                  trader: {
-                    max_open_positions: maxPositions,
-                    trade_size_sol: tradeSize,
-                    entry_sizes: entrySizes,
-                    close_cooldown_seconds: closeCooldownSeconds,
-                    entry_monitor_concurrency: entryConcurrency,
-                  },
-                });
-              },
-            },
-          ],
-        });
-        break;
-
-      default:
-        actionBar.clear();
-    }
-  }
-
-  /**
    * Switch to a different tab
    */
   function switchTab(tabId) {
@@ -676,9 +249,6 @@ function createLifecycle() {
     if (tabId === "time-rules") {
       updateTimeRulesStatus();
     }
-
-    // Configure ActionBar for the current tab
-    configureActionBar(tabId);
   }
 
   /**
@@ -693,6 +263,10 @@ function createLifecycle() {
 
       // Update form fields
       updateFormFields();
+
+      // Re-baseline the per-card Save/Reset controls to the freshly loaded
+      // values (hides the buttons until the next edit).
+      configCards?.snapshot();
 
       // Update config overview in stats tab
       updateConfigOverview();
@@ -1406,7 +980,7 @@ function createLifecycle() {
 
   /**
    * Setup form submission handlers
-   * Note: Button handlers moved to ActionBar in configureActionBar()
+   * Note: per-card Save/Reset is handled by the config_cards module.
    */
   function setupFormHandlers() {
     // Setup auto trader toggle handlers
@@ -1516,23 +1090,33 @@ function createLifecycle() {
   }
 
   /**
-   * Save configuration updates
+   * Save configuration updates and apply them live to core.
+   *
+   * `updates` is keyed by config section, e.g. { trader: {...}, positions: {...} }.
+   * Each section is sent to its PATCH endpoint (`/api/config/<section>`), which
+   * merges the flat partial into the live config, validates, persists, and
+   * hot-reloads it — the only correct path (the root `/api/config` is GET-only).
    */
   async function saveConfig(updates) {
     try {
-      await requestManager.fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-        priority: "high",
-      });
+      const sections = Object.entries(updates).filter(
+        ([, fields]) => fields && Object.keys(fields).length > 0
+      );
+      for (const [section, fields] of sections) {
+        await requestManager.fetch(`/api/config/${section}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(fields),
+          priority: "high",
+        });
+      }
 
       Utils.showToast({
         type: "success",
         title: "Configuration Saved",
-        message: "Trader settings updated successfully",
+        message: "Trader settings applied successfully",
       });
-      await loadConfig(); // Reload to reflect changes
+      await loadConfig(); // Reload to reflect the applied values
     } catch (error) {
       console.error("[Trader] Failed to save config:", error);
       Utils.showToast({
@@ -1540,71 +1124,8 @@ function createLifecycle() {
         title: "Save Failed",
         message: "Failed to save trader configuration",
       });
+      throw error;
     }
-  }
-
-  /**
-   * Export configuration to JSON file
-   */
-  function exportConfig() {
-    if (!state.config) {
-      Utils.showToast({
-        type: "error",
-        title: "Export Failed",
-        message: "No configuration loaded",
-      });
-      return;
-    }
-
-    const dataStr = JSON.stringify(state.config.trader, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `trader-config-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    Utils.showToast({
-      type: "success",
-      title: "Configuration Exported",
-      message: "Trader settings saved to file",
-    });
-  }
-
-  /**
-   * Import configuration from JSON file
-   */
-  function importConfig() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json";
-    input.onchange = async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      try {
-        const text = await file.text();
-        const imported = JSON.parse(text);
-
-        await saveConfig({ trader: imported });
-        Utils.showToast({
-          type: "success",
-          title: "Configuration Imported",
-          message: "Trader settings loaded from file",
-        });
-      } catch (error) {
-        console.error("[Trader] Failed to import config:", error);
-        Utils.showToast({
-          type: "error",
-          title: "Import Failed",
-          message: "Failed to import configuration - invalid file format",
-        });
-      }
-    };
-    input.click();
   }
 
   /**
@@ -1642,16 +1163,11 @@ function createLifecycle() {
       // Fetch feature status early (non-blocking, but before tab bar setup)
       const featurePromise = fetchFeatureStatus(requestManager);
 
-      // Initialize ActionBar
-      actionBar = new ActionBar({
-        container: "#toolbarContainer",
-      });
-
-      // Register with ActionBarManager for page-switch coordination
-      ActionBarManager.register("trader", actionBar);
-
-      // Integrate with lifecycle for auto-cleanup (clears on deactivate, disposes on dispose)
-      ctx.manageActionBar(actionBar);
+      // Per-card Save/Reset controls (injected into each config card header).
+      // saveConfig POSTs + hot-reloads + reloads the form, after which
+      // loadConfig() calls configCards.snapshot() so the buttons re-hide.
+      configCards = createTraderConfigCards({ saveConfig });
+      configCards.setup();
 
       // Wait for features before setting up tabs (important for initial tab selection)
       tradingFeatures = await featurePromise;
@@ -1807,9 +1323,9 @@ function createLifecycle() {
       // Dispose the embedded Strategies editor lifecycle + its pollers
       disposeStrategiesSubtab();
 
-      // Unregister ActionBar from manager (lifecycle already disposes it via manageActionBar)
-      ActionBarManager.unregister("trader");
-      actionBar = null;
+      // Remove the per-card Save/Reset controls + their listeners
+      configCards?.dispose();
+      configCards = null;
 
       // Clean up all tracked event listeners
       eventCleanups.forEach((cleanup) => cleanup());

@@ -7,7 +7,9 @@
   padding: 0 1rem 1rem;
 }
 
-/* Unified Card Container */
+/* Unified Card Container — responsive grid so config items use the available
+   width (multiple per row on wide screens, auto-collapsing to fewer/one column
+   on narrow screens) instead of one item per row wasting horizontal space. */
 .config-card {
   background: var(--card-bg);
   border-radius: var(--radius-lg);
@@ -15,9 +17,10 @@
   border: 1px solid var(--border-color);
   box-shadow: 0 2px 8px var(--shadow-sm);
   transition: box-shadow var(--transition-base);
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem 1.25rem;
+  align-items: start;
 }
 
 .config-card:hover {
@@ -28,13 +31,90 @@
   margin-top: 1rem;
 }
 
-/* Card Header - Internal title for config cards - Scoped to trader page */
+/* Field groups in the same card share the card's row tracks via subgrid, so the
+   labels, hints, inputs and impact boxes all line up on the same vertical
+   position across columns regardless of differing hint/line heights. Each group
+   maps its children to four rows: label-row, hint, input, impact (missing parts
+   leave their row empty, preserving alignment). Full-width groups are excluded. */
+.config-card > .config-group:not(.config-group-full) {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  row-gap: 0.4rem;
+  align-items: start;
+  margin: 0;
+}
+
+/* Subgrid row-gap handles internal rhythm — drop legacy child margins so they
+   don't add to it. */
+.config-card > .config-group:not(.config-group-full) > * {
+  margin: 0;
+}
+
+/* Impact boxes carry a visible background, so stretch them to equal height
+   across columns (their shared row track) instead of top-aligning. */
+.config-card > .config-group:not(.config-group-full) > .config-impact {
+  align-self: stretch;
+}
+
+.config-card > .config-group-full {
+  margin: 0;
+}
+
+/* Elements that must occupy the full card width (headers, full-width groups,
+   how-it-works examples, lists, previews) span every grid column. */
+.config-card > .card-header,
+.config-card > .config-group-full,
+.config-card > .visual-example,
+.config-card > .feature-preview {
+  grid-column: 1 / -1;
+}
+
+/* Card Header — the single title bar for every config card. Holds the title +
+   description on the left and, for feature cards, the on/off toggle on the
+   right (one header per card — never a separate title block below). */
 .config-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   margin: -1.25rem -1.25rem 1rem;
   padding: 1rem 1.25rem;
   background: linear-gradient(135deg, var(--primary-alpha-5), transparent);
   border-bottom: 1px solid var(--border-color);
-  border-radius: var(--radius-lg) 8px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.card-header-text {
+  min-width: 0;
+}
+
+.config-card .card-header > .toggle {
+  flex-shrink: 0;
+}
+
+/* Right-aligned cluster holding the per-card Save/Reset buttons and (for feature
+   cards) the on/off toggle. Injected by the config_cards module. */
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.config-card-save,
+.config-card-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+/* Save/Reset only appear when the card has unsaved changes (toggled via the
+   [hidden] attribute) — this rule outranks the inline-flex above. */
+.config-card-save[hidden],
+.config-card-reset[hidden] {
+  display: none;
 }
 
 .config-card .card-header h3 {
@@ -57,83 +137,6 @@
   font-size: 0.8125rem;
   color: var(--text-secondary);
   font-weight: 400;
-}
-
-/* Unified Config Group */
-.config-group {
-  margin-bottom: 0.75rem;
-}
-
-.config-group + .config-group {
-  margin-top: 0.75rem;
-}
-
-.config-group:last-child {
-  margin-bottom: 0;
-}
-
-.config-group-primary {
-  background: var(--primary-alpha-5);
-  padding: 1rem;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--primary-alpha-15);
-}
-
-/* Compact Row Layout for Small Configs */
-.config-row-compact {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
-  align-items: start;
-}
-
-@media (width <= 768px) {
-  .config-row-compact {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Toggle Switch Component */
-.config-toggle {
-  width: 100%;
-}
-
-.toggle-label {
-  cursor: pointer;
-  display: block;
-}
-
-.toggle-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.toggle-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.toggle-title i {
-  font-size: 1.125rem;
-  color: var(--primary);
-}
-
-/* Toggle switch - Now uses centralized .toggle from form_controls.css */
-
-/* Migrated: Use <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label> */
-
-.toggle-description {
-  margin: 0.5rem 0 0;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
 }
 
 .config-label-row {
