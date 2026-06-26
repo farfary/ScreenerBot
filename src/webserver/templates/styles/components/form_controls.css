@@ -357,20 +357,22 @@ input[type="checkbox"]:checked {
     0 2px 5px rgb(0, 0, 0, 0.15);
 }
 
-/* White dot indicator */
+/* White dot indicator — centered with translate so scaling stays centered */
 input[type="checkbox"]::after {
   content: "";
   position: absolute;
+  top: 50%;
+  left: 50%;
   width: 42%;
   height: 42%;
   background: white;
   border-radius: 50%;
-  transform: scale(0);
+  transform: translate(-50%, -50%) scale(0);
   transition: transform 0.3s ease;
 }
 
 input[type="checkbox"]:checked::after {
-  transform: scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }
 
 input[type="checkbox"]:focus-visible {
