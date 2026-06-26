@@ -604,12 +604,7 @@ button.link-button:hover {
 }
 
 .checkbox-label input[type="checkbox"] {
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
   margin-top: 1px;
-  accent-color: var(--primary-color);
-  cursor: pointer;
 }
 
 .checkbox-label span {

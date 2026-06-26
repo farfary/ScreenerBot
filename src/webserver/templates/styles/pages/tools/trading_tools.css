@@ -226,11 +226,6 @@
   color: var(--success-color);
 }
 
-.mw-wallet-table input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
 
 /* Selection Summary */
 .mw-selection-summary {

@@ -395,9 +395,6 @@
 .config-field-control input[type="checkbox"] {
   width: 22px;
   height: 22px;
-  cursor: pointer;
-  accent-color: var(--primary-color);
-  border-radius: var(--radius-sm);
 }
 
 .config-field-reset {

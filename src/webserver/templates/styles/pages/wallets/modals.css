@@ -245,10 +245,6 @@
   font-weight: 500;
 }
 
-.form-group.checkbox-group input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-}
 
 /* Password/Secure Input */
 .password-input-wrapper {

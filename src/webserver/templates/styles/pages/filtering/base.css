@@ -631,8 +631,6 @@
   width: 20px;
   height: 20px;
   min-width: 20px;
-  cursor: pointer;
-  flex-shrink: 0;
 }
 
 .filtering-config-field .field-meta {

@@ -76,11 +76,6 @@
   font-feature-settings: "tnum" 1;
 }
 
-.wc-wallet-table input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
 
 .wc-wallet-table tr.empty-wallet {
   opacity: 0.5;
@@ -443,11 +438,6 @@
   justify-content: center;
 }
 
-.burn-token-select input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
 
 .burn-token-select > i {
   font-size: 0.875rem;

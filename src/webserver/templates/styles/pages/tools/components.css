@@ -305,10 +305,6 @@
   cursor: pointer;
 }
 
-.form-group.checkbox-group input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-}
 
 /* Input group */
 .input-group {
