@@ -239,17 +239,6 @@
   max-width: 600px;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.form-group label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-primary);
-}
 
 .form-control {
   padding: var(--input-padding-y, 8px) var(--input-padding-x, 12px);

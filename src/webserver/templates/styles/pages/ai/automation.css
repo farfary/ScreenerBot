@@ -462,10 +462,31 @@
 
 /* Automation Modal */
 .automation-modal {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2xl);
   width: 66vw;
   max-width: 800px;
   min-width: 400px;
   max-height: 80vh;
+  box-shadow:
+    0 20px 40px rgb(0, 0, 0, 0.4),
+    0 0 0 1px var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: automation-modal-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes automation-modal-slide-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .modal-runs-list {
