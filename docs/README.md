@@ -41,7 +41,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Tokens Module](architecture/tokens.md) | 1936 | Token lifecycle, database schema, caching, market data, security |
 | [Pools Module](architecture/pools.md) | 910 | Pool discovery, DEX decoders, price calculation, swap integration |
 | [Positions Module](architecture/positions.md) | 805 | Position lifecycle, state machine, verification, PnL tracking |
-| [OHLCV Module](architecture/ohlcvs.md) | 814 | Candle data fetching, aggregation, caching, strategy integration |
+| [OHLCV Module](architecture/ohlcvs.md) | 861 | Candle data fetching, aggregation, caching, strategy integration |
 | [Trader Engine](architecture/trader.md) | 534 | Dual monitors, entry pipeline, priority exits, safety system |
 | [Trading Strategies](architecture/strategies.md) | 383 | Condition-based strategy system, rule tree, evaluation engine |
 | [Filtering Pipeline](architecture/filtering.md) | 1043 | Token quality control — filter chain, sources, caching, query system |

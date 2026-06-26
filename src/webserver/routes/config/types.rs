@@ -117,6 +117,7 @@ pub const SENSITIVE_FIELDS: &[(&str, &[&str])] = &[
             "mistral.api_key",
         ],
     ),
+    ("ohlcv", &["sources.solana_tracker.api_key"]),
 ];
 
 #[derive(Debug, Deserialize)]

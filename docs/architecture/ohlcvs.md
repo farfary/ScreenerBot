@@ -717,14 +717,61 @@ pub enum RecommendedAction {
 
 ## 13. Configuration
 
-OHLCV config options (via `config_struct!` macro):
+OHLCV config options (`src/config/schemas/ohlcv.rs`):
 
 | Field | Type | Default | Purpose |
 |-------|------|---------|---------|
-| `retention_days` | i64 | 30 | How long to keep candle data |
-| `enable_ohlcv` | bool | true | Master enable/disable |
-| `max_monitored_tokens` | usize | 50 | Max tokens to actively monitor |
-| `api_rate_limit_per_minute` | u32 | 30 | GeckoTerminal API rate limit |
+| `enabled` | bool | true | Master enable/disable of OHLCV monitoring |
+| `max_monitored_tokens` | usize | 100 | Max tokens actively monitored (cap memory + API budget) |
+| `retention_days` | i64 | 7 | Days to keep historical candle data |
+| `max_empty_fetches` | u32 | 10 | Consecutive empty API responses before throttling |
+| `auto_fill_gaps` | bool | true | Automatically fetch missing candles when gaps detected |
+| `cache_size` | usize | 100 | Max tokens in hot memory cache |
+| `cache_retention_hours` | i64 | 24 | Hours to keep tokens in hot cache |
+| `pool_failover_enabled` | bool | true | Switch to alternative data source when primary fails |
+| `max_pool_failures` | u32 | 5 | Consecutive failures before switching to backup source |
+| `sources` | OhlcvSourcesConfig | (below) | OHLCV data sources — independent of `[tokens.discovery.*]` |
+
+### Data Sources (`ohlcv.sources`)
+
+The OHLCV fetcher's API sources are configured under `[ohlcv.sources.*]`,
+**independent of token discovery**. Previously the GeckoTerminal client
+lived in `[tokens.sources.geckoterminal]` + `[tokens.discovery.geckoterminal]`
+and was ANDed with the discovery master switch — turning off discovery
+silently disabled OHLCV fetches (264+ errors/min in the latest log).
+SolanaTracker is OHLCV-only and used to live under `[tokens.sources.solana_tracker]`.
+
+The shared `ApiManager.geckoterminal` client now stays on if EITHER side
+needs it (discovery OR OHLCV), so the two can be enabled/disabled
+independently. Endpoints are config-driven (no hardcoded URLs in code).
+
+#### `[ohlcv.sources.geckoterminal]`
+
+| Field | Type | Default | Purpose |
+|-------|------|---------|---------|
+| `enabled` | bool | true | Enable GeckoTerminal as an OHLCV data source |
+| `endpoint` | String | `https://api.geckoterminal.com/api/v2` | API base URL |
+| `rate_limit_per_minute` | u32 | 30 | Maximum API requests per minute |
+| `timeout_seconds` | u64 | 10 | HTTP request timeout in seconds |
+
+#### `[ohlcv.sources.solana_tracker]` (fallback source, credit-based)
+
+| Field | Type | Default | Purpose |
+|-------|------|---------|---------|
+| `enabled` | bool | false | Enable SolanaTracker as OHLCV fallback |
+| `endpoint` | String | `https://data.solanatracker.io` | API base URL |
+| `api_key` | String | (empty) | SolanaTracker API key (required when enabled) |
+| `rate_limit_per_minute` | u32 | 30 | Maximum API requests per minute |
+| `timeout_seconds` | u64 | 15 | HTTP request timeout in seconds |
+
+### Multi-source fallback chain (`fetcher.rs::fetch_multi_source`)
+
+```
+fetch_multi_source(mint, pool_address, api_endpoint, aggregate, limit)
+  1. Try SolanaTracker  (uses mint, no pool needed) — if enabled + API key
+  2. Fallback to GeckoTerminal (uses pool_address) — if enabled
+  3. Return error
+```
 
 ---
 

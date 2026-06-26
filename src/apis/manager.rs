@@ -38,6 +38,7 @@ impl ApiManager {
         let cfg = get_config_clone();
         let sources_cfg = &cfg.tokens.sources;
         let discovery_cfg = &cfg.tokens.discovery;
+        let ohlcv_sources_cfg = &cfg.ohlcv.sources;
         let discovery_enabled = discovery_cfg.enabled;
 
         let dexscreener_cfg = &sources_cfg.dexscreener;
@@ -45,8 +46,25 @@ impl ApiManager {
 
         let dexscreener_enabled =
             dexscreener_cfg.enabled && discovery_enabled && discovery_cfg.dexscreener.enabled;
+        // GeckoTerminal client enablement is shared between token discovery
+        // (new_pools / trending / recently_updated) and OHLCV candle fetching.
+        // The client stays on if EITHER consumer needs it, so the two can be
+        // enabled/disabled independently via their own config sections. The
+        // endpoint used is whichever side actually consumes the client right
+        // now (OHLCV's if it needs it, else the tokens source default).
+        let discovery_needs_gt = geckoterminal_cfg.enabled
+            && discovery_enabled
+            && discovery_cfg.geckoterminal.enabled;
+        let ohlcv_needs_gt = ohlcv_sources_cfg.geckoterminal.enabled;
         let geckoterminal_enabled =
-            geckoterminal_cfg.enabled && discovery_enabled && discovery_cfg.geckoterminal.enabled;
+            geckoterminal_cfg.enabled && (discovery_needs_gt || ohlcv_needs_gt);
+        let gecko_endpoint = if ohlcv_needs_gt {
+            ohlcv_sources_cfg.geckoterminal.endpoint.clone()
+        } else if !geckoterminal_cfg.endpoint.is_empty() {
+            geckoterminal_cfg.endpoint.clone()
+        } else {
+            String::new()
+        };
         // The Rugcheck CLIENT powers per-token security reports (fetch_report) used
         // by both filtering and the token-details Security tab. Its enablement must
         // follow ONLY the security-source toggle `[tokens.sources.rugcheck].enabled`
@@ -65,12 +83,24 @@ impl ApiManager {
             dexscreener_cfg.timeout_seconds
         };
 
-        let gecko_rate_limit = if geckoterminal_cfg.rate_limit_per_minute == 0 {
+        let gecko_rate_limit = if ohlcv_needs_gt {
+            if ohlcv_sources_cfg.geckoterminal.rate_limit_per_minute == 0 {
+                GECKO_RATE_LIMIT
+            } else {
+                ohlcv_sources_cfg.geckoterminal.rate_limit_per_minute as usize
+            }
+        } else if geckoterminal_cfg.rate_limit_per_minute == 0 {
             GECKO_RATE_LIMIT
         } else {
             geckoterminal_cfg.rate_limit_per_minute as usize
         };
-        let gecko_timeout = if geckoterminal_cfg.timeout_seconds == 0 {
+        let gecko_timeout = if ohlcv_needs_gt {
+            if ohlcv_sources_cfg.geckoterminal.timeout_seconds == 0 {
+                GECKO_TIMEOUT
+            } else {
+                ohlcv_sources_cfg.geckoterminal.timeout_seconds
+            }
+        } else if geckoterminal_cfg.timeout_seconds == 0 {
             GECKO_TIMEOUT
         } else {
             geckoterminal_cfg.timeout_seconds
@@ -84,7 +114,11 @@ impl ApiManager {
             && discovery_cfg.defillama.enabled
             && discovery_cfg.defillama.protocols_enabled;
 
-        let st_cfg = &sources_cfg.solana_tracker;
+        // SolanaTracker is exclusively an OHLCV fallback (its previous config
+        // home under [tokens.sources.solana_tracker] has been moved to
+        // [ohlcv.sources.solana_tracker]). All enablement, rate-limit, timeout,
+        // and endpoint settings now come from that section.
+        let st_cfg = &ohlcv_sources_cfg.solana_tracker;
         let st_enabled = st_cfg.enabled && !st_cfg.api_key.is_empty();
         let st_rate_limit = if st_cfg.rate_limit_per_minute == 0 {
             ST_RATE_LIMIT
@@ -143,10 +177,11 @@ impl ApiManager {
                         .expect("Failed to create disabled DexScreener client")
                 },
             ),
-            geckoterminal: GeckoTerminalClient::new(
+            geckoterminal: GeckoTerminalClient::with_base_url(
                 geckoterminal_enabled,
                 gecko_rate_limit,
                 gecko_timeout,
+                gecko_endpoint,
             )
             .unwrap_or_else(|e| {
                 logger::warning(
@@ -202,11 +237,12 @@ impl ApiManager {
                 );
                 DefiLlamaClient::new(false).expect("Failed to create disabled DefiLlama client")
             }),
-            solana_tracker: SolanaTrackerClient::new(
+            solana_tracker: SolanaTrackerClient::with_base_url(
                 st_enabled,
                 st_cfg.api_key.clone(),
                 st_rate_limit,
                 st_timeout,
+                st_cfg.endpoint.clone(),
             )
             .unwrap_or_else(|e| {
                 logger::warning(

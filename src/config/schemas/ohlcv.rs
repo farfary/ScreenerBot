@@ -105,5 +105,142 @@ config_struct! {
             category: "Fallback",
         })]
         max_pool_failures: u32 = 5,
+
+        /// OHLCV data source configuration (independent of token sources/discovery)
+        #[metadata(field_metadata! {
+            label: "Data Sources",
+            hint: "API sources used by the OHLCV fetcher (independent of token discovery)",
+            impact: "high",
+            category: "Sources",
+        })]
+        sources: OhlcvSourcesConfig = OhlcvSourcesConfig::default(),
+    }
+}
+
+// ----------------------------------------------------------------------------
+// OHLCV DATA SOURCES CONFIGURATION (independent of token sources/discovery)
+// ----------------------------------------------------------------------------
+//
+// The OHLCV module fetches candlestick data from external APIs. Historically
+// it shared its GeckoTerminal client with token discovery, so turning off
+// `[tokens.discovery.geckoterminal].enabled` also disabled OHLCV fetches
+// (264+ errors/min in the latest log). These structs give OHLCV its own
+// configuration block so it can stay on while discovery is off, and vice
+// versa. Endpoint URLs are now config-driven (no hardcoded base URLs in
+// code).
+
+config_struct! {
+    /// GeckoTerminal API configuration for the OHLCV fetcher.
+    pub struct OhlcvGeckoConfig {
+        /// Whether OHLCV fetches should use this source
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable GeckoTerminal as an OHLCV data source",
+            impact: "high",
+            category: "Sources",
+        })]
+        enabled: bool = true,
+        /// GeckoTerminal API base URL
+        #[metadata(field_metadata! {
+            label: "Endpoint",
+            hint: "GeckoTerminal API base URL",
+            impact: "critical",
+            category: "Sources",
+        })]
+        endpoint: String = "https://api.geckoterminal.com/api/v2".to_owned(),
+        /// Maximum API requests per minute to this source
+        #[metadata(field_metadata! {
+            label: "Rate Limit (req/min)",
+            hint: "Maximum API requests per minute (GeckoTerminal enforces strict limits)",
+            impact: "medium",
+            category: "Sources",
+            min: 1.0,
+            max: 300.0,
+            step: 1.0,
+        })]
+        rate_limit_per_minute: u32 = 30,
+        /// HTTP request timeout in seconds
+        #[metadata(field_metadata! {
+            label: "Timeout (seconds)",
+            hint: "HTTP request timeout for GeckoTerminal calls",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 60.0,
+            step: 1.0,
+        })]
+        timeout_seconds: u64 = 10,
+    }
+}
+
+config_struct! {
+    /// SolanaTracker API configuration for the OHLCV fetcher (credit-based billing).
+    pub struct OhlcvSolanaTrackerConfig {
+        /// Whether OHLCV fetches should use this source
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable SolanaTracker as an OHLCV fallback source (credit-based, requires API key)",
+            impact: "high",
+            category: "Sources",
+        })]
+        enabled: bool = false,
+        /// SolanaTracker API base URL
+        #[metadata(field_metadata! {
+            label: "Endpoint",
+            hint: "SolanaTracker API base URL",
+            impact: "critical",
+            category: "Sources",
+        })]
+        endpoint: String = "https://data.solanatracker.io".to_owned(),
+        /// SolanaTracker API key (required when enabled = true)
+        #[metadata(field_metadata! {
+            label: "API Key",
+            hint: "SolanaTracker API key from solanatracker.io",
+            impact: "critical",
+            category: "Sources",
+        })]
+        api_key: String = String::new(),
+        /// Maximum API requests per minute
+        #[metadata(field_metadata! {
+            label: "Rate Limit (req/min)",
+            hint: "Maximum API requests per minute (credit-based, be conservative)",
+            impact: "medium",
+            category: "Sources",
+            min: 1.0,
+            max: 120.0,
+            step: 1.0,
+        })]
+        rate_limit_per_minute: u32 = 30,
+        /// HTTP request timeout in seconds
+        #[metadata(field_metadata! {
+            label: "Timeout (seconds)",
+            hint: "HTTP request timeout for SolanaTracker calls",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 60.0,
+            step: 1.0,
+        })]
+        timeout_seconds: u64 = 15,
+    }
+}
+
+config_struct! {
+    /// All OHLCV data sources — endpoint URLs and enablement per provider.
+    pub struct OhlcvSourcesConfig {
+        #[metadata(field_metadata! {
+            label: "GeckoTerminal Source",
+            hint: "GeckoTerminal endpoint used exclusively by the OHLCV fetcher (independent of token discovery)",
+            impact: "high",
+            category: "Sources",
+        })]
+        geckoterminal: OhlcvGeckoConfig = OhlcvGeckoConfig::default(),
+        #[metadata(field_metadata! {
+            label: "SolanaTracker Source",
+            hint: "SolanaTracker fallback endpoint used exclusively by the OHLCV fetcher (when enabled + API key set)",
+            impact: "medium",
+            category: "Sources",
+        })]
+        solana_tracker: OhlcvSolanaTrackerConfig = OhlcvSolanaTrackerConfig::default(),
     }
 }

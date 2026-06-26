@@ -25,6 +25,7 @@ pub const RATE_LIMIT_PER_MINUTE: usize = 60;
 
 pub struct SolanaTrackerClient {
     client: Client,
+    base_url: String,
     rate_limiter: RateLimiter,
     stats: Arc<ApiStatsTracker>,
     timeout: Duration,
@@ -41,12 +42,31 @@ impl SolanaTrackerClient {
         rate_limit: usize,
         timeout_seconds: u64,
     ) -> Result<Self, String> {
+        Self::with_base_url(enabled, api_key, rate_limit, timeout_seconds, BASE_URL.to_owned())
+    }
+
+    /// Construct a client with an explicit API base URL (used when an
+    /// OHLCV-specific endpoint override is configured).
+    pub fn with_base_url(
+        enabled: bool,
+        api_key: String,
+        rate_limit: usize,
+        timeout_seconds: u64,
+        base_url: String,
+    ) -> Result<Self, String> {
         if timeout_seconds == 0 {
             return Err("Timeout must be greater than zero".to_owned());
         }
 
+        let url = if base_url.is_empty() {
+            BASE_URL.to_owned()
+        } else {
+            base_url.trim_end_matches('/').to_owned()
+        };
+
         Ok(Self {
             client: crate::net::client(),
+            base_url: url,
             rate_limiter: RateLimiter::new(rate_limit),
             stats: Arc::new(ApiStatsTracker::new()),
             timeout: Duration::from_secs(timeout_seconds),
@@ -99,7 +119,7 @@ impl SolanaTrackerClient {
             .await
             .map_err(|e| format!("Rate limiter error: {e}"))?;
 
-        let url = format!("{}{}", BASE_URL, path);
+        let url = format!("{}{}", self.base_url, path);
         let start = Instant::now();
 
         let response_result = self
@@ -232,7 +252,7 @@ impl SolanaTrackerClient {
         query: &str,
     ) -> Result<Vec<types::SearchResult>, String> {
         // Build URL via reqwest::Url to get proper query-parameter encoding
-        let base = format!("{}/search", BASE_URL);
+        let base = format!("{}/search", self.base_url);
         let url = reqwest::Url::parse_with_params(&base, &[("query", query)])
             .map_err(|e| format!("Failed to build search URL: {e}"))?;
         // get_json expects a path (with query string), so extract it from the parsed URL

@@ -60,6 +60,7 @@ pub const RATE_LIMIT_PER_MINUTE: usize = 30;
 /// GeckoTerminal API client with rate limiting and stats tracking
 pub struct GeckoTerminalClient {
     pub(crate) client: Client,
+    pub(crate) base_url: String,
     rate_limiter: RateLimiter,
     stats: Arc<ApiStatsTracker>,
     timeout: Duration,
@@ -70,12 +71,35 @@ pub struct GeckoTerminalClient {
 
 impl GeckoTerminalClient {
     pub fn new(enabled: bool, rate_limit: usize, timeout_seconds: u64) -> Result<Self, String> {
+        Self::with_base_url(
+            enabled,
+            rate_limit,
+            timeout_seconds,
+            GECKOTERMINAL_BASE_URL.to_owned(),
+        )
+    }
+
+    /// Construct a client with an explicit API base URL (used when an
+    /// OHLCV-specific or tokens-specific endpoint override is configured).
+    pub fn with_base_url(
+        enabled: bool,
+        rate_limit: usize,
+        timeout_seconds: u64,
+        base_url: String,
+    ) -> Result<Self, String> {
         if timeout_seconds == 0 {
             return Err("Timeout must be greater than zero".to_owned());
         }
 
+        let url = if base_url.is_empty() {
+            GECKOTERMINAL_BASE_URL.to_owned()
+        } else {
+            base_url.trim_end_matches('/').to_owned()
+        };
+
         Ok(Self {
             client: crate::net::client(),
+            base_url: url,
             rate_limiter: RateLimiter::new(rate_limit),
             stats: Arc::new(ApiStatsTracker::new()),
             timeout: Duration::from_secs(timeout_seconds),

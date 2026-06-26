@@ -401,10 +401,10 @@ impl OhlcvMonitor {
         // Calculate delay based on configured rate limit to respect API limits
         // Formula: (60_000ms / rate_limit_per_minute) + buffer
         let rate_limit: usize = with_config(|cfg| {
-            if !cfg.tokens.sources.geckoterminal.enabled {
+            if !cfg.ohlcv.sources.geckoterminal.enabled {
                 0
             } else {
-                let configured = cfg.tokens.sources.geckoterminal.rate_limit_per_minute as usize;
+                let configured = cfg.ohlcv.sources.geckoterminal.rate_limit_per_minute as usize;
                 if configured == 0 {
                     crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE
                 } else {
