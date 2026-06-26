@@ -365,7 +365,7 @@
   padding-right: 2.5rem;
 }
 
-.param-field input,
+.param-field input:not([type="checkbox"], [type="radio"]),
 .param-field select {
   padding: 0.5rem;
   border: 1px solid var(--border-color);
@@ -384,7 +384,7 @@
   cursor: pointer;
 }
 
-.param-field input:focus,
+.param-field input:not([type="checkbox"], [type="radio"]):focus,
 .param-field select:focus {
   border-color: var(--primary-color);
   outline: none;

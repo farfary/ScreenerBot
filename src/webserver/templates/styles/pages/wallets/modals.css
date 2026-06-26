@@ -206,7 +206,7 @@
   color: var(--error-color);
 }
 
-.form-group input,
+.form-group input:not([type="checkbox"], [type="radio"]),
 .form-group textarea {
   padding: 10px 12px;
   border: 1px solid var(--border-color);
@@ -220,7 +220,7 @@
     box-shadow 0.2s ease;
 }
 
-.form-group input:focus,
+.form-group input:not([type="checkbox"], [type="radio"]):focus,
 .form-group textarea:focus {
   outline: none;
   border-color: var(--primary-color);

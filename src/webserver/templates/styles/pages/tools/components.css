@@ -227,7 +227,7 @@
   color: var(--text-primary);
 }
 
-.form-group input,
+.form-group input:not([type="checkbox"], [type="radio"]),
 .form-group textarea,
 .form-group select {
   padding: 10px 12px;
@@ -248,7 +248,7 @@
   cursor: pointer;
 }
 
-.form-group input:focus,
+.form-group input:not([type="checkbox"], [type="radio"]):focus,
 .form-group textarea:focus,
 .form-group select:focus {
   outline: none;
@@ -274,11 +274,11 @@
 }
 
 /* Input validation states */
-.form-group input:invalid:not(:placeholder-shown) {
+.form-group input:not([type="checkbox"], [type="radio"]):invalid:not(:placeholder-shown) {
   border-color: var(--error-color);
 }
 
-.form-group input:invalid:not(:placeholder-shown):focus {
+.form-group input:not([type="checkbox"], [type="radio"]):invalid:not(:placeholder-shown):focus {
   box-shadow: 0 0 0 3px var(--danger-alpha-20);
 }
 
