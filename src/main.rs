@@ -188,8 +188,6 @@ async fn main() {
 
     // Initialize logger
     screenerbot::logger::init();
-    // Detect and log the system/network proxy once (used by HTTP, RPC and WS).
-    screenerbot::net::log_detected_proxy();
     info(
         LogTag::System,
         "Logger initialized, attempting to load config...",
@@ -204,6 +202,10 @@ async fn main() {
         return;
     }
     info(LogTag::System, "Configuration loaded successfully");
+
+    // Detect and log the system/network proxy once (used by HTTP, RPC and WS).
+    // Must run AFTER config load so `[network] proxy` is available.
+    screenerbot::net::log_detected_proxy();
 
     // Set up panic hook for crash notifications (after config is loaded)
     setup_panic_hook();

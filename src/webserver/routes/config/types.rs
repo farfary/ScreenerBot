@@ -33,6 +33,7 @@ pub struct FullConfigResponse {
     pub gui: config::GuiConfig,
     pub telegram: config::TelegramConfig,
     pub ai: config::AiConfig,
+    pub network: config::NetworkConfig,
     pub timestamp: String,
 }
 
@@ -82,6 +83,7 @@ pub const CONFIG_SECTIONS: &[&str] = &[
     "gui",
     "telegram",
     "ai",
+    "network",
 ];
 
 /// Sensitive fields that should be sanitized on export (path format: "section.nested.field")

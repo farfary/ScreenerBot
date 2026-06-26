@@ -32,6 +32,7 @@ pub async fn get_full_config() -> Response {
         gui: cfg.gui.clone(),
         telegram: cfg.telegram.clone(),
         ai: cfg.ai.clone(),
+        network: cfg.network.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -122,6 +123,16 @@ pub async fn get_maintenance_config() -> Response {
 pub async fn get_sol_price_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.sol_price.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/network - Get network proxy configuration
+pub async fn get_network_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.network.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -307,6 +318,7 @@ where
             "HolderWatchConfig" => serde_json::to_value(&cfg.holder_watch).ok(),
             "WalletConfig" => serde_json::to_value(&cfg.wallet).ok(),
             "PerformanceConfig" => serde_json::to_value(&cfg.performance).ok(),
+            "NetworkConfig" => serde_json::to_value(&cfg.network).ok(),
             _ => None,
         });
 
@@ -523,6 +535,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.performance = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "NetworkConfig" => {
+                let new_config: config::NetworkConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid NetworkConfig: {e}"))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.network = new_config;
                     },
                     true,
                 )?;

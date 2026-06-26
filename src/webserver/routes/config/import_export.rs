@@ -93,6 +93,7 @@ fn get_section_label(section: &str) -> String {
         "swaps" => "Swaps".to_owned(),
         "tokens" => "Tokens".to_owned(),
         "sol_price" => "SOL Price".to_owned(),
+        "network" => "Network".to_owned(),
         "events" => "Events".to_owned(),
         "services" => "Services".to_owned(),
         "monitoring" => "Monitoring".to_owned(),
@@ -192,6 +193,10 @@ fn apply_section_to_config(
             cfg.sol_price = serde_json::from_value(value)
                 .map_err(|e| format!("Invalid SolPriceConfig: {e}"))?;
         }
+        "network" => {
+            cfg.network = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid NetworkConfig: {e}"))?;
+        }
         "events" => {
             cfg.events =
                 serde_json::from_value(value).map_err(|e| format!("Invalid EventsConfig: {e}"))?;
@@ -261,6 +266,7 @@ pub async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response
                 "swaps" => serde_json::to_value(&cfg.swaps).ok(),
                 "tokens" => serde_json::to_value(&cfg.tokens).ok(),
                 "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
+                "network" => serde_json::to_value(&cfg.network).ok(),
                 "events" => serde_json::to_value(&cfg.events).ok(),
                 "services" => serde_json::to_value(&cfg.services).ok(),
                 "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
@@ -384,6 +390,9 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
             "sol_price" => serde_json::from_value::<config::SolPriceConfig>(value.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
+            "network" => serde_json::from_value::<config::NetworkConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
             "events" => serde_json::from_value::<config::EventsConfig>(value.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
@@ -414,6 +423,7 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
             "swaps" => serde_json::to_value(&cfg.swaps).ok(),
             "tokens" => serde_json::to_value(&cfg.tokens).ok(),
             "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
+            "network" => serde_json::to_value(&cfg.network).ok(),
             "events" => serde_json::to_value(&cfg.events).ok(),
             "services" => serde_json::to_value(&cfg.services).ok(),
             "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
@@ -520,6 +530,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
                     "swaps" => serde_json::to_value(&candidate_config.swaps).ok(),
                     "tokens" => serde_json::to_value(&candidate_config.tokens).ok(),
                     "sol_price" => serde_json::to_value(&candidate_config.sol_price).ok(),
+                    "network" => serde_json::to_value(&candidate_config.network).ok(),
                     "events" => serde_json::to_value(&candidate_config.events).ok(),
                     "services" => serde_json::to_value(&candidate_config.services).ok(),
                     "monitoring" => serde_json::to_value(&candidate_config.monitoring).ok(),
@@ -594,6 +605,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
                         "swaps" => cfg.swaps = candidate_config.swaps.clone(),
                         "tokens" => cfg.tokens = candidate_config.tokens.clone(),
                         "sol_price" => cfg.sol_price = candidate_config.sol_price.clone(),
+                        "network" => cfg.network = candidate_config.network.clone(),
                         "events" => cfg.events = candidate_config.events.clone(),
                         "services" => cfg.services = candidate_config.services.clone(),
                         "monitoring" => cfg.monitoring = candidate_config.monitoring.clone(),

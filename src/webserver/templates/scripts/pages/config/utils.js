@@ -23,6 +23,7 @@ export const SECTION_DISPLAY_ORDER = [
   "monitoring",
   "performance",
   "maintenance",
+  "network",
   "ohlcv",
   "summary",
 ];
@@ -49,6 +50,7 @@ export const SECTION_LABEL_OVERRIDES = {
   strategies: "Strategies",
   holder_watch: "Holder Watch",
   performance: "Performance",
+  network: "Network",
 };
 
 /**

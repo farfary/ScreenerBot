@@ -6,10 +6,12 @@
 //! OS network settings and not exported as environment variables.
 //!
 //! Detection order:
-//! 1. Environment variables: `ALL_PROXY`/`all_proxy`, `HTTPS_PROXY`/`https_proxy`,
+//! 1. Config `[network] proxy` setting (highest priority — works for GUI-launched
+//!    apps that don't inherit shell env vars).
+//! 2. Environment variables: `ALL_PROXY`/`all_proxy`, `HTTPS_PROXY`/`https_proxy`,
 //!    `HTTP_PROXY`/`http_proxy` (reqwest reads these itself, but we resolve them
 //!    explicitly so the WebSocket path and RPC path share the same value).
-//! 2. macOS system proxy via `scutil --proxy` (HTTP/HTTPS first, then SOCKS).
+//! 3. macOS system proxy via `scutil --proxy` (HTTP/HTTPS first, then SOCKS).
 //!
 //! GUI apps launched from Finder/Electron do not inherit shell env vars, so the
 //! macOS system-proxy probe is the path that actually fires in practice.
@@ -168,10 +170,33 @@ async fn connect_ws_via_http_proxy(
 }
 
 fn detect_proxy() -> Option<String> {
+    // 1. Config `[network] proxy` — highest priority (works for GUI-launched apps
+    //    that don't inherit shell env vars).
+    if let Some(url) = detect_from_config() {
+        return Some(url);
+    }
+
+    // 2. Environment variables (works for terminal-launched runs).
     if let Some(url) = detect_from_env() {
         return Some(url);
     }
+
+    // 3. macOS system proxy (scutil --proxy).
     detect_macos_system_proxy()
+}
+
+/// Read the proxy URL from the bot's config (`[network] proxy`).
+/// Returns None if config isn't loaded yet or the field is empty.
+/// Uses `CONFIG.get()` directly (not `with_config`) to avoid panicking
+/// when the proxy is detected before config is loaded at boot.
+fn detect_from_config() -> Option<String> {
+    let config_lock = crate::config::utils::CONFIG.get()?;
+    let config = config_lock.read().ok()?;
+    let proxy = config.network.proxy.trim().to_owned();
+    if proxy.is_empty() {
+        return None;
+    }
+    Some(normalize_proxy_url(&proxy))
 }
 
 fn detect_from_env() -> Option<String> {

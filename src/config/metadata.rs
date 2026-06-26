@@ -309,6 +309,7 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("holder_watch", super::HolderWatchConfig::field_metadata());
     map.insert("wallet", super::WalletConfig::field_metadata());
     map.insert("performance", super::PerformanceConfig::field_metadata());
+    map.insert("network", super::NetworkConfig::field_metadata());
 
     for section in map.values_mut() {
         section.retain(|_, field| !field.hidden.unwrap_or_default());

@@ -11,6 +11,7 @@ mod gui;
 mod holder_watch;
 mod maintenance;
 mod monitoring;
+mod network;
 mod ohlcv;
 mod performance;
 mod pools;
@@ -34,6 +35,7 @@ pub use gui::*;
 pub use holder_watch::*;
 pub use maintenance::*;
 pub use monitoring::*;
+pub use network::*;
 pub use ohlcv::*;
 pub use performance::*;
 pub use pools::*;
@@ -127,5 +129,8 @@ config_struct! {
 
         /// Automatic maintenance and data retention
         maintenance: MaintenanceConfig = MaintenanceConfig::default(),
+
+        /// Network proxy configuration
+        network: NetworkConfig = NetworkConfig::default(),
     }
 }

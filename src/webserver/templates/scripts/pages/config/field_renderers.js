@@ -35,6 +35,7 @@ export const SECTION_ICONS = {
   strategies: "icon-brain",
   holder_watch: "icon-eye",
   performance: "icon-gauge",
+  network: "icon-globe",
 };
 
 /**
