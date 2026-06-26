@@ -17,10 +17,25 @@ import {
   formatSectionLabel,
   metadataMatchesSearch,
 } from "./config/utils.js";
-import { SECTION_ICONS, renderFieldControl } from "./config/field_renderers.js";
+import {
+  SECTION_ICONS,
+  renderFieldControl,
+  getOpenedObjects,
+  getOpenedCategories,
+  setOpenedObjects,
+  setOpenedCategories,
+  expandAllObjects,
+  collapseAllObjects,
+  expandAllCategories,
+  collapseAllCategories,
+  isCategoryOpen,
+  toggleCategory,
+} from "./config/field_renderers.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
+const OPENED_OBJECTS_KEY = `${CONFIG_STATE_KEY}.openedObjects`;
+const OPENED_CATEGORIES_KEY = `${CONFIG_STATE_KEY}.openedCategories`;
 
 function ensureActiveSectionValid() {
   const metadata = state.metadata || {};
@@ -40,6 +55,25 @@ function ensureActiveSectionValid() {
     state.activeSection = preferred;
     AppState.save(`${CONFIG_STATE_KEY}.activeSection`, preferred);
   }
+}
+
+/**
+ * Persist the current opened-objects / opened-categories sets to AppState
+ * so expand/collapse state survives page reloads. Called on every toggle
+ * (cheap — Sets are small + AppState uses an in-memory cache).
+ */
+function persistOpenedState() {
+  const objArr = Array.from(getOpenedObjects());
+  const catArr = Array.from(getOpenedCategories());
+  AppState.save(OPENED_OBJECTS_KEY, objArr);
+  AppState.save(OPENED_CATEGORIES_KEY, catArr);
+}
+
+function loadOpenedState() {
+  const objArr = AppState.load(OPENED_OBJECTS_KEY, []);
+  const catArr = AppState.load(OPENED_CATEGORIES_KEY, []);
+  setOpenedObjects(new Set(Array.isArray(objArr) ? objArr : []));
+  setOpenedCategories(new Set(Array.isArray(catArr) ? catArr : []));
 }
 
 const state = {
@@ -253,6 +287,37 @@ function renderToolbar(sectionId) {
     toolbar.appendChild(revertBtn);
   }
 
+  // Expand all / Collapse all — applies to both top-level categories and
+  // nested object sub-configs (e.g. OHLCV > Data Sources > GeckoTerminal).
+  // Persisted via AppState so the choice survives reloads.
+  const expandAllBtn = create("button", {
+    type: "button",
+    className: "config-header-action ghost",
+    title: "Expand every section and every nested sub-config",
+  });
+  expandAllBtn.innerHTML = "<i class=\"icon-chevron-down\"></i><span>Expand all</span>";
+  on(expandAllBtn, "click", () => {
+    expandAllCategories();
+    expandAllObjects();
+    persistOpenedState();
+    render();
+  });
+  toolbar.appendChild(expandAllBtn);
+
+  const collapseAllBtn = create("button", {
+    type: "button",
+    className: "config-header-action ghost",
+    title: "Collapse every section and every nested sub-config",
+  });
+  collapseAllBtn.innerHTML = "<i class=\"icon-chevron-up\"></i><span>Collapse all</span>";
+  on(collapseAllBtn, "click", () => {
+    collapseAllCategories();
+    collapseAllObjects();
+    persistOpenedState();
+    render();
+  });
+  toolbar.appendChild(collapseAllBtn);
+
   show(toolbar);
 }
 
@@ -388,6 +453,28 @@ function createVisibilitySeparator(label) {
   return sep;
 }
 
+/**
+ * Update the "X fields · Y pending" chip on a category header without
+ * rebuilding the DOM. Called from the field onChange callback to keep
+ * counters in sync after an in-place edit (which no longer triggers a
+ * full re-render). When `visibleFieldCount` differs from total, render
+ * the search-filter chip instead.
+ */
+function updateCategoryChip(categoryEl, totalCount, pendingCount, visibleCount) {
+  const chipEl = categoryEl?.querySelector(".config-category-chip");
+  if (!chipEl) return;
+  if (pendingCount > 0) {
+    chipEl.classList.add("pending");
+    chipEl.textContent = `${totalCount} fields · ${pendingCount} pending`;
+  } else {
+    chipEl.classList.remove("pending");
+    chipEl.textContent = `${totalCount} fields`;
+  }
+  if (typeof visibleCount === "number" && visibleCount !== totalCount) {
+    chipEl.textContent = `${visibleCount} of ${totalCount} fields`;
+  }
+}
+
 function renderCategories(sectionId) {
   const container = $("#configCategories");
   if (!container) {
@@ -441,12 +528,16 @@ function renderCategories(sectionId) {
     }
     lastVisibility = categoryVisibility;
 
-    // Primary visibility categories are expanded by default
-    const isCollapsedDefault = categoryVisibility !== "primary";
+    // Primary visibility categories are expanded by default, UNLESS the
+    // user has explicitly opened/closed this one before (persisted).
+    const collapsedByDefault = categoryVisibility !== "primary";
+    const userOpenedCategory = isCategoryOpen([sectionId, category]);
+    const startCollapsed = collapsedByDefault && !userOpenedCategory;
     const categoryEl = create("div", {
-      className: isCollapsedDefault ? "config-category collapsed" : "config-category",
+      className: startCollapsed ? "config-category collapsed" : "config-category",
     });
     categoryEl.dataset.visibility = categoryVisibility;
+    categoryEl.dataset.categoryPath = `${sectionId}::${category}`;
 
     const header = create("button", {
       type: "button",
@@ -466,6 +557,9 @@ function renderCategories(sectionId) {
 
     on(header, "click", () => {
       categoryEl.classList.toggle("collapsed");
+      // Track in the persistent set so the user's choice survives reloads.
+      toggleCategory([sectionId, category]);
+      persistOpenedState();
     });
 
     let categoryHasMatch = false;
@@ -562,18 +656,38 @@ function renderCategories(sectionId) {
         path: fieldPath,
         searchTerm,
         onChange: (nextValue) => {
+          // In-place update only — do NOT call render() here. The previous
+          // implementation called render() on every keystroke which rebuilt
+          // the entire field tree, collapsing object wrappers (the user
+          // had to re-expand to keep typing) and stealing focus from the
+          // input. Instead we update state + DOM markers locally and let
+          // the global render() run on section switch / save / reload.
           if (!state.draft[sectionId]) {
             state.draft[sectionId] = {};
           }
           state.draft[sectionId][fieldKey] = normalizeFieldValue(fieldMeta.type, nextValue);
           const originalSection = state.original?.[sectionId] ?? {};
-          markFieldChanged(
-            sectionId,
-            fieldKey,
-            !deepEqual(state.draft[sectionId][fieldKey], originalSection[fieldKey])
-          );
-          render();
+          const newValue = state.draft[sectionId][fieldKey];
+          const isChanged = !deepEqual(newValue, originalSection[fieldKey]);
+          markFieldChanged(sectionId, fieldKey, isChanged);
+
+          // Toggle the row's --changed CSS class + reset-button enable state.
+          fieldEl.classList.toggle("config-field--changed", isChanged);
+          const resetBtn = controlEl.querySelector(".config-field-reset");
+          if (resetBtn && resetBtn.hidden === false) {
+            const defaultValue = deepClone(fieldMeta.default);
+            const atDefault = deepEqual(newValue, defaultValue);
+            resetBtn.disabled = atDefault;
+          }
+
+          // Recount pending fields in this category + update the chip.
+          pendingCount = isChanged ? pendingCount + 1 : Math.max(0, pendingCount - 1);
+          updateCategoryChip(categoryEl, fieldsList.length, pendingCount);
+          renderToolbar(sectionId);
+          renderHeader(sectionId);
+          renderSidebar();
         },
+        onCollapseChange: persistOpenedState,
       });
 
       controlEl.appendChild(control);
@@ -1113,6 +1227,7 @@ function attachEventHandlers(ctx) {
 }
 
 function activate() {
+  loadOpenedState();
   ensureActiveSectionValid();
   render();
 }

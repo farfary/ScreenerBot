@@ -13,6 +13,46 @@ import {
   normalizeFieldValue,
 } from "./utils.js";
 
+// Set of stable IDs (`${sectionId}::${fieldKey}::${childKey}`) for object
+// wrappers the user has explicitly opened. Members are paths with the
+// `open::` prefix; everything else (including unset) is collapsed by
+// default. Persistence is handled by the caller via AppState so the
+// expand/collapse state survives page reloads.
+let openedObjects = new Set();
+let openedCategories = new Set();
+
+export function getOpenedObjects() {
+  return new Set(openedObjects);
+}
+
+export function getOpenedCategories() {
+  return new Set(openedCategories);
+}
+
+export function setOpenedObjects(set) {
+  openedObjects = set instanceof Set ? new Set(set) : new Set();
+}
+
+export function setOpenedCategories(set) {
+  openedCategories = set instanceof Set ? new Set(set) : new Set();
+}
+
+export function expandAllObjects() {
+  openedObjects = new Set(["__all__"]);
+}
+
+export function collapseAllObjects() {
+  openedObjects = new Set();
+}
+
+export function expandAllCategories() {
+  openedCategories = new Set(["__all__"]);
+}
+
+export function collapseAllCategories() {
+  openedCategories = new Set();
+}
+
 export const SECTION_ICONS = {
   rpc: "icon-satellite",
   trader: "icon-briefcase",
@@ -39,6 +79,48 @@ export const SECTION_ICONS = {
 };
 
 /**
+ * Build a stable ID for an object wrapper at this path. The path is the
+ * array of config keys from the section root down to (and including) this
+ * object's key. The path is joined with `::` to avoid collisions with
+ * config keys that contain dots.
+ */
+function objectPathId(path) {
+  return path.join("::");
+}
+
+export function isObjectOpen(path) {
+  if (openedObjects.has("__all__")) return true;
+  return openedObjects.has(objectPathId(path));
+}
+
+export function isCategoryOpen(path) {
+  if (openedCategories.has("__all__")) return true;
+  return openedCategories.has(path.join("::"));
+}
+
+export function toggleObject(path) {
+  const id = objectPathId(path);
+  if (isObjectOpen(path)) {
+    openedObjects.delete("__all__");
+    openedObjects.delete(id);
+  } else {
+    openedObjects.delete("__all__");
+    openedObjects.add(id);
+  }
+}
+
+export function toggleCategory(path) {
+  const id = path.join("::");
+  if (isCategoryOpen(path)) {
+    openedCategories.delete("__all__");
+    openedCategories.delete(id);
+  } else {
+    openedCategories.delete("__all__");
+    openedCategories.add(id);
+  }
+}
+
+/**
  * Render an object field with children recursively.
  * @param {Object} options - Rendering options
  * @returns {HTMLElement|null} Rendered element or null
@@ -52,6 +134,7 @@ export function renderObjectWithChildren({
   path = [],
   searchTerm = "",
   onChange,
+  onCollapseChange,
   parentLabel = "",
 }) {
   if (!metadata.children) {
@@ -63,7 +146,10 @@ export function renderObjectWithChildren({
     return null;
   }
 
-  const wrapper = create("div", { className: "config-object-wrapper collapsed" });
+  const startCollapsed = !isObjectOpen(path);
+  const wrapper = create("div", {
+    className: startCollapsed ? "config-object-wrapper collapsed" : "config-object-wrapper",
+  });
 
   if (parentLabel) {
     const header = create("button", {
@@ -72,7 +158,11 @@ export function renderObjectWithChildren({
     });
     header.innerHTML = `<i class="config-object-chevron icon-chevron-down"></i><span>${Utils.escapeHtml(parentLabel)}</span>`;
     on(header, "click", () => {
+      toggleObject(path);
       wrapper.classList.toggle("collapsed");
+      if (typeof onCollapseChange === "function") {
+        onCollapseChange();
+      }
     });
     wrapper.appendChild(header);
   }
@@ -169,6 +259,7 @@ export function renderObjectWithChildren({
         nextObject[childKey] = normalizedChild;
         onChange(nextObject);
       },
+      onCollapseChange,
     });
 
     controlEl.appendChild(childControl);
@@ -386,6 +477,7 @@ export const FIELD_RENDERERS = {
     path = [],
     searchTerm = "",
     onChange,
+    onCollapseChange,
   }) {
     const nested = renderObjectWithChildren({
       fieldId,
@@ -396,6 +488,7 @@ export const FIELD_RENDERERS = {
       path,
       searchTerm,
       onChange,
+      onCollapseChange,
       parentLabel: metadata.label || (path.length > 0 ? path[path.length - 1] : ""),
     });
     if (nested) {
