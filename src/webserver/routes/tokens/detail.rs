@@ -23,26 +23,26 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Fetch token from database (with market data)
     let lookup_start = std::time::Instant::now();
     let snapshot = match crate::tokens::get_full_token_async(&mint).await {
-        Ok(Some(snap)) => {
-            logger::debug(
-                LogTag::Webserver,
-                &format!(
-                    "mint={} elapsed={}μs",
-                    mint,
-                    lookup_start.elapsed().as_micros()
-                ),
-            );
-            snap
-        }
-        Ok(None) | Err(_) => {
-            logger::debug(
-                LogTag::Webserver,
-                &format!(
-                    "mint={} elapsed={}μs",
-                    mint,
-                    lookup_start.elapsed().as_micros()
-                ),
-            );
+        Ok(Some(snap)) => Some(snap),
+        // Not in our DB yet — fetch from external APIs (DexScreener/Jupiter) and
+        // add it, so opening a token we have not tracked (e.g. from the billboard
+        // or search) shows real data instead of an empty NOT_FOUND stub. Mirrors
+        // get_token_analysis.
+        Ok(None) => fetch_and_add_token_from_external(&mint).await,
+        Err(_) => None,
+    };
+    logger::debug(
+        LogTag::Webserver,
+        &format!(
+            "mint={} elapsed={}μs",
+            mint,
+            lookup_start.elapsed().as_micros()
+        ),
+    );
+
+    let snapshot = match snapshot {
+        Some(snap) => snap,
+        None => {
             return Json(TokenDetailResponse {
                 mint: mint.clone(),
                 symbol: "NOT_FOUND".to_owned(),

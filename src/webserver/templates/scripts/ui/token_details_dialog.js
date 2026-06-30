@@ -844,6 +844,28 @@ export class TokenDetailsDialog {
   }
 
   _updateHeader(token) {
+    // Update symbol / name / logo from the latest data. The header markup is
+    // built once from the seed token (which, when opened from the billboard or
+    // search, only carries {mint, symbol}); without refreshing here the name
+    // stays "Unknown Token" and the logo a placeholder even after full data loads.
+    const symbolEl = this.dialogEl.querySelector(".title-main");
+    if (symbolEl && token.symbol && token.symbol !== "NOT_FOUND") {
+      if (symbolEl.textContent !== token.symbol) symbolEl.textContent = token.symbol;
+    }
+    const nameEl = this.dialogEl.querySelector(".title-sub");
+    if (nameEl && token.name && token.name !== "Token not in cache") {
+      if (nameEl.textContent !== token.name) nameEl.textContent = token.name;
+    }
+    const logoEl = this.dialogEl.querySelector(".header-logo");
+    if (logoEl) {
+      const sym = token.symbol && token.symbol !== "NOT_FOUND" ? token.symbol : "?";
+      const logoUrl = token.logo_url || token.image_url || "";
+      const logoHtml = logoUrl
+        ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(sym)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${this._escapeHtml(sym.charAt(0))}</div>'" />`
+        : `<div class="logo-placeholder">${this._escapeHtml(sym.charAt(0))}</div>`;
+      this._renderHtmlIfChanged(logoEl, logoHtml, "__logoHtml");
+    }
+
     // Update badges in separate row
     const badgesContainer = this.dialogEl.querySelector("#headerBadges");
     const badgesRow = this.dialogEl.querySelector("#headerBadgesRow");
