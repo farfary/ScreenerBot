@@ -558,58 +558,65 @@
    DATA SOURCES STATUS BAR - Shows loading status of each data source
    ============================================================================= */
 
-.data-sources-status {
-  display: flex;
+.token-details-dialog .data-sources-status {
+  display: inline-flex;
   align-items: center;
+  min-height: 22px;
   gap: 12px;
-  padding: 4px 10px;
+  padding: 0 10px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
+  line-height: 1;
   transition: opacity var(--transition-normal);
   overflow: hidden;
 }
 
-.data-sources-status.all-loaded {
+.token-details-dialog .data-sources-status.all-loaded {
   opacity: 0.7;
   border-color: transparent;
   background: transparent;
   padding: 0;
 }
 
-.source-status {
-  display: flex;
+.token-details-dialog .source-status {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  min-height: 22px;
+  white-space: nowrap;
 }
 
-.status-icon {
-  width: 6px;
-  height: 6px;
+.token-details-dialog .source-status .status-icon {
+  display: block;
+  width: 7px;
+  height: 7px;
   border-radius: var(--radius-full);
   flex-shrink: 0;
   transition: background-color var(--transition-base);
+  opacity: 1;
+  transform: translateY(0);
 }
 
-.status-icon.pending {
+.token-details-dialog .source-status .status-icon.pending {
   background-color: var(--text-muted, #484f58);
 }
 
-.status-icon.loading {
+.token-details-dialog .source-status .status-icon.loading {
   background-color: var(--warning-color, #d29922);
   animation: status-pulse 1s ease-in-out infinite;
 }
 
-.status-icon.success {
+.token-details-dialog .source-status .status-icon.success {
   background-color: var(--success-color, #3fb950);
 }
 
-.status-icon.error {
+.token-details-dialog .source-status .status-icon.error {
   background-color: var(--danger, #f85149);
 }
 
-.status-icon.cached {
+.token-details-dialog .source-status .status-icon.cached {
   background-color: var(--primary-color, #58a6ff);
 }
 
@@ -624,12 +631,13 @@
   }
 }
 
-.status-label {
+.token-details-dialog .source-status .status-label {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
-  font-size: 0.55rem;
+  font-size: 0.58rem;
+  line-height: 1;
 }
 
 /* Clickable transaction rows (whole row links to Solscan tx) */

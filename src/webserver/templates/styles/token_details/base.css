@@ -198,12 +198,18 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 22px;
 }
 
 .last-updated {
-  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  font-size: 0.68rem;
+  line-height: 1;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
   white-space: nowrap;
 }
 

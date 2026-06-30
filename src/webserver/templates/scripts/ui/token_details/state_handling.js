@@ -19,6 +19,16 @@ const CONNECTION_TEXT = {
   offline: "Offline — retrying…",
 };
 
+function backendLooksOffline() {
+  if (navigator.onLine === false) return true;
+  if (document.documentElement.hasAttribute("data-backend-offline")) return true;
+  try {
+    return window.__SB_CONNECTIVITY__?.isBackendOnline?.() === false;
+  } catch {
+    return false;
+  }
+}
+
 export function applyStateHandlingMixin(DialogClass) {
   const proto = DialogClass.prototype;
 
@@ -56,7 +66,7 @@ export function applyStateHandlingMixin(DialogClass) {
       return;
     }
     this._consecutiveFailures = (this._consecutiveFailures || 0) + 1;
-    if (this._consecutiveFailures >= 2) {
+    if (this._consecutiveFailures >= 2 && backendLooksOffline()) {
       this._setConnectionState(navigator.onLine === false ? "offline" : "reconnecting");
     }
   };
@@ -68,13 +78,15 @@ export function applyStateHandlingMixin(DialogClass) {
    * @param {"online"|"reconnecting"|"offline"} state
    */
   proto._setConnectionState = function (state) {
-    if (this._connectionState === state) return;
+    if (this._connectionState === state && state !== "online") return;
     this._connectionState = state;
     const chip = this.dialogEl?.querySelector(".tdd-connection-chip");
     if (!chip) return;
     chip.dataset.state = state;
     if (state === "online") {
       chip.hidden = true;
+      const text = chip.querySelector(".tdd-connection-text");
+      if (text) text.textContent = "";
       return;
     }
     chip.hidden = false;

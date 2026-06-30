@@ -259,6 +259,10 @@ export class TokenDetailsDialog {
       // Use requestManager with high priority for token detail fetch
       const newData = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}`, {
         priority: "high",
+        // Uncached tokens can spend >10s trying external sources before the
+        // backend returns a normal NOT_FOUND payload. Do not misclassify that
+        // slow-but-valid path as a reconnect.
+        timeout: this._initialLoadComplete ? 10000 : 25000,
       });
 
       if (newData) {
@@ -331,8 +335,8 @@ export class TokenDetailsDialog {
         const content = this.dialogEl?.querySelector(`[data-tab-content="${this.currentTab}"]`);
         this._renderTabError(content, { title: "Couldn't load token data" });
       } else {
-        // Already showing good data — treat this as a transient connection blip.
-        // Keep the last good content; the connection chip surfaces the state.
+        // Already showing good data. Keep the last good content; only show the
+        // connection chip if the global backend watcher has confirmed an outage.
         this._recordPollOutcome(false);
       }
     } finally {
@@ -788,7 +792,7 @@ export class TokenDetailsDialog {
               </div>
               <div class="tdd-connection-chip" data-state="online" role="status" hidden>
                 <span class="tdd-connection-dot" aria-hidden="true"></span>
-                <span class="tdd-connection-text">Reconnecting…</span>
+                <span class="tdd-connection-text"></span>
               </div>
               <div class="last-updated" id="lastUpdatedTime"></div>
             </div>
