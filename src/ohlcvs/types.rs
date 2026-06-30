@@ -635,3 +635,31 @@ impl Default for MonitorStats {
         }
     }
 }
+
+/// Per-timeframe data + backfill state for a token, surfaced to the chart
+/// status indicator so the dialog can show exactly which timeframes have data
+/// and whether the 30-day backfill finished.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OhlcvTimeframeStatus {
+    pub timeframe: String,
+    pub candles: i64,
+    pub backfill_complete: bool,
+    pub latest_timestamp: Option<i64>,
+}
+
+/// Overall OHLCV process status for one token (monitoring + per-timeframe data).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OhlcvStatus {
+    pub mint: String,
+    /// Currently in the active monitoring set (data collection running).
+    pub monitored: bool,
+    /// Any timeframe has at least one stored candle.
+    pub has_data: bool,
+    /// Total candles across all timeframes.
+    pub total_candles: i64,
+    /// Finest timeframe that currently has candles (chart default target).
+    pub best_timeframe: Option<String>,
+    /// True once every timeframe's 30-day backfill is complete.
+    pub backfill_complete: bool,
+    pub timeframes: Vec<OhlcvTimeframeStatus>,
+}

@@ -183,43 +183,53 @@ impl OhlcvMonitor {
             active.insert(mint.clone(), config.clone());
         }
 
-        // Trigger multi-timeframe backfill for new token
+        // Trigger multi-timeframe backfill for new token.
+        // Guard with try_start_backfill so repeated add_token calls for the same
+        // mint (every token-detail dialog open calls add_token_monitoring, plus
+        // the monitor/sync loops) do NOT spawn concurrent full backfills of all 7
+        // timeframes — that previously hammered GeckoTerminal far past its limit
+        // and produced bursts of "Rate limit exceeded" warnings for the same
+        // mint+timeframe within the same second.
         if let Some(pool) = config.get_best_pool() {
-            let runner = self.clone();
-            let mint_owned = mint.clone();
-            let pool_owned = pool.address.clone();
-            let priority_owned = priority;
+            if self.try_start_backfill(&mint) {
+                let runner = self.clone();
+                let mint_owned = mint.clone();
+                let pool_owned = pool.address.clone();
+                let priority_owned = priority;
 
-            tokio::spawn(async move {
-                logger::debug(
-                    LogTag::Ohlcv,
-                    &format!(
-                        "Triggering 30-day backfill for new token mint={} pool={} priority={:?}",
-                        mint_owned, pool_owned, priority_owned
-                    ),
-                );
+                tokio::spawn(async move {
+                    logger::debug(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Triggering 30-day backfill for new token mint={} pool={} priority={:?}",
+                            mint_owned, pool_owned, priority_owned
+                        ),
+                    );
 
-                match runner
-                    .backfill_all_timeframes_30d(&mint_owned, &pool_owned, priority_owned)
-                    .await
-                {
-                    Ok(total) => {
-                        logger::debug(
-                            LogTag::Ohlcv,
-                            &format!(
-                                "Backfill completed for mint={} total_candles={}",
-                                mint_owned, total
-                            ),
-                        );
+                    match runner
+                        .backfill_all_timeframes_30d(&mint_owned, &pool_owned, priority_owned)
+                        .await
+                    {
+                        Ok(total) => {
+                            logger::debug(
+                                LogTag::Ohlcv,
+                                &format!(
+                                    "Backfill completed for mint={} total_candles={}",
+                                    mint_owned, total
+                                ),
+                            );
+                        }
+                        Err(e) => {
+                            logger::warning(
+                                LogTag::Ohlcv,
+                                &format!("Backfill failed for mint={mint_owned}: {e}"),
+                            );
+                        }
                     }
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::Ohlcv,
-                            &format!("Backfill failed for mint={mint_owned}: {e}"),
-                        );
-                    }
-                }
-            });
+
+                    runner.finish_backfill(&mint_owned);
+                });
+            }
         } else {
             logger::warning(
                 LogTag::Ohlcv,
@@ -308,6 +318,11 @@ impl OhlcvMonitor {
     /// Force refresh for a token
     pub async fn force_refresh(&self, mint: &str) -> OhlcvResult<()> {
         self.fetch_token_data(mint).await
+    }
+
+    /// Whether the given mint is currently in the active monitoring set.
+    pub async fn is_monitored(&self, mint: &str) -> bool {
+        self.active_tokens.read().await.contains_key(mint)
     }
 
     /// Get monitoring statistics

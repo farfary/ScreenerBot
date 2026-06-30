@@ -102,6 +102,27 @@ pub async fn get_token_ohlcv(
     Ok(Json(points))
 }
 
+/// GET /api/tokens/:mint/ohlcv/status
+///
+/// Per-timeframe OHLCV process status for a token: which timeframes have data,
+/// candle counts, backfill completion, and whether the token is being monitored.
+/// Feeds the chart status indicator so the dialog can show data state without
+/// firing a probe request per timeframe.
+pub async fn get_token_ohlcv_status(
+    Path(mint): Path<String>,
+) -> Result<Json<crate::ohlcvs::OhlcvStatus>, StatusCode> {
+    match crate::ohlcvs::get_status(&mint).await {
+        Ok(status) => Ok(Json(status)),
+        Err(e) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!("mint={mint} ohlcv_status_error error={e}"),
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 /// POST /api/tokens/:mint/ohlcv/refresh
 ///
 /// Force refresh OHLCV data (immediate fetch outside scheduled monitoring)

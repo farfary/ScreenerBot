@@ -67,6 +67,13 @@ pub struct GeckoTerminalClient {
     enabled: bool,
     /// Consecutive 429 error count for exponential backoff
     consecutive_429s: AtomicU32,
+    /// When set, no request may be SENT before this instant. Set on a 429 and
+    /// enforced inside `execute_request` while holding the rate-limiter guard, so
+    /// the backoff actually slows the outbound rate for ALL callers (the old
+    /// inline sleep only paused the single caller after the guard was released,
+    /// so concurrent backfills kept firing every min_interval and the 429s never
+    /// subsided).
+    penalty_until: Arc<tokio::sync::Mutex<Option<Instant>>>,
 }
 
 impl GeckoTerminalClient {
@@ -105,6 +112,7 @@ impl GeckoTerminalClient {
             timeout: Duration::from_secs(timeout_seconds),
             enabled,
             consecutive_429s: AtomicU32::new(0),
+            penalty_until: Arc::new(tokio::sync::Mutex::new(None)),
         })
     }
 
@@ -139,6 +147,18 @@ impl GeckoTerminalClient {
             .acquire()
             .await
             .map_err(|e| format!("Rate limiter error: {e}"))?;
+
+        // Honor any active 429 penalty BEFORE sending, while still holding the
+        // limiter guard so every caller serializes behind the backoff window.
+        {
+            let penalty = *self.penalty_until.lock().await;
+            if let Some(until) = penalty {
+                let now = Instant::now();
+                if until > now {
+                    tokio::time::sleep(until - now).await;
+                }
+            }
+        }
 
         let start = Instant::now();
         let response_result = builder.timeout(self.timeout).send().await;
@@ -182,11 +202,18 @@ impl GeckoTerminalClient {
                     format!("HTTP {status}: {body}"),
                 )
                 .await;
-            // Exponential backoff on 429: 10s, 20s, 40s, 60s max
+            // Exponential backoff on 429: 10s, 20s, 40s, 60s max. Record it as a
+            // shared penalty window (enforced in execute_request) rather than
+            // sleeping only this caller — otherwise concurrent requests keep
+            // firing every min_interval and the rate limit never recovers.
             if status.as_u16() == 429 {
                 let count = self.consecutive_429s.fetch_add(1, Ordering::Relaxed) + 1;
                 let backoff_secs = (10u64 * (1u64 << (count - 1).min(3))).min(60);
-                tokio::time::sleep(Duration::from_secs(backoff_secs)).await;
+                let until = Instant::now() + Duration::from_secs(backoff_secs);
+                let mut penalty = self.penalty_until.lock().await;
+                if penalty.map_or(true, |existing| until > existing) {
+                    *penalty = Some(until);
+                }
             }
             return Err(format!("GeckoTerminal API error {status}: {body}"));
         }
@@ -195,6 +222,7 @@ impl GeckoTerminalClient {
             Ok(value) => {
                 self.stats.record_request(true, elapsed).await;
                 self.consecutive_429s.store(0, Ordering::Relaxed);
+                *self.penalty_until.lock().await = None;
                 Ok(value)
             }
             Err(err) => {

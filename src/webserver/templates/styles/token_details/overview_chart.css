@@ -722,12 +722,130 @@
   flex-shrink: 0;
 }
 
-.chart-title {
+/* Chart data-status indicator (replaces the old "Price Chart" label). A small
+   chip whose dot color reflects OHLCV data state; hovering/focusing reveals a
+   per-timeframe breakdown tooltip. */
+.chart-data-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  cursor: default;
+  outline: none;
+}
+
+.chart-data-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.chart-data-label {
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.chart-data-indicator[data-state="ready"] .chart-data-dot {
+  background: var(--success-color);
+  box-shadow: 0 0 6px var(--success-color);
+}
+
+.chart-data-indicator[data-state="partial"] .chart-data-dot,
+.chart-data-indicator[data-state="collecting"] .chart-data-dot {
+  background: var(--warning-color);
+  box-shadow: 0 0 6px var(--warning-color);
+}
+
+.chart-data-indicator[data-state="none"] .chart-data-dot {
+  background: var(--text-tertiary);
+}
+
+/* Hover/focus tooltip with the per-timeframe breakdown. */
+.chart-data-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-dropdown);
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgb(0, 0, 0, 0.4));
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.chart-data-indicator:hover .chart-data-tip,
+.chart-data-indicator:focus-visible .chart-data-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.chart-data-tip-head {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.chart-data-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+}
+
+.chart-data-tip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.chart-data-tip-dot[data-state="ready"] {
+  background: var(--success-color);
+}
+
+.chart-data-tip-dot[data-state="partial"] {
+  background: var(--warning-color);
+}
+
+.chart-data-tip-tf {
+  color: var(--text-secondary);
+  min-width: 32px;
+}
+
+.chart-data-tip-count {
+  margin-left: auto;
+  color: var(--text-primary);
+}
+
+.chart-data-tip-foot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.66rem;
+  color: var(--text-tertiary);
+}
+
+.chart-data-tip-empty {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
 }
 
 /* OHLCV Display in chart header */

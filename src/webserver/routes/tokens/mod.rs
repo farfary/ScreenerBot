@@ -24,7 +24,7 @@ use favorites::{add_favorite, get_favorites, remove_favorite, update_favorite};
 use list::{filter_tokens, get_tokens_stats, search_tokens};
 use ohlcv::{
     deprioritize_token_ohlcv, focus_token, get_token_dexscreener, get_token_ohlcv,
-    get_token_transactions, refresh_token_ohlcv, unfocus_token,
+    get_token_ohlcv_status, get_token_transactions, refresh_token_ohlcv, unfocus_token,
 };
 
 // Re-export get_tokens_list as pub(crate) since it's used by dashboard routes
@@ -51,6 +51,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tokens/:mint/analysis", get(get_token_analysis))
         .route("/tokens/:mint/refresh", post(refresh_token_data))
         .route("/tokens/:mint/ohlcv", get(get_token_ohlcv))
+        .route("/tokens/:mint/ohlcv/status", get(get_token_ohlcv_status))
         .route("/tokens/:mint/ohlcv/refresh", post(refresh_token_ohlcv))
         .route(
             "/tokens/:mint/ohlcv/deprioritize",

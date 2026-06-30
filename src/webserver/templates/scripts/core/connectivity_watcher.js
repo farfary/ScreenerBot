@@ -26,6 +26,7 @@ const state = {
   timer: null,
   overlay: null,
   started: false,
+  probeInFlight: false,
 };
 
 function buildOverlay() {
@@ -93,6 +94,10 @@ function markFailure() {
 }
 
 async function checkHealth(force) {
+  // Coalesce concurrent probes — observed-failure bursts (e.g. several dialog
+  // requests timing out at once) must not each spawn their own health probe.
+  if (state.probeInFlight) return;
+  state.probeInFlight = true;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   let ok = false;
@@ -107,6 +112,7 @@ async function checkHealth(force) {
     ok = false;
   } finally {
     clearTimeout(timeoutId);
+    state.probeInFlight = false;
   }
 
   if (ok) markSuccess();
@@ -146,9 +152,15 @@ function instrumentFetch() {
       // Ignore deliberate aborts (cancelled polls / navigation) — they are not
       // connectivity failures.
       if (isSameOrigin && err && err.name !== "AbortError") {
-        markFailure();
-        // Confirm fast via the health endpoint rather than waiting for the tick.
-        if (!state.online) schedule();
+        // A single observed request failure is NOT proof the backend is down —
+        // heavy views (the token dialog fires ~10 parallel requests, incl. 7
+        // OHLCV probes) can have an individual request time out while the server
+        // is perfectly healthy. So instead of counting this toward the offline
+        // streak directly (which flipped the "Reconnecting" overlay on 2 such
+        // blips), confirm authoritatively against /api/health. Only the probe
+        // decides offline — a genuinely dead backend fails it too, so detection
+        // stays fast.
+        if (!state.probeInFlight) checkHealth(true);
       }
       throw err;
     }

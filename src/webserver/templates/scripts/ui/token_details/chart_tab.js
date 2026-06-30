@@ -108,6 +108,9 @@ export function applyChartTabMixin(DialogClass) {
     this._chartInitialLoadPending = true;
     await this._loadChartData(mint, this.currentTimeframe, true); // Initial load - set view
 
+    // Populate the data-status indicator (fire-and-forget; never blocks render).
+    this._updateDataIndicator(mint);
+
     this._startChartPolling();
 
     // Handle timeframe button clicks
@@ -344,6 +347,70 @@ export function applyChartTabMixin(DialogClass) {
     timeframeButtons
       .querySelectorAll(".timeframe-btn")
       .forEach((b) => b.classList.toggle("active", b.dataset.tf === tf));
+  };
+
+  /**
+   * Fetch and render the chart data-status indicator (the small "Data" chip that
+   * replaced the "Price Chart" label). Shows an at-a-glance state — ready /
+   * collecting / no data — with a hover tooltip breaking down candle counts and
+   * backfill completion per timeframe. Cheap single endpoint; safe to call on
+   * each chart poll. Never throws.
+   * @private
+   * @param {string} mint
+   */
+  proto._updateDataIndicator = async function (mint) {
+    const indicator = this.dialogEl?.querySelector("#chartDataIndicator");
+    const tip = this.dialogEl?.querySelector("#chartDataTip");
+    if (!indicator) return;
+
+    let status;
+    try {
+      status = await requestManager.fetch(`/api/tokens/${mint}/ohlcv/status`, {
+        priority: "low",
+      });
+    } catch {
+      return; // transient — keep the last rendered state
+    }
+    if (!status || typeof status !== "object") return;
+
+    // Overall state: ready (any data + backfill done) / collecting (monitored or
+    // partial data) / none (nothing yet).
+    let state = "none";
+    let summary = "No chart data yet";
+    if (status.has_data && status.backfill_complete) {
+      state = "ready";
+      summary = "Data ready";
+    } else if (status.has_data) {
+      state = "partial";
+      summary = "Collecting history…";
+    } else if (status.monitored) {
+      state = "collecting";
+      summary = "Fetching data…";
+    }
+    indicator.dataset.state = state;
+    indicator.setAttribute("aria-label", `Chart data: ${summary}`);
+
+    if (tip) {
+      const rows = (status.timeframes || [])
+        .map((tf) => {
+          const has = tf.candles > 0;
+          const dot = has ? (tf.backfill_complete ? "ready" : "partial") : "none";
+          const count = has ? `${tf.candles}` : "—";
+          return `
+            <div class="chart-data-tip-row">
+              <span class="chart-data-tip-dot" data-state="${dot}"></span>
+              <span class="chart-data-tip-tf">${tf.timeframe.toUpperCase()}</span>
+              <span class="chart-data-tip-count">${count}</span>
+            </div>`;
+        })
+        .join("");
+      tip.innerHTML = `
+        <div class="chart-data-tip-head">${summary}</div>
+        <div class="chart-data-tip-list">${rows}</div>
+        <div class="chart-data-tip-foot">${status.total_candles || 0} candles · ${
+          status.monitored ? "monitoring" : "idle"
+        }</div>`;
+    }
   };
 
   /**

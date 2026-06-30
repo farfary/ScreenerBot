@@ -125,7 +125,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         Ok(duration) => Some(duration.as_secs() as i64),
         Err(_) => None,
     };
-    let pool_infos: Vec<TokenPoolInfo> = pool_descriptors
+    let mut pool_infos: Vec<TokenPoolInfo> = pool_descriptors
         .into_iter()
         .map(|pool| {
             let token_role = if let Some(mint_key) = mint_pubkey {
@@ -223,6 +223,55 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
             price_sol.is_some()
         ),
     );
+
+    // Fallback pool entry: the on-chain pool analyzer registry only knows pools
+    // for tokens it has actively discovered, so tokens opened from the billboard
+    // or search (enriched purely from external APIs) have an empty pools[] even
+    // though we DO have a real SOL pair used for pricing. When the registry has
+    // nothing, synthesize a single descriptor from the pool the price calculator
+    // used (or the last-used pool stored on the token) so the Pools tab shows the
+    // canonical SOL pair instead of "No pools found". Pricing always uses a
+    // single highest-liquidity SOL pair, so the quote is WSOL.
+    if pool_infos.is_empty() {
+        // Prefer the on-chain pool the price calculator used; fall back to the
+        // last-used pool stored on the token, then to the DexScreener pair the
+        // token was enriched from (available immediately for API/billboard tokens
+        // even before the pool service has priced them on-chain).
+        let mut fallback_pool = pool_address
+            .clone()
+            .or_else(|| token.pool_price_last_used_pool.clone());
+        let mut fallback_dex = pool_dex.clone();
+
+        if fallback_pool.is_none() {
+            let mint_clone = mint.clone();
+            if let Ok(Some(ds)) = tokio::task::spawn_blocking(move || {
+                get_global_database().and_then(|db| db.get_dexscreener_data(&mint_clone).ok().flatten())
+            })
+            .await
+            {
+                if let Some(pair) = ds.pair_address.filter(|p| !p.trim().is_empty()) {
+                    fallback_pool = Some(pair);
+                    fallback_dex = fallback_dex.or(ds.dex_id);
+                }
+            }
+        }
+
+        if let Some(pool_id) = fallback_pool {
+            pool_infos.push(TokenPoolInfo {
+                pool_id,
+                program: fallback_dex.unwrap_or_else(|| format!("{:?}", token.data_source)),
+                base_mint: mint.clone(),
+                quote_mint: crate::constants::SOL_MINT.to_string(),
+                token_role: "base".to_string(),
+                paired_mint: crate::constants::SOL_MINT.to_string(),
+                liquidity_usd: token.liquidity_usd.filter(|v| v.is_finite()),
+                volume_h24_usd: token.volume_h24.filter(|v| v.is_finite()),
+                reserve_accounts: Vec::new(),
+                is_canonical: true,
+                last_updated_unix: now_unix_opt,
+            });
+        }
+    }
 
     // Get security info from Token struct
     let security_start = std::time::Instant::now();

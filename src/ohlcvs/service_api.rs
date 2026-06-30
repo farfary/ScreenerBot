@@ -4,8 +4,8 @@ use super::database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
 use super::priorities::ActivityType;
 use super::service::{get_or_init_service, OhlcvServiceImpl, OHLCV_SERVICE};
 use super::types::{
-    Candle, MonitorStats, OhlcvError, OhlcvMetrics, OhlcvResult, PoolMetadata, Priority, Timeframe,
-    TimeframeBundle,
+    Candle, MonitorStats, OhlcvError, OhlcvMetrics, OhlcvResult, OhlcvStatus, PoolMetadata,
+    Priority, Timeframe, TimeframeBundle,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -119,6 +119,11 @@ pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
     tokio::task::spawn_blocking(move || service_clone.has_data(&mint_owned))
         .await
         .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
+}
+
+pub async fn get_status(mint: &str) -> OhlcvResult<OhlcvStatus> {
+    let service = get_or_init_service().await?;
+    service.get_status(mint).await
 }
 
 pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String>> {

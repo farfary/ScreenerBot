@@ -176,6 +176,39 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
     }
 
+    /// Per-timeframe candle count and latest timestamp for a token, in a single
+    /// grouped query. Used by the chart status indicator so the dialog can show
+    /// exactly which timeframes have data without firing one probe request per
+    /// timeframe. Returns (timeframe_str, candle_count, latest_timestamp).
+    pub fn get_timeframe_summary(&self, mint: &str) -> OhlcvResult<Vec<(String, i64, Option<i64>)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT timeframe, COUNT(*) AS cnt, MAX(timestamp) AS latest
+                 FROM ohlcv_candles
+                 WHERE mint = ?1
+                 GROUP BY timeframe",
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
+
+        let rows = stmt
+            .query_map(params![mint], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                ))
+            })
+            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
+    }
+
     /// Check if backfill is complete for timeframe
     pub fn is_backfill_complete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<bool> {
         let conn = self

@@ -26,7 +26,13 @@ export function renderOverviewTab(token, options = {}) {
         <div class="chart-container">
           <div class="chart-header">
             <div class="chart-header-left">
-              <span class="chart-title">Price Chart</span>
+              <div class="chart-data-indicator" id="chartDataIndicator" tabindex="0" role="status">
+                <span class="chart-data-dot"></span>
+                <span class="chart-data-label">Data</span>
+                <div class="chart-data-tip" id="chartDataTip" role="tooltip">
+                  <div class="chart-data-tip-empty">Checking data…</div>
+                </div>
+              </div>
               ${renderHintTrigger("tokenDetails.chart")}
             </div>
             <div class="chart-ohlcv-display" id="chartOhlcvDisplay">

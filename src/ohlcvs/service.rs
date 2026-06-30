@@ -9,7 +9,8 @@ use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::monitor::OhlcvMonitor;
 use crate::ohlcvs::types::{
-    Candle, OhlcvError, OhlcvResult, Timeframe, TimeframeBundle, BUNDLE_CANDLE_COUNT,
+    Candle, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe, TimeframeBundle,
+    BUNDLE_CANDLE_COUNT,
 };
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
@@ -212,6 +213,57 @@ impl OhlcvServiceImpl {
 
     pub(super) fn get_mints_with_data(&self, mints: &[String]) -> OhlcvResult<HashSet<String>> {
         self.db.get_mints_with_data(mints)
+    }
+
+    /// Assemble the per-timeframe OHLCV process status for a token (monitoring
+    /// state + candle counts + backfill flags). Cheap: one grouped candle query
+    /// plus per-timeframe backfill flags from the monitor config row.
+    pub(super) async fn get_status(&self, mint: &str) -> OhlcvResult<OhlcvStatus> {
+        let summary = self.db.get_timeframe_summary(mint)?;
+        let monitored = self.monitor.is_monitored(mint).await;
+
+        let mut total_candles = 0i64;
+        let mut best_timeframe: Option<String> = None;
+        let mut all_backfilled = true;
+        let mut timeframes = Vec::with_capacity(7);
+
+        // Timeframe::all() is finest→coarsest, so the first one with candles is
+        // the finest available — the chart's preferred default target.
+        for tf in Timeframe::all() {
+            let tf_str = tf.as_str().to_string();
+            let (candles, latest) = summary
+                .iter()
+                .find(|(name, _, _)| name == &tf_str)
+                .map(|(_, count, latest)| (*count, *latest))
+                .unwrap_or((0, None));
+
+            let backfill_complete = self.db.is_backfill_complete(mint, tf).unwrap_or(false);
+            if !backfill_complete {
+                all_backfilled = false;
+            }
+
+            total_candles += candles;
+            if candles > 0 && best_timeframe.is_none() {
+                best_timeframe = Some(tf_str.clone());
+            }
+
+            timeframes.push(OhlcvTimeframeStatus {
+                timeframe: tf_str,
+                candles,
+                backfill_complete,
+                latest_timestamp: latest,
+            });
+        }
+
+        Ok(OhlcvStatus {
+            mint: mint.to_string(),
+            monitored,
+            has_data: total_candles > 0,
+            total_candles,
+            best_timeframe,
+            backfill_complete: all_backfilled,
+            timeframes,
+        })
     }
 
     /// Get timeframe bundle from cache (non-blocking, cache-only)

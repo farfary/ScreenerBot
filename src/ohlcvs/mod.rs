@@ -13,8 +13,8 @@ mod types;
 
 pub use types::{
     Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvMetrics, OhlcvResult,
-    PoolConfig, PoolMetadata, Priority, Timeframe, TimeframeBundle, TokenOhlcvConfig,
-    BUNDLE_CANDLE_COUNT,
+    OhlcvStatus, OhlcvTimeframeStatus, PoolConfig, PoolMetadata, Priority, Timeframe,
+    TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 
 pub use database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
@@ -70,6 +70,10 @@ pub async fn get_monitor_stats() -> Option<MonitorStats> {
 
 pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
     service_api::has_data(mint).await
+}
+
+pub async fn get_status(mint: &str) -> OhlcvResult<OhlcvStatus> {
+    service_api::get_status(mint).await
 }
 
 pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String>> {
