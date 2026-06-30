@@ -272,7 +272,7 @@ config_struct! {
             impact: "critical",
             category: "Sources",
         })]
-        endpoint: String = "https://screenerbot.io/ohlcv".to_owned(),
+        endpoint: String = "https://screenerbot.io/data".to_owned(),
         /// HTTP request timeout in seconds (keep short so a miss falls back fast)
         #[metadata(field_metadata! {
             label: "Timeout (seconds)",
