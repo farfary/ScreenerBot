@@ -11,6 +11,11 @@ import { $ } from "../core/dom.js";
 import { openBillboard } from "./billboard_dialog.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
+// Side-effect import: registers the global "screenerbot:open-token-details"
+// window listener. The billboard row appears on pages (e.g. Home) that do not
+// otherwise load the token details dialog module, so without this the
+// open-token-details event a card click dispatches would have no listener.
+import "./token_details_dialog.js";
 
 const CONTAINER_ID = "billboard-row";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes

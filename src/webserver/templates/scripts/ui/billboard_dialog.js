@@ -7,6 +7,10 @@
 
 import { $ } from "../core/dom.js";
 import { openExternal } from "../core/utils.js";
+// Side-effect import: registers the global "screenerbot:open-token-details"
+// window listener so cards open the token details dialog even when the billboard
+// dialog is opened from a page (e.g. Home) that doesn't otherwise load it.
+import "./token_details_dialog.js";
 
 const DIALOG_ID = "billboard-dialog";
 
