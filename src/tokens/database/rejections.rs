@@ -285,7 +285,17 @@ impl TokenDatabase {
     pub fn get_recent_rejections(
         &self,
         limit: usize,
-    ) -> TokenResult<Vec<(String, String, String, i64, Option<String>, Option<String>, Option<String>)>> {
+    ) -> TokenResult<
+        Vec<(
+            String,
+            String,
+            String,
+            i64,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )>,
+    > {
         let conn = self
             .conn
             .lock()

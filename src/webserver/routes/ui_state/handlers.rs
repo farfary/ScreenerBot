@@ -1,13 +1,9 @@
-use axum::{
-    extract::Json,
-    http::StatusCode,
-    response::Response,
-};
+use axum::{extract::Json, http::StatusCode, response::Response};
 use std::collections::HashMap;
 
+use super::types::*;
 use crate::paths;
 use crate::webserver::utils::{error_response, success_response};
-use super::types::*;
 
 /// Load the UI state store from disk
 fn load_store() -> UiStateStore {

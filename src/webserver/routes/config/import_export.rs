@@ -194,8 +194,8 @@ fn apply_section_to_config(
                 .map_err(|e| format!("Invalid SolPriceConfig: {e}"))?;
         }
         "network" => {
-            cfg.network = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid NetworkConfig: {e}"))?;
+            cfg.network =
+                serde_json::from_value(value).map_err(|e| format!("Invalid NetworkConfig: {e}"))?;
         }
         "events" => {
             cfg.events =

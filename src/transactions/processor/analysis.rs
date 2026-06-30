@@ -692,136 +692,137 @@ impl TransactionProcessor {
                 }
 
                 // Map PnL main component if present
-                let swap_pnl_info =
-                    if let Some(main) = &analysis.pnl.main_pnl {
-                        let swap_type = match direction {
-            crate::transactions::analyzer::classify::SwapDirection::SolToToken => "Buy",
-            crate::transactions::analyzer::classify::SwapDirection::TokenToSol =>
-              "Sell",
-            crate::transactions::analyzer::classify::SwapDirection::TokenToToken =>
-              "Swap",
-          };
-
-                        let fees_total = analysis.pnl.fee_breakdown.total_fees;
-                        let status_str = if transaction.success {
-                            "Success"
-                        } else {
-                            "Failed"
-                        };
-
-                        // Use the rent-excluded swap amount derived above (output_ui for
-                        // sells = WSOL credited to the wallet; input_ui for buys = SOL
-                        // spent). main.sol_amount_* comes from a naive "largest SOL change
-                        // anywhere" heuristic that picks up ATA rent reclaim (~0.00204 SOL)
-                        // and reports wildly wrong proceeds (e.g. a -99% exit looking like
-                        // -59%). For token->token, fall back to the analyzer value.
-                        let corrected_sol_amount = match direction {
-                            crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
-                                input_ui
-                            }
-                            crate::transactions::analyzer::classify::SwapDirection::TokenToSol => {
-                                output_ui
-                            }
-                            crate::transactions::analyzer::classify::SwapDirection::TokenToToken => {
-                                main.sol_amount_adjusted.abs()
-                            }
-                        };
-                        let token_amt = main.token_amount.abs();
-                        let corrected_price = if token_amt > 0.0 {
-                            corrected_sol_amount / token_amt
-                        } else {
-                            main.price_per_token
-                        };
-
-                        Some(SwapPnLInfo {
-                            token_mint: primary_mint.clone(),
-                            token_symbol: String::new(),
-                            swap_type: swap_type.to_string(),
-                            sol_amount: corrected_sol_amount,
-                            token_amount: token_amt,
-                            calculated_price_sol: corrected_price,
-                            timestamp: transaction.timestamp,
-                            signature: transaction.signature.clone(),
-                            router: router_str.clone(),
-                            fee_sol: analysis.pnl.fee_breakdown.base_fee,
-                            // CRITICAL FIX: Use total_rent_paid for all swap types
-                            // ATAs can be created in any swap (e.g., WSOL ATA during sells)
-                            // The verifier expects this value to normalize CSV amounts that include rent
-                            ata_rents: analysis.ata.rent_summary.total_rent_paid,
-                            effective_sol_spent: if matches!(
-                                direction,
-                                crate::transactions::analyzer::classify::SwapDirection::SolToToken
-                            ) {
-                                corrected_sol_amount
-                            } else {
-                                0.0
-                            },
-                            effective_sol_received: if matches!(
-                                direction,
-                                crate::transactions::analyzer::classify::SwapDirection::TokenToSol
-                            ) {
-                                corrected_sol_amount
-                            } else {
-                                0.0
-                            },
-                            ata_created_count: transaction
-                                .ata_analysis
-                                .as_ref()
-                                .map(|a| a.total_ata_creations)
-                                .unwrap_or_default(),
-                            ata_closed_count: transaction
-                                .ata_analysis
-                                .as_ref()
-                                .map(|a| a.total_ata_closures)
-                                .unwrap_or_default(),
-                            slot: transaction.slot,
-                            status: status_str.to_string(),
-                            // Legacy fields for debug tools
-                            sol_spent: if matches!(
-                                direction,
-                                crate::transactions::analyzer::classify::SwapDirection::SolToToken
-                            ) {
-                                corrected_sol_amount
-                            } else {
-                                0.0
-                            },
-                            sol_received: if matches!(
-                                direction,
-                                crate::transactions::analyzer::classify::SwapDirection::TokenToSol
-                            ) {
-                                corrected_sol_amount
-                            } else {
-                                0.0
-                            },
-                            tokens_bought: if matches!(
-                                direction,
-                                crate::transactions::analyzer::classify::SwapDirection::SolToToken
-                            ) {
-                                main.token_amount.abs()
-                            } else {
-                                0.0
-                            },
-                            tokens_sold: if matches!(
-                                direction,
-                                crate::transactions::analyzer::classify::SwapDirection::TokenToSol
-                            ) {
-                                main.token_amount.abs()
-                            } else {
-                                0.0
-                            },
-                            net_sol_change: analysis
-                                .balance
-                                .sol_changes
-                                .values()
-                                .map(|c| c.change)
-                                .sum(),
-                            estimated_token_value_sol: None,
-                            estimated_pnl_sol: None,
-                            fees_paid_sol: fees_total,
-                        })
-                    } else {
-                        None
+                let swap_pnl_info = if let Some(main) = &analysis.pnl.main_pnl {
+                    let swap_type = match direction {
+                        crate::transactions::analyzer::classify::SwapDirection::SolToToken => "Buy",
+                        crate::transactions::analyzer::classify::SwapDirection::TokenToSol => {
+                            "Sell"
+                        }
+                        crate::transactions::analyzer::classify::SwapDirection::TokenToToken => {
+                            "Swap"
+                        }
                     };
+
+                    let fees_total = analysis.pnl.fee_breakdown.total_fees;
+                    let status_str = if transaction.success {
+                        "Success"
+                    } else {
+                        "Failed"
+                    };
+
+                    // Use the rent-excluded swap amount derived above (output_ui for
+                    // sells = WSOL credited to the wallet; input_ui for buys = SOL
+                    // spent). main.sol_amount_* comes from a naive "largest SOL change
+                    // anywhere" heuristic that picks up ATA rent reclaim (~0.00204 SOL)
+                    // and reports wildly wrong proceeds (e.g. a -99% exit looking like
+                    // -59%). For token->token, fall back to the analyzer value.
+                    let corrected_sol_amount = match direction {
+                        crate::transactions::analyzer::classify::SwapDirection::SolToToken => {
+                            input_ui
+                        }
+                        crate::transactions::analyzer::classify::SwapDirection::TokenToSol => {
+                            output_ui
+                        }
+                        crate::transactions::analyzer::classify::SwapDirection::TokenToToken => {
+                            main.sol_amount_adjusted.abs()
+                        }
+                    };
+                    let token_amt = main.token_amount.abs();
+                    let corrected_price = if token_amt > 0.0 {
+                        corrected_sol_amount / token_amt
+                    } else {
+                        main.price_per_token
+                    };
+
+                    Some(SwapPnLInfo {
+                        token_mint: primary_mint.clone(),
+                        token_symbol: String::new(),
+                        swap_type: swap_type.to_string(),
+                        sol_amount: corrected_sol_amount,
+                        token_amount: token_amt,
+                        calculated_price_sol: corrected_price,
+                        timestamp: transaction.timestamp,
+                        signature: transaction.signature.clone(),
+                        router: router_str.clone(),
+                        fee_sol: analysis.pnl.fee_breakdown.base_fee,
+                        // CRITICAL FIX: Use total_rent_paid for all swap types
+                        // ATAs can be created in any swap (e.g., WSOL ATA during sells)
+                        // The verifier expects this value to normalize CSV amounts that include rent
+                        ata_rents: analysis.ata.rent_summary.total_rent_paid,
+                        effective_sol_spent: if matches!(
+                            direction,
+                            crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                        ) {
+                            corrected_sol_amount
+                        } else {
+                            0.0
+                        },
+                        effective_sol_received: if matches!(
+                            direction,
+                            crate::transactions::analyzer::classify::SwapDirection::TokenToSol
+                        ) {
+                            corrected_sol_amount
+                        } else {
+                            0.0
+                        },
+                        ata_created_count: transaction
+                            .ata_analysis
+                            .as_ref()
+                            .map(|a| a.total_ata_creations)
+                            .unwrap_or_default(),
+                        ata_closed_count: transaction
+                            .ata_analysis
+                            .as_ref()
+                            .map(|a| a.total_ata_closures)
+                            .unwrap_or_default(),
+                        slot: transaction.slot,
+                        status: status_str.to_string(),
+                        // Legacy fields for debug tools
+                        sol_spent: if matches!(
+                            direction,
+                            crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                        ) {
+                            corrected_sol_amount
+                        } else {
+                            0.0
+                        },
+                        sol_received: if matches!(
+                            direction,
+                            crate::transactions::analyzer::classify::SwapDirection::TokenToSol
+                        ) {
+                            corrected_sol_amount
+                        } else {
+                            0.0
+                        },
+                        tokens_bought: if matches!(
+                            direction,
+                            crate::transactions::analyzer::classify::SwapDirection::SolToToken
+                        ) {
+                            main.token_amount.abs()
+                        } else {
+                            0.0
+                        },
+                        tokens_sold: if matches!(
+                            direction,
+                            crate::transactions::analyzer::classify::SwapDirection::TokenToSol
+                        ) {
+                            main.token_amount.abs()
+                        } else {
+                            0.0
+                        },
+                        net_sol_change: analysis
+                            .balance
+                            .sol_changes
+                            .values()
+                            .map(|c| c.change)
+                            .sum(),
+                        estimated_token_value_sol: None,
+                        estimated_pnl_sol: None,
+                        fees_paid_sol: fees_total,
+                    })
+                } else {
+                    None
+                };
 
                 transaction.token_swap_info = Some(token_swap_info.clone());
                 transaction.token_info = Some(token_swap_info);

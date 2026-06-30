@@ -3,7 +3,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::transactions::{database::TransactionCursor, database::TransactionListFilters, database::TransactionListRow};
+use crate::transactions::{
+    database::TransactionCursor, database::TransactionListFilters, database::TransactionListRow,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ListTransactionsRequest {

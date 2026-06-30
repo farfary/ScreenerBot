@@ -4,8 +4,8 @@
 //! metadata (base/quote tokens, reserve accounts), validate pool structure and
 //! data, and prepare account lists for fetching.
 
-use super::types::{PoolDescriptor, ProgramKind};
 use super::types::PoolMintVaultInfo;
+use super::types::{PoolDescriptor, ProgramKind};
 use super::utils::is_sol_mint;
 
 use crate::events::{record_safe, Event, EventCategory, Severity};

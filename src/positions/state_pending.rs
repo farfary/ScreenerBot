@@ -1,7 +1,7 @@
 //! Pending swap state — tracks in-flight partial exits and DCA swaps with persistence.
 
-pub use super::types::{PendingDcaSwap, PendingPartialExit};
 use super::db;
+pub use super::types::{PendingDcaSwap, PendingPartialExit};
 use crate::logger::{self, LogTag};
 use std::{collections::HashMap, sync::LazyLock};
 use tokio::sync::RwLock;

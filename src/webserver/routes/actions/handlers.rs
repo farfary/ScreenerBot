@@ -13,8 +13,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio_stream::StreamExt as _;
 
-use crate::webserver::state::AppState;
 use super::types::*;
+use crate::webserver::state::AppState;
 
 /// Server-Sent Events stream for real-time action updates
 pub(super) async fn stream_actions(

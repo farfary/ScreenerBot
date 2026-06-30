@@ -1,7 +1,7 @@
 //! UI state route — persists and retrieves user interface state (collapsed panels, etc.).
 
-mod types;
 mod handlers;
+mod types;
 
 pub use types::*;
 

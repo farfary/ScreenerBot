@@ -2,13 +2,13 @@ use axum::response::Json;
 use axum::Json as AxumJson;
 use std::collections::HashMap;
 
+use super::types::*;
 use crate::logger::{self, LogTag};
 use crate::wallet::{
     clear_dashboard_api_cache, get_current_wallet_status, get_dashboard_cache_metrics,
     get_flow_cache_stats, get_snapshot_token_balances, get_wallet_dashboard_data,
     refresh_dashboard_cache,
 };
-use super::types::*;
 
 /// Get current wallet balance
 pub(super) async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
@@ -163,19 +163,19 @@ async fn enrich_token_holdings(
 
     // Latest price in SOL per mint, sourced from the assembled token's market data
     // (None for mints without market data — they simply show no value).
-    let price_fetches = mints
-        .iter()
-        .map(|mint| async move {
-            let price = crate::tokens::database::get_full_token_async(mint)
-                .await
-                .ok()
-                .flatten()
-                .map(|t| t.price_sol)
-                .filter(|p| *p > 0.0);
-            (mint.clone(), price)
-        });
-    let price_map: HashMap<String, Option<f64>> =
-        futures::future::join_all(price_fetches).await.into_iter().collect();
+    let price_fetches = mints.iter().map(|mint| async move {
+        let price = crate::tokens::database::get_full_token_async(mint)
+            .await
+            .ok()
+            .flatten()
+            .map(|t| t.price_sol)
+            .filter(|p| *p > 0.0);
+        (mint.clone(), price)
+    });
+    let price_map: HashMap<String, Option<f64>> = futures::future::join_all(price_fetches)
+        .await
+        .into_iter()
+        .collect();
 
     token_balances
         .iter()

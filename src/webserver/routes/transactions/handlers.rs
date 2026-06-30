@@ -64,7 +64,9 @@ pub(super) async fn get_transaction_detail(
 }
 
 /// POST /api/transactions/summary - Get transaction summary/KPIs
-pub(super) async fn get_summary(State(state): State<Arc<AppState>>) -> Json<TransactionSummaryResponse> {
+pub(super) async fn get_summary(
+    State(state): State<Arc<AppState>>,
+) -> Json<TransactionSummaryResponse> {
     let db = match get_transaction_database().await {
         Some(db) => db,
         None => {

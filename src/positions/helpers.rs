@@ -382,5 +382,3 @@ pub async fn sync_position_to_database(position: &Position) -> Result<(), String
         Ok(())
     }
 }
-
-

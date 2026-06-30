@@ -82,7 +82,11 @@ pub(super) fn collect_entries<'a>(
     }
 }
 
-pub(super) fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &FilteringSnapshot) {
+pub(super) fn apply_filters(
+    items: &mut Vec<&Token>,
+    query: &FilteringQuery,
+    snapshot: &FilteringSnapshot,
+) {
     // quick maps for derived flags
     let flags: HashMap<&str, (&TokenEntry, bool, bool, bool)> = snapshot
         .tokens
@@ -176,7 +180,11 @@ pub(super) fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, sna
     }
 }
 
-pub(super) fn sort_tokens(items: &mut Vec<&Token>, sort_key: TokenSortKey, direction: SortDirection) {
+pub(super) fn sort_tokens(
+    items: &mut Vec<&Token>,
+    sort_key: TokenSortKey,
+    direction: SortDirection,
+) {
     let ascending = matches!(direction, SortDirection::Asc);
     items.sort_by(|a, b| {
         let ordering = match sort_key {

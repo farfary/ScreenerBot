@@ -196,7 +196,9 @@ where
                 let status = resp.status();
                 if status.is_success() {
                     return resp.text().await.map_err(|e| {
-                        Error::network_error(format!("Failed to read Jupiter {label} response: {e}"))
+                        Error::network_error(format!(
+                            "Failed to read Jupiter {label} response: {e}"
+                        ))
                     });
                 }
                 let is_transient = status.as_u16() == 429 || status.is_server_error();
@@ -487,7 +489,8 @@ impl SwapRouter for JupiterRouter {
             if let Some(ref key) = api_key {
                 req = req.header("x-api-key", key.clone());
             }
-            req.header("Content-Type", "application/json").json(&swap_req)
+            req.header("Content-Type", "application/json")
+                .json(&swap_req)
         })
         .await?;
 

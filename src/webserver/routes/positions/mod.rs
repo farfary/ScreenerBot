@@ -42,7 +42,10 @@ pub fn routes() -> Router<Arc<AppState>> {
             post(force_close_position),
         )
         .route("/positions/:position_id/archive", post(archive_position))
-        .route("/positions/:position_id/unarchive", post(unarchive_position))
+        .route(
+            "/positions/:position_id/unarchive",
+            post(unarchive_position),
+        )
         .route(
             "/positions/:position_id/manual-management",
             post(set_manual_management),

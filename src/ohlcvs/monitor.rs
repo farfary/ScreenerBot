@@ -6,10 +6,10 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
+use crate::ohlcvs::database::OhlcvTokenStatus;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
 use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
-use crate::ohlcvs::database::OhlcvTokenStatus;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
     Candle, MintGapAggregate, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvResult,
@@ -938,12 +938,8 @@ impl OhlcvMonitor {
 
                 if stored_count > 0 {
                     // Update cache
-                    self.cache.put(
-                        mint,
-                        None,
-                        Timeframe::Minute1,
-                        candles.clone(),
-                    )?;
+                    self.cache
+                        .put(mint, None, Timeframe::Minute1, candles.clone())?;
 
                     // Mark successful fetch
                     {
@@ -971,7 +967,8 @@ impl OhlcvMonitor {
                         LogTag::Ohlcv,
                         &format!(
                             "SolanaTracker OHLCV: {} candles for {} (no pool needed)",
-                            stored_count, &mint[..mint.len().min(12)]
+                            stored_count,
+                            &mint[..mint.len().min(12)]
                         ),
                     );
                 }

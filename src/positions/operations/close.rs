@@ -244,7 +244,8 @@ pub async fn close_position_direct(
                         Err(e2) => {
                             last_err = Some(format!(
                                 "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
-                                i + 1, slippage
+                                i + 1,
+                                slippage
                             ));
                             continue;
                         }

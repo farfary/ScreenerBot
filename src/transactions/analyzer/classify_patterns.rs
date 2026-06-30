@@ -1,8 +1,8 @@
 //! Pattern detection and classification helpers for transaction flow analysis.
 
 use super::classify::{
-    ClassifiedType, EdgeType, FlowAnalysis, FlowEdge, FlowNode, FlowPattern, NodeType,
-    PatternType, SwapDirection,
+    ClassifiedType, EdgeType, FlowAnalysis, FlowEdge, FlowNode, FlowPattern, NodeType, PatternType,
+    SwapDirection,
 };
 use super::dex::DexAnalysis;
 use super::AnalysisConfidence;

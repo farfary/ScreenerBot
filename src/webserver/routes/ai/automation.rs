@@ -77,9 +77,11 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
     }
 
     // Validate schedule value
-    if let Err(e) =
-        crate::ai::scheduled::database::calculate_next_run(&req.schedule_type, &req.schedule_value, None)
-    {
+    if let Err(e) = crate::ai::scheduled::database::calculate_next_run(
+        &req.schedule_type,
+        &req.schedule_value,
+        None,
+    ) {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_SCHEDULE",

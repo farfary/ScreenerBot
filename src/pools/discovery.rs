@@ -386,10 +386,8 @@ impl PoolDiscovery {
                             .filter(|p| p.is_sol_pair && p.pool_address != canonical_address)
                             .collect();
                         sorted_pools.sort_by(|a, b| {
-                            let metric_a =
-                                crate::tokens::calculate_pool_metric(a);
-                            let metric_b =
-                                crate::tokens::calculate_pool_metric(b);
+                            let metric_a = crate::tokens::calculate_pool_metric(a);
+                            let metric_b = crate::tokens::calculate_pool_metric(b);
                             metric_b
                                 .partial_cmp(&metric_a)
                                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -505,9 +503,7 @@ impl PoolDiscovery {
                     program_id: Pubkey::default(),
                     base_mint,
                     quote_mint,
-                    liquidity_usd: effective_canonical_pool
-                        .liquidity_usd
-                        .unwrap_or_default(),
+                    liquidity_usd: effective_canonical_pool.liquidity_usd.unwrap_or_default(),
                     volume_h24_usd: effective_canonical_pool.volume_h24.unwrap_or_default(),
                 });
                 sent_count += 1;

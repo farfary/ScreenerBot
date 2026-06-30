@@ -308,7 +308,10 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
         return;
     }
 
-    logger::debug(LogTag::SolPrice, "Fetching SOL price (DexScreener -> GeckoTerminal -> Jupiter)");
+    logger::debug(
+        LogTag::SolPrice,
+        "Fetching SOL price (DexScreener -> GeckoTerminal -> Jupiter)",
+    );
 
     match fetch_sol_price().await {
         Ok((price, source)) => {
@@ -359,7 +362,10 @@ async fn fetch_sol_price() -> Result<(f64, &'static str), String> {
     match fetch_from_dexscreener().await {
         Ok(price) => return Ok((price, "dexscreener")),
         Err(e) => {
-            logger::debug(LogTag::SolPrice, &format!("DexScreener SOL price failed: {e}"));
+            logger::debug(
+                LogTag::SolPrice,
+                &format!("DexScreener SOL price failed: {e}"),
+            );
             errors.push(format!("dexscreener: {e}"));
         }
     }
@@ -386,7 +392,10 @@ async fn fetch_sol_price() -> Result<(f64, &'static str), String> {
         Err(e) => errors.push(format!("jupiter: {e}")),
     }
 
-    Err(format!("All SOL price sources failed: {}", errors.join("; ")))
+    Err(format!(
+        "All SOL price sources failed: {}",
+        errors.join("; ")
+    ))
 }
 
 /// PRIMARY: fetch SOL/USD from DexScreener — the `priceUsd` of the highest-liquidity

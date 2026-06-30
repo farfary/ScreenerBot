@@ -1,6 +1,6 @@
 //! Common argument parsing patterns used across binaries.
 
-use super::{has_arg, get_arg_value};
+use super::{get_arg_value, has_arg};
 
 /// Checks for help flags.
 pub fn is_help_requested() -> bool {

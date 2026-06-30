@@ -36,7 +36,11 @@ pub async fn load_positions_with_filters(
         _ => {
             // "all" excludes archived so they only appear in the Archived tab.
             let positions_guard = positions::POSITIONS.read().await;
-            positions_guard.iter().filter(|p| !p.archived).cloned().collect()
+            positions_guard
+                .iter()
+                .filter(|p| !p.archived)
+                .cloned()
+                .collect()
         }
     };
 

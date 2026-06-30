@@ -1,7 +1,7 @@
 //! Update download — streaming download with progress tracking and checksum verification.
 
 use super::types::*;
-use super::{UPDATE_STATE, DOWNLOAD_TIMEOUT_SECS};
+use super::{DOWNLOAD_TIMEOUT_SECS, UPDATE_STATE};
 use crate::logger::{self, LogTag};
 use futures_util::StreamExt;
 use std::time::Duration;

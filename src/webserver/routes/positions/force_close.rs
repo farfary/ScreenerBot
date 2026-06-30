@@ -126,9 +126,7 @@ pub(super) async fn force_close_position(
     if let Err(e) = positions::update_position(&db_position).await {
         logger::error(
             LogTag::Positions,
-            &format!(
-                "Force-close: failed to persist position {position_id} to database: {e}"
-            ),
+            &format!("Force-close: failed to persist position {position_id} to database: {e}"),
         );
         // Continue anyway — in-memory state is already updated and semaphore should be released
     }

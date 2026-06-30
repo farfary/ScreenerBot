@@ -1,7 +1,10 @@
 use axum::response::Json;
 use std::collections::HashMap;
 
-use crate::pools::db::{list_blacklisted_accounts, list_blacklisted_pools, BlacklistedAccountRecord, BlacklistedPoolRecord};
+use crate::pools::db::{
+    list_blacklisted_accounts, list_blacklisted_pools, BlacklistedAccountRecord,
+    BlacklistedPoolRecord,
+};
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
 

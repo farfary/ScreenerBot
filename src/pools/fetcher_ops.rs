@@ -190,10 +190,8 @@ impl AccountFetcher {
 
         // Convert to vector and batch, filtering out native SOL mint which is not a
         // real on-chain account (RPC returns null for it, wasting batch slots)
-        let sol_mint_pubkey =
-            Pubkey::from_str(crate::constants::SOL_MINT).unwrap();
-        let system_program_pubkey =
-            Pubkey::from_str(crate::constants::SYSTEM_PROGRAM_ID).unwrap();
+        let sol_mint_pubkey = Pubkey::from_str(crate::constants::SOL_MINT).unwrap();
+        let system_program_pubkey = Pubkey::from_str(crate::constants::SYSTEM_PROGRAM_ID).unwrap();
         let drained_accounts: Vec<Pubkey> = pending_accounts
             .drain()
             .filter(|key| *key != sol_mint_pubkey && *key != system_program_pubkey)
@@ -741,12 +739,11 @@ impl AccountFetcher {
                     {
                         // Price was calculated before but may have expired from cache.
                         // Check if the target token still has a valid cached price.
-                        let target_mint =
-                            if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
-                                pool_descriptor.quote_mint.to_string()
-                            } else {
-                                pool_descriptor.base_mint.to_string()
-                            };
+                        let target_mint = if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
+                            pool_descriptor.quote_mint.to_string()
+                        } else {
+                            pool_descriptor.base_mint.to_string()
+                        };
                         if !super::cache::is_price_fresh(&target_mint) {
                             // Price expired — reset flag and re-trigger calculation
                             entry.0.calculation_requested = false;

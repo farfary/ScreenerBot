@@ -194,8 +194,7 @@ async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<S
     } else {
         "https://api.jup.ag"
     };
-    let mut req = client
-        .post(format!("{api_base}/swap/v1/swap"));
+    let mut req = client.post(format!("{api_base}/swap/v1/swap"));
     if !api_key.is_empty() {
         req = req.header("x-api-key", api_key);
     }

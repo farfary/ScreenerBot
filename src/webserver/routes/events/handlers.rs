@@ -4,7 +4,9 @@ use chrono;
 use super::types::*;
 
 /// Get latest events (head) with cursor
-pub(super) async fn get_events_head(axum::extract::Query(params): axum::extract::Query<HeadQuery>) -> Json<EventsListResponse> {
+pub(super) async fn get_events_head(
+    axum::extract::Query(params): axum::extract::Query<HeadQuery>,
+) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
     let category = params
         .category
@@ -95,7 +97,9 @@ pub(super) async fn get_events_head(axum::extract::Query(params): axum::extract:
 }
 
 /// Get events newer than a cursor (since)
-pub(super) async fn get_events_since(axum::extract::Query(params): axum::extract::Query<SinceQuery>) -> Json<EventsListResponse> {
+pub(super) async fn get_events_since(
+    axum::extract::Query(params): axum::extract::Query<SinceQuery>,
+) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
     let category = params
         .category
@@ -171,7 +175,9 @@ pub(super) async fn get_events_since(axum::extract::Query(params): axum::extract
 }
 
 /// Get events older than a cursor (before)
-pub(super) async fn get_events_before(axum::extract::Query(params): axum::extract::Query<BeforeQuery>) -> Json<EventsListResponse> {
+pub(super) async fn get_events_before(
+    axum::extract::Query(params): axum::extract::Query<BeforeQuery>,
+) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
     let category = params
         .category
@@ -250,7 +256,9 @@ pub(super) async fn get_events_before(axum::extract::Query(params): axum::extrac
 
 /// Get available event categories with counts
 pub(super) async fn get_categories() -> Json<serde_json::Value> {
-    let counts = crate::events::count_by_category(24).await.unwrap_or_default();
+    let counts = crate::events::count_by_category(24)
+        .await
+        .unwrap_or_default();
 
     Json(serde_json::json!({
         "categories": counts,

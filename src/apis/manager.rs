@@ -52,9 +52,8 @@ impl ApiManager {
         // enabled/disabled independently via their own config sections. The
         // endpoint used is whichever side actually consumes the client right
         // now (OHLCV's if it needs it, else the tokens source default).
-        let discovery_needs_gt = geckoterminal_cfg.enabled
-            && discovery_enabled
-            && discovery_cfg.geckoterminal.enabled;
+        let discovery_needs_gt =
+            geckoterminal_cfg.enabled && discovery_enabled && discovery_cfg.geckoterminal.enabled;
         let ohlcv_needs_gt = ohlcv_sources_cfg.geckoterminal.enabled;
         let geckoterminal_enabled =
             geckoterminal_cfg.enabled && (discovery_needs_gt || ohlcv_needs_gt);

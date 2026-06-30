@@ -59,14 +59,19 @@ pub fn client_builder() -> reqwest::ClientBuilder {
 /// A default reqwest client with the detected proxy applied. Drop-in replacement
 /// for `reqwest::Client::new()`; falls back to a direct client if the build fails.
 pub fn client() -> reqwest::Client {
-    client_builder().build().unwrap_or_else(|_| reqwest::Client::new())
+    client_builder()
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
 }
 
 /// Log the detected proxy once at startup (call from boot).
 pub fn log_detected_proxy() {
     match proxy_url() {
         Some(url) => logger::info(LogTag::System, &format!("Network proxy detected: {url}")),
-        None => logger::info(LogTag::System, "No network proxy detected (direct connections)"),
+        None => logger::info(
+            LogTag::System,
+            "No network proxy detected (direct connections)",
+        ),
     }
 }
 
@@ -95,7 +100,9 @@ pub async fn connect_ws(
 
 /// Parse "http://host:port" → (host, port). Returns None for non-http schemes.
 fn parse_http_proxy(proxy: &str) -> Option<(String, u16)> {
-    let rest = proxy.strip_prefix("http://").or_else(|| proxy.strip_prefix("https://"))?;
+    let rest = proxy
+        .strip_prefix("http://")
+        .or_else(|| proxy.strip_prefix("https://"))?;
     let authority = rest.split('/').next().unwrap_or(rest);
     let (host, port) = authority.rsplit_once(':')?;
     Some((host.to_owned(), port.parse().ok()?))

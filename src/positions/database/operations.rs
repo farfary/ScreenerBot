@@ -643,8 +643,8 @@ impl PositionsDatabase {
 
         // Fallback formats (no timezone → assume UTC)
         const FALLBACK_FORMATS: &[&str] = &[
-            "%Y-%m-%dT%H:%M:%S",   // ISO8601 without tz
-            "%Y-%m-%d %H:%M:%S",   // space-separated
+            "%Y-%m-%dT%H:%M:%S",    // ISO8601 without tz
+            "%Y-%m-%d %H:%M:%S",    // space-separated
             "%Y-%m-%d %H:%M:%S%.f", // space-separated with fractional seconds
         ];
 
@@ -661,7 +661,9 @@ impl PositionsDatabase {
             }
         }
 
-        Err(format!("Failed to parse datetime '{s}' with any known format"))
+        Err(format!(
+            "Failed to parse datetime '{s}' with any known format"
+        ))
     }
 
     /// Helper function to convert database row to Position struct

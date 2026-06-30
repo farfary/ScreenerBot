@@ -216,7 +216,10 @@ impl OhlcvServiceImpl {
 
     /// Get timeframe bundle from cache (non-blocking, cache-only)
     /// Returns None if bundle is stale or missing (triggers background refresh)
-    pub(super) async fn get_timeframe_bundle(&self, mint: &str) -> OhlcvResult<Option<TimeframeBundle>> {
+    pub(super) async fn get_timeframe_bundle(
+        &self,
+        mint: &str,
+    ) -> OhlcvResult<Option<TimeframeBundle>> {
         let cache = self.bundle_cache.read().await;
 
         if let Some((bundle, cached_at)) = cache.get(mint) {
@@ -446,7 +449,11 @@ impl OhlcvServiceImpl {
 
     /// Store bundle in cache with LRU eviction
     /// Takes bundle by value to avoid unnecessary cloning
-    pub(super) async fn store_bundle(&self, mint: String, bundle: TimeframeBundle) -> OhlcvResult<()> {
+    pub(super) async fn store_bundle(
+        &self,
+        mint: String,
+        bundle: TimeframeBundle,
+    ) -> OhlcvResult<()> {
         let mut cache = self.bundle_cache.write().await;
 
         // LRU eviction: if cache is full, remove oldest entry
@@ -547,4 +554,3 @@ impl OhlcvService {
         service.has_data(mint)
     }
 }
-

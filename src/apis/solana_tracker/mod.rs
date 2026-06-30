@@ -42,7 +42,13 @@ impl SolanaTrackerClient {
         rate_limit: usize,
         timeout_seconds: u64,
     ) -> Result<Self, String> {
-        Self::with_base_url(enabled, api_key, rate_limit, timeout_seconds, BASE_URL.to_owned())
+        Self::with_base_url(
+            enabled,
+            api_key,
+            rate_limit,
+            timeout_seconds,
+            BASE_URL.to_owned(),
+        )
     }
 
     /// Construct a client with an explicit API base URL (used when an
@@ -106,11 +112,7 @@ impl SolanaTrackerClient {
         Ok(())
     }
 
-    async fn get_json<T: DeserializeOwned>(
-        &self,
-        endpoint: &str,
-        path: &str,
-    ) -> Result<T, String> {
+    async fn get_json<T: DeserializeOwned>(&self, endpoint: &str, path: &str) -> Result<T, String> {
         self.ensure_enabled(endpoint)?;
 
         let guard = self
@@ -247,10 +249,7 @@ impl SolanaTrackerClient {
     }
 
     /// Search tokens by name, symbol, or mint address.
-    pub async fn search_tokens(
-        &self,
-        query: &str,
-    ) -> Result<Vec<types::SearchResult>, String> {
+    pub async fn search_tokens(&self, query: &str) -> Result<Vec<types::SearchResult>, String> {
         // Build URL via reqwest::Url to get proper query-parameter encoding
         let base = format!("{}/search", self.base_url);
         let url = reqwest::Url::parse_with_params(&base, &[("query", query)])

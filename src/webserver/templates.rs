@@ -337,7 +337,6 @@ pub fn config_content() -> String {
     render_page(CONFIG_PAGE)
 }
 
-
 pub fn trader_content() -> String {
     // The Strategies subtab embeds the full strategy-editor markup (formerly its
     // own page) into the trader page via the {{STRATEGIES_PANEL}} placeholder.

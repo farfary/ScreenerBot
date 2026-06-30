@@ -142,7 +142,12 @@ pub async fn monitor_entries(
                     pool_tokens.len(),
                     passed_mints.len(),
                     available_tokens.len(),
-                    available_tokens.iter().take(5).map(|m| &m[..8.min(m.len())]).collect::<Vec<_>>().join(",")
+                    available_tokens
+                        .iter()
+                        .take(5)
+                        .map(|m| &m[..8.min(m.len())])
+                        .collect::<Vec<_>>()
+                        .join(",")
                 ),
             );
         }

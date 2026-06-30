@@ -17,5 +17,8 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(handlers::get_all_features))
         .route("/tool/{tool_id}", get(handlers::check_tool))
-        .route("/trading/{feature_id}", get(handlers::check_trading_feature))
+        .route(
+            "/trading/{feature_id}",
+            get(handlers::check_trading_feature),
+        )
 }

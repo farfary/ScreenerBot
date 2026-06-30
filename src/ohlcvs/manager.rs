@@ -345,6 +345,7 @@ impl PoolManager {
         let dex_label = pools::extract_dex_label(pool);
         let liquidity = pools::extract_pool_liquidity(pool);
 
+        let was_existing = existing.is_some();
         let mut config = existing.unwrap_or_else(|| {
             PoolConfig::new(pool.pool_address.clone(), dex_label.clone(), liquidity)
         });
@@ -365,6 +366,15 @@ impl PoolManager {
 
         if let Some(canonical_address) = canonical {
             config.is_default = canonical_address == config.address;
+        }
+
+        // When re-discovering an existing pool, reset its failure_count so it
+        // gets a fresh chance. The pool service just confirmed the pool exists
+        // and is valid — stale failure counts from a previous session (or from
+        // transient API errors) should not permanently block OHLCV fetching.
+        // If the API is still failing, the count will build up again naturally.
+        if was_existing && !config.is_healthy() {
+            config.failure_count = 0;
         }
 
         config

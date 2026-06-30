@@ -4,8 +4,10 @@
 //! Handles conversation flow, tool execution, and permission management.
 
 use super::database;
+pub use super::types::{
+    ChatContext, ChatRequest, ChatResponse, ToolCallInfo, ToolCallStatus, ToolMode,
+};
 use super::types::{ConfirmationState, PendingConfirmation, ToolCall};
-pub use super::types::{ChatContext, ChatRequest, ChatResponse, ToolCallInfo, ToolCallStatus, ToolMode};
 use crate::ai::tools::{create_tool_registry, ToolRegistry};
 use crate::ai::types::AiError;
 use crate::apis::llm::ChatMessage as LlmChatMessage;
@@ -125,7 +127,10 @@ impl ConfirmationManager {
         confirmation_id
     }
 
-    pub(super) async fn get_confirmation(&self, confirmation_id: &str) -> Option<ConfirmationState> {
+    pub(super) async fn get_confirmation(
+        &self,
+        confirmation_id: &str,
+    ) -> Option<ConfirmationState> {
         let mut pending = self.pending.write().await;
         let state = pending.get(confirmation_id)?;
 

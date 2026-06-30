@@ -220,18 +220,20 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
             // Build recent rejections list
             let recent_rejections: Vec<RecentRejectionEntry> = recent_raw
                 .into_iter()
-                .map(|(mint, reason, source, ts, symbol, name, image_url)| RecentRejectionEntry {
-                    mint,
-                    symbol,
-                    name,
-                    image_url,
-                    display_label: get_rejection_display_label(&reason),
-                    reason,
-                    source,
-                    rejected_at: DateTime::from_timestamp(ts, 0)
-                        .unwrap_or_else(|| Utc::now())
-                        .to_rfc3339(),
-                })
+                .map(
+                    |(mint, reason, source, ts, symbol, name, image_url)| RecentRejectionEntry {
+                        mint,
+                        symbol,
+                        name,
+                        image_url,
+                        display_label: get_rejection_display_label(&reason),
+                        reason,
+                        source,
+                        rejected_at: DateTime::from_timestamp(ts, 0)
+                            .unwrap_or_else(|| Utc::now())
+                            .to_rfc3339(),
+                    },
+                )
                 .collect();
 
             // Calculate rates

@@ -36,7 +36,10 @@ pub async fn is_blacklisted(mint: &str) -> bool {
 ///
 /// Uses tokens module as single source of truth (no cache layer).
 /// Priority: Emergency (highest)
-pub async fn check_blacklist_exit(position: &Position, current_price: f64) -> Option<TradeDecision> {
+pub async fn check_blacklist_exit(
+    position: &Position,
+    current_price: f64,
+) -> Option<TradeDecision> {
     if is_blacklisted(&position.mint).await {
         logger::warning(
             LogTag::Trader,

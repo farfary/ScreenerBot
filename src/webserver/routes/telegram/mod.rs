@@ -40,8 +40,5 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/discovery/select/:chat_id",
             post(handlers::select_discovered_chat),
         )
-        .route(
-            "/discovery/clear",
-            post(handlers::clear_discovered_chats),
-        )
+        .route("/discovery/clear", post(handlers::clear_discovered_chats))
 }

@@ -88,7 +88,10 @@ pub async fn set_position_manual_management_db(
 ) -> Result<bool, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.set_position_manual_management(id, manual_management).await,
+        Some(db) => {
+            db.set_position_manual_management(id, manual_management)
+                .await
+        }
         None => Err("Positions database not initialized".to_owned()),
     }
 }

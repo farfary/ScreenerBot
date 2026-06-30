@@ -577,13 +577,15 @@ pub async fn force_update_token(
     let (dex_result, gecko_result, rug_result) = tokio::join!(
         // DexScreener market data
         async {
-            let permit =
-                match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_dexscreener_batch())
-                    .await
-                {
-                    Ok(Ok(p)) => Some(p),
-                    _ => None,
-                };
+            let permit = match tokio::time::timeout(
+                ON_DEMAND_PERMIT_WAIT,
+                coord_ref.acquire_dexscreener_batch(),
+            )
+            .await
+            {
+                Ok(Ok(p)) => Some(p),
+                _ => None,
+            };
             let result = dexscreener::fetch_dexscreener_data(&mint_str, db_ref).await;
             if let Some(p) = permit {
                 if result.is_ok() && matches!(result, Ok(Some(_))) {
@@ -594,13 +596,15 @@ pub async fn force_update_token(
         },
         // GeckoTerminal market data
         async {
-            let permit =
-                match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_geckoterminal())
-                    .await
-                {
-                    Ok(Ok(p)) => Some(p),
-                    _ => None,
-                };
+            let permit = match tokio::time::timeout(
+                ON_DEMAND_PERMIT_WAIT,
+                coord_ref.acquire_geckoterminal(),
+            )
+            .await
+            {
+                Ok(Ok(p)) => Some(p),
+                _ => None,
+            };
             let result = geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref).await;
             if let Some(p) = permit {
                 if result.is_ok() && matches!(result, Ok(Some(_))) {
@@ -612,7 +616,9 @@ pub async fn force_update_token(
         // Rugcheck security data
         async {
             let permit =
-                match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_rugcheck()).await {
+                match tokio::time::timeout(ON_DEMAND_PERMIT_WAIT, coord_ref.acquire_rugcheck())
+                    .await
+                {
                     Ok(Ok(p)) => Some(p),
                     _ => None,
                 };

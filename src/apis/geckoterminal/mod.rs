@@ -16,8 +16,8 @@
 //! 11. /tokens/info_recently_updated - Recent token updates (global)
 //! 12. /networks/{network}/pools/{pool_address}/trades - Recent pool trades
 
-pub mod types;
 mod endpoints;
+pub mod types;
 
 // Re-export types for external use
 pub use self::types::{

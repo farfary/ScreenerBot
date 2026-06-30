@@ -367,7 +367,17 @@ pub async fn get_rejection_stats_with_time_filter_async(
 /// Async: get rejected tokens list
 pub async fn get_recent_rejections_async(
     limit: usize,
-) -> TokenResult<Vec<(String, String, String, i64, Option<String>, Option<String>, Option<String>)>> {
+) -> TokenResult<
+    Vec<(
+        String,
+        String,
+        String,
+        i64,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )>,
+> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 

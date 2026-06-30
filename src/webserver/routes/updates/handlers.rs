@@ -1,13 +1,9 @@
-use axum::{
-    http::StatusCode,
-    response::Response,
-    Json,
-};
 use crate::{
     logger::{self, LogTag},
     version,
     webserver::utils::{error_response, success_response},
 };
+use axum::{http::StatusCode, response::Response, Json};
 
 use super::types::*;
 

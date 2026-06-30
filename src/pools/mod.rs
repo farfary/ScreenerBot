@@ -24,9 +24,9 @@ pub mod database;
 pub use database as db;
 
 // Re-export fetcher types for debug bins
+pub mod fetcher;
 mod fetcher_ops;
 mod fetcher_types;
-pub mod fetcher;
 
 pub mod decoders;
 pub mod service;

@@ -622,4 +622,3 @@ pub async fn execute_query(query: FilteringQuery) -> Result<FilteringQueryResult
 pub async fn get_stats() -> Result<FilteringStatsSnapshot, String> {
     global_store().get_stats().await
 }
-

@@ -3,11 +3,11 @@
 //! Private implementation methods for ChatEngine.
 //! Separated from chat_engine.rs for maintainability.
 
+use super::database;
 use super::engine::{ChatEngine, JSON_CODE_BLOCK_PATTERN, LOOSE_JSON_PATTERN};
 use super::types::{
     ChatContext, PendingConfirmation, ToolCall, ToolCallInfo, ToolCallStatus, ToolMode,
 };
-use super::database;
 use crate::ai::tools::ToolResult;
 use crate::ai::types::AiError;
 use crate::apis::llm::{

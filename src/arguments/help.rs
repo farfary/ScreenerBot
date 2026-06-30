@@ -1,7 +1,7 @@
 //! Help display and debug info output.
 
-use crate::logger::{self, LogTag};
 use super::{get_cmd_args, modes::*};
+use crate::logger::{self, LogTag};
 
 /// Displays the help menu with all available flags and their descriptions.
 pub fn print_help() {

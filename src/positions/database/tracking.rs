@@ -90,7 +90,11 @@ impl PositionsDatabase {
                 LogTag::Positions,
                 &format!(
                     "Position {id} manual management {}",
-                    if manual_management { "enabled" } else { "disabled" }
+                    if manual_management {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    }
                 ),
             );
         }

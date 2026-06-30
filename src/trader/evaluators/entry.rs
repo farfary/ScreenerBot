@@ -34,13 +34,25 @@ pub async fn evaluate_entry_for_token(
 ) -> Result<Option<TradeDecision>, String> {
     // Early exit: Force stop is active
     if crate::global::is_force_stopped() {
-        crate::logger::debug(crate::logger::LogTag::Trader, &format!("[ENTRY-EVAL] {}: blocked by force_stop", &token_mint[..8.min(token_mint.len())]));
+        crate::logger::debug(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by force_stop",
+                &token_mint[..8.min(token_mint.len())]
+            ),
+        );
         return Ok(None);
     }
 
     // Early exit: Loss limit reached
     if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
-        crate::logger::info(crate::logger::LogTag::Trader, &format!("[ENTRY-EVAL] {}: blocked by loss_limit", &token_mint[..8.min(token_mint.len())]));
+        crate::logger::info(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by loss_limit",
+                &token_mint[..8.min(token_mint.len())]
+            ),
+        );
         return Ok(None);
     }
 
@@ -48,31 +60,62 @@ pub async fn evaluate_entry_for_token(
     if let Some(unhealthy) =
         crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener", "rugcheck"]).await
     {
-        crate::logger::info(crate::logger::LogTag::Trader, &format!("[ENTRY-EVAL] {}: blocked by unhealthy: {}", &token_mint[..8.min(token_mint.len())], unhealthy));
+        crate::logger::info(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by unhealthy: {}",
+                &token_mint[..8.min(token_mint.len())],
+                unhealthy
+            ),
+        );
         return Err(format!("Unhealthy endpoints: {unhealthy}"));
     }
 
     // 2. Position limits - check if we can open more positions
     if !safety::check_position_limits().await? {
-        crate::logger::debug(crate::logger::LogTag::Trader, &format!("[ENTRY-EVAL] {}: blocked by position_limits", &token_mint[..8.min(token_mint.len())]));
+        crate::logger::debug(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by position_limits",
+                &token_mint[..8.min(token_mint.len())]
+            ),
+        );
         return Ok(None); // Hit position limit
     }
 
     // 3. Existing position check - prevent duplicate entries
     if safety::has_open_position(token_mint).await? {
-        crate::logger::debug(crate::logger::LogTag::Trader, &format!("[ENTRY-EVAL] {}: blocked by existing_position", &token_mint[..8.min(token_mint.len())]));
+        crate::logger::debug(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by existing_position",
+                &token_mint[..8.min(token_mint.len())]
+            ),
+        );
         return Ok(None); // Already have position
     }
 
     // 4. Re-entry cooldown - prevent immediate re-entry after exit
     if safety::is_in_reentry_cooldown(token_mint).await? {
-        crate::logger::info(crate::logger::LogTag::Trader, &format!("[ENTRY-EVAL] {}: blocked by reentry_cooldown", &token_mint[..8.min(token_mint.len())]));
+        crate::logger::info(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by reentry_cooldown",
+                &token_mint[..8.min(token_mint.len())]
+            ),
+        );
         return Ok(None); // Still in cooldown
     }
 
     // 5. Blacklist check - token-level only (not pool-level)
     if safety::is_blacklisted(token_mint).await {
-        crate::logger::info(crate::logger::LogTag::Trader, &format!("[ENTRY-EVAL] {}: blocked by blacklist", &token_mint[..8.min(token_mint.len())]));
+        crate::logger::info(
+            crate::logger::LogTag::Trader,
+            &format!(
+                "[ENTRY-EVAL] {}: blocked by blacklist",
+                &token_mint[..8.min(token_mint.len())]
+            ),
+        );
         return Ok(None); // Token is blacklisted
     }
 

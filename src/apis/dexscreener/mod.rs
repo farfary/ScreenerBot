@@ -12,8 +12,8 @@
 //! 7. /token-boosts/top/v1 - Get top boosted tokens  
 //! 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
 
-pub mod types;
 mod endpoints;
+pub mod types;
 
 // Re-export types for external use
 pub use self::types::{
