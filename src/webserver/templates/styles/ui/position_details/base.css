@@ -697,7 +697,10 @@
 .position-details-dialog .tab-button {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  box-sizing: border-box;
+  inline-size: 136px;
   padding: 6px 14px;
   background: transparent;
   border: none;
@@ -706,14 +709,22 @@
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
 }
 
 .position-details-dialog .tab-button i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 18px;
+  block-size: 18px;
   font-size: 14px;
+  line-height: 1;
   opacity: 0.6;
   transition: opacity var(--transition-fast);
 }

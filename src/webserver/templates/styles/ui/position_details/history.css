@@ -229,6 +229,7 @@
   }
 
   .position-details-dialog .tab-button {
+    inline-size: 112px;
     padding: 6px 10px;
     font-size: 0.7rem;
   }
@@ -248,4 +249,3 @@
     gap: 4px;
   }
 }
-

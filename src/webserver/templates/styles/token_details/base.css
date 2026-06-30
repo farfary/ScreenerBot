@@ -550,6 +550,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  box-sizing: border-box;
+  inline-size: 136px;
   padding: 8px 16px;
   height: 36px;
   background: transparent;
@@ -559,7 +561,10 @@
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
@@ -581,7 +586,13 @@
 }
 
 .tab-button i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 18px;
+  block-size: 18px;
   font-size: 15px;
+  line-height: 1;
   opacity: 0.6;
   transition: opacity var(--transition-base);
 }
