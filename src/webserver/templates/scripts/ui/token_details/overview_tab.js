@@ -54,11 +54,12 @@ export function renderOverviewTab(token, options = {}) {
               </div>
             </div>
           </div>
-          <div id="tradingview-chart" class="tradingview-chart"></div>
-          <div id="chartLoadingOverlay" class="chart-loading-overlay">
-            <div class="chart-loading-content">
-              <div class="chart-loading-spinner"></div>
-              <div class="chart-loading-text">Loading chart data...</div>
+          <div id="tradingview-chart" class="tradingview-chart">
+            <div id="chartLoadingOverlay" class="chart-loading-overlay">
+              <div class="chart-loading-content">
+                <div class="chart-loading-spinner"></div>
+                <div class="chart-loading-text">Loading chart data...</div>
+              </div>
             </div>
           </div>
         </div>
