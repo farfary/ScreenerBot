@@ -6,10 +6,37 @@ const _state = {
   listeners: [],
 };
 
+const DEFAULT_INTERVAL = 1000;
+
 export function init() {
-  // Load saved interval or default to 1000ms
-  _state.interval = AppState.load("pollingInterval", 1000);
-  console.log("[PollingManager] Initialized with interval:", _state.interval, "ms");
+  // Apply a safe default synchronously so early callers never read null, then
+  // adopt the persisted value once AppState's cache is ready. AppState.init()
+  // is an async fetch, so reading load() synchronously at module load would
+  // race ahead of it (returning the default and pinning it forever). loadAsync
+  // awaits init, so the saved interval is honored on every startup.
+  if (_state.interval === null) {
+    _state.interval = DEFAULT_INTERVAL;
+  }
+  AppState.loadAsync("pollingInterval", DEFAULT_INTERVAL)
+    .then((value) => {
+      const ms = Number(value);
+      if (Number.isFinite(ms) && ms > 0 && ms !== _state.interval) {
+        const oldInterval = _state.interval;
+        _state.interval = ms;
+        // Reschedule any pollers already started with the default — they only
+        // reread the interval when notified.
+        _state.listeners.forEach((callback) => {
+          try {
+            callback(ms, oldInterval);
+          } catch (err) {
+            console.error("[PollingManager] Listener callback failed:", err);
+          }
+        });
+      }
+    })
+    .catch(() => {
+      /* keep the default; AppState already logged the failure */
+    });
 }
 
 export function getInterval() {

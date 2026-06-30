@@ -249,6 +249,10 @@ pub async fn start_server(
     // the running instance without manual configuration
     write_mcp_connection_file(port, is_gui);
 
+    // Warm the billboard cache in the background so the first dashboard load
+    // serves the featured row instantly instead of blocking on the remote fetch.
+    crate::webserver::routes::billboard::prewarm();
+
     // Run the server with graceful shutdown
     let shutdown_signal = async {
         SHUTDOWN_NOTIFY.notified().await;
@@ -487,7 +491,10 @@ fn write_mcp_connection_file(port: u16, is_gui: bool) {
     });
 
     let path = mcp_connection_file_path();
-    match std::fs::write(&path, serde_json::to_string_pretty(&content).unwrap_or_default()) {
+    match std::fs::write(
+        &path,
+        serde_json::to_string_pretty(&content).unwrap_or_default(),
+    ) {
         Ok(_) => {
             logger::debug(
                 LogTag::Webserver,

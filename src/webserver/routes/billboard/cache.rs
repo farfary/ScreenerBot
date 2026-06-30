@@ -209,22 +209,9 @@ async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>, String> {
         .collect())
 }
 
-/// Get billboard tokens (with caching)
-pub(super) async fn get_billboard() -> Result<Vec<BillboardToken>, String> {
-    // Check cache
-    {
-        let cache = BILLBOARD_CACHE.read().await;
-        if let Some(ref cached) = *cache {
-            if cached.fetched_at.elapsed() < CACHE_TTL {
-                return Ok(cached.tokens.clone());
-            }
-        }
-    }
-
-    // Fetch fresh data
+/// Fetch from the website and store into the cache. Returns the fresh tokens.
+async fn refresh_billboard_cache() -> Result<Vec<BillboardToken>, String> {
     let tokens = fetch_from_website().await?;
-
-    // Update cache
     {
         let mut cache = BILLBOARD_CACHE.write().await;
         *cache = Some(BillboardCache {
@@ -232,8 +219,42 @@ pub(super) async fn get_billboard() -> Result<Vec<BillboardToken>, String> {
             fetched_at: Instant::now(),
         });
     }
-
     Ok(tokens)
+}
+
+/// Get billboard tokens (stale-while-revalidate).
+///
+/// A warm cache (even past its TTL) returns immediately and triggers a
+/// background refresh, so the once-per-load `/api/billboard` request never
+/// blocks on the ~multi-second remote fetch to the website. Only a cold cache
+/// blocks — and that is pre-warmed at startup via `spawn_prewarm()`.
+pub(super) async fn get_billboard() -> Result<Vec<BillboardToken>, String> {
+    {
+        let cache = BILLBOARD_CACHE.read().await;
+        if let Some(ref cached) = *cache {
+            let stale = cached.fetched_at.elapsed() >= CACHE_TTL;
+            let tokens = cached.tokens.clone();
+            drop(cache);
+            if stale {
+                // Serve stale now, revalidate in the background.
+                tokio::spawn(async {
+                    let _ = refresh_billboard_cache().await;
+                });
+            }
+            return Ok(tokens);
+        }
+    }
+
+    // Cold cache — must fetch synchronously this once.
+    refresh_billboard_cache().await
+}
+
+/// Warm the billboard cache in the background so the first dashboard load is
+/// served instantly instead of waiting on the remote website fetch.
+pub fn spawn_prewarm() {
+    tokio::spawn(async {
+        let _ = refresh_billboard_cache().await;
+    });
 }
 
 /// Get Jupiter organic tokens (with caching)

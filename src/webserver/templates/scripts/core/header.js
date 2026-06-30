@@ -1,6 +1,6 @@
 // Header controls for global dashboard interactions (trader toggle + metrics)
 import { loadPage } from "./router.js";
-import { Poller, getInterval as getGlobalPollingInterval } from "./poller.js";
+import { Poller } from "./poller.js";
 import * as Utils from "./utils.js";
 import { Dropdown } from "../ui/dropdown.js";
 import { notificationManager } from "./notifications.js";
@@ -12,7 +12,6 @@ import { showSettingsDialog } from "../ui/settings_dialog.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff } from "./sounds.js";
 
-const MIN_STATUS_POLL_INTERVAL = 5000;
 const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
 
 const state = {
@@ -20,7 +19,6 @@ const state = {
   running: false,
   available: false,
   loading: false,
-  fetching: false,
   connected: false,
   bootstrapping: true,
   uiReady: false,
@@ -28,96 +26,17 @@ const state = {
   bootstrapStatus: null,
 };
 
-let statusPoller = null;
 let metricsPoller = null;
-let currentStatusPromise = null;
-let currentController = null;
 let powerDropdown = null;
 let traderDropdown = null;
 let bootstrapUnsubscribe = null;
 
 function getElements() {
   return {
-    toggle: document.getElementById("traderToggle"),
-    icon: document.getElementById("traderIcon"),
-    text: document.getElementById("traderText"),
-    badge: document.getElementById("botBadge"),
-    badgeIcon: document.getElementById("botStatusIcon"),
-    badgeText: document.getElementById("botStatusText"),
     connectionStatus: document.getElementById("connectionStatus"),
     connectionIcon: document.getElementById("connectionIcon"),
     notificationBadge: document.getElementById("notificationBadge"),
   };
-}
-
-function updateBadge({ badge, badgeIcon, badgeText }) {
-  if (!badge || !badgeIcon || !badgeText) {
-    return;
-  }
-
-  badge.classList.remove("loading", "success", "warning", "error");
-
-  if (state.loading) {
-    badge.classList.add("loading");
-    badgeIcon.className = "icon-bot";
-    badgeText.textContent = "LOADING";
-    return;
-  }
-
-  if (!state.available) {
-    badge.classList.add("warning");
-    badgeIcon.className = "icon-triangle-alert";
-    badgeText.textContent = "UNKNOWN";
-    return;
-  }
-
-  if (state.running) {
-    badge.classList.add("success");
-    badgeIcon.className = "icon-circle-check";
-    badgeText.textContent = "RUNNING";
-  } else {
-    badge.classList.add("warning");
-    badgeIcon.className = "icon-circle-pause";
-    badgeText.textContent = "STOPPED";
-  }
-}
-
-function updateToggle({ toggle, icon, text }) {
-  if (!toggle || !icon || !text) {
-    return;
-  }
-
-  toggle.disabled = state.loading || !state.available;
-  toggle.setAttribute("aria-busy", state.loading ? "true" : "false");
-  toggle.dataset.traderState = state.running ? "running" : "stopped";
-
-  // Update button classes for styling
-  toggle.classList.remove("running", "stopped");
-  if (state.running) {
-    toggle.classList.add("running");
-  } else {
-    toggle.classList.add("stopped");
-  }
-
-  if (state.loading) {
-    icon.innerHTML = '<i class="icon-loader"></i>';
-    text.textContent = "Updating...";
-    return;
-  }
-
-  if (!state.available) {
-    icon.className = "icon-triangle-alert";
-    text.textContent = "Status unavailable";
-    return;
-  }
-
-  if (state.running) {
-    icon.className = "icon-pause";
-    text.textContent = "Stop Trader";
-  } else {
-    icon.className = "icon-play";
-    text.textContent = "Start Trader";
-  }
 }
 
 function applyStatus(newStatus) {
@@ -131,17 +50,11 @@ function applyStatus(newStatus) {
     state.running = newStatus.running;
   }
   state.available = true;
-  const elements = getElements();
-  updateToggle(elements);
-  updateBadge(elements);
   updateConnectionStatus(true);
 }
 
 function setAvailability(isAvailable) {
   state.available = isAvailable;
-  const elements = getElements();
-  updateToggle(elements);
-  updateBadge(elements);
   updateConnectionStatus(isAvailable);
 }
 
@@ -195,9 +108,6 @@ function createRippleEffect(element, event) {
 
 function setLoading(isLoading) {
   state.loading = Boolean(isLoading);
-  const elements = getElements();
-  updateToggle(elements);
-  updateBadge(elements);
 }
 
 // Open the wallet + RPC setup dialog so the user can complete setup from preview mode
@@ -241,27 +151,13 @@ function applyBootstrapStatus(status) {
     state.loading = true;
   }
 
-  const elements = getElements();
-
   if (!uiReady) {
-    if (elements.badgeText) {
-      const label = status?.message?.toUpperCase() || "BOOTING";
-      elements.badgeText.textContent = label;
-    }
-    if (elements.badgeIcon) {
-      elements.badgeIcon.className = "icon-loader";
-    }
-    if (elements.badge) {
-      elements.badge.classList.add("loading");
-    }
-    updateBadge(elements);
     updateConnectionStatus(false);
     return;
   }
 
   state.loading = false;
   state.available = true;
-  updateBadge(elements);
   updateConnectionStatus(true);
 }
 
@@ -308,11 +204,18 @@ function updateHeaderMetrics(metrics) {
 
 function updateBotCard(trader) {
   const card = document.getElementById("botCard");
-  const icon = document.getElementById("botIcon");
   const status = document.getElementById("botStatus");
   const pnl = document.getElementById("botPnL");
 
   if (!card || !status || !pnl) return;
+
+  // The bot card is the trader on/off control (see initCardHandlers). Header
+  // metrics are the authoritative live source, so mirror the running state here
+  // — otherwise the click handler can't tell start from stop.
+  if (trader && typeof trader.running === "boolean") {
+    state.running = trader.running;
+    state.available = true;
+  }
 
   const previewMode = Boolean(state.bootstrapStatus?.preview_mode);
 
@@ -496,80 +399,7 @@ function startMetricsPolling() {
 // END HEADER METRICS
 // ============================================================================
 
-async function fetchTraderStatus({ silent = false, showLoading = false } = {}) {
-  if (state.bootstrapping) {
-    return null;
-  }
-
-  if (state.fetching && currentStatusPromise) {
-    return currentStatusPromise;
-  }
-
-  const elements = getElements();
-
-  if (!elements.toggle) {
-    return null;
-  }
-
-  if (showLoading) {
-    setLoading(true);
-  }
-
-  state.fetching = true;
-  const controller = new AbortController();
-  if (currentController) {
-    currentController.abort();
-  }
-  currentController = controller;
-
-  const request = fetch("/api/trader/status", {
-    method: "GET",
-    headers: { "X-Requested-With": "fetch" },
-    cache: "no-store",
-    signal: controller.signal,
-  })
-    .then(async (res) => {
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      applyStatus(data);
-      return data;
-    })
-    .catch((err) => {
-      if (err?.name === "AbortError") {
-        return null;
-      }
-      console.error("[TraderHeader] Failed to fetch status", err);
-      setAvailability(false);
-      if (!silent) {
-        Utils.showToast(
-          '<i class="icon-triangle-alert"></i> Failed to refresh trader status',
-          "warning"
-        );
-      }
-      return null;
-    })
-    .finally(() => {
-      if (currentController === controller) {
-        currentController = null;
-      }
-      state.fetching = false;
-      if (showLoading) {
-        setLoading(false);
-      }
-    });
-
-  currentStatusPromise = request;
-  return request;
-}
-
 async function controlTrader(action) {
-  const elements = getElements();
-  if (!elements.toggle) {
-    return;
-  }
-
   if (state.loading) {
     return;
   }
@@ -606,59 +436,13 @@ async function controlTrader(action) {
     setAvailability(false);
   } finally {
     setLoading(false);
-    fetchTraderStatus({ silent: true });
+    // Refresh the header immediately so the bot card reflects the new state
+    // without waiting for the next metrics tick.
+    fetchHeaderMetrics();
   }
-}
-
-function attachToggleHandler(toggle) {
-  if (!toggle) {
-    return;
-  }
-
-  toggle.addEventListener("click", (event) => {
-    event.preventDefault();
-    if (!state.available || state.loading) {
-      return;
-    }
-
-    const action = state.running ? "stop" : "start";
-    controlTrader(action);
-  });
-}
-
-function startStatusPolling() {
-  if (statusPoller) {
-    statusPoller.cleanup();
-  }
-
-  const pollIntervalProvider = () => {
-    try {
-      const interval = Number(getGlobalPollingInterval());
-      if (Number.isFinite(interval) && interval > 0) {
-        return Math.max(interval, MIN_STATUS_POLL_INTERVAL);
-      }
-    } catch (err) {
-      console.warn("[TraderHeader] Failed to read polling interval", err);
-    }
-    return MIN_STATUS_POLL_INTERVAL;
-  };
-
-  statusPoller = new Poller(() => fetchTraderStatus({ silent: true }), {
-    label: "TraderStatus",
-    getInterval: pollIntervalProvider,
-  });
-
-  statusPoller.start({ silent: true });
 }
 
 function initTraderControls() {
-  const elements = getElements();
-  if (!elements.toggle) {
-    console.warn("[Header] Toggle element not found, skipping initialization");
-  } else {
-    attachToggleHandler(elements.toggle);
-  }
-
   if (!bootstrapUnsubscribe) {
     bootstrapUnsubscribe = subscribeToBootstrap(applyBootstrapStatus);
   }
@@ -670,6 +454,7 @@ function initTraderControls() {
   }
 
   // Initialize connection status as connecting
+  const elements = getElements();
   if (elements.connectionStatus && elements.connectionIcon) {
     elements.connectionStatus.classList.add("connecting");
     elements.connectionIcon.className = "icon-circle-dot";
@@ -704,11 +489,7 @@ function initTraderControls() {
   setupVisibilityHandler();
 
   waitForReady()
-    .then(() => fetchTraderStatus({ silent: true, showLoading: true }))
-    .then(() => {
-      startStatusPolling();
-      return fetchHeaderMetrics();
-    })
+    .then(() => fetchHeaderMetrics())
     .then(() => {
       startMetricsPolling();
     })
@@ -1104,20 +885,14 @@ function setupVisibilityHandler() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      // Pause header pollers when tab hidden
+      // Pause header poller when tab hidden
       if (metricsPoller && metricsPoller.isActive()) {
         metricsPoller.pause();
       }
-      if (statusPoller && statusPoller.isActive()) {
-        statusPoller.pause();
-      }
     } else {
-      // Resume header pollers when tab visible
+      // Resume header poller when tab visible
       if (metricsPoller && metricsPoller.isActive()) {
         metricsPoller.resume();
-      }
-      if (statusPoller && statusPoller.isActive()) {
-        statusPoller.resume();
       }
     }
   });

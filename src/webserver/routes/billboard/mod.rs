@@ -14,6 +14,12 @@ use std::sync::Arc;
 
 pub use types::{BillboardAllResponse, BillboardToken, EnrichedBillboardToken, ExternalToken};
 
+/// Warm the billboard cache in the background so the first dashboard load is
+/// served instantly instead of blocking on the remote website fetch.
+pub fn prewarm() {
+    cache::spawn_prewarm();
+}
+
 /// Billboard routes
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
