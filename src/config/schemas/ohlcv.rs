@@ -242,5 +242,47 @@ config_struct! {
             category: "Sources",
         })]
         solana_tracker: OhlcvSolanaTrackerConfig = OhlcvSolanaTrackerConfig::default(),
+        #[metadata(field_metadata! {
+            label: "ScreenerBot Server Source",
+            hint: "Self-hosted ScreenerBot OHLCV cache — tried FIRST (fast, shared cache); falls back to the providers below on a miss",
+            impact: "high",
+            category: "Sources",
+        })]
+        screenerbot_server: OhlcvScreenerbotConfig = OhlcvScreenerbotConfig::default(),
+    }
+}
+
+config_struct! {
+    /// Self-hosted ScreenerBot OHLCV server — the preferred first-hop source. It
+    /// serves cached candles fast and warms itself; on a miss the fetcher falls
+    /// back to GeckoTerminal/SolanaTracker as before.
+    pub struct OhlcvScreenerbotConfig {
+        /// Whether to try the ScreenerBot server first
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Try the self-hosted ScreenerBot OHLCV server before external providers",
+            impact: "high",
+            category: "Sources",
+        })]
+        enabled: bool = true,
+        /// ScreenerBot OHLCV server base URL (no trailing slash)
+        #[metadata(field_metadata! {
+            label: "Endpoint",
+            hint: "Base URL of the self-hosted OHLCV server",
+            impact: "critical",
+            category: "Sources",
+        })]
+        endpoint: String = "https://screenerbot.io/ohlcv".to_owned(),
+        /// HTTP request timeout in seconds (keep short so a miss falls back fast)
+        #[metadata(field_metadata! {
+            label: "Timeout (seconds)",
+            hint: "HTTP request timeout for the ScreenerBot server (short so misses fall back quickly)",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 30.0,
+            step: 1.0,
+        })]
+        timeout_seconds: u64 = 4,
     }
 }

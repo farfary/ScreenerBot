@@ -1,10 +1,12 @@
 //! OHLCV fetcher — retrieves candlestick data from multiple sources.
 //!
 //! Sources (in priority order):
+//! 0. ScreenerBot self-hosted OHLCV server — fast shared cache, tried FIRST
 //! 1. SolanaTracker — uses token address, credit-based, high quality
 //! 2. GeckoTerminal — uses pool address, rate-limited 30/min, free
 
 use crate::apis::{get_api_manager, ApiManager};
+use crate::config::with_config;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
 use serde_json::json;
@@ -331,6 +333,58 @@ impl OhlcvFetcher {
 
     /// Fetch OHLCV with multi-source fallback: SolanaTracker → GeckoTerminal
     /// `mint` is needed for SolanaTracker, `pool_address` for GeckoTerminal
+    /// Map the GeckoTerminal (endpoint, aggregate) pair back to the canonical
+    /// timeframe string the ScreenerBot server expects.
+    fn server_timeframe(api_endpoint: &str, aggregate: u32) -> Option<&'static str> {
+        match (api_endpoint, aggregate) {
+            ("minute", 1) => Some("1m"),
+            ("minute", 5) => Some("5m"),
+            ("minute", 15) => Some("15m"),
+            ("hour", 1) => Some("1h"),
+            ("hour", 4) => Some("4h"),
+            ("hour", 12) => Some("12h"),
+            ("day", 1) => Some("1d"),
+            _ => None,
+        }
+    }
+
+    /// Try the self-hosted ScreenerBot OHLCV server. Returns None on disabled /
+    /// miss / timeout / any error so the caller falls back to the providers.
+    async fn fetch_from_screenerbot_server(
+        &self,
+        mint: &str,
+        api_endpoint: &str,
+        aggregate: u32,
+        limit: usize,
+    ) -> Option<Vec<Candle>> {
+        let (enabled, endpoint, timeout_secs) = with_config(|c| {
+            let s = &c.ohlcv.sources.screenerbot_server;
+            (s.enabled, s.endpoint.clone(), s.timeout_seconds)
+        });
+        if !enabled || endpoint.trim().is_empty() {
+            return None;
+        }
+        let tf = Self::server_timeframe(api_endpoint, aggregate)?;
+        let url = format!(
+            "{}/v1/ohlcv?mint={}&timeframe={}&limit={}",
+            endpoint.trim_end_matches('/'),
+            mint,
+            tf,
+            limit.min(MAX_CANDLES_PER_REQUEST)
+        );
+        let resp = crate::net::client()
+            .get(&url)
+            .timeout(Duration::from_secs(timeout_secs))
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        // The server returns a JSON array of candles with identical field names.
+        resp.json::<Vec<Candle>>().await.ok()
+    }
+
     pub async fn fetch_multi_source(
         &self,
         mint: &str,
@@ -339,6 +393,19 @@ impl OhlcvFetcher {
         aggregate: u32,
         limit: usize,
     ) -> OhlcvResult<Vec<Candle>> {
+        // Try the self-hosted ScreenerBot OHLCV server first: it serves a shared
+        // cache fast and warms itself, sparing the external providers' budgets. On
+        // any miss/timeout/error we fall straight through to the providers below,
+        // so this is purely an accelerator — never a hard dependency.
+        if let Some(candles) = self
+            .fetch_from_screenerbot_server(mint, api_endpoint, aggregate, limit)
+            .await
+        {
+            if !candles.is_empty() {
+                return Ok(candles);
+            }
+        }
+
         // Try SolanaTracker first (uses token address, better data)
         if self.api_manager.solana_tracker.is_enabled() {
             if let Some(interval) = Self::gt_to_st_interval(api_endpoint, aggregate) {
