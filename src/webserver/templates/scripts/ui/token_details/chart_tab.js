@@ -101,6 +101,11 @@ export function applyChartTabMixin(DialogClass) {
     // Sync the active button highlight to the restored timeframe.
     buttons.forEach((b) => b.classList.toggle("active", b.dataset.tf === this.currentTimeframe));
 
+    // Allow ONE automatic timeframe fallback on this token's first load (see
+    // _loadChartData): if the chosen timeframe has no candles yet but the token
+    // has data at another (e.g. only daily so far), switch to it instead of
+    // sitting on an empty chart. Manual timeframe clicks never auto-switch.
+    this._chartInitialLoadPending = true;
     await this._loadChartData(mint, this.currentTimeframe, true); // Initial load - set view
 
     this._startChartPolling();
@@ -221,6 +226,22 @@ export function applyChartTabMixin(DialogClass) {
       });
 
       if (!Array.isArray(data) || data.length === 0) {
+        // The selected timeframe has no candles. The token can still have OHLCV
+        // at a different timeframe (e.g. only daily candles fetched so far) — the
+        // has_ohlcv badge is true while this specific timeframe is empty. On the
+        // token's first load, probe for a timeframe that DOES have data and
+        // switch to it instead of sitting on an empty "Waiting…" chart. Runs once
+        // per open and never overrides a manual timeframe selection.
+        if (isInitialLoad && this._chartInitialLoadPending) {
+          this._chartInitialLoadPending = false;
+          const altTf = await this._findTimeframeWithData(mint, timeframe);
+          if (altTf && altTf !== timeframe) {
+            this.currentTimeframe = altTf;
+            this._syncTimeframeButtons(altTf);
+            await this._loadChartData(mint, altTf, true);
+            return;
+          }
+        }
         // No data yet - show waiting message
         if (loadingText) {
           loadingText.textContent = "Waiting for chart data...";
@@ -231,6 +252,8 @@ export function applyChartTabMixin(DialogClass) {
         this.chartDataLoaded = false;
         return;
       }
+
+      this._chartInitialLoadPending = false;
 
       if (!this.advancedChart) return;
 
@@ -279,6 +302,48 @@ export function applyChartTabMixin(DialogClass) {
       }
       this.chartDataLoaded = false;
     }
+  };
+
+  /**
+   * Find the finest timeframe that currently has candles for this token, probing
+   * cheaply (limit=1). Returns null if none have data. Order is finest→coarsest
+   * so the chart lands on the most granular timeframe available.
+   * @private
+   * @param {string} mint
+   * @param {string} exclude - timeframe already known to be empty (skipped)
+   * @returns {Promise<string|null>}
+   */
+  proto._findTimeframeWithData = async function (mint, exclude) {
+    const order = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
+    const checks = await Promise.all(
+      order.map(async (tf) => {
+        if (tf === exclude) return null;
+        try {
+          const d = await requestManager.fetch(
+            `/api/tokens/${mint}/ohlcv?timeframe=${tf}&limit=1`,
+            { priority: "low" }
+          );
+          return Array.isArray(d) && d.length > 0 ? tf : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+    return checks.find((tf) => tf) || null;
+  };
+
+  /**
+   * Highlight the given timeframe button (used when an automatic fallback
+   * switches the chart to a timeframe the user didn't click).
+   * @private
+   * @param {string} tf
+   */
+  proto._syncTimeframeButtons = function (tf) {
+    const timeframeButtons = this.dialogEl?.querySelector("#timeframeButtons");
+    if (!timeframeButtons) return;
+    timeframeButtons
+      .querySelectorAll(".timeframe-btn")
+      .forEach((b) => b.classList.toggle("active", b.dataset.tf === tf));
   };
 
   /**
