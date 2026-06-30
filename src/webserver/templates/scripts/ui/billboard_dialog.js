@@ -187,6 +187,21 @@ class BillboardDialog {
       this._initScrollBehavior(cat.id);
     });
 
+    // Clicking a card (outside its action buttons/links) opens token details.
+    container.querySelectorAll(".billboard-cat-card").forEach((card) => {
+      const mint = card.dataset.mint;
+      if (!mint) return;
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("a, button, .billboard-cat-actions")) return;
+        this.close();
+        window.dispatchEvent(
+          new CustomEvent("screenerbot:open-token-details", {
+            detail: { mint, symbol: card.dataset.symbol || "" },
+          })
+        );
+      });
+    });
+
     // Attach copy handlers
     container.querySelectorAll(".billboard-cat-copy-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -269,7 +284,7 @@ class BillboardDialog {
       : `<div class="billboard-cat-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`;
 
     return `
-      <div class="billboard-cat-card ${featuredClass}" data-mint="${mint}" title="${name} (${symbol})">
+      <div class="billboard-cat-card ${featuredClass}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(name)} (${this._escapeHtml(symbol)})">
         ${badge}
         ${logoHtml}
         <div class="billboard-cat-info">

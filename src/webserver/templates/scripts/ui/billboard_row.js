@@ -246,7 +246,12 @@ class BillboardRow {
   }
 
   /**
-   * Fetch tokens from API with caching
+   * Fetch tokens from API with caching.
+   *
+   * Pulls from ALL billboard sources (our featured tokens plus Jupiter and
+   * DexScreener trending) and merges them — featured first, then the trending
+   * sources — deduped by mint. This way the row still fills with trending
+   * tokens when our own featured list is empty, instead of showing nothing.
    */
   async _fetchTokens() {
     const now = Date.now();
@@ -256,16 +261,32 @@ class BillboardRow {
       return cachedTokens;
     }
 
-    const response = await fetch("/api/billboard");
+    const response = await fetch("/api/billboard/all");
     const data = await response.json();
 
-    if (data.success && data.tokens) {
-      cachedTokens = data.tokens;
-      cacheTimestamp = now;
-      return cachedTokens;
+    if (!data || data.success === false) {
+      return [];
     }
 
-    return [];
+    const merged = [];
+    const seen = new Set();
+    const add = (list) => {
+      (list || []).forEach((token) => {
+        const mint = token.mint || token.id;
+        if (!mint || seen.has(mint)) return;
+        seen.add(mint);
+        merged.push(token);
+      });
+    };
+
+    add(data.featured);
+    add(data.jupiter_organic);
+    add(data.jupiter_traded);
+    add(data.dexscreener_trending);
+
+    cachedTokens = merged;
+    cacheTimestamp = now;
+    return merged;
   }
 
   /**
@@ -333,9 +354,17 @@ class BillboardRow {
 
     container.innerHTML = tokens.map((token) => this._renderTokenCard(token)).join("");
 
-    // Add click handlers to cards
+    // Clicking a token card opens its full details dialog.
     container.querySelectorAll(".billboard-row-card").forEach((card) => {
-      card.addEventListener("click", () => openBillboard());
+      const mint = card.dataset.mint;
+      if (!mint) return;
+      card.addEventListener("click", () => {
+        window.dispatchEvent(
+          new CustomEvent("screenerbot:open-token-details", {
+            detail: { mint, symbol: card.dataset.symbol || "" },
+          })
+        );
+      });
     });
 
     // Update arrow visibility after render
@@ -358,6 +387,7 @@ class BillboardRow {
     const featuredClass = token.featured ? "featured" : "";
     const symbol = token.symbol || "???";
     const name = token.name || symbol;
+    const mint = token.mint || token.id || "";
     const displayName = truncateName(name);
     const fullTitle = `${name} (${symbol})`;
 
@@ -367,7 +397,7 @@ class BillboardRow {
       : `<div class="billboard-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`;
 
     return `
-      <div class="billboard-row-card ${featuredClass}" title="${this._escapeHtml(fullTitle)}">
+      <div class="billboard-row-card ${featuredClass}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(fullTitle)}">
         ${logoHtml}
         <span class="billboard-row-card-name">${this._escapeHtml(displayName)}</span>
         ${token.featured ? '<i class="icon-star billboard-row-card-star"></i>' : ""}
