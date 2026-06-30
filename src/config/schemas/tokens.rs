@@ -225,6 +225,52 @@ config_struct! {
             rate_limit_per_minute: 30,
             timeout_seconds: 15,
         },
+
+        #[metadata(field_metadata! {
+            label: "ScreenerBot Server Source",
+            hint: "Self-hosted ScreenerBot data server — tried FIRST for Rugcheck security reports (shared cache, fast); falls back to the direct Rugcheck API on a miss",
+            impact: "high",
+            category: "Sources",
+        })]
+        screenerbot_server: ScreenerbotServerSourceConfig =
+            ScreenerbotServerSourceConfig::default(),
+    }
+}
+
+config_struct! {
+    /// Self-hosted ScreenerBot data server used as the preferred first-hop source
+    /// for token security (Rugcheck) reports. It serves a shared cache fast and
+    /// warms itself; on any miss/timeout the security fetcher falls straight back
+    /// to the direct Rugcheck API, so this is purely an accelerator — never a hard
+    /// dependency, and it never consumes the direct Rugcheck rate-limit budget.
+    pub struct ScreenerbotServerSourceConfig {
+        /// Whether to try the ScreenerBot server first for Rugcheck reports
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Try the self-hosted ScreenerBot server before the direct Rugcheck API",
+            impact: "high",
+            category: "Sources",
+        })]
+        enabled: bool = true,
+        /// ScreenerBot data server base URL (no trailing slash)
+        #[metadata(field_metadata! {
+            label: "Endpoint",
+            hint: "Base URL of the self-hosted ScreenerBot data server",
+            impact: "critical",
+            category: "Sources",
+        })]
+        endpoint: String = "https://screenerbot.io/data".to_owned(),
+        /// HTTP request timeout in seconds (keep short so a miss falls back fast)
+        #[metadata(field_metadata! {
+            label: "Timeout (seconds)",
+            hint: "HTTP request timeout for the ScreenerBot server (short so misses fall back quickly)",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 30.0,
+            step: 1.0,
+        })]
+        timeout_seconds: u64 = 4,
     }
 }
 

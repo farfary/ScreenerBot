@@ -18,8 +18,7 @@ pub use self::types::{
 
 use crate::apis::client::{HttpClient, RateLimiter};
 use crate::apis::stats::ApiStatsTracker;
-use crate::tokens::types::{ApiError, SecurityRisk, TokenHolder};
-use chrono::Utc;
+use crate::tokens::types::ApiError;
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
@@ -181,86 +180,7 @@ impl RugcheckClient {
     pub async fn fetch_report(&self, mint: &str) -> Result<RugcheckInfo, ApiError> {
         let url = format!("{RUGCHECK_BASE_URL}/{mint}/report");
         let api_response: RugcheckResponse = self.parse_json(&url, "rugcheck.report").await?;
-
-        // Convert API response to domain type
-        let risks = api_response
-            .risks
-            .unwrap_or_default()
-            .into_iter()
-            .map(|r| SecurityRisk {
-                name: r.name,
-                value: r.value,
-                description: r.description,
-                score: r.score,
-                level: r.level,
-            })
-            .collect();
-
-        let top_holders = api_response
-            .top_holders
-            .unwrap_or_default()
-            .into_iter()
-            .map(|h| TokenHolder {
-                address: h.address,
-                amount: h.amount.to_string(),
-                pct: h.pct,
-                owner: h.owner,
-                insider: h.insider.unwrap_or_default(),
-            })
-            .collect();
-
-        let token_meta = api_response.token_meta;
-        let token = api_response.token;
-        let transfer_fee = api_response.transfer_fee;
-
-        // Extract authorities with fallback strategy:
-        // 1. Try top-level fields (may be None if API returned object format)
-        // 2. Fall back to nested token.* fields (always string or null)
-        // This ensures we NEVER miss authority data regardless of API response format
-        let mint_authority = api_response
-            .mint_authority
-            .or_else(|| token.as_ref().and_then(|t| t.mint_authority.clone()));
-
-        let freeze_authority = api_response
-            .freeze_authority
-            .or_else(|| token.as_ref().and_then(|t| t.freeze_authority.clone()));
-
-        Ok(RugcheckInfo {
-            mint: api_response.mint,
-            token_program: api_response.token_program,
-            token_type: api_response.token_type,
-            token_name: token_meta.as_ref().and_then(|t| t.name.clone()),
-            token_symbol: token_meta.as_ref().and_then(|t| t.symbol.clone()),
-            token_decimals: token.as_ref().and_then(|t| t.decimals),
-            token_supply: token.as_ref().and_then(|t| t.supply.map(|s| s.to_string())),
-            token_uri: token_meta.as_ref().and_then(|t| t.uri.clone()),
-            token_mutable: token_meta.as_ref().and_then(|t| t.mutable),
-            token_update_authority: token_meta.as_ref().and_then(|t| t.update_authority.clone()),
-            mint_authority,
-            freeze_authority,
-            creator: api_response.creator,
-            creator_balance: api_response.creator_balance,
-            creator_tokens: api_response.creator_tokens,
-            score: api_response.score,
-            score_normalised: api_response.score_normalised,
-            rugged: api_response.rugged.unwrap_or_default(),
-            risks,
-            total_markets: None, // Market data not included in API response
-            total_market_liquidity: api_response.total_market_liquidity,
-            total_stable_liquidity: api_response.total_stable_liquidity,
-            total_lp_providers: api_response.total_lp_providers,
-            total_holders: api_response.total_holders,
-            top_holders,
-            graph_insiders_detected: api_response.graph_insiders_detected,
-            transfer_fee_pct: transfer_fee.as_ref().and_then(|t| t.pct),
-            transfer_fee_max_amount: transfer_fee
-                .as_ref()
-                .and_then(|t| t.max_amount.map(|a| a as i64)),
-            transfer_fee_authority: transfer_fee.and_then(|t| t.authority),
-            detected_at: api_response.detected_at,
-            analyzed_at: api_response.analyzed_at,
-            fetched_at: Utc::now(),
-        })
+        Ok(RugcheckInfo::from_response(api_response))
     }
 
     // ========================================================================

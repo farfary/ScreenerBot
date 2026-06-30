@@ -5,5 +5,6 @@
 //! - onchain: Future on-chain verification
 
 pub mod rugcheck;
+pub mod rugcheck_server;
 
 pub use rugcheck::fetch_rugcheck_data;
