@@ -5,6 +5,10 @@
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
+import * as AppState from "../../core/app_state.js";
+
+// Persisted across dialog opens so the user's last chart timeframe is restored.
+const TIMEFRAME_STATE_KEY = "tokenChartTimeframe";
 
 /**
  * Apply chart tab mixin to TokenDetailsDialog class
@@ -32,14 +36,31 @@ export function applyChartTabMixin(DialogClass) {
       return;
     }
 
-    // Guard against duplicate initialization. The overview tab can be (re)loaded
-    // more than once in quick succession — it renders with partial row data on
-    // open, then again the moment the immediate detail fetch resolves. Recreating
-    // the chart would orphan the previous instance (leak + duplicate pollers), so
-    // if one already exists just refresh its data for the current timeframe.
+    // The overview tab is (re)rendered more than once in quick succession — it
+    // renders with partial row data on open, then again the moment the immediate
+    // detail fetch resolves. Each render does `content.innerHTML = …`, which
+    // REPLACES the chart container node. If a chart already exists AND it is
+    // still bound to the live container, just refresh its data (avoids leaks +
+    // duplicate pollers). But if the container was swapped out by a re-render,
+    // the existing chart is now drawing into a DETACHED node — the visible chart
+    // would stay blank forever even as OHLCV data arrives (only a full page
+    // reload fixed it). In that case tear the orphan down and recreate it in the
+    // live container.
     if (this.advancedChart) {
-      await this._loadChartData(mint, this.currentTimeframe, false);
-      return;
+      if (this.advancedChart.container === chartContainer && chartContainer.isConnected) {
+        await this._loadChartData(mint, this.currentTimeframe, false);
+        return;
+      }
+      // Orphaned by a container swap — dispose before recreating.
+      this._stopChartPolling();
+      if (this._themeObserver) {
+        this._themeObserver.disconnect();
+        this._themeObserver = null;
+      }
+      this.advancedChart.destroy();
+      this.advancedChart = null;
+      this.chart = null;
+      this.chartDataLoaded = false;
     }
 
     // Determine current theme
@@ -69,9 +90,16 @@ export function applyChartTabMixin(DialogClass) {
     // Store reference for cleanup
     this.chart = this.advancedChart;
 
-    // Get initial timeframe from active button
+    // Restore the user's last-used timeframe (falling back to the active button,
+    // then 5m). Only honor a saved value that maps to a real button.
+    const buttons = timeframeButtons ? [...timeframeButtons.querySelectorAll(".timeframe-btn")] : [];
+    const saved = AppState.load(TIMEFRAME_STATE_KEY, null);
     const activeBtn = timeframeButtons?.querySelector(".timeframe-btn.active");
-    this.currentTimeframe = activeBtn?.dataset.tf || "5m";
+    const savedValid = saved && buttons.some((b) => b.dataset.tf === saved);
+    this.currentTimeframe = savedValid ? saved : activeBtn?.dataset.tf || "5m";
+
+    // Sync the active button highlight to the restored timeframe.
+    buttons.forEach((b) => b.classList.toggle("active", b.dataset.tf === this.currentTimeframe));
 
     await this._loadChartData(mint, this.currentTimeframe, true); // Initial load - set view
 
@@ -90,6 +118,8 @@ export function applyChartTabMixin(DialogClass) {
         btn.classList.add("active");
 
         this.currentTimeframe = btn.dataset.tf;
+        // Remember the choice for the next time any token dialog is opened.
+        AppState.save(TIMEFRAME_STATE_KEY, this.currentTimeframe);
         await this._triggerOhlcvRefresh();
         await new Promise((resolve) => setTimeout(resolve, 500));
         await this._loadChartData(mint, this.currentTimeframe, true); // Timeframe change - reset view
