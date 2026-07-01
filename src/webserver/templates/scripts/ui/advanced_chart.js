@@ -1346,9 +1346,10 @@
     setVisibleRange(barsCount) {
       if (this.chart && this.data.length) {
         const lastIndex = this.data.length - 1;
+        const rightOffset = this.options.rightOffset;
         this.chart.timeScale().setVisibleLogicalRange({
-          from: Math.max(0, lastIndex - barsCount),
-          to: lastIndex + this.options.rightOffset,
+          from: lastIndex - barsCount,
+          to: lastIndex + rightOffset,
         });
       }
     }
