@@ -7,7 +7,6 @@ import { waitForReady } from "./bootstrap.js";
 const AUTO_DISMISS_COMPLETED_MS = 10000; // 10 seconds
 const AUTO_DISMISS_FAILED_MS = 30000; // 30 seconds
 const RECONNECT_DELAY_MS = 3000;
-const UI_STATE_STORAGE_KEY = "screenerbot:action-notifications-ui-state:v1";
 
 // Action types that represent an in-flight trade for a token. Used by the
 // positions list and the position-details dialog to disable Add/Sell/Close
@@ -24,10 +23,6 @@ class NotificationManager {
   constructor() {
     this.eventSource = null;
     this.notifications = new Map();
-    this.readIds = new Set();
-    this.dismissedIds = new Set();
-    this.readAllBefore = 0;
-    this.dismissedAllBefore = 0;
     this.subscribers = new Set();
     this.isConnected = false;
     this.lastConnectionChange = null;
@@ -36,7 +31,6 @@ class NotificationManager {
     this._saveTimer = null;
     this.hadInitialConnect = false;
     this.activeSyncPromise = null;
-    this.loadUiState();
   }
 
   /**
@@ -277,8 +271,6 @@ class NotificationManager {
 
     notification.read = true;
     this.notifications.set(actionId, notification);
-    this.readIds.add(actionId);
-    this.saveUiState();
     this.notifySubscribers({
       type: "marked_read",
       notification,
@@ -290,18 +282,12 @@ class NotificationManager {
    * Mark all notifications as read
    */
   markAllAsRead() {
-    const now = Date.now();
-    this.readAllBefore = Math.max(this.readAllBefore, now);
-
     for (const [id, notification] of this.notifications) {
       if (!notification.read) {
         notification.read = true;
         this.notifications.set(id, notification);
       }
-      this.readIds.add(id);
     }
-
-    this.saveUiState();
     this.notifySubscribers({
       type: "all_marked_read",
     });
@@ -317,8 +303,6 @@ class NotificationManager {
 
     notification.dismissed = true;
     this.notifications.set(actionId, notification);
-    this.dismissedIds.add(actionId);
-    this.saveUiState();
 
     // Clear auto-dismiss timer if exists
     if (this.autoDismissTimers.has(actionId)) {
@@ -341,25 +325,13 @@ class NotificationManager {
    * Clear all notifications
    */
   clearAll() {
-    const now = Date.now();
-    this.dismissedAllBefore = Math.max(this.dismissedAllBefore, now);
-    this.readAllBefore = Math.max(this.readAllBefore, now);
-
     // Clear all auto-dismiss timers
     for (const timer of this.autoDismissTimers.values()) {
       clearTimeout(timer);
     }
     this.autoDismissTimers.clear();
 
-    for (const [id, notification] of this.notifications) {
-      notification.read = true;
-      notification.dismissed = true;
-      this.notifications.set(id, notification);
-      this.readIds.add(id);
-      this.dismissedIds.add(id);
-    }
-
-    this.saveUiState();
+    this.notifications.clear();
     this.notifySubscribers({
       type: "cleared",
     });
@@ -550,27 +522,15 @@ class NotificationManager {
   buildNotificationRecord(action, existing = null, options = {}) {
     const { resetRead = false, resetDismissed = false } = options;
 
+    const read = resetRead ? false : (existing?.read ?? false);
+    const dismissed = resetDismissed ? false : (existing?.dismissed ?? false);
+
     const timestamp =
       existing?.timestamp ||
       action?.timestamp ||
       action?.completed_at ||
       action?.started_at ||
       new Date().toISOString();
-
-    const timestampMs = new Date(timestamp).getTime();
-    const withinReadBaseline =
-      Number.isFinite(timestampMs) && timestampMs <= this.readAllBefore;
-    const withinDismissedBaseline =
-      Number.isFinite(timestampMs) && timestampMs <= this.dismissedAllBefore;
-    const knownRead = action?.id ? this.readIds.has(action.id) : false;
-    const knownDismissed = action?.id ? this.dismissedIds.has(action.id) : false;
-
-    const read = resetRead
-      ? false
-      : Boolean(existing?.read || knownRead || withinReadBaseline);
-    const dismissed = resetDismissed
-      ? false
-      : Boolean(existing?.dismissed || knownDismissed || withinDismissedBaseline);
 
     const merged = {
       ...(existing || {}),
@@ -582,43 +542,6 @@ class NotificationManager {
     merged.timestamp = timestamp;
 
     return merged;
-  }
-
-  loadUiState() {
-    if (typeof localStorage === "undefined") {
-      return;
-    }
-
-    try {
-      const raw = localStorage.getItem(UI_STATE_STORAGE_KEY);
-      if (!raw) return;
-
-      const parsed = JSON.parse(raw);
-      this.readAllBefore = Number(parsed?.readAllBefore) || 0;
-      this.dismissedAllBefore = Number(parsed?.dismissedAllBefore) || 0;
-      this.readIds = new Set(Array.isArray(parsed?.readIds) ? parsed.readIds : []);
-      this.dismissedIds = new Set(Array.isArray(parsed?.dismissedIds) ? parsed.dismissedIds : []);
-    } catch (error) {
-      console.warn("[NotificationManager] Failed to load notification UI state", error);
-    }
-  }
-
-  saveUiState() {
-    if (typeof localStorage === "undefined") {
-      return;
-    }
-
-    try {
-      const payload = {
-        readAllBefore: this.readAllBefore,
-        dismissedAllBefore: this.dismissedAllBefore,
-        readIds: Array.from(this.readIds).slice(-1000),
-        dismissedIds: Array.from(this.dismissedIds).slice(-1000),
-      };
-      localStorage.setItem(UI_STATE_STORAGE_KEY, JSON.stringify(payload));
-    } catch (error) {
-      console.warn("[NotificationManager] Failed to save notification UI state", error);
-    }
   }
 
   areRecordsEqual(a, b) {
