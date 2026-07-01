@@ -28,7 +28,6 @@ class NotificationManager {
     this.lastConnectionChange = null;
     this.reconnectTimer = null;
     this.autoDismissTimers = new Map();
-    this._saveTimer = null;
     this.hadInitialConnect = false;
     this.activeSyncPromise = null;
   }
@@ -763,33 +762,6 @@ class NotificationManager {
       return data;
     } catch (error) {
       console.error("[NotificationManager] Failed to fetch action history:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Fetch single action by ID from database
-   * @param {string} actionId - Action ID to fetch
-   * @returns {Promise<Object>} Response with {success: boolean, action?: Action, error?: string}
-   */
-  async fetchActionById(actionId) {
-    try {
-      const url = `/api/actions/${encodeURIComponent(actionId)}`;
-      const response = await fetch(url, {
-        headers: {
-          "X-Requested-With": "fetch",
-        },
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(`[NotificationManager] Failed to fetch action ${actionId}:`, error);
       throw error;
     }
   }
