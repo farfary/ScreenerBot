@@ -95,12 +95,16 @@
 .hint-popover {
   position: fixed;
   z-index: var(--z-hint-popover);
+  display: flex;
+  flex-direction: column;
   width: max-content;
   max-width: 360px;
   background: var(--floating-bg);
   border: 1px solid var(--floating-border);
   border-radius: var(--floating-panel-radius);
   box-shadow: var(--shadow-floating-lg);
+  box-sizing: border-box;
+  overflow: hidden;
   opacity: 0;
   transform: scale(0.95) translateY(4px);
   transition:
@@ -169,6 +173,7 @@
 .hint-popover__header {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--border-color);
@@ -231,10 +236,18 @@
    ============================================================================= */
 
 .hint-popover__content {
+  min-height: 0;
   padding: var(--spacing-md);
+  overflow-y: visible;
   font-size: 0.8125rem;
   line-height: 1.6;
   color: var(--text-secondary);
+}
+
+.hint-popover--scrollable .hint-popover__content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .hint-popover__content p {
@@ -301,6 +314,7 @@
 .hint-popover__footer {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   justify-content: space-between;
   gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-md);
@@ -410,8 +424,6 @@
 @media (width <= 768px) {
   .hint-popover {
     max-width: calc(100vw - 32px);
-    left: 16px !important;
-    right: 16px;
     width: auto;
   }
 

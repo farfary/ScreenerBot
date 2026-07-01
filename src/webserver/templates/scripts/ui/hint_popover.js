@@ -15,6 +15,10 @@ let activePopover = null;
 // Click outside handler reference
 let outsideClickHandler = null;
 
+const POPOVER_MARGIN = 12;
+const POPOVER_MAX_WIDTH = 360;
+const ARROW_SAFE_ZONE = 18;
+
 /**
  * HintTrigger - Creates the small help icon button
  */
@@ -95,6 +99,7 @@ export class HintPopover {
     this.hint = hint;
     this.triggerEl = triggerEl;
     this.el = null;
+    this._repositionHandler = null;
   }
 
   /**
@@ -127,6 +132,7 @@ export class HintPopover {
     if (!this.el) return;
 
     this.el.classList.remove("hint-popover--visible");
+    this._detachViewportHandlers();
 
     // Remove after animation
     setTimeout(() => {
@@ -255,34 +261,53 @@ export class HintPopover {
     if (!this.el || !this.triggerEl) return;
 
     const triggerRect = this.triggerEl.getBoundingClientRect();
-    const popoverRect = this.el.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const margin = 12;
-    const arrowSize = 8;
+    const viewport = getUsableViewport(POPOVER_MARGIN);
+
+    this.el.classList.remove(
+      "hint-popover--right",
+      "hint-popover--left",
+      "hint-popover--bottom",
+      "hint-popover--top",
+      "hint-popover--scrollable"
+    );
+
+    this.el.style.top = "";
+    this.el.style.left = "";
+    this.el.style.maxHeight = "";
+
+    const maxWidth = Math.max(1, Math.min(POPOVER_MAX_WIDTH, viewport.width));
+    this.el.style.maxWidth = `${maxWidth}px`;
+
+    const popoverWidth = Math.min(this.el.offsetWidth || maxWidth, maxWidth);
+    const naturalHeight = this.el.offsetHeight || this.el.scrollHeight;
+    const maxHeight = Math.max(1, viewport.height);
+    const popoverHeight = Math.min(naturalHeight, maxHeight);
+
+    if (naturalHeight > maxHeight + 1) {
+      this.el.classList.add("hint-popover--scrollable");
+      this.el.style.maxHeight = `${maxHeight}px`;
+    }
 
     // Preferred position from data attribute
     const preferred = this.triggerEl.dataset.hintPosition || "right";
 
     // Calculate available space in each direction
-    const spaceRight = viewportWidth - triggerRect.right;
-    const spaceLeft = triggerRect.left;
-    const spaceBottom = viewportHeight - triggerRect.bottom;
-    const spaceTop = triggerRect.top;
+    const spaceRight = viewport.right - triggerRect.right;
+    const spaceLeft = triggerRect.left - viewport.left;
+    const spaceBottom = viewport.bottom - triggerRect.bottom;
+    const spaceTop = triggerRect.top - viewport.top;
 
     // Determine best position
     let position = preferred;
-    const popoverWidth = Math.min(popoverRect.width, 360);
-    const popoverHeight = popoverRect.height;
 
     // Check if preferred position has enough space
-    if (position === "right" && spaceRight < popoverWidth + margin) {
+    if (position === "right" && spaceRight < popoverWidth + POPOVER_MARGIN) {
       position = spaceLeft > spaceRight ? "left" : "bottom";
-    } else if (position === "left" && spaceLeft < popoverWidth + margin) {
+    } else if (position === "left" && spaceLeft < popoverWidth + POPOVER_MARGIN) {
       position = spaceRight > spaceLeft ? "right" : "bottom";
-    } else if (position === "bottom" && spaceBottom < popoverHeight + margin) {
+    } else if (position === "bottom" && spaceBottom < popoverHeight + POPOVER_MARGIN) {
       position = spaceTop > spaceBottom ? "top" : "right";
-    } else if (position === "top" && spaceTop < popoverHeight + margin) {
+    } else if (position === "top" && spaceTop < popoverHeight + POPOVER_MARGIN) {
       position = spaceBottom > spaceTop ? "bottom" : "right";
     }
 
@@ -293,36 +318,36 @@ export class HintPopover {
     switch (position) {
       case "right":
         top = triggerRect.top + triggerRect.height / 2 - popoverHeight / 2;
-        left = triggerRect.right + margin;
+        left = triggerRect.right + POPOVER_MARGIN;
         this.el.classList.add("hint-popover--right");
         break;
 
       case "left":
         top = triggerRect.top + triggerRect.height / 2 - popoverHeight / 2;
-        left = triggerRect.left - popoverWidth - margin;
+        left = triggerRect.left - popoverWidth - POPOVER_MARGIN;
         this.el.classList.add("hint-popover--left");
         break;
 
       case "bottom":
-        top = triggerRect.bottom + margin;
+        top = triggerRect.bottom + POPOVER_MARGIN;
         left = triggerRect.left + triggerRect.width / 2 - popoverWidth / 2;
         this.el.classList.add("hint-popover--bottom");
         break;
 
       case "top":
-        top = triggerRect.top - popoverHeight - margin;
+        top = triggerRect.top - popoverHeight - POPOVER_MARGIN;
         left = triggerRect.left + triggerRect.width / 2 - popoverWidth / 2;
         this.el.classList.add("hint-popover--top");
         break;
     }
 
-    // Clamp to viewport
-    top = Math.max(margin, Math.min(top, viewportHeight - popoverHeight - margin));
-    left = Math.max(margin, Math.min(left, viewportWidth - popoverWidth - margin));
+    // Clamp to the usable viewport. This also handles long content: height is
+    // capped above, so the popover remains fully visible and the body scrolls.
+    top = Math.max(viewport.top, Math.min(top, viewport.bottom - popoverHeight));
+    left = Math.max(viewport.left, Math.min(left, viewport.right - popoverWidth));
 
     this.el.style.top = `${top}px`;
     this.el.style.left = `${left}px`;
-    this.el.style.maxWidth = `${popoverWidth}px`;
 
     // Adjust arrow position to point exactly at trigger center
     if (arrow) {
@@ -335,10 +360,7 @@ export class HintPopover {
         const triggerCenterY = triggerRect.top + triggerRect.height / 2;
         const arrowY = triggerCenterY - top;
 
-        // Clamp arrow to keep it within the popover content box (accounting for rounded corners)
-        // 12px (radius) + 6px (half arrow) = ~18px safe zone
-        const safeZone = 18;
-        const clampedY = Math.max(safeZone, Math.min(arrowY, popoverHeight - safeZone));
+        const clampedY = clampArrowOffset(arrowY, popoverHeight);
 
         arrow.style.top = `${clampedY}px`;
         // ensure margin-top doesn't shift it further if we set explicit top
@@ -349,8 +371,7 @@ export class HintPopover {
         const triggerCenterX = triggerRect.left + triggerRect.width / 2;
         const arrowX = triggerCenterX - left;
 
-        const safeZone = 18;
-        const clampedX = Math.max(safeZone, Math.min(arrowX, popoverWidth - safeZone));
+        const clampedX = clampArrowOffset(arrowX, popoverWidth);
 
         arrow.style.left = `${clampedX}px`;
       }
@@ -394,6 +415,39 @@ export class HintPopover {
       };
       document.addEventListener("click", outsideClickHandler);
     }, 100);
+
+    this._attachViewportHandlers();
+  }
+
+  _attachViewportHandlers() {
+    if (this._repositionHandler) return;
+
+    this._repositionHandler = () => {
+      if (!this.el || !this.triggerEl || !document.body.contains(this.triggerEl)) {
+        this.close();
+        return;
+      }
+      this._position();
+    };
+
+    window.addEventListener("resize", this._repositionHandler, { passive: true });
+    window.addEventListener("scroll", this._repositionHandler, { passive: true, capture: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", this._repositionHandler, { passive: true });
+      window.visualViewport.addEventListener("scroll", this._repositionHandler, { passive: true });
+    }
+  }
+
+  _detachViewportHandlers() {
+    if (!this._repositionHandler) return;
+
+    window.removeEventListener("resize", this._repositionHandler);
+    window.removeEventListener("scroll", this._repositionHandler, { capture: true });
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", this._repositionHandler);
+      window.visualViewport.removeEventListener("scroll", this._repositionHandler);
+    }
+    this._repositionHandler = null;
   }
 }
 
@@ -473,6 +527,58 @@ function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+}
+
+function clampArrowOffset(value, length) {
+  const safeZone = Math.min(ARROW_SAFE_ZONE, Math.max(0, length / 2));
+  const max = Math.max(safeZone, length - safeZone);
+  return Math.max(safeZone, Math.min(value, max));
+}
+
+function getUsableViewport(margin) {
+  const doc = document.documentElement;
+  const visualViewport = window.visualViewport;
+  const viewportLeft = visualViewport?.offsetLeft || 0;
+  const viewportTop = visualViewport?.offsetTop || 0;
+  const viewportWidth = visualViewport?.width || doc.clientWidth || window.innerWidth;
+  const viewportHeight = visualViewport?.height || doc.clientHeight || window.innerHeight;
+
+  let left = viewportLeft + margin;
+  let top = viewportTop + margin;
+  let right = viewportLeft + viewportWidth - margin;
+  let bottom = viewportTop + viewportHeight - margin;
+
+  const statusBar = document.querySelector(".status-bar");
+  if (statusBar) {
+    const style = window.getComputedStyle(statusBar);
+    const rect = statusBar.getBoundingClientRect();
+    const isVisible =
+      style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    const overlapsBottom = rect.top < bottom && rect.bottom > top && rect.bottom >= viewportTop + viewportHeight - 1;
+
+    if (style.position === "fixed" && isVisible && overlapsBottom) {
+      bottom = Math.min(bottom, rect.top - margin);
+    }
+  }
+
+  if (right <= left) {
+    left = viewportLeft + margin;
+    right = viewportLeft + Math.max(viewportWidth - margin, left + 1);
+  }
+
+  if (bottom <= top) {
+    top = viewportTop + margin;
+    bottom = Math.max(top + 1, viewportTop + viewportHeight - margin);
+  }
+
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top),
+  };
 }
 
 /**
