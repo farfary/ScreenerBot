@@ -32,6 +32,10 @@ const DATA_SOURCE_STATUS = {
   CACHED: "cached",
 };
 
+// How long after opening a token we suppress the "no data" row, so source
+// failures are never shown while the initial fetch/refresh is still in flight.
+const INITIAL_LOAD_GRACE_MS = 6000;
+
 export class TokenDetailsDialog {
   constructor(options = {}) {
     this.onClose = options.onClose || (() => {});
@@ -104,6 +108,11 @@ export class TokenDetailsDialog {
       this.fullTokenData = tokenData;
       // Reset chart data state for new token
       this.chartDataLoaded = false;
+      this._chartEmptyCount = 0;
+      this._chartPollBackedOff = false;
+      // Grace window before the "no data" row may appear, so we never flash
+      // source failures while the very first fetch/refresh is still in flight.
+      this._issuesSettleAt = Date.now() + INITIAL_LOAD_GRACE_MS;
 
       // Initialize hints system before creating dialog
       await Hints.init();
@@ -376,16 +385,45 @@ export class TokenDetailsDialog {
   /**
    * Render the thin row below the header that spells out which upstream sources
    * have no data (or are temporarily unavailable) for this token, so blanks are
-   * explained instead of silent. Hidden entirely when every source is ok.
+   * explained instead of silent.
+   *
+   * Rules that keep it honest and quiet:
+   * - Suppressed entirely during the initial-load grace window, so we never flash
+   *   failures while the first fetch/refresh is still in flight.
+   * - DexScreener and GeckoTerminal are one "market" concern: if either has data,
+   *   neither is listed (the token IS priced — the other provider is just an
+   *   unused alternative, not a real gap).
+   * - The chart is only flagged once its poll has actually settled on "empty"
+   *   (backed off), not while candles may still be loading.
    * @param {Array<{source:string,label:string,state:string,message:string}>} sourceStatus
    */
   _renderSourceIssues(sourceStatus) {
     const row = this.dialogEl?.querySelector("#sourceIssuesRow");
     if (!row) return;
 
-    const issues = Array.isArray(sourceStatus)
-      ? sourceStatus.filter((s) => s && s.state && s.state !== "ok")
-      : [];
+    const list = Array.isArray(sourceStatus) ? sourceStatus : [];
+    const by = Object.fromEntries(list.map((s) => [s.source, s]));
+    const isOk = (id) => by[id]?.state === "ok";
+
+    // Hold everything back until the initial load has had a chance to settle.
+    const settled = Date.now() >= (this._issuesSettleAt || 0);
+
+    const issues = [];
+    const marketOk = isOk("dexscreener") || isOk("geckoterminal");
+    if (settled) {
+      // Market: only when NEITHER provider has data (genuine no-market state).
+      if (!marketOk) {
+        if (by.dexscreener) issues.push(by.dexscreener);
+        if (by.geckoterminal) issues.push(by.geckoterminal);
+      }
+      // Rugcheck: flag once settled and still absent.
+      if (!isOk("rugcheck") && by.rugcheck) issues.push(by.rugcheck);
+    }
+    // Chart: independent of the grace timer — only once the poll has confirmed
+    // there is no OHLCV (backed off), so it never shows mid-load.
+    if (!isOk("ohlcv") && this._chartPollBackedOff && by.ohlcv) {
+      issues.push(by.ohlcv);
+    }
 
     if (issues.length === 0) {
       row.hidden = true;
@@ -393,7 +431,8 @@ export class TokenDetailsDialog {
       return;
     }
 
-    const allFailed = issues.length === (sourceStatus?.length || 0);
+    // "All failed" = no market, no security, no chart — the full blackout case.
+    const allFailed = !marketOk && !isOk("rugcheck") && !isOk("ohlcv");
     const icon = (state) =>
       state === "unavailable" ? "icon-circle-alert" : "icon-circle-x";
 
