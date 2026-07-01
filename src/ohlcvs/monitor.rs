@@ -748,6 +748,7 @@ impl OhlcvMonitor {
                     let updated_config = {
                         let mut active = self.active_tokens.write().await;
                         active.get_mut(mint).map(|config| {
+                            config.mark_fetch();
                             config.mark_empty_fetch();
                             config.clone()
                         })
@@ -782,6 +783,7 @@ impl OhlcvMonitor {
                         let mut active = self.active_tokens.write().await;
                         active.get_mut(mint).map(|config| {
                             config.consecutive_empty_fetches = 0;
+                            config.mark_fetch();
                             config.mark_activity();
                             config.clone()
                         })

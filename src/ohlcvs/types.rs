@@ -644,7 +644,11 @@ pub struct OhlcvTimeframeStatus {
     pub timeframe: String,
     pub candles: i64,
     pub backfill_complete: bool,
+    /// Timestamp (unix secs) of the newest candle for this timeframe.
     pub latest_timestamp: Option<i64>,
+    /// When new candles were last written for this timeframe (unix secs) — i.e.
+    /// the last successful fetch that produced data.
+    pub last_new_data_at: Option<i64>,
 }
 
 /// Overall OHLCV process status for one token (monitoring + per-timeframe data).
@@ -661,5 +665,9 @@ pub struct OhlcvStatus {
     pub best_timeframe: Option<String>,
     /// True once every timeframe's 30-day backfill is complete.
     pub backfill_complete: bool,
+    /// When this token's OHLCV was last checked (any fetch attempt, unix secs).
+    pub last_checked_at: Option<i64>,
+    /// When new candles were last written across any timeframe (unix secs).
+    pub last_new_data_at: Option<i64>,
     pub timeframes: Vec<OhlcvTimeframeStatus>,
 }

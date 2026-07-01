@@ -220,11 +220,14 @@ impl OhlcvServiceImpl {
     /// plus per-timeframe backfill flags from the monitor config row.
     pub(super) async fn get_status(&self, mint: &str) -> OhlcvResult<OhlcvStatus> {
         let summary = self.db.get_timeframe_summary(mint)?;
+        let last_new_by_tf = self.db.get_timeframe_last_new_data(mint).unwrap_or_default();
+        let last_checked_at = self.db.get_last_checked_at(mint).unwrap_or(None);
         let monitored = self.monitor.is_monitored(mint).await;
 
         let mut total_candles = 0i64;
         let mut best_timeframe: Option<String> = None;
         let mut all_backfilled = true;
+        let mut overall_last_new: Option<i64> = None;
         let mut timeframes = Vec::with_capacity(7);
 
         // Timeframe::all() is finest→coarsest, so the first one with candles is
@@ -247,11 +250,20 @@ impl OhlcvServiceImpl {
                 best_timeframe = Some(tf_str.clone());
             }
 
+            let last_new_data_at = last_new_by_tf
+                .iter()
+                .find(|(name, _)| name == &tf_str)
+                .map(|(_, ts)| *ts);
+            if let Some(ts) = last_new_data_at {
+                overall_last_new = Some(overall_last_new.map_or(ts, |cur| cur.max(ts)));
+            }
+
             timeframes.push(OhlcvTimeframeStatus {
                 timeframe: tf_str,
                 candles,
                 backfill_complete,
                 latest_timestamp: latest,
+                last_new_data_at,
             });
         }
 
@@ -262,6 +274,8 @@ impl OhlcvServiceImpl {
             total_candles,
             best_timeframe,
             backfill_complete: all_backfilled,
+            last_checked_at,
+            last_new_data_at: overall_last_new,
             timeframes,
         })
     }

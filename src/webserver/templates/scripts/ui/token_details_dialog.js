@@ -46,6 +46,7 @@ export class TokenDetailsDialog {
     this.tabHandlers = new Map();
     this.refreshPoller = null;
     this.chartPoller = null;
+    this.dataStatusPoller = null;
     this.isRefreshing = false;
     this.currentTimeframe = "5m";
     this.isOpening = false;
@@ -527,6 +528,24 @@ export class TokenDetailsDialog {
       { label: "ChartRefresh", interval }
     );
     this.chartPoller.start();
+
+    // Keep the DATA popover live on a steady, independent cadence — the chart
+    // poll can back off to 15s on a dead chart, but the data-status indicator
+    // (candle counts, last-checked / last-new-candle times) should still tick so
+    // it reflects new candles / checks promptly while the dialog is open.
+    if (this.dataStatusPoller) {
+      this.dataStatusPoller.stop();
+      this.dataStatusPoller.cleanup();
+    }
+    this.dataStatusPoller = new Poller(
+      () => {
+        if (this.currentTab === "overview" && this.tokenData?.mint) {
+          this._updateDataIndicator(this.tokenData.mint);
+        }
+      },
+      { label: "DataStatus", interval: 5000 }
+    );
+    this.dataStatusPoller.start();
   }
 
   _stopChartPolling() {
@@ -534,6 +553,11 @@ export class TokenDetailsDialog {
       this.chartPoller.stop();
       this.chartPoller.cleanup();
       this.chartPoller = null;
+    }
+    if (this.dataStatusPoller) {
+      this.dataStatusPoller.stop();
+      this.dataStatusPoller.cleanup();
+      this.dataStatusPoller = null;
     }
   }
 

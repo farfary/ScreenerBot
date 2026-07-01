@@ -391,25 +391,48 @@ export function applyChartTabMixin(DialogClass) {
     indicator.setAttribute("aria-label", `Chart data: ${summary}`);
 
     if (tip) {
+      const ago = (ts) => (ts ? Utils.formatTimeAgo(ts) : "—");
       const rows = (status.timeframes || [])
         .map((tf) => {
           const has = tf.candles > 0;
           const dot = has ? (tf.backfill_complete ? "ready" : "partial") : "none";
-          const count = has ? `${tf.candles}` : "—";
+          const count = has ? Number(tf.candles).toLocaleString() : "—";
+          const fresh = has ? ago(tf.last_new_data_at) : "—";
           return `
             <div class="chart-data-tip-row">
               <span class="chart-data-tip-dot" data-state="${dot}"></span>
               <span class="chart-data-tip-tf">${tf.timeframe.toUpperCase()}</span>
               <span class="chart-data-tip-count">${count}</span>
+              <span class="chart-data-tip-fresh" title="Last new candle">${fresh}</span>
             </div>`;
         })
         .join("");
+      const checked = status.last_checked_at
+        ? `checked ${ago(status.last_checked_at)}`
+        : status.monitored
+          ? "checking…"
+          : "not checked";
+      const updated = status.last_new_data_at
+        ? `updated ${ago(status.last_new_data_at)}`
+        : "no candles yet";
       tip.innerHTML = `
-        <div class="chart-data-tip-head">${summary}</div>
+        <div class="chart-data-tip-head">
+          <span class="chart-data-tip-title">${summary}</span>
+          <span class="chart-data-tip-checked">${checked}</span>
+        </div>
+        <div class="chart-data-tip-cols">
+          <span></span>
+          <span>TF</span>
+          <span class="chart-data-tip-count">Candles</span>
+          <span class="chart-data-tip-fresh">New</span>
+        </div>
         <div class="chart-data-tip-list">${rows}</div>
-        <div class="chart-data-tip-foot">${status.total_candles || 0} candles · ${
-          status.monitored ? "monitoring" : "idle"
-        }</div>`;
+        <div class="chart-data-tip-foot">
+          <span>${Number(status.total_candles || 0).toLocaleString()} candles · ${
+            status.monitored ? "monitoring" : "idle"
+          }</span>
+          <span class="chart-data-tip-foot-time">${updated}</span>
+        </div>`;
     }
   };
 

@@ -775,7 +775,7 @@
   top: calc(100% + 6px);
   left: 0;
   z-index: var(--z-dropdown);
-  min-width: 180px;
+  min-width: 244px;
   padding: 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -794,16 +794,41 @@
 }
 
 .chart-data-tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 6px;
 }
 
+.chart-data-tip-checked {
+  font-weight: 500;
+  font-size: 0.64rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-data);
+}
+
+/* Column header + each row share the same grid so values line up. */
+.chart-data-tip-cols,
 .chart-data-tip-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 10px 34px 1fr auto;
   align-items: center;
   gap: 8px;
+}
+
+.chart-data-tip-cols {
+  padding: 0 0 4px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.chart-data-tip-row {
   padding: 2px 0;
   font-family: var(--font-data);
   font-size: 0.7rem;
@@ -827,20 +852,34 @@
 
 .chart-data-tip-tf {
   color: var(--text-secondary);
-  min-width: 32px;
 }
 
 .chart-data-tip-count {
-  margin-left: auto;
+  text-align: right;
   color: var(--text-primary);
 }
 
+.chart-data-tip-fresh {
+  text-align: right;
+  color: var(--text-tertiary);
+  min-width: 56px;
+}
+
 .chart-data-tip-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid var(--border-color);
   font-size: 0.66rem;
   color: var(--text-tertiary);
+}
+
+.chart-data-tip-foot-time {
+  font-family: var(--font-data);
+  white-space: nowrap;
 }
 
 .chart-data-tip-empty {

@@ -209,6 +209,61 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
     }
 
+    /// Per-timeframe time of the most recent candle write (unix secs), i.e. the
+    /// last successful fetch that produced new candles. `fetched_at` is stored as
+    /// a TEXT timestamp, so convert to epoch in SQL.
+    pub fn get_timeframe_last_new_data(&self, mint: &str) -> OhlcvResult<Vec<(String, i64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT timeframe, CAST(strftime('%s', MAX(fetched_at)) AS INTEGER) AS last_new
+                 FROM ohlcv_candles
+                 WHERE mint = ?1
+                 GROUP BY timeframe",
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
+
+        let rows = stmt
+            .query_map(params![mint], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
+            })
+            .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            let (tf, last): (String, Option<i64>) =
+                row.map_err(|e| OhlcvError::DatabaseError(format!("Row failed: {e}")))?;
+            if let Some(ts) = last {
+                out.push((tf, ts));
+            }
+        }
+        Ok(out)
+    }
+
+    /// When this token's OHLCV was last checked (any fetch attempt), from the
+    /// monitor config's `last_fetch` (TEXT) as unix secs.
+    pub fn get_last_checked_at(&self, mint: &str) -> OhlcvResult<Option<i64>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        let res: Option<i64> = conn
+            .query_row(
+                "SELECT CAST(strftime('%s', last_fetch) AS INTEGER)
+                 FROM ohlcv_monitor_config WHERE mint = ?1",
+                params![mint],
+                |r| r.get(0),
+            )
+            .ok()
+            .flatten();
+        Ok(res)
+    }
+
     /// Check if backfill is complete for timeframe
     pub fn is_backfill_complete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<bool> {
         let conn = self
