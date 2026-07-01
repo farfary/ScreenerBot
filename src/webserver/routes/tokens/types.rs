@@ -210,8 +210,29 @@ pub struct TokenDetailResponse {
     // Pools
     pub pools: Vec<TokenPoolInfo>,
 
+    // Per-source data status (which providers supplied data, which have none,
+    // which are currently unavailable). Drives the dialog's "no data" row so the
+    // user sees exactly why a token shows blanks instead of a silent empty view.
+    pub source_status: Vec<SourceStatus>,
+
     // Metadata
     pub timestamp: String,
+}
+
+/// State of a single upstream data source for a token, surfaced in the
+/// token-details dialog. `ok` = we have data; `no_data` = the source simply
+/// does not list this token; `unavailable` = the source is currently
+/// unreachable/rate-limited so data may appear later.
+#[derive(Debug, Serialize, Clone)]
+pub struct SourceStatus {
+    /// Stable id: "dexscreener" | "geckoterminal" | "rugcheck" | "ohlcv".
+    pub source: String,
+    /// Display label, e.g. "DexScreener".
+    pub label: String,
+    /// "ok" | "no_data" | "unavailable".
+    pub state: String,
+    /// Short human message, e.g. "Not listed on DexScreener".
+    pub message: String,
 }
 
 /// OHLCV data point for charting
@@ -681,6 +702,82 @@ impl FilterRequest {
 ///
 /// This is used when a token is requested but not found in the local database.
 /// Returns the Token if found and successfully added, None otherwise.
+/// Build the per-source status list for the token-details dialog.
+///
+/// `has_*` reflect whether we hold data for each source. When we don't, we
+/// distinguish "the source genuinely doesn't list this token" (`no_data`) from
+/// "the source is currently unreachable/rate-limited" (`unavailable`) using the
+/// connectivity health monitor, so the UI can say "retrying" instead of a flat
+/// "no data" when a provider is merely throttled.
+pub(super) async fn build_source_status(
+    has_dexscreener: bool,
+    has_geckoterminal: bool,
+    has_rugcheck: bool,
+    has_ohlcv: bool,
+) -> Vec<SourceStatus> {
+    async fn market_state(
+        endpoint: &str,
+        label: &str,
+        has_data: bool,
+    ) -> SourceStatus {
+        let (state, message) = if has_data {
+            ("ok", "Live market data".to_owned())
+        } else if crate::connectivity::get_endpoint_health(endpoint)
+            .await
+            .map(|h| h.is_unhealthy())
+            .unwrap_or(false)
+        {
+            ("unavailable", format!("{label} unavailable — retrying"))
+        } else {
+            ("no_data", format!("Not listed on {label}"))
+        };
+        SourceStatus {
+            source: endpoint.to_owned(),
+            label: label.to_owned(),
+            state: state.to_owned(),
+            message,
+        }
+    }
+
+    let (dex, gecko) = tokio::join!(
+        market_state("dexscreener", "DexScreener", has_dexscreener),
+        market_state("geckoterminal", "GeckoTerminal", has_geckoterminal),
+    );
+
+    let rug = {
+        let (state, message) = if has_rugcheck {
+            ("ok", "Security report available".to_owned())
+        } else if crate::connectivity::get_endpoint_health("rugcheck")
+            .await
+            .map(|h| h.is_unhealthy())
+            .unwrap_or(false)
+        {
+            ("unavailable", "Rugcheck unavailable — retrying".to_owned())
+        } else {
+            ("no_data", "No Rugcheck report".to_owned())
+        };
+        SourceStatus {
+            source: "rugcheck".to_owned(),
+            label: "Rugcheck".to_owned(),
+            state: state.to_owned(),
+            message,
+        }
+    };
+
+    let ohlcv = SourceStatus {
+        source: "ohlcv".to_owned(),
+        label: "Chart".to_owned(),
+        state: if has_ohlcv { "ok" } else { "no_data" }.to_owned(),
+        message: if has_ohlcv {
+            "Chart data available".to_owned()
+        } else {
+            "No chart data yet".to_owned()
+        },
+    };
+
+    vec![dex, gecko, rug, ohlcv]
+}
+
 /// Per-provider deadline for the on-demand external token fetch. Keeps a
 /// rate-limited provider (e.g. GeckoTerminal 429 + retry/backoff) from stalling
 /// the `GET /tokens/:mint` request past the dashboard's client-side abort.

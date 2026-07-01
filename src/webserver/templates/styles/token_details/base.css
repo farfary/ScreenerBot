@@ -531,6 +531,54 @@
   - Keep keyboard accessibility via :focus-visible
   ============================================================================= */
 
+/* Thin per-source "no data / unavailable" row between the header and the tabs.
+   Explains blanks (token not on DexScreener/GeckoTerminal, no Rugcheck report,
+   no chart yet) instead of leaving the user with a silent empty view. */
+.source-issues-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 6px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.source-issues-lead {
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.source-issue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.source-issue i {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.source-issue--no_data i {
+  color: var(--text-tertiary, var(--text-secondary));
+}
+
+.source-issue--unavailable {
+  color: var(--warning, #d29922);
+}
+
+.source-issue--unavailable i {
+  color: var(--warning, #d29922);
+}
+
 .dialog-tabs {
   display: flex;
   align-items: center;

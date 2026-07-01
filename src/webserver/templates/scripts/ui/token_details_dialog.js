@@ -368,6 +368,52 @@ export class TokenDetailsDialog {
     } else if (this._dataSourceStatus.ohlcv === DATA_SOURCE_STATUS.PENDING) {
       this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.LOADING);
     }
+
+    // Detailed per-source "no data / unavailable" row (backend-driven).
+    this._renderSourceIssues(token.source_status);
+  }
+
+  /**
+   * Render the thin row below the header that spells out which upstream sources
+   * have no data (or are temporarily unavailable) for this token, so blanks are
+   * explained instead of silent. Hidden entirely when every source is ok.
+   * @param {Array<{source:string,label:string,state:string,message:string}>} sourceStatus
+   */
+  _renderSourceIssues(sourceStatus) {
+    const row = this.dialogEl?.querySelector("#sourceIssuesRow");
+    if (!row) return;
+
+    const issues = Array.isArray(sourceStatus)
+      ? sourceStatus.filter((s) => s && s.state && s.state !== "ok")
+      : [];
+
+    if (issues.length === 0) {
+      row.hidden = true;
+      row.innerHTML = "";
+      return;
+    }
+
+    const allFailed = issues.length === (sourceStatus?.length || 0);
+    const icon = (state) =>
+      state === "unavailable" ? "icon-circle-alert" : "icon-circle-x";
+
+    const chips = issues
+      .map(
+        (s) =>
+          `<span class="source-issue source-issue--${this._escapeHtml(s.state)}">
+             <i class="${icon(s.state)}" aria-hidden="true"></i>
+             <span class="source-issue-text">${this._escapeHtml(s.message)}</span>
+           </span>`
+      )
+      .join("");
+
+    const lead = allFailed
+      ? '<span class="source-issues-lead">No data available</span>'
+      : "";
+
+    row.innerHTML = `${lead}${chips}`;
+    row.hidden = false;
+    row.classList.toggle("source-issues-row--all", allFailed);
   }
 
   /**
@@ -798,6 +844,8 @@ export class TokenDetailsDialog {
             </div>
           </div>
         </div>
+
+        <div class="source-issues-row" id="sourceIssuesRow" role="status" hidden></div>
 
         <div class="dialog-tabs">
           <button class="tab-button active" data-tab="overview">
