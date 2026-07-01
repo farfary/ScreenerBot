@@ -307,6 +307,26 @@ impl OhlcvDatabase {
         Ok(())
     }
 
+    /// Mark backfill as incomplete for timeframe
+    pub fn mark_backfill_incomplete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
+
+        let query = format!(
+            "UPDATE ohlcv_monitor_config SET {} = 0, updated_at = CURRENT_TIMESTAMP WHERE mint = ?1",
+            column
+        );
+
+        conn.execute(&query, params![mint])
+            .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
+
+        Ok(())
+    }
+
     /// Mark all backfills as complete
     pub fn mark_all_backfills_complete(&self, mint: &str) -> OhlcvResult<()> {
         let conn = self

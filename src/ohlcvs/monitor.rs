@@ -819,6 +819,30 @@ impl OhlcvMonitor {
                     }
 
                     if !stored_points.is_empty() {
+                        match self.refresh_derived_timeframes_from_1m(mint, &pool_address) {
+                            Ok(derived_points) if derived_points > 0 => {
+                                logger::debug(
+                                    LogTag::Ohlcv,
+                                    &format!(
+                                        "Derived {} higher-timeframe OHLCV points for {} via {}",
+                                        derived_points, mint, pool_address
+                                    ),
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                logger::warning(
+                                    LogTag::Ohlcv,
+                                    &format!(
+                                        "Higher-timeframe derivation failed for {} via {}: {}",
+                                        mint, pool_address, e
+                                    ),
+                                );
+                            }
+                        }
+                    }
+
+                    if !stored_points.is_empty() {
                         let earliest = stored_points.first().map(|p| p.timestamp);
                         let latest = stored_points.last().map(|p| p.timestamp);
 
@@ -957,6 +981,16 @@ impl OhlcvMonitor {
                 )?;
 
                 if stored_count > 0 {
+                    if let Err(e) = self.refresh_derived_timeframes_from_1m(mint, mint) {
+                        logger::warning(
+                            LogTag::Ohlcv,
+                            &format!(
+                                "Higher-timeframe derivation failed for {} via SolanaTracker: {}",
+                                mint, e
+                            ),
+                        );
+                    }
+
                     // Update cache
                     self.cache
                         .put(mint, None, Timeframe::Minute1, candles.clone())?;
@@ -1113,15 +1147,100 @@ impl OhlcvMonitor {
         Ok(data_points)
     }
 
+    fn refresh_derived_timeframes_from_1m(
+        &self,
+        mint: &str,
+        pool_address: &str,
+    ) -> OhlcvResult<usize> {
+        let now = Utc::now().timestamp();
+        let from_ts = now - (2 * Timeframe::Day1.to_seconds());
+        let minute_candles = self.db.get_candles(
+            mint,
+            Some(pool_address),
+            Timeframe::Minute1,
+            Some(from_ts),
+            Some(now),
+            None,
+        )?;
+
+        if minute_candles.is_empty() {
+            return Ok(0);
+        }
+
+        let mut inserted_total = 0;
+
+        for timeframe in AGGREGATED_TIMEFRAMES {
+            let aggregated =
+                OhlcvAggregator::aggregate(&minute_candles, Timeframe::Minute1, timeframe)?;
+
+            if aggregated.is_empty() {
+                continue;
+            }
+
+            let inserted = self.db.insert_candles_batch(
+                mint,
+                pool_address,
+                timeframe,
+                &aggregated,
+                "monitor_aggregate",
+            )?;
+
+            inserted_total += inserted;
+            self.cache
+                .put(mint, Some(pool_address), timeframe, aggregated)?;
+        }
+
+        Ok(inserted_total)
+    }
+
+    fn is_timeframe_backfill_ready(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+    ) -> OhlcvResult<bool> {
+        let flag_complete = self.db.is_backfill_complete(mint, timeframe)?;
+        let has_candles = self
+            .db
+            .get_time_bounds(mint, pool_address, timeframe)?
+            .is_some();
+
+        if flag_complete && !has_candles {
+            self.db.mark_backfill_incomplete(mint, timeframe)?;
+            logger::warning(
+                LogTag::Ohlcv,
+                &format!(
+                    "Corrected stale backfill flag for mint={} timeframe={} (no candles stored)",
+                    mint,
+                    timeframe.as_str()
+                ),
+            );
+        }
+
+        Ok(flag_complete && has_candles)
+    }
+
+    fn are_all_timeframes_backfill_ready(
+        &self,
+        mint: &str,
+        pool_address: &str,
+    ) -> OhlcvResult<bool> {
+        for timeframe in Timeframe::all() {
+            if !self.is_timeframe_backfill_ready(mint, pool_address, timeframe)? {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+
     async fn ensure_retention_window(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
         let retention_days = with_config(|cfg| cfg.ohlcv.retention_days);
         if retention_days <= 0 {
             return Ok(());
         }
 
-        // Check if we need backfill by checking the oldest timeframe (1d)
-        // If 1d is complete, all timeframes should be complete
-        if self.db.is_backfill_complete(mint, Timeframe::Day1)? {
+        if self.are_all_timeframes_backfill_ready(mint, pool_address)? {
             return Ok(());
         }
 
@@ -1542,9 +1661,9 @@ impl OhlcvMonitor {
             ),
         );
 
-        for timeframe in timeframes.iter() {
-            // Check if already complete
-            if self.db.is_backfill_complete(mint, *timeframe)? {
+        for timeframe in timeframes {
+            // Check if already complete and backed by stored candles.
+            if self.is_timeframe_backfill_ready(mint, pool_address, timeframe)? {
                 logger::debug(
                     LogTag::Ohlcv,
                     &format!(
@@ -1558,24 +1677,41 @@ impl OhlcvMonitor {
 
             // Fetch this timeframe
             match self
-                .backfill_timeframe(mint, pool_address, *timeframe, thirty_days_ago, now)
+                .backfill_timeframe(mint, pool_address, timeframe, thirty_days_ago, now)
                 .await
             {
                 Ok(count) => {
                     total_fetched += count;
-                    // Mark as complete
-                    self.db.mark_backfill_complete(mint, *timeframe)?;
-                    logger::debug(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "Backfill complete for mint={} timeframe={} candles={}",
-                            mint,
-                            timeframe.as_str(),
-                            count
-                        ),
-                    );
+                    if count > 0
+                        || self
+                            .db
+                            .get_time_bounds(mint, pool_address, timeframe)?
+                            .is_some()
+                    {
+                        self.db.mark_backfill_complete(mint, timeframe)?;
+                        logger::debug(
+                            LogTag::Ohlcv,
+                            &format!(
+                                "Backfill complete for mint={} timeframe={} candles={}",
+                                mint,
+                                timeframe.as_str(),
+                                count
+                            ),
+                        );
+                    } else {
+                        self.db.mark_backfill_incomplete(mint, timeframe)?;
+                        logger::warning(
+                            LogTag::Ohlcv,
+                            &format!(
+                                "Backfill produced no candles for mint={} timeframe={}; leaving incomplete",
+                                mint,
+                                timeframe.as_str()
+                            ),
+                        );
+                    }
                 }
                 Err(e) => {
+                    self.db.mark_backfill_incomplete(mint, timeframe)?;
                     logger::warning(
                         LogTag::Ohlcv,
                         &format!(
@@ -1599,8 +1735,9 @@ impl OhlcvMonitor {
             sleep(Duration::from_millis(delay_ms)).await;
         }
 
-        // Mark all as complete if we got here
-        self.db.mark_all_backfills_complete(mint)?;
+        if self.are_all_timeframes_backfill_ready(mint, pool_address)? {
+            self.db.mark_all_backfills_complete(mint)?;
+        }
 
         logger::debug(
             LogTag::Ohlcv,
