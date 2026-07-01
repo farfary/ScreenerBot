@@ -8,6 +8,7 @@ pub struct ActiveActionsResponse {
     pub in_progress: usize,
     pub completed: usize,
     pub failed: usize,
+    pub unread: usize,
 }
 
 /// Action history response with pagination
@@ -41,4 +42,11 @@ fn default_limit() -> usize {
 #[derive(Debug, Serialize)]
 pub struct SubscriberCountResponse {
     pub subscriber_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActionMutationResponse {
+    pub success: bool,
+    pub updated: usize,
+    pub unread: usize,
 }

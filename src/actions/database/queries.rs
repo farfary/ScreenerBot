@@ -25,13 +25,18 @@ impl ActionsDatabase {
             String,         // state_data
             String,         // started_at
             Option<String>, // completed_at
+            bool,           // read
+            bool,           // dismissed
             String,         // metadata
             String,         // updated_at
         )> = conn
             .query_row(
                 r#"
                 SELECT id, action_type, entity_id, state, state_data,
-                       started_at, completed_at, metadata, updated_at
+                       started_at, completed_at,
+                       read_at IS NOT NULL AS read,
+                       dismissed_at IS NOT NULL AS dismissed,
+                       metadata, updated_at
                 FROM actions
                 WHERE id = ?1
                 "#,
@@ -47,6 +52,8 @@ impl ActionsDatabase {
                         row.get(6)?,
                         row.get(7)?,
                         row.get(8)?,
+                        row.get(9)?,
+                        row.get(10)?,
                     ))
                 },
             )
@@ -61,6 +68,8 @@ impl ActionsDatabase {
             state_data,
             started_at_str,
             completed_at_str,
+            read,
+            dismissed,
             metadata_str,
             _updated_at,
         )) = action_row
@@ -154,6 +163,8 @@ impl ActionsDatabase {
             current_step_index,
             started_at,
             completed_at,
+            read,
+            dismissed,
             metadata,
         }))
     }
@@ -166,7 +177,10 @@ impl ActionsDatabase {
         let mut query = String::from(
             r#"
             SELECT id, action_type, entity_id, state, state_data,
-                   started_at, completed_at, metadata, updated_at
+                   started_at, completed_at,
+                   read_at IS NOT NULL AS read,
+                   dismissed_at IS NOT NULL AS dismissed,
+                   metadata, updated_at
             FROM actions
             WHERE 1=1
             "#,
@@ -230,6 +244,8 @@ impl ActionsDatabase {
             String,
             String,
             Option<String>,
+            bool,
+            bool,
             String,
         )> = stmt
             .query_map(&params_refs[..], |row| {
@@ -241,7 +257,9 @@ impl ActionsDatabase {
                     row.get(4)?, // state_data
                     row.get(5)?, // started_at
                     row.get(6)?, // completed_at
-                    row.get(7)?, // metadata
+                    row.get(7)?, // read
+                    row.get(8)?, // dismissed
+                    row.get(9)?, // metadata
                 ))
             })
             .map_err(|e| format!("Failed to query actions: {e}"))?
@@ -331,6 +349,8 @@ impl ActionsDatabase {
             state_data,
             started_at_str,
             completed_at_str,
+            read,
+            dismissed,
             metadata_str,
         ) in actions_data
         {
@@ -372,6 +392,8 @@ impl ActionsDatabase {
                 current_step_index,
                 started_at,
                 completed_at,
+                read,
+                dismissed,
                 metadata,
             });
         }
@@ -512,6 +534,84 @@ impl ActionsDatabase {
             }
         }
         Ok((in_progress, completed, failed, cancelled))
+    }
+
+    pub async fn count_unread(&self) -> Result<usize, String> {
+        let conn = self.get_read_connection()?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM actions WHERE read_at IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to count unread actions: {e}"))?;
+        Ok(count.max(0) as usize)
+    }
+
+    pub async fn mark_action_read(&self, action_id: &str) -> Result<bool, String> {
+        let conn = self.get_write_connection()?;
+        let now = Utc::now().to_rfc3339();
+        let affected = conn
+            .execute(
+                r#"
+                UPDATE actions
+                SET read_at = COALESCE(read_at, ?1),
+                    updated_at = ?1
+                WHERE id = ?2
+                "#,
+                params![now, action_id],
+            )
+            .map_err(|e| format!("Failed to mark action read: {e}"))?;
+        Ok(affected > 0)
+    }
+
+    pub async fn mark_all_actions_read(&self) -> Result<usize, String> {
+        let conn = self.get_write_connection()?;
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            r#"
+            UPDATE actions
+            SET read_at = COALESCE(read_at, ?1),
+                updated_at = ?1
+            WHERE read_at IS NULL
+            "#,
+            params![now],
+        )
+        .map_err(|e| format!("Failed to mark all actions read: {e}"))
+    }
+
+    pub async fn dismiss_action(&self, action_id: &str) -> Result<bool, String> {
+        let conn = self.get_write_connection()?;
+        let now = Utc::now().to_rfc3339();
+        let affected = conn
+            .execute(
+                r#"
+                UPDATE actions
+                SET read_at = COALESCE(read_at, ?1),
+                    dismissed_at = COALESCE(dismissed_at, ?1),
+                    updated_at = ?1
+                WHERE id = ?2
+                "#,
+                params![now, action_id],
+            )
+            .map_err(|e| format!("Failed to dismiss action: {e}"))?;
+        Ok(affected > 0)
+    }
+
+    pub async fn dismiss_all_actions(&self) -> Result<usize, String> {
+        let conn = self.get_write_connection()?;
+        let now = Utc::now().to_rfc3339();
+        conn.execute(
+            r#"
+            UPDATE actions
+            SET read_at = COALESCE(read_at, ?1),
+                dismissed_at = COALESCE(dismissed_at, ?1),
+                updated_at = ?1
+            WHERE dismissed_at IS NULL OR read_at IS NULL
+            "#,
+            params![now],
+        )
+        .map_err(|e| format!("Failed to dismiss all actions: {e}"))
     }
 
     /// Finalize any actions still marked `in_progress` in the database.

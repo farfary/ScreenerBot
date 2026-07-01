@@ -94,7 +94,9 @@ export function open() {
 
   // Mark all as read after short delay
   setTimeout(() => {
-    notificationManager.markAllAsRead();
+    notificationManager.markAllAsRead().catch((error) => {
+      console.error("[NotificationPanel] Failed to mark notifications read on open", error);
+    });
   }, 500);
 }
 
@@ -336,9 +338,14 @@ function setupActions() {
   const clearAllBtn = document.getElementById("clearAllBtn");
 
   if (markAllReadBtn) {
-    handlers.markAllRead = () => {
-      notificationManager.markAllAsRead();
-      Utils.showToast({ type: "success", title: "All marked as read" });
+    handlers.markAllRead = async () => {
+      try {
+        await notificationManager.markAllAsRead();
+        Utils.showToast({ type: "success", title: "All marked as read" });
+      } catch (error) {
+        console.error("[NotificationPanel] Failed to mark all read:", error);
+        Utils.showToast("Failed to mark notifications read", "error");
+      }
     };
     markAllReadBtn.addEventListener("click", handlers.markAllRead);
   }
@@ -355,8 +362,13 @@ function setupActions() {
       });
 
       if (confirmed) {
-        notificationManager.clearAll();
-        Utils.showToast("Notifications cleared", "info");
+        try {
+          await notificationManager.clearAll();
+          Utils.showToast("Notifications cleared", "info");
+        } catch (error) {
+          console.error("[NotificationPanel] Failed to clear notifications:", error);
+          Utils.showToast("Failed to clear notifications", "error");
+        }
       }
     };
     clearAllBtn.addEventListener("click", handlers.clearAll);
@@ -548,9 +560,9 @@ async function renderNotifications() {
   // Apply UI state from cache
   notifications = notifications.map(mergeWithStoredState);
 
-  // The live "active" tab hides client-dismissed items; the DB-backed history
-  // tabs always show the full persisted record.
-  if (currentTab === "active") {
+  // Active and All are notification inbox views, so dismissed items stay hidden.
+  // Completed/Failed remain retained history views and show the persisted record.
+  if (currentTab === "active" || currentTab === "all") {
     notifications = notifications.filter((n) => !n.dismissed);
   }
 
@@ -616,8 +628,12 @@ async function loadMoreNotifications() {
       // Append new items to DOM
       const list = document.getElementById("notificationList");
       if (list) {
-        const newHtml = newNotifications
-          .map(mergeWithStoredState)
+        let itemsToAppend = newNotifications.map(mergeWithStoredState);
+        if (currentTab === "all") {
+          itemsToAppend = itemsToAppend.filter((n) => !n.dismissed);
+        }
+
+        const newHtml = itemsToAppend
           .map((n) => renderNotification(n))
           .join("");
         list.insertAdjacentHTML("beforeend", newHtml);
@@ -857,7 +873,10 @@ function setupNotificationListDelegation() {
       e.stopPropagation();
       const id = dismissBtn.dataset.id;
       if (id) {
-        notificationManager.dismiss(id);
+        notificationManager.dismiss(id).catch((error) => {
+          console.error("[NotificationPanel] Failed to dismiss notification:", error);
+          Utils.showToast("Failed to dismiss notification", "error");
+        });
       }
       return;
     }
@@ -866,7 +885,9 @@ function setupNotificationListDelegation() {
     if (item) {
       const id = item.dataset.id;
       if (id) {
-        notificationManager.markAsRead(id);
+        notificationManager.markAsRead(id).catch((error) => {
+          console.error("[NotificationPanel] Failed to mark notification read:", error);
+        });
       }
     }
   };

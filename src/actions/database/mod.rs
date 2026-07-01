@@ -110,6 +110,8 @@ impl ActionsDatabase {
                 started_at TEXT NOT NULL,
                 completed_at TEXT,
                 duration_ms INTEGER,
+                read_at TEXT,
+                dismissed_at TEXT,
                 metadata TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -179,6 +181,21 @@ impl ActionsDatabase {
         )
         .map_err(|e| format!("Failed to create completed_at index: {e}"))?;
 
+        self.ensure_actions_column(&conn, "read_at", "TEXT")?;
+        self.ensure_actions_column(&conn, "dismissed_at", "TEXT")?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_actions_read_at ON actions(read_at)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create read_at index: {e}"))?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_actions_dismissed_at ON actions(dismissed_at)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create dismissed_at index: {e}"))?;
+
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_action_steps_action_id ON action_steps(action_id)",
             [],
@@ -186,6 +203,41 @@ impl ActionsDatabase {
         .map_err(|e| format!("Failed to create action_steps index: {e}"))?;
 
         logger::info(LogTag::System, "Actions database schema initialized");
+
+        Ok(())
+    }
+
+    fn ensure_actions_column(
+        &self,
+        conn: &Connection,
+        column_name: &str,
+        column_type: &str,
+    ) -> Result<(), String> {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(actions)")
+            .map_err(|e| format!("Failed to inspect actions schema: {e}"))?;
+
+        let columns = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("Failed to read actions schema: {e}"))?;
+
+        for column in columns {
+            let column = column.map_err(|e| format!("Failed to parse actions schema row: {e}"))?;
+            if column == column_name {
+                return Ok(());
+            }
+        }
+
+        conn.execute(
+            &format!("ALTER TABLE actions ADD COLUMN {column_name} {column_type}"),
+            [],
+        )
+        .map_err(|e| format!("Failed to add actions.{column_name}: {e}"))?;
+
+        logger::info(
+            LogTag::System,
+            &format!("Added actions.{column_name} column"),
+        );
 
         Ok(())
     }
@@ -236,8 +288,9 @@ impl ActionsDatabase {
             r#"
             INSERT INTO actions (
                 id, action_type, entity_id, wallet_address, state, state_data,
-                started_at, completed_at, duration_ms, metadata, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                started_at, completed_at, duration_ms, read_at, dismissed_at,
+                metadata, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, ?11, ?12)
             "#,
             params![
                 action.id,

@@ -37,6 +37,12 @@ pub struct Action {
     /// When action completed (success or failure)
     pub completed_at: Option<DateTime<Utc>>,
 
+    /// Whether the user has read this action notification.
+    pub read: bool,
+
+    /// Whether the user has dismissed this action notification from live lists.
+    pub dismissed: bool,
+
     /// Additional metadata (symbol, amounts, etc.)
     pub metadata: Value,
 }
@@ -81,6 +87,8 @@ impl Action {
             current_step_index: 0,
             started_at: Utc::now(),
             completed_at: None,
+            read: false,
+            dismissed: false,
             metadata,
         }
     }

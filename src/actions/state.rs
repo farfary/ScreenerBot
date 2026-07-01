@@ -128,7 +128,7 @@ pub async fn get_active_actions() -> Vec<Action> {
     let actions = ACTIVE_ACTIONS.read().await;
     actions
         .values()
-        .filter(|a| matches!(a.state, ActionState::InProgress { .. }))
+        .filter(|a| matches!(a.state, ActionState::InProgress { .. }) && !a.dismissed)
         .cloned()
         .collect()
 }
@@ -469,6 +469,109 @@ pub async fn get_action_counts() -> (usize, usize, usize, usize) {
     }
 
     (in_progress, completed, failed, cancelled)
+}
+
+/// Count unread action notifications from the backend source of truth.
+pub async fn get_unread_count() -> usize {
+    if let Some(db_arc) = get_db().await {
+        let db_lock = db_arc.read().await;
+        if let Some(db) = db_lock.as_ref() {
+            if let Ok(count) = db.count_unread().await {
+                return count;
+            }
+        }
+    }
+
+    let actions = ACTIVE_ACTIONS.read().await;
+    actions.values().filter(|action| !action.read).count()
+}
+
+/// Mark one action notification as read in the database and hot cache.
+pub async fn mark_action_read(action_id: &str) -> Result<bool, String> {
+    let found = if let Some(db_arc) = get_db().await {
+        let db_lock = db_arc.read().await;
+        if let Some(db) = db_lock.as_ref() {
+            db.mark_action_read(action_id).await?
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    let mut actions = ACTIVE_ACTIONS.write().await;
+    if let Some(action) = actions.get_mut(action_id) {
+        action.read = true;
+        return Ok(true);
+    }
+
+    Ok(found)
+}
+
+/// Mark every persisted action notification as read.
+pub async fn mark_all_actions_read() -> Result<usize, String> {
+    let updated = if let Some(db_arc) = get_db().await {
+        let db_lock = db_arc.read().await;
+        if let Some(db) = db_lock.as_ref() {
+            db.mark_all_actions_read().await?
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    let mut actions = ACTIVE_ACTIONS.write().await;
+    for action in actions.values_mut() {
+        action.read = true;
+    }
+
+    Ok(updated)
+}
+
+/// Dismiss one action notification from live notification lists.
+pub async fn dismiss_action(action_id: &str) -> Result<bool, String> {
+    let found = if let Some(db_arc) = get_db().await {
+        let db_lock = db_arc.read().await;
+        if let Some(db) = db_lock.as_ref() {
+            db.dismiss_action(action_id).await?
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    let mut actions = ACTIVE_ACTIONS.write().await;
+    if let Some(action) = actions.get_mut(action_id) {
+        action.read = true;
+        action.dismissed = true;
+        return Ok(true);
+    }
+
+    Ok(found)
+}
+
+/// Dismiss every action notification from live lists while keeping history rows.
+pub async fn dismiss_all_actions() -> Result<usize, String> {
+    let updated = if let Some(db_arc) = get_db().await {
+        let db_lock = db_arc.read().await;
+        if let Some(db) = db_lock.as_ref() {
+            db.dismiss_all_actions().await?
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    let mut actions = ACTIVE_ACTIONS.write().await;
+    for action in actions.values_mut() {
+        action.read = true;
+        action.dismissed = true;
+    }
+
+    Ok(updated)
 }
 
 /// Query action history from database with pagination and filters

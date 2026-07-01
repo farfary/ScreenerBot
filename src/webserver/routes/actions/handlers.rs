@@ -71,6 +71,7 @@ pub(super) async fn get_active_actions(State(_state): State<Arc<AppState>>) -> i
     let actions = crate::actions::get_active_actions().await;
     let count = actions.len();
     let (in_progress, completed, failed, _cancelled) = crate::actions::get_action_counts().await;
+    let unread = crate::actions::get_unread_count().await;
 
     Json(ActiveActionsResponse {
         actions,
@@ -78,6 +79,7 @@ pub(super) async fn get_active_actions(State(_state): State<Arc<AppState>>) -> i
         in_progress,
         completed,
         failed,
+        unread,
     })
 }
 
@@ -176,6 +178,102 @@ pub(super) async fn get_action_by_id(
             "success": false,
             "error": format!("Action {action_id} not found")
         })),
+    }
+}
+
+/// Mark one action notification as read
+pub(super) async fn mark_action_read(
+    State(_state): State<Arc<AppState>>,
+    Path(action_id): Path<String>,
+) -> impl IntoResponse {
+    match crate::actions::mark_action_read(&action_id).await {
+        Ok(found) => Json(ActionMutationResponse {
+            success: found,
+            updated: usize::from(found),
+            unread: crate::actions::get_unread_count().await,
+        }),
+        Err(e) => {
+            crate::logger::error(
+                crate::logger::LogTag::System,
+                &format!("Failed to mark action {action_id} read: {e}"),
+            );
+            Json(ActionMutationResponse {
+                success: false,
+                updated: 0,
+                unread: crate::actions::get_unread_count().await,
+            })
+        }
+    }
+}
+
+/// Mark every action notification as read
+pub(super) async fn mark_all_actions_read(
+    State(_state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    match crate::actions::mark_all_actions_read().await {
+        Ok(updated) => Json(ActionMutationResponse {
+            success: true,
+            updated,
+            unread: crate::actions::get_unread_count().await,
+        }),
+        Err(e) => {
+            crate::logger::error(
+                crate::logger::LogTag::System,
+                &format!("Failed to mark all actions read: {e}"),
+            );
+            Json(ActionMutationResponse {
+                success: false,
+                updated: 0,
+                unread: crate::actions::get_unread_count().await,
+            })
+        }
+    }
+}
+
+/// Dismiss one action notification from live lists
+pub(super) async fn dismiss_action(
+    State(_state): State<Arc<AppState>>,
+    Path(action_id): Path<String>,
+) -> impl IntoResponse {
+    match crate::actions::dismiss_action(&action_id).await {
+        Ok(found) => Json(ActionMutationResponse {
+            success: found,
+            updated: usize::from(found),
+            unread: crate::actions::get_unread_count().await,
+        }),
+        Err(e) => {
+            crate::logger::error(
+                crate::logger::LogTag::System,
+                &format!("Failed to dismiss action {action_id}: {e}"),
+            );
+            Json(ActionMutationResponse {
+                success: false,
+                updated: 0,
+                unread: crate::actions::get_unread_count().await,
+            })
+        }
+    }
+}
+
+/// Dismiss every action notification from live lists while keeping history rows
+pub(super) async fn dismiss_all_actions(State(_state): State<Arc<AppState>>) -> impl IntoResponse {
+    match crate::actions::dismiss_all_actions().await {
+        Ok(updated) => Json(ActionMutationResponse {
+            success: true,
+            updated,
+            unread: crate::actions::get_unread_count().await,
+        }),
+        Err(e) => {
+            crate::logger::error(
+                crate::logger::LogTag::System,
+                &format!("Failed to dismiss all actions: {e}"),
+            );
+            Json(ActionMutationResponse {
+                success: false,
+                updated: 0,
+                unread: crate::actions::get_unread_count().await,
+            })
+        }
     }
 }
 

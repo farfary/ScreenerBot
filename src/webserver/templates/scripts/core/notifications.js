@@ -255,7 +255,9 @@ class NotificationManager {
     }
 
     const timer = setTimeout(() => {
-      this.dismiss(actionId);
+      this.dismiss(actionId).catch((error) => {
+        console.error("[NotificationManager] Auto-dismiss failed", error);
+      });
       this.autoDismissTimers.delete(actionId);
     }, delayMs);
 
@@ -265,10 +267,11 @@ class NotificationManager {
   /**
    * Mark notification as read
    */
-  markAsRead(actionId) {
+  async markAsRead(actionId) {
     const notification = this.notifications.get(actionId);
     if (!notification) return;
 
+    await this.postActionMutation(`/api/actions/${encodeURIComponent(actionId)}/read`);
     notification.read = true;
     this.notifications.set(actionId, notification);
     this.notifySubscribers({
@@ -281,7 +284,10 @@ class NotificationManager {
   /**
    * Mark all notifications as read
    */
-  markAllAsRead() {
+  async markAllAsRead() {
+    const result = await this.postActionMutation("/api/actions/read-all");
+    this.serverUnread = Number(result?.unread) || 0;
+
     for (const [id, notification] of this.notifications) {
       if (!notification.read) {
         notification.read = true;
@@ -297,11 +303,14 @@ class NotificationManager {
   /**
    * Dismiss notification
    */
-  dismiss(actionId) {
+  async dismiss(actionId) {
     const notification = this.notifications.get(actionId);
     if (!notification) return;
 
+    const result = await this.postActionMutation(`/api/actions/${encodeURIComponent(actionId)}/dismiss`);
+    this.serverUnread = Number(result?.unread) || 0;
     notification.dismissed = true;
+    notification.read = true;
     this.notifications.set(actionId, notification);
 
     // Clear auto-dismiss timer if exists
@@ -324,14 +333,21 @@ class NotificationManager {
   /**
    * Clear all notifications
    */
-  clearAll() {
+  async clearAll() {
+    const result = await this.postActionMutation("/api/actions/dismiss-all");
+    this.serverUnread = Number(result?.unread) || 0;
+
     // Clear all auto-dismiss timers
     for (const timer of this.autoDismissTimers.values()) {
       clearTimeout(timer);
     }
     this.autoDismissTimers.clear();
 
-    this.notifications.clear();
+    for (const [id, notification] of this.notifications) {
+      notification.dismissed = true;
+      notification.read = true;
+      this.notifications.set(id, notification);
+    }
     this.notifySubscribers({
       type: "cleared",
     });
@@ -398,6 +414,9 @@ class NotificationManager {
    * Get unread count
    */
   getUnreadCount() {
+    if (Number.isFinite(this.serverUnread)) {
+      return this.serverUnread;
+    }
     return this.getAll().filter((n) => !n.read).length;
   }
 
@@ -468,6 +487,7 @@ class NotificationManager {
         completed: Number(payload?.completed) || 0,
         failed: Number(payload?.failed) || 0,
       };
+      this.serverUnread = Number(payload?.unread) || 0;
 
       const changed = this.upsertActions(actions);
 
@@ -522,8 +542,10 @@ class NotificationManager {
   buildNotificationRecord(action, existing = null, options = {}) {
     const { resetRead = false, resetDismissed = false } = options;
 
-    const read = resetRead ? false : (existing?.read ?? false);
-    const dismissed = resetDismissed ? false : (existing?.dismissed ?? false);
+    const read = resetRead ? false : Boolean(action?.read || existing?.read || false);
+    const dismissed = resetDismissed
+      ? false
+      : Boolean(action?.dismissed || existing?.dismissed || false);
 
     const timestamp =
       existing?.timestamp ||
@@ -542,6 +564,27 @@ class NotificationManager {
     merged.timestamp = timestamp;
 
     return merged;
+  }
+
+  async postActionMutation(url) {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "fetch",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const payload = await response.json();
+    if (!payload?.success) {
+      throw new Error("Action notification update failed");
+    }
+    return payload;
   }
 
   areRecordsEqual(a, b) {

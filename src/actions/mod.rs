@@ -54,9 +54,10 @@ pub use types::{
 
 // Re-export state functions
 pub use state::{
-    cancel_action, complete_action_failed, complete_action_success, get_action, get_action_counts,
-    get_active_actions, get_all_actions, init_database, query_action_history, register_action,
-    spawn_cleanup_task, sync_from_db, update_step,
+    cancel_action, complete_action_failed, complete_action_success, dismiss_action,
+    dismiss_all_actions, get_action, get_action_counts, get_active_actions, get_all_actions,
+    get_unread_count, init_database, mark_action_read, mark_all_actions_read, query_action_history,
+    register_action, spawn_cleanup_task, sync_from_db, update_step,
 };
 
 // Re-export broadcast functions
