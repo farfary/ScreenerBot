@@ -94,6 +94,7 @@ pub struct OhlcvMonitor {
     active_tokens: Arc<RwLock<HashMap<String, TokenOhlcvConfig>>>,
     shutdown_signal: Arc<RwLock<bool>>,
     backfill_in_progress: Arc<Mutex<HashSet<String>>>,
+    discovery_in_progress: Arc<Mutex<HashSet<String>>>,
     telemetry: Arc<RwLock<MonitorTelemetry>>,
 }
 
@@ -114,6 +115,7 @@ impl OhlcvMonitor {
             active_tokens: Arc::new(RwLock::new(HashMap::new())),
             shutdown_signal: Arc::new(RwLock::new(false)),
             backfill_in_progress: Arc::new(Mutex::new(HashSet::new())),
+            discovery_in_progress: Arc::new(Mutex::new(HashSet::new())),
             telemetry: Arc::new(RwLock::new(MonitorTelemetry::default())),
         }
     }
@@ -152,23 +154,24 @@ impl OhlcvMonitor {
     pub async fn add_token(&self, mint: String, priority: Priority) -> OhlcvResult<()> {
         let mut config = TokenOhlcvConfig::new(mint.clone(), priority);
 
-        // Try to load existing pools from database
+        // Load existing pools from the database (fast, local). If none are stored
+        // yet, do NOT block this call on network pool discovery: `discover_pools`
+        // performs a rate-limited DexScreener/GeckoTerminal fetch that can stall
+        // for tens of seconds when the provider budget is exhausted. Because
+        // `add_token` is awaited inline by the `GET /tokens/:mint/ohlcv` handler
+        // (every chart-dialog open, polled ~1s), a blocking discovery here wedged
+        // the chart endpoint AND — via shared OHLCV DB contention — the token
+        // detail endpoint's `has_data` check, leaving the dialog stuck on a
+        // loading spinner. Instead, proceed immediately with whatever pools exist
+        // and kick discovery off in the background; the discovered pools are
+        // persisted to the DB, so the next poll (or the monitor loop) picks them
+        // up and backfill starts then. Mirrors the pre-existing "discovery failed
+        // -> empty pools -> retry later" path, just without the stall.
         let pools = match self.pool_manager.get_pools(&mint).await {
             Ok(pools) if !pools.is_empty() => pools,
             _ => {
-                // No pools in database, try to discover them from Pool Service
-                match self.pool_manager.discover_pools(&mint).await {
-                    Ok(discovered) => discovered,
-                    Err(e) => {
-                        // If discovery fails, still allow monitoring but with empty pools
-                        // The monitor loop will retry discovery later
-                        logger::warning(
-                            LogTag::Ohlcv,
-                            &format!("Warning: Pool discovery failed for {mint}: {e}"),
-                        );
-                        Vec::new()
-                    }
-                }
+                self.spawn_pool_discovery(&mint);
+                Vec::new()
             }
         };
 
@@ -1194,6 +1197,49 @@ impl OhlcvMonitor {
         Ok(())
     }
 
+    /// Kick off network pool discovery for `mint` in the background so callers
+    /// (notably the chart endpoint) never block on the rate-limited provider
+    /// fetch. Deduped per-mint via `discovery_in_progress` so the ~1s chart poll
+    /// can't spawn a discovery every tick. Discovered pools are persisted by
+    /// `discover_pools`, so the next poll/monitor cycle finds them and starts
+    /// backfill.
+    fn spawn_pool_discovery(&self, mint: &str) {
+        if !self.try_start_discovery(mint) {
+            return;
+        }
+        let runner = self.clone();
+        let mint_owned = mint.to_string();
+        tokio::spawn(async move {
+            if let Err(e) = runner.pool_manager.discover_pools(&mint_owned).await {
+                logger::warning(
+                    LogTag::Ohlcv,
+                    &format!("Warning: background pool discovery failed for {mint_owned}: {e}"),
+                );
+            }
+            runner.finish_discovery(&mint_owned);
+        });
+    }
+
+    fn try_start_discovery(&self, mint: &str) -> bool {
+        match self.discovery_in_progress.lock() {
+            Ok(mut set) => {
+                if set.contains(mint) {
+                    false
+                } else {
+                    set.insert(mint.to_string());
+                    true
+                }
+            }
+            Err(_) => false,
+        }
+    }
+
+    fn finish_discovery(&self, mint: &str) {
+        if let Ok(mut set) = self.discovery_in_progress.lock() {
+            set.remove(mint);
+        }
+    }
+
     fn try_start_backfill(&self, mint: &str) -> bool {
         match self.backfill_in_progress.lock() {
             Ok(mut set) => {
@@ -1699,6 +1745,7 @@ impl Clone for OhlcvMonitor {
             active_tokens: Arc::clone(&self.active_tokens),
             shutdown_signal: Arc::clone(&self.shutdown_signal),
             backfill_in_progress: Arc::clone(&self.backfill_in_progress),
+            discovery_in_progress: Arc::clone(&self.discovery_in_progress),
             telemetry: Arc::clone(&self.telemetry),
         }
     }

@@ -555,6 +555,34 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
 /// internally (1 concurrent request + min interval), so we never burst the API.
 const ON_DEMAND_PERMIT_WAIT: Duration = Duration::from_secs(3);
 
+/// Hard ceiling on each individual source fetch during an on-demand force update.
+/// `force_update_token` fans the three sources out concurrently with `join!`, so
+/// the endpoint blocks on the SLOWEST arm. A source that is rate-limited (e.g.
+/// GeckoTerminal returning 429 and entering its internal retry/backoff) can stall
+/// for 40s+ — long past the dashboard's 10s client-side abort — which leaves the
+/// token-details dialog stuck on a loading spinner even though the other sources
+/// already returned. Bounding each fetch turns a slow arm into a plain failure so
+/// the fast sources still populate the UI promptly.
+const ON_DEMAND_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Run an on-demand source fetch under [`ON_DEMAND_FETCH_TIMEOUT`], mapping a
+/// timeout to an `Api` failure tagged with the source name.
+async fn fetch_with_deadline<T, F>(source: &str, fut: F) -> TokenResult<Option<T>>
+where
+    F: std::future::Future<Output = TokenResult<Option<T>>>,
+{
+    match tokio::time::timeout(ON_DEMAND_FETCH_TIMEOUT, fut).await {
+        Ok(result) => result,
+        Err(_) => Err(TokenError::Api {
+            source: source.to_owned(),
+            message: format!(
+                "on-demand fetch timed out after {}s",
+                ON_DEMAND_FETCH_TIMEOUT.as_secs()
+            ),
+        }),
+    }
+}
+
 pub async fn force_update_token(
     mint: &str,
     db: std::sync::Arc<TokenDatabase>,
@@ -586,7 +614,11 @@ pub async fn force_update_token(
                 Ok(Ok(p)) => Some(p),
                 _ => None,
             };
-            let result = dexscreener::fetch_dexscreener_data(&mint_str, db_ref).await;
+            let result = fetch_with_deadline(
+                "DexScreener",
+                dexscreener::fetch_dexscreener_data(&mint_str, db_ref),
+            )
+            .await;
             if let Some(p) = permit {
                 if result.is_ok() && matches!(result, Ok(Some(_))) {
                     p.forget();
@@ -605,7 +637,11 @@ pub async fn force_update_token(
                 Ok(Ok(p)) => Some(p),
                 _ => None,
             };
-            let result = geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref).await;
+            let result = fetch_with_deadline(
+                "GeckoTerminal",
+                geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref),
+            )
+            .await;
             if let Some(p) = permit {
                 if result.is_ok() && matches!(result, Ok(Some(_))) {
                     p.forget();
@@ -622,7 +658,11 @@ pub async fn force_update_token(
                     Ok(Ok(p)) => Some(p),
                     _ => None,
                 };
-            let result = rugcheck::fetch_rugcheck_data(&mint_str, db_ref).await;
+            let result = fetch_with_deadline(
+                "Rugcheck",
+                rugcheck::fetch_rugcheck_data(&mint_str, db_ref),
+            )
+            .await;
             if let Some(p) = permit {
                 if result.is_ok() && matches!(result, Ok(Some(_))) {
                     p.forget();

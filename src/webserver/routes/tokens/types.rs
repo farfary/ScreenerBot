@@ -681,6 +681,14 @@ impl FilterRequest {
 ///
 /// This is used when a token is requested but not found in the local database.
 /// Returns the Token if found and successfully added, None otherwise.
+/// Per-provider deadline for the on-demand external token fetch. Keeps a
+/// rate-limited provider (e.g. GeckoTerminal 429 + retry/backoff) from stalling
+/// the `GET /tokens/:mint` request past the dashboard's client-side abort.
+/// Kept at 3s because the two providers are tried sequentially (DexScreener then
+/// GeckoTerminal), so the worst case is ~2x this — 3s keeps the total under the
+/// 10s client abort even when both providers are slow/rate-limited.
+const EXTERNAL_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crate::tokens::Token> {
     use crate::apis::get_api_manager;
     use crate::tokens::database::get_global_database;
@@ -693,9 +701,22 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
     let apis = get_api_manager();
     let db = get_global_database()?;
 
-    // Try DexScreener first - most reliable for Solana tokens
+    // Try DexScreener first - most reliable for Solana tokens.
+    //
+    // Bound the provider call: a user opening a token we have never tracked hits
+    // this path, and when a provider is rate-limited (GeckoTerminal returns 429
+    // and enters its internal retry/backoff) the fetch can block for 10s+ — past
+    // the dashboard's client-side abort — leaving the token-details dialog stuck
+    // on a loading spinner. A timed-out provider is treated as a miss so we fall
+    // through to the next source (or NOT_FOUND) promptly instead of hanging.
     if apis.dexscreener.is_enabled() {
-        match apis.dexscreener.fetch_token_pools(mint, None).await {
+        let dex_fetch = tokio::time::timeout(
+            EXTERNAL_FETCH_TIMEOUT,
+            apis.dexscreener.fetch_token_pools(mint, None),
+        )
+        .await
+        .unwrap_or_else(|_| Err("provider fetch timed out".to_owned()));
+        match dex_fetch {
             Ok(pools) => {
                 if let Some(pool) = pools.first() {
                     let symbol = if !pool.base_token_symbol.is_empty() {
@@ -772,9 +793,16 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
         }
     }
 
-    // Try GeckoTerminal as fallback
+    // Try GeckoTerminal as fallback (same bounded-fetch rationale as above:
+    // never let a rate-limited provider stall the token-details request).
     if apis.geckoterminal.is_enabled() {
-        match apis.geckoterminal.fetch_pools(mint).await {
+        let gecko_fetch = tokio::time::timeout(
+            EXTERNAL_FETCH_TIMEOUT,
+            apis.geckoterminal.fetch_pools(mint),
+        )
+        .await
+        .unwrap_or_else(|_| Err("provider fetch timed out".to_owned()));
+        match gecko_fetch {
             Ok(pools) => {
                 if let Some(pool) = pools.first() {
                     // Extract symbol from pool name (format: "SYMBOL/SOL")
