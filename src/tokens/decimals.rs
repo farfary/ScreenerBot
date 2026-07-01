@@ -197,7 +197,24 @@ pub async fn get(mint: &str) -> Option<u8> {
         return Some(d);
     }
 
-    // Fetch from chain as last resort
+    // Try the self-hosted ScreenerBot data server FIRST (a fast shared cache of
+    // Rugcheck-sourced decimals). On any disabled/miss/timeout it yields None and
+    // we fall through to on-chain extraction below. This path never touches a
+    // provider rate limiter (the server enforces its own per-IP limit).
+    if let Some(d) = get_from_server(mint).await {
+        cache(mint, d);
+        if let Err(e) = persist_to_db(mint, d).await {
+            logger::warning(
+                LogTag::Tokens,
+                &format!("Failed to persist server decimals to DB: mint={mint} err={e}"),
+            );
+        }
+        drop(guard);
+        release_lock_if_idle(mint);
+        return Some(d);
+    }
+
+    // Fetch from chain (self-extraction) as fallback after the server.
     let chain_result = get_token_decimals_from_chain(mint).await;
     if let Ok(d) = chain_result {
         cache(mint, d);
@@ -404,6 +421,46 @@ async fn get_from_db(mint: &str) -> Option<u8> {
 }
 
 /// Try to get decimals from stored RugCheck data
+/// Fetch decimals from the self-hosted ScreenerBot data server's `/v1/decimals`
+/// endpoint. Returns `None` when the source is disabled/unconfigured or the
+/// request misses/times out/errors, so the caller falls back to on-chain
+/// extraction. Gated by the shared `[tokens.sources.screenerbot_server]` config;
+/// deliberately at the request layer so no provider rate limiter is consumed.
+async fn get_from_server(mint: &str) -> Option<u8> {
+    use crate::config::with_config;
+    use std::time::Duration;
+
+    let (enabled, endpoint, timeout_secs) = with_config(|c| {
+        let s = &c.tokens.sources.screenerbot_server;
+        (s.enabled, s.endpoint.clone(), s.timeout_seconds)
+    });
+    if !enabled || endpoint.trim().is_empty() {
+        return None;
+    }
+
+    let url = format!(
+        "{}/v1/decimals?mint={}",
+        endpoint.trim_end_matches('/'),
+        mint
+    );
+    let resp = crate::net::client()
+        .get(&url)
+        .timeout(Duration::from_secs(timeout_secs))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+
+    // Response shape: { "decimals": { "<mint>": <n> }, "requested": N }.
+    // A cold token returns an empty map (fetch scheduled server-side); treat that
+    // as a miss and fall back to chain, warming the server cache for next time.
+    let body: serde_json::Value = resp.json().await.ok()?;
+    let value = body.pointer(&format!("/decimals/{mint}"))?.as_u64()?;
+    (value <= u8::MAX as u64).then_some(value as u8)
+}
+
 async fn get_from_rugcheck(mint: &str) -> Option<u8> {
     use crate::tokens::database::get_global_database;
 
