@@ -886,34 +886,43 @@
   }
 }
 
-/* Floating controls (save + close), always on the dark backdrop → bright glass */
+/* Floating controls pinned to the viewport corner so they always sit on the
+   dark backdrop (never over the white image panel) → consistent contrast in
+   both themes. */
 .lightbox-toolbar {
-  position: absolute;
-  top: -8px;
-  right: -8px;
+  position: fixed;
+  top: 18px;
+  right: 18px;
   display: flex;
-  gap: 8px;
-  z-index: 2;
+  gap: 10px;
+  z-index: 3;
 }
 
 .lightbox-btn {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: var(--radius-full);
-  background: rgb(255, 255, 255, 0.1);
-  border: 1px solid rgb(255, 255, 255, 0.18);
+  background: rgb(20, 22, 28, 0.72);
+  border: 1px solid rgb(255, 255, 255, 0.22);
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition-base);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgb(0, 0, 0, 0.4);
 }
 
 .lightbox-btn:hover {
-  background: rgb(255, 255, 255, 0.2);
+  background: rgb(40, 44, 54, 0.9);
+  border-color: rgb(255, 255, 255, 0.4);
   transform: scale(1.08);
+}
+
+.lightbox-save:hover {
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
 .lightbox-btn:active {
