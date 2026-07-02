@@ -97,3 +97,23 @@ pub struct OpenUrlResponse {
     pub message: String,
     pub url: String,
 }
+
+/// Payload the dashboard frontend sends once it has fully loaded and started.
+/// All fields optional so the signal works even from a minimal caller.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct ClientReadyRequest {
+    /// The page that was active when the UI became ready (default "home").
+    #[serde(default)]
+    pub page: Option<String>,
+    /// Milliseconds from page navigation start to fully-ready, if measured.
+    #[serde(default)]
+    pub load_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ClientReadyResponse {
+    pub acknowledged: bool,
+    /// True only for the first report after boot (the one that was logged).
+    pub first_report: bool,
+    pub uptime_seconds: u64,
+}

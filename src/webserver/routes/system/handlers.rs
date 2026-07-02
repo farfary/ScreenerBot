@@ -17,9 +17,19 @@ use axum::{extract::State, http::StatusCode, response::Response, Json};
 use chrono::Utc;
 use std::env;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task;
+
+/// Set the first time the dashboard frontend reports itself fully loaded, so the
+/// "frontend ready" log line fires exactly once per process.
+static CLIENT_READY_REPORTED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the dashboard frontend has reported that it finished loading.
+pub fn is_client_ready() -> bool {
+    CLIENT_READY_REPORTED.load(Ordering::SeqCst)
+}
 
 /// POST /api/system/reboot — Restart the entire screenerbot process
 pub(super) async fn reboot_system() -> Response {
@@ -418,5 +428,40 @@ pub(super) async fn get_data_stats() -> Response {
         config_size_bytes,
         data_directory: paths::get_data_directory().display().to_string(),
         timestamp: Utc::now().to_rfc3339(),
+    })
+}
+
+/// POST /api/system/client-ready — the dashboard frontend signals that it has
+/// finished loading everything and is fully started (initial page rendered and
+/// its first live data shown). Logged once per process so boot-to-interactive
+/// time is observable, and exposed via `is_client_ready()` for anything that
+/// wants to know the UI is up. Idempotent: repeat reports are acknowledged
+/// without re-logging.
+pub(super) async fn client_ready(
+    State(state): State<Arc<AppState>>,
+    body: Option<Json<ClientReadyRequest>>,
+) -> Response {
+    let req = body.map(|Json(inner)| inner).unwrap_or_default();
+    let first_report = !CLIENT_READY_REPORTED.swap(true, Ordering::SeqCst);
+
+    if first_report {
+        let page = req.page.as_deref().unwrap_or("home");
+        let load_info = req
+            .load_ms
+            .map(|ms| format!(", client load {ms}ms"))
+            .unwrap_or_default();
+        logger::info(
+            LogTag::Webserver,
+            &format!(
+                "Dashboard frontend fully loaded and started (page={page}, {}s after boot{load_info})",
+                state.uptime_seconds()
+            ),
+        );
+    }
+
+    success_response(ClientReadyResponse {
+        acknowledged: true,
+        first_report,
+        uptime_seconds: state.uptime_seconds(),
     })
 }

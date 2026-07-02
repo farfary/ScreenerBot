@@ -21,4 +21,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/open-url", post(handlers::open_url))
         .route("/exit", post(handlers::exit_app))
         .route("/data-stats", get(handlers::get_data_stats))
+        .route("/client-ready", post(handlers::client_ready))
 }

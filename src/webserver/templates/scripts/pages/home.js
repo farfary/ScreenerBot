@@ -4,19 +4,23 @@ import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
+import { notifyClientReady } from "../core/client_ready.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
 import { createCustomizer } from "./home/customize.js";
 
 function createLifecycle() {
   let poller = null;
   let scopedFetch = null;
-  // Separate scoped fetcher for the calendar: a `latestOnly` fetcher aborts its
-  // previous request on the NEXT call regardless of URL, so sharing one with the
-  // main dashboard fetch would make the calendar poll abort /api/dashboard/home
-  // every tick (leaving the cards stuck in loading). Each concern gets its own.
+  // The calendar gets its OWN scoped fetcher (not shared with the dashboard
+  // fetch): scoped fetchers tie their requests to the page lifecycle so they're
+  // cancelled on dispose, and keeping them separate means neither concern can
+  // cancel the other. The dashboard fetcher is deliberately NOT `latestOnly` —
+  // see fetchData's in-flight guard for why.
   let calendarFetch = null;
   let cachedData = null;
   let hasLoadedOnce = false;
+  // Guards against overlapping dashboard fetches (see fetchData).
+  let isFetching = false;
   let calendar = null;
   let customizer = null;
   // Animation intervals tracking
@@ -47,6 +51,17 @@ function createLifecycle() {
 
   // Fetch dashboard data
   async function fetchData() {
+    // Never start a second fetch while one is still in flight. The 5s poller
+    // used to fire straight into a `latestOnly` fetcher, which ABORTED the
+    // still-pending request; fetchData's AbortError branch then returned
+    // WITHOUT clearing the loading skeleton. Any response slower than the poll
+    // interval (startup service contention, a slow RPC tick, a brief network
+    // hiccup) therefore got cancelled before it could resolve, and the wallet
+    // hero + cards stayed stuck in the loading state forever. Skipping the tick
+    // lets the in-flight request finish and clear the skeleton.
+    if (isFetching) return;
+    isFetching = true;
+
     const fetcher =
       typeof scopedFetch === "function"
         ? scopedFetch
@@ -61,13 +76,20 @@ function createLifecycle() {
       updateUI(data);
       // Remove loading state after successful data fetch
       setLoadingState(false);
+      // Landing page has rendered real data — the app is fully up. Fire the
+      // one-time "frontend ready" signal so the backend can log/observe it.
+      notifyClientReady({ page: "home" });
     } catch (error) {
       if (error?.name === "AbortError") {
+        // Only reached on page dispose (the lifecycle ctx aborts its requests).
+        // The next visit's fetch will repopulate; nothing to clear here.
         return;
       }
       console.error("Error fetching dashboard data:", error);
       // Remove loading state on error to avoid stuck loading
       setLoadingState(false);
+    } finally {
+      isFetching = false;
     }
   }
 
@@ -257,7 +279,10 @@ function createLifecycle() {
   return {
     init: (ctx) => {
       console.log("[Home] Initializing dashboard");
-      scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
+      // Dashboard fetcher is NOT latestOnly — fetchData's in-flight guard
+      // already prevents overlap, and latestOnly would abort a slow in-flight
+      // request on the next poll tick (the stuck-loading bug).
+      scopedFetch = createScopedFetcher(ctx);
       calendarFetch = createScopedFetcher(ctx, { latestOnly: true });
 
       // Note: Loading state is already applied via HTML classes
@@ -274,7 +299,7 @@ function createLifecycle() {
       console.log("[Home] Activating dashboard");
 
       if (!scopedFetch) {
-        scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
+        scopedFetch = createScopedFetcher(ctx);
       }
       if (!calendarFetch) {
         calendarFetch = createScopedFetcher(ctx, { latestOnly: true });
