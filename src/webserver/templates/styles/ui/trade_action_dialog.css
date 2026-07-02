@@ -651,9 +651,8 @@ body.trade-action-dialog-open {
 
 .trade-action-quote-section[data-state="error"] .trade-action-quote-error {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 8px;
   padding: 12px;
   font-size: 0.8rem;
   color: rgb(var(--color-error, 248 81 73));
@@ -662,9 +661,49 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-quote-error svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.quote-error-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-align: left;
+}
+
+/* Title: the friendly reason (e.g. "This token isn't tradable right now"). */
+.quote-error-text {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Detail: the actionable hint — muted, sits under the title. */
+.quote-error-detail {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgb(var(--color-text-secondary));
+}
+
+.quote-error-retry {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgb(var(--color-error, 248 81 73));
+  background: transparent;
+  border: 1px solid rgb(var(--color-error, 248 81 73) / 0.4);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s) ease;
+}
+
+.quote-error-retry:hover {
+  background: rgb(var(--color-error, 248 81 73) / 0.15);
 }
 
 .trade-action-quote-section[data-state="loaded"] .trade-action-quote-content {

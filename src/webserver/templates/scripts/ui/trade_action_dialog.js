@@ -225,7 +225,11 @@ export class TradeActionDialog {
                 <circle cx="12" cy="12" r="10"/>
                 <path d="M12 8v4M12 16h.01"/>
               </svg>
-              <span class="quote-error-text"></span>
+              <div class="quote-error-body">
+                <span class="quote-error-text"></span>
+                <span class="quote-error-detail"></span>
+                <button type="button" class="quote-error-retry">Try again</button>
+              </div>
             </div>
             <div class="trade-action-quote-content">
               <div class="quote-hero">
@@ -376,6 +380,8 @@ export class TradeActionDialog {
     this.quoteRouteEl = overlay.querySelector(".quote-route");
     this.quoteSlippageEl = overlay.querySelector(".quote-slippage");
     this.quoteErrorTextEl = overlay.querySelector(".quote-error-text");
+    this.quoteErrorDetailEl = overlay.querySelector(".quote-error-detail");
+    this.quoteErrorRetryBtn = overlay.querySelector(".quote-error-retry");
     this.quoteUnitPriceEl = overlay.querySelector(".quote-unit-price");
     this.quoteMinReceivedEl = overlay.querySelector(".quote-min-received");
     this.quoteYouPayEl = overlay.querySelector(".quote-you-pay");
@@ -414,6 +420,7 @@ export class TradeActionDialog {
     on(this.confirmBtn, "click", this._confirmListener);
     on(this.inputField, "input", this._inputChangeListener);
     on(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
+    on(this.quoteErrorRetryBtn, "click", this._quoteRefreshListener);
 
     // Amount slider + MAX
     this._sliderListener = this._handleSliderInput.bind(this);
@@ -602,6 +609,7 @@ export class TradeActionDialog {
     off(this.confirmBtn, "click", this._confirmListener);
     off(this.inputField, "input", this._inputChangeListener);
     off(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
+    off(this.quoteErrorRetryBtn, "click", this._quoteRefreshListener);
     off(this.sliderEl, "input", this._sliderListener);
     off(this.maxBtn, "click", this._maxListener);
 

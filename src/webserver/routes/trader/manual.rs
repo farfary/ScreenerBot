@@ -573,11 +573,52 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
 
             success_response(response)
         }
-        Err(e) => error_response(
-            StatusCode::BAD_GATEWAY,
-            "QuoteFailed",
-            &format!("Failed to fetch quote: {e}"),
-            None,
-        ),
+        Err(e) => {
+            // Map the underlying failure to a friendly title + actionable hint so
+            // the trade dialog explains WHY a quote couldn't be fetched instead of
+            // dumping the raw error chain (e.g. "RPC Provider Error: ...").
+            let raw = e.to_string();
+            let low = raw.to_lowercase();
+            let (status, code, message, details): (StatusCode, &str, &str, &str) =
+                if low.contains("not tradable") || low.contains("token_not_tradable") {
+                    (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "TokenNotTradable",
+                        "This token isn't tradable right now",
+                        "No liquidity or swap route is available. The token may be unlaunched, \
+                         abandoned, or have no pool. Try again later or choose another token.",
+                    )
+                } else if low.contains("no swap route") || low.contains("no route") {
+                    (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "NoRoute",
+                        "No swap route available",
+                        "No provider could route this trade at the requested amount. Try a \
+                         smaller amount, or try again in a moment.",
+                    )
+                } else if low.contains("no swap routers enabled") {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "NoRouters",
+                        "No swap providers are enabled",
+                        "Enable at least one swap router in Trader settings, then try again.",
+                    )
+                } else if low.contains("timeout") || low.contains("timed out") {
+                    (
+                        StatusCode::GATEWAY_TIMEOUT,
+                        "QuoteTimeout",
+                        "Quote request timed out",
+                        "The swap providers didn't respond in time. Check your connection and retry.",
+                    )
+                } else {
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        "QuoteFailed",
+                        "Couldn't fetch a quote",
+                        raw.as_str(),
+                    )
+                };
+            error_response(status, code, message, Some(details))
+        }
     }
 }

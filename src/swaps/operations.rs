@@ -59,11 +59,15 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
                                 quote.price_impact_pct
                             ),
                         );
-                        Some(quote)
+                        Ok(quote)
                     }
                     Err(e) => {
-                        logger::warning(LogTag::Swap, &format!("{} quote failed: {}", r.name(), e));
-                        None
+                        let msg = e.to_string();
+                        logger::warning(
+                            LogTag::Swap,
+                            &format!("{} quote failed: {msg}", r.name()),
+                        );
+                        Err((r.name().to_owned(), msg))
                     }
                 }
             }
@@ -71,12 +75,22 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
         .collect();
 
     let results = future::join_all(futures).await;
-    let quotes: Vec<Quote> = results.into_iter().flatten().collect();
-
     let elapsed = start.elapsed();
 
+    // Partition into successful quotes and per-router failures. Keeping the
+    // failures lets us report the ACTUAL reason (e.g. token not tradable) to the
+    // trade dialog instead of a generic "all routers failed" that hides it.
+    let mut quotes: Vec<Quote> = Vec::new();
+    let mut errors: Vec<(String, String)> = Vec::new();
+    for res in results {
+        match res {
+            Ok(q) => quotes.push(q),
+            Err(e) => errors.push(e),
+        }
+    }
+
     if quotes.is_empty() {
-        return Err(Error::api_error("All routers failed to provide quotes"));
+        return Err(classify_quote_failure(&errors));
     }
 
     // Select best quote (highest output)
@@ -97,6 +111,40 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     );
 
     Ok(best)
+}
+
+/// Turn the collected per-router quote failures into a single, user-meaningful
+/// error message. The common case — a token with no pool/liquidity — is reported
+/// by routers as "not tradable"; surface that plainly so the trade dialog can
+/// explain WHY the swap can't be previewed instead of a generic failure string.
+///
+/// The message is kept clean and self-describing (the quote route matches on it
+/// to pick a friendly title/hint for the UI), so it must not be wrapped in extra
+/// prefixes here.
+fn classify_quote_failure(errors: &[(String, String)]) -> Error {
+    if errors.is_empty() {
+        return Error::api_error("All routers failed to provide quotes");
+    }
+
+    let joined = errors
+        .iter()
+        .map(|(name, msg)| format!("{name}: {msg}"))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let lower = joined.to_lowercase();
+
+    if lower.contains("not tradable") || lower.contains("token_not_tradable") {
+        return Error::api_error(
+            "Token not tradable: no liquidity or swap route is available for this token",
+        );
+    }
+    if lower.contains("no route") || lower.contains("no routes") || lower.contains("could not find any route") {
+        return Error::api_error(
+            "No swap route available for this token at the requested amount",
+        );
+    }
+
+    Error::api_error(format!("No swap route available ({joined})"))
 }
 
 // ============================================================================

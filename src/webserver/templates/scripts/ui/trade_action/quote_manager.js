@@ -149,7 +149,12 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         this._pulseQuote();
         this._startQuoteRefreshTimer();
       } else {
-        throw new Error(data.error?.message || "Failed to fetch quote");
+        // Carry the backend's friendly title (message) + actionable hint
+        // (details) so the error panel can explain WHY the quote failed.
+        const e = new Error(data.error?.message || "Couldn't fetch a quote");
+        e.detail = data.error?.details || "";
+        e.code = data.error?.code || "";
+        throw e;
       }
     } catch (err) {
       if (!this._isOpen) return;
@@ -161,8 +166,27 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       }
       this._quoteError = err.message;
       this._quoteData = null;
-      this.quoteErrorTextEl.textContent = err.message;
+      this._renderQuoteError(err);
       this._setQuoteState("error");
+    }
+  };
+
+  /**
+   * Render the quote error panel: a friendly title plus an optional actionable
+   * detail line. Network/parse failures (no structured backend error) fall back
+   * to a generic-but-clear message.
+   * @param {Error & {detail?: string, code?: string}} err
+   */
+  proto._renderQuoteError = function (err) {
+    const title =
+      err?.message && err.message !== "Failed to fetch"
+        ? err.message
+        : "Couldn't fetch a quote — check your connection and try again";
+    if (this.quoteErrorTextEl) this.quoteErrorTextEl.textContent = title;
+    if (this.quoteErrorDetailEl) {
+      const detail = err?.detail || "";
+      this.quoteErrorDetailEl.textContent = detail;
+      this.quoteErrorDetailEl.style.display = detail ? "" : "none";
     }
   };
 
