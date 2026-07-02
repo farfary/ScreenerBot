@@ -37,24 +37,29 @@ export function showImageLightbox({ imageUrl, symbol = "", name = "", stats = []
   ].join("");
   const captionHtml = captionParts ? `<div class="lightbox-caption">${captionParts}</div>` : "";
 
+  // The toolbar is a direct child of the lightbox (NOT inside .lightbox-stage):
+  // the stage has a transform animation, and a transformed ancestor becomes the
+  // containing block for position:fixed children — so a toolbar inside it would
+  // ride over the image during the animation, then snap to the viewport corner
+  // once the transform clears. Keeping it outside pins it to the viewport always.
   lightbox.innerHTML = `
     <div class="lightbox-backdrop"></div>
+    <div class="lightbox-toolbar">
+      <button class="lightbox-btn lightbox-save" type="button" title="Save image">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+      <button class="lightbox-btn lightbox-close" type="button" title="Close (ESC)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
     <div class="lightbox-stage">
-      <div class="lightbox-toolbar">
-        <button class="lightbox-btn lightbox-save" type="button" title="Save image">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="7 10 12 15 17 10"></polyline>
-            <line x1="12" y1="15" x2="12" y2="3"></line>
-          </svg>
-        </button>
-        <button class="lightbox-btn lightbox-close" type="button" title="Close (ESC)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
       <div class="lightbox-image-wrapper">
         <img src="${Utils.escapeHtml(imageUrl)}" alt="${Utils.escapeHtml(symbol || name || "Image")}" class="lightbox-image" />
       </div>
