@@ -730,6 +730,7 @@ export function applyServerPaginationMixin(DataTable) {
 
     if (normalizedDirection === "next") {
       pagination.loadingNext = true;
+      pagination.loadingNextReason = reason;
       this._updateScrollLoadingIndicator();
     } else if (normalizedDirection === "prev") {
       pagination.loadingPrev = true;
@@ -747,6 +748,7 @@ export function applyServerPaginationMixin(DataTable) {
       loadPromise = Promise.resolve(pagination.loadPage(loadArgs));
     } catch (error) {
       pagination.loadingNext = false;
+      pagination.loadingNextReason = null;
       pagination.loadingPrev = false;
       pagination.loadingInitial = false;
       this._setLoadingState(false);
@@ -788,6 +790,7 @@ export function applyServerPaginationMixin(DataTable) {
         pagination.abortController = null;
         if (normalizedDirection === "next") {
           pagination.loadingNext = false;
+          pagination.loadingNextReason = null;
         } else if (normalizedDirection === "prev") {
           pagination.loadingPrev = false;
         } else {
@@ -1229,7 +1232,10 @@ export function applyServerPaginationMixin(DataTable) {
     }
     const pagination = this._pagination;
     const visible = Boolean(
-      pagination?.enabled && !this._scrollLoadingDisabled && pagination.loadingNext
+      pagination?.enabled &&
+        !this._scrollLoadingDisabled &&
+        pagination.loadingNext &&
+        pagination.loadingNextReason === "scroll"
     );
     loader.classList.toggle("is-visible", visible);
   };
@@ -1253,6 +1259,7 @@ export function applyServerPaginationMixin(DataTable) {
           hasMoreNext: pagination.hasMoreNext !== false,
           hasMorePrev: pagination.hasMorePrev !== false,
           loadingNext: Boolean(pagination.loadingNext),
+          loadingNextReason: pagination.loadingNextReason ?? null,
           loadingPrev: Boolean(pagination.loadingPrev),
           total: pagination.total,
           meta: pagination.meta,
@@ -1369,6 +1376,7 @@ export function applyServerPaginationMixin(DataTable) {
 
     this._pagination.pendingRequest = null;
     this._pagination.loadingNext = false;
+    this._pagination.loadingNextReason = null;
     this._pagination.loadingPrev = false;
     this._pagination.loadingInitial = false;
 

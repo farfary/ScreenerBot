@@ -351,6 +351,7 @@ export class DataTable {
           ? Boolean(paginationOptions.initialHasMorePrev)
           : Boolean(paginationOptions.initialPrevCursor),
       loadingNext: false,
+      loadingNextReason: null,
       loadingPrev: false,
       loadingInitial: false,
       pendingRequest: null,
@@ -1967,6 +1968,7 @@ export class DataTable {
     pagination.total = null;
     pagination.meta = {};
     pagination.loadingNext = false;
+    pagination.loadingNextReason = null;
     pagination.loadingPrev = false;
     pagination.loadingInitial = false;
 
@@ -2125,6 +2127,7 @@ export class DataTable {
       hasMoreNext: this._pagination.hasMoreNext !== false,
       hasMorePrev: this._pagination.hasMorePrev !== false,
       loadingNext: Boolean(this._pagination.loadingNext),
+      loadingNextReason: this._pagination.loadingNextReason ?? null,
       loadingPrev: Boolean(this._pagination.loadingPrev),
       // Expose the initial/replace load flag too. Silent poll reloads set
       // `loadingInitial` (NOT loadingNext) and do not flip `state.isLoading`, so
