@@ -268,9 +268,34 @@
   justify-content: center;
 }
 
-.price-loading {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+/* Price skeleton — mirrors the real price block shape (SOL value, USD sub,
+   change badge) with the shared .shimmer sweep instead of bare "Loading" text. */
+.price-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.price-skel {
+  display: inline-block;
+  background: var(--bg-card-hover);
+  border-radius: var(--radius-md);
+}
+
+.price-skel-main {
+  width: 104px;
+  height: 22px;
+}
+
+.price-skel-sub {
+  width: 58px;
+  height: 14px;
+}
+
+.price-skel-badge {
+  width: 62px;
+  height: 26px;
+  border-radius: var(--radius-lg);
 }
 
 /* Price block - stacked layout */

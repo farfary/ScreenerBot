@@ -848,7 +848,11 @@ export class TokenDetailsDialog {
             </div>
             <div class="header-center">
               <div class="header-price" id="headerPrice">
-                <div class="price-loading">Loading...</div>
+                <div class="price-skeleton" role="status" aria-label="Loading price">
+                  <span class="price-skel price-skel-main shimmer"></span>
+                  <span class="price-skel price-skel-sub shimmer"></span>
+                  <span class="price-skel price-skel-badge shimmer"></span>
+                </div>
               </div>
             </div>
             <div class="header-right">
