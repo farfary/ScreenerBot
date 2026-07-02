@@ -193,9 +193,10 @@
   margin-top: auto;
 }
 
-/* Profit/loss cells carry a heatmap tint. In dark theme the tint sits over a
-   dark surface (pale-to-deep colour) so light text reads well; in light theme
-   the same alpha over a white card yields pastel tints, so dark text is used. */
+/* Profit/loss cells carry a saturated heatmap tint (the JS raises the alpha
+   floor in light theme so the fill stays a solid colour, not a pale pastel), so
+   white text reads on the coloured cells in BOTH themes. Empty/no-trade cells
+   have no tint and keep their dark --text-muted for contrast on the light card. */
 .calendar-cell.profit .cell-pnl,
 .calendar-cell.loss .cell-pnl {
   color: #fff;
@@ -210,22 +211,6 @@
 .calendar-cell.profit .cell-value,
 .calendar-cell.loss .cell-value {
   color: rgb(255 255 255 / 0.85);
-}
-
-[data-theme="light"] .calendar-cell.profit .cell-pnl,
-[data-theme="light"] .calendar-cell.loss .cell-pnl {
-  color: #0b1220;
-  text-shadow: none;
-}
-
-[data-theme="light"] .calendar-cell.profit .cell-day,
-[data-theme="light"] .calendar-cell.loss .cell-day {
-  color: rgb(0 0 0 / 0.75);
-}
-
-[data-theme="light"] .calendar-cell.profit .cell-value,
-[data-theme="light"] .calendar-cell.loss .cell-value {
-  color: rgb(0 0 0 / 0.7);
 }
 
 /* ===== Calendar month summary ===== */
@@ -279,9 +264,9 @@
   z-index: var(--z-app-tooltip, 10090);
   min-width: 12rem;
   max-width: min(16rem, calc(100vw - 16px));
-  background: var(--bg-tooltip, #1f2937);
-  color: var(--text-tooltip, #f9fafb);
-  border: 1px solid var(--border-tooltip, #374151);
+  background: var(--bg-card, #161b22);
+  color: var(--text-primary, #e6edf3);
+  border: 1px solid var(--border-color, #30363d);
   border-radius: var(--radius-lg, 8px);
   box-shadow: var(--shadow-floating-md, 0 8px 24px rgb(0 0 0 / 0.35));
   font-family: var(--font-data, var(--font-mono));
@@ -304,13 +289,13 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.7rem;
-  border-bottom: 1px solid var(--border-tooltip, #374151);
+  border-bottom: 1px solid var(--border-color, #30363d);
 }
 
 .cal-pop-date {
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--text-tooltip, #f9fafb);
+  color: var(--text-primary, #e6edf3);
 }
 
 .cal-pop-year {
@@ -334,8 +319,8 @@
 }
 
 .cal-pop-label {
-  color: var(--text-tooltip, #f9fafb);
-  opacity: 0.55;
+  color: var(--text-secondary, #8b949e);
+  opacity: 0.85;
   font-size: 0.58rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -351,15 +336,14 @@
     "zero" 1;
 }
 
-/* The popover surface is always dark (--bg-tooltip) in both themes, so use the
-   bright green/red directly — the light-theme badge tokens are dark shades that
-   would be low-contrast here. */
+/* Popover now follows the theme surface (--bg-card), so use the semantic P&L
+   tokens which flip readable in both light and dark. */
 .cal-pop-val.profit {
-  color: #3fb950;
+  color: var(--badge-online, #3fb950);
 }
 
 .cal-pop-val.loss {
-  color: #f85149;
+  color: var(--badge-error, #f85149);
 }
 
 /* ===== Card edit controls (hidden until edit mode) ===== */

@@ -26,6 +26,7 @@ export function createCalendar(fetcher) {
   let year = now.getUTCFullYear();
   let month = now.getUTCMonth() + 1; // 1-12
   let lastKey = null;
+  let lastData = null;
   const cleanups = [];
   // Per-day detail lookup (date -> day object) + shared hover popover element.
   const dayMap = new Map();
@@ -95,11 +96,15 @@ export function createCalendar(fetcher) {
   function render(data) {
     const gridEl = grid();
     if (!gridEl || !data) return;
+    lastData = data;
 
-    // Skip redraw when nothing changed (avoids flicker / scroll reset).
-    const key = JSON.stringify(data);
+    // Skip redraw when nothing changed (avoids flicker / scroll reset). Theme is
+    // part of the key so a light/dark switch re-tints the cells (intensity differs).
+    const theme = document.documentElement.getAttribute("data-theme") || "dark";
+    const key = `${theme}|${JSON.stringify(data)}`;
     if (key === lastKey) return;
     lastKey = key;
+    const isLight = theme === "light";
 
     const labelEl = monthLabel();
     if (labelEl) labelEl.textContent = `${MONTH_NAMES[data.month - 1]} ${data.year}`;
@@ -133,11 +138,16 @@ export function createCalendar(fetcher) {
 
       // Heatmap tint intensity relative to the month's largest absolute P&L.
       // Uses a sqrt curve + a solid floor so even a faint day reads as clearly
-      // green/red rather than a muddy near-black tint.
+      // green/red rather than a muddy near-black tint. Light theme needs a much
+      // higher floor: the tint sits over a WHITE card, so a low alpha yields a
+      // pale pastel that white cell text can't sit on. Keep it saturated so the
+      // white text (matching dark theme) always reads.
       let style = "";
       if (d.has_data && maxAbs > 0 && pnl !== 0) {
         const ratio = Math.sqrt(Math.abs(pnl) / maxAbs);
-        const intensity = Math.min(0.9, 0.35 + ratio * 0.55);
+        const intensity = isLight
+          ? Math.min(0.96, 0.78 + ratio * 0.18)
+          : Math.min(0.9, 0.35 + ratio * 0.55);
         const rgb = pnl > 0 ? "63, 185, 80" : "248, 81, 73";
         style = ` style="background: rgba(${rgb}, ${intensity.toFixed(3)});"`;
       }
@@ -320,6 +330,11 @@ export function createCalendar(fetcher) {
       track(gridEl, "mouseover", onGridOver);
       track(gridEl, "mouseout", onGridOut);
 
+      // Re-tint cells when the theme changes (intensity floor differs per theme).
+      track(window, "screenerbot:theme", () => {
+        if (lastData) render(lastData);
+      });
+
       updateNavState();
       renderSkeleton();
       load();
@@ -334,6 +349,7 @@ export function createCalendar(fetcher) {
       cleanups.forEach((fn) => fn());
       cleanups.length = 0;
       lastKey = null;
+      lastData = null;
       hidePopover();
       dayMap.clear();
       if (popoverEl) {

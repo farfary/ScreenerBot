@@ -111,6 +111,11 @@
   async function setTheme(theme) {
     console.log("[Theme] Setting theme to:", theme);
     html.setAttribute("data-theme", theme);
+    // Notify theme-sensitive components (e.g. the portfolio calendar heatmap,
+    // whose tint intensity differs per theme) so they can re-render immediately.
+    try {
+      window.dispatchEvent(new CustomEvent("screenerbot:theme", { detail: { theme } }));
+    } catch { /* CustomEvent unavailable */ }
     // Keep localStorage in sync so FOUC-prevention script in base.html sees the right value
     try { localStorage.setItem("theme", theme); } catch { /* storage unavailable */ }
     // Mirror to the Electron main process so the NEXT launch's splash/loading
