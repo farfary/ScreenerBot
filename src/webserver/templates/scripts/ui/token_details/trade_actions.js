@@ -84,7 +84,10 @@ export function applyTradeActionsMixin(DialogClass) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mint: this.tokenData.mint,
+          // Use the mint captured before the dialog opened: this.tokenData can
+          // be nulled while the dialog is open (dialog close resets it), and
+          // re-reading it here threw "Cannot read properties of null".
+          mint,
           ...(result.amount ? { size_sol: result.amount } : {}),
         }),
       });
@@ -98,7 +101,7 @@ export function applyTradeActionsMixin(DialogClass) {
 
       Utils.showToast("Buy order placed!", "success");
       this._refreshPositionsData();
-      this.onTradeComplete("buy", this.tokenData.mint);
+      this.onTradeComplete("buy", mint);
     } catch (error) {
       Utils.showToast(error.message || "Buy failed", "error");
     }
@@ -133,10 +136,12 @@ export function applyTradeActionsMixin(DialogClass) {
       const sellBtn = this.dialogEl.querySelector("#headerSellBtn");
       if (sellBtn) sellBtn.disabled = true;
 
+      // Use the mint captured before the dialog opened (this.tokenData may be
+      // nulled while the dialog is open).
       const body =
         result.percentage === 100
-          ? { mint: this.tokenData.mint, close_all: true }
-          : { mint: this.tokenData.mint, percentage: result.percentage };
+          ? { mint, close_all: true }
+          : { mint, percentage: result.percentage };
 
       const response = await fetch("/api/trader/manual/sell", {
         method: "POST",
@@ -153,7 +158,7 @@ export function applyTradeActionsMixin(DialogClass) {
 
       Utils.showToast("Sell order placed!", "success");
       this._refreshPositionsData();
-      this.onTradeComplete("sell", this.tokenData.mint);
+      this.onTradeComplete("sell", mint);
     } catch (error) {
       Utils.showToast(error.message || "Sell failed", "error");
     }
