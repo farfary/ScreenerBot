@@ -37,6 +37,14 @@
   gap: 16px;
 }
 
+/* The columns are scroll containers now, so their card children must keep their
+   natural height and let the column scroll — without this the default
+   flex-shrink:1 compresses/clips cards (e.g. the holder-health gauge) to fit. */
+.security-left-col > *,
+.security-right-col > * {
+  flex-shrink: 0;
+}
+
 .security-score-circle {
   position: relative;
   width: 120px;
