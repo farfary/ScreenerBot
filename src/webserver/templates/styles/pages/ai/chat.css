@@ -80,8 +80,12 @@
   transition: border-color var(--transition-fast);
 }
 
+/* Single focus indicator on the WRAPPER, matching every other dashboard input
+   (primary border + soft ring). The inner input is fully chrome-less below so
+   the global input[type="text"] styling can't paint a second border/ring. */
 .sessions-search:focus-within {
   border-color: var(--primary-color);
+  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
 }
 
 .sessions-search i {
@@ -93,12 +97,25 @@
 
 .sessions-search input {
   flex: 1;
+  height: auto;
+  padding: 0;
   background: transparent;
   border: none;
   outline: none;
   color: var(--text-primary);
   font-size: 0.8125rem;
   min-width: 0;
+  width: auto;
+}
+
+/* Override the global input[type="text"]:hover/:focus chrome so it never draws
+   a second border or box-shadow inside the wrapper. */
+.sessions-search input:hover,
+.sessions-search input:focus {
+  border: none;
+  box-shadow: none;
+  outline: none;
+  background: transparent;
 }
 
 .sessions-search input::placeholder {
