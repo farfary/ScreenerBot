@@ -125,6 +125,10 @@ export function createTraderConfigCards({ saveConfig }) {
     card.resetBtn.hidden = !dirty;
   }
 
+  function hasDirtyCards() {
+    return cards.some((card) => isDirty(card));
+  }
+
   async function save(card) {
     const payload = { [card.spec.section]: {} };
     card.spec.fields.forEach((f) => {
@@ -246,5 +250,5 @@ export function createTraderConfigCards({ saveConfig }) {
     cards.length = 0;
   }
 
-  return { setup, snapshot, dispose };
+  return { setup, snapshot, dispose, hasDirtyCards };
 }

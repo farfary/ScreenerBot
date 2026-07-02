@@ -254,19 +254,23 @@ function createLifecycle() {
   /**
    * Load configuration from server
    */
-  async function loadConfig() {
+  async function loadConfig(options = {}) {
     try {
       const data = await requestManager.fetch("/api/config", {
         priority: "normal",
       });
       state.config = data.config;
+      const preserveUnsavedEdits =
+        options.preserveUnsavedEdits === true && configCards?.hasDirtyCards?.();
 
-      // Update form fields
-      updateFormFields();
+      if (!preserveUnsavedEdits) {
+        // Update form fields
+        updateFormFields();
 
-      // Re-baseline the per-card Save/Reset controls to the freshly loaded
-      // values (hides the buttons until the next edit).
-      configCards?.snapshot();
+        // Re-baseline the per-card Save/Reset controls to the freshly loaded
+        // values (hides the buttons until the next edit).
+        configCards?.snapshot();
+      }
 
       // Update config overview in stats tab
       updateConfigOverview();
@@ -1258,7 +1262,7 @@ function createLifecycle() {
       configPoller = ctx.managePoller(
         new Poller(
           async () => {
-            await loadConfig();
+            await loadConfig({ preserveUnsavedEdits: true });
           },
           { label: "Trader Config", intervalMs: 10000 }
         )
