@@ -8,6 +8,7 @@ import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
+import { showImageLightbox } from "./image_lightbox.js";
 import { renderOverviewTab, renderOverviewLeft } from "./token_details/overview_tab.js";
 import { renderSecurityTab } from "./token_details/security_tab.js";
 import {
@@ -757,6 +758,14 @@ export class TokenDetailsDialog {
           this._sellHandler = null;
         }
 
+        if (this._logoZoomHandler) {
+          const logoEl = this.dialogEl.querySelector(".header-logo");
+          if (logoEl) {
+            logoEl.removeEventListener("click", this._logoZoomHandler);
+          }
+          this._logoZoomHandler = null;
+        }
+
         // Clean up favorites-changed listener
         if (this._favoritesChangedHandler) {
           window.removeEventListener(
@@ -1262,6 +1271,22 @@ export class TokenDetailsDialog {
     if (sellBtn) {
       this._sellHandler = () => this._handleSellClick();
       sellBtn.addEventListener("click", this._sellHandler);
+    }
+
+    // Click the logo to zoom it (same lightbox as the tokens table)
+    const logoEl = this.dialogEl.querySelector(".header-logo");
+    if (logoEl) {
+      this._logoZoomHandler = () => {
+        const url = logoEl.querySelector("img")?.getAttribute("src");
+        if (!url) return; // placeholder letter, nothing to zoom
+        showImageLightbox({
+          imageUrl: url,
+          symbol: this.tokenData?.symbol || "",
+          name: this.tokenData?.name || "",
+        });
+      };
+      logoEl.addEventListener("click", this._logoZoomHandler);
+      logoEl.classList.add("clickable-logo");
     }
 
     // Listen for favorite changes from other UI components (context menu, etc.)

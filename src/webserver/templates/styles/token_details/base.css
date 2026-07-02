@@ -141,6 +141,16 @@
   object-fit: cover;
 }
 
+/* Logo is clickable to zoom (only when it actually holds an image). */
+.header-logo.clickable-logo:has(img) {
+  cursor: zoom-in;
+  transition: transform var(--transition-fast);
+}
+
+.header-logo.clickable-logo:has(img):hover {
+  transform: scale(1.05);
+}
+
 .logo-placeholder {
   font-size: 18px;
   font-weight: 700;

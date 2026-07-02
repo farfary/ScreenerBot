@@ -163,6 +163,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "action_bar.js" => Some(embeds::ACTION_BAR_UI),
         "table_settings_dialog.js" => Some(embeds::TABLE_SETTINGS_DIALOG_UI),
         "token_details_dialog.js" => Some(embeds::TOKEN_DETAILS_DIALOG_UI),
+        "image_lightbox.js" => Some(embeds::IMAGE_LIGHTBOX_UI),
         "token_details/overview_tab.js" => Some(embeds::TOKEN_DETAILS_OVERVIEW_TAB_UI),
         "token_details/security_tab.js" => Some(embeds::TOKEN_DETAILS_SECURITY_TAB_UI),
         "token_details/pools_links_tab.js" => Some(embeds::TOKEN_DETAILS_POOLS_LINKS_TAB_UI),

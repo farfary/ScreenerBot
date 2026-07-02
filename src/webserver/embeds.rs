@@ -283,6 +283,7 @@ pub const TABLE_SETTINGS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/table_settings_dialog.js");
 pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
+pub const IMAGE_LIGHTBOX_UI: &str = include_str!("templates/scripts/ui/image_lightbox.js");
 pub const TOKEN_DETAILS_OVERVIEW_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/overview_tab.js");
 pub const TOKEN_DETAILS_SECURITY_TAB_UI: &str =

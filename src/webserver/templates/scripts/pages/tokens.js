@@ -8,6 +8,7 @@ import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
+import { showImageLightbox } from "../ui/image_lightbox.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { InputDialog } from "../ui/input_dialog.js";
 
@@ -1605,67 +1606,12 @@ function createLifecycle() {
         }
       }
 
-      // Create lightbox overlay
-      const lightbox = document.createElement("div");
-      lightbox.className = "image-lightbox";
-
-      const symbolHtml = symbol
-        ? `<div class="lightbox-token-symbol">${Utils.escapeHtml(symbol)}</div>`
-        : "";
-      const nameHtml = name
-        ? `<div class="lightbox-token-name">${Utils.escapeHtml(name)}</div>`
-        : "";
-
-      lightbox.innerHTML = `
-        <div class="lightbox-backdrop"></div>
-        <div class="lightbox-container">
-          <div class="lightbox-header">
-            ${symbolHtml}
-            ${nameHtml}
-            <button class="lightbox-close" type="button" title="Close (ESC)">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-          </div>
-          <div class="lightbox-body">
-            <div class="lightbox-image-wrapper">
-              <img src="${Utils.escapeHtml(imageUrl)}" alt="Token logo" class="lightbox-image" />
-            </div>
-          </div>
-          <div class="lightbox-footer">
-            <div class="lightbox-stat">
-              <div class="stat-label">Token Age</div>
-              <div class="stat-value">${Utils.escapeHtml(ageText)}</div>
-            </div>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(lightbox);
-
-      // Animate in
-      requestAnimationFrame(() => {
-        lightbox.classList.add("active");
+      showImageLightbox({
+        imageUrl,
+        symbol,
+        name,
+        stats: [{ label: "Token Age", value: ageText }],
       });
-
-      // Close handlers with proper cleanup
-      const escapeHandler = (e) => {
-        if (e.key === "Escape") {
-          close();
-        }
-      };
-      document.addEventListener("keydown", escapeHandler);
-
-      const close = () => {
-        lightbox.classList.remove("active");
-        document.removeEventListener("keydown", escapeHandler);
-        setTimeout(() => lightbox.remove(), 300);
-      };
-
-      lightbox.querySelector(".lightbox-close").addEventListener("click", close);
-      lightbox.querySelector(".lightbox-backdrop").addEventListener("click", close);
     };
 
     container._logoClickHandler = clickHandler;
