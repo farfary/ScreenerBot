@@ -813,172 +813,8 @@
   opacity: 0.85;
 }
 
-.image-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-dialog);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity var(--transition-normal);
-  pointer-events: none;
-}
-
-.image-lightbox.active {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.lightbox-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgb(0, 0, 0, 0.94);
-  backdrop-filter: blur(16px);
-  cursor: pointer;
-}
-
-.lightbox-container {
-  position: relative;
-  z-index: 1;
-  width: 90vw;
-  max-width: 500px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-2xl);
-  overflow: hidden;
-  box-shadow:
-    0 30px 90px rgb(0, 0, 0, 0.7),
-    0 0 0 1px var(--border-color);
-  animation: lightboxSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes lightboxSlideUp {
-  0% {
-    transform: translateY(50px) scale(0.92);
-    opacity: 0;
-  }
-
-  100% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-}
-
-.lightbox-header {
-  position: relative;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.lightbox-token-symbol {
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  padding-right: 44px;
-}
-
-.lightbox-token-name {
-  font-size: 0.95rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-  line-height: 1.3;
-  padding-right: 44px;
-}
-
-.lightbox-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  background: var(--bg-primary);
-  border: 2px solid var(--border-color);
-  color: var(--text-primary);
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition-base);
-  z-index: 2;
-}
-
-.lightbox-close:hover {
-  background: var(--bg-secondary);
-  border-color: var(--text-secondary);
-  transform: scale(1.1);
-}
-
-.lightbox-close:active {
-  transform: scale(0.95);
-}
-
-.lightbox-close svg {
-  width: 20px;
-  height: 20px;
-}
-
-.lightbox-body {
-  position: relative;
-  width: 100%;
-  padding: 40px;
-  background: var(--bg-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 320px;
-}
-
-.lightbox-image-wrapper {
-  position: relative;
-  width: 100%;
-  max-width: 280px;
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at center, var(--bg-secondary) 0%, transparent 70%);
-}
-
-.lightbox-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 10px 30px rgb(0, 0, 0, 0.4));
-  animation: imageFloat 3s ease-in-out infinite;
-}
-
-@keyframes imageFloat {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
-.lightbox-footer {
-  padding: 20px 24px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: center;
-  gap: 32px;
-}
-
-.lightbox-stat {
-  text-align: center;
-  flex: 1;
-}
-
+/* Generic stat label/value utilities (used by various stat blocks, e.g. the AI
+   cache stats). Kept global — several components rely on the bare classes. */
 .stat-label {
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -999,42 +835,162 @@
   line-height: 1.2;
 }
 
+/* Image lightbox — minimal, image-focused viewer (token logos / banners).
+   The image floats on a dark blurred backdrop with floating save/close controls
+   and one subtle caption line; no heavy header/footer chrome. */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  pointer-events: none;
+}
+
+.image-lightbox.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lightbox-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0, 0, 0, 0.9);
+  backdrop-filter: blur(18px);
+  cursor: zoom-out;
+}
+
+.lightbox-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  max-width: min(90vw, 520px);
+  animation: lightboxSlideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes lightboxSlideUp {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Floating controls (save + close), always on the dark backdrop → bright glass */
+.lightbox-toolbar {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  display: flex;
+  gap: 8px;
+  z-index: 2;
+}
+
+.lightbox-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: rgb(255, 255, 255, 0.1);
+  border: 1px solid rgb(255, 255, 255, 0.18);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-base);
+  backdrop-filter: blur(8px);
+}
+
+.lightbox-btn:hover {
+  background: rgb(255, 255, 255, 0.2);
+  transform: scale(1.08);
+}
+
+.lightbox-btn:active {
+  transform: scale(0.94);
+}
+
+.lightbox-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Image surface: subtle rounded panel so transparent images stay legible */
+.lightbox-image-wrapper {
+  width: min(80vw, 420px);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: var(--bg-card);
+  border: 1px solid rgb(255, 255, 255, 0.08);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 30px 90px rgb(0, 0, 0, 0.6);
+}
+
+.lightbox-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgb(0, 0, 0, 0.35));
+}
+
+/* Minimal single-line caption on the dark backdrop → fixed light colors */
+.lightbox-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  text-align: center;
+  max-width: 100%;
+}
+
+.lightbox-caption-symbol {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.lightbox-caption-name {
+  font-size: 0.9rem;
+  color: rgb(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.lightbox-caption-meta {
+  width: 100%;
+  font-size: 0.75rem;
+  color: rgb(255, 255, 255, 0.45);
+  font-family: var(--font-data);
+}
+
 /* Responsive adjustments */
 @media (width <= 768px) {
-  .lightbox-container {
-    width: 95vw;
-    max-width: 420px;
-  }
-
-  .lightbox-header {
-    padding: 16px 20px;
-  }
-
-  .lightbox-token-symbol {
-    font-size: 1.4rem;
-  }
-
-  .lightbox-token-name {
-    font-size: 0.9rem;
-  }
-
-  .lightbox-close {
-    width: 32px;
-    height: 32px;
-    top: 14px;
-    right: 14px;
-  }
-
-  .lightbox-body {
-    padding: 32px 24px;
-    min-height: 280px;
-  }
-
   .lightbox-image-wrapper {
-    max-width: 240px;
+    width: 82vw;
+    padding: 20px;
   }
 
-  .lightbox-footer {
-    padding: 16px 20px;
+  .lightbox-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .lightbox-btn svg {
+    width: 18px;
+    height: 18px;
   }
 }

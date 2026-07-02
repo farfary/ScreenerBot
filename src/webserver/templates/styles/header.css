@@ -141,9 +141,14 @@
   transform: translateY(-2px);
 }
 
+/* The logo SVG is monochrome white; render it as a mask so it can be tinted to
+   the brand color per theme (dark navy in light mode, light cyan in dark mode)
+   to match the brand text — an <img> can't be recolored by CSS. */
 .brand-logo {
   height: 32px;
-  width: auto;
+  width: 32px;
+  background-color: var(--brand-navy);
+  mask: url("/assets/logo.svg") no-repeat center / contain;
   filter: drop-shadow(0 2px 4px rgb(0, 0, 0, 0.3));
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -189,6 +194,7 @@
 
 /* Dark mode brand styling */
 [data-theme="dark"] .brand-logo {
+  background-color: var(--brand-cyan-light);
   filter: drop-shadow(0 0 4px rgb(6, 182, 212, 0.4)) drop-shadow(0 2px 4px rgb(0, 0, 0, 0.6));
 }
 
@@ -207,6 +213,7 @@
 
 /* Light mode brand styling */
 [data-theme="light"] .brand-logo {
+  background-color: var(--brand-navy);
   filter: drop-shadow(0 2px 4px rgb(0, 0, 0, 0.3)) drop-shadow(0 1px 2px rgb(0, 0, 0, 0.2));
 }
 
