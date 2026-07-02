@@ -21,9 +21,13 @@
   height: 100%;
 }
 
-/* ===== Wallet Hero Section ===== */
-.wallet-section {
-  width: 100%;
+/* ===== Wallet Hero Card ===== */
+/* The wallet card is a chrome-less container so the hero gradient fills it. */
+.wallet-card {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
 }
 
 .wallet-hero {
@@ -146,14 +150,26 @@
     "zero" 1;
 }
 
-/* ===== Content Grid - 3 Columns ===== */
+/* ===== Content Grid - responsive, reorderable ===== */
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1.3fr) minmax(180px, 0.75fr) minmax(200px, 0.95fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--home-gap);
   align-items: start;
+  /* Pack rows to the top; leftover vertical space stays at the bottom instead
+     of stretching the row tracks (which pushed the second row down). */
+  align-content: start;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* Wide cards span the full row / half the grid. */
+.content-grid > .wallet-card {
+  grid-column: 1 / -1;
+}
+
+.content-grid > .calendar-card {
+  grid-column: span 2;
 }
 
 /* ===== Dashboard Cards ===== */
@@ -200,137 +216,6 @@
 }
 
 
-
-/* ===== Period Tabs ===== */
-.period-tabs {
-  display: flex;
-  gap: 0.3rem;
-  margin-bottom: 0.625rem;
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-
-.period-tab {
-  padding: 0.3rem 0.55rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 0.65rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.period-tab:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--link-color);
-}
-
-.period-tab.active {
-  background: var(--link-color);
-  color: #fff;
-  border-color: var(--link-color);
-}
-
-/* ===== Analytics Grid (Trader Card) - 3 Columns ===== */
-.analytics-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
-  flex: 0 0 auto;
-}
-
-.analytics-item {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  padding: var(--row-padding);
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  border: 1px solid rgb(255 255 255 / 0.04);
-  transition: border-color var(--transition-fast);
-}
-
-.analytics-item:hover {
-  border-color: rgb(59 130 246 / 0.25);
-}
-
-.analytics-item.primary {
-  grid-column: 1 / -1;
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgb(59 130 246 / 0.08) 100%);
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.analytics-label {
-  font-size: var(--label-size);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.analytics-value {
-  font-family: var(--font-data);
-  font-size: var(--value-size);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  white-space: nowrap;
-}
-
-.analytics-item.primary .analytics-value {
-  font-size: 1.05rem;
-}
-
-.analytics-value.profit {
-  color: var(--badge-online);
-}
-
-.analytics-value.loss {
-  color: var(--badge-error);
-}
-
-/* ===== Analytics Secondary Stats ===== */
-.analytics-secondary {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
-  flex: 0 0 auto;
-}
-
-.secondary-stat {
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  padding: var(--row-padding);
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  border: 1px solid rgb(255 255 255 / 0.03);
-}
-
-.secondary-label {
-  font-size: var(--label-size);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.secondary-value {
-  font-size: var(--value-size);
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
 
 /* ===== Positions Card ===== */
 .positions-list {
@@ -380,78 +265,6 @@
   color: var(--badge-error);
 }
 
-/* ===== Right Stack (System + Tokens) ===== */
-.right-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--home-gap);
-}
-
-/* ===== System Card ===== */
-.system-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.35rem;
-}
-
-.system-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--row-padding);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid rgb(255 255 255 / 0.03);
-}
-
-.system-row.full-width {
-  grid-column: 1 / -1;
-}
-
-.system-label {
-  font-size: var(--label-size);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.system-value {
-  font-size: var(--value-size);
-  font-weight: 700;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  white-space: nowrap;
-}
-
-/* Mini progress bars for system metrics */
-.mini-progress {
-  width: 100%;
-  height: 3px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-xs);
-  margin-top: 0.2rem;
-  overflow: hidden;
-}
-
-.mini-progress-bar {
-  height: 100%;
-  background: var(--link-color);
-  border-radius: var(--radius-xs);
-  transition: width var(--transition-normal);
-}
-
-.mini-progress-bar.warning {
-  background: var(--badge-warning);
-}
-
-.mini-progress-bar.danger {
-  background: var(--badge-error);
-}
-
 /* ===== Tokens Card ===== */
 .tokens-stats {
   display: grid;
@@ -499,34 +312,13 @@
 }
 
 /* ===== Responsive Design ===== */
-@media (width <= 1280px) {
+@media (width <= 1100px) {
   .content-grid {
-    grid-template-columns: minmax(260px, 1.2fr) minmax(160px, 0.8fr) minmax(180px, 1fr);
-  }
-
-  .analytics-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .analytics-item.primary {
+  .content-grid > .calendar-card {
     grid-column: 1 / -1;
-  }
-}
-
-@media (width <= 1100px) {
-  .content-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .right-stack {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--home-gap);
-  }
-
-  .analytics-grid {
-    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -544,16 +336,9 @@
     grid-template-columns: 1fr;
   }
 
-  .right-stack {
-    grid-template-columns: 1fr;
-  }
-
-  .analytics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .analytics-secondary {
-    grid-template-columns: repeat(3, 1fr);
+  .content-grid > .calendar-card,
+  .content-grid > .wallet-card {
+    grid-column: 1 / -1;
   }
 }
 
@@ -578,24 +363,8 @@
     grid-column: 1 / -1;
   }
 
-  .analytics-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .analytics-secondary {
-    grid-template-columns: 1fr;
-  }
-
   .tokens-stats {
     grid-template-columns: 1fr;
-  }
-
-  .tokens-timeline {
-    flex-wrap: wrap;
-  }
-
-  .timeline-item {
-    flex: 1 1 45%;
   }
 }
 
@@ -654,12 +423,10 @@
 .loading .hero-stat-value,
 .loading .hero-change-value,
 .loading .change-percent,
-.loading .analytics-value,
-.loading .secondary-value,
 .loading .position-value,
-.loading .system-value,
 .loading .token-value,
-.loading .timeline-value {
+.loading .cell-pnl,
+.loading .cell-value {
   color: transparent;
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);

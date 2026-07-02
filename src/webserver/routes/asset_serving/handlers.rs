@@ -90,6 +90,8 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
     let file = file.strip_prefix('/').unwrap_or(&file);
     let content = match file {
         "home.js" => Some(embeds::HOME_PAGE_SCRIPT),
+        "home/portfolio_calendar.js" => Some(embeds::HOME_CALENDAR_JS),
+        "home/customize.js" => Some(embeds::HOME_CUSTOMIZE_JS),
         "services.js" => Some(embeds::SERVICES_PAGE_SCRIPT),
         "transactions.js" => Some(embeds::TRANSACTIONS_PAGE_SCRIPT),
         "events.js" => Some(embeds::EVENTS_PAGE_SCRIPT),

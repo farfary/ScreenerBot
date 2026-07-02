@@ -402,6 +402,18 @@ pub struct PeriodTradingStats {
     pub win_rate: f64,
 }
 
+/// Realized trading statistics for a single calendar day (UTC), grouped by exit_time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyTradingStats {
+    /// Calendar day in YYYY-MM-DD (UTC).
+    pub date: String,
+    pub net_pnl_sol: f64,
+    pub profit_sol: f64,
+    pub loss_sol: f64,
+    pub trades: i64,
+    pub wins: i64,
+}
+
 /// Statistics about positions database operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PositionsDatabaseStats {

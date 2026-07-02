@@ -448,6 +448,18 @@ pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f6
     }
 }
 
+/// Get the end-of-day SOL balance for each calendar day within a period.
+pub async fn get_daily_end_balances(
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+) -> Result<Vec<(String, f64)>, String> {
+    let db_guard = GLOBAL_WALLET_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_daily_end_balances(start, end),
+        None => Err("Wallet database not initialized".to_owned()),
+    }
+}
+
 /// Public accessor for flow cache stats
 pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;

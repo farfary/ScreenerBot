@@ -396,6 +396,25 @@
   outline-offset: 2px;
 }
 
+/* Mouse/touch interaction: suppress focus rings so controls don't stay
+   highlighted after a click (native desktop-app behaviour). Keyboard navigation
+   (Tab/arrows) re-enables them via [data-input="keyboard"] on <html>. Text-entry
+   controls keep their ring so the active field stays obvious. */
+html[data-input="mouse"] :focus-visible:not(input):not(textarea):not(select):not([contenteditable="true"]) {
+  outline: none;
+}
+
+html[data-input="mouse"] button:focus-visible,
+html[data-input="mouse"] a:focus-visible,
+html[data-input="mouse"] [role="button"]:focus-visible,
+html[data-input="mouse"] [role="tab"]:focus-visible,
+html[data-input="mouse"] .btn:focus-visible,
+html[data-input="mouse"] .btn-icon:focus-visible,
+html[data-input="mouse"] .tab:focus-visible,
+html[data-input="mouse"] .sub-tab:focus-visible {
+  box-shadow: none;
+}
+
 html {
   height: 100%;
   overflow: hidden;

@@ -22,6 +22,7 @@ pub use service::{
     clear_dashboard_api_cache,
     force_wallet_snapshot,
     get_balance_at_time,
+    get_daily_end_balances,
     get_current_wallet_status,
     get_dashboard_cache_metrics,
     get_flow_cache_stats,

@@ -1,82 +1,153 @@
 <div class="home-dashboard">
-  <!-- Hero Wallet Section - Full Width -->
-  <section class="wallet-section">
-    <div class="wallet-hero loading">
-      <div class="hero-main">
-        <div class="hero-label">Current Balance</div>
-        <div class="hero-balance" id="walletBalance">0.00</div>
-        <div class="hero-change" id="homeWalletChange">
-          <span class="hero-change-value change-value">+0.00</span>
-          <span class="change-percent">(+0.00%)</span>
-        </div>
+  <!-- Reorderable / toggleable card flow -->
+  <section class="content-grid" id="homeCardGrid">
+    <!-- Card: Wallet hero -->
+    <div class="dashboard-card wallet-card" data-card-id="wallet">
+      <div class="card-edit-controls">
+        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-edit-title">Wallet</span>
+        <label class="toggle card-toggle">
+          <input type="checkbox" class="card-enable-toggle" data-card-id="wallet" checked />
+          <span class="toggle-track"></span>
+        </label>
       </div>
-      <div class="hero-stat">
-        <div class="hero-stat-label">Tokens</div>
-        <div class="hero-stat-value" id="walletTokens">0</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-label">Tokens Worth</div>
-        <div class="hero-stat-value" id="walletTokensWorth">0.00</div>
-      </div>
-      <div class="hero-stat">
-        <div class="hero-stat-label">Start of Day</div>
-        <div class="hero-stat-value" id="walletStartDay">0.00</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Main Content - 3 Column Layout -->
-  <section class="content-grid">
-    <!-- Column 1: Trading Analytics -->
-    <div class="dashboard-card trader-card loading">
-      <div class="card-header">
-        <h2><i class="icon-chart-bar"></i> Analytics</h2>
-      </div>
-      <div class="period-tabs" id="periodTabs">
-        <button type="button" class="period-tab active" data-period="today">Today</button>
-        <button type="button" class="period-tab" data-period="yesterday">Yesterday</button>
-        <button type="button" class="period-tab" data-period="this_week">Week</button>
-        <button type="button" class="period-tab" data-period="this_month">Month</button>
-        <button type="button" class="period-tab" data-period="all_time">All</button>
-      </div>
-      <div class="analytics-grid">
-        <div class="analytics-item primary">
-          <span class="analytics-label">Net P&L</span>
-          <span class="analytics-value" id="statNetPnl">0.00</span>
+      <div class="wallet-hero loading">
+        <div class="hero-main">
+          <div class="hero-label">Current Balance</div>
+          <div class="hero-balance" id="walletBalance">0.00</div>
+          <div class="hero-change" id="homeWalletChange">
+            <span class="hero-change-value change-value">+0.00</span>
+            <span class="change-percent">(+0.00%)</span>
+          </div>
         </div>
-        <div class="analytics-item">
-          <span class="analytics-label">Win Rate</span>
-          <span class="analytics-value" id="statWinRate">0%</span>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Tokens</div>
+          <div class="hero-stat-value" id="walletTokens">0</div>
         </div>
-        <div class="analytics-item">
-          <span class="analytics-label">Profit</span>
-          <span class="analytics-value profit" id="statProfit">0.00</span>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Tokens Worth</div>
+          <div class="hero-stat-value" id="walletTokensWorth">0.00</div>
         </div>
-        <div class="analytics-item">
-          <span class="analytics-label">Loss</span>
-          <span class="analytics-value loss" id="statLoss">0.00</span>
-        </div>
-      </div>
-      <div class="analytics-secondary">
-        <div class="secondary-stat">
-          <span class="secondary-label">Buys</span>
-          <span class="secondary-value" id="statBuys">0</span>
-        </div>
-        <div class="secondary-stat">
-          <span class="secondary-label">Sells</span>
-          <span class="secondary-value" id="statSells">0</span>
-        </div>
-        <div class="secondary-stat">
-          <span class="secondary-label">Drawdown</span>
-          <span class="secondary-value" id="statDrawdown">0%</span>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Start of Day</div>
+          <div class="hero-stat-value" id="walletStartDay">0.00</div>
         </div>
       </div>
     </div>
 
-    <!-- Column 2: Positions -->
-    <div class="dashboard-card positions-card loading">
+    <!-- Card: Portfolio Calendar -->
+    <div class="dashboard-card calendar-card loading" data-card-id="calendar">
+      <div class="card-edit-controls">
+        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-edit-title">Portfolio Calendar</span>
+        <label class="toggle card-toggle">
+          <input type="checkbox" class="card-enable-toggle" data-card-id="calendar" checked />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+      <div class="card-header calendar-header">
+        <h2><i class="icon-calendar"></i> Portfolio</h2>
+        <div class="calendar-header-right">
+          <div class="card-header-actions">
+            <button type="button" class="btn-icon card-customize-trigger" title="Customize dashboard" aria-label="Customize dashboard">
+              <i class="icon-sliders-horizontal"></i>
+            </button>
+            <button type="button" class="btn-icon card-reset-trigger" title="Reset layout" aria-label="Reset layout">
+              <i class="icon-rotate-ccw"></i>
+            </button>
+          </div>
+          <div class="calendar-nav">
+            <button type="button" class="btn-icon" id="calendarPrev" title="Previous month" aria-label="Previous month">
+              <i class="icon-chevron-left"></i>
+            </button>
+            <span class="calendar-month-label" id="calendarMonthLabel">—</span>
+            <button type="button" class="btn-icon" id="calendarNext" title="Next month" aria-label="Next month">
+              <i class="icon-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="calendar-weekdays">
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+      </div>
+      <div class="calendar-grid" id="portfolioCalendarGrid">
+        <!-- Static skeleton so the month grid is shaped correctly at first paint,
+             before JS renders the real month. Replaced by portfolio_calendar.js. -->
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+        <div class="calendar-cell skeleton"></div>
+      </div>
+      <div class="calendar-summary">
+        <div class="calendar-summary-stat">
+          <span class="calendar-summary-label">Month P&amp;L</span>
+          <span class="calendar-summary-value" id="calendarMonthPnl">0.00</span>
+        </div>
+        <div class="calendar-summary-stat">
+          <span class="calendar-summary-label">Trades</span>
+          <span class="calendar-summary-value" id="calendarMonthTrades">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card: Positions -->
+    <div class="dashboard-card positions-card loading" data-card-id="positions">
+      <div class="card-edit-controls">
+        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-edit-title">Positions</span>
+        <label class="toggle card-toggle">
+          <input type="checkbox" class="card-enable-toggle" data-card-id="positions" checked />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
       <div class="card-header">
         <h2><i class="icon-trending-up"></i> Positions</h2>
+        <div class="card-header-actions">
+          <button type="button" class="btn-icon card-customize-trigger" title="Customize dashboard" aria-label="Customize dashboard">
+            <i class="icon-sliders-horizontal"></i>
+          </button>
+          <button type="button" class="btn-icon card-reset-trigger" title="Reset layout" aria-label="Reset layout">
+            <i class="icon-rotate-ccw"></i>
+          </button>
+        </div>
       </div>
       <div class="positions-list">
         <div class="position-row">
@@ -88,11 +159,11 @@
           <span class="position-value" id="positionsInvested">0.00</span>
         </div>
         <div class="position-row highlight">
-          <span class="position-label">P&L</span>
+          <span class="position-label">P&amp;L</span>
           <span class="position-value" id="positionsUnrealizedPnl">0.00</span>
         </div>
         <div class="position-row">
-          <span class="position-label">P&L %</span>
+          <span class="position-label">P&amp;L %</span>
           <span class="position-value" id="positionsUnrealizedPercent">0.00%</span>
         </div>
         <div class="position-row">
@@ -114,38 +185,51 @@
       </div>
     </div>
 
-    <!-- Column 3: System & Tokens -->
-    <div class="right-stack">
-      <!-- Token Statistics -->
-      <div class="dashboard-card tokens-card loading">
-        <div class="card-header">
-          <h2><i class="icon-coins"></i> Tokens</h2>
+    <!-- Card: Tokens -->
+    <div class="dashboard-card tokens-card loading" data-card-id="tokens">
+      <div class="card-edit-controls">
+        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-edit-title">Tokens</span>
+        <label class="toggle card-toggle">
+          <input type="checkbox" class="card-enable-toggle" data-card-id="tokens" checked />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+      <div class="card-header">
+        <h2><i class="icon-coins"></i> Tokens</h2>
+        <div class="card-header-actions">
+          <button type="button" class="btn-icon card-customize-trigger" title="Customize dashboard" aria-label="Customize dashboard">
+            <i class="icon-sliders-horizontal"></i>
+          </button>
+          <button type="button" class="btn-icon card-reset-trigger" title="Reset layout" aria-label="Reset layout">
+            <i class="icon-rotate-ccw"></i>
+          </button>
         </div>
-        <div class="tokens-stats">
-          <div class="token-row">
-            <span class="token-label">Total</span>
-            <span class="token-value" id="tokensTotal">0</span>
-          </div>
-          <div class="token-row">
-            <span class="token-label">Priced</span>
-            <span class="token-value" id="tokensWithPrices">0</span>
-          </div>
-          <div class="token-row">
-            <span class="token-label">Passed</span>
-            <span class="token-value success" id="tokensPassed">0</span>
-          </div>
-          <div class="token-row">
-            <span class="token-label">Rejected</span>
-            <span class="token-value danger" id="tokensRejected">0</span>
-          </div>
-          <div class="token-row">
-            <span class="token-label">Blacklist</span>
-            <span class="token-value" id="tokensBlacklisted">0</span>
-          </div>
-          <div class="token-row">
-            <span class="token-label">OHLCV</span>
-            <span class="token-value" id="tokensOhlcv">0</span>
-          </div>
+      </div>
+      <div class="tokens-stats">
+        <div class="token-row">
+          <span class="token-label">Total</span>
+          <span class="token-value" id="tokensTotal">0</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Priced</span>
+          <span class="token-value" id="tokensWithPrices">0</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Passed</span>
+          <span class="token-value success" id="tokensPassed">0</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Rejected</span>
+          <span class="token-value danger" id="tokensRejected">0</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">Blacklist</span>
+          <span class="token-value" id="tokensBlacklisted">0</span>
+        </div>
+        <div class="token-row">
+          <span class="token-label">OHLCV</span>
+          <span class="token-value" id="tokensOhlcv">0</span>
         </div>
       </div>
     </div>

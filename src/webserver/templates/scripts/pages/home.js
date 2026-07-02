@@ -4,26 +4,23 @@ import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
+import { createCalendar } from "./home/portfolio_calendar.js";
+import { createCustomizer } from "./home/customize.js";
 
 function createLifecycle() {
   let poller = null;
   let scopedFetch = null;
-  let currentPeriod = "today";
+  // Separate scoped fetcher for the calendar: a `latestOnly` fetcher aborts its
+  // previous request on the NEXT call regardless of URL, so sharing one with the
+  // main dashboard fetch would make the calendar poll abort /api/dashboard/home
+  // every tick (leaving the cards stuck in loading). Each concern gets its own.
+  let calendarFetch = null;
   let cachedData = null;
   let hasLoadedOnce = false;
-  // Event cleanup tracking
-  const eventCleanups = [];
+  let calendar = null;
+  let customizer = null;
   // Animation intervals tracking
   const animationIntervals = [];
-
-  /**
-   * Add tracked event listener for cleanup
-   */
-  function addTrackedListener(element, event, handler) {
-    if (!element) return;
-    element.addEventListener(event, handler);
-    eventCleanups.push(() => element.removeEventListener(event, handler));
-  }
 
   /**
    * Set loading state on dashboard sections
@@ -78,54 +75,14 @@ function createLifecycle() {
   function updateUI(data) {
     if (!data) return;
 
-    // Update trading analytics for current period
-    updateTraderStats(data.trader[currentPeriod]);
-
     // Update wallet analytics
     updateWalletStats(data.wallet);
 
     // Update positions snapshot
     updatePositionsStats(data.positions);
 
-    // Update system metrics
-    updateSystemStats(data.system);
-
     // Update token statistics
     updateTokenStats(data.tokens);
-  }
-
-  // Update trading statistics
-  function updateTraderStats(stats) {
-    if (!stats) return;
-
-    const buysEl = document.getElementById("statBuys");
-    const sellsEl = document.getElementById("statSells");
-    const profitEl = document.getElementById("statProfit");
-    const lossEl = document.getElementById("statLoss");
-    const netPnlEl = document.getElementById("statNetPnl");
-    const winRateEl = document.getElementById("statWinRate");
-    const drawdownEl = document.getElementById("statDrawdown");
-
-    if (buysEl) animateValue(buysEl, stats.buys);
-    if (sellsEl) animateValue(sellsEl, stats.sells);
-    if (profitEl) {
-      profitEl.textContent = Utils.formatSol(stats.profit_sol, { decimals: 4 });
-      profitEl.classList.add("profit");
-    }
-    if (lossEl) {
-      lossEl.textContent = Utils.formatSol(stats.loss_sol, { decimals: 4 });
-      lossEl.classList.add("loss");
-    }
-    if (netPnlEl) {
-      netPnlEl.textContent = Utils.formatSol(stats.net_pnl_sol, { decimals: 4 });
-      netPnlEl.className = `stat-value ${stats.net_pnl_sol >= 0 ? "profit" : "loss"}`;
-    }
-    if (winRateEl) {
-      winRateEl.textContent = `${Utils.formatNumber(stats.win_rate, 2)}%`;
-    }
-    if (drawdownEl) {
-      drawdownEl.textContent = `${Utils.formatNumber(stats.drawdown_percent, 2)}%`;
-    }
   }
 
   // Update wallet statistics
@@ -246,29 +203,6 @@ function createLifecycle() {
   }
 
   // Update system statistics
-  function updateSystemStats(system) {
-    if (!system) return;
-
-    const uptimeEl = document.getElementById("systemUptime");
-    const memoryEl = document.getElementById("systemMemory");
-    const cpuEl = document.getElementById("systemCpu");
-    const rpcRateEl = document.getElementById("systemRpcRate");
-    const rpcSuccessEl = document.getElementById("systemRpcSuccess");
-    const servicesEl = document.getElementById("systemServices");
-
-    if (uptimeEl) uptimeEl.textContent = system.uptime_formatted;
-    if (memoryEl)
-      memoryEl.textContent = `${Utils.formatNumber(system.memory_mb, 0)} MB (${Utils.formatNumber(
-        system.memory_percent,
-        1
-      )}%)`;
-    if (cpuEl) cpuEl.textContent = `${Utils.formatNumber(system.cpu_percent, 1)}%`;
-    if (rpcRateEl) rpcRateEl.textContent = Utils.formatNumber(system.rpc_calls_per_min, 1);
-    if (rpcSuccessEl)
-      rpcSuccessEl.textContent = `${Utils.formatNumber(system.rpc_success_rate, 1)}%`;
-    if (servicesEl) servicesEl.textContent = `${system.services_healthy}/${system.services_total}`;
-  }
-
   // Update token statistics
   function updateTokenStats(tokens) {
     if (!tokens) return;
@@ -320,31 +254,20 @@ function createLifecycle() {
     animationIntervals.push(interval);
   }
 
-  // Handle period tab clicks
-  function setupPeriodTabs() {
-    const tabs = document.querySelectorAll(".period-tab");
-    tabs.forEach((tab) => {
-      addTrackedListener(tab, "click", () => {
-        tabs.forEach((t) => t.classList.remove("active"));
-        tab.classList.add("active");
-        currentPeriod = tab.dataset.period;
-
-        if (cachedData && cachedData.trader) {
-          updateTraderStats(cachedData.trader[currentPeriod]);
-        }
-      });
-    });
-  }
-
   return {
     init: (ctx) => {
       console.log("[Home] Initializing dashboard");
       scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
+      calendarFetch = createScopedFetcher(ctx, { latestOnly: true });
 
       // Note: Loading state is already applied via HTML classes
       // Data fetch happens in activate() to avoid double call
 
-      setupPeriodTabs();
+      // Portfolio calendar + card customization
+      calendar = createCalendar(calendarFetch);
+      calendar.mount();
+      customizer = createCustomizer();
+      customizer.mount();
     },
 
     activate: (ctx) => {
@@ -352,6 +275,18 @@ function createLifecycle() {
 
       if (!scopedFetch) {
         scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
+      }
+      if (!calendarFetch) {
+        calendarFetch = createScopedFetcher(ctx, { latestOnly: true });
+      }
+
+      if (!calendar) {
+        calendar = createCalendar(calendarFetch);
+        calendar.mount();
+      }
+      if (!customizer) {
+        customizer = createCustomizer();
+        customizer.mount();
       }
 
       // If we have cached data from a previous visit, show it immediately
@@ -363,10 +298,16 @@ function createLifecycle() {
 
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(() => fetchData(), {
-            label: "HomeDashboard",
-            getInterval: () => 5000,
-          })
+          new Poller(
+            () => {
+              fetchData();
+              calendar?.refresh();
+            },
+            {
+              label: "HomeDashboard",
+              getInterval: () => 5000,
+            }
+          )
         );
       }
 
@@ -392,6 +333,12 @@ function createLifecycle() {
     dispose: () => {
       console.log("[Home] Disposing dashboard");
       scopedFetch = null;
+      calendarFetch = null;
+
+      calendar?.dispose();
+      calendar = null;
+      customizer?.dispose();
+      customizer = null;
 
       // Note: Don't reset hasLoadedOnce or cachedData here
       // Preserving them allows instant display on page revisit
@@ -401,10 +348,6 @@ function createLifecycle() {
       const dashboardCards = document.querySelectorAll(".dashboard-card");
       walletHero?.classList.remove("loaded");
       dashboardCards.forEach((card) => card.classList.remove("loaded"));
-
-      // Clean up all tracked event listeners
-      eventCleanups.forEach((cleanup) => cleanup());
-      eventCleanups.length = 0;
 
       // Clear all animation intervals
       animationIntervals.forEach((interval) => clearInterval(interval));

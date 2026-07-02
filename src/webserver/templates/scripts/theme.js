@@ -1,3 +1,35 @@
+// Input modality tracking
+// Marks the document as mouse- or keyboard-driven so focus rings only appear
+// during keyboard navigation (native desktop-app feel — no ring lingering after
+// a mouse click, and none from programmatic .focus()/re-renders). Runs first and
+// synchronously so the default is set before any focus can occur.
+(function () {
+  const root = document.documentElement;
+  // Default to mouse: rings stay hidden until the user actually navigates by keyboard.
+  root.setAttribute("data-input", "mouse");
+  const setMouse = () => {
+    if (root.getAttribute("data-input") !== "mouse") root.setAttribute("data-input", "mouse");
+  };
+  const NAV_KEYS = new Set([
+    "Tab",
+    "ArrowUp",
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+  ]);
+  const onKey = (e) => {
+    if (NAV_KEYS.has(e.key)) root.setAttribute("data-input", "keyboard");
+  };
+  window.addEventListener("pointerdown", setMouse, true);
+  window.addEventListener("mousedown", setMouse, true);
+  window.addEventListener("touchstart", setMouse, true);
+  window.addEventListener("keydown", onKey, true);
+})();
+
 // Theme Management
 // Uses server-side state storage for persistence across app restarts
 (async function () {

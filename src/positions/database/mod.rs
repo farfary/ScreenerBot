@@ -16,8 +16,8 @@ mod types;
 
 // Re-export types
 pub use types::{
-    PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking, PositionsDatabase,
-    PositionsDatabaseStats, TokenSnapshot,
+    DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking,
+    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
 
 // Re-export global database functions
@@ -29,7 +29,8 @@ pub use global::{
 // Re-export convenience functions
 pub use convenience::{
     delete_archived_positions, delete_position_by_id, force_database_sync, get_closed_positions,
-    get_closed_positions_count_since, get_closed_positions_since, get_entry_history,
+    get_closed_positions_count_since, get_closed_positions_since, get_daily_trading_stats,
+    get_entry_history,
     get_exit_history, get_metadata, get_open_positions, get_period_trading_stats,
     get_position_by_id, get_position_by_mint, get_recent_closed_positions_for_mint,
     get_token_snapshot, get_token_snapshots, load_all_positions, save_entry_record,

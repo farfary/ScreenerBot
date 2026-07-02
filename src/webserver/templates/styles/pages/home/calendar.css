@@ -1,0 +1,427 @@
+/* Home portfolio calendar + card customization (edit mode, drag reorder). */
+
+/* ===== Card header hover actions (customize / reset) ===== */
+
+/* Live inside each card title; hidden until the card is hovered so they take
+   no permanent space at the top of the dashboard. */
+.card-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+.dashboard-card:hover .card-header-actions,
+.dashboard-card:focus-within .card-header-actions,
+.home-editing .card-header-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.card-customize-trigger,
+.card-reset-trigger {
+  width: 1.6rem;
+  height: 1.6rem;
+  font-size: 0.75rem;
+}
+
+.card-customize-trigger.active {
+  background: var(--link-color);
+  color: #fff;
+}
+
+/* Reset only makes sense while editing. */
+.card-reset-trigger {
+  display: none;
+}
+
+.home-editing .card-reset-trigger {
+  display: inline-flex;
+}
+
+/* ===== Calendar card ===== */
+.calendar-header {
+  gap: 0.5rem;
+}
+
+.calendar-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.calendar-month-label {
+  /* Fixed width sized for the longest label ("September 2026") so the prev/next
+     buttons never shift when the month name length changes. */
+  width: 15ch;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3rem;
+  margin-bottom: 0.35rem;
+  flex-shrink: 0;
+}
+
+.calendar-weekdays span {
+  padding-left: 0.4rem;
+  font-size: 0.56rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3rem;
+  flex: 1 1 auto;
+}
+
+.calendar-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 3.4rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid rgb(255 255 255 / 0.04);
+  overflow: hidden;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
+}
+
+/* In light theme --bg-secondary == --bg-card (both white), so give cells a
+   subtle fill + darker border to define the grid. Tinted (profit/loss) cells
+   keep their inline heatmap background, which wins over this rule. */
+[data-theme="light"] .calendar-cell {
+  background: var(--bg-card-hover);
+  border-color: rgb(0 0 0 / 0.07);
+}
+
+.calendar-cell:not(.blank, .future):hover {
+  transform: translateY(-1px);
+  border-color: rgb(255 255 255 / 0.14);
+  z-index: 1;
+}
+
+[data-theme="light"] .calendar-cell:not(.blank, .future):hover {
+  border-color: rgb(0 0 0 / 0.2);
+}
+
+.calendar-cell.blank {
+  background: transparent;
+  border: none;
+}
+
+.calendar-cell.empty,
+.calendar-cell.skeleton {
+  opacity: 0.7;
+}
+
+.calendar-cell.future {
+  opacity: 0.28;
+}
+
+/* Day number: top-left marker; today gets an accent pill instead of a heavy
+   full-cell outline so it reads cleanly alongside the heatmap tints. */
+.calendar-cell .cell-day {
+  align-self: flex-start;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  line-height: 1.15;
+}
+
+.calendar-cell.today .cell-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  margin: -0.1rem 0 0 -0.1rem;
+  padding: 0 0.2rem;
+  background: var(--link-color);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+/* P&L is the hero metric — pushed to the bottom with the portfolio value under it. */
+.calendar-cell .cell-pnl {
+  margin-top: auto;
+  font-family: var(--font-data);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.calendar-cell .cell-value {
+  margin-top: 0.1rem;
+  font-family: var(--font-data);
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.2;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Empty days (no trades) show only the portfolio value — keep it bottom-aligned. */
+.calendar-cell.empty .cell-value {
+  margin-top: auto;
+}
+
+/* Profit/loss cells carry a heatmap tint. In dark theme the tint sits over a
+   dark surface (pale-to-deep colour) so light text reads well; in light theme
+   the same alpha over a white card yields pastel tints, so dark text is used. */
+.calendar-cell.profit .cell-pnl,
+.calendar-cell.loss .cell-pnl {
+  color: #fff;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+
+.calendar-cell.profit .cell-day,
+.calendar-cell.loss .cell-day {
+  color: rgb(255 255 255 / 0.9);
+}
+
+.calendar-cell.profit .cell-value,
+.calendar-cell.loss .cell-value {
+  color: rgb(255 255 255 / 0.85);
+}
+
+[data-theme="light"] .calendar-cell.profit .cell-pnl,
+[data-theme="light"] .calendar-cell.loss .cell-pnl {
+  color: #0b1220;
+  text-shadow: none;
+}
+
+[data-theme="light"] .calendar-cell.profit .cell-day,
+[data-theme="light"] .calendar-cell.loss .cell-day {
+  color: rgb(0 0 0 / 0.75);
+}
+
+[data-theme="light"] .calendar-cell.profit .cell-value,
+[data-theme="light"] .calendar-cell.loss .cell-value {
+  color: rgb(0 0 0 / 0.7);
+}
+
+/* ===== Calendar month summary ===== */
+.calendar-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  flex-shrink: 0;
+}
+
+.calendar-summary-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--row-padding);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgb(255 255 255 / 0.03);
+}
+
+.calendar-summary-label {
+  font-size: var(--label-size);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.calendar-summary-value {
+  font-family: var(--font-data);
+  font-size: var(--value-size);
+  font-weight: 700;
+  color: var(--text-primary);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.calendar-summary-value.profit {
+  color: var(--badge-online);
+}
+
+.calendar-summary-value.loss {
+  color: var(--badge-error);
+}
+
+/* ===== Day detail popover (hover, traded days only) ===== */
+.cal-day-popover {
+  position: fixed;
+  z-index: var(--z-app-tooltip, 10090);
+  min-width: 12rem;
+  max-width: min(16rem, calc(100vw - 16px));
+  background: var(--bg-tooltip, #1f2937);
+  color: var(--text-tooltip, #f9fafb);
+  border: 1px solid var(--border-tooltip, #374151);
+  border-radius: var(--radius-lg, 8px);
+  box-shadow: var(--shadow-floating-md, 0 8px 24px rgb(0 0 0 / 0.35));
+  font-family: var(--font-data, var(--font-mono));
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    opacity var(--transition-fast, 0.15s) ease,
+    transform var(--transition-fast, 0.15s) ease;
+}
+
+.cal-day-popover--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cal-pop-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid var(--border-tooltip, #374151);
+}
+
+.cal-pop-date {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-tooltip, #f9fafb);
+}
+
+.cal-pop-year {
+  font-size: 0.62rem;
+  font-weight: 600;
+  opacity: 0.55;
+}
+
+.cal-pop-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.cal-pop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cal-pop-label {
+  color: var(--text-tooltip, #f9fafb);
+  opacity: 0.55;
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cal-pop-val {
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+/* The popover surface is always dark (--bg-tooltip) in both themes, so use the
+   bright green/red directly — the light-theme badge tokens are dark shades that
+   would be low-contrast here. */
+.cal-pop-val.profit {
+  color: #3fb950;
+}
+
+.cal-pop-val.loss {
+  color: #f85149;
+}
+
+/* ===== Card edit controls (hidden until edit mode) ===== */
+.card-edit-controls {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  margin: -0.625rem -0.625rem 0.5rem;
+  padding: 0.4rem 0.625rem;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.wallet-card .card-edit-controls {
+  margin: 0 0 0.4rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.home-editing .card-edit-controls {
+  display: flex;
+}
+
+.card-drag-handle {
+  cursor: grab;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+}
+
+.card-drag-handle:active {
+  cursor: grabbing;
+}
+
+.card-edit-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-right: auto;
+}
+
+/* ===== Edit mode container + drag states ===== */
+.home-editing .dashboard-card {
+  border: 1px dashed var(--border-color);
+}
+
+.home-editing .dashboard-card[draggable="true"] {
+  cursor: default;
+}
+
+.dashboard-card.dragging {
+  opacity: 0.55;
+  outline: 2px solid var(--link-color);
+  outline-offset: -1px;
+}
+
+/* Disabled (toggled off) cards: dimmed in edit mode, removed otherwise. */
+.dashboard-card.card-disabled.card-hidden {
+  display: none;
+}
+
+.home-editing .dashboard-card.card-disabled {
+  opacity: 0.4;
+}

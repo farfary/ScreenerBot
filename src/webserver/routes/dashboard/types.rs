@@ -4,6 +4,47 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ============================================================================
+// Portfolio Calendar Types
+// ============================================================================
+
+/// A single day cell in the portfolio calendar.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CalendarDay {
+    /// Day-of-month (1-31).
+    pub day: u32,
+    /// Full date, YYYY-MM-DD (UTC).
+    pub date: String,
+    /// Realized net P&L (SOL) from trades closed that day.
+    pub net_pnl_sol: f64,
+    /// Gross realized profit (SOL) from winning trades that day.
+    pub profit_sol: f64,
+    /// Gross realized loss (SOL, positive magnitude) from losing trades that day.
+    pub loss_sol: f64,
+    /// Number of positions closed that day.
+    pub trades: i64,
+    /// Number of profitable positions closed that day.
+    pub wins: i64,
+    /// End-of-day wallet SOL balance, if a snapshot exists for that day.
+    pub portfolio_value_sol: Option<f64>,
+    /// Whether the day has any P&L or trade activity.
+    pub has_data: bool,
+}
+
+/// Portfolio calendar response for a single month.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PortfolioCalendarResponse {
+    pub year: i32,
+    pub month: u32,
+    /// Weekday (0=Sunday..6=Saturday) that the 1st of the month falls on.
+    pub first_weekday: u32,
+    /// Number of days in the month.
+    pub days_in_month: u32,
+    pub days: Vec<CalendarDay>,
+    pub month_net_pnl_sol: f64,
+    pub month_trades: i64,
+}
+
+// ============================================================================
 // Dashboard Overview Types
 // ============================================================================
 

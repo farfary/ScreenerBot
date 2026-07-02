@@ -114,6 +114,47 @@ impl WalletDatabase {
         Ok(result)
     }
 
+    /// Get the end-of-day SOL balance for each calendar day (UTC) within a period.
+    /// Picks the last snapshot recorded on each day. Used by the home portfolio calendar.
+    /// Returns pairs of (YYYY-MM-DD, sol_balance) ordered ascending by day.
+    pub fn get_daily_end_balances(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<(String, f64)>, String> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+            SELECT strftime('%Y-%m-%d', snapshot_time) AS day, sol_balance
+            FROM wallet_snapshots
+            WHERE id IN (
+                SELECT MAX(id)
+                FROM wallet_snapshots
+                WHERE datetime(snapshot_time) >= datetime(?1)
+                  AND datetime(snapshot_time) < datetime(?2)
+                GROUP BY strftime('%Y-%m-%d', snapshot_time)
+            )
+            ORDER BY day ASC
+            "#,
+            )
+            .map_err(|e| format!("Failed to prepare daily balances query: {e}"))?;
+
+        let rows = stmt
+            .query_map(
+                params![start.to_rfc3339(), end.to_rfc3339()],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+            )
+            .map_err(|e| format!("Failed to execute daily balances query: {e}"))?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| format!("Failed to read daily balance row: {e}"))?);
+        }
+        Ok(result)
+    }
+
     /// Get the most recent snapshot timestamp (if any) without loading token data
     pub fn get_latest_snapshot_time(&self) -> Result<Option<DateTime<Utc>>, String> {
         let conn = self.get_connection()?;

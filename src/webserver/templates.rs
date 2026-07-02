@@ -167,6 +167,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         AI_CHAT_INPUT_STYLES,
         AI_AUTOMATION_STYLES,
         HOME_PAGE_STYLES,
+        HOME_CALENDAR_STYLES,
         UPDATES_PAGE_STYLES,
         ABOUT_PAGE_STYLES,
     ];
@@ -246,7 +247,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
             ]
             .join("\n"),
         ),
-        ("home", HOME_PAGE_STYLES),
+        ("home", &[HOME_PAGE_STYLES, HOME_CALENDAR_STYLES].join("\n")),
         ("updates", UPDATES_PAGE_STYLES),
         ("about", ABOUT_PAGE_STYLES),
     ] {

@@ -373,6 +373,66 @@ impl PositionsDatabase {
         Ok(stats)
     }
 
+    /// Get realized trading statistics grouped by calendar day (UTC) for a period.
+    /// Used by the home portfolio calendar. Only exit-verified, closed positions count,
+    /// keyed by the day their exit was recorded (`exit_time`).
+    pub async fn get_daily_trading_stats(
+        &self,
+        period_start: DateTime<Utc>,
+        period_end: DateTime<Utc>,
+    ) -> Result<Vec<DailyTradingStats>, String> {
+        let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+        SELECT
+          strftime('%Y-%m-%d', exit_time) as day,
+          COUNT(*) as trades,
+          SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
+          COALESCE(SUM(CASE WHEN pnl > 0 THEN pnl ELSE 0 END), 0) as profit,
+          COALESCE(SUM(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE 0 END), 0) as loss,
+          COALESCE(SUM(pnl), 0) as total_pnl
+        FROM positions
+        WHERE wallet_address = ?1
+          AND transaction_exit_verified = 1
+          AND exit_time IS NOT NULL
+          AND datetime(exit_time) >= datetime(?2)
+          AND datetime(exit_time) < datetime(?3)
+        GROUP BY day
+        ORDER BY day ASC
+        "#,
+            )
+            .map_err(|e| format!("Failed to prepare daily stats query: {e}"))?;
+
+        let rows = stmt
+            .query_map(
+                params![
+                    wallet_address,
+                    period_start.to_rfc3339(),
+                    period_end.to_rfc3339()
+                ],
+                |row| {
+                    Ok(DailyTradingStats {
+                        date: row.get(0)?,
+                        trades: row.get(1)?,
+                        wins: row.get::<_, Option<i64>>(2)?.unwrap_or_default(),
+                        profit_sol: row.get(3)?,
+                        loss_sol: row.get(4)?,
+                        net_pnl_sol: row.get(5)?,
+                    })
+                },
+            )
+            .map_err(|e| format!("Failed to execute daily stats query: {e}"))?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| format!("Failed to read daily stats row: {e}"))?);
+        }
+        Ok(result)
+    }
+
     /// Get recent closed & verified positions for a specific mint (exit verified)
     /// Ordered by most recent exit_time DESC. Used for adaptive re-entry profit capping.
     pub async fn get_recent_closed_positions_for_mint(

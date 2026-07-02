@@ -8,7 +8,8 @@ use crate::positions::types::{EntryRecord, ExitRecord, Position};
 
 use super::global::GLOBAL_POSITIONS_DB;
 use super::types::{
-    PeriodTradingStats, PositionState, PositionTracking, PositionsDatabaseStats, TokenSnapshot,
+    DailyTradingStats, PeriodTradingStats, PositionState, PositionTracking, PositionsDatabaseStats,
+    TokenSnapshot,
 };
 
 // =============================================================================
@@ -251,6 +252,18 @@ pub async fn get_period_trading_stats(
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_period_trading_stats(period_start, period_end).await,
+        None => Err("Positions database not initialized".to_owned()),
+    }
+}
+
+/// Get realized trading statistics grouped by calendar day for a period
+pub async fn get_daily_trading_stats(
+    period_start: DateTime<Utc>,
+    period_end: DateTime<Utc>,
+) -> Result<Vec<DailyTradingStats>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_daily_trading_stats(period_start, period_end).await,
         None => Err("Positions database not initialized".to_owned()),
     }
 }
