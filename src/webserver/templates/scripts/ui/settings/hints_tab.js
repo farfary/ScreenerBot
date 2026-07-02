@@ -44,9 +44,11 @@ export function buildHintsTab() {
                 <label>${Utils.escapeHtml(hint.title)}</label>
                 <span class="settings-field-hint">${preview}</span>
               </div>
-              <div class="settings-field-control hint-manage-control">
-                <span class="hint-manage-status"></span>
-                <button class="btn btn-secondary btn-sm hint-manage-toggle" type="button"></button>
+              <div class="settings-field-control">
+                <label class="toggle" title="Show this hint">
+                  <input type="checkbox" class="hint-manage-toggle" checked>
+                  <span class="toggle-track"></span>
+                </label>
               </div>
             </div>`;
         })
@@ -95,27 +97,17 @@ export function buildHintsTab() {
 }
 
 /**
- * Update a single row's control to reflect its dismissed state.
+ * Sync a single row's toggle + dimming to its dismissed state.
  */
 function renderRowState(row) {
-  const hintId = row.dataset.hintId;
-  const dismissed = Hints.isDismissed(hintId);
-  const status = row.querySelector(".hint-manage-status");
+  const dismissed = Hints.isDismissed(row.dataset.hintId);
   const toggle = row.querySelector(".hint-manage-toggle");
-
-  row.classList.toggle("hint-manage-row--hidden", dismissed);
-
-  if (dismissed) {
-    status.innerHTML = '<span class="badge secondary">Hidden</span>';
-    toggle.innerHTML = '<i class="icon-eye"></i> Restore';
-    toggle.classList.remove("btn-secondary");
-    toggle.classList.add("btn-primary");
-  } else {
-    status.innerHTML = '<span class="badge success">Visible</span>';
-    toggle.innerHTML = '<i class="icon-eye-off"></i> Hide';
-    toggle.classList.remove("btn-primary");
-    toggle.classList.add("btn-secondary");
+  if (toggle) {
+    toggle.checked = !dismissed;
+    const label = toggle.closest(".toggle");
+    if (label) label.title = dismissed ? "Hidden — turn on to show" : "Shown";
   }
+  row.classList.toggle("hint-manage-row--hidden", dismissed);
 }
 
 /**
@@ -140,14 +132,14 @@ export async function attachHintsHandlers(dialog, content) {
   rows.forEach((row) => renderRowState(row));
   refreshSummary(content);
 
-  // Per-hint hide/restore toggle
-  content.querySelectorAll(".hint-manage-toggle").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const row = btn.closest(".hint-manage-row");
+  // Per-hint show/hide toggle (checked = shown)
+  content.querySelectorAll(".hint-manage-toggle").forEach((toggle) => {
+    toggle.addEventListener("change", async () => {
+      const row = toggle.closest(".hint-manage-row");
       if (!row) return;
       const hintId = row.dataset.hintId;
 
-      if (Hints.isDismissed(hintId)) {
+      if (toggle.checked) {
         await Hints.undismissHint(hintId);
       } else {
         await Hints.dismissHint(hintId);

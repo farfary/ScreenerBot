@@ -465,25 +465,8 @@
    HINTS TAB - Contextual hint management rows
    ============================================================================= */
 
-.hint-manage-control {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Fixed width so the toggle button never shifts as the status label changes. */
-.hint-manage-status {
-  display: inline-flex;
-  justify-content: flex-end;
-  width: 64px;
-  flex-shrink: 0;
-}
-
-.hint-manage-toggle {
-  min-width: 104px;
-  justify-content: center;
-}
-
+/* Dim a hint's text while it's turned off (hidden), so the toggle state reads
+   at a glance without a loud badge. */
 .hint-manage-row--hidden .settings-field-info {
-  opacity: 0.6;
+  opacity: 0.55;
 }
