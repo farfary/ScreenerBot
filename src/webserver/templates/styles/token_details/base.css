@@ -728,12 +728,19 @@
   display: block;
 }
 
-/* Security and other tabs need scrolling */
-.token-details-dialog .tab-content[data-tab-content="security"],
+/* These tabs scroll as a whole */
 .token-details-dialog .tab-content[data-tab-content="positions"],
 .token-details-dialog .tab-content[data-tab-content="pools"],
 .token-details-dialog .tab-content[data-tab-content="links"] {
   overflow-y: auto;
+  padding: 0;
+}
+
+/* Security clips instead of scrolling: its two columns scroll INDEPENDENTLY
+   (see .security-left-col / .security-right-col), so the left summary stays put
+   while the right details list scrolls. */
+.token-details-dialog .tab-content[data-tab-content="security"] {
+  overflow: hidden;
   padding: 0;
 }
 
