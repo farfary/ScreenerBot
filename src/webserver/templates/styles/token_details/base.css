@@ -263,8 +263,12 @@
 #headerPrice {
   display: flex;
   align-items: center;
-  gap: 24px;
+  /* Tight row-gap so that when a long price forces the metrics onto a second
+     line the two tiers stay visually grouped (a uniform 24px gap left the price
+     floating high above the metrics — the "corrupt" tall header). */
+  gap: 8px 24px;
   flex-wrap: wrap;
+  align-content: center;
   justify-content: center;
 }
 
@@ -359,12 +363,12 @@
   background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
 }
 
-/* Metrics row */
+/* Metrics row. No left border/padding divider: it reads as a stray left accent
+   bar when the metrics wrap onto their own line (and left accents are banned).
+   The column-gap in #headerPrice already separates it from the price inline. */
 .price-metrics {
   display: flex;
   gap: 20px;
-  padding-left: 20px;
-  border-left: 1px solid var(--border-color);
   flex-wrap: wrap;
   justify-content: center;
 }
