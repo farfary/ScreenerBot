@@ -13,6 +13,7 @@ import { loadSecurityTab } from "./settings/security_tab.js";
 import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
 import { buildUpdatesTab, attachUpdatesHandlers } from "./settings/updates_tab.js";
 import { buildInterfaceTab, attachInterfaceHandlers } from "./settings/interface_tab.js";
+import { buildHintsTab, attachHintsHandlers } from "./settings/hints_tab.js";
 import { buildNavigationTab, attachNavigationHandlers } from "./settings/navigation_tab.js";
 import { buildLicensesTab, attachLicensesHandlers } from "./settings/licenses_tab.js";
 import { loadTelegramTab } from "./settings/telegram_tab.js";
@@ -549,6 +550,10 @@ export class SettingsDialog {
               <i class="icon-zap"></i>
               <span>Startup</span>
             </button>
+            <button class="settings-nav-item" data-tab="hints">
+              <i class="icon-lightbulb"></i>
+              <span>Hints</span>
+            </button>
             <button class="settings-nav-item" data-tab="data">
               <i class="icon-database"></i>
               <span>Data</span>
@@ -595,6 +600,9 @@ export class SettingsDialog {
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="startup">
+              <div class="settings-loading">Loading...</div>
+            </div>
+            <div class="settings-tab" data-tab-content="hints">
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="data">
@@ -709,6 +717,10 @@ export class SettingsDialog {
         content.innerHTML = this._buildStartupTab();
         this._attachStartupHandlers(content);
         enhanceAllSelects(content);
+        break;
+      case "hints":
+        content.innerHTML = buildHintsTab();
+        attachHintsHandlers(this, content);
         break;
       case "data":
         content.innerHTML = buildDataTab();

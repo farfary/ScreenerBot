@@ -93,6 +93,27 @@ export async function dismissHint(hintId) {
 }
 
 /**
+ * Restore a single dismissed hint (make it show again)
+ */
+export async function undismissHint(hintId) {
+  if (!dismissedHints.has(hintId)) return;
+  dismissedHints.delete(hintId);
+
+  try {
+    await fetch("/api/ui-state/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key: "dismissed_hints",
+        value: Array.from(dismissedHints),
+      }),
+    });
+  } catch (e) {
+    console.warn("[Hints] Failed to restore hint:", e);
+  }
+}
+
+/**
  * Reset all dismissed hints
  */
 export async function resetDismissedHints() {
@@ -110,6 +131,60 @@ export async function resetDismissedHints() {
   } catch (e) {
     console.warn("[Hints] Failed to reset dismissed hints:", e);
   }
+}
+
+/**
+ * Get the set of dismissed hint IDs as an array
+ */
+export function getDismissedHints() {
+  return Array.from(dismissedHints);
+}
+
+/**
+ * Human-readable labels for the top-level HINTS categories
+ */
+export const HINT_CATEGORY_LABELS = {
+  tokens: "Tokens",
+  positions: "Positions",
+  filtering: "Filtering",
+  trader: "Auto Trader",
+  services: "Services",
+  wallet: "Wallet",
+  wallets: "Wallets",
+  tools: "Tools",
+  config: "Config",
+  configTelegram: "Telegram",
+  tokenDetails: "Token Details",
+  ui: "Interface",
+};
+
+/**
+ * Flatten the HINTS registry into a list of hint entries, grouped by category.
+ * Returns: [{ category, categoryLabel, hints: [{ path, id, title, content, learnMoreUrl }] }]
+ */
+export function getAllHintGroups() {
+  const groups = [];
+  for (const [category, hints] of Object.entries(HINTS)) {
+    const entries = [];
+    for (const [key, hint] of Object.entries(hints)) {
+      if (!hint || !hint.id) continue;
+      entries.push({
+        path: `${category}.${key}`,
+        id: hint.id,
+        title: hint.title,
+        content: hint.content,
+        learnMoreUrl: hint.learnMoreUrl,
+      });
+    }
+    if (entries.length) {
+      groups.push({
+        category,
+        categoryLabel: HINT_CATEGORY_LABELS[category] || category,
+        hints: entries,
+      });
+    }
+  }
+  return groups;
 }
 
 /**
