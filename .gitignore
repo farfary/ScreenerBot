@@ -68,7 +68,7 @@ run.sh
 run.bat
 run-dev.bat
 publish.sh
-scripts/
+/scripts/
 vless/
 control-panel/
 _public-legacy/
