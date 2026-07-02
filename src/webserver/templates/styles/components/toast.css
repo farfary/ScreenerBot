@@ -167,11 +167,14 @@
    TOAST HEADER
    ============================================ */
 
+/* Center icon, title and close on one row so a single-line toast reads as
+   vertically centered. Spacing to any following content (message/progress/
+   actions) comes from those siblings' own margin-top, so the header needs no
+   margin-bottom (which otherwise offset title-only toasts). */
 .toast__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 6px;
 }
 
 .toast__icon {
@@ -265,8 +268,6 @@
   cursor: pointer;
   padding: 0;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  top: -2px;
 }
 
 .toast__close:hover {
@@ -287,6 +288,22 @@
 
 .toast__close svg {
   display: block;
+}
+
+/* Desktop / big screens with a real pointer: keep the close button hidden until
+   the toast is hovered (or the button is keyboard-focused), so a resting toast
+   stays clean. Touch / small screens always show it (no hover to reveal it). */
+@media (hover: hover) and (pointer: fine) {
+  .toast__close {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .toast:hover .toast__close,
+  .toast:focus-within .toast__close {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 /* ============================================
