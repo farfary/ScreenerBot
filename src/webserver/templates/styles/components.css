@@ -115,12 +115,23 @@
 }
 
 .btn {
+  /* Flex base so an icon + label sit centered with consistent spacing.
+     Without this, `.btn`s with a leading <i> icon align the icon to the text
+     baseline (visibly high) and have no gap — the reason page CSS kept
+     re-declaring inline-flex per button. gap uses em so it scales with each
+     size variant (.btn-xs/.btn-sm/.btn-lg). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
   padding: var(--spacing-xs) var(--spacing-md);
   border: none;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 0.85em;
   font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
   transition: all var(--transition-normal);
 }
 
