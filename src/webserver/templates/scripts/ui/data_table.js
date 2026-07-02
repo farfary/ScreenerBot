@@ -1682,6 +1682,18 @@ export class DataTable {
   }
 
   /**
+   * Direction to use the FIRST time a column is clicked (before any toggling).
+   * Defaults to "desc" so numeric/date columns (updated, price, volume, …) show
+   * the most-recent / highest / most-relevant rows on top on the first click,
+   * instead of the worst (oldest / smallest) values. A column may override this
+   * via `defaultSortDirection: "asc"` (e.g. name/text columns that read better A→Z).
+   */
+  _getInitialSortDirection(columnId) {
+    const column = this.options.columns.find((c) => c.id === columnId);
+    return column && column.defaultSortDirection === "asc" ? "asc" : "desc";
+  }
+
+  /**
    * Check if user is currently interacting with table controls
    * Skip render during interaction to preserve UI state (dropdowns, focus, hover)
    */

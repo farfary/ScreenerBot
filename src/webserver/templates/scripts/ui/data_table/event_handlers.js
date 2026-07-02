@@ -253,7 +253,13 @@ export function applyEventHandlersMixin(DataTable) {
       if (this._getSortingMode() === "server") {
         const currentDirection =
           this.state.sortColumn === columnId ? this.state.sortDirection : null;
-        const nextDirection = currentDirection === "asc" ? "desc" : "asc";
+        // First click on a column uses the column's initial direction (desc by
+        // default → newest/highest first); subsequent clicks toggle.
+        const nextDirection = currentDirection
+          ? currentDirection === "asc"
+            ? "desc"
+            : "asc"
+          : this._getInitialSortDirection(columnId);
         this.state.sortColumn = columnId;
         this.state.sortDirection = nextDirection;
 
@@ -278,7 +284,7 @@ export function applyEventHandlersMixin(DataTable) {
         this.state.sortDirection = this.state.sortDirection === "asc" ? "desc" : "asc";
       } else {
         this.state.sortColumn = columnId;
-        this.state.sortDirection = "asc";
+        this.state.sortDirection = this._getInitialSortDirection(columnId);
       }
 
       this._applySort();
