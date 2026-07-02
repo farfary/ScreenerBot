@@ -547,6 +547,12 @@
   line-height: 1.4;
 }
 
+/* `display: flex` above beats the bare [hidden] attribute, so the row would
+   still occupy space (padding + bottom border) when empty. Guard it. */
+.source-issues-row[hidden] {
+  display: none;
+}
+
 .source-issues-lead {
   font-weight: 600;
   color: var(--text-secondary);
