@@ -94,7 +94,7 @@ function buildQuickStats(token) {
     <div class="quick-stats">
       <div class="quick-stat">
         <span class="stat-label">Price</span>
-        <span class="stat-value">${token.price_sol ? Utils.formatPriceSol(token.price_sol, { decimals: 9 }) + " SOL" : "—"}</span>
+        <span class="stat-value">${token.price_sol ? Utils.formatPriceSubscript(token.price_sol, { precision: 5 }) + " SOL" : "—"}</span>
         ${change24h !== undefined ? `<span class="stat-change ${changeClass}">${formatChange(change24h)}</span>` : ""}
       </div>
       <div class="quick-stat">

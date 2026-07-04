@@ -164,14 +164,11 @@
 
     const absPrice = Math.abs(num);
 
-    // Very small prices - use subscript
-    if (absPrice < 0.000001) {
-      return formatPriceSubscript(price, { fallback, precision: 5 });
-    }
-
-    // Small prices - show more decimals
+    // Tiny prices (more than 3 leading zeros after the decimal, i.e. < 0.0001):
+    // subscript notation, never scientific — "0.0₅36" not "3.6000e-6". Keeps
+    // every price display in the app consistent with the token-details header.
     if (absPrice < 0.0001) {
-      return num.toExponential(4);
+      return formatPriceSubscript(price, { fallback, precision: 5 });
     }
 
     // Normal small prices

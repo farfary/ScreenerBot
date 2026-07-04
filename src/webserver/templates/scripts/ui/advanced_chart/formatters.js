@@ -153,14 +153,12 @@
 
     const absPrice = Math.abs(price);
 
-    // Very small prices - use subscript
-    if (absPrice < 0.000001) {
-      return formatPriceSubscript(price, precision);
-    }
-
-    // Small prices - use scientific notation
+    // Tiny prices (more than 3 leading zeros after the decimal, i.e. < 0.0001):
+    // subscript notation, never scientific — "0.0₅36" reads far better than
+    // "3.6000e-6" on axis labels, tooltips and legends. formatPriceSubscript
+    // renders the leading-zero count as a small subscript.
     if (absPrice < 0.0001) {
-      return price.toExponential(4);
+      return formatPriceSubscript(price, precision);
     }
 
     // Normal prices

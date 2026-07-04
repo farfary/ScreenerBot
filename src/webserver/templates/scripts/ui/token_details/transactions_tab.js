@@ -171,7 +171,7 @@ export function applyTransactionsTabMixin(DialogClass) {
         const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
 
         // Price (if available) - generic transactions typically don't have price
-        const price = tx.price_sol ? Utils.formatPriceSol(tx.price_sol) : "—";
+        const price = tx.price_sol ? Utils.formatPriceSubscript(tx.price_sol, { precision: 5 }) : "—";
 
         // Total SOL (use sol_delta absolute value)
         const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);

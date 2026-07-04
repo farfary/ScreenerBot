@@ -316,7 +316,8 @@ export function applyChartTabMixin(PositionDetailsDialog) {
     const last = chartData[chartData.length - 1];
     const set = (id, v) => {
       const el = this.dialogEl?.querySelector(id);
-      if (el) el.textContent = Utils.formatPriceSol(v, { decimals: 9 });
+      // Subscript notation (0.0₅1311), consistent with the chart axis/tooltip.
+      if (el) el.textContent = Utils.formatPriceSubscript(v, { precision: 5 });
     };
     set("#pddO", last.open);
     set("#pddH", last.high);

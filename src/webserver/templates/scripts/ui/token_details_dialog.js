@@ -1196,7 +1196,7 @@ export class TokenDetailsDialog {
   _buildHeaderPrice(token) {
     const priceSol =
       token.price_sol !== null && token.price_sol !== undefined
-        ? Utils.formatPriceSol(token.price_sol, { decimals: 12 })
+        ? Utils.formatPriceSubscript(token.price_sol, { precision: 5 })
         : "—";
     const priceUsd =
       token.price_usd !== null && token.price_usd !== undefined

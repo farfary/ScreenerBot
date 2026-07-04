@@ -468,10 +468,13 @@ export function applyChartTabMixin(DialogClass) {
     const ohlcvClose = this.dialogEl?.querySelector("#ohlcvClose");
     const ohlcvChange = this.dialogEl?.querySelector("#ohlcvChange");
 
-    if (ohlcvOpen) ohlcvOpen.textContent = Utils.formatPriceSol(latest.open, { decimals: 9 });
-    if (ohlcvHigh) ohlcvHigh.textContent = Utils.formatPriceSol(latest.high, { decimals: 9 });
-    if (ohlcvLow) ohlcvLow.textContent = Utils.formatPriceSol(latest.low, { decimals: 9 });
-    if (ohlcvClose) ohlcvClose.textContent = Utils.formatPriceSol(latest.close, { decimals: 9 });
+    // Subscript notation (0.0₅1311) rather than a long zero-string — matches the
+    // chart axis/tooltip and the dialog header, and stays compact for tiny prices.
+    if (ohlcvOpen) ohlcvOpen.textContent = Utils.formatPriceSubscript(latest.open, { precision: 5 });
+    if (ohlcvHigh) ohlcvHigh.textContent = Utils.formatPriceSubscript(latest.high, { precision: 5 });
+    if (ohlcvLow) ohlcvLow.textContent = Utils.formatPriceSubscript(latest.low, { precision: 5 });
+    if (ohlcvClose)
+      ohlcvClose.textContent = Utils.formatPriceSubscript(latest.close, { precision: 5 });
 
     if (ohlcvChange && latest.open && latest.close) {
       const changePercent = ((latest.close - latest.open) / latest.open) * 100;

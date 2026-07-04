@@ -222,7 +222,7 @@ function pickPrice(...candidates) {
 
 function fmtPrice(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
-  return Utils.formatPriceSol(Number(value), { decimals: 9 }) + " SOL";
+  return Utils.formatPriceSubscript(Number(value), { precision: 5 }) + " SOL";
 }
 
 function fmtSol(value) {
