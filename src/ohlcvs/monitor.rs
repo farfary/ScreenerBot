@@ -718,7 +718,7 @@ impl OhlcvMonitor {
         }
 
         // Get token config with pools
-        let (pool_address, priority, batch_size) = {
+        let (pool_address, pool_is_sol, priority, batch_size) = {
             let active = self.active_tokens.read().await;
             let config = active
                 .get(mint)
@@ -732,13 +732,18 @@ impl OhlcvMonitor {
             // Calculate batch size based on priority
             let batch_size = PriorityManager::calculate_batch_size(config.priority);
 
-            (pool.address.clone(), config.priority, batch_size)
+            (
+                pool.address.clone(),
+                pool.is_sol_pair,
+                config.priority,
+                batch_size,
+            )
         };
 
         // Fetch 1-minute data (base timeframe) with multi-source fallback
         let data = self
             .fetcher
-            .fetch_multi_source(mint, &pool_address, "minute", 1, batch_size)
+            .fetch_multi_source(mint, &pool_address, "minute", 1, batch_size, pool_is_sol)
             .await;
 
         match data {
@@ -1774,10 +1779,31 @@ impl OhlcvMonitor {
             ),
         );
 
+        // Look up the pool's denomination so a USD-quoted pool skips GeckoTerminal
+        // (see fetch_multi_source). Unknown/missing rows default to SOL.
+        let pool_is_sol = self
+            .db
+            .get_pools(mint)
+            .ok()
+            .and_then(|pools| {
+                pools
+                    .into_iter()
+                    .find(|p| p.address == pool_address)
+                    .map(|p| p.is_sol_pair)
+            })
+            .unwrap_or(true);
+
         // Fetch using multi-source fallback
         let candles = self
             .fetcher
-            .fetch_multi_source(mint, pool_address, api_endpoint, aggregate, max_candles)
+            .fetch_multi_source(
+                mint,
+                pool_address,
+                api_endpoint,
+                aggregate,
+                max_candles,
+                pool_is_sol,
+            )
             .await?;
 
         if candles.is_empty() {

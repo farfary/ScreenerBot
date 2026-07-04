@@ -271,6 +271,11 @@ pub struct PoolConfig {
     pub dex: String,
     pub liquidity: f64,
     pub is_default: bool,
+    /// Whether this pool is wSOL-quoted. A USD-quoted pool must NOT be fetched via
+    /// GeckoTerminal `currency=token` (that returns USD candles that poison the
+    /// SOL-denominated series); the SOL-forcing sources (data server, SolanaTracker)
+    /// are used instead. Defaults to true (legacy rows / unknown = assume SOL).
+    pub is_sol_pair: bool,
     pub last_successful_fetch: Option<DateTime<Utc>>,
     pub failure_count: u32,
 }
@@ -282,6 +287,7 @@ impl PoolConfig {
             dex,
             liquidity,
             is_default: false,
+            is_sol_pair: true,
             last_successful_fetch: None,
             failure_count: 0,
         }

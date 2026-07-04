@@ -229,44 +229,53 @@ impl PoolManager {
             .collect();
 
         let mut discovered_configs = Vec::new();
-        let mut skipped_non_sol = 0usize;
+        let mut non_sol_configs = Vec::new();
 
         for pool in snapshot.pools.iter() {
-            if !pool.is_sol_pair {
-                skipped_non_sol += 1;
-                continue;
-            }
-
             let existing = existing_map.remove(&pool.pool_address);
             let config = Self::merge_pool_info(pool, canonical_address.as_deref(), existing);
-            discovered_configs.push(config);
+            if pool.is_sol_pair {
+                discovered_configs.push(config);
+            } else {
+                non_sol_configs.push(config);
+            }
         }
 
+        // A token whose ONLY pools are USD-quoted (e.g. a pump token that only ever
+        // paired with USDC) has no wSOL pool. We used to bail out ("No SOL pools")
+        // and never chart it — but the data server (and SolanaTracker) return
+        // SOL-denominated candles for ANY pool by forcing SOL on the paid path, so
+        // we CAN chart it. Register the best USD pool as a fallback; the fetcher
+        // then skips GeckoTerminal for it (is_sol_pair=false) to avoid pulling USD
+        // candles that would poison the SOL series, and relies on the SOL-forcing
+        // sources instead.
         if discovered_configs.is_empty() {
+            if non_sol_configs.is_empty() {
+                record_ohlcv_event(
+                    "pool_discovery_empty",
+                    Severity::Warn,
+                    Some(mint),
+                    None,
+                    json!({ "mint": mint }),
+                )
+                .await;
+
+                return Err(OhlcvError::NotFound(format!(
+                    "No pools available for mint {}",
+                    mint
+                )));
+            }
+
             logger::debug(
                 LogTag::Ohlcv,
                 &format!(
-                    "No SOL pools discovered for mint={} ({} pools skipped as non-SOL)",
-                    mint, skipped_non_sol
+                    "No SOL pool for mint={}; registering best USD pool ({} candidates), \
+                     OHLCV via SOL-forcing sources (server/SolanaTracker), Gecko skipped",
+                    mint,
+                    non_sol_configs.len()
                 ),
             );
-
-            record_ohlcv_event(
-                "pool_discovery_empty",
-                Severity::Warn,
-                Some(mint),
-                None,
-                json!({
-                    "mint": mint,
-                    "skipped_non_sol": skipped_non_sol,
-                }),
-            )
-            .await;
-
-            return Err(OhlcvError::NotFound(format!(
-                "No SOL pools available for mint {}",
-                mint
-            )));
+            discovered_configs = non_sol_configs;
         }
 
         if !discovered_configs.iter().any(|cfg| cfg.is_default) {
@@ -283,16 +292,6 @@ impl PoolManager {
         for leftover in existing_map.into_values() {
             self.db.delete_pool(mint, &leftover.address)?;
             removed_addresses.push(leftover.address);
-        }
-
-        if skipped_non_sol > 0 {
-            logger::debug(
-                LogTag::Ohlcv,
-                &format!(
-                    "Filtered {} non-SOL pools while discovering mint={}",
-                    skipped_non_sol, mint
-                ),
-            );
         }
 
         if !removed_addresses.is_empty() {
@@ -330,7 +329,7 @@ impl PoolManager {
             json!({
                 "mint": mint,
                 "pools_found": discovered_configs.len(),
-                "skipped_non_sol": skipped_non_sol,
+                "sol_pool": discovered_configs.iter().any(|c| c.is_sol_pair),
                 "removed_pools": removed_addresses.len(),
                 "canonical_address": canonical_address,
             }),
@@ -366,6 +365,10 @@ impl PoolManager {
         if liquidity.is_finite() && liquidity > 0.0 {
             config.liquidity = liquidity;
         }
+
+        // Carry the pool's SOL/USD denomination so the fetcher can avoid running
+        // GeckoTerminal (USD) on a USD-quoted pool.
+        config.is_sol_pair = pool.is_sol_pair;
 
         if let Some(canonical_address) = canonical {
             config.is_default = canonical_address == config.address;

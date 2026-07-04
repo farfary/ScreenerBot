@@ -394,6 +394,7 @@ impl OhlcvFetcher {
         api_endpoint: &str,
         aggregate: u32,
         limit: usize,
+        pool_is_sol: bool,
     ) -> OhlcvResult<Vec<Candle>> {
         // Try the self-hosted ScreenerBot OHLCV server first: it serves a shared
         // cache fast and warms itself, sparing the external providers' budgets. On
@@ -433,7 +434,27 @@ impl OhlcvFetcher {
             }
         }
 
-        // Fallback to GeckoTerminal (uses pool address)
+        // Fallback to GeckoTerminal (uses pool address). GeckoTerminal returns
+        // candles in the pool's QUOTE token (`currency=token`), so it is SOL only
+        // for a wSOL-quoted pool. On a USD-quoted pool it returns USD candles that
+        // would poison the SOL-denominated series (candles are keyed by
+        // (mint,timeframe,ts) with no pool, so one USD candle corrupts the chart).
+        // Skip Gecko entirely for non-SOL pools; the SOL-forcing sources above
+        // (data server, SolanaTracker) are the only valid path there.
+        if !pool_is_sol {
+            record_ohlcv_event(
+                "gecko_skipped_non_sol_pool",
+                Severity::Debug,
+                Some(mint),
+                Some(pool_address),
+                json!({
+                    "reason": "USD-quoted pool; GeckoTerminal would return USD candles",
+                }),
+            )
+            .await;
+            return Ok(Vec::new());
+        }
+
         self.fetch_with_aggregate(pool_address, api_endpoint, aggregate, None, limit)
             .await
     }

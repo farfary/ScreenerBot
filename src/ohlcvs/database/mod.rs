@@ -55,6 +55,7 @@ impl OhlcvDatabase {
                 dex TEXT NOT NULL,
                 liquidity REAL NOT NULL DEFAULT 0.0,
                 is_default INTEGER NOT NULL DEFAULT 0,
+                is_sol_pair INTEGER NOT NULL DEFAULT 1,
                 last_success TEXT,
                 failure_count INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -132,6 +133,14 @@ impl OhlcvDatabase {
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to create tables: {e}")))?;
 
+        // Migration: add is_sol_pair to pre-existing ohlcv_pools tables (CREATE IF
+        // NOT EXISTS above won't add a column to a table that already exists). Errs
+        // harmlessly (duplicate column) once migrated, so ignore the result.
+        let _ = conn.execute(
+            "ALTER TABLE ohlcv_pools ADD COLUMN is_sol_pair INTEGER NOT NULL DEFAULT 1",
+            [],
+        );
+
         Ok(())
     }
 
@@ -147,11 +156,12 @@ impl OhlcvDatabase {
 
         conn
             .execute(
-                "INSERT INTO ohlcv_pools (mint, pool_address, dex, liquidity, is_default, last_success, failure_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "INSERT INTO ohlcv_pools (mint, pool_address, dex, liquidity, is_default, is_sol_pair, last_success, failure_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(mint, pool_address) DO UPDATE SET
                 liquidity = excluded.liquidity,
                 is_default = excluded.is_default,
+                is_sol_pair = excluded.is_sol_pair,
                 last_success = excluded.last_success,
                 failure_count = excluded.failure_count",
                 params![
@@ -160,6 +170,7 @@ impl OhlcvDatabase {
                     &pool.dex,
                     pool.liquidity,
                     pool.is_default as i32,
+                    pool.is_sol_pair as i32,
                     last_success,
                     pool.failure_count
                 ]
@@ -192,7 +203,7 @@ impl OhlcvDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT pool_address, dex, liquidity, is_default, last_success, failure_count
+                "SELECT pool_address, dex, liquidity, is_default, last_success, failure_count, is_sol_pair
                  FROM ohlcv_pools
                  WHERE mint = ?1
                  ORDER BY liquidity DESC",
@@ -215,6 +226,7 @@ impl OhlcvDatabase {
                     is_default: row.get::<_, i32>(3)? != 0,
                     last_successful_fetch: last_success,
                     failure_count: row.get(5)?,
+                    is_sol_pair: row.get::<_, i32>(6)? != 0,
                 })
             })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
