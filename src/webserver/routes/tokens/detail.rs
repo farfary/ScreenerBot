@@ -227,18 +227,19 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     );
 
     // Fallback pool entry: the on-chain pool analyzer registry only knows pools
-    // for tokens it has actively discovered, so tokens opened from the billboard
-    // or search (enriched purely from external APIs) have an empty pools[] even
-    // though we DO have a real SOL pair used for pricing. When the registry has
-    // nothing, synthesize a single descriptor from the pool the price calculator
-    // used (or the last-used pool stored on the token) so the Pools tab shows the
-    // canonical SOL pair instead of "No pools found". Pricing always uses a
-    // single highest-liquidity SOL pair, so the quote is WSOL.
+    // for tokens it has actively discovered, and it ONLY registers SOL pairs — so
+    // a token opened from the billboard/search (enriched purely from external
+    // APIs), OR a token whose only pool is USD-quoted (the analyzer rejects it),
+    // has an empty pools[]. When the registry has nothing, synthesize a single
+    // descriptor from the pool the price calculator used, the last-used pool, or
+    // the DexScreener pair, so the Pools tab shows the pool instead of "No pools
+    // found". CAUTION: do NOT assume the quote is WSOL — a USD-only-pool token
+    // lands here too, and hardcoding SOL mislabels a genuine USDC pool (bit us:
+    // DYxPtx.../pump showed quote=WSOL for its pumpswap USDC pool). Resolve the
+    // real quote/base from the pool_data snapshot (which stores each pool's actual
+    // quote_mint), and only fall back to WSOL when we truly lack denomination info
+    // (a calculator/last-used pool IS a real SOL pair, so WSOL is right there).
     if pool_infos.is_empty() {
-        // Prefer the on-chain pool the price calculator used; fall back to the
-        // last-used pool stored on the token, then to the DexScreener pair the
-        // token was enriched from (available immediately for API/billboard tokens
-        // even before the pool service has priced them on-chain).
         let mut fallback_pool = pool_address
             .clone()
             .or_else(|| token.pool_price_last_used_pool.clone());
@@ -260,13 +261,48 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         }
 
         if let Some(pool_id) = fallback_pool {
+            // Look up this pool's ACTUAL mints from the persisted pool_data
+            // snapshot so a USD-quoted pool is labelled correctly. Default to
+            // token/WSOL only when the snapshot has no record of the pool.
+            let (mint_lookup, pool_lookup) = (mint.clone(), pool_id.clone());
+            let matched = tokio::task::spawn_blocking(move || {
+                get_global_database()
+                    .and_then(|db| db.get_token_pools(&mint_lookup).ok().flatten())
+                    .and_then(|snap| {
+                        snap.pools
+                            .into_iter()
+                            .find(|p| p.pool_address == pool_lookup)
+                    })
+            })
+            .await
+            .ok()
+            .flatten();
+
+            let (base_mint, quote_mint) = match matched {
+                Some(p) => (p.base_mint, p.quote_mint),
+                None => (mint.clone(), crate::constants::SOL_MINT.to_string()),
+            };
+
+            let token_role = if base_mint == mint {
+                "base"
+            } else if quote_mint == mint {
+                "quote"
+            } else {
+                "base"
+            };
+            let paired_mint = if token_role == "base" {
+                quote_mint.clone()
+            } else {
+                base_mint.clone()
+            };
+
             pool_infos.push(TokenPoolInfo {
                 pool_id,
                 program: fallback_dex.unwrap_or_else(|| format!("{:?}", token.data_source)),
-                base_mint: mint.clone(),
-                quote_mint: crate::constants::SOL_MINT.to_string(),
-                token_role: "base".to_string(),
-                paired_mint: crate::constants::SOL_MINT.to_string(),
+                base_mint,
+                quote_mint,
+                token_role: token_role.to_string(),
+                paired_mint,
                 liquidity_usd: token.liquidity_usd.filter(|v| v.is_finite()),
                 volume_h24_usd: token.volume_h24.filter(|v| v.is_finite()),
                 reserve_accounts: Vec::new(),
