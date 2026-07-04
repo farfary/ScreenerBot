@@ -514,8 +514,31 @@ impl ServiceManager {
         let shutdown_begin = format!("running={} debug_system=on", running_services.len());
         log_service_startup_phase("shutdown_begin", Some(&shutdown_begin));
 
-        // Signal shutdown
+        // Signal shutdown.
+        //
+        // notify_waiters() is EDGE-triggered: it only wakes tasks that are parked on
+        // `.notified()` at this exact instant. Any background task that is mid-work
+        // right now (running an update batch, an RPC wallet snapshot, a pool-priority
+        // sync, a filter scan) is NOT parked, so it misses this single broadcast — and
+        // because the loop helpers create a FRESH `.notified()` future on the next
+        // iteration, every subsequent wait is registered too late to ever catch a
+        // broadcast that already fired, so the task hangs until its 10s per-task
+        // timeout below. That is exactly the residual wallet + tokens pool-sync stall.
+        //
+        // Fix at the source: keep re-broadcasting on a short interval for the whole
+        // duration of shutdown. Any task is then guaranteed to catch the signal within
+        // one interval of becoming parked again, whatever it was doing when shutdown
+        // began — with zero changes required at the ~50 `.notified()` consumer sites.
         self.shutdown.notify_waiters();
+        let renotify = {
+            let notify = self.shutdown.clone();
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    notify.notify_waiters();
+                }
+            })
+        };
 
         // Get services in reverse startup order
         let mut ordered = self.resolve_startup_order(&running_services)?;
@@ -584,6 +607,9 @@ impl ServiceManager {
                 log_service_event(service_name, ServiceLogEvent::StopSuccess, None, false);
             }
         }
+
+        // All handles have been awaited — stop re-broadcasting the shutdown signal.
+        renotify.abort();
 
         logger::info(
             LogTag::System,
