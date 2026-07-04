@@ -1013,6 +1013,19 @@ export class TokenDetailsDialog {
     const badgesRow = this.dialogEl.querySelector("#headerBadgesRow");
     if (badgesContainer && badgesRow) {
       const badges = [];
+
+      // Price source badge (first, left of Verified): shows which price system
+      // produced the header quote — POOL (real-time on-chain, preferred) or API
+      // (cached market-data fallback).
+      if (token.price_source) {
+        const isPool = token.price_source === "pool";
+        badges.push(
+          `<span class="badge ${isPool ? "badge-success" : "badge-secondary"}" title="${
+            isPool ? "Price from real-time on-chain pool" : "Price from cached market-data (API)"
+          }">Price ${isPool ? "Pool" : "API"}</span>`
+        );
+      }
+
       if (token.verified) badges.push('<span class="badge badge-success">Verified</span>');
 
       // Mutable/Immutable badge
@@ -1214,17 +1227,6 @@ export class TokenDetailsDialog {
         ? Utils.formatCurrencyUSD(token.price_usd)
         : "";
 
-    // Source chip: which price system produced this quote — pool (real-time
-    // on-chain, preferred) or api (cached market-data fallback). Only shown when
-    // we actually have a price.
-    let sourceChip = "";
-    if (token.price_sol !== null && token.price_sol !== undefined && token.price_source) {
-      const isPool = token.price_source === "pool";
-      sourceChip = `<span class="price-source-chip ${isPool ? "pool" : "api"}" title="${
-        isPool ? "Real-time on-chain pool price" : "Cached market-data (API) price"
-      }">${isPool ? "POOL" : "API"}</span>`;
-    }
-
     // Price change badge
     let changeHtml = "";
     if (token.price_change_periods) {
@@ -1241,7 +1243,6 @@ export class TokenDetailsDialog {
         <div class="price-sol-row">
           <span class="price-sol">${priceSol}</span>
           <span class="price-sol-unit">SOL</span>
-          ${sourceChip}
         </div>
         ${priceUsd ? `<span class="price-usd">${priceUsd}</span>` : ""}
       </div>
