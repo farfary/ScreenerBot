@@ -14,7 +14,7 @@ const CARD_SPECS = [
   {
     section: "trader",
     fields: [
-      { id: "stop-loss-enabled", key: "stop_loss_enabled", type: "bool" },
+      { id: "stop-loss-enabled", key: "stop_loss_enabled", type: "bool", autoSave: true },
       { id: "stop-loss-threshold", key: "stop_loss_threshold_pct", type: "float" },
       { id: "stop-loss-allow-partial", key: "stop_loss_allow_partial", type: "bool" },
       { id: "stop-loss-min-hold", key: "stop_loss_min_hold_seconds", type: "int" },
@@ -23,7 +23,7 @@ const CARD_SPECS = [
   {
     section: "positions",
     fields: [
-      { id: "trailing-enabled", key: "trailing_stop_enabled", type: "bool" },
+      { id: "trailing-enabled", key: "trailing_stop_enabled", type: "bool", autoSave: true },
       { id: "trail-activation", key: "trailing_stop_activation_pct", type: "float" },
       { id: "trail-distance", key: "trailing_stop_distance_pct", type: "float" },
     ],
@@ -31,14 +31,14 @@ const CARD_SPECS = [
   {
     section: "trader",
     fields: [
-      { id: "roi-enabled", key: "roi_exit_enabled", type: "bool" },
+      { id: "roi-enabled", key: "roi_exit_enabled", type: "bool", autoSave: true },
       { id: "roi-target", key: "roi_target_percent", type: "float" },
     ],
   },
   {
     section: "trader",
     fields: [
-      { id: "time-override-enabled", key: "time_override_enabled", type: "bool" },
+      { id: "time-override-enabled", key: "time_override_enabled", type: "bool", autoSave: true },
       { id: "time-max-hold", key: "time_override_duration", type: "float" },
       { id: "time-unit", key: "time_override_unit", type: "string" },
       { id: "time-loss-threshold", key: "time_override_loss_threshold_percent", type: "float" },
@@ -47,7 +47,7 @@ const CARD_SPECS = [
   {
     section: "trader",
     fields: [
-      { id: "dca-enabled", key: "dca_enabled", type: "bool" },
+      { id: "dca-enabled", key: "dca_enabled", type: "bool", autoSave: true },
       { id: "dca-threshold", key: "dca_threshold_pct", type: "float" },
       { id: "dca-max-count", key: "dca_max_count", type: "int" },
       { id: "dca-size", key: "dca_size_percentage", type: "float" },
@@ -148,6 +148,32 @@ export function createTraderConfigCards({ saveConfig }) {
     }
   }
 
+  async function saveField(card, field, el) {
+    const nextSaved = snapValue(el);
+    const previousSaved = card.saved[field.id];
+    const payload = { [card.spec.section]: { [field.key]: readField(el, field.type) } };
+
+    el.disabled = true;
+    try {
+      await saveConfig(payload, {
+        reload: false,
+        successTitle: el.checked ? "Feature Enabled" : "Feature Disabled",
+        successMessage: "Auto Trader setting applied",
+      });
+      card.saved[field.id] = nextSaved;
+      evaluate(card);
+    } catch {
+      if (el.type === "checkbox") {
+        el.checked = previousSaved === "true";
+      } else {
+        el.value = previousSaved;
+      }
+      evaluate(card);
+    } finally {
+      el.disabled = false;
+    }
+  }
+
   function reset(card) {
     card.spec.fields.forEach((f) => {
       const el = document.getElementById(f.id);
@@ -186,13 +212,13 @@ export function createTraderConfigCards({ saveConfig }) {
     saveBtn.hidden = true;
     saveBtn.addEventListener("click", () => save(card));
 
-    actions.append(resetBtn, saveBtn);
-
-    // Move the feature on/off toggle (if any) into the actions group so the
-    // Save/Reset buttons sit to its left, sharing one right-aligned cluster.
     const toggle = header.querySelector(":scope > .toggle");
-    header.appendChild(actions);
-    if (toggle) actions.appendChild(toggle);
+    actions.append(resetBtn, saveBtn);
+    if (toggle) {
+      header.insertBefore(actions, toggle);
+    } else {
+      header.appendChild(actions);
+    }
 
     card.saveBtn = saveBtn;
     card.resetBtn = resetBtn;
@@ -212,7 +238,13 @@ export function createTraderConfigCards({ saveConfig }) {
         const fe = document.getElementById(f.id);
         if (!fe) return;
         const evt = fe.tagName === "SELECT" || fe.type === "checkbox" ? "change" : "input";
-        const handler = () => evaluate(card);
+        const handler = () => {
+          if (f.autoSave) {
+            saveField(card, f, fe);
+            return;
+          }
+          evaluate(card);
+        };
         fe.addEventListener(evt, handler);
         card.cleanups.push(() => fe.removeEventListener(evt, handler));
       });
@@ -239,12 +271,6 @@ export function createTraderConfigCards({ saveConfig }) {
       card.cleanups.forEach((c) => c());
       const actions = card.el.querySelector(".card-header-actions");
       if (!actions) return;
-      // The page DOM persists across visits, so move the feature toggle back out
-      // to the header before discarding the actions cluster — otherwise the
-      // toggle would be destroyed and gone on the next visit.
-      const header = actions.parentElement;
-      const toggle = actions.querySelector(":scope > .toggle");
-      if (toggle && header) header.appendChild(toggle);
       actions.remove();
     });
     cards.length = 0;

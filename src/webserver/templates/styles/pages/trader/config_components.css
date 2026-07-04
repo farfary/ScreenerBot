@@ -93,6 +93,10 @@
   flex-shrink: 0;
 }
 
+.config-card .card-header > .card-header-actions {
+  margin-left: auto;
+}
+
 /* Right-aligned cluster holding the per-card Save/Reset buttons and (for feature
    cards) the on/off toggle. Injected by the config_cards module. */
 .card-header-actions {

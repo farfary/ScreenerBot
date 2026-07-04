@@ -1195,7 +1195,13 @@ function createLifecycle() {
    * merges the flat partial into the live config, validates, persists, and
    * hot-reloads it — the only correct path (the root `/api/config` is GET-only).
    */
-  async function saveConfig(updates) {
+  async function saveConfig(updates, options = {}) {
+    const {
+      reload = true,
+      successTitle = "Configuration Saved",
+      successMessage = "Trader settings applied successfully",
+    } = options;
+
     try {
       const sections = Object.entries(updates).filter(
         ([, fields]) => fields && Object.keys(fields).length > 0
@@ -1211,10 +1217,24 @@ function createLifecycle() {
 
       Utils.showToast({
         type: "success",
-        title: "Configuration Saved",
-        message: "Trader settings applied successfully",
+        title: successTitle,
+        message: successMessage,
       });
-      await loadConfig(); // Reload to reflect the applied values
+      if (reload) {
+        await loadConfig(); // Reload to reflect the applied values
+      } else {
+        state.config ||= {};
+        sections.forEach(([section, fields]) => {
+          state.config[section] = {
+            ...(state.config[section] || {}),
+            ...fields,
+          };
+        });
+        updateConfigOverview();
+        examples.updateStopLossExample();
+        examples.updateRoiExample();
+        examples.updateTimeLossExample();
+      }
     } catch (error) {
       console.error("[Trader] Failed to save config:", error);
       Utils.showToast({
