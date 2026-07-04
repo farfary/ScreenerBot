@@ -22,6 +22,10 @@ use serde_json::json;
 const TOKEN_POOLS_TTL_SECS: u64 = 60;
 const POOL_PREFETCH_DEBOUNCE_SECS: u64 = 20;
 const POOL_PREFETCH_WORKER_COUNT: usize = 8;
+/// Max time `fetch_immediate` waits on a refresh slot already held by another
+/// (possibly background/rate-limited) refresher before falling back to a direct,
+/// instant data-server pool fetch. Keeps user-opened charts responsive.
+const FOREIGN_REFRESH_WAIT: Duration = Duration::from_millis(2_500);
 
 #[derive(Clone)]
 struct TokenPoolCacheEntry {
@@ -665,12 +669,30 @@ pub async fn fetch_immediate(mint: &str) -> TokenResult<Option<TokenPoolsSnapsho
         }
     }
 
-    // Do immediate fetch, bypassing the background queue
+    // INSTANT PATH: this is the user-viewed path (chart open, token details), so
+    // latency matters. The data server is the central pool registry and answers
+    // in ~200ms. The full multi-source refresh below `tokio::join!`s DexScreener +
+    // GeckoTerminal and BLOCKS on the slowest one — and under Gecko 429 penalty a
+    // provider's internal retry/backoff can take 60-90s, which is exactly why
+    // charts for tokens without a local pool appeared "stuck" (the fast server
+    // result was wasted behind the slow providers). So try the server FIRST and
+    // return its pools immediately; then kick a debounced background refresh to
+    // enrich the snapshot with per-pool price/volume from the direct providers.
+    if let Some(snapshot) = server_only_snapshot(trimmed).await {
+        schedule_background_refresh_if_due(trimmed, PrefetchPriority::High, true).await;
+        return Ok(Some(snapshot));
+    }
+
+    // Server missed: fall back to the direct multi-source refresh, bypassing the
+    // background queue.
     let (should_refresh, notifier) = begin_refresh_slot(trimmed).await;
 
     if !should_refresh {
-        // Another request is already fetching - wait for it
-        notifier.notified().await;
+        // Another refresh already holds the slot (often a background prefetch
+        // worker draining the rate-limited discovery queue, 60-90s away). Only
+        // wait a short bounded window, then return whatever is cached rather than
+        // blocking the user's request on the slow pipeline.
+        let _ = tokio::time::timeout(FOREIGN_REFRESH_WAIT, notifier.notified()).await;
         return Ok(get_cached_pool_snapshot(trimmed)
             .or_else(|| get_cached_pool_snapshot_allow_stale(trimmed)));
     }
@@ -681,6 +703,39 @@ pub async fn fetch_immediate(mint: &str) -> TokenResult<Option<TokenPoolsSnapsho
     complete_refresh_slot(trimmed).await;
 
     result
+}
+
+/// Build and cache an instant snapshot from the data server's pool registry
+/// alone (no DexScreener/GeckoTerminal). Used as the fast fallback when a chart
+/// is opened while a slow background refresh already holds this mint's slot, so
+/// the OHLCV monitor gets a usable SOL pool in ~200ms instead of waiting on the
+/// rate-limited pipeline. Returns `None` when the server is disabled/misses.
+async fn server_only_snapshot(mint: &str) -> Option<TokenPoolsSnapshot> {
+    let server_pools = super::server::fetch_pools_from_server(mint).await?;
+    if server_pools.is_empty() {
+        return None;
+    }
+
+    let mut pools_map: HashMap<String, TokenPoolInfo> = HashMap::new();
+    for info in server_pools {
+        super::operations::ingest_pool_entry(&mut pools_map, info);
+    }
+    let mut pools: Vec<TokenPoolInfo> = pools_map.into_values().collect();
+    sort_pools_for_snapshot(&mut pools);
+    let canonical_pool_address = choose_canonical_pool(&pools);
+
+    let snapshot = TokenPoolsSnapshot {
+        mint: mint.to_string(),
+        pools,
+        canonical_pool_address,
+        pool_data_last_fetched_at: Utc::now(),
+    };
+
+    // Persist so the OHLCV monitor and other consumers see it immediately; the
+    // in-flight full refresh will overwrite it with the enriched snapshot.
+    let _ = database::replace_token_pools_async(snapshot.clone()).await;
+    store_pool_snapshot(snapshot.clone());
+    Some(snapshot)
 }
 
 /// Clear pool cache (for testing/reset)
