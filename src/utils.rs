@@ -113,6 +113,25 @@ pub async fn delay_with_shutdown(shutdown: &Notify, duration: Duration) {
     }
 }
 
+/// Runs `work` to completion, but abandons it the instant `shutdown` fires.
+///
+/// Returns `Some(output)` if the work finished, `None` if shutdown interrupted it
+/// (caller should then break/return). Critically, while the work future is being
+/// awaited the task stays parked on `shutdown.notified()`, so it also cannot MISS a
+/// one-shot `notify_waiters()` broadcast that lands mid-work — the failure mode that
+/// makes a long-running background task hang until the ServiceManager's per-task
+/// shutdown timeout. Always wrap real work (network/DB batches, long computes) in a
+/// background loop with this so the process exits gracefully instead of being killed.
+pub async fn run_or_shutdown<F>(shutdown: &Notify, work: F) -> Option<F::Output>
+where
+    F: std::future::Future,
+{
+    tokio::select! {
+      _ = shutdown.notified() => None,
+      out = work => Some(out),
+    }
+}
+
 // =============================================================================
 // ATA (ASSOCIATED TOKEN ACCOUNT) OPERATIONS
 // =============================================================================

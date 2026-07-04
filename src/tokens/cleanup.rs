@@ -11,12 +11,12 @@ use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{TokenError, TokenResult};
+use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 
 // ============================================================================
 // BLACKLIST CONDITIONS
@@ -157,27 +157,25 @@ pub struct CleanupResult {
 pub fn start_cleanup_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> JoinHandle<()> {
     tokio::spawn(async move {
         loop {
-            tokio::select! {
-                _ = shutdown.notified() => break,
-                _ = sleep(Duration::from_secs(3600)) => {
-                    logger::info(LogTag::Tokens, "[CLEANUP] Starting cleanup scan...");
-                    match run_cleanup_scan(&db).await {
-                        Ok(result) => {
-                            logger::info(
-                                LogTag::Tokens,
-                                &format!(
-                                    "[CLEANUP] Scan complete: {} checked, {} blacklisted, {} errors",
-                                    result.checked, result.blacklisted, result.errors
-                                ),
-                            );
-                        }
-                        Err(e) => {
-                            logger::error(
-                                LogTag::Tokens,
-                                &format!("[CLEANUP] Scan failed: {e}"),
-                            );
-                        }
-                    }
+            if check_shutdown_or_delay(&shutdown, Duration::from_secs(3600)).await {
+                break;
+            }
+            logger::info(LogTag::Tokens, "[CLEANUP] Starting cleanup scan...");
+            // Race the scan against shutdown: it can iterate many tokens, and we must
+            // stay parked on notified() so the one-shot shutdown broadcast is not missed.
+            match run_or_shutdown(&shutdown, run_cleanup_scan(&db)).await {
+                None => break,
+                Some(Ok(result)) => {
+                    logger::info(
+                        LogTag::Tokens,
+                        &format!(
+                            "[CLEANUP] Scan complete: {} checked, {} blacklisted, {} errors",
+                            result.checked, result.blacklisted, result.errors
+                        ),
+                    );
+                }
+                Some(Err(e)) => {
+                    logger::error(LogTag::Tokens, &format!("[CLEANUP] Scan failed: {e}"));
                 }
             }
         }

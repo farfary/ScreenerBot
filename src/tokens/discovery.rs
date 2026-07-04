@@ -14,6 +14,7 @@ use crate::tokens::database::TokenDatabase;
 use crate::tokens::events::{self, TokenEvent};
 use crate::tokens::priorities::Priority;
 use crate::tokens::updates::RateLimitCoordinator;
+use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 use chrono::Utc;
 use futures::future::{join_all, BoxFuture};
 use solana_sdk::pubkey::Pubkey;
@@ -23,7 +24,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 
 use super::discovery_sources::*;
 
@@ -66,39 +66,43 @@ pub fn start_discovery_loop(
         let mut last_skip_reason: Option<String> = None;
 
         loop {
-            tokio::select! {
-                _ = shutdown.notified() => break,
-                _ = sleep(wait) => {
-                    wait = Duration::from_secs(DISCOVERY_INTERVAL_SECS);
+            if check_shutdown_or_delay(&shutdown, wait).await {
+                break;
+            }
+            wait = Duration::from_secs(DISCOVERY_INTERVAL_SECS);
 
-                    match run_discovery_once(&db, coordinator.clone()).await {
-                        Ok(stats) => {
-                            if let Some(reason) = stats.skip_reason.clone() {
-                                if last_skip_reason.as_ref() != Some(&reason) {
-                                    logger::info(
-                                        LogTag::Tokens,
-                                        &format!("[DISCOVERY] Skipping discovery loop: {reason}"),
-                                    );
-                                    last_skip_reason = Some(reason);
-                                }
-                                continue;
-                            }
-
-                            last_skip_reason = None;
-
-                            let source_summary = if stats.by_source.is_empty() {
-                                "-".to_owned()
-                            } else {
-                                let mut parts: Vec<String> = stats
-                                    .by_source
-                                    .iter()
-                                    .map(|(source, count)| format!("{source}:{count}"))
-                                    .collect();
-                                parts.sort();
-                                parts.join(", ")
-                            };
-
+            // Race the discovery run (network API calls) against shutdown so a stop
+            // mid-run returns at once and stays parked on notified() to never miss the
+            // one-shot shutdown broadcast.
+            match run_or_shutdown(&shutdown, run_discovery_once(&db, coordinator.clone())).await {
+                None => break,
+                Some(Ok(stats)) => {
+                    if let Some(reason) = stats.skip_reason.clone() {
+                        if last_skip_reason.as_ref() != Some(&reason) {
                             logger::info(
+                                LogTag::Tokens,
+                                &format!("[DISCOVERY] Skipping discovery loop: {reason}"),
+                            );
+                            last_skip_reason = Some(reason);
+                        }
+                        continue;
+                    }
+
+                    last_skip_reason = None;
+
+                    let source_summary = if stats.by_source.is_empty() {
+                        "-".to_owned()
+                    } else {
+                        let mut parts: Vec<String> = stats
+                            .by_source
+                            .iter()
+                            .map(|(source, count)| format!("{source}:{count}"))
+                            .collect();
+                        parts.sort();
+                        parts.join(", ")
+                    };
+
+                    logger::info(
                                 LogTag::Tokens,
                                 &format!(
                                     "[DISCOVERY] Completed: {} candidates, {} unique, {} new, {} known, {} blacklisted, {} invalid, {} errors ({} ms) | sources: {}",
@@ -114,54 +118,53 @@ pub fn start_discovery_loop(
                                 ),
                             );
 
-                            // Record discovery run completion (INFO if new tokens found, DEBUG otherwise)
-                            let severity = if stats.newly_added > 0 { Severity::Info } else { Severity::Debug };
-                            tokio::spawn({
-                                let stats = stats.clone();
-                                async move {
-                                    record_token_event(
-                                        "system", // system-level event, no specific mint
-                                        "discovery_run_complete",
-                                        severity,
-                                        serde_json::json!({
-                                            "total_candidates": stats.total_candidates,
-                                            "unique_mints": stats.unique_mints,
-                                            "newly_added": stats.newly_added,
-                                            "already_known": stats.already_known,
-                                            "blacklisted": stats.blacklisted,
-                                            "invalid": stats.invalid,
-                                            "errors": stats.errors,
-                                            "duration_ms": stats.duration_ms,
-                                            "by_source": stats.by_source,
-                                        }),
-                                    )
-                                    .await;
-                                }
-                            });
+                    // Record discovery run completion (INFO if new tokens found, DEBUG otherwise)
+                    let severity = if stats.newly_added > 0 {
+                        Severity::Info
+                    } else {
+                        Severity::Debug
+                    };
+                    tokio::spawn({
+                        let stats = stats.clone();
+                        async move {
+                            record_token_event(
+                                "system", // system-level event, no specific mint
+                                "discovery_run_complete",
+                                severity,
+                                serde_json::json!({
+                                    "total_candidates": stats.total_candidates,
+                                    "unique_mints": stats.unique_mints,
+                                    "newly_added": stats.newly_added,
+                                    "already_known": stats.already_known,
+                                    "blacklisted": stats.blacklisted,
+                                    "invalid": stats.invalid,
+                                    "errors": stats.errors,
+                                    "duration_ms": stats.duration_ms,
+                                    "by_source": stats.by_source,
+                                }),
+                            )
+                            .await;
                         }
-                        Err(err) => {
-                            logger::error(
-                                LogTag::Tokens,
-                                &format!("[DISCOVERY] Run failed: {err}"),
-                            );
+                    });
+                }
+                Some(Err(err)) => {
+                    logger::error(LogTag::Tokens, &format!("[DISCOVERY] Run failed: {err}"));
 
-                            // Record discovery error
-                            tokio::spawn({
-                                let error_msg = err.to_string();
-                                async move {
-                                    record_token_event(
-                                        "system",
-                                        "discovery_run_failed",
-                                        Severity::Error,
-                                        serde_json::json!({
-                                            "error": error_msg,
-                                        }),
-                                    )
-                                    .await;
-                                }
-                            });
+                    // Record discovery error
+                    tokio::spawn({
+                        let error_msg = err.to_string();
+                        async move {
+                            record_token_event(
+                                "system",
+                                "discovery_run_failed",
+                                Severity::Error,
+                                serde_json::json!({
+                                    "error": error_msg,
+                                }),
+                            )
+                            .await;
                         }
-                    }
+                    });
                 }
             }
         }

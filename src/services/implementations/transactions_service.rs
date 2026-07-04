@@ -59,6 +59,21 @@ impl Service for TransactionsService {
         Ok(vec![handle])
     }
 
+    async fn stop(&mut self) -> crate::Result<()> {
+        // Signal the transaction service loop (and its websocket) to stop and shut
+        // the manager down. The loop awaits the transactions module's own
+        // SHUTDOWN_NOTIFY, which is a SEPARATE Notify from the one the
+        // ServiceManager broadcasts on — so without this the task never sees a
+        // shutdown signal and blocks until the 10s per-task timeout.
+        if let Err(e) = crate::transactions::service::stop_global_transaction_service().await {
+            crate::logger::warning(
+                crate::logger::LogTag::Transactions,
+                &format!("Error stopping transaction service: {e}"),
+            );
+        }
+        Ok(())
+    }
+
     async fn health(&self) -> ServiceHealth {
         if crate::global::TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed) {
             ServiceHealth::Healthy

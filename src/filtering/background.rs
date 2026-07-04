@@ -16,6 +16,7 @@ use crate::logger::{self, LogTag};
 use crate::telegram::pagination::PAGINATION_MANAGER;
 use crate::telegram::{queue_notification, Notification};
 use crate::tokens::{cleanup_rejection_history_async, cleanup_rejection_stats_async};
+use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 
 // Timing constants
 const FILTER_CACHE_TTL_SECS: u64 = 30;
@@ -46,14 +47,19 @@ pub async fn run_refresh_loop(
     operations: Arc<AtomicU64>,
     errors: Arc<AtomicU64>,
 ) {
-    // Do first refresh immediately on start (async, doesn't block other services)
+    // Do first refresh immediately on start (async, doesn't block other services).
+    // A full refresh scans tens of thousands of tokens and can run for many seconds;
+    // race it against shutdown so a stop mid-refresh returns at once (and stays parked
+    // on notified() so the one-shot shutdown broadcast is never missed) instead of
+    // hanging until the ServiceManager's per-task shutdown timeout.
     logger::info(LogTag::Filtering, "Starting initial filtering refresh...");
-    match filtering::refresh().await {
-        Ok(_) => {
+    match run_or_shutdown(&shutdown, filtering::refresh()).await {
+        None => return,
+        Some(Ok(_)) => {
             operations.fetch_add(1, Ordering::Relaxed);
             logger::info(LogTag::Filtering, "Initial filtering refresh complete");
         }
-        Err(err) => {
+        Some(Err(err)) => {
             errors.fetch_add(1, Ordering::Relaxed);
             logger::warning(LogTag::Filtering, &format!("Initial refresh failed: {err}"));
         }
@@ -73,7 +79,11 @@ pub async fn run_refresh_loop(
         let prev_passed = filtering::get_passed_tokens().await.unwrap_or_default();
         let prev_mints: HashSet<String> = prev_passed.iter().map(|t| t.mint.clone()).collect();
 
-        match filtering::refresh().await {
+        let refresh_result = match run_or_shutdown(&shutdown, filtering::refresh()).await {
+            None => break,
+            Some(result) => result,
+        };
+        match refresh_result {
             Ok(_) => {
                 operations.fetch_add(1, Ordering::Relaxed);
 
@@ -102,7 +112,9 @@ pub async fn run_refresh_loop(
             Err(err) => {
                 errors.fetch_add(1, Ordering::Relaxed);
                 logger::warning(LogTag::Filtering, &err);
-                tokio::time::sleep(Duration::from_secs(3)).await;
+                if check_shutdown_or_delay(&shutdown, Duration::from_secs(3)).await {
+                    break;
+                }
             }
         }
     }

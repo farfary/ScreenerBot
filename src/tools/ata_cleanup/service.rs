@@ -5,10 +5,10 @@
 use std::sync::Arc;
 
 use tokio::sync::Notify;
-use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
+use tokio::time::{interval, Duration, MissedTickBehavior};
 
 use crate::logger::{self, LogTag};
-use crate::utils::get_wallet_address;
+use crate::utils::{check_shutdown_or_delay, get_wallet_address, run_or_shutdown};
 
 use super::operations::{cleanup_empty_atas, update_stats};
 
@@ -33,8 +33,18 @@ const ATA_CLEANUP_STARTUP_DELAY_SECONDS: u64 = 30;
 pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
     logger::debug(LogTag::Wallet, "Starting background ATA cleanup service...");
 
-    // Wait before starting to allow system initialization
-    sleep(Duration::from_secs(ATA_CLEANUP_STARTUP_DELAY_SECONDS)).await;
+    // Wait before starting to allow system initialization. Race the delay against
+    // shutdown so a stop during the 30s startup window returns immediately instead
+    // of hanging until the ServiceManager's per-task shutdown timeout.
+    if check_shutdown_or_delay(
+        &shutdown_notify,
+        Duration::from_secs(ATA_CLEANUP_STARTUP_DELAY_SECONDS),
+    )
+    .await
+    {
+        logger::info(LogTag::Wallet, "ATA cleanup service stopped");
+        return;
+    }
 
     // Create interval timer for periodic cleanup
     let mut cleanup_timer = interval(Duration::from_secs(ATA_CLEANUP_INTERVAL_MINUTES * 60));
@@ -58,8 +68,16 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
 
             // Periodic cleanup timer
             _ = cleanup_timer.tick() => {
-                match perform_scheduled_cleanup().await {
-                    Ok((closed_count, signatures)) => {
+                // Race the cleanup itself against shutdown: a cleanup cycle makes RPC
+                // calls and can run for seconds, during which we must still react to a
+                // stop signal (and stay parked on notified() so a mid-cycle broadcast
+                // is not missed).
+                match run_or_shutdown(&shutdown_notify, perform_scheduled_cleanup()).await {
+                    None => {
+                        logger::info(LogTag::Wallet, "ATA cleanup service shutting down...");
+                        break;
+                    }
+                    Some(Ok((closed_count, signatures))) => {
                         if closed_count > 0 {
                             logger::info(
                                 LogTag::Wallet,
@@ -71,13 +89,16 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
                             );
                         }
                     }
-                    Err(e) => {
+                    Some(Err(e)) => {
                         logger::error(
                             LogTag::Wallet,
                             &format!("ATA cleanup service error: {e}"),
                         );
-                        // Sleep before continuing on error to avoid rapid failures
-                        sleep(Duration::from_secs(30)).await;
+                        // Back off before continuing on error to avoid rapid failures,
+                        // but wake immediately on shutdown.
+                        if check_shutdown_or_delay(&shutdown_notify, Duration::from_secs(30)).await {
+                            break;
+                        }
                     }
                 }
             }

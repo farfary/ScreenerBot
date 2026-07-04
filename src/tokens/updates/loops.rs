@@ -25,12 +25,12 @@ use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::priorities::Priority;
+use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 use futures::future::join_all;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 
 /// Start all update loops (main entry point)
 ///
@@ -52,13 +52,34 @@ pub fn start_update_loop(
     let shutdown_security = shutdown.clone();
     handles.push(tokio::spawn(async move {
         // Stagger loop start to avoid thundering herd (0s delay)
-        update_security_data(&db_security, &coord_security).await;
+        if run_or_shutdown(
+            &shutdown_security,
+            update_security_data(&db_security, &coord_security),
+        )
+        .await
+        .is_none()
+        {
+            return;
+        }
         loop {
-            tokio::select! {
-                _ = shutdown_security.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.security_seconds))) => {
-                    update_security_data(&db_security, &coord_security).await;
-                }
+            if check_shutdown_or_delay(
+                &shutdown_security,
+                Duration::from_secs(with_config(|cfg| {
+                    cfg.tokens.update_intervals.security_seconds
+                })),
+            )
+            .await
+            {
+                break;
+            }
+            if run_or_shutdown(
+                &shutdown_security,
+                update_security_data(&db_security, &coord_security),
+            )
+            .await
+            .is_none()
+            {
+                break;
             }
         }
     }));
@@ -69,14 +90,30 @@ pub fn start_update_loop(
     let shutdown_seed = shutdown.clone();
     handles.push(tokio::spawn(async move {
         // Stagger loop start to avoid thundering herd (2s delay)
-        sleep(Duration::from_secs(2)).await;
-        update_uninitialized_tokens(&db_seed, &coord_seed).await;
+        if check_shutdown_or_delay(&shutdown_seed, Duration::from_secs(2)).await {
+            return;
+        }
+        if run_or_shutdown(
+            &shutdown_seed,
+            update_uninitialized_tokens(&db_seed, &coord_seed),
+        )
+        .await
+        .is_none()
+        {
+            return;
+        }
         loop {
-            tokio::select! {
-                _ = shutdown_seed.notified() => break,
-                _ = sleep(Duration::from_secs(10)) => {
-                    update_uninitialized_tokens(&db_seed, &coord_seed).await;
-                }
+            if check_shutdown_or_delay(&shutdown_seed, Duration::from_secs(10)).await {
+                break;
+            }
+            if run_or_shutdown(
+                &shutdown_seed,
+                update_uninitialized_tokens(&db_seed, &coord_seed),
+            )
+            .await
+            .is_none()
+            {
+                break;
             }
         }
     }));
@@ -88,14 +125,30 @@ pub fn start_update_loop(
     let shutdown_pool_sync = shutdown.clone();
     handles.push(tokio::spawn(async move {
         // Stagger loop start to avoid thundering herd (4s delay)
-        sleep(Duration::from_secs(4)).await;
-        manager_sync.sync(db_pool_state.as_ref()).await;
+        if check_shutdown_or_delay(&shutdown_pool_sync, Duration::from_secs(4)).await {
+            return;
+        }
+        if run_or_shutdown(
+            &shutdown_pool_sync,
+            manager_sync.sync(db_pool_state.as_ref()),
+        )
+        .await
+        .is_none()
+        {
+            return;
+        }
         loop {
-            tokio::select! {
-                _ = shutdown_pool_sync.notified() => break,
-                _ = sleep(Duration::from_secs(5)) => {
-                    manager_sync.sync(db_pool_state.as_ref()).await;
-                }
+            if check_shutdown_or_delay(&shutdown_pool_sync, Duration::from_secs(5)).await {
+                break;
+            }
+            if run_or_shutdown(
+                &shutdown_pool_sync,
+                manager_sync.sync(db_pool_state.as_ref()),
+            )
+            .await
+            .is_none()
+            {
+                break;
             }
         }
     }));
@@ -106,14 +159,37 @@ pub fn start_update_loop(
     let shutdown_pool_update = shutdown.clone();
     handles.push(tokio::spawn(async move {
         // Stagger loop start to avoid thundering herd (6s delay)
-        sleep(Duration::from_secs(6)).await;
-        update_pool_tracked_tokens(&db_pool_update, &coord_pool).await;
+        if check_shutdown_or_delay(&shutdown_pool_update, Duration::from_secs(6)).await {
+            return;
+        }
+        if run_or_shutdown(
+            &shutdown_pool_update,
+            update_pool_tracked_tokens(&db_pool_update, &coord_pool),
+        )
+        .await
+        .is_none()
+        {
+            return;
+        }
         loop {
-            tokio::select! {
-                _ = shutdown_pool_update.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.pool_tracked_seconds))) => {
-                    update_pool_tracked_tokens(&db_pool_update, &coord_pool).await;
-                }
+            if check_shutdown_or_delay(
+                &shutdown_pool_update,
+                Duration::from_secs(with_config(|cfg| {
+                    cfg.tokens.update_intervals.pool_tracked_seconds
+                })),
+            )
+            .await
+            {
+                break;
+            }
+            if run_or_shutdown(
+                &shutdown_pool_update,
+                update_pool_tracked_tokens(&db_pool_update, &coord_pool),
+            )
+            .await
+            .is_none()
+            {
+                break;
             }
         }
     }));
@@ -124,13 +200,28 @@ pub fn start_update_loop(
     let shutdown_open_pos = shutdown.clone();
     handles.push(tokio::spawn(async move {
         // Stagger loop start to avoid thundering herd (8s delay)
-        sleep(Duration::from_secs(8)).await;
+        if check_shutdown_or_delay(&shutdown_open_pos, Duration::from_secs(8)).await {
+            return;
+        }
         loop {
-            tokio::select! {
-                _ = shutdown_open_pos.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.open_position_seconds))) => {
-                    update_open_position_tokens(&db_open_pos, &coord_open_pos).await;
-                }
+            if check_shutdown_or_delay(
+                &shutdown_open_pos,
+                Duration::from_secs(with_config(|cfg| {
+                    cfg.tokens.update_intervals.open_position_seconds
+                })),
+            )
+            .await
+            {
+                break;
+            }
+            if run_or_shutdown(
+                &shutdown_open_pos,
+                update_open_position_tokens(&db_open_pos, &coord_open_pos),
+            )
+            .await
+            .is_none()
+            {
+                break;
             }
         }
     }));
@@ -141,13 +232,28 @@ pub fn start_update_loop(
     let shutdown_filter_passed = shutdown.clone();
     handles.push(tokio::spawn(async move {
         // Stagger loop start to avoid thundering herd (10s delay)
-        sleep(Duration::from_secs(10)).await;
+        if check_shutdown_or_delay(&shutdown_filter_passed, Duration::from_secs(10)).await {
+            return;
+        }
         loop {
-            tokio::select! {
-                _ = shutdown_filter_passed.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.filter_passed_seconds))) => {
-                    update_filter_passed_tokens(&db_filter_passed, &coord_filter_passed).await;
-                }
+            if check_shutdown_or_delay(
+                &shutdown_filter_passed,
+                Duration::from_secs(with_config(|cfg| {
+                    cfg.tokens.update_intervals.filter_passed_seconds
+                })),
+            )
+            .await
+            {
+                break;
+            }
+            if run_or_shutdown(
+                &shutdown_filter_passed,
+                update_filter_passed_tokens(&db_filter_passed, &coord_filter_passed),
+            )
+            .await
+            .is_none()
+            {
+                break;
             }
         }
     }));
@@ -158,13 +264,28 @@ pub fn start_update_loop(
     let shutdown_background = shutdown.clone();
     handles.push(tokio::spawn(async move {
         // Stagger loop start to avoid thundering herd (12s delay)
-        sleep(Duration::from_secs(12)).await;
+        if check_shutdown_or_delay(&shutdown_background, Duration::from_secs(12)).await {
+            return;
+        }
         loop {
-            tokio::select! {
-                _ = shutdown_background.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.background_seconds))) => {
-                    update_background_tokens(&db_background, &coord_background).await;
-                }
+            if check_shutdown_or_delay(
+                &shutdown_background,
+                Duration::from_secs(with_config(|cfg| {
+                    cfg.tokens.update_intervals.background_seconds
+                })),
+            )
+            .await
+            {
+                break;
+            }
+            if run_or_shutdown(
+                &shutdown_background,
+                update_background_tokens(&db_background, &coord_background),
+            )
+            .await
+            .is_none()
+            {
+                break;
             }
         }
     }));
