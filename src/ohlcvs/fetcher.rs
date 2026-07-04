@@ -353,6 +353,7 @@ impl OhlcvFetcher {
     async fn fetch_from_screenerbot_server(
         &self,
         mint: &str,
+        pool_address: &str,
         api_endpoint: &str,
         aggregate: u32,
         limit: usize,
@@ -366,9 +367,10 @@ impl OhlcvFetcher {
         }
         let tf = Self::server_timeframe(api_endpoint, aggregate)?;
         let url = format!(
-            "{}/v1/ohlcv?mint={}&timeframe={}&limit={}",
+            "{}/v1/ohlcv?mint={}&pool={}&timeframe={}&limit={}",
             endpoint.trim_end_matches('/'),
             mint,
+            pool_address,
             tf,
             limit.min(MAX_CANDLES_PER_REQUEST)
         );
@@ -398,7 +400,7 @@ impl OhlcvFetcher {
         // any miss/timeout/error we fall straight through to the providers below,
         // so this is purely an accelerator — never a hard dependency.
         if let Some(candles) = self
-            .fetch_from_screenerbot_server(mint, api_endpoint, aggregate, limit)
+            .fetch_from_screenerbot_server(mint, pool_address, api_endpoint, aggregate, limit)
             .await
         {
             if !candles.is_empty() {
