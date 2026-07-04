@@ -114,11 +114,30 @@ pub async fn fetch_from_sources(
         }
     };
 
-    let (dex_result, gecko_result) = tokio::join!(dex_future, gecko_future);
+    // The self-hosted server is the PRIMARY, central pool registry: fetch it
+    // alongside the direct providers and ingest it FIRST so its pools seed the
+    // snapshot (DexScreener/GeckoTerminal then enrich price/volume by address).
+    // Even if both direct providers fail, the server pools keep the snapshot
+    // non-empty, so every consumer (OHLCV, pool service, dashboard) still gets a
+    // usable pool set.
+    let server_future = super::server::fetch_pools_from_server(&mint_owned);
+
+    let (server_pools, dex_result, gecko_result) =
+        tokio::join!(server_future, dex_future, gecko_future);
 
     let mut pools_map: HashMap<String, TokenPoolInfo> = HashMap::new();
     let mut success_sources = 0usize;
     let mut failures: Vec<String> = Vec::new();
+
+    let server_ok = match server_pools {
+        Some(pools) if !pools.is_empty() => {
+            for info in pools {
+                ingest_pool_entry(&mut pools_map, info);
+            }
+            true
+        }
+        _ => false,
+    };
 
     match dex_result {
         Ok(pools) => {
@@ -186,6 +205,12 @@ pub async fn fetch_from_sources(
             .await;
             failures.push(format!("GeckoTerminal→{message}"));
         }
+    }
+
+    // The server counts as a successful source: when it supplied pools, the
+    // snapshot is usable even if both direct providers failed.
+    if server_ok {
+        success_sources += 1;
     }
 
     let attempted_sources = (should_fetch_dex as usize) + (should_fetch_gecko as usize);

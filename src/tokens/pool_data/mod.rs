@@ -20,6 +20,7 @@ mod api;
 mod cache;
 mod conversion;
 mod operations;
+mod server;
 mod utils;
 
 // Re-export public API
