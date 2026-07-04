@@ -226,8 +226,10 @@ export function applyChartTabMixin(PositionDetailsDialog) {
       this._renderPositionChartStats(chartData[chartData.length - 1]?.close);
 
       if (isInitial) {
+        // Anchor the newest candle at a fixed bar width so candle size stays
+        // normal for any candle count (no giant stretched bars with few candles).
         this._pddChart.resetUserInteraction();
-        this._pddChart.setVisibleRange(90);
+        this._pddChart.anchorLatest();
       }
     } catch {
       if (loadingText) loadingText.textContent = "Waiting for chart data...";

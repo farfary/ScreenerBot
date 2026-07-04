@@ -291,9 +291,11 @@ export function applyChartTabMixin(DialogClass) {
       // Only set initial visible range on first load of this timeframe
       // Chart will auto-preserve user's zoom/pan on subsequent updates
       if (isInitialLoad && chartData.length > 0) {
-        // Reset interaction flag and set initial view
+        // Reset interaction flag and anchor the newest candle at a fixed bar
+        // width (fills the pane with normal-size candles for any candle count —
+        // no giant stretched bars when only a few candles exist).
         this.advancedChart.resetUserInteraction();
-        this.advancedChart.setVisibleRange(80);
+        this.advancedChart.anchorLatest();
       }
     } catch {
       // On error, show waiting message

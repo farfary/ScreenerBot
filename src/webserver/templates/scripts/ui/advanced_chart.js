@@ -387,9 +387,10 @@
       // Update legend
       this._updateLegend();
 
-      // Only fit content on first load or if user hasn't interacted
+      // On first load anchor the newest candle at a FIXED bar width (never
+      // fitContent — that stretches a few candles into giant bars).
       if (this._isFirstDataLoad) {
-        this.fitContent();
+        this.anchorLatest();
         this._isFirstDataLoad = false;
       } else if (!this._userHasInteracted && this._lastVisibleRange) {
         // User hasn't interacted - scroll to show latest data while maintaining zoom level
@@ -1306,6 +1307,33 @@
     }
 
     /**
+     * Anchor the view to the newest candle at a FIXED bar width, showing as many
+     * candles as fit the pane.
+     *
+     * This is the deliberate alternative to fitContent() / a logical-range fit:
+     * both of those derive candle WIDTH from either the data span or a transient
+     * pane width, so a token with only a handful of candles gets a few enormous
+     * bars stretched across the pane (and a single daily candle fills the whole
+     * chart). anchorLatest keeps candle width CONSTANT no matter how many candles
+     * exist — 3 candles render as 3 normal-width bars pinned to the right with
+     * whitespace to the left; hundreds render the newest pane-worth. Because the
+     * width comes from a fixed pixel barSpacing (not the data count or a pane
+     * width that may still be 0 mid dialog-open), the result is deterministic.
+     */
+    anchorLatest() {
+      if (!this.chart || !this.data.length) return;
+      const ts = this.chart.timeScale();
+      // Reset any huge barSpacing a prior fitContent() may have applied, then pin
+      // the newest candle to the right edge. scrollToRealTime keeps that anchor as
+      // live candles arrive.
+      ts.applyOptions({
+        barSpacing: this.options.barSpacing,
+        rightOffset: this.options.rightOffset,
+      });
+      ts.scrollToRealTime();
+    }
+
+    /**
      * Scroll to specific time
      * @param {number} timestamp - Unix timestamp in seconds
      * @param {boolean} animate - Whether to animate the scroll
@@ -1337,21 +1365,6 @@
         from: Math.max(0, lastIndex - visibleBars + this.options.rightOffset),
         to: lastIndex + this.options.rightOffset,
       });
-    }
-
-    /**
-     * Set visible range
-     * @param {number} barsCount - Number of bars to show
-     */
-    setVisibleRange(barsCount) {
-      if (this.chart && this.data.length) {
-        const lastIndex = this.data.length - 1;
-        const rightOffset = this.options.rightOffset;
-        this.chart.timeScale().setVisibleLogicalRange({
-          from: lastIndex - barsCount,
-          to: lastIndex + rightOffset,
-        });
-      }
     }
 
     /**
