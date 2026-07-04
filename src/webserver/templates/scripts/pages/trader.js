@@ -840,7 +840,7 @@ function createLifecycle() {
       const exitStrategies = exitData.items || [];
       state.strategies = [...entryStrategies, ...exitStrategies];
 
-      updateStrategyControlSummary(entryStrategies, exitStrategies);
+      updateStrategyLaneCounts(entryStrategies, exitStrategies);
 
       if (state.config) {
         updateConfigOverview();
@@ -879,29 +879,23 @@ function createLifecycle() {
     }
   }
 
-  function updateStrategyControlSummary(entryStrategies, exitStrategies) {
-    const allStrategies = [...entryStrategies, ...exitStrategies];
-    const enabledCount = allStrategies.filter((strategy) => strategy.enabled).length;
+  function updateStrategyLaneCounts(entryStrategies, exitStrategies) {
     const entryEnabled = entryStrategies.filter((strategy) => strategy.enabled).length;
     const exitEnabled = exitStrategies.filter((strategy) => strategy.enabled).length;
 
-    const totals = {
-      "#strategy-total-count": allStrategies.length,
-      "#strategy-enabled-count": enabledCount,
-      "#strategy-entry-count": entryStrategies.length,
-      "#strategy-exit-count": exitStrategies.length,
+    const counts = {
       "#strategy-entry-enabled-label": `${entryEnabled}/${entryStrategies.length} active`,
       "#strategy-exit-enabled-label": `${exitEnabled}/${exitStrategies.length} active`,
     };
 
-    Object.entries(totals).forEach(([selector, value]) => {
+    Object.entries(counts).forEach(([selector, value]) => {
       const el = $(selector);
       if (el) el.textContent = String(value);
     });
   }
 
   function renderStrategiesError() {
-    updateStrategyControlSummary([], []);
+    updateStrategyLaneCounts([], []);
     ["#entry-strategies", "#exit-strategies"].forEach((selector) => {
       const container = $(selector);
       if (!container) return;
@@ -946,9 +940,6 @@ function createLifecycle() {
             strategy.priority !== null && strategy.priority !== undefined
               ? Utils.escapeHtml(String(strategy.priority))
               : "Auto";
-          const timeframe = strategy.timeframe
-            ? Utils.escapeHtml(String(strategy.timeframe))
-            : "Default";
           const strategyId = Utils.escapeHtml(String(strategy.id));
           const strategyName = strategy.name
             ? Utils.escapeHtml(String(strategy.name))
@@ -982,14 +973,6 @@ function createLifecycle() {
             <span class="strategy-control-chip">
               <i class="icon-list-ordered"></i>
               Priority ${priority}
-            </span>
-            <span class="strategy-control-chip">
-              <i class="icon-clock"></i>
-              ${timeframe}
-            </span>
-            <span class="strategy-control-chip ${statusClass}">
-              <i class="${strategy.enabled ? "icon-circle-check" : "icon-circle"}"></i>
-              ${statusLabel}
             </span>
           </div>
         </div>
@@ -1263,12 +1246,6 @@ function createLifecycle() {
     });
   }
 
-  function setupStrategyControlActions() {
-    addTrackedListener($("#refresh-strategy-control"), "click", async () => {
-      await loadStrategies({ showLoading: true });
-    });
-  }
-
   // ============================================================================
   // Lifecycle Methods
   // ============================================================================
@@ -1348,8 +1325,6 @@ function createLifecycle() {
       // Setup navigation links
       setupNavigation();
 
-      // Setup Strategy Control actions
-      setupStrategyControlActions();
     },
 
     /**
