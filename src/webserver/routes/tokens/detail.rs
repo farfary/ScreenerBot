@@ -66,6 +66,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 price_sol: None,
                 price_usd: None,
                 price_confidence: None,
+                price_source: None,
                 price_change_h1: None,
                 price_change_h24: None,
                 price_change_periods: PeriodStats::empty(),
@@ -436,13 +437,20 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let pool_price_last_calculated_at_ts = Some(token.pool_price_last_calculated_at.timestamp());
     let pair_created_at = token_birth_ts.or(created_at_ts);
 
-    // Prefer pool price (real-time on-chain) over token cached price
+    // Prefer pool price (real-time on-chain) over the cached API price, but ALWAYS
+    // surface a SOL price when one is available so the header never shows "—" while
+    // we still hold a valid API quote. `price_source` tells the UI which system won.
     let sol_price_usd = crate::sol_price::get_sol_price();
-    let price_usd = if let Some(sol_p) = price_sol {
+    let (effective_price_sol, price_source) = match price_sol {
+        Some(p) if p > 0.0 => (Some(p), Some("pool".to_string())),
+        _ if token.price_sol > 0.0 => (Some(token.price_sol), Some("api".to_string())),
+        _ => (None, None),
+    };
+    let price_usd = if let Some(sol_p) = effective_price_sol {
         if sol_p > 0.0 && sol_price_usd > 0.0 {
             Some(sol_p * sol_price_usd)
         } else {
-            None
+            Some(token.price_usd)
         }
     } else {
         Some(token.price_usd)
@@ -624,9 +632,10 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         pair_created_at,
         pair_url: None,      // Not available in unified Token
         boosts_active: None, // Not available in unified Token
-        price_sol,
+        price_sol: effective_price_sol,
         price_usd,
         price_confidence,
+        price_source,
         price_change_h1: token.price_change_h1,
         price_change_h24: token.price_change_h24,
         price_change_periods,

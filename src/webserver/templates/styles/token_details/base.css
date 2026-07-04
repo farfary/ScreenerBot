@@ -351,6 +351,31 @@
   font-weight: 500;
 }
 
+/* Price source chip: marks whether the SOL price is a real-time on-chain pool
+   quote or a cached market-data (API) fallback. Small, aligned to the unit. */
+.price-source-chip {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+  border: 1px solid transparent;
+}
+
+.price-source-chip.pool {
+  color: var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success-color) 30%, transparent);
+}
+
+.price-source-chip.api {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+  border-color: color-mix(in srgb, var(--text-muted) 30%, transparent);
+}
+
 /* Price change badge */
 .price-change {
   display: inline-flex;
