@@ -21,6 +21,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+#trader-content::-webkit-scrollbar,
+.stats-col::-webkit-scrollbar {
+  display: none;
 }
 
 .trader-tab-content {
@@ -47,6 +53,7 @@
 
 #trader-content.trader-content--split-scroll {
   overflow: hidden;
+  padding-bottom: 0;
 }
 
 #stats-tab {
@@ -54,6 +61,7 @@
   min-height: 0;
   overflow: hidden;
   box-sizing: border-box;
+  padding-top: 0;
 }
 
 #strategies-tab {
@@ -335,7 +343,9 @@
   min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-right: 0.25rem;
+  padding: 1.5rem 0.25rem calc(var(--trader-vertical-gap) * 2) 0;
+  box-sizing: border-box;
+  scrollbar-width: none;
 }
 
 /* In the narrow left column the Entry/Exit monitor cards must stack — their
@@ -368,7 +378,7 @@
   .stats-col {
     height: auto;
     overflow: visible;
-    padding-right: 0;
+    padding: 0;
   }
 }
 
