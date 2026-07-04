@@ -573,6 +573,10 @@ export class TokenDetailsDialog {
     const loadingOverlay = this.dialogEl?.querySelector("#chartLoadingOverlay");
     const loadingText = loadingOverlay?.querySelector(".chart-loading-text");
     const wasDataLoaded = this.chartDataLoaded;
+    // Capture the identity this poll is fetching for; if the user switches token
+    // or timeframe during the await, a late response must not paint stale candles.
+    const pollMint = this.tokenData.mint;
+    const pollTimeframe = this.currentTimeframe;
 
     // Update OHLCV status to loading if not yet loaded
     if (!this.chartDataLoaded && this._dataSourceStatus.ohlcv !== DATA_SOURCE_STATUS.SUCCESS) {
@@ -582,9 +586,16 @@ export class TokenDetailsDialog {
     try {
       // Use requestManager with normal priority for periodic chart refresh
       const data = await requestManager.fetch(
-        `/api/tokens/${this.tokenData.mint}/ohlcv?timeframe=${this.currentTimeframe}&limit=${CHART_CANDLE_LIMIT}`,
+        `/api/tokens/${pollMint}/ohlcv?timeframe=${pollTimeframe}&limit=${CHART_CANDLE_LIMIT}`,
         { priority: "normal" }
       );
+
+      // Drop a response that arrived after the user moved to another token or
+      // timeframe (see _loadChartData) — otherwise it overwrites the live chart
+      // with the previous token's data.
+      if (this.tokenData?.mint !== pollMint || this.currentTimeframe !== pollTimeframe) {
+        return;
+      }
 
       if (!Array.isArray(data) || data.length === 0) {
         // No data yet. After a streak of empty responses, switch to a clearer

@@ -243,6 +243,16 @@ export function applyChartTabMixin(DialogClass) {
         { priority: isInitialLoad ? "high" : "normal" }
       );
 
+      // Stale-response guard: OHLCV fetches are slow enough that this promise can
+      // resolve AFTER the user switched tokens (close+reopen) or timeframes. If
+      // the dialog no longer shows this (mint, timeframe), drop the payload — it
+      // would otherwise paint the previous token's candles over the current chart
+      // for a few seconds ("chart shows different data then changes"). The next
+      // load/poll for the current token repaints correctly.
+      if (this.tokenData?.mint !== mint || this.currentTimeframe !== timeframe) {
+        return;
+      }
+
       if (!Array.isArray(data) || data.length === 0) {
         // The selected timeframe has no candles. The token can still have OHLCV
         // at a different timeframe (e.g. only daily candles fetched so far) — the
