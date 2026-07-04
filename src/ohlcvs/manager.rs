@@ -1,5 +1,6 @@
 //! OHLCV manager — coordinates candle fetching, caching, and priority management.
 
+use crate::config::with_config;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::database::OhlcvDatabase;
@@ -11,6 +12,7 @@ use serde_json::json;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 pub struct PoolManager {
     db: Arc<OhlcvDatabase>,
@@ -170,6 +172,25 @@ impl PoolManager {
             }),
         )
         .await;
+
+        // PRIMARY source: the self-hosted server's centrally-resolved pools. It
+        // knows every token's wSOL pool even when this client's local per-pool
+        // data hasn't populated yet. On any miss we fall through to local
+        // DexScreener/Gecko discovery below.
+        if let Some(configs) = self.fetch_pools_from_server(mint).await {
+            for config in &configs {
+                self.db.upsert_pool(mint, config)?;
+            }
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                    "Registered {} SOL pool(s) from screenerbot server for mint={}",
+                    configs.len(),
+                    mint
+                ),
+            );
+            return Ok(configs);
+        }
 
         // Use immediate fetch instead of background prefetch for user-viewed tokens
         let snapshot = match fetch_token_pools_immediate(mint).await {
@@ -335,6 +356,73 @@ impl PoolManager {
         .await;
 
         Ok(discovered_configs)
+    }
+
+    /// Fetch a token's pools from the self-hosted screenerbot-data server — the
+    /// primary pool source. The server resolves and caches every token's pools
+    /// centrally (DexScreener/Gecko), preferring the wSOL pool, so this both
+    /// spares each client's provider budget and fixes tokens whose local per-pool
+    /// data hasn't populated yet (the cause of "No pool available, backfill
+    /// deferred"). Returns SOL-quoted pools as PoolConfigs with the server's
+    /// preferred wSOL pool marked default; None on disabled/miss/timeout/error so
+    /// the caller falls back to local discovery.
+    async fn fetch_pools_from_server(&self, mint: &str) -> Option<Vec<PoolConfig>> {
+        let (enabled, endpoint, timeout_secs) = with_config(|c| {
+            let s = &c.ohlcv.sources.screenerbot_server;
+            (s.enabled, s.endpoint.clone(), s.timeout_seconds)
+        });
+        if !enabled || endpoint.trim().is_empty() {
+            return None;
+        }
+        let url = format!("{}/v1/pools?mint={}", endpoint.trim_end_matches('/'), mint);
+        let resp = crate::net::client()
+            .get(&url)
+            .timeout(Duration::from_secs(timeout_secs))
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let body: serde_json::Value = resp.json().await.ok()?;
+        let sol_pool = body
+            .get("sol_pool")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let arr = body.get("pools").and_then(|v| v.as_array())?;
+        let mut configs: Vec<PoolConfig> = Vec::new();
+        for p in arr {
+            // Only SOL-quoted pools — the bot's OHLCV/trading is SOL-denominated.
+            if !p
+                .get("is_sol_pair")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let Some(address) = p.get("pool").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let dex = p
+                .get("dex")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let liquidity = p.get("liquidity_usd").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let mut cfg = PoolConfig::new(address.to_string(), dex, liquidity);
+            cfg.is_default = sol_pool.as_deref() == Some(address);
+            configs.push(cfg);
+        }
+        if configs.is_empty() {
+            return None;
+        }
+        // Guarantee exactly one default (server's sol_pool, else highest liquidity).
+        if !configs.iter().any(|c| c.is_default) {
+            if let Some(idx) = Self::best_pool_index(&configs) {
+                configs[idx].is_default = true;
+            }
+        }
+        Some(configs)
     }
 
     fn merge_pool_info(
