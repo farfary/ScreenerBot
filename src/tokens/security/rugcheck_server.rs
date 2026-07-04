@@ -101,9 +101,7 @@ pub async fn fetch_reports_from_server(mints: &[String]) -> HashMap<String, Rugc
             let Some(report) = entry.get("report") else {
                 continue;
             };
-            if let Ok(api_response) =
-                serde_json::from_value::<RugcheckResponse>(report.clone())
-            {
+            if let Ok(api_response) = serde_json::from_value::<RugcheckResponse>(report.clone()) {
                 out.insert(mint.clone(), RugcheckInfo::from_response(api_response));
             }
         }
