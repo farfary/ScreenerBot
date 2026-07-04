@@ -226,6 +226,35 @@
           barSpacing: this.options.barSpacing,
           minBarSpacing: this.options.minBarSpacing,
           rightOffset: this.options.rightOffset,
+          // lightweight-charts renders axis ticks in UTC by default, but the
+          // crosshair tooltip formats in local time — that mismatch made the
+          // axis label and the popup show different times for the same candle.
+          // Format ticks in local time so both agree.
+          tickMarkFormatter: (time, tickMarkType, locale) => {
+            const d = new Date(time * 1000);
+            switch (tickMarkType) {
+              case 0: // Year
+                return d.toLocaleDateString(locale, { year: "numeric" });
+              case 1: // Month
+                return d.toLocaleDateString(locale, { month: "short" });
+              case 2: // DayOfMonth
+                return d.toLocaleDateString(locale, {
+                  day: "numeric",
+                  month: "short",
+                });
+              case 3: // Time
+                return d.toLocaleTimeString(locale, {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+              default: // TimeWithSeconds
+                return d.toLocaleTimeString(locale, {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                });
+            }
+          },
         },
         localization: {
           priceFormatter: (price) => this._formatPrice(price),
