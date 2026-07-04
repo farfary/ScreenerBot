@@ -98,7 +98,6 @@
       // User interaction tracking - respects user zoom/pan actions
       this._userHasInteracted = false;
       this._isFirstDataLoad = true;
-      this._lastVisibleRange = null;
       this._interactionTimeout = null;
       this.indicatorSeries = {};
       this.overlaySeries = [];
@@ -387,16 +386,19 @@
       // Update legend
       this._updateLegend();
 
-      // On first load anchor the newest candle at a FIXED bar width (never
-      // fitContent — that stretches a few candles into giant bars).
+      // Anchor the newest candle at a FIXED bar width on first load AND on every
+      // non-interacted refresh. Never fitContent / setVisibleLogicalRange here —
+      // both derive candle WIDTH from the data span or a prior view, so a token
+      // with a handful of candles gets stretched into giant bars (worse: a poll
+      // after the first paint would re-stretch what the first load anchored
+      // correctly). Re-anchoring keeps candle width identical across every load,
+      // any candle count. If the user HAS interacted, leave their view untouched.
       if (this._isFirstDataLoad) {
         this.anchorLatest();
         this._isFirstDataLoad = false;
-      } else if (!this._userHasInteracted && this._lastVisibleRange) {
-        // User hasn't interacted - scroll to show latest data while maintaining zoom level
-        this._scrollToLatestPreserveZoom();
+      } else if (!this._userHasInteracted) {
+        this.anchorLatest();
       }
-      // If user HAS interacted, don't touch their view at all
 
       // Callback
       if (this.onDataUpdate) {
@@ -932,10 +934,6 @@
       // Add indicator values
       this.options.indicators.forEach((ind) => {
         if (this.indicatorSeries[ind]) {
-          const series = Array.isArray(this.indicatorSeries[ind])
-            ? this.indicatorSeries[ind][0]
-            : this.indicatorSeries[ind];
-          // Note: Getting last value requires data tracking
           html += `<div class="legend-item indicator"><span class="legend-indicator-name">${ind.toUpperCase()}</span></div>`;
         }
       });
@@ -1050,11 +1048,8 @@
         }
       });
 
-      // Time range change - track user interactions
+      // Time range change - forward to callback
       this.chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        // Store last visible range for restoration
-        this._lastVisibleRange = range;
-
         if (this.onTimeRangeChange) {
           this.onTimeRangeChange(range);
         }
@@ -1347,24 +1342,6 @@
 
       // Use scrollToRealTime for proper time-based scrolling
       this.chart.timeScale().scrollToRealTime();
-    }
-
-    /**
-     * Scroll to show latest data while preserving current zoom level
-     * Called during data updates when user hasn't interacted
-     */
-    _scrollToLatestPreserveZoom() {
-      if (!this.chart || !this.data.length || !this._lastVisibleRange) return;
-
-      // Calculate how many bars were visible
-      const visibleBars = this._lastVisibleRange.to - this._lastVisibleRange.from;
-
-      // Set new range ending at latest data
-      const lastIndex = this.data.length - 1;
-      this.chart.timeScale().setVisibleLogicalRange({
-        from: Math.max(0, lastIndex - visibleBars + this.options.rightOffset),
-        to: lastIndex + this.options.rightOffset,
-      });
     }
 
     /**
