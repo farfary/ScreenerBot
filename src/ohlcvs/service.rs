@@ -110,11 +110,19 @@ impl OhlcvServiceImpl {
             let filtered: Vec<Candle> = cached_data;
 
             if !filtered.is_empty() {
-                // Take last N entries (most recent)
-                let start_idx = filtered.len().saturating_sub(limit);
+                // limit == 0 means "return the full stored history" (no cap);
+                // otherwise take the last N entries (most recent).
+                let start_idx = if limit == 0 {
+                    0
+                } else {
+                    filtered.len().saturating_sub(limit)
+                };
                 return Ok(filtered.into_iter().skip(start_idx).collect());
             }
         }
+
+        // limit == 0 => no SQL LIMIT (return everything for this timeframe).
+        let db_limit = if limit == 0 { None } else { Some(limit) };
 
         // Fetch from unified candles table (wrapped in spawn_blocking to avoid blocking async runtime)
         let db = Arc::clone(&self.db);
@@ -127,7 +135,7 @@ impl OhlcvServiceImpl {
                 timeframe,
                 from_timestamp,
                 to_timestamp,
-                Some(limit),
+                db_limit,
             )
         })
         .await
@@ -145,7 +153,7 @@ impl OhlcvServiceImpl {
                     timeframe,
                     from_timestamp,
                     to_timestamp,
-                    Some(limit),
+                    db_limit,
                 )
             })
             .await
@@ -159,7 +167,12 @@ impl OhlcvServiceImpl {
             // Fetch enough 1m candles to aggregate into requested limit
             // For 5m we need 5x more 1m candles, etc.
             let multiplier = timeframe.to_seconds() / Timeframe::Minute1.to_seconds();
-            let raw_limit = limit * multiplier as usize;
+            // limit == 0 => aggregate the full 1m history (no cap).
+            let raw_limit = if limit == 0 {
+                None
+            } else {
+                Some(limit * multiplier as usize)
+            };
 
             let raw_candles = tokio::task::spawn_blocking(move || {
                 db.get_candles(
@@ -168,7 +181,7 @@ impl OhlcvServiceImpl {
                     Timeframe::Minute1,
                     from_timestamp,
                     to_timestamp,
-                    Some(raw_limit),
+                    raw_limit,
                 )
             })
             .await
@@ -202,8 +215,12 @@ impl OhlcvServiceImpl {
             .cache
             .put(mint, Some(&pool), timeframe, candles.clone());
 
-        // Take last N entries (most recent)
-        let start_idx = candles.len().saturating_sub(limit);
+        // limit == 0 => return everything; otherwise the most recent N.
+        let start_idx = if limit == 0 {
+            0
+        } else {
+            candles.len().saturating_sub(limit)
+        };
         Ok(candles.into_iter().skip(start_idx).collect())
     }
 

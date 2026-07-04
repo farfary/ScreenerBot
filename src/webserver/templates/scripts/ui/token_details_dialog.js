@@ -19,7 +19,7 @@ import {
 } from "./token_details/pools_links_tab.js";
 import { applyTradeActionsMixin } from "./token_details/trade_actions.js";
 import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
-import { applyChartTabMixin } from "./token_details/chart_tab.js";
+import { applyChartTabMixin, CHART_CANDLE_LIMIT } from "./token_details/chart_tab.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin } from "./token_details/state_handling.js";
 import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
@@ -582,7 +582,7 @@ export class TokenDetailsDialog {
     try {
       // Use requestManager with normal priority for periodic chart refresh
       const data = await requestManager.fetch(
-        `/api/tokens/${this.tokenData.mint}/ohlcv?timeframe=${this.currentTimeframe}&limit=200`,
+        `/api/tokens/${this.tokenData.mint}/ohlcv?timeframe=${this.currentTimeframe}&limit=${CHART_CANDLE_LIMIT}`,
         { priority: "normal" }
       );
 

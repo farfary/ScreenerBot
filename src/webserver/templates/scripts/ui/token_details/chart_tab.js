@@ -10,6 +10,18 @@ import * as AppState from "../../core/app_state.js";
 // Persisted across dialog opens so the user's last chart timeframe is restored.
 const TIMEFRAME_STATE_KEY = "tokenChartTimeframe";
 
+// Candle count requested for the chart. 0 = the FULL stored history for the
+// selected timeframe (no cap) — the chart shows every candle we have, like a
+// normal price chart, and lightweight-charts virtualizes rendering so large
+// sets stay smooth. This MUST be identical on the initial load and on every
+// poll refresh: a mismatch (the initial load used to omit the param → backend
+// default 100, while the poll asked for 200) made the chart visibly jump to
+// "different data" a few seconds after opening. Requesting the full set also
+// avoids the cache-vs-DB flip, where a capped read returned the newest N from
+// the warm cache but the OLDEST N from a cold-cache SQL read. Single source of
+// truth for both fetch sites.
+export const CHART_CANDLE_LIMIT = 0;
+
 /**
  * Apply chart tab mixin to TokenDetailsDialog class
  * @param {class} DialogClass - TokenDetailsDialog class
@@ -223,10 +235,13 @@ export function applyChartTabMixin(DialogClass) {
     const loadingText = loadingOverlay?.querySelector(".chart-loading-text");
 
     try {
-      // Use requestManager with high priority for initial chart data load
-      const data = await requestManager.fetch(`/api/tokens/${mint}/ohlcv?timeframe=${timeframe}`, {
-        priority: isInitialLoad ? "high" : "normal",
-      });
+      // Use requestManager with high priority for initial chart data load.
+      // limit MUST match the poll refresh (CHART_CANDLE_LIMIT) so the dataset
+      // doesn't change the moment the first poll lands.
+      const data = await requestManager.fetch(
+        `/api/tokens/${mint}/ohlcv?timeframe=${timeframe}&limit=${CHART_CANDLE_LIMIT}`,
+        { priority: isInitialLoad ? "high" : "normal" }
+      );
 
       if (!Array.isArray(data) || data.length === 0) {
         // The selected timeframe has no candles. The token can still have OHLCV
