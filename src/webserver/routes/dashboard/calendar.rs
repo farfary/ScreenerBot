@@ -1,9 +1,6 @@
 //! Portfolio calendar route — per-day realized P&L and end-of-day portfolio value.
 
-use axum::{
-    extract::Query,
-    response::Json,
-};
+use axum::{extract::Query, response::Json};
 use chrono::{Datelike, NaiveDate, TimeZone, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -27,11 +24,13 @@ pub async fn get_portfolio_calendar(
 ) -> Json<PortfolioCalendarResponse> {
     let now = Utc::now();
     let year = params.year.unwrap_or_else(|| now.year());
-    let month = params.month.filter(|m| (1..=12).contains(m)).unwrap_or_else(|| now.month());
+    let month = params
+        .month
+        .filter(|m| (1..=12).contains(m))
+        .unwrap_or_else(|| now.month());
 
     let days_in_month = days_in_month(year, month);
-    let first_day = NaiveDate::from_ymd_opt(year, month, 1)
-        .unwrap_or_else(|| now.date_naive());
+    let first_day = NaiveDate::from_ymd_opt(year, month, 1).unwrap_or_else(|| now.date_naive());
     // Sunday=0 .. Saturday=6
     let first_weekday = first_day.weekday().num_days_from_sunday();
 

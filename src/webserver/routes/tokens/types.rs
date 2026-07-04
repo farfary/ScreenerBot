@@ -718,11 +718,7 @@ pub(super) async fn build_source_status(
     has_rugcheck: bool,
     has_ohlcv: bool,
 ) -> Vec<SourceStatus> {
-    async fn market_state(
-        endpoint: &str,
-        label: &str,
-        has_data: bool,
-    ) -> SourceStatus {
+    async fn market_state(endpoint: &str, label: &str, has_data: bool) -> SourceStatus {
         let (state, message) = if has_data {
             ("ok", "Live market data".to_owned())
         } else if crate::connectivity::get_endpoint_health(endpoint)
@@ -896,12 +892,10 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
     // Try GeckoTerminal as fallback (same bounded-fetch rationale as above:
     // never let a rate-limited provider stall the token-details request).
     if apis.geckoterminal.is_enabled() {
-        let gecko_fetch = tokio::time::timeout(
-            EXTERNAL_FETCH_TIMEOUT,
-            apis.geckoterminal.fetch_pools(mint),
-        )
-        .await
-        .unwrap_or_else(|_| Err("provider fetch timed out".to_owned()));
+        let gecko_fetch =
+            tokio::time::timeout(EXTERNAL_FETCH_TIMEOUT, apis.geckoterminal.fetch_pools(mint))
+                .await
+                .unwrap_or_else(|_| Err("provider fetch timed out".to_owned()));
         match gecko_fetch {
             Ok(pools) => {
                 if let Some(pool) = pools.first() {

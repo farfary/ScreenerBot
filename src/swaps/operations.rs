@@ -63,10 +63,7 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
                     }
                     Err(e) => {
                         let msg = e.to_string();
-                        logger::warning(
-                            LogTag::Swap,
-                            &format!("{} quote failed: {msg}", r.name()),
-                        );
+                        logger::warning(LogTag::Swap, &format!("{} quote failed: {msg}", r.name()));
                         Err((r.name().to_owned(), msg))
                     }
                 }
@@ -138,10 +135,11 @@ fn classify_quote_failure(errors: &[(String, String)]) -> Error {
             "Token not tradable: no liquidity or swap route is available for this token",
         );
     }
-    if lower.contains("no route") || lower.contains("no routes") || lower.contains("could not find any route") {
-        return Error::api_error(
-            "No swap route available for this token at the requested amount",
-        );
+    if lower.contains("no route")
+        || lower.contains("no routes")
+        || lower.contains("could not find any route")
+    {
+        return Error::api_error("No swap route available for this token at the requested amount");
     }
 
     Error::api_error(format!("No swap route available ({joined})"))

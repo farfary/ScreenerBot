@@ -658,11 +658,9 @@ pub async fn force_update_token(
                     Ok(Ok(p)) => Some(p),
                     _ => None,
                 };
-            let result = fetch_with_deadline(
-                "Rugcheck",
-                rugcheck::fetch_rugcheck_data(&mint_str, db_ref),
-            )
-            .await;
+            let result =
+                fetch_with_deadline("Rugcheck", rugcheck::fetch_rugcheck_data(&mint_str, db_ref))
+                    .await;
             if let Some(p) = permit {
                 if result.is_ok() && matches!(result, Ok(Some(_))) {
                     p.forget();

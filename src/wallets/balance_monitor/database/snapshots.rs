@@ -142,10 +142,9 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to prepare daily balances query: {e}"))?;
 
         let rows = stmt
-            .query_map(
-                params![start.to_rfc3339(), end.to_rfc3339()],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
-            )
+            .query_map(params![start.to_rfc3339(), end.to_rfc3339()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+            })
             .map_err(|e| format!("Failed to execute daily balances query: {e}"))?;
 
         let mut result = Vec::new();

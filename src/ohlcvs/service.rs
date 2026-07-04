@@ -237,7 +237,10 @@ impl OhlcvServiceImpl {
     /// plus per-timeframe backfill flags from the monitor config row.
     pub(super) async fn get_status(&self, mint: &str) -> OhlcvResult<OhlcvStatus> {
         let summary = self.db.get_timeframe_summary(mint)?;
-        let last_new_by_tf = self.db.get_timeframe_last_new_data(mint).unwrap_or_default();
+        let last_new_by_tf = self
+            .db
+            .get_timeframe_last_new_data(mint)
+            .unwrap_or_default();
         let last_checked_at = self.db.get_last_checked_at(mint).unwrap_or(None);
         let monitored = self.monitor.is_monitored(mint).await;
 

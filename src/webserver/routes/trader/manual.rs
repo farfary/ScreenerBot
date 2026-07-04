@@ -605,11 +605,11 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                     )
                 } else if low.contains("timeout") || low.contains("timed out") {
                     (
-                        StatusCode::GATEWAY_TIMEOUT,
-                        "QuoteTimeout",
-                        "Quote request timed out",
-                        "The swap providers didn't respond in time. Check your connection and retry.",
-                    )
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "QuoteTimeout",
+                    "Quote request timed out",
+                    "The swap providers didn't respond in time. Check your connection and retry.",
+                )
                 } else {
                     (
                         StatusCode::BAD_GATEWAY,

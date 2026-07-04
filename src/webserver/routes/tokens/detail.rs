@@ -247,7 +247,8 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         if fallback_pool.is_none() {
             let mint_clone = mint.clone();
             if let Ok(Some(ds)) = tokio::task::spawn_blocking(move || {
-                get_global_database().and_then(|db| db.get_dexscreener_data(&mint_clone).ok().flatten())
+                get_global_database()
+                    .and_then(|db| db.get_dexscreener_data(&mint_clone).ok().flatten())
             })
             .await
             {
@@ -594,21 +595,21 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Per-source presence for the dialog "no data" row: check each market/security
     // table independently (a token may have DexScreener but not GeckoTerminal, or
     // vice versa) in one blocking hop.
-    let (has_dexscreener, has_geckoterminal, has_rugcheck) =
-        if let Some(db) = get_global_database() {
-            let mint_owned = mint.clone();
-            tokio::task::spawn_blocking(move || {
-                (
-                    matches!(db.get_dexscreener_data(&mint_owned), Ok(Some(_))),
-                    matches!(db.get_geckoterminal_data(&mint_owned), Ok(Some(_))),
-                    matches!(db.get_rugcheck_data(&mint_owned), Ok(Some(_))),
-                )
-            })
-            .await
-            .unwrap_or((false, false, false))
-        } else {
-            (false, false, false)
-        };
+    let (has_dexscreener, has_geckoterminal, has_rugcheck) = if let Some(db) = get_global_database()
+    {
+        let mint_owned = mint.clone();
+        tokio::task::spawn_blocking(move || {
+            (
+                matches!(db.get_dexscreener_data(&mint_owned), Ok(Some(_))),
+                matches!(db.get_geckoterminal_data(&mint_owned), Ok(Some(_))),
+                matches!(db.get_rugcheck_data(&mint_owned), Ok(Some(_))),
+            )
+        })
+        .await
+        .unwrap_or((false, false, false))
+    } else {
+        (false, false, false)
+    };
     let source_status =
         build_source_status(has_dexscreener, has_geckoterminal, has_rugcheck, has_ohlcv).await;
 

@@ -180,7 +180,10 @@ impl OhlcvDatabase {
     /// grouped query. Used by the chart status indicator so the dialog can show
     /// exactly which timeframes have data without firing one probe request per
     /// timeframe. Returns (timeframe_str, candle_count, latest_timestamp).
-    pub fn get_timeframe_summary(&self, mint: &str) -> OhlcvResult<Vec<(String, i64, Option<i64>)>> {
+    pub fn get_timeframe_summary(
+        &self,
+        mint: &str,
+    ) -> OhlcvResult<Vec<(String, i64, Option<i64>)>> {
         let conn = self
             .conn
             .lock()

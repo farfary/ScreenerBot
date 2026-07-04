@@ -187,29 +187,28 @@ pub async fn fetch_rugcheck_data(
     // straight through to the direct Rugcheck API below — purely an accelerator,
     // never a hard dependency. This path never touches the Rugcheck client's rate
     // limiter (the server enforces its own per-IP limit upstream).
-    let rugcheck_info = if let Some(info) =
-        super::rugcheck_server::fetch_report_from_server(mint).await
-    {
-        info
-    } else {
-        let api_manager = crate::apis::manager::get_api_manager();
-        match api_manager.rugcheck.fetch_report(mint).await {
-            Ok(info) => info,
-            Err(e) => {
-                // Check if it's a "not found" error (token not analyzed yet)
-                let err_str = format!("{:?}", e);
-                if err_str.contains("404") || err_str.contains("NotFound") {
-                    return Ok(None);
-                }
+    let rugcheck_info =
+        if let Some(info) = super::rugcheck_server::fetch_report_from_server(mint).await {
+            info
+        } else {
+            let api_manager = crate::apis::manager::get_api_manager();
+            match api_manager.rugcheck.fetch_report(mint).await {
+                Ok(info) => info,
+                Err(e) => {
+                    // Check if it's a "not found" error (token not analyzed yet)
+                    let err_str = format!("{:?}", e);
+                    if err_str.contains("404") || err_str.contains("NotFound") {
+                        return Ok(None);
+                    }
 
-                // Other errors
-                return Err(TokenError::Api {
-                    source: "Rugcheck".to_owned(),
-                    message: err_str,
-                });
+                    // Other errors
+                    return Err(TokenError::Api {
+                        source: "Rugcheck".to_owned(),
+                        message: err_str,
+                    });
+                }
             }
-        }
-    };
+        };
 
     let data = convert_rugcheck_to_data(&rugcheck_info);
 

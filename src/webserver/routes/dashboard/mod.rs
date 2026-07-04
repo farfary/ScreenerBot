@@ -20,8 +20,5 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/dashboard/overview", get(get_dashboard_overview))
         .route("/dashboard/home", get(get_home_dashboard))
-        .route(
-            "/dashboard/portfolio-calendar",
-            get(get_portfolio_calendar),
-        )
+        .route("/dashboard/portfolio-calendar", get(get_portfolio_calendar))
 }

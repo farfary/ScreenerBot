@@ -335,8 +335,7 @@ pub const SETTINGS_UPDATES_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/updates_tab.js");
 pub const SETTINGS_INTERFACE_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/interface_tab.js");
-pub const SETTINGS_HINTS_TAB_UI: &str =
-    include_str!("templates/scripts/ui/settings/hints_tab.js");
+pub const SETTINGS_HINTS_TAB_UI: &str = include_str!("templates/scripts/ui/settings/hints_tab.js");
 pub const SETTINGS_NAVIGATION_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/navigation_tab.js");
 pub const SETTINGS_LICENSES_TAB_UI: &str =
