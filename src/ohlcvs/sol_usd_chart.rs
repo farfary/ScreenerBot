@@ -45,8 +45,9 @@ fn tf_str(tf: Timeframe) -> &'static str {
 /// pull generously (the server caps at 10k); fine frames only reach back weeks.
 fn pull_limit(tf: Timeframe) -> usize {
     match tf {
-        Timeframe::Day1 | Timeframe::Hour12 | Timeframe::Hour4 => 10_000,
-        Timeframe::Hour1 => 5_000,
+        // Coarse frames carry the deep multi-year history (back to 2020); pull the
+        // server's max so the bot mirror is as deep as one call allows.
+        Timeframe::Day1 | Timeframe::Hour12 | Timeframe::Hour4 | Timeframe::Hour1 => 10_000,
         _ => 2_000,
     }
 }
