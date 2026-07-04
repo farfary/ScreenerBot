@@ -43,7 +43,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Positions Module](architecture/positions.md) | 805 | Position lifecycle, state machine, verification, PnL tracking |
 | [OHLCV Module](architecture/ohlcvs.md) | 861 | Candle data fetching, aggregation, caching, strategy integration |
 | [Trader Engine](architecture/trader.md) | 534 | Dual monitors, entry pipeline, priority exits, safety system |
-| [Trading Strategies](architecture/strategies.md) | 383 | Condition-based strategy system, rule tree, evaluation engine |
+| [Trading Strategies](architecture/strategies.md) | 407 | Condition-based strategy system, rule tree, evaluation engine |
 | [Filtering Pipeline](architecture/filtering.md) | 1043 | Token quality control — filter chain, sources, caching, query system |
 | **Execution** | | |
 | [Swap Routing](architecture/swaps.md) | 494 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
@@ -52,7 +52,7 @@ Living documentation describing how each major system works. These docs are the 
 | [RPC Module](architecture/rpc.md) | 600 | Multi-provider Solana RPC, circuit breaker, rate limiting |
 | [APIs Module](architecture/apis.md) | 412 | External HTTP clients + LLM providers + SOL price service |
 | **User Interface** | | |
-| [Webserver](architecture/webserver.md) | 1052 | Axum server lifecycle, middleware gates, embedded assets, headless auth, performance patterns |
+| [Webserver](architecture/webserver.md) | 1055 | Axum server lifecycle, middleware gates, embedded assets, headless auth, performance patterns |
 | [Telegram](architecture/telegram.md) | 364 | Telegram bot: discovery, notifications, commands, sessions/2FA |
 | **System** | | |
 | [Config](architecture/config.md) | 478 | TOML configuration, macro system, hot reload, metadata |

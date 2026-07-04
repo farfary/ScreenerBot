@@ -1,6 +1,6 @@
 //! Strategy CRUD and configuration routes for the web UI.
 use axum::{
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use std::sync::Arc;
@@ -40,6 +40,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Templates
         .route("/templates", get(templates::list_templates))
         // Routes with path parameters (must come after static routes)
+        .route("/:id/enabled", patch(crud::set_strategy_enabled_handler))
         .route(
             "/:id",
             get(crud::get_strategy_detail)

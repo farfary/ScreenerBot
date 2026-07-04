@@ -13,9 +13,10 @@
 5. [Condition System](#5-condition-system)
 6. [Built-in Conditions](#6-built-in-conditions)
 7. [Database Schema](#7-database-schema)
-8. [Data Flow](#8-data-flow)
-9. [Module Connections](#9-module-connections)
-10. [Configuration](#10-configuration)
+8. [Web API](#8-web-api)
+9. [Data Flow](#9-data-flow)
+10. [Module Connections](#10-module-connections)
+11. [Configuration](#11-configuration)
 
 ---
 
@@ -309,7 +310,30 @@ All conditions support optional `timeframe` parameter to override the strategy's
 
 ---
 
-## 8. Data Flow
+## 8. Web API
+
+Strategy CRUD is exposed under `src/webserver/routes/strategies/`:
+
+| Route | Purpose |
+|-------|---------|
+| `GET /api/strategies` | List all strategies (`items`, `total`, `timestamp`) |
+| `GET /api/strategies?type=ENTRY` | List entry strategies, filtered in the backend |
+| `GET /api/strategies?type=EXIT` | List exit strategies, filtered in the backend |
+| `GET /api/strategies?enabled=true` | List enabled strategies |
+| `GET /api/strategies/:id` | Fetch full strategy detail |
+| `POST /api/strategies` | Create a strategy |
+| `PUT /api/strategies/:id` | Replace a full strategy definition |
+| `PATCH /api/strategies/:id/enabled` | Toggle only enabled state; backend reads the full record, updates SQLite, increments version, and clears evaluation cache |
+| `DELETE /api/strategies/:id` | Delete a strategy |
+| `POST /api/strategies/:id/validate` | Validate a saved strategy |
+| `POST /api/strategies/validate` | Validate an unsaved strategy payload |
+| `POST /api/strategies/:id/test` | Test a strategy |
+
+Dashboard Strategy Control must use backend-filtered list calls and the dedicated enabled-state endpoint. It must not reconstruct full strategy update payloads in the browser for a toggle.
+
+---
+
+## 9. Data Flow
 
 ### Entry Signal Flow
 
@@ -350,7 +374,7 @@ Same as entry, but:
 
 ---
 
-## 9. Module Connections
+## 10. Module Connections
 
 ```
 strategies/
@@ -369,7 +393,7 @@ strategies/
 
 ---
 
-## 10. Configuration
+## 11. Configuration
 
 ### Engine Constants
 

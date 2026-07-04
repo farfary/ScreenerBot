@@ -822,21 +822,23 @@ function createLifecycle() {
    */
   async function loadStrategies() {
     try {
-      const data = await requestManager.fetch("/api/strategies", {
-        priority: "normal",
-      });
+      const [entryData, exitData] = await Promise.all([
+        requestManager.fetch("/api/strategies?type=ENTRY", {
+          priority: "normal",
+        }),
+        requestManager.fetch("/api/strategies?type=EXIT", {
+          priority: "normal",
+        }),
+      ]);
 
-      state.strategies = data.strategies || [];
+      const entryStrategies = entryData.items || [];
+      const exitStrategies = exitData.items || [];
+      state.strategies = [...entryStrategies, ...exitStrategies];
 
       if (state.config) {
         updateConfigOverview();
       }
 
-      // Separate entry and exit strategies
-      const entryStrategies = state.strategies.filter((s) => s.strategy_type === "entry");
-      const exitStrategies = state.strategies.filter((s) => s.strategy_type === "exit");
-
-      // Render lists
       renderStrategiesList("#entry-strategies", entryStrategies);
       renderStrategiesList("#exit-strategies", exitStrategies);
     } catch (error) {
@@ -892,7 +894,7 @@ function createLifecycle() {
     // Attach event listeners for toggle switches
     container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
       const handler = async (e) => {
-        const strategyId = parseInt(e.target.dataset.strategyId, 10);
+        const strategyId = e.target.dataset.strategyId;
         const enabled = e.target.checked;
         await updateStrategyStatus(strategyId, enabled);
       };
@@ -906,8 +908,8 @@ function createLifecycle() {
    */
   async function updateStrategyStatus(strategyId, enabled) {
     try {
-      await requestManager.fetch(`/api/strategies/${strategyId}`, {
-        method: "PUT",
+      await requestManager.fetch(`/api/strategies/${encodeURIComponent(strategyId)}/enabled`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
         priority: "high",
@@ -916,7 +918,7 @@ function createLifecycle() {
       Utils.showToast({
         type: "success",
         title: enabled ? "Strategy Enabled" : "Strategy Disabled",
-        message: enabled ? "Now monitoring for entry signals" : "Entry monitoring stopped",
+        message: enabled ? "Strategy is active" : "Strategy is inactive",
       });
       await loadStrategies();
     } catch (error) {

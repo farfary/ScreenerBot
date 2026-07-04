@@ -363,6 +363,65 @@ pub async fn update_strategy_handler(
     }))
 }
 
+/// PATCH /api/strategies/:id/enabled - Update only the strategy enabled state
+pub async fn set_strategy_enabled_handler(
+    Path(id): Path<String>,
+    Json(request): Json<StrategyEnabledRequest>,
+) -> Response {
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "PATCH /api/strategies/{}/enabled - enabled={}",
+            id, request.enabled
+        ),
+    );
+
+    let mut strategy = match get_strategy(&id) {
+        Ok(Some(s)) => s,
+        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Err(e) => {
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("Failed to get strategy: {e}"),
+            );
+        }
+    };
+
+    strategy.enabled = request.enabled;
+    strategy.updated_at = Utc::now();
+    strategy.version += 1;
+
+    if let Err(e) = update_strategy(&strategy) {
+        return err(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            &format!("Failed to update strategy enabled state: {e}"),
+        );
+    }
+
+    if let Err(e) = strategies::clear_evaluation_cache().await {
+        logger::info(
+            LogTag::Webserver,
+            &format!("Failed to clear evaluation cache: {e}"),
+        );
+    }
+
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "Strategy enabled state updated: id={}, enabled={}, version={}",
+            strategy.id, strategy.enabled, strategy.version
+        ),
+    );
+
+    success_response(serde_json::json!({
+        "id": strategy.id,
+        "enabled": strategy.enabled,
+        "version": strategy.version,
+        "updated_at": strategy.updated_at.to_rfc3339(),
+        "message": "Strategy enabled state updated successfully"
+    }))
+}
+
 /// DELETE /api/strategies/:id - Delete strategy
 pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     logger::info(LogTag::Webserver, &format!("DELETE /api/strategies/{id}"));

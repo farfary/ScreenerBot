@@ -135,6 +135,12 @@ pub struct StrategyRequest {
     pub author: Option<String>,
 }
 
+/// Strategy enabled-state update request.
+#[derive(Debug, Deserialize)]
+pub struct StrategyEnabledRequest {
+    pub enabled: bool,
+}
+
 fn default_enabled() -> bool {
     true
 }
