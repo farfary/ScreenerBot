@@ -211,6 +211,7 @@ function createLifecycle() {
       traderContent?.classList.remove("trader-content--fullbleed");
       deactivateStrategiesSubtab();
     }
+    traderContent?.classList.toggle("trader-content--split-scroll", tabId === "stats");
 
     // Start/stop pollers based on tab
     if (tabId === "stats") {
