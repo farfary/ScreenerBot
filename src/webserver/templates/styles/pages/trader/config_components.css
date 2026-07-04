@@ -313,7 +313,7 @@
 }
 
 .step-icon-activation {
-  background: linear-gradient(135deg, var(--warning), var(--warning-hover));
+  background: linear-gradient(135deg, var(--warning), var(--warning-color-dark));
   color: white;
 }
 
