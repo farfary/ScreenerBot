@@ -362,6 +362,8 @@
   border-radius: var(--radius-sm);
   line-height: 1.4;
   border: 1px solid transparent;
+  /* Row is baseline-aligned for the price+unit; center the chip against it. */
+  align-self: center;
 }
 
 .price-source-chip.pool {

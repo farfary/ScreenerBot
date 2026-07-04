@@ -95,6 +95,10 @@
     } else if (abs >= 1_000) {
       scaled = num / 1_000;
       suffix = "K";
+    } else if (abs > 0 && abs < 0.01) {
+      // Sub-cent prices round to $0.00 with toFixed(2); render the real value in
+      // subscript notation (e.g. $0.0₅8142) so tiny token prices stay visible.
+      return `$${formatPriceSubscript(num, { fallback, precision: 4 })}`;
     }
 
     return `$${scaled.toFixed(2)}${suffix}`;
