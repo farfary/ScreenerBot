@@ -210,7 +210,19 @@ pub async fn fetch_rugcheck_data(
             }
         };
 
-    let data = convert_rugcheck_to_data(&rugcheck_info);
+    let data = persist_rugcheck(mint, &rugcheck_info, db).await?;
+    Ok(Some(data))
+}
+
+/// Convert, store (DB + cache), refresh the token snapshot, and record the sampled
+/// security event for one fetched Rugcheck report. Shared by the single-token
+/// fetch and the batch server warm so neither duplicates the persistence logic.
+pub(crate) async fn persist_rugcheck(
+    mint: &str,
+    info: &RugcheckInfo,
+    db: &TokenDatabase,
+) -> TokenResult<RugcheckData> {
+    let data = convert_rugcheck_to_data(info);
 
     // Store in database
     db.upsert_rugcheck_data(mint, &data)?;
@@ -221,7 +233,7 @@ pub async fn fetch_rugcheck_data(
         logger::error(
             LogTag::Tokens,
             &format!(
-                "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck API mint={} err={:?}",
+                "[TOKENS][STORE] Failed to refresh token snapshot after Rugcheck mint={} err={:?}",
                 mint, err
             ),
         );
@@ -261,7 +273,31 @@ pub async fn fetch_rugcheck_data(
         });
     }
 
-    Ok(Some(data))
+    Ok(data)
+}
+
+/// Batch-warm security data for many mints via ONE server call
+/// (`/v1/rugcheck?mints=`), persisting every report the shared server had cached.
+/// Returns the set of mints that were warmed so the caller can fall back to the
+/// direct Rugcheck API only for the misses. Never touches the direct Rugcheck rate
+/// limiter (the server enforces its own per-IP limit across its proxy egresses),
+/// so warming 30 tokens costs one un-throttled request instead of 30.
+pub async fn warm_security_from_server(
+    mints: &[String],
+    db: &TokenDatabase,
+) -> std::collections::HashSet<String> {
+    use std::collections::HashSet;
+    let mut warmed = HashSet::new();
+    if mints.is_empty() {
+        return warmed;
+    }
+    let reports = super::rugcheck_server::fetch_reports_from_server(mints).await;
+    for (mint, info) in reports {
+        if persist_rugcheck(&mint, &info, db).await.is_ok() {
+            warmed.insert(mint);
+        }
+    }
+    warmed
 }
 
 /// Calculate a SAFETY score from Rugcheck data (for internal use in event logging)

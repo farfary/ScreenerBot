@@ -456,7 +456,15 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
         return;
     }
 
-    let tokens = match db.get_tokens_without_security_data(1) {
+    // Load a whole batch of tokens lacking security data (was one-at-a-time). The
+    // shared data server can return up to 30 tokens' reports in a single
+    // un-throttled call, so we warm the backlog far faster.
+    const SECURITY_BATCH: usize = 30;
+    /// Cap on direct Rugcheck API fetches per cycle (for tokens the server didn't
+    /// have) so the direct per-IP budget is never bursted.
+    const MAX_DIRECT_PER_CYCLE: usize = 3;
+
+    let tokens = match db.get_tokens_without_security_data(SECURITY_BATCH) {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
@@ -471,56 +479,74 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
         return;
     }
 
-    let mint = &tokens[0];
-
-    // Check if token is already being fetched
-    if !try_mark_in_flight(mint) {
-        return; // Another loop is already fetching this token
+    // 1) Batch-warm from the shared server in ONE call (server-first, no direct
+    //    Rugcheck rate-limit permit consumed). Tokens the server had cached are
+    //    persisted here and drop out of the backlog immediately.
+    let warmed = rugcheck::warm_security_from_server(&tokens, db).await;
+    for mint in &warmed {
+        let _ = db.clear_security_error(mint);
+    }
+    if !warmed.is_empty() {
+        logger::debug(
+            LogTag::Tokens,
+            &format!(
+                "Security data batch-warmed for {} token(s) from data server",
+                warmed.len()
+            ),
+        );
     }
 
-    // Fetch security data for single token
-    match coordinator.acquire_rugcheck().await {
-        Ok(permit) => match rugcheck::fetch_rugcheck_data(mint, db).await {
-            Ok(Some(_)) => {
-                permit.forget();
-                logger::debug(LogTag::Tokens, &format!("Security data fetched for {mint}"));
-                // Clear any previous error tracking
-                let _ = db.clear_security_error(mint);
-            }
-            Ok(None) => {
-                // Token not analyzed by Rugcheck - this is PERMANENT (404/400 not found)
-                let _ = db.record_security_error(
-                    mint,
-                    "Token not analyzed by Rugcheck (404/400)",
-                    "permanent",
-                );
-            }
-            Err(e) => {
-                // Classify error type
-                let err_str = format!("{:?}", e);
-                let error_type = if err_str.contains("404")
-                    || err_str.contains("NotFound")
-                    || err_str.contains("not found")
-                {
-                    "permanent"
-                } else {
-                    "temporary"
-                };
+    // 2) Direct Rugcheck fallback for a BOUNDED number of the misses (the server
+    //    didn't have them yet — it has scheduled its own background fetch, but we
+    //    still fetch directly now so the data is available immediately).
+    let misses: Vec<String> = tokens
+        .into_iter()
+        .filter(|m| !warmed.contains(m))
+        .take(MAX_DIRECT_PER_CYCLE)
+        .collect();
 
-                logger::error(
-                    LogTag::Tokens,
-                    &format!("Rugcheck error ({error_type}) for {mint}: {e}"),
-                );
-                let _ = db.record_security_error(mint, &e.to_string(), error_type);
-            }
-        },
-        Err(e) => {
-            logger::error(LogTag::Tokens, &format!("Rugcheck rate limit: {e}"));
+    for mint in &misses {
+        if !try_mark_in_flight(mint) {
+            continue; // Another loop is already fetching this token
         }
+        match coordinator.acquire_rugcheck().await {
+            Ok(permit) => match rugcheck::fetch_rugcheck_data(mint, db).await {
+                Ok(Some(_)) => {
+                    permit.forget();
+                    logger::debug(LogTag::Tokens, &format!("Security data fetched for {mint}"));
+                    let _ = db.clear_security_error(mint);
+                }
+                Ok(None) => {
+                    // Token not analyzed by Rugcheck - this is PERMANENT (404/400).
+                    let _ = db.record_security_error(
+                        mint,
+                        "Token not analyzed by Rugcheck (404/400)",
+                        "permanent",
+                    );
+                }
+                Err(e) => {
+                    let err_str = format!("{:?}", e);
+                    let error_type = if err_str.contains("404")
+                        || err_str.contains("NotFound")
+                        || err_str.contains("not found")
+                    {
+                        "permanent"
+                    } else {
+                        "temporary"
+                    };
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!("Rugcheck error ({error_type}) for {mint}: {e}"),
+                    );
+                    let _ = db.record_security_error(mint, &e.to_string(), error_type);
+                }
+            },
+            Err(e) => {
+                logger::error(LogTag::Tokens, &format!("Rugcheck rate limit: {e}"));
+            }
+        }
+        clear_in_flight(mint);
     }
-
-    // Clear in-flight marker
-    clear_in_flight(mint);
 }
 
 // ============================================================================
