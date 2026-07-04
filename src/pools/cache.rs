@@ -45,9 +45,22 @@ pub async fn initialize_cache() {
     logger::debug(LogTag::PoolCache, "Price cache system initialized");
 }
 
-/// Get current price for a token
-pub fn get_price(mint: &str) -> Option<PriceResult> {
-    PRICE_CACHE.get(mint).map(|entry| entry.value().clone())
+/// Get the current price for a token, but only when it is still fresh (within
+/// the configured TTL). Stale entries return `None` so callers never act on an
+/// outdated pool price. This matches the TTL filter used by
+/// `get_available_tokens` (the Pool Service list), so a token that is no longer
+/// being actively priced stops reporting a pool price instead of surfacing its
+/// last, now-stale, cached value.
+pub fn get_fresh_price(mint: &str) -> Option<PriceResult> {
+    let ttl = price_cache_ttl_seconds();
+    PRICE_CACHE.get(mint).and_then(|entry| {
+        let price = entry.value();
+        if price.timestamp.elapsed().as_secs() < ttl {
+            Some(price.clone())
+        } else {
+            None
+        }
+    })
 }
 
 /// Check if a token has a fresh (non-expired) price in cache

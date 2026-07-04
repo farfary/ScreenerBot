@@ -27,7 +27,12 @@ pub fn get_pool_price(mint: &str) -> Option<PriceResult> {
         return None;
     }
 
-    cache::get_price(mint)
+    // Only return a price that is still within the configured TTL. A stale cached
+    // value means the token is no longer being actively priced on-chain, so it
+    // must NOT be reported as a live pool price (that produced the "header shows
+    // Price Pool but the Pool Service list omits the token" mismatch, and would
+    // feed stale prices to trading/P&L). Matches `get_available_tokens`.
+    cache::get_fresh_price(mint)
 }
 
 /// Get pools associated with a token from the analyzer's in-memory directory.
