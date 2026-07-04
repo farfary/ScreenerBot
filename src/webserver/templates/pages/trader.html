@@ -826,33 +826,78 @@
 
     <!-- Strategy Control Tab -->
     <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
-      <div class="config-section">
-        <!-- Entry Strategies -->
-        <div class="config-card">
-          <div class="card-header">
-            <div class="card-header-text">
-              <h3><i class="icon-target"></i> Entry Strategies</h3>
-              <p class="card-subtitle">Select strategies that determine when to open positions</p>
+      <div class="config-section strategy-control-section">
+        <div class="strategy-control-hero">
+          <div class="strategy-control-title">
+            <span class="strategy-control-icon"><i class="icon-puzzle"></i></span>
+            <div>
+              <h3>Strategy Control</h3>
+              <p>Enable the backend strategies that Auto Trader can use for entries and exits.</p>
             </div>
           </div>
-          <div class="config-group config-group-full">
-            <div id="entry-strategies" class="strategies-list">
-              <div class="loading">Loading strategies...</div>
-            </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="refresh-strategy-control">
+            <i class="icon-refresh-cw"></i>
+            Refresh
+          </button>
+        </div>
+
+        <div class="strategy-control-summary">
+          <div class="strategy-summary-card">
+            <span class="strategy-summary-label">Total</span>
+            <strong id="strategy-total-count">--</strong>
+            <span class="strategy-summary-meta">Strategies</span>
+          </div>
+          <div class="strategy-summary-card">
+            <span class="strategy-summary-label">Active</span>
+            <strong id="strategy-enabled-count">--</strong>
+            <span class="strategy-summary-meta">Enabled</span>
+          </div>
+          <div class="strategy-summary-card">
+            <span class="strategy-summary-label">Entry</span>
+            <strong id="strategy-entry-count">--</strong>
+            <span class="strategy-summary-meta">Open signals</span>
+          </div>
+          <div class="strategy-summary-card">
+            <span class="strategy-summary-label">Exit</span>
+            <strong id="strategy-exit-count">--</strong>
+            <span class="strategy-summary-meta">Close signals</span>
           </div>
         </div>
 
-        <!-- Exit Strategies -->
-        <div class="config-card">
-          <div class="card-header">
-            <div class="card-header-text">
-              <h3><i class="icon-log-out"></i> Exit Strategies</h3>
-              <p class="card-subtitle">Select strategies that determine when to close positions</p>
+        <div class="strategy-control-grid">
+          <div class="config-card strategy-lane-card strategy-lane-card-entry">
+            <div class="card-header">
+              <div class="card-header-text">
+                <h3><i class="icon-target"></i> Entry Strategies</h3>
+                <p class="card-subtitle">Signals that can open a new position.</p>
+              </div>
+              <span class="strategy-lane-count" id="strategy-entry-enabled-label">-- active</span>
+            </div>
+            <div class="config-group config-group-full">
+              <div id="entry-strategies" class="strategies-list">
+                <div class="strategy-list-state">
+                  <i class="icon-loader spinning"></i>
+                  <span>Loading strategies...</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="config-group config-group-full">
-            <div id="exit-strategies" class="strategies-list">
-              <div class="loading">Loading strategies...</div>
+
+          <div class="config-card strategy-lane-card strategy-lane-card-exit">
+            <div class="card-header">
+              <div class="card-header-text">
+                <h3><i class="icon-log-out"></i> Exit Strategies</h3>
+                <p class="card-subtitle">Signals that can close or protect an open position.</p>
+              </div>
+              <span class="strategy-lane-count" id="strategy-exit-enabled-label">-- active</span>
+            </div>
+            <div class="config-group config-group-full">
+              <div id="exit-strategies" class="strategies-list">
+                <div class="strategy-list-state">
+                  <i class="icon-loader spinning"></i>
+                  <span>Loading strategies...</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

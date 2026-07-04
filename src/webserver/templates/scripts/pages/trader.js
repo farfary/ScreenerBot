@@ -47,6 +47,7 @@ function createLifecycle() {
 
   // Event cleanup tracking
   const eventCleanups = [];
+  const strategyListCleanups = [];
 
   // Feature status from API
   let tradingFeatures = {};
@@ -223,7 +224,7 @@ function createLifecycle() {
     }
 
     if (tabId === "strategy-control") {
-      loadStrategies();
+      loadStrategies({ showLoading: true });
       if (strategiesPoller && !strategiesPoller.running) {
         strategiesPoller.start();
       }
@@ -820,8 +821,12 @@ function createLifecycle() {
   /**
    * Load strategies list
    */
-  async function loadStrategies() {
+  async function loadStrategies({ showLoading = false } = {}) {
     try {
+      if (showLoading) {
+        setStrategiesLoadingState();
+      }
+
       const [entryData, exitData] = await Promise.all([
         requestManager.fetch("/api/strategies?type=ENTRY", {
           priority: "normal",
@@ -835,6 +840,8 @@ function createLifecycle() {
       const exitStrategies = exitData.items || [];
       state.strategies = [...entryStrategies, ...exitStrategies];
 
+      updateStrategyControlSummary(entryStrategies, exitStrategies);
+
       if (state.config) {
         updateConfigOverview();
       }
@@ -843,7 +850,68 @@ function createLifecycle() {
       renderStrategiesList("#exit-strategies", exitStrategies);
     } catch (error) {
       console.error("[Trader] Failed to load strategies:", error);
+      renderStrategiesError();
     }
+  }
+
+  function setStrategiesLoadingState() {
+    cleanupStrategyListListeners();
+    ["#entry-strategies", "#exit-strategies"].forEach((selector) => {
+      const container = $(selector);
+      if (!container) return;
+      container.innerHTML = `
+        <div class="strategy-list-state">
+          <i class="icon-loader spinning"></i>
+          <span>Loading strategies...</span>
+        </div>
+      `;
+    });
+  }
+
+  function cleanupStrategyListListeners() {
+    while (strategyListCleanups.length > 0) {
+      const cleanup = strategyListCleanups.pop();
+      try {
+        cleanup();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  function updateStrategyControlSummary(entryStrategies, exitStrategies) {
+    const allStrategies = [...entryStrategies, ...exitStrategies];
+    const enabledCount = allStrategies.filter((strategy) => strategy.enabled).length;
+    const entryEnabled = entryStrategies.filter((strategy) => strategy.enabled).length;
+    const exitEnabled = exitStrategies.filter((strategy) => strategy.enabled).length;
+
+    const totals = {
+      "#strategy-total-count": allStrategies.length,
+      "#strategy-enabled-count": enabledCount,
+      "#strategy-entry-count": entryStrategies.length,
+      "#strategy-exit-count": exitStrategies.length,
+      "#strategy-entry-enabled-label": `${entryEnabled}/${entryStrategies.length} active`,
+      "#strategy-exit-enabled-label": `${exitEnabled}/${exitStrategies.length} active`,
+    };
+
+    Object.entries(totals).forEach(([selector, value]) => {
+      const el = $(selector);
+      if (el) el.textContent = String(value);
+    });
+  }
+
+  function renderStrategiesError() {
+    updateStrategyControlSummary([], []);
+    ["#entry-strategies", "#exit-strategies"].forEach((selector) => {
+      const container = $(selector);
+      if (!container) return;
+      container.innerHTML = `
+        <div class="strategy-list-state is-error">
+          <i class="icon-circle-alert"></i>
+          <span>Could not load strategies</span>
+        </div>
+      `;
+    });
   }
 
   /**
@@ -854,40 +922,79 @@ function createLifecycle() {
     if (!container) return;
 
     if (strategies.length === 0) {
-      container.innerHTML = '<div class="empty-state">No strategies defined</div>';
+      container.innerHTML = `
+        <div class="strategy-list-state is-empty">
+          <i class="icon-circle"></i>
+          <span>No strategies defined</span>
+        </div>
+      `;
       return;
     }
 
     container.innerHTML = strategies
       .map(
-        (strategy) => `
-        <div class="strategy-item">
-          <div class="strategy-header">
-            <div class="strategy-name">${Utils.escapeHtml(strategy.name)}</div>
-            <label class="switch">
+        (strategy) => {
+          const strategyType = String(strategy.strategy_type || "").toUpperCase();
+          const isEntry = strategyType === "ENTRY";
+          const typeClass = isEntry ? "is-entry" : "is-exit";
+          const statusClass = strategy.enabled ? "is-enabled" : "is-disabled";
+          const statusLabel = strategy.enabled ? "Enabled" : "Disabled";
+          const description = strategy.description
+            ? Utils.escapeHtml(strategy.description)
+            : "No description provided.";
+          const priority =
+            strategy.priority !== null && strategy.priority !== undefined
+              ? Utils.escapeHtml(String(strategy.priority))
+              : "Auto";
+          const timeframe = strategy.timeframe
+            ? Utils.escapeHtml(String(strategy.timeframe))
+            : "Default";
+          const strategyId = Utils.escapeHtml(String(strategy.id));
+          const strategyName = strategy.name
+            ? Utils.escapeHtml(String(strategy.name))
+            : "Unnamed strategy";
+
+          return `
+        <div class="strategy-control-item ${statusClass}">
+          <div class="strategy-control-item-header">
+            <div class="strategy-control-main">
+              <div class="strategy-control-name-row">
+                <span class="strategy-control-status-dot" aria-hidden="true"></span>
+                <h4 class="strategy-control-name">${strategyName}</h4>
+              </div>
+              <p class="strategy-control-description">${description}</p>
+            </div>
+            <label class="toggle">
               <input 
                 type="checkbox" 
-                data-strategy-id="${strategy.id}" 
+                data-strategy-id="${strategyId}"
                 ${strategy.enabled ? "checked" : ""}
               />
-              <span class="slider"></span>
+              <span class="toggle-track"></span>
+              <span class="toggle-label">${statusLabel}</span>
             </label>
           </div>
-          ${
-            strategy.description
-              ? `<div class="strategy-description">${Utils.escapeHtml(strategy.description)}</div>`
-              : ""
-          }
-          <div class="strategy-meta">
-            <span class="strategy-badge">${Utils.escapeHtml(strategy.strategy_type)}</span>
-            ${
-              strategy.priority !== null && strategy.priority !== undefined
-                ? `<span class="strategy-priority">Priority: ${strategy.priority}</span>`
-                : ""
-            }
+          <div class="strategy-control-meta">
+            <span class="strategy-control-chip ${typeClass}">
+              <i class="${isEntry ? "icon-target" : "icon-log-out"}"></i>
+              ${Utils.escapeHtml(strategyType || "STRATEGY")}
+            </span>
+            <span class="strategy-control-chip">
+              <i class="icon-list-ordered"></i>
+              Priority ${priority}
+            </span>
+            <span class="strategy-control-chip">
+              <i class="icon-clock"></i>
+              ${timeframe}
+            </span>
+            <span class="strategy-control-chip ${statusClass}">
+              <i class="${strategy.enabled ? "icon-circle-check" : "icon-circle"}"></i>
+              ${statusLabel}
+            </span>
           </div>
         </div>
-      `
+      `;
+        }
       )
       .join("");
 
@@ -896,10 +1003,11 @@ function createLifecycle() {
       const handler = async (e) => {
         const strategyId = e.target.dataset.strategyId;
         const enabled = e.target.checked;
+        e.target.disabled = true;
         await updateStrategyStatus(strategyId, enabled);
       };
       checkbox.addEventListener("change", handler);
-      eventCleanups.push(() => checkbox.removeEventListener("change", handler));
+      strategyListCleanups.push(() => checkbox.removeEventListener("change", handler));
     });
   }
 
@@ -1155,6 +1263,12 @@ function createLifecycle() {
     });
   }
 
+  function setupStrategyControlActions() {
+    addTrackedListener($("#refresh-strategy-control"), "click", async () => {
+      await loadStrategies({ showLoading: true });
+    });
+  }
+
   // ============================================================================
   // Lifecycle Methods
   // ============================================================================
@@ -1233,6 +1347,9 @@ function createLifecycle() {
 
       // Setup navigation links
       setupNavigation();
+
+      // Setup Strategy Control actions
+      setupStrategyControlActions();
     },
 
     /**
@@ -1317,6 +1434,7 @@ function createLifecycle() {
      */
     deactivate() {
       console.log("[Trader] Deactivating page");
+      cleanupStrategyListListeners();
       // Pollers stopped automatically by lifecycle context
     },
 

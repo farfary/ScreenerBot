@@ -441,9 +441,351 @@
    Strategy Control Tab - Components
    ============================================================================ */
 
-/* Strategies List */
+.strategy-control-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.strategy-control-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background:
+    linear-gradient(135deg, var(--primary-alpha-10), transparent 62%),
+    var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+}
+
+.strategy-control-title {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.strategy-control-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.strategy-control-icon i {
+  font-size: 1.25rem;
+}
+
+.strategy-control-title h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.strategy-control-title p {
+  margin: 0.25rem 0 0;
+  max-width: 62rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.strategy-control-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.strategy-summary-card {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 4px var(--shadow-sm);
+}
+
+.strategy-summary-label,
+.strategy-summary-meta {
+  overflow: hidden;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-summary-card strong {
+  font-family: var(--font-data);
+  font-size: 1.35rem;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.strategy-summary-meta {
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.strategy-control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.strategy-lane-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.strategy-lane-card + .strategy-lane-card {
+  margin-top: 0;
+}
+
+.strategy-lane-card .card-header {
+  min-height: 76px;
+  margin-bottom: 0;
+}
+
+.strategy-lane-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.5rem;
+  padding: 0.3rem 0.6rem;
+  color: var(--primary-color);
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--primary-alpha-10);
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: var(--radius-xl);
+}
+
 .strategies-list {
-  min-height: 100px;
+  display: grid;
+  gap: 0.75rem;
+  min-height: 190px;
+}
+
+.strategy-control-item {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.875rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.strategy-control-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+}
+
+.strategy-control-item.is-enabled {
+  background: linear-gradient(135deg, var(--success-alpha-10), var(--bg-secondary) 70%);
+  border-color: var(--success-alpha-20);
+}
+
+.strategy-control-item.is-disabled {
+  opacity: 0.78;
+}
+
+.strategy-control-item-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.strategy-control-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.strategy-control-status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgb(139, 148, 158, 0.08);
+  flex-shrink: 0;
+}
+
+.strategy-control-item.is-enabled .strategy-control-status-dot {
+  background: var(--success-color);
+  box-shadow: 0 0 0 4px var(--success-alpha-10);
+}
+
+.strategy-control-name {
+  overflow: hidden;
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategy-control-description {
+  display: -webkit-box;
+  margin: 0.35rem 0 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.strategy-control-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.strategy-control-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 24px;
+  padding: 0.25rem 0.5rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.strategy-control-chip i {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.strategy-control-chip.is-entry {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  border-color: var(--primary-alpha-20);
+}
+
+.strategy-control-chip.is-exit {
+  color: var(--warning-color);
+  background: var(--warning-alpha-10);
+  border-color: var(--warning-alpha-20);
+}
+
+.strategy-control-chip.is-enabled {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+  border-color: var(--success-alpha-20);
+}
+
+.strategy-control-chip.is-disabled {
+  color: var(--text-muted);
+}
+
+.strategy-control-item .toggle {
+  margin-top: 0.1rem;
+}
+
+.strategy-control-item .toggle-label {
+  min-width: 3.5rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.strategy-list-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 150px;
+  padding: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  text-align: center;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.strategy-list-state i {
+  color: var(--primary-color);
+  font-size: 1rem;
+}
+
+.strategy-list-state.is-empty i {
+  color: var(--text-muted);
+}
+
+.strategy-list-state.is-error i {
+  color: var(--error-color);
+}
+
+@media (width <= 1100px) {
+  .strategy-control-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width <= 800px) {
+  .strategy-control-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .strategy-control-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 500px) {
+  .strategy-control-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .strategy-control-item-header {
+    grid-template-columns: 1fr;
+  }
+
+  .strategy-control-item .toggle {
+    justify-content: space-between;
+  }
 }
 
 /* ============================================================================
