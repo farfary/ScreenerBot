@@ -35,7 +35,7 @@ impl Service for SolPriceService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        let handle = crate::sol_price::start_sol_price_service(shutdown.clone(), monitor)
+        let handle = crate::sol_price::start_sol_price_service(shutdown.clone(), monitor.clone())
             .await
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
@@ -44,8 +44,13 @@ impl Service for SolPriceService {
                 })
             })?;
 
-        // Return price_task handle so ServiceManager can wait for graceful shutdown
-        Ok(vec![handle])
+        // Also mirror the full SOL/USD reference chart from the data server so the
+        // bot always has SOL's own price history (all timeframes) ready for display
+        // and USDC->SOL conversion, prepared during runtime (never per request).
+        let chart_handle = crate::ohlcvs::sol_usd_chart::start(shutdown.clone(), monitor.clone());
+
+        // Return both handles so ServiceManager can wait for graceful shutdown.
+        Ok(vec![handle, chart_handle])
     }
 
     async fn health(&self) -> ServiceHealth {

@@ -9,6 +9,7 @@ mod monitor;
 mod priorities;
 mod service;
 mod service_api;
+pub mod sol_usd_chart;
 mod types;
 
 pub use types::{
