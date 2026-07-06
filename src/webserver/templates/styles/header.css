@@ -371,6 +371,26 @@
   background: rgb(248, 81, 73, 0.15);
 }
 
+/* SOL price card — a compact, clickable market-price chip that opens the SOL/USD
+   chart in the token-details dialog. Stays visually consistent with the other
+   transparent header cards; a faint rounded background on hover/focus signals it
+   is interactive. */
+.sol-price-card {
+  border-radius: var(--radius-md, 6px);
+}
+
+.sol-price-card:hover {
+  background: rgb(255, 255, 255, 0.05);
+}
+
+[data-theme="light"] .sol-price-card:hover {
+  background: rgb(0, 0, 0, 0.04);
+}
+
+.sol-price-card .card-value {
+  letter-spacing: -0.01em;
+}
+
 .card-sub {
   font-size: 10px;
   color: var(--text-secondary);

@@ -8,7 +8,15 @@ pub struct HeaderMetricsResponse {
     pub rpc: RpcHeaderInfo,
     pub filtering: FilteringHeaderInfo,
     pub system: SystemHeaderInfo,
+    pub sol: SolHeaderInfo,
     pub timestamp: String,
+}
+
+/// SOL/USD price for the header price card (click opens the SOL chart dialog).
+#[derive(Debug, Serialize)]
+pub struct SolHeaderInfo {
+    pub price_usd: f64,
+    pub change_24h_percent: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]

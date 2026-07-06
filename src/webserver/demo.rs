@@ -548,6 +548,10 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
         rpc,
         filtering,
         system,
+        sol: crate::webserver::routes::header::SolHeaderInfo {
+            price_usd: 176.42,
+            change_24h_percent: Some(2.3),
+        },
         timestamp: now.to_rfc3339(),
     }
 }

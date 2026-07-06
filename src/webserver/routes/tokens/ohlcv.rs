@@ -31,6 +31,34 @@ pub async fn get_token_ohlcv(
         }
     };
 
+    // WSOL/SOL is special: its own "SOL-denominated" price is trivially 1.0, so the
+    // regular OHLCV path is meaningless. Serve the SOL/USD reference chart (SOL's
+    // price in USD) mirrored from the data server, so the token-details dialog shows
+    // a real SOL chart. No monitoring/activity — this series is maintained globally.
+    if mint == crate::constants::SOL_MINT {
+        let series = crate::ohlcvs::sol_usd_chart::series(timeframe);
+        // `limit == 0` means "all" here (the chart sends CHART_CANDLE_LIMIT = 0 to
+        // fetch the full series); otherwise keep the newest `limit` candles.
+        let take = if query.limit == 0 {
+            series.len()
+        } else {
+            (query.limit as usize).min(series.len())
+        };
+        let start = series.len() - take;
+        let points: Vec<OhlcvPoint> = series[start..]
+            .iter()
+            .map(|c| OhlcvPoint {
+                timestamp: c.timestamp,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close,
+                volume: c.volume,
+            })
+            .collect();
+        return Ok(Json(points));
+    }
+
     logger::debug(
         LogTag::Webserver,
         &format!(
@@ -111,6 +139,51 @@ pub async fn get_token_ohlcv(
 pub async fn get_token_ohlcv_status(
     Path(mint): Path<String>,
 ) -> Result<Json<crate::ohlcvs::OhlcvStatus>, StatusCode> {
+    // WSOL/SOL uses the globally-maintained SOL/USD reference chart, so synthesize
+    // its status from that in-memory series (it isn't in the per-token monitor).
+    if mint == crate::constants::SOL_MINT {
+        use crate::ohlcvs::{sol_usd_chart, Timeframe};
+        let tfs = [
+            Timeframe::Minute1,
+            Timeframe::Minute5,
+            Timeframe::Minute15,
+            Timeframe::Hour1,
+            Timeframe::Hour4,
+            Timeframe::Hour12,
+            Timeframe::Day1,
+        ];
+        let mut timeframes = Vec::new();
+        let mut total = 0i64;
+        let mut best: Option<String> = None;
+        for tf in tfs {
+            let s = sol_usd_chart::series(tf);
+            let count = s.len() as i64;
+            total += count;
+            let latest = s.last().map(|c| c.timestamp);
+            if count > 0 && best.is_none() {
+                best = Some(tf.to_string());
+            }
+            timeframes.push(crate::ohlcvs::OhlcvTimeframeStatus {
+                timeframe: tf.to_string(),
+                candles: count,
+                backfill_complete: count > 0,
+                latest_timestamp: latest,
+                last_new_data_at: latest,
+            });
+        }
+        return Ok(Json(crate::ohlcvs::OhlcvStatus {
+            mint,
+            monitored: true,
+            has_data: total > 0,
+            total_candles: total,
+            best_timeframe: best,
+            backfill_complete: total > 0,
+            last_checked_at: sol_usd_chart::last_updated(),
+            last_new_data_at: sol_usd_chart::last_updated(),
+            timeframes,
+        }));
+    }
+
     match crate::ohlcvs::get_status(&mint).await {
         Ok(status) => Ok(Json(status)),
         Err(e) => {

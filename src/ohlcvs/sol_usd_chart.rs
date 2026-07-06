@@ -84,6 +84,19 @@ pub fn last_updated() -> Option<i64> {
     (ts > 0).then_some(ts)
 }
 
+/// SOL/USD 24h price change as a percentage, from the 1h series (last close vs the
+/// close ~24 hours earlier). None until enough 1h history is cached.
+pub fn change_24h_percent() -> Option<f64> {
+    let s = series(Timeframe::Hour1);
+    let n = s.len();
+    if n < 25 {
+        return None;
+    }
+    let now = s[n - 1].close;
+    let prev = s[n - 25].close;
+    (prev > 0.0).then(|| (now - prev) / prev * 100.0)
+}
+
 /// Convert a token's USD candles (same timeframe grid) into SOL by dividing OHLC
 /// by the SOL/USD close at each timestamp. Candles without SOL/USD coverage are
 /// dropped — never fabricated. Empty until the chart has been fetched.

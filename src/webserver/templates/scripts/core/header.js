@@ -11,6 +11,10 @@ import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff } from "./sounds.js";
+// Side-effect import: registers the `screenerbot:open-token-details` window
+// listener so the SOL price card (and any header control) can open the dialog.
+// Without this the event fires into the void on pages that don't load the dialog.
+import "../ui/token_details_dialog.js";
 
 const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
 
@@ -195,6 +199,9 @@ function updateHeaderMetrics(metrics) {
   // Update Wallet Card
   updateWalletCard(metrics.wallet);
 
+  // Update SOL Price Card
+  updateSolPriceCard(metrics.sol);
+
   // Update Positions Card
   updatePositionsCard(metrics.positions, metrics.rpc);
 
@@ -289,6 +296,31 @@ function updateWalletCard(wallet) {
   // Update token worth
   if (tokenWorth) {
     tokenWorth.textContent = `${wallet.tokens_worth_sol.toFixed(2)} SOL`;
+  }
+}
+
+function updateSolPriceCard(sol) {
+  const value = document.getElementById("solPriceValue");
+  const change = document.getElementById("solPriceChange");
+  if (!value || !change) return;
+
+  const price = sol && Number.isFinite(sol.price_usd) ? sol.price_usd : 0;
+  value.textContent =
+    price > 0
+      ? `$${price.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
+      : "—";
+
+  const pct = sol && Number.isFinite(sol.change_24h_percent) ? sol.change_24h_percent : null;
+  if (pct === null) {
+    change.textContent = "—";
+    change.classList.remove("positive", "negative");
+  } else {
+    change.textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+    change.classList.toggle("positive", pct >= 0);
+    change.classList.toggle("negative", pct < 0);
   }
 }
 
@@ -570,6 +602,30 @@ function initCardHandlers() {
       loadPage("positions");
     });
     walletCard.style.cursor = "pointer";
+  }
+
+  // SOL price card - open the SOL/USD chart in the shared token-details dialog.
+  // WSOL is charted as SOL's USD price (special-cased server-side), so the same
+  // dialog every other token uses works unchanged here.
+  const solPriceCard = document.getElementById("solPriceCard");
+  if (solPriceCard) {
+    const openSolDetails = () => {
+      window.dispatchEvent(
+        new CustomEvent("screenerbot:open-token-details", {
+          detail: {
+            mint: "So11111111111111111111111111111111111111112",
+            symbol: "SOL",
+          },
+        }),
+      );
+    };
+    solPriceCard.addEventListener("click", openSolDetails);
+    solPriceCard.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openSolDetails();
+      }
+    });
   }
 
   // Positions card - navigate to positions page

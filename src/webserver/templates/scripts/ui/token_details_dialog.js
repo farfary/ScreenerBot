@@ -851,6 +851,10 @@ export class TokenDetailsDialog {
     const symbol = this.tokenData.symbol || "Unknown";
     const name = this.tokenData.name || "Unknown Token";
     const logoUrl = this.tokenData.logo_url || this.tokenData.image_url || "";
+    // WSOL/SOL is the base currency, not a tradeable/analyzable token: hide the
+    // trade buttons, the per-token actions (favorite/copy/Solscan), and every tab
+    // except Overview — only its price + SOL/USD chart are meaningful here.
+    const isSol = this.tokenData.mint === "So11111111111111111111111111111111111111112";
 
     return `
       <div class="dialog-backdrop"></div>
@@ -876,7 +880,10 @@ export class TokenDetailsDialog {
               </div>
             </div>
             <div class="header-right">
-              <div class="header-trade-actions">
+              ${
+                isSol
+                  ? ""
+                  : `<div class="header-trade-actions">
                 <button class="trade-btn buy-btn" id="headerBuyBtn" title="Buy this token">
                   <i class="icon-shopping-cart"></i>
                   Buy
@@ -896,7 +903,8 @@ export class TokenDetailsDialog {
                 <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" class="action-btn" title="View on Solscan">
                   <i class="icon-external-link"></i>
                 </a>
-              </div>
+              </div>`
+              }
               <button class="dialog-close" type="button" title="Close (ESC)">
                 <i class="icon-x"></i>
               </button>
@@ -939,7 +947,10 @@ export class TokenDetailsDialog {
             <i class="icon-info"></i>
             Overview
           </button>
-          <button class="tab-button" data-tab="security">
+          ${
+            isSol
+              ? ""
+              : `<button class="tab-button" data-tab="security">
             <i class="icon-shield"></i>
             Security
           </button>
@@ -958,7 +969,8 @@ export class TokenDetailsDialog {
           <button class="tab-button" data-tab="transactions">
             <i class="icon-activity"></i>
             Txns
-          </button>
+          </button>`
+          }
         </div>
 
         <div class="dialog-body">

@@ -126,6 +126,12 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     // System info
     let system = calculate_system_health().await;
 
+    // SOL/USD price for the header price card.
+    let sol = SolHeaderInfo {
+        price_usd: crate::sol_price::get_sol_price(),
+        change_24h_percent: crate::ohlcvs::sol_usd_chart::change_24h_percent(),
+    };
+
     Json(HeaderMetricsResponse {
         trader,
         wallet,
@@ -133,6 +139,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         rpc,
         filtering,
         system,
+        sol,
         timestamp: now.to_rfc3339(),
     })
 }
