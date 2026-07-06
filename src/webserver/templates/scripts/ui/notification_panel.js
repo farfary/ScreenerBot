@@ -380,10 +380,6 @@ function setupActions() {
  */
 function subscribeToUpdates() {
   unsubscribe = notificationManager.subscribe((event) => {
-    if (event.type === "summary") {
-      updateConnectionStatus(event.summary.connection);
-    }
-
     updateTabCounts();
 
     if (
@@ -424,25 +420,6 @@ function subscribeToUpdates() {
       Utils.showToast(`Failed to refresh (${event.error || "unknown"})`, "warning");
     }
   });
-}
-
-/**
- * Update connection status indicator
- */
-function updateConnectionStatus(connection) {
-  const connectionEl = document.getElementById("notificationConnection");
-  const textEl = document.getElementById("notificationConnectionText");
-
-  if (!connectionEl || !textEl) return;
-
-  if (!connection || connection.status !== "connected") {
-    connectionEl.setAttribute("data-state", "disconnected");
-    textEl.textContent = "Offline";
-    return;
-  }
-
-  connectionEl.setAttribute("data-state", "connected");
-  textEl.textContent = "Live";
 }
 
 /**

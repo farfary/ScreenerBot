@@ -91,45 +91,6 @@ body.notification-drawer-open {
   letter-spacing: -0.01em;
 }
 
-/* Connection Status - Minimal inline */
-.notification-connection {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: var(--radius-xl);
-  background: var(--success-alpha-10);
-  transition: all var(--transition-base);
-}
-
-.notification-connection__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--success-color);
-  transition: all var(--transition-normal);
-}
-
-.notification-connection[data-state="disconnected"] {
-  background: var(--danger-alpha-10);
-}
-
-.notification-connection[data-state="disconnected"] .notification-connection__dot {
-  background: var(--error-color);
-}
-
-.notification-connection__text {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--success-color);
-}
-
-.notification-connection[data-state="disconnected"] .notification-connection__text {
-  color: var(--error-color);
-}
-
 /* Action Buttons */
 .notification-panel-actions {
   display: flex;
@@ -266,6 +227,7 @@ body.notification-drawer-open {
   padding-right: 24px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
+
   /* background-color (not the `background` shorthand) so the global select arrow survives. */
   background-color: var(--bg-secondary);
   color: var(--text-primary);
@@ -273,6 +235,7 @@ body.notification-drawer-open {
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
+
   /* Arrow inherited from global `select {}` (form_controls.css). */
 }
 
