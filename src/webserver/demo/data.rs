@@ -1,21 +1,17 @@
-//! Static demo data for dashboard showcase
+//! Static demo INPUTS for the dashboard showcase.
 //!
-//! This module contains all hardcoded constants and token arrays
-//! used in demo mode for realistic screenshots and marketing materials.
+//! Only genuine inputs live here — the SOL balance, host metrics, and the two
+//! token arrays. Every aggregate (P&L, win rate, invested, trade counts, wallet
+//! worth) is DERIVED from these arrays in `aggregates.rs`, so the whole demo is
+//! internally consistent. Never hand-tune a total here.
 
 // =============================================================================
-// DEMO CONSTANTS - Realistic showcase values
+// DEMO INPUT CONSTANTS
 // =============================================================================
 
 pub(super) const DEMO_SOL_BALANCE: f64 = 9.847;
 pub(super) const DEMO_SOL_LAMPORTS: u64 = 9_847_000_000;
 pub(super) const DEMO_START_BALANCE: f64 = 8.5;
-pub(super) const DEMO_TOTAL_PNL: f64 = 4.127;
-pub(super) const DEMO_WIN_RATE: f64 = 71.2;
-pub(super) const DEMO_TOTAL_TRADES: usize = 118;
-pub(super) const DEMO_OPEN_POSITIONS: usize = 10;
-pub(super) const DEMO_INVESTED_SOL: f64 = 1.65;
-pub(super) const DEMO_UNREALIZED_PNL: f64 = 0.524;
 pub(super) const DEMO_MEMORY_MB: f64 = 384.5;
 pub(super) const DEMO_CPU_PERCENT: f64 = 12.3;
 pub(super) const DEMO_TOKENS_TRACKED: usize = 2847;

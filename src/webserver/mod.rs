@@ -2,7 +2,6 @@
 mod server;
 
 pub mod demo;
-mod demo_data;
 mod embeds;
 pub mod middleware;
 pub mod routes;

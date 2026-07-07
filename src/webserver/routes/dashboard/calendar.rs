@@ -35,7 +35,12 @@ pub async fn get_portfolio_calendar(
     let first_weekday = first_day.weekday().num_days_from_sunday();
 
     if demo::is_demo_mode() {
-        return Json(demo_calendar(year, month, days_in_month, first_weekday));
+        return Json(demo::get_demo_portfolio_calendar(
+            year,
+            month,
+            days_in_month,
+            first_weekday,
+        ));
     }
 
     // Month bounds [start, end) in UTC.
@@ -115,49 +120,5 @@ fn days_in_month(year: i32, month: u32) -> u32 {
     match (this, next) {
         (Some(a), Some(b)) => (b - a).num_days() as u32,
         _ => 30,
-    }
-}
-
-/// Synthetic calendar for demo mode (never used in normal runs).
-fn demo_calendar(
-    year: i32,
-    month: u32,
-    days_in_month: u32,
-    first_weekday: u32,
-) -> PortfolioCalendarResponse {
-    let mut days = Vec::with_capacity(days_in_month as usize);
-    let mut month_net_pnl_sol = 0.0f64;
-    let mut month_trades = 0i64;
-    let mut balance = 10.0f64;
-
-    for day in 1..=days_in_month {
-        // Deterministic pseudo-random swing per day.
-        let swing = ((day as f64 * 7.13).sin()) * 0.5;
-        let trades = ((day % 5) as i64).max(0);
-        balance += swing;
-        month_net_pnl_sol += swing;
-        month_trades += trades;
-        let wins = if swing >= 0.0 { trades } else { trades / 2 };
-        days.push(CalendarDay {
-            day,
-            date: format!("{year:04}-{month:02}-{day:02}"),
-            net_pnl_sol: swing,
-            profit_sol: swing.max(0.0),
-            loss_sol: (-swing).max(0.0),
-            trades,
-            wins,
-            portfolio_value_sol: Some(balance),
-            has_data: trades > 0,
-        });
-    }
-
-    PortfolioCalendarResponse {
-        year,
-        month,
-        first_weekday,
-        days_in_month,
-        days,
-        month_net_pnl_sol,
-        month_trades,
     }
 }

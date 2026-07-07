@@ -162,7 +162,35 @@ impl Service for WebserverService {
             true,
         );
 
-        Ok(vec![handle])
+        let mut handles = vec![handle];
+
+        // Demo mode normally runs webserver-only (no wallet/RPC), so the SOL price
+        // service never starts and the header would show a stale hardcoded price.
+        // Start a lightweight SOL price service + the SOL/USD reference chart mirror
+        // so the demo header shows a genuinely LIVE price whenever the network is
+        // reachable (it still falls back to a constant when offline).
+        if crate::webserver::demo::is_demo_mode() {
+            match crate::sol_price::start_sol_price_service(shutdown.clone(), monitor.clone()).await
+            {
+                Ok(h) => {
+                    handles.push(h);
+                    handles.push(crate::ohlcvs::sol_usd_chart::start(
+                        shutdown.clone(),
+                        monitor.clone(),
+                    ));
+                    logger::info(
+                        LogTag::Webserver,
+                        "Demo mode: live SOL price service started",
+                    );
+                }
+                Err(e) => logger::warning(
+                    LogTag::Webserver,
+                    &format!("Demo mode: could not start live SOL price service: {e}"),
+                ),
+            }
+        }
+
+        Ok(handles)
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
