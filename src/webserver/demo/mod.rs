@@ -17,6 +17,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod aggregates;
+mod ai;
 mod dashboard;
 mod data;
 mod header;
@@ -24,6 +25,7 @@ mod positions;
 mod trader;
 mod wallet;
 
+pub use ai::get_demo_ai_status;
 pub use dashboard::{
     get_demo_dashboard_overview, get_demo_home_dashboard, get_demo_portfolio_calendar,
 };

@@ -21,6 +21,29 @@ pub struct AiStatusResponse {
     pub total_evaluations: u64,
     pub cache_entries: usize,
     pub cache_fresh_entries: usize,
+    /// Headline metrics for the overview cards.
+    pub metrics: AiMetrics,
+    /// Newest evaluation decisions for the overview feed.
+    pub recent_decisions: Vec<AiDecision>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AiMetrics {
+    pub total_evaluations: u64,
+    pub cache_hit_rate: f64,
+    pub avg_response_time_ms: f64,
+    pub active_providers: u32,
+    pub total_providers: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AiDecision {
+    pub decision: String,
+    pub context: String,
+    pub token: String,
+    pub timestamp: String,
+    pub latency_ms: f64,
+    pub confidence: f64,
 }
 
 #[derive(Debug, Serialize)]

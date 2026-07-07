@@ -15,6 +15,10 @@ use super::types::*;
 
 /// GET /api/ai/status - Get AI module status
 pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
+    if crate::webserver::demo::is_demo_mode() {
+        return success_response(crate::webserver::demo::get_demo_ai_status());
+    }
+
     let config = with_config(|cfg| cfg.ai.clone());
 
     // Get cache stats
@@ -70,6 +74,12 @@ pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
         rate_limit_per_minute: config.providers.Assistant.rate_limit_per_minute,
     });
 
+    let active_providers = providers
+        .iter()
+        .filter(|p| p.enabled && p.has_api_key)
+        .count() as u32;
+    let total_providers = providers.len() as u32;
+
     let response = AiStatusResponse {
         enabled: config.enabled,
         filtering_enabled: config.filtering_enabled,
@@ -80,6 +90,14 @@ pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
         total_evaluations: 0, // TODO: Add metrics tracking
         cache_entries: total_entries,
         cache_fresh_entries: fresh_entries,
+        metrics: AiMetrics {
+            total_evaluations: 0, // TODO: Add metrics tracking
+            cache_hit_rate: 0.0,
+            avg_response_time_ms: 0.0,
+            active_providers,
+            total_providers,
+        },
+        recent_decisions: Vec::new(),
     };
 
     success_response(response)

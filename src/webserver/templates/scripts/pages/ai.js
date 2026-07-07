@@ -297,7 +297,7 @@ function createLifecycle() {
               ? "decision-reject"
               : "";
         const icon =
-          d.decision === "allow" ? "check-circle" : d.decision === "reject" ? "x-circle" : "help-circle";
+          d.decision === "allow" ? "circle-check" : d.decision === "reject" ? "circle-x" : "info";
         const time = d.timestamp ? Utils.formatTimeAgo(new Date(d.timestamp)) : "";
 
         return `
