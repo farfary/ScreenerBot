@@ -46,6 +46,11 @@ let isRecovering = false; // True while a one-click recovery (e.g. wallet reset)
 let dashboardLoaded = false; // True once the dashboard URL has been loaded successfully
 let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in window-state.json
 
+function getBackendExtraArgs() {
+  const raw = process.env.SCREENERBOT_EXTRA_ARGS || '';
+  return raw.split(/\s+/).map(arg => arg.trim()).filter(Boolean);
+}
+
 // Window/splash base color per theme — must match the dashboard's --bg-primary
 // (foundation.css: light #f8f9fb, dark #0d1117) so the splash and the brief
 // pre-paint window chrome render in the same theme as the last run.
@@ -1160,7 +1165,7 @@ async function initialize() {
 
   // Start the backend
   updateLoadingStatus('Starting backend services...');
-  const backend = startBackend();
+  const backend = startBackend(getBackendExtraArgs());
   
   if (!backend) {
     console.error('[Electron] Failed to start backend process');

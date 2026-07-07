@@ -1,5 +1,24 @@
 # CLI Arguments Reference
 
+## Display and Demo Mode
+
+### --dashboard-demo
+
+Enable hardcoded dashboard demo data for screenshots, marketing, and UI review.
+
+**Usage**:
+
+```bash
+screenerbot --dashboard-demo
+screenerbot --gui --dashboard-demo
+```
+
+**Notes**:
+
+- Demo mode affects dashboard API responses that have demo fixtures.
+- In GUI mode, Electron still passes `--gui`; demo mode is an additional backend flag.
+- The wrapper launcher supports this through `./run.sh demo` or `./run.sh headless --demo`.
+
 ## Webserver Configuration
 
 ### --port <PORT>
