@@ -18,7 +18,7 @@ pub use types::{
     TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 
-pub use database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
+pub use database::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};
 pub use priorities::ActivityType;
 pub use service::OhlcvService;
 
@@ -121,6 +121,10 @@ pub async fn delete_token_data(mint: &str) -> OhlcvResult<DeleteResult> {
 
 pub async fn delete_inactive_tokens(inactive_hours: i64) -> OhlcvResult<Vec<String>> {
     service_api::delete_inactive_tokens(inactive_hours).await
+}
+
+pub async fn clear_all_ohlcv_data() -> OhlcvResult<ClearAllResult> {
+    service_api::clear_all_ohlcv_data().await
 }
 
 pub async fn get_database_stats() -> OhlcvResult<DatabaseStats> {

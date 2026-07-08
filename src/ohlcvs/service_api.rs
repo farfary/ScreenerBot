@@ -1,6 +1,6 @@
 //! OHLCV service — public API functions for querying candle data.
 
-use super::database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
+use super::database::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};
 use super::priorities::ActivityType;
 use super::service::{get_or_init_service, OhlcvServiceImpl, OHLCV_SERVICE};
 use super::types::{
@@ -229,6 +229,18 @@ pub async fn delete_inactive_tokens(inactive_hours: i64) -> OhlcvResult<Vec<Stri
     let db = Arc::clone(&service.db);
 
     tokio::task::spawn_blocking(move || db.delete_inactive_tokens(inactive_hours))
+        .await
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
+}
+
+/// Clear ALL cached OHLCV candle data (candles + gaps) and reset backfill
+/// progress so every monitored token re-fetches from scratch. Pools and the
+/// monitoring list are preserved.
+pub async fn clear_all_ohlcv_data() -> OhlcvResult<ClearAllResult> {
+    let service = get_or_init_service().await?;
+    let db = Arc::clone(&service.db);
+
+    tokio::task::spawn_blocking(move || db.clear_all_ohlcv_data())
         .await
         .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }

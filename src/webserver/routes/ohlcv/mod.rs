@@ -16,6 +16,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/ohlcv/tokens", get(handlers::get_all_tokens_handler))
         .route("/ohlcv/stats", get(handlers::get_stats_handler))
         .route("/ohlcv/cleanup", post(handlers::cleanup_inactive_handler))
+        .route("/ohlcv/cache/clear", post(handlers::clear_all_handler))
         // Data endpoints
         .route("/ohlcv/:mint", get(handlers::get_ohlcv_data_handler))
         .route("/ohlcv/:mint/pools", get(handlers::get_pools_handler))

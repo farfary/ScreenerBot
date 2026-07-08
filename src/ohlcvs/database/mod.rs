@@ -6,7 +6,7 @@ mod gaps;
 mod maintenance;
 pub mod types;
 
-pub use types::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
+pub use types::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};
 
 use crate::database;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
@@ -14,6 +14,23 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Result as SqliteResult};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+/// Version of the OHLCV candle data logic. Bump this whenever a change to how
+/// candles are fetched/stored (locally or by the data server) means the existing
+/// cached candles are no longer trustworthy and should be re-fetched. On startup
+/// a stored version that differs from this constant triggers a one-time wipe of
+/// the local candle/gap data so every monitored token re-backfills with the
+/// current logic — self-healing across app restarts for every user, no manual
+/// cache clearing required.
+///
+/// Pool rows and the monitoring list (which tokens to watch) are preserved; only
+/// the candle data and gap tracking are cleared and backfill progress is reset.
+///
+/// Changelog:
+///   1 — 2026-07: data-server `fetch_limit` now bridges interior gaps in one
+///       fetch (was a fixed refresh window that left permanent holes on cold
+///       tokens); wipe stale local caches so they re-pull the healed series.
+const OHLCV_DATA_VERSION: i64 = 1;
 
 pub struct OhlcvDatabase {
     pub(crate) conn: Arc<Mutex<Connection>>,
@@ -141,7 +158,43 @@ impl OhlcvDatabase {
             [],
         );
 
+        // One-time wipe of stale candle caches when the OHLCV data logic version
+        // changed (uses SQLite's built-in user_version slot — no extra schema).
+        let stored: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to read user_version: {e}")))?;
+        if stored != OHLCV_DATA_VERSION {
+            let result = wipe_candle_data(&conn).map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to wipe candle data: {e}"))
+            })?;
+            conn.pragma_update(None, "user_version", OHLCV_DATA_VERSION)
+                .map_err(|e| {
+                    OhlcvError::DatabaseError(format!("Failed to set user_version: {e}"))
+                })?;
+            tracing::warn!(
+                from = stored,
+                to = OHLCV_DATA_VERSION,
+                candles_deleted = result.candles_deleted,
+                gaps_deleted = result.gaps_deleted,
+                tokens_reset = result.tokens_reset,
+                "OHLCV data version changed; wiped local candle caches for re-fetch"
+            );
+        }
+
         Ok(())
+    }
+
+    /// Clear ALL cached OHLCV candles and gaps and reset every token's backfill
+    /// progress so monitored tokens re-fetch from scratch. Pools and the
+    /// monitoring list are preserved. Backs both the manual "Clear OHLCV Cache"
+    /// action and the automatic data-version wipe.
+    pub fn clear_all_ohlcv_data(&self) -> OhlcvResult<ClearAllResult> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        wipe_candle_data(&conn)
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to clear OHLCV data: {e}")))
     }
 
     // ==================== Pool Management ====================
@@ -267,4 +320,37 @@ impl OhlcvDatabase {
 
         Ok(())
     }
+}
+
+/// Delete all candles + gaps and reset every monitor row's backfill progress so
+/// the token re-backfills from scratch on the next scheduler pass. Operates on an
+/// already-locked connection so it can be shared by both the constructor's
+/// version wipe and the public `clear_all_ohlcv_data` (which locks first).
+fn wipe_candle_data(conn: &Connection) -> SqliteResult<ClearAllResult> {
+    let candles_deleted = conn.execute("DELETE FROM ohlcv_candles", [])?;
+    let gaps_deleted = conn.execute("DELETE FROM ohlcv_gaps", [])?;
+    // Reset backfill progress + activity counters so every monitored token is
+    // treated as never-fetched and re-pulls its full series. The monitor rows
+    // themselves (and pools) stay so we still know which tokens to watch.
+    let tokens_reset = conn.execute(
+        "UPDATE ohlcv_monitor_config SET
+            backfill_1m_complete = 0,
+            backfill_5m_complete = 0,
+            backfill_15m_complete = 0,
+            backfill_1h_complete = 0,
+            backfill_4h_complete = 0,
+            backfill_12h_complete = 0,
+            backfill_1d_complete = 0,
+            backfill_started_at = NULL,
+            backfill_completed_at = NULL,
+            last_fetch = NULL,
+            consecutive_empty_fetches = 0,
+            updated_at = CURRENT_TIMESTAMP",
+        [],
+    )?;
+    Ok(ClearAllResult {
+        candles_deleted,
+        gaps_deleted,
+        tokens_reset,
+    })
 }

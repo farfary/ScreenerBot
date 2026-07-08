@@ -91,6 +91,21 @@ export function buildDataTab() {
           
           <div class="settings-field">
             <div class="settings-field-info">
+              <label>Clear All OHLCV Cache</label>
+              <span class="settings-field-hint">
+                Wipe all cached candlestick data and re-fetch every monitored token from scratch. Use if charts look wrong or after a data logic update.
+              </span>
+            </div>
+            <div class="settings-field-control">
+              <button id="clearOhlcvCacheBtn" class="btn btn-warning btn-sm">
+                <i class="icon-trash-2"></i>
+                Clear OHLCV Cache
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
               <label>UI State Cache</label>
               <span class="settings-field-hint">
                 Clear saved table preferences, filter states, and view settings.
@@ -228,6 +243,44 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
       } finally {
         cleanupBtn.disabled = false;
         cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup OHLCV';
+      }
+    });
+  }
+
+  // Clear all OHLCV cache button
+  const clearOhlcvBtn = content.querySelector("#clearOhlcvCacheBtn");
+  if (clearOhlcvBtn) {
+    clearOhlcvBtn.addEventListener("click", async () => {
+      const confirmResult = await ConfirmationDialog.show({
+        title: "Clear All OHLCV Cache",
+        message:
+          "Wipe all cached candlestick data for every token? Monitored tokens will re-fetch their history from scratch. This cannot be undone.",
+        confirmLabel: "Clear",
+        cancelLabel: "Cancel",
+        variant: "danger",
+      });
+      if (!confirmResult.confirmed) return;
+
+      clearOhlcvBtn.disabled = true;
+      clearOhlcvBtn.innerHTML = '<i class="icon-loader spin"></i> Clearing...';
+
+      try {
+        const response = await fetch("/api/ohlcv/cache/clear", { method: "POST" });
+        if (response.ok) {
+          const data = await response.json();
+          Utils.showToast(
+            `Cleared ${data.candles_deleted} candles across ${data.tokens_reset} tokens; re-fetching`,
+            "success",
+          );
+          loadDataOverview(content);
+        } else {
+          Utils.showToast("Failed to clear OHLCV cache", "error");
+        }
+      } catch (err) {
+        Utils.showToast("Failed to clear OHLCV cache: " + err.message, "error");
+      } finally {
+        clearOhlcvBtn.disabled = false;
+        clearOhlcvBtn.innerHTML = '<i class="icon-trash-2"></i> Clear OHLCV Cache';
       }
     });
   }

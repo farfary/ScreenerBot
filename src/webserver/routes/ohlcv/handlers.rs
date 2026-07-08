@@ -2,10 +2,10 @@
 
 use super::types::*;
 use crate::ohlcvs::{
-    add_token_monitoring, delete_inactive_tokens, delete_token_data, get_all_tokens_with_status,
-    get_available_pools, get_data_gaps, get_database_stats, get_metrics, get_ohlcv_data,
-    record_activity, remove_token_monitoring, request_refresh, ActivityType, DatabaseStats,
-    Priority, Timeframe,
+    add_token_monitoring, clear_all_ohlcv_data, delete_inactive_tokens, delete_token_data,
+    get_all_tokens_with_status, get_available_pools, get_data_gaps, get_database_stats,
+    get_metrics, get_ohlcv_data, record_activity, remove_token_monitoring, request_refresh,
+    ActivityType, DatabaseStats, Priority, Timeframe,
 };
 use crate::webserver::utils::{error_response, success_response};
 use axum::{
@@ -415,6 +415,25 @@ pub(super) async fn delete_token_handler(Path(mint): Path<String>) -> Result<Res
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_delete_failed",
             &format!("Failed to delete token data: {e}"),
+            None,
+        )),
+    }
+}
+
+/// Clear ALL cached OHLCV candle data (manual "Clear OHLCV Cache" action).
+/// Wipes candles + gaps and resets backfill progress so monitored tokens
+/// re-fetch from scratch; pools and the monitoring list are preserved.
+pub(super) async fn clear_all_handler() -> Result<Response, Response> {
+    match clear_all_ohlcv_data().await {
+        Ok(result) => Ok(success_response(ClearAllResponse {
+            candles_deleted: result.candles_deleted,
+            gaps_deleted: result.gaps_deleted,
+            tokens_reset: result.tokens_reset,
+        })),
+        Err(e) => Err(error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ohlcv_clear_failed",
+            &format!("Failed to clear OHLCV cache: {e}"),
             None,
         )),
     }

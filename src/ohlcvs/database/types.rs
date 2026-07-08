@@ -36,6 +36,15 @@ pub struct DeleteResult {
     pub config_deleted: usize,
 }
 
+/// Result of clearing ALL cached OHLCV candle data (manual clear or a data
+/// version bump). Pools and the monitoring list are preserved.
+#[derive(Debug, Clone, Default)]
+pub struct ClearAllResult {
+    pub candles_deleted: usize,
+    pub gaps_deleted: usize,
+    pub tokens_reset: usize,
+}
+
 /// Database statistics
 #[derive(Debug, Clone)]
 pub struct DatabaseStats {

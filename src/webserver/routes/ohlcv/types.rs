@@ -138,6 +138,13 @@ pub(super) struct CleanupResponse {
     pub deleted_mints: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub(super) struct ClearAllResponse {
+    pub candles_deleted: usize,
+    pub gaps_deleted: usize,
+    pub tokens_reset: usize,
+}
+
 // ==================== Query Parameters ====================
 
 #[derive(Debug, Deserialize)]
