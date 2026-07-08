@@ -290,30 +290,30 @@ function createLifecycle() {
 
     container.innerHTML = decisions
       .map((d) => {
-        const decisionClass =
-          d.decision === "allow"
-            ? "decision-allow"
-            : d.decision === "reject"
-              ? "decision-reject"
-              : "";
+        const decision = (d.decision || "").toLowerCase();
+        const state = decision === "allow" ? "allow" : decision === "reject" ? "reject" : "neutral";
         const icon =
-          d.decision === "allow" ? "circle-check" : d.decision === "reject" ? "circle-x" : "info";
+          state === "allow" ? "circle-check" : state === "reject" ? "circle-x" : "info";
         const time = d.timestamp ? Utils.formatTimeAgo(new Date(d.timestamp)) : "";
+        const confidence = Math.round((d.confidence || 0) * 100);
+        const latency = Math.round(d.latency_ms || 0);
 
         return `
-          <div class="decision-card ${decisionClass}">
-            <div class="decision-header">
-              <i class="icon-${icon}"></i>
-              <span class="decision-type">${Utils.escapeHtml(d.context || "Unknown")}</span>
-              <span class="decision-time">${time}</span>
+          <div class="decision-card" data-decision="${state}">
+            <div class="decision-icon"><i class="icon-${icon}"></i></div>
+            <div class="decision-main">
+              <div class="decision-top">
+                <span class="decision-token">${Utils.escapeHtml(d.token || "N/A")}</span>
+                ${d.context ? `<span class="decision-context">${Utils.escapeHtml(d.context)}</span>` : ""}
+              </div>
+              <div class="decision-time"><i class="icon-clock"></i> ${time || "just now"}</div>
             </div>
-            <div class="decision-body">
-              <div class="decision-token">${Utils.escapeHtml(d.token || "N/A")}</div>
-              <div class="decision-result">${Utils.escapeHtml(d.decision.toUpperCase())}</div>
-            </div>
-            <div class="decision-meta">
-              <span class="meta-item"><i class="icon-zap"></i> ${Math.round(d.latency_ms || 0)}ms</span>
-              <span class="meta-item"><i class="icon-activity"></i> ${Math.round((d.confidence || 0) * 100)}%</span>
+            <div class="decision-side">
+              <span class="decision-result">${Utils.escapeHtml((d.decision || "").toUpperCase() || "N/A")}</span>
+              <div class="decision-stats">
+                <span title="Latency"><i class="icon-zap"></i> ${latency}ms</span>
+                <span title="Confidence"><i class="icon-activity"></i> ${confidence}%</span>
+              </div>
             </div>
           </div>
         `;

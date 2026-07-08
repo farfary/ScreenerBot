@@ -229,11 +229,6 @@
   }
 }
 
-/* Ensure smooth entrance */
-.ai-panel-content.active {
-  animation-timing-function: ease-out;
-}
-
 .ai-panel-header {
   display: flex;
   justify-content: space-between;
@@ -304,11 +299,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1.1rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--ai-card-radius);
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
   transition: all 0.25s ease;
 }
 
@@ -363,12 +358,40 @@
 }
 
 .ai-page .status-bar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
 
 .ai-status-bar[data-status="enabled"] .status-bar-status {
   color: var(--success);
+}
+
+/* Pulsing live dot when the module is active. */
+.ai-status-bar[data-status="enabled"] .status-bar-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 0 var(--success-alpha-40);
+  animation: ai-status-pulse 2s infinite;
+}
+
+@keyframes ai-status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--success-alpha-40);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 .ai-page .status-bar-toggle {
@@ -427,26 +450,33 @@
   color: var(--text-muted);
 }
 
-/* Metrics Grid */
+/* ============================================================================
+   Key Metrics
+   ============================================================================ */
+
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
 }
 
 .metric-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: var(--bg-tertiary);
+  gap: 0.85rem;
+  padding: 1.1rem;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  transition: all var(--transition-base);
+  border-radius: var(--ai-card-radius);
+  transition:
+    transform var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
 .metric-card:hover {
-  border-color: var(--primary-alpha-40);
+  transform: translateY(-2px);
   box-shadow: var(--ai-card-shadow);
 }
 
@@ -454,96 +484,222 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   border-radius: var(--radius-lg);
   background: var(--primary-alpha-10);
   color: var(--primary);
-  font-size: 1.1rem;
+  font-size: 1.2rem;
+}
+
+/* Per-metric accent tints */
+.metric-card[data-accent="primary"]:hover {
+  border-color: var(--primary-alpha-40);
+}
+
+.metric-card[data-accent="success"] .metric-icon {
+  background: var(--success-alpha-15);
+  color: var(--success);
+}
+
+.metric-card[data-accent="success"]:hover {
+  border-color: var(--success-alpha-40);
+}
+
+.metric-card[data-accent="info"] .metric-icon {
+  background: var(--info-alpha-15);
+  color: var(--info-color);
+}
+
+.metric-card[data-accent="info"]:hover {
+  border-color: var(--info-alpha-15);
+}
+
+.metric-card[data-accent="warning"] .metric-icon {
+  background: var(--warning-alpha-15);
+  color: var(--warning);
+}
+
+.metric-card[data-accent="warning"]:hover {
+  border-color: var(--warning-alpha-30);
 }
 
 .metric-content {
   flex: 1;
+  min-width: 0;
 }
 
 .metric-label {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.3rem;
 }
 
 .metric-value {
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
   color: var(--text-primary);
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Recent Decisions */
+/* ============================================================================
+   Recent Decisions
+   ============================================================================ */
+
 #recent-decisions-container {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0.5rem;
-  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 420px;
   overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
-.decision-item {
+#recent-decisions-container .empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.decision-card {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem;
-  border-bottom: 1px solid var(--border-color);
-  transition: background var(--transition-base);
+  padding: 0.7rem 0.85rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--transition-base),
+    transform var(--transition-base);
 }
 
-.decision-item:last-child {
-  border-bottom: none;
-}
-
-.decision-item:hover {
-  background: var(--bg-secondary);
+.decision-card:hover {
+  border-color: var(--primary-alpha-40);
+  transform: translateX(2px);
 }
 
 .decision-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
   border-radius: var(--radius-md);
   font-size: 1rem;
 }
 
-.decision-icon.pass {
+.decision-card[data-decision="allow"] .decision-icon {
   background: var(--success-alpha-15);
   color: var(--success);
 }
 
-.decision-icon.reject {
+.decision-card[data-decision="reject"] .decision-icon {
   background: var(--danger-alpha-15);
   color: var(--danger);
 }
 
-.decision-content {
+.decision-card[data-decision="neutral"] .decision-icon {
+  background: var(--info-alpha-15);
+  color: var(--info-color);
+}
+
+.decision-main {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
-.decision-mint {
-  font-size: 0.85rem;
+.decision-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.decision-token {
   font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.9rem;
   color: var(--text-primary);
-  margin-bottom: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.decision-details {
-  font-size: 0.75rem;
+.decision-context {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.05rem 0.4rem;
+}
+
+.decision-time {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
 }
 
-.decision-confidence {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
+.decision-time i {
+  font-size: 0.8rem;
+}
+
+.decision-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.decision-result {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+}
+
+.decision-card[data-decision="allow"] .decision-result {
+  background: var(--success-alpha-15);
+  color: var(--success);
+}
+
+.decision-card[data-decision="reject"] .decision-result {
+  background: var(--danger-alpha-15);
+  color: var(--danger);
+}
+
+.decision-card[data-decision="neutral"] .decision-result {
+  background: var(--info-alpha-15);
+  color: var(--info-color);
+}
+
+.decision-stats {
+  display: flex;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.decision-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }

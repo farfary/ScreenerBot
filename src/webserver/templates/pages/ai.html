@@ -67,8 +67,15 @@
         <div id="chat-panel" class="ai-panel-content active">
         </div>
 
-        <!-- Stats Panel -->
+        <!-- Stats Panel (Overview) -->
         <div id="stats-panel" class="ai-panel-content">
+          <div class="ai-panel-header">
+            <h2 class="ai-panel-title">Assistant Overview</h2>
+            <p class="ai-panel-description">
+              Live module status, performance metrics, and the latest AI evaluations.
+            </p>
+          </div>
+
           <!-- AI Status Control -->
           <div class="ai-status-bar" id="ai-status-bar">
             <div class="status-bar-main">
@@ -89,39 +96,34 @@
             </div>
           </div>
 
-          <!-- Key Metrics Section -->
-          <div class="stats-section stats-section-metrics">
-            <div class="section-header">
-              <h3><i class="icon-chart-bar"></i> Key Metrics</h3>
+          <!-- Key Metrics -->
+          <div class="metrics-grid">
+            <div class="metric-card" data-accent="primary">
+              <div class="metric-icon"><i class="icon-hash"></i></div>
+              <div class="metric-content">
+                <div class="metric-label">Total Evaluations</div>
+                <div class="metric-value" id="metric-total-evaluations">0</div>
+              </div>
             </div>
-            <div class="metrics-grid">
-              <div class="metric-card">
-                <div class="metric-icon"><i class="icon-hash"></i></div>
-                <div class="metric-content">
-                  <div class="metric-label">Total Evaluations</div>
-                  <div class="metric-value" id="metric-total-evaluations">0</div>
-                </div>
+            <div class="metric-card" data-accent="success">
+              <div class="metric-icon"><i class="icon-zap"></i></div>
+              <div class="metric-content">
+                <div class="metric-label">Cache Hit Rate</div>
+                <div class="metric-value" id="metric-cache-hit-rate">0%</div>
               </div>
-              <div class="metric-card">
-                <div class="metric-icon"><i class="icon-zap"></i></div>
-                <div class="metric-content">
-                  <div class="metric-label">Cache Hit Rate</div>
-                  <div class="metric-value" id="metric-cache-hit-rate">0%</div>
-                </div>
+            </div>
+            <div class="metric-card" data-accent="info">
+              <div class="metric-icon"><i class="icon-timer"></i></div>
+              <div class="metric-content">
+                <div class="metric-label">Avg Latency</div>
+                <div class="metric-value" id="metric-avg-latency">0ms</div>
               </div>
-              <div class="metric-card">
-                <div class="metric-icon"><i class="icon-timer"></i></div>
-                <div class="metric-content">
-                  <div class="metric-label">Avg Latency</div>
-                  <div class="metric-value" id="metric-avg-latency">0ms</div>
-                </div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-icon"><i class="icon-server"></i></div>
-                <div class="metric-content">
-                  <div class="metric-label">Providers</div>
-                  <div class="metric-value" id="metric-providers">0 / 10</div>
-                </div>
+            </div>
+            <div class="metric-card" data-accent="warning">
+              <div class="metric-icon"><i class="icon-server"></i></div>
+              <div class="metric-content">
+                <div class="metric-label">Active Providers</div>
+                <div class="metric-value" id="metric-providers">0 / 10</div>
               </div>
             </div>
           </div>
@@ -130,7 +132,7 @@
           <div class="stats-section stats-section-decisions">
             <div class="section-header">
               <h3><i class="icon-list"></i> Recent Decisions</h3>
-              <span class="section-subtitle">Last 10 Assistant evaluations</span>
+              <span class="section-subtitle">Latest AI evaluations</span>
             </div>
             <div id="recent-decisions-container"></div>
           </div>
