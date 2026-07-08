@@ -30,7 +30,12 @@ use std::sync::{Arc, Mutex};
 ///   1 — 2026-07: data-server `fetch_limit` now bridges interior gaps in one
 ///       fetch (was a fixed refresh window that left permanent holes on cold
 ///       tokens); wipe stale local caches so they re-pull the healed series.
-const OHLCV_DATA_VERSION: i64 = 1;
+///   2 — 2026-07: backfill now requests full depth (`max_backfill_candles` = 1000
+///       per timeframe, was per-tf ~30-day caps) and the data server deep-pages
+///       history backward. Existing caches capped at ~30 days had their backfill
+///       flags marked complete, so they would never re-deepen — wipe them so
+///       every token re-pulls the now-deep coarse-frame series.
+const OHLCV_DATA_VERSION: i64 = 2;
 
 pub struct OhlcvDatabase {
     pub(crate) conn: Arc<Mutex<Connection>>,
