@@ -80,6 +80,15 @@ impl OhlcvDatabase {
         let mut inserted = 0;
 
         for candle in candles {
+            // Never record an empty no-trade candle. Candles are SOL-denominated,
+            // so a real trade always carries volume > 0; volume == 0 means no
+            // swaps happened in that period and the provider merely carried the
+            // price forward. Storing those paints fake price action on the chart,
+            // so we drop them (the series shows an honest gap instead, like
+            // TradingView/DexScreener on an illiquid pair).
+            if !candle.volume.is_finite() || candle.volume <= 0.0 {
+                continue;
+            }
             let aligned_ts = if bucket > 0 {
                 (candle.timestamp / bucket) * bucket
             } else {
@@ -193,13 +202,16 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
     }
 
-    /// Per-timeframe candle count and latest timestamp for a token, in a single
-    /// grouped query. Used by the chart status indicator so the dialog can show
-    /// exactly which timeframes have data without firing one probe request per
-    /// timeframe. Returns (timeframe_str, candle_count, latest_timestamp).
+    /// Per-timeframe candle count and latest timestamp for a token ON A SINGLE
+    /// POOL, in one grouped query. Feeds the chart status indicator. It MUST be
+    /// scoped to the same pool the chart reads (`get_ohlcv_data`) — counting
+    /// across every pool_address would combine candles from different pools
+    /// (e.g. an old pool the token has since migrated away from) and report a
+    /// count the chart never shows. Returns (timeframe_str, count, latest_ts).
     pub fn get_timeframe_summary(
         &self,
         mint: &str,
+        pool_address: &str,
     ) -> OhlcvResult<Vec<(String, i64, Option<i64>)>> {
         let conn = self
             .conn
@@ -210,13 +222,13 @@ impl OhlcvDatabase {
             .prepare(
                 "SELECT timeframe, COUNT(*) AS cnt, MAX(timestamp) AS latest
                  FROM ohlcv_candles
-                 WHERE mint = ?1
+                 WHERE mint = ?1 AND pool_address = ?2
                  GROUP BY timeframe",
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
 
         let rows = stmt
-            .query_map(params![mint], |row| {
+            .query_map(params![mint, pool_address], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, i64>(1)?,
@@ -227,6 +239,26 @@ impl OhlcvDatabase {
 
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
+    }
+
+    /// Delete every candle stored under a pool that is no longer the token's
+    /// resolved pool. Called when pool discovery drops a pool from a token so a
+    /// stale pool's price series can never resurface or be combined with the
+    /// current pool's candles. Returns the number of rows removed.
+    pub fn delete_candles_for_pool(&self, mint: &str, pool_address: &str) -> OhlcvResult<usize> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        let removed = conn
+            .execute(
+                "DELETE FROM ohlcv_candles WHERE mint = ?1 AND pool_address = ?2",
+                params![mint, pool_address],
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Delete failed: {e}")))?;
+
+        Ok(removed)
     }
 
     /// Per-timeframe time of the most recent candle write (unix secs), i.e. the

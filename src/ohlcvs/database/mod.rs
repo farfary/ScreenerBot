@@ -40,7 +40,11 @@ use std::sync::{Arc, Mutex};
 ///       12h at +10h, ts % 43200 == 36000; others use the midnight grid), so the
 ///       stored 12h series interleaved two grids ~2h apart and rendered corrupt.
 ///       Wipe so every token re-pulls onto the single normalized grid.
-const OHLCV_DATA_VERSION: i64 = 3;
+///   4 — 2026-07: empty no-trade candles (volume == 0) are no longer recorded,
+///       and reads/status are scoped to the single resolved pool (no cross-pool
+///       combining). Wipe so existing zero-volume rows and any stale other-pool
+///       candles are cleared and re-pulled clean.
+const OHLCV_DATA_VERSION: i64 = 4;
 
 pub struct OhlcvDatabase {
     pub(crate) conn: Arc<Mutex<Connection>>,

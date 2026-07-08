@@ -141,29 +141,19 @@ impl OhlcvServiceImpl {
         .await
         .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
 
-        // Fallback: if no candles found for specific pool, try querying without pool filter
-        // This handles cases where candles were stored under a different pool address
-        if candles.is_empty() {
-            let db = Arc::clone(&self.db);
-            let mint_owned = mint.to_string();
-            candles = tokio::task::spawn_blocking(move || {
-                db.get_candles(
-                    &mint_owned,
-                    None, // Query any pool for this mint
-                    timeframe,
-                    from_timestamp,
-                    to_timestamp,
-                    db_limit,
-                )
-            })
-            .await
-            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
-        }
+        // NOTE: deliberately NO "query any pool" fallback here. Candles from a
+        // different pool are a different price series; merging them would combine
+        // pools (the token-details chart must only ever show the single resolved
+        // pool). If the resolved pool has no candles yet the chart shows an empty
+        // "collecting" state until the backfill fills THIS pool.
 
-        // Fallback: if still empty and requested timeframe is not 1m, try aggregating from 1m data
+        // Fallback: if still empty and requested timeframe is not 1m, try
+        // aggregating from 1m data — scoped to the SAME resolved pool (never
+        // across pools).
         if candles.is_empty() && timeframe != Timeframe::Minute1 {
             let db = Arc::clone(&self.db);
             let mint_owned = mint.to_string();
+            let pool_owned = pool.clone();
             // Fetch enough 1m candles to aggregate into requested limit
             // For 5m we need 5x more 1m candles, etc.
             let multiplier = timeframe.to_seconds() / Timeframe::Minute1.to_seconds();
@@ -177,7 +167,7 @@ impl OhlcvServiceImpl {
             let raw_candles = tokio::task::spawn_blocking(move || {
                 db.get_candles(
                     &mint_owned,
-                    None,
+                    Some(&pool_owned),
                     Timeframe::Minute1,
                     from_timestamp,
                     to_timestamp,
@@ -243,7 +233,19 @@ impl OhlcvServiceImpl {
     /// state + candle counts + backfill flags). Cheap: one grouped candle query
     /// plus per-timeframe backfill flags from the monitor config row.
     pub(super) async fn get_status(&self, mint: &str) -> OhlcvResult<OhlcvStatus> {
-        let summary = self.db.get_timeframe_summary(mint)?;
+        // Scope the summary to the SAME single pool the chart reads
+        // (`get_ohlcv_data`): default pool, else the best available. Without this
+        // the counts would sum every pool_address and diverge from the chart the
+        // moment a token has candles under more than one pool. No pool yet =>
+        // no data (empty summary), which is the correct "collecting" state.
+        let mut selected_pool = self.pool_manager.get_default_pool(mint).await?;
+        if selected_pool.is_none() {
+            selected_pool = self.pool_manager.get_best_pool(mint).await?;
+        }
+        let summary = match selected_pool.as_ref() {
+            Some(pool) => self.db.get_timeframe_summary(mint, &pool.address)?,
+            None => Vec::new(),
+        };
         let last_new_by_tf = self
             .db
             .get_timeframe_last_new_data(mint)

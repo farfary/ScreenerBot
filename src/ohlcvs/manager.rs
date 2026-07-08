@@ -291,6 +291,20 @@ impl PoolManager {
         let mut removed_addresses = Vec::new();
         for leftover in existing_map.into_values() {
             self.db.delete_pool(mint, &leftover.address)?;
+            // Also drop the removed pool's candles so a stale pool's price series
+            // can never resurface or be combined with the current pool's candles
+            // (the chart/status must only ever reflect the single resolved pool).
+            if let Ok(removed) = self.db.delete_candles_for_pool(mint, &leftover.address) {
+                if removed > 0 {
+                    logger::debug(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Removed {} candles from dropped pool {} for mint={}",
+                            removed, leftover.address, mint
+                        ),
+                    );
+                }
+            }
             removed_addresses.push(leftover.address);
         }
 
