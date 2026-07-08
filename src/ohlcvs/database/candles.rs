@@ -65,11 +65,28 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Transaction failed: {e}")))?;
 
         let timeframe_str = timeframe.as_str();
+        // Snap every timestamp to the canonical UTC-anchored bucket for this
+        // timeframe (floor to the interval), matching OhlcvAggregator's
+        // `(ts / bucket) * bucket` convention. Different OHLCV providers anchor
+        // some timeframes on different grids — notably 12h: GeckoTerminal returns
+        // 12h candles phased at +10h (ts % 43200 == 36000) while SolanaTracker,
+        // the derived-from-1m aggregator, and every other timeframe use the
+        // midnight grid (offset 0). Storing both raw phases in the same
+        // (mint,pool,timeframe) series interleaves candles ~2h apart and renders
+        // a corrupted chart with impossible price jumps. Normalizing here forces
+        // a single grid for all sources, so the chart matches TradingView /
+        // DexScreener (which also anchor at 00:00/12:00 UTC).
+        let bucket = timeframe.to_seconds();
         let mut inserted = 0;
 
         for candle in candles {
+            let aligned_ts = if bucket > 0 {
+                (candle.timestamp / bucket) * bucket
+            } else {
+                candle.timestamp
+            };
             let result = tx.execute(
-                "INSERT INTO ohlcv_candles 
+                "INSERT INTO ohlcv_candles
                  (mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(mint, pool_address, timeframe, timestamp) DO NOTHING",
@@ -77,7 +94,7 @@ impl OhlcvDatabase {
                     mint,
                     pool_address,
                     timeframe_str,
-                    candle.timestamp,
+                    aligned_ts,
                     candle.open,
                     candle.high,
                     candle.low,

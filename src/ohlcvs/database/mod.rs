@@ -35,7 +35,12 @@ use std::sync::{Arc, Mutex};
 ///       history backward. Existing caches capped at ~30 days had their backfill
 ///       flags marked complete, so they would never re-deepen — wipe them so
 ///       every token re-pulls the now-deep coarse-frame series.
-const OHLCV_DATA_VERSION: i64 = 2;
+///   3 — 2026-07: candle timestamps are now snapped to the canonical UTC bucket
+///       at ingest. Providers disagreed on the 12h anchor (GeckoTerminal phases
+///       12h at +10h, ts % 43200 == 36000; others use the midnight grid), so the
+///       stored 12h series interleaved two grids ~2h apart and rendered corrupt.
+///       Wipe so every token re-pulls onto the single normalized grid.
+const OHLCV_DATA_VERSION: i64 = 3;
 
 pub struct OhlcvDatabase {
     pub(crate) conn: Arc<Mutex<Connection>>,
