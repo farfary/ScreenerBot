@@ -68,16 +68,15 @@ impl Timeframe {
     }
 
     /// Maximum candles available from API for 30 days
-    pub fn max_candles_30d(&self) -> usize {
-        match self {
-            Timeframe::Minute1 => 43_200, // 30 * 24 * 60
-            Timeframe::Minute5 => 8_640,  // 30 * 24 * 12
-            Timeframe::Minute15 => 2_880, // 30 * 24 * 4
-            Timeframe::Hour1 => 720,      // 30 * 24
-            Timeframe::Hour4 => 180,      // 30 * 6
-            Timeframe::Hour12 => 60,      // 30 * 2
-            Timeframe::Day1 => 30,        // 30
-        }
+    /// How many candles to request per backfill call for this timeframe. The
+    /// fetcher clamps each call to MAX_CANDLES_PER_REQUEST (1000) and the server
+    /// returns however much history it holds, so requesting 1000 gets the DEEPEST
+    /// available series in one call: coarse frames span years (1d×1000 ≈ 2.7y,
+    /// 4h×1000 ≈ 166d, 1h×1000 ≈ 41d), fine frames as far as providers retain
+    /// (1m ≈ 16h, 5m ≈ 3.5d). The old per-tf "30-day" caps needlessly truncated
+    /// coarse charts (1d was 30 candles) even though the server had far more.
+    pub fn max_backfill_candles(&self) -> usize {
+        1000
     }
 
     /// Priority order for backfilling (fastest first)

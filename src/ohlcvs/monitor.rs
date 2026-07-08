@@ -210,7 +210,7 @@ impl OhlcvMonitor {
                     );
 
                     match runner
-                        .backfill_all_timeframes_30d(&mint_owned, &pool_owned, priority_owned)
+                        .backfill_all_timeframes(&mint_owned, &pool_owned, priority_owned)
                         .await
                     {
                         Ok(total) => {
@@ -1294,7 +1294,7 @@ impl OhlcvMonitor {
 
         tokio::spawn(async move {
             match runner
-                .backfill_all_timeframes_30d(&mint_owned, &pool_owned, priority)
+                .backfill_all_timeframes(&mint_owned, &pool_owned, priority)
                 .await
             {
                 Ok(points) => {
@@ -1519,24 +1519,34 @@ impl OhlcvMonitor {
                 }
             }
 
-            // Optional: Remove tokens no longer in Pool Service
-            // (Keep tokens that were manually added or have positions)
+            // Remove tokens no longer in Pool Service — but KEEP anything the user
+            // is actively interested in, so charts a user opens/trades stay ready
+            // (DexScreener-style) instead of being dropped the moment the trader's
+            // watchlist rotates. A token survives if it has an open position, is
+            // still in Pool Service, is High/Critical priority (viewed/requested/
+            // traded — see PriorityManager::update_priority_on_activity), or was
+            // active within the cache-retention grace window.
             let available_set: std::collections::HashSet<_> =
                 available_mints.iter().cloned().collect();
+            let grace_hours = with_config(|cfg| cfg.ohlcv.cache_retention_hours).max(0);
+            let activity_cutoff = Utc::now() - chrono::Duration::hours(grace_hours);
             let mut removed = 0;
 
             let active_tokens = self.active_tokens.read().await;
-            let tokens_to_check: Vec<String> = active_tokens.keys().cloned().collect();
+            let tokens_to_check: Vec<(String, Priority, DateTime<Utc>)> = active_tokens
+                .iter()
+                .map(|(mint, cfg)| (mint.clone(), cfg.priority, cfg.last_activity))
+                .collect();
             drop(active_tokens);
 
-            for mint in tokens_to_check {
-                // Don't remove if has open position
-                if open_positions.contains(&mint) {
-                    continue;
-                }
-
-                // Don't remove if still in Pool Service
-                if available_set.contains(&mint) {
+            for (mint, priority, last_activity) in tokens_to_check {
+                // Keep: open position, still in Pool Service, user-interest
+                // priority, or recently active within the grace window.
+                if open_positions.contains(&mint)
+                    || available_set.contains(&mint)
+                    || matches!(priority, Priority::Critical | Priority::High)
+                    || last_activity >= activity_cutoff
+                {
                     continue;
                 }
 
@@ -1635,16 +1645,15 @@ impl OhlcvMonitor {
 
     // ==================== Multi-Timeframe Backfill ====================
 
-    /// Backfill all timeframes for a token with 30-day history
-    /// Fetches timeframes in priority order (1d → 12h → 4h → 1h → 15m → 5m → 1m)
-    async fn backfill_all_timeframes_30d(
+    /// Backfill all timeframes for a token as deep as the source provides.
+    /// Fetches timeframes in priority order (1d → 12h → 4h → 1h → 15m → 5m → 1m);
+    /// each call requests `max_backfill_candles` (server returns all it holds).
+    async fn backfill_all_timeframes(
         &self,
         mint: &str,
         pool_address: &str,
         priority: Priority,
     ) -> OhlcvResult<usize> {
-        let now = Utc::now().timestamp();
-        let thirty_days_ago = now - (30 * 86400);
         let mut total_fetched = 0;
 
         // All timeframes in backfill priority order
@@ -1661,7 +1670,7 @@ impl OhlcvMonitor {
         logger::debug(
             LogTag::Ohlcv,
             &format!(
-                "Starting 30-day backfill for mint={} pool={} priority={:?}",
+                "Starting full-depth backfill for mint={} pool={} priority={:?}",
                 mint, pool_address, priority
             ),
         );
@@ -1681,10 +1690,7 @@ impl OhlcvMonitor {
             }
 
             // Fetch this timeframe
-            match self
-                .backfill_timeframe(mint, pool_address, timeframe, thirty_days_ago, now)
-                .await
-            {
+            match self.backfill_timeframe(mint, pool_address, timeframe).await {
                 Ok(count) => {
                     total_fetched += count;
                     if count > 0
@@ -1747,7 +1753,7 @@ impl OhlcvMonitor {
         logger::debug(
             LogTag::Ohlcv,
             &format!(
-                "Completed 30-day backfill for mint={} pool={} total_candles={}",
+                "Completed full-depth backfill for mint={} pool={} total_candles={}",
                 mint, pool_address, total_fetched
             ),
         );
@@ -1761,11 +1767,9 @@ impl OhlcvMonitor {
         mint: &str,
         pool_address: &str,
         timeframe: Timeframe,
-        from_ts: i64,
-        to_ts: i64,
     ) -> OhlcvResult<usize> {
         let (api_endpoint, aggregate) = timeframe.to_api_params();
-        let max_candles = timeframe.max_candles_30d();
+        let max_candles = timeframe.max_backfill_candles();
 
         logger::debug(
             LogTag::Ohlcv,

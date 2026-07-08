@@ -21,15 +21,15 @@ config_struct! {
         /// Maximum number of tokens to monitor simultaneously
         #[metadata(field_metadata! {
             label: "Max Monitored Tokens",
-            hint: "Maximum tokens to track OHLCV data for (higher uses more memory)",
+            hint: "Maximum tokens to track OHLCV data for (higher uses more memory/disk; the shared data server does the heavy fetching so this can be generous)",
             min: 10,
-            max: 500,
+            max: 2000,
             step: 10,
             unit: "tokens",
             impact: "medium",
             category: "General",
         })]
-        max_monitored_tokens: usize = 100,
+        max_monitored_tokens: usize = 300,
         /// Data retention period in days
         #[metadata(field_metadata! {
             label: "Retention Days",
