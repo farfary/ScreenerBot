@@ -996,9 +996,10 @@ impl OhlcvMonitor {
                         );
                     }
 
-                    // Update cache
+                    // Partial batch fetch; the DB holds the full series.
+                    // Invalidate rather than cache the slice (see persist_chunk).
                     self.cache
-                        .put(mint, None, Timeframe::Minute1, candles.clone())?;
+                        .invalidate(mint, None, Some(Timeframe::Minute1))?;
 
                     // Mark successful fetch
                     {
@@ -1141,13 +1142,13 @@ impl OhlcvMonitor {
             "monitor",
         )?;
 
-        // Update cache
-        self.cache.put(
-            mint,
-            Some(pool_address),
-            Timeframe::Minute1,
-            data_points.clone(),
-        )?;
+        // This chunk is only the freshly-fetched 1m window; the DB now holds the
+        // merged full series. Invalidate rather than cache the partial slice so
+        // the chart's full-history read repopulates the cache from the DB.
+        // (Caching the window here made the chart show only the recent candles
+        // while the status popup — which reads the DB — showed the full count.)
+        self.cache
+            .invalidate(mint, Some(pool_address), Some(Timeframe::Minute1))?;
 
         Ok(data_points)
     }
@@ -1191,8 +1192,11 @@ impl OhlcvMonitor {
             )?;
 
             inserted_total += inserted;
+            // Only the last 2 days were aggregated here; the DB retains the full
+            // series for this timeframe. Invalidate so the chart re-reads the
+            // complete history instead of this short window (see persist_chunk).
             self.cache
-                .put(mint, Some(pool_address), timeframe, aggregated)?;
+                .invalidate(mint, Some(pool_address), Some(timeframe))?;
         }
 
         Ok(inserted_total)
@@ -1819,9 +1823,11 @@ impl OhlcvMonitor {
             self.db
                 .insert_candles_batch(mint, pool_address, timeframe, &candles, "backfill")?;
 
-        // Update cache
+        // A backfill / deep-paging fetch returns only one window; the DB now
+        // holds the merged full series. Invalidate so the chart reads the
+        // complete history rather than this single page (see persist_chunk).
         self.cache
-            .put(mint, Some(pool_address), timeframe, candles.clone())?;
+            .invalidate(mint, Some(pool_address), Some(timeframe))?;
 
         Ok(inserted)
     }

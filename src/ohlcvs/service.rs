@@ -210,10 +210,17 @@ impl OhlcvServiceImpl {
         // Normalize to ASC ordering
         candles.sort_by_key(|d| d.timestamp);
 
-        // Update cache
-        let _ = self
-            .cache
-            .put(mint, Some(&pool), timeframe, candles.clone());
+        // Only cache the FULL series (limit == 0 => db_limit is None). A limited
+        // read — e.g. the limit=1 existence probes fired by the chart status
+        // indicator and the timeframe fallback — returns just a slice; caching
+        // that slice under the (mint, pool, timeframe) key would make the chart's
+        // next full-history read cache-hit the slice and render only a few
+        // candles. The full-series read below repopulates the cache correctly.
+        if db_limit.is_none() {
+            let _ = self
+                .cache
+                .put(mint, Some(&pool), timeframe, candles.clone());
+        }
 
         // limit == 0 => return everything; otherwise the most recent N.
         let start_idx = if limit == 0 {
