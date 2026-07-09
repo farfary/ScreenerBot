@@ -1660,15 +1660,23 @@ impl OhlcvMonitor {
     ) -> OhlcvResult<usize> {
         let mut total_fetched = 0;
 
-        // All timeframes in backfill priority order
+        // FINE-FIRST order (1m→1d). Backfill is sequential + throttled on purpose:
+        // fetch_multi_source falls back to GeckoTerminal when the shared data
+        // server misses (new/illiquid tokens), and Gecko 429s on a concurrent
+        // burst — so we must NOT parallelize. But the old order was coarse-first
+        // (1d first, 1m last), so the sub-4h frames the user is actually looking
+        // at (the chart defaults to a fine timeframe) appeared LAST, ~8-10s in,
+        // and looked "not loading" while 4h/12h/1d were already there. Fetching
+        // fine-first makes 1m/5m/15m/1h land in the first few seconds; the coarse
+        // frames (few candles, one quick fetch each) fill right after.
         let timeframes = [
-            Timeframe::Day1,
-            Timeframe::Hour12,
-            Timeframe::Hour4,
-            Timeframe::Hour1,
-            Timeframe::Minute15,
-            Timeframe::Minute5,
             Timeframe::Minute1,
+            Timeframe::Minute5,
+            Timeframe::Minute15,
+            Timeframe::Hour1,
+            Timeframe::Hour4,
+            Timeframe::Hour12,
+            Timeframe::Day1,
         ];
 
         logger::debug(
@@ -1740,7 +1748,8 @@ impl OhlcvMonitor {
                 }
             }
 
-            // Rate limiting based on priority
+            // Rate limiting based on priority (prevents Gecko 429 on the fallback
+            // path when the shared server misses).
             let delay_ms = match priority {
                 Priority::Critical => 100,
                 Priority::High => 200,
