@@ -122,8 +122,13 @@ pub async fn fetch_from_sources(
     // usable pool set.
     let server_future = super::server::fetch_pools_from_server(&mint_owned);
 
-    let (server_pools, dex_result, gecko_result) =
-        tokio::join!(server_future, dex_future, gecko_future);
+    // Fetch the proxy-backed server (no direct rate limit) + DexScreener first.
+    // Direct GeckoTerminal is a LAST-RESORT fallback below — it used to be fetched
+    // in PARALLEL here for every token, which hammered the direct GeckoTerminal
+    // API into constant 429s (marking the endpoint unhealthy and starving the
+    // OHLCV fetcher's own Gecko fallback), even though the server + DexScreener
+    // already cover ~every token's pools.
+    let (server_pools, dex_result) = tokio::join!(server_future, dex_future);
 
     let mut pools_map: HashMap<String, TokenPoolInfo> = HashMap::new();
     let mut success_sources = 0usize;
@@ -173,9 +178,20 @@ pub async fn fetch_from_sources(
         }
     }
 
+    // Direct GeckoTerminal only as a last resort: fetch it ONLY when the server
+    // and DexScreener both yielded zero pools. This keeps direct Gecko usage rare
+    // so its shared rate limit stays free for the OHLCV fetcher's Gecko fallback
+    // instead of being burned (and 429'd) on redundant pool lookups.
+    let gecko_attempted = should_fetch_gecko && pools_map.is_empty();
+    let gecko_result = if gecko_attempted {
+        gecko_future.await
+    } else {
+        Ok(Vec::new())
+    };
+
     match gecko_result {
         Ok(pools) => {
-            if should_fetch_gecko {
+            if gecko_attempted {
                 success_sources += 1;
             }
             for pool in pools.iter() {
@@ -213,7 +229,7 @@ pub async fn fetch_from_sources(
         success_sources += 1;
     }
 
-    let attempted_sources = (should_fetch_dex as usize) + (should_fetch_gecko as usize);
+    let attempted_sources = (should_fetch_dex as usize) + (gecko_attempted as usize);
     if attempted_sources > 0 && success_sources == 0 {
         let combined = if failures.is_empty() {
             "all pool sources failed without details".to_owned()
