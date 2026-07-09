@@ -238,11 +238,9 @@ pub async fn delete_inactive_tokens(inactive_hours: i64) -> OhlcvResult<Vec<Stri
 /// monitoring list are preserved.
 pub async fn clear_all_ohlcv_data() -> OhlcvResult<ClearAllResult> {
     let service = get_or_init_service().await?;
-    let db = Arc::clone(&service.db);
-
-    tokio::task::spawn_blocking(move || db.clear_all_ohlcv_data())
-        .await
-        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
+    // Wipe the DB AND the in-memory caches together, otherwise stale candles keep
+    // being served from the hot/bundle caches after the DB is cleared.
+    service.clear_all_data().await
 }
 
 /// Get database statistics

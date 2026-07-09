@@ -75,6 +75,22 @@ impl OhlcvServiceImpl {
         })
     }
 
+    /// Wipe ALL cached candle data (DB) AND both in-memory caches. Clearing only
+    /// the DB left the hot cache and the bundle cache serving stale candles until
+    /// their TTL (up to 24h / 30s), so a manual "clear cache" appeared to do
+    /// nothing on charts that were already cached. Invalidate them together.
+    pub(super) async fn clear_all_data(
+        &self,
+    ) -> OhlcvResult<crate::ohlcvs::database::ClearAllResult> {
+        let db = Arc::clone(&self.db);
+        let result = tokio::task::spawn_blocking(move || db.clear_all_ohlcv_data())
+            .await
+            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))??;
+        self.cache.clear()?;
+        self.bundle_cache.write().await.clear();
+        Ok(result)
+    }
+
     pub(super) async fn get_ohlcv_data(
         &self,
         mint: &str,

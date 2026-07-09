@@ -171,15 +171,27 @@ impl OhlcvDatabase {
             param_index += 1;
         }
 
-        query.push_str(" ORDER BY timestamp ASC");
-
-        if let Some(lim) = limit {
-            query.push_str(&format!(" LIMIT ?{param_index}"));
+        // A chart wants the NEWEST `limit` candles, returned oldest-first (ASC) for
+        // rendering. A plain `ORDER BY timestamp ASC LIMIT N` returns the OLDEST N
+        // instead — so an active token with more history than `limit` would show
+        // ancient candles and miss recent price action, and the result would differ
+        // from the in-memory cache path (which takes the most-recent N), making the
+        // same request flip between recent and ancient depending on cache state.
+        // Select the newest N via a DESC-limited subquery, then re-sort ASC. With no
+        // limit, return the full series in ASC order.
+        let final_query = if let Some(lim) = limit {
             params_vec.push(Box::new(lim));
-        }
+            format!(
+                "SELECT timestamp, open, high, low, close, volume FROM (
+                     {query} ORDER BY timestamp DESC LIMIT ?{param_index}
+                 ) ORDER BY timestamp ASC"
+            )
+        } else {
+            format!("{query} ORDER BY timestamp ASC")
+        };
 
         let mut stmt = conn
-            .prepare(&query)
+            .prepare(&final_query)
             .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
 
         let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
