@@ -5,7 +5,7 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
-import { TradeActionDialog } from "../ui/trade_action_dialog.js";
+import { manualTrade } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
@@ -88,9 +88,7 @@ function createLifecycle() {
   let table = null;
   let poller = null;
   let tabBar = null;
-  let tradeDialog = null;
   let positionDetailsDialog = null;
-  let walletBalance = 0;
   let liveUnsub = null;
   let liveDebounce = null;
 
@@ -810,7 +808,6 @@ function createLifecycle() {
   return {
     init(ctx) {
       // Initialize dialogs
-      tradeDialog = new TradeActionDialog();
       positionDetailsDialog = new PositionDetailsDialog();
 
       // Sub-tabs
@@ -931,87 +928,36 @@ function createLifecycle() {
           return;
         }
 
-        try {
-          if (action === "add") {
-            // Fetch config for entry sizes
-            let entrySizes = [0.005, 0.01, 0.02, 0.05];
-            try {
-              const configData = await requestManager.fetch("/api/config/trader", {
-                priority: "normal",
-              });
-              if (Array.isArray(configData?.data?.entry_sizes)) {
-                entrySizes = configData.data.entry_sizes;
-              }
-            } catch (err) {
-              console.warn("Failed to fetch entry_sizes config:", err);
+        // Both actions go through the shared manual-trade flow (ui/manual_trade.js),
+        // which owns the dialog, the payload, the toasts AND resolves the position
+        // (holdings/decimals/size) itself — so this no longer passes them by hand.
+        const context = {};
+        if (action === "add") {
+          // DCA presets for the add dialog's size buttons.
+          let entrySizes = [0.005, 0.01, 0.02, 0.05];
+          try {
+            const configData = await requestManager.fetch("/api/config/trader", {
+              priority: "normal",
+            });
+            if (Array.isArray(configData?.data?.entry_sizes)) {
+              entrySizes = configData.data.entry_sizes;
             }
-
-            // Open dialog
-            const result = await tradeDialog.open({
-              action: "add",
-              mint: mint,
-              symbol: row.symbol || "?",
-              context: {
-                mint: mint,
-                balance: walletBalance,
-                entrySize: row.entry_sol || row.sol_size,
-                entrySizes: entrySizes,
-                currentSize: row.sol_size,
-              },
-            });
-
-            if (!result) return; // User cancelled
-
-            // Proceed with API call
-            btn.disabled = true;
-            const data = await requestManager.fetch("/api/trader/manual/add", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mint,
-                ...(result.amount ? { size_sol: result.amount } : {}),
-              }),
-              priority: "high",
-            });
-            btn.disabled = false;
-            Utils.showToast("Added to position", "success");
-            table.refresh({ reason: "manual", preserveScroll: true });
-          } else if (action === "sell") {
-            // Open dialog
-            const result = await tradeDialog.open({
-              action: "sell",
-              mint: mint,
-              symbol: row.symbol || "?",
-              context: {
-                mint: mint,
-                holdings: row.token_amount,
-                decimals: row.token_decimals,
-              },
-            });
-
-            if (!result) return; // User cancelled
-
-            // Build request body
-            const body =
-              result.percentage === 100
-                ? { mint, close_all: true }
-                : { mint, percentage: result.percentage };
-
-            btn.disabled = true;
-            const data = await requestManager.fetch("/api/trader/manual/sell", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-              priority: "high",
-            });
-            btn.disabled = false;
-            Utils.showToast("Sell placed", "success");
-            table.refresh({ reason: "manual", preserveScroll: true });
+          } catch (err) {
+            console.warn("Failed to fetch entry_sizes config:", err);
           }
-        } catch (err) {
-          btn.disabled = false;
-          Utils.showToast(err?.message || "Action failed", "error");
+          context.entrySize = row.entry_sol || row.sol_size;
+          context.entrySizes = entrySizes;
         }
+
+        const placed = await manualTrade({
+          action,
+          mint,
+          symbol: row.symbol,
+          btn,
+          context,
+        });
+
+        if (placed) table.refresh({ reason: "manual", preserveScroll: true });
       };
 
       if (containerEl) {
@@ -1070,18 +1016,6 @@ function createLifecycle() {
         tabBar.show({ force: true });
       }
 
-      // Fetch wallet balance for dialog context
-      requestManager
-        .fetch("/api/wallet/balance", { priority: "low" })
-        .then((data) => {
-          if (data?.sol_balance != null) {
-            walletBalance = data.sol_balance;
-          }
-        })
-        .catch(() => {
-          console.warn("[Positions] Failed to fetch wallet balance");
-        });
-
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(() => table?.refresh({ reason: "poll", preserveScroll: true, silent: true }), {
@@ -1122,10 +1056,6 @@ function createLifecycle() {
         window.clearTimeout(liveDebounce);
         liveDebounce = null;
       }
-      if (tradeDialog) {
-        tradeDialog.destroy();
-        tradeDialog = null;
-      }
       if (positionDetailsDialog) {
         positionDetailsDialog.destroy();
         positionDetailsDialog = null;
@@ -1140,7 +1070,6 @@ function createLifecycle() {
       state.view = "open";
       state.total = 0;
       state.lastServerRows = [];
-      walletBalance = 0;
     },
   };
 }

@@ -3,8 +3,7 @@
  * Adds overview tab rendering functionality to PositionDetailsDialog class
  */
 import * as Utils from "../../core/utils.js";
-import { requestManager } from "../../core/request_manager.js";
-import { TradeActionDialog } from "../trade_action_dialog.js";
+import { manualTrade } from "../manual_trade.js";
 
 /**
  * Apply overview tab methods to PositionDetailsDialog prototype
@@ -533,169 +532,70 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
   };
 
   /**
+   * Add / sell / close all run through the shared manual-trade flow
+   * (ui/manual_trade.js), which owns the dialog, payload, endpoints and toasts, and
+   * resolves the position itself.
+   *
+   * The local copies these replace had two silent bugs:
+   *   - they tested `response.success`, but the manual endpoints return RAW JSON with
+   *     no {success,data} envelope, so `success` was always undefined and a
+   *     SUCCESSFUL trade reported "Failed to ..." and never refreshed the view;
+   *   - "close position" POSTed percentage: 100 rather than close_all, which can
+   *     leave dust behind instead of fully closing.
+   */
+  proto._runTrade = async function (action, pos, btn, context = {}) {
+    const originalText = btn?.innerHTML;
+    if (btn) btn.innerHTML = '<i class="icon-loader"></i> Loading...';
+
+    const placed = await manualTrade({
+      action: action === "close" ? "sell" : action,
+      mint: pos.mint,
+      symbol: pos.symbol,
+      btn,
+      context,
+    });
+
+    // Restore the label; the disabled state is reasserted from the live in-flight
+    // state so the button stays disabled while the trade processes.
+    if (btn) btn.innerHTML = originalText;
+    this._updateTradeButtonsState();
+
+    return placed;
+  };
+
+  /**
    * Handle add to position action
    */
   proto._handleAddPosition = async function (pos, btn) {
-    if (!this.tradeDialog) {
-      this.tradeDialog = new TradeActionDialog();
-    }
-
-    const result = await this.tradeDialog.open({
-      action: "add",
-      symbol: pos.symbol,
-      context: {
-        mint: pos.mint,
-        balance: pos.wallet_balance || 0,
-        entrySize: pos.entry_size_sol,
-        currentSize: pos.total_size_sol,
-      },
+    const placed = await this._runTrade("add", pos, btn, {
+      entrySize: pos.entry_size_sol,
     });
 
-    if (result) {
-      // Set loading state
-      const originalText = btn?.innerHTML;
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="icon-loader"></i> Loading...';
-      }
-
-      try {
-        const response = await requestManager.fetch("/api/trader/manual/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mint: pos.mint,
-            size_sol: result.amount,
-          }),
-          priority: "high",
-        });
-
-        if (response.success) {
-          Utils.showToast("Added to position successfully!", "success");
-          this.onTradeComplete({ action: "add", mint: pos.mint });
-          await this._fetchDetails();
-        } else {
-          Utils.showToast(response.error || "Failed to add to position", "error");
-        }
-      } catch (error) {
-        Utils.showToast(error?.message || "Failed to add to position", "error");
-      } finally {
-        // Restore the label; the disabled state is reasserted from the live
-        // in-flight state so the button stays disabled while the trade processes.
-        if (btn) btn.innerHTML = originalText;
-        this._updateTradeButtonsState();
-      }
-    }
+    if (!placed) return;
+    this.onTradeComplete({ action: "add", mint: pos.mint });
+    await this._fetchDetails();
   };
 
   /**
    * Handle partial sell action
    */
   proto._handlePartialSell = async function (pos, btn) {
-    if (!this.tradeDialog) {
-      this.tradeDialog = new TradeActionDialog();
-    }
+    const placed = await this._runTrade("sell", pos, btn);
 
-    const result = await this.tradeDialog.open({
-      action: "sell",
-      symbol: pos.symbol,
-      context: {
-        mint: pos.mint,
-        holdings: pos.remaining_token_amount || pos.token_amount,
-        decimals: pos.token_decimals,
-      },
-    });
-
-    if (result) {
-      // Set loading state
-      const originalText = btn?.innerHTML;
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="icon-loader"></i> Loading...';
-      }
-
-      try {
-        const response = await requestManager.fetch("/api/trader/manual/sell", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mint: pos.mint,
-            percentage: result.percentage,
-          }),
-          priority: "high",
-        });
-
-        if (response.success) {
-          Utils.showToast("Sell order executed!", "success");
-          this.onTradeComplete({ action: "sell", mint: pos.mint });
-          await this._fetchDetails();
-        } else {
-          Utils.showToast(response.error || "Failed to execute sell", "error");
-        }
-      } catch (error) {
-        Utils.showToast(error?.message || "Failed to execute sell", "error");
-      } finally {
-        // Restore the label; the disabled state is reasserted from the live
-        // in-flight state so the button stays disabled while the trade processes.
-        if (btn) btn.innerHTML = originalText;
-        this._updateTradeButtonsState();
-      }
-    }
+    if (!placed) return;
+    this.onTradeComplete({ action: "sell", mint: pos.mint });
+    await this._fetchDetails();
   };
 
   /**
-   * Handle close position action
+   * Handle close position action — the sell dialog pre-selected at 100%, which the
+   * shared flow submits as `close_all` (no dust left behind).
    */
   proto._handleClosePosition = async function (pos, btn) {
-    if (!this.tradeDialog) {
-      this.tradeDialog = new TradeActionDialog();
-    }
+    const placed = await this._runTrade("close", pos, btn, { preselect: 100 });
 
-    // Pre-select 100% for close position
-    const result = await this.tradeDialog.open({
-      action: "sell",
-      symbol: pos.symbol,
-      context: {
-        mint: pos.mint,
-        holdings: pos.remaining_token_amount || pos.token_amount,
-        preselect: 100,
-      },
-    });
-
-    if (result && result.percentage === 100) {
-      // Set loading state
-      const originalText = btn?.innerHTML;
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="icon-loader"></i> Loading...';
-      }
-
-      try {
-        const response = await requestManager.fetch("/api/trader/manual/sell", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mint: pos.mint,
-            percentage: 100,
-          }),
-          priority: "high",
-        });
-
-        if (response.success) {
-          Utils.showToast("Position closed!", "success");
-          this.onTradeComplete({ action: "close", mint: pos.mint });
-          this.close();
-        } else {
-          Utils.showToast(response.error || "Failed to close position", "error");
-        }
-      } catch (error) {
-        Utils.showToast(error?.message || "Failed to close position", "error");
-      } finally {
-        // Restore the label; the disabled state is reasserted from the live
-        // in-flight state so the button stays disabled while the close processes.
-        if (btn) btn.innerHTML = originalText;
-        this._updateTradeButtonsState();
-      }
-    }
+    if (!placed) return;
+    this.onTradeComplete({ action: "close", mint: pos.mint });
+    this.close();
   };
 }

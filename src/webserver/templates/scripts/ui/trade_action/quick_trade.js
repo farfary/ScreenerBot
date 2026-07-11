@@ -293,13 +293,16 @@ export function applyQuickTradeMixin(TradeActionDialog) {
         throw new Error(response.status === 404 ? "Token not found" : "Failed to fetch token");
       }
 
-      const data = await response.json();
+      // /api/tokens/{mint} returns the TokenDetailResponse RAW — success_response is
+      // a plain Json(...) with no {success,data} envelope. This used to test
+      // `data.success && data.data`, which are both always undefined, so quick trade
+      // threw "Token not found in database" for EVERY mint and the mode never worked.
+      const token = await response.json();
 
-      if (!data.success || !data.data) {
+      if (!token?.mint) {
         throw new Error("Token not found in database");
       }
 
-      const token = data.data;
       this._fetchedTokenData = token;
 
       // Update preview
@@ -374,9 +377,13 @@ export function applyQuickTradeMixin(TradeActionDialog) {
           return;
         }
 
-        // Update context with holdings
+        // Update context with the position. `hasPosition` + decimals are what make
+        // the dialog render the Held badge and scale holdings to whole tokens.
         this.currentContext.holdings = holdings;
         this.currentContext.mint = mint;
+        this.currentContext.hasPosition = true;
+        this.currentContext.decimals = pos.token_decimals ?? null;
+        this.currentContext.currentSize = pos.total_size_sol ?? pos.entry_size_sol ?? null;
 
         this._quickContinueBtnEl.classList.remove("loading");
       } catch {
@@ -392,6 +399,13 @@ export function applyQuickTradeMixin(TradeActionDialog) {
 
     // Update symbol
     this._currentSymbol = token.symbol || "Unknown";
+
+    // Identity for the dialog's token strip, so quick mode shows the same
+    // logo/name/symbol header as every other entry point.
+    this.currentContext.symbol = this._currentSymbol;
+    this.currentContext.name = token.name || null;
+    this.currentContext.logo = token.logo_url || null;
+    this.currentContext.decimals = token.decimals ?? this.currentContext.decimals ?? null;
 
     // Transition to trade step
     this._transitionToTradeStep();

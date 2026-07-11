@@ -518,13 +518,22 @@ export class TradeActionDialog {
       } else {
         this.dialog?.focus();
 
-        // Auto-select default preset if exists
-        const defaultPreset = this.presetsContainer.querySelector(
-          ".trade-action-preset-btn[data-default='true']"
-        );
-        if (defaultPreset) {
-          defaultPreset.click();
-        }
+        // `context.preselect` picks a specific preset (Close Position opens the sell
+        // dialog at 100%). It was read by NO code before, so close-position never
+        // pre-selected anything — and its caller then only submitted when the user
+        // happened to choose exactly 100%, silently doing nothing otherwise.
+        const preselected =
+          context.preselect != null
+            ? this.presetsContainer.querySelector(
+                `.trade-action-preset-btn[data-value="${context.preselect}"]`
+              )
+            : null;
+
+        const target =
+          preselected ||
+          this.presetsContainer.querySelector(".trade-action-preset-btn[data-default='true']");
+
+        if (target) target.click();
       }
     });
 
@@ -722,6 +731,42 @@ export class TradeActionDialog {
     return icons[iconName] || icons["shopping-cart"];
   }
 
+  /**
+   * Token identity strip: logo, name, symbol — so the user can SEE which token they
+   * are about to trade, not just a bare ticker. Replaces a plain "Token: SYM" row.
+   *
+   * Everything is optional: a token with no logo falls back to its initial, and one
+   * with no name shows the symbol alone.
+   */
+  _renderIdentity(symbol, context) {
+    const displaySymbol = (symbol || "?").toUpperCase();
+    const logo = Utils.normalizeImageUrl(context.logo);
+    const initial = Utils.escapeHtml(displaySymbol.charAt(0));
+
+    const logoHtml = logo
+      ? `<img src="${Utils.escapeHtml(logo)}" alt="" class="trade-action-token-logo-img"
+           onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'trade-action-token-initial',textContent:'${initial}'}))"/>`
+      : `<span class="trade-action-token-initial">${initial}</span>`;
+
+    // Name is only worth its own line when it differs from the symbol.
+    const name = context.name && context.name.toUpperCase() !== displaySymbol ? context.name : "";
+
+    return `
+      <div class="trade-action-token">
+        <div class="trade-action-token-logo">${logoHtml}</div>
+        <div class="trade-action-token-meta">
+          <span class="trade-action-token-symbol">${Utils.escapeHtml(displaySymbol)}</span>
+          ${name ? `<span class="trade-action-token-name">${Utils.escapeHtml(name)}</span>` : ""}
+        </div>
+        ${
+          context.hasPosition
+            ? '<span class="trade-action-position-badge" title="You hold an open position in this token">Held</span>'
+            : ""
+        }
+      </div>
+    `;
+  }
+
   _renderContext(action, symbol, context) {
     const rows = [];
 
@@ -729,14 +774,6 @@ export class TradeActionDialog {
     if (context.mint) {
       this.currentContext.mint = context.mint;
     }
-
-    // Token info with symbol highlight
-    rows.push(`
-      <div class="trade-action-context-item">
-        <span class="trade-action-context-label">Token</span>
-        <span class="trade-action-context-value trade-action-symbol">${Utils.escapeHtml(symbol || "Unknown")}</span>
-      </div>
-    `);
 
     if (action === "buy" || action === "add") {
       const balance = context.balance != null ? context.balance.toFixed(4) : "—";
@@ -752,10 +789,14 @@ export class TradeActionDialog {
       `);
     }
 
-    if (action === "add" && context.currentSize != null) {
+    // Invested size, shown for ANY action on a held token — buying more of something
+    // you already hold is exactly when you want to see the existing exposure.
+    // (This row used to be gated on `action === "add"` AND a `currentSize` that no
+    // caller ever passed, so it never rendered at all.)
+    if (context.hasPosition && context.currentSize != null) {
       rows.push(`
         <div class="trade-action-context-item">
-          <span class="trade-action-context-label">Current Position</span>
+          <span class="trade-action-context-label">Position Size</span>
           <span class="trade-action-context-value">
             <span class="trade-action-balance-amount">${context.currentSize.toFixed(4)}</span>
             <span class="trade-action-balance-unit">SOL</span>
@@ -764,24 +805,31 @@ export class TradeActionDialog {
       `);
     }
 
-    if (action === "sell" && context.holdings != null) {
-      // holdings is in raw token units; convert to whole tokens for display when
-      // decimals are known (the percentage-based quote/execution use the real
-      // on-chain balance directly, so this is display-only).
-      const wholeHoldings =
-        context.decimals != null
-          ? context.holdings / 10 ** context.decimals
-          : context.holdings;
-      const formatted = Utils.formatCompactNumber(wholeHoldings, 2);
+    if (context.hasPosition && context.holdings) {
       rows.push(`
         <div class="trade-action-context-item">
           <span class="trade-action-context-label">Holdings</span>
-          <span class="trade-action-context-value">${Utils.escapeHtml(formatted)} tokens</span>
+          <span class="trade-action-context-value">${Utils.escapeHtml(this._formatHoldings(context))} tokens</span>
         </div>
       `);
     }
 
-    this.contextEl.innerHTML = `<div class="trade-action-context-grid">${rows.join("")}</div>`;
+    this.contextEl.innerHTML = `
+      ${this._renderIdentity(symbol, context)}
+      <div class="trade-action-context-grid">${rows.join("")}</div>
+    `;
+  }
+
+  /**
+   * Holdings arrive as RAW on-chain units and must be scaled by the token's decimals
+   * before display — printing them raw shows "1.2B tokens" for 1,200 tokens at 6
+   * decimals. Display only: the percentage-based quote and execution work off the
+   * real on-chain balance server-side.
+   */
+  _formatHoldings(context) {
+    const whole =
+      context.decimals != null ? context.holdings / 10 ** context.decimals : context.holdings;
+    return Utils.formatCompactNumber(whole, 2);
   }
 
   _buildPresets(action, context) {

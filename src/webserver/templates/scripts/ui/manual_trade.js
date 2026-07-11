@@ -45,6 +45,73 @@ export async function fetchWalletBalance() {
   return 0;
 }
 
+/**
+ * The token's open position, or null when it has none.
+ *
+ * This is the authoritative source for holdings/decimals/size — NOT whatever the
+ * calling view happened to have on its row. Callers used to pass these themselves
+ * and got them wrong in ways nobody could see:
+ *
+ *   - token details passed `fullTokenData.holdings`, a field the token API does not
+ *     even return, so every sell opened with holdings = 0 and no basis to size the
+ *     percentage against;
+ *   - the context menu passed holdings but NOT decimals, so the dialog printed the
+ *     RAW on-chain amount ("1.2B tokens" for 1,200 tokens at 6 decimals);
+ *   - nobody ever passed `currentSize`, so the "Current Position" row in the add
+ *     dialog was dead code that never rendered.
+ *
+ * Resolving it here once means every entry point is correct by construction.
+ */
+async function fetchPosition(mint) {
+  try {
+    const data = await requestManager.fetch(
+      `/api/positions/${encodeURIComponent(mint)}/details`,
+      { priority: "high" }
+    );
+
+    // /details returns PositionDetailResponse directly; `position` flattens the
+    // summary fields onto itself (no {success,data} envelope).
+    const position = data?.position;
+    if (!position) return null;
+
+    return {
+      // remaining_token_amount reflects partial exits; token_amount is the original.
+      holdings: position.remaining_token_amount ?? position.token_amount ?? 0,
+      decimals: position.token_decimals ?? data?.token_info?.decimals ?? null,
+      currentSize: position.total_size_sol ?? position.entry_size_sol ?? null,
+      symbol: position.symbol || null,
+      name: position.name || null,
+      logo: position.logo_url || data?.token_info?.image_url || null,
+      manualManagement: position.manual_management === true,
+    };
+  } catch {
+    // No position, or the lookup failed — the trade still proceeds.
+    return null;
+  }
+}
+
+/**
+ * Token identity (symbol / name / logo) for the dialog header.
+ * Only called when the position did not already supply it.
+ */
+async function fetchTokenIdentity(mint) {
+  try {
+    const token = await requestManager.fetch(`/api/tokens/${encodeURIComponent(mint)}`, {
+      priority: "high",
+    });
+    if (!token?.mint) return null;
+
+    return {
+      symbol: token.symbol || null,
+      name: token.name || null,
+      logo: token.logo_url || null,
+      decimals: token.decimals ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 const ENDPOINTS = {
   buy: "/api/trader/manual/buy",
   add: "/api/trader/manual/add",
@@ -87,17 +154,21 @@ function buildBody(action, mint, result) {
 }
 
 /**
- * Run a manual trade end to end: confirm it in the shared dialog, POST it, toast
- * the outcome.
+ * Run a manual trade end to end: resolve the token and its position, confirm it in
+ * the shared dialog, POST it, toast the outcome.
+ *
+ * Callers supply only what they know. Identity (symbol/name/logo), holdings,
+ * decimals and current position size are all resolved HERE, so no view can pass
+ * them wrongly or forget them.
  *
  * @param {Object} options
  * @param {"buy"|"add"|"sell"} options.action
  * @param {string} options.mint - captured by the CALLER before any await; a dialog's
  *   own token data can be nulled while the trade dialog is open.
- * @param {string} [options.symbol]
+ * @param {string} [options.symbol] - display hint; the resolved value wins
+ * @param {string} [options.name]
+ * @param {string} [options.logo]
  * @param {number} [options.balance] - fetched when omitted (buy/add only)
- * @param {number} [options.holdings] - required to size a sell
- * @param {number} [options.decimals]
  * @param {Object} [options.context] - extra fields merged into the dialog context
  *   (e.g. the tokens page's `entrySize` / `entrySizes` DCA presets for "add")
  * @param {HTMLElement} [options.btn] - disabled while the request is in flight
@@ -107,10 +178,10 @@ function buildBody(action, mint, result) {
 export async function manualTrade({
   action,
   mint,
-  symbol = "?",
+  symbol,
+  name,
+  logo,
   balance,
-  holdings,
-  decimals,
   context = {},
   btn = null,
 }) {
@@ -120,15 +191,43 @@ export async function manualTrade({
   }
 
   try {
-    const dialogContext = { mint, ...context };
-    if (action === "sell") {
-      dialogContext.holdings = holdings ?? 0;
-      if (decimals != null) dialogContext.decimals = decimals;
-    } else {
-      dialogContext.balance = balance ?? (await fetchWalletBalance());
+    // The position is authoritative for holdings/decimals/size AND already carries
+    // the token's identity, so it doubles as the identity lookup when one exists.
+    const [position, walletBalance] = await Promise.all([
+      fetchPosition(mint),
+      action === "sell" ? Promise.resolve(null) : balance ?? fetchWalletBalance(),
+    ]);
+
+    // Only pay for a second lookup when the position did not supply identity.
+    const identity =
+      position || (symbol && logo) ? null : await fetchTokenIdentity(mint);
+
+    const dialogContext = {
+      ...context,
+      mint,
+      symbol: symbol || position?.symbol || identity?.symbol || "?",
+      name: name || position?.name || identity?.name || null,
+      logo: logo || position?.logo || identity?.logo || null,
+
+      // Position awareness: every action gets it, so a buy can warn that the token
+      // is already held and an add/sell can size against the real amount.
+      hasPosition: position != null,
+      holdings: position?.holdings ?? 0,
+      decimals: position?.decimals ?? identity?.decimals ?? null,
+      currentSize: position?.currentSize ?? null,
+      manualManagement: position?.manualManagement ?? null,
+    };
+
+    if (action !== "sell") {
+      dialogContext.balance = walletBalance ?? 0;
     }
 
-    const result = await getDialog().open({ action, mint, symbol, context: dialogContext });
+    const result = await getDialog().open({
+      action,
+      mint,
+      symbol: dialogContext.symbol,
+      context: dialogContext,
+    });
     if (!result) return false; // user cancelled
 
     if (btn) btn.disabled = true;
