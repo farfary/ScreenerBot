@@ -675,15 +675,32 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                              }
                            }
                            VerificationKind::Exit => {
-                             // Force synthetic exit after timeout
                              if let Some(position_id) = item.position_id {
-                               logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {position_id} after verification abandonment - manual wallet check recommended"));
+                               if item.is_partial_exit {
+                                 // A PARTIAL exit item also carries kind: Exit. Forcing a
+                                 // synthetic exit for it CLOSED THE WHOLE POSITION — releasing
+                                 // its permit and dropping it from Open — while the user still
+                                 // held everything the partial had not sold. Only the partial
+                                 // failed: mark that, leave the position alone. (This also
+                                 // clears the pending-partial registry, which otherwise stays
+                                 // set forever and blocks every future exit for this mint.)
+                                 logger::warning(LogTag::Positions, &format!("Marking partial exit for position {position_id} as failed after verification abandonment - position stays open"));
 
-                               let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
-                                 position_id,
-                                 exit_time: chrono::Utc::now(),
-                               };
-                               let _ = super::apply::apply_transition(transition).await;
+                                 let transition = super::transitions::PositionTransition::PartialExitFailed {
+                                   position_id,
+                                   reason: format!("Abandoned after {:?}", give_up_reason),
+                                 };
+                                 let _ = super::apply::apply_transition(transition).await;
+                               } else {
+                                 // Force synthetic exit after timeout
+                                 logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {position_id} after verification abandonment - manual wallet check recommended"));
+
+                                 let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
+                                   position_id,
+                                   exit_time: chrono::Utc::now(),
+                                 };
+                                 let _ = super::apply::apply_transition(transition).await;
+                               }
                              }
                            }
                          }

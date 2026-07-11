@@ -663,6 +663,35 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 ));
                             }
 
+                            // Realized P&L for THIS partial: proceeds minus the cost basis of
+                            // the tokens sold. Scale by the token's REAL decimals — this was
+                            // hardcoded to 10^9 (SOL's), so for any token that is not 9-decimal
+                            // the cost basis was off by orders of magnitude, and the number went
+                            // to the events log AND the Telegram notification.
+                            let sold_tokens = match crate::tokens::get_decimals(&position.mint)
+                                .await
+                            {
+                                Some(decimals) => exit_amount as f64 / 10_f64.powi(decimals as i32),
+                                None => 0.0,
+                            };
+                            let partial_pnl = if sold_tokens > 0.0 {
+                                Some(sol_received - (sold_tokens * position.average_entry_price))
+                            } else {
+                                None
+                            };
+
+                            // Feed the period loss limit. `record_realized_loss` was only ever
+                            // called on a FULL exit, so losses realized by partial exits (a
+                            // partial stop-loss, say) were invisible to the limiter and could
+                            // never trip it.
+                            if let Some(pnl) = partial_pnl {
+                                if pnl < 0.0 {
+                                    crate::trader::safety::loss_limit::record_realized_loss(
+                                        pnl.abs(),
+                                    );
+                                }
+                            }
+
                             crate::events::record_position_event(
                                 &position_id.to_string(),
                                 &position.mint,
@@ -671,11 +700,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 None,
                                 sol_received,
                                 exit_amount,
-                                Some(
-                                    sol_received
-                                        - (exit_amount as f64 / 10_f64.powi(9)
-                                            * position.average_entry_price),
-                                ), // Quick P&L estimate
+                                partial_pnl,
                                 None,
                             )
                             .await;
@@ -711,15 +736,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     } else {
                                         100.0 - exit_percentage
                                     };
-                                // Calculate realized PnL for this partial exit
-                                let partial_pnl = sol_received
-                                    - (exit_amount as f64 / 10_f64.powi(9)
-                                        * position.average_entry_price);
                                 queue_notification(Notification::partial_exit(
                                     position.symbol.clone(),
                                     position.mint.clone(),
                                     exit_percentage,
-                                    partial_pnl,
+                                    partial_pnl.unwrap_or_default(),
                                     remaining_pct,
                                 ));
                             }
@@ -732,6 +753,52 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     }
                 }
             }
+        }
+
+        PositionTransition::ExitResidualClearForRetry {
+            position_id,
+            exit_amount,
+            sol_received,
+            effective_exit_price,
+            fee_lamports,
+            exit_time,
+            exit_signature,
+            exit_percentage,
+        } => {
+            // The close swap DID sell tokens and DID receive SOL — it just did not empty the
+            // wallet (tokens split across accounts; close_position_direct sells the primary
+            // ATA only). Book the fill exactly as a partial exit, THEN clear the exit
+            // signature so the residual can be closed on the next pass.
+            //
+            // Previously this was reported as a plain ExitFailedClearForRetry, which recorded
+            // nothing: the SOL received vanished from the position's proceeds and the tokens
+            // sold were still counted as held.
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Exit for position {} filled only partially ({} tokens, {:.6} SOL) - recording the fill and retrying the residual",
+                    position_id, exit_amount, sol_received
+                ),
+            );
+
+            Box::pin(apply_transition(PositionTransition::PartialExitVerified {
+                position_id,
+                exit_amount,
+                sol_received,
+                effective_exit_price,
+                fee_lamports,
+                exit_time,
+                exit_signature,
+                exit_percentage,
+            }))
+            .await?;
+
+            let cleared = Box::pin(apply_transition(
+                PositionTransition::ExitFailedClearForRetry { position_id },
+            ))
+            .await?;
+
+            effects.db_updated = cleared.db_updated;
         }
 
         PositionTransition::PartialExitFailed {

@@ -194,6 +194,20 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
             return Ok(result);
         }
         Err(primary_error) => {
+            // NEVER fall back on a swap that was already SUBMITTED. The confirmation poll
+            // timed out, but the transaction can still land — re-sending it through another
+            // router is a second, real swap.
+            if let Some(signature) = unconfirmed_swap_signature(&primary_error) {
+                logger::warning(
+                    LogTag::Swap,
+                    &format!(
+                        "Swap {signature} submitted via {} but not confirmed in time - NOT retrying (it may still land); verification will reconcile it",
+                        primary.name()
+                    ),
+                );
+                return Err(primary_error);
+            }
+
             // Check if error is retryable
             if !is_retryable_error(&primary_error) {
                 logger::error(
@@ -287,6 +301,19 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                         return Ok(result);
                     }
                     Err(e) => {
+                        // Same rule as the primary: a submitted-but-unconfirmed swap must not
+                        // be re-sent through yet another router.
+                        if let Some(signature) = unconfirmed_swap_signature(&e) {
+                            logger::warning(
+                                LogTag::Swap,
+                                &format!(
+                                    "Fallback swap {signature} submitted via {} but not confirmed in time - stopping the chain (it may still land)",
+                                    fallback_router.name()
+                                ),
+                            );
+                            return Err(e);
+                        }
+
                         logger::warning(
                             LogTag::Swap,
                             &format!("{} execution failed: {}", fallback_router.name(), e),
@@ -306,6 +333,32 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/// The signature of a swap that WAS SUBMITTED but whose confirmation timed out.
+///
+/// `sign_send_and_confirm_transaction` sends the transaction and then polls for it; on
+/// timeout it returns an error even though the transaction may still land — a Solana
+/// transaction stays valid until its blockhash expires, well beyond our poll window.
+///
+/// Retrying such a swap is a DOUBLE SPEND: the fallback chain would submit the same sell
+/// through another router, and the exit's slippage ladder would submit it again at the next
+/// rung. On a full close the second sell usually just fails on an empty balance (wasted
+/// fee), but on a PARTIAL exit the tokens are still there — so a "sell 25%" that timed out
+/// once actually sells 25% twice, and the position records only one of them.
+///
+/// The signature is embedded in the error text, so a caller can stop retrying and hand it
+/// to verification, which reconciles what really happened on chain.
+pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
+    let message = error.to_string();
+    let (_, after) = message.split_once("Transaction ")?;
+    let (signature, _) = after.split_once(" not confirmed within timeout")?;
+
+    let signature = signature.trim();
+    if signature.is_empty() {
+        return None;
+    }
+    Some(signature.to_owned())
+}
 
 /// Check if error is retryable (network/transient issues)
 fn is_retryable_error(error: &Error) -> bool {

@@ -184,6 +184,9 @@ pub async fn close_position_direct(
     // Slippage retry loop for exit
     let mut last_err: Option<String> = None;
     let mut swap_result = None;
+    // A swap that was SUBMITTED but whose confirmation timed out: the sell may still land,
+    // so retrying the ladder would sell twice. We stop and let verification reconcile it.
+    let mut submitted_signature: Option<String> = None;
     for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
         let quote_request = QuoteRequest {
             input_mint: token_mint.to_string(),
@@ -226,6 +229,21 @@ pub async fn close_position_direct(
                 break;
             }
             Err(e) => {
+                // Submitted but unconfirmed — the sell may already be on chain. Stop the
+                // ladder: another rung would be a second real sell.
+                if let Some(signature) = crate::swaps::unconfirmed_swap_signature(&e) {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Exit swap {} for {} was submitted but not confirmed in time - not retrying; verification will settle it",
+                            signature, api_token.symbol
+                        ),
+                    );
+                    submitted_signature = Some(signature);
+                    last_err = None;
+                    break;
+                }
+
                 // Check for pump.fun bonding curve error (graduated token routed through closed curve)
                 let msg = e.to_string();
                 let msg_lower = msg.to_lowercase();
@@ -258,6 +276,11 @@ pub async fn close_position_direct(
                             break;
                         }
                         Err(e2) => {
+                            if let Some(signature) = crate::swaps::unconfirmed_swap_signature(&e2) {
+                                submitted_signature = Some(signature);
+                                last_err = None;
+                                break;
+                            }
                             last_err = Some(format!(
                                 "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
                                 i + 1,
@@ -298,33 +321,44 @@ pub async fn close_position_direct(
         }
     }
 
-    let swap_result =
-        swap_result.ok_or_else(|| last_err.unwrap_or_else(|| "Exit swap failed".to_owned()))?;
+    let transaction_signature = match (swap_result, submitted_signature) {
+        (Some(result), _) => {
+            let transaction_signature = result.transaction_signature.clone();
 
-    let transaction_signature = swap_result.transaction_signature.clone();
-
-    // CRITICAL: Log execution vs requested amounts to detect partial execution
-    let executed_amount = swap_result.input_amount;
-    if executed_amount < sell_amount {
-        logger::warning(
-            LogTag::Positions,
-            &format!(
+            // CRITICAL: Log execution vs requested amounts to detect partial execution
+            let executed_amount = result.input_amount;
+            if executed_amount < sell_amount {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
  "PARTIAL SWAP DETECTED for {}: Requested {} tokens, executed {} tokens, shortfall: {}",
         api_token.symbol,
         sell_amount,
         executed_amount,
         sell_amount - executed_amount
       ),
-        );
-    } else {
-        logger::info(
-            LogTag::Positions,
-            &format!(
-                "Full swap executed for {}: {} tokens",
-                api_token.symbol, executed_amount
-            ),
-        );
-    }
+                );
+            } else {
+                logger::info(
+                    LogTag::Positions,
+                    &format!(
+                        "Full swap executed for {}: {} tokens",
+                        api_token.symbol, executed_amount
+                    ),
+                );
+            }
+
+            transaction_signature
+        }
+        // Submitted, confirmation timed out. Treat it exactly like a confirmed submission:
+        // record the signature and enqueue verification, which reads the chain and either
+        // settles the exit or (if the transaction never landed) clears it for a retry. What
+        // we must NOT do is send it again.
+        (None, Some(signature)) => signature,
+        (None, None) => {
+            return Err(last_err.unwrap_or_else(|| "Exit swap failed".to_owned()));
+        }
+    };
 
     // Update position with exit signature and market exit price
     crate::positions::state::update_position_state(token_mint, |pos| {
@@ -336,15 +370,16 @@ pub async fn close_position_direct(
 
     add_signature_to_index(&transaction_signature, token_mint).await;
 
-    // Get position ID (needed for event recording)
+    // Get position ID (needed for event recording). Keep it an Option: defaulting to 0 on a
+    // lookup race enqueued a verification item pointing at position 0, which resolves to
+    // nothing — the exit would then never be applied to the real position.
     let position_id = crate::positions::state::get_position_by_mint(token_mint)
         .await
-        .and_then(|p| p.id)
-        .unwrap_or_default();
+        .and_then(|p| p.id);
 
     // Record a position closing event (pending verification)
     crate::events::record_position_event(
-        &position_id.to_string(),
+        &position_id.unwrap_or_default().to_string(),
         token_mint,
         "closing_submitted",
         None,
@@ -367,7 +402,7 @@ pub async fn close_position_direct(
     let verification_item = VerificationItem::new(
         transaction_signature.clone(),
         token_mint.to_string(),
-        Some(position_id),
+        position_id,
         VerificationKind::Exit,
         expiry_height,
     );

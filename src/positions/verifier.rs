@@ -71,7 +71,14 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
 
     if let Some(pid) = position_id {
         if let Some(position) = get_position_by_id(pid).await {
-            if let Some(token_amount) = position.token_amount {
+            // Measure dust against what the position actually HOLDS. `token_amount` is the
+            // entry buy: it excludes DCA adds and is not reduced by partial exits, so after
+            // either it no longer describes the balance this residual is being compared to.
+            if let Some(token_amount) = position
+                .remaining_token_amount
+                .filter(|remaining| *remaining > 0)
+                .or(position.token_amount)
+            {
                 let dust_threshold = (token_amount / 1_000).max(10);
                 if balance <= dust_threshold {
                     logger::debug(
@@ -90,6 +97,60 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
     }
 
     true
+}
+
+/// Outcome for an exit verification that FAILED on-chain.
+///
+/// A failed PARTIAL exit is not a failed close. The position is still open and still
+/// holds its tokens; only that one partial swap failed. Every failure branch here used to
+/// key off `item.kind` alone — and a partial-exit item carries `kind: Exit` — so a failed
+/// partial was processed as a failed FULL exit: it stamped `exit_retry_pending` on a
+/// position that was not closing, and (via the abandonment path in worker.rs) could
+/// SYNTHETICALLY CLOSE a position of which the user still held most of the tokens. It also
+/// never cleared the pending-partial registry, which permanently blocks every later exit
+/// for that mint. `PartialExitFailed` is the correct transition and had no emitter.
+async fn failed_exit_outcome(item: &VerificationItem, reason: String) -> VerificationOutcome {
+    if item.is_partial_exit {
+        return VerificationOutcome::PermanentFailure(PositionTransition::PartialExitFailed {
+            position_id: item.position_id.unwrap_or_default(),
+            reason,
+        });
+    }
+
+    let Some(position_id) = item.position_id else {
+        return VerificationOutcome::PermanentFailure(
+            PositionTransition::ExitPermanentFailureSynthetic {
+                position_id: 0,
+                exit_time: Utc::now(),
+            },
+        );
+    };
+
+    // A FULL exit that failed: if real (non-dust) tokens remain, clear the exit signature
+    // so the close can be retried; if nothing is left, the tokens are gone and the
+    // position is closed synthetically.
+    let Ok(wallet_address) = get_wallet_address() else {
+        return VerificationOutcome::PermanentFailure(
+            PositionTransition::ExitPermanentFailureSynthetic {
+                position_id,
+                exit_time: Utc::now(),
+            },
+        );
+    };
+
+    match get_total_token_balance(&wallet_address, &item.mint).await {
+        Ok(balance) if residual_balance_requires_retry(Some(position_id), balance).await => {
+            VerificationOutcome::Transition(PositionTransition::ExitFailedClearForRetry {
+                position_id,
+            })
+        }
+        _ => VerificationOutcome::PermanentFailure(
+            PositionTransition::ExitPermanentFailureSynthetic {
+                position_id,
+                exit_time: Utc::now(),
+            },
+        ),
+    }
 }
 
 /// Verify a transaction and produce the appropriate transition
@@ -112,47 +173,11 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             },
                         ),
                         VerificationKind::Exit => {
-                            // For exit permanent failures, check wallet balance
-                            if let (Ok(wallet_address), Some(position_id)) =
-                                (get_wallet_address(), item.position_id)
-                            {
-                                match get_total_token_balance(&wallet_address, &item.mint).await {
-                                    Ok(balance) => {
-                                        if residual_balance_requires_retry(
-                                            Some(position_id),
-                                            balance,
-                                        )
-                                        .await
-                                        {
-                                            VerificationOutcome::Transition(
-                                                PositionTransition::ExitFailedClearForRetry {
-                                                    position_id,
-                                                },
-                                            )
-                                        } else {
-                                            VerificationOutcome::PermanentFailure(
-                                                PositionTransition::ExitPermanentFailureSynthetic {
-                                                    position_id,
-                                                    exit_time: Utc::now(),
-                                                },
-                                            )
-                                        }
-                                    }
-                                    Err(_) => VerificationOutcome::PermanentFailure(
-                                        PositionTransition::ExitPermanentFailureSynthetic {
-                                            position_id,
-                                            exit_time: Utc::now(),
-                                        },
-                                    ),
-                                }
-                            } else {
-                                VerificationOutcome::PermanentFailure(
-                                    PositionTransition::ExitPermanentFailureSynthetic {
-                                        position_id: item.position_id.unwrap_or_default(),
-                                        exit_time: Utc::now(),
-                                    },
-                                )
-                            }
+                            failed_exit_outcome(
+                                item,
+                                format!("Exit transaction failed permanently: {error_msg}"),
+                            )
+                            .await
                         }
                     };
                 } else {
@@ -230,50 +255,11 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 );
                             }
                             VerificationKind::Exit => {
-                                // For exit failures, prefer wallet residual check
-                                if let (Ok(wallet_address), Some(position_id)) =
-                                    (get_wallet_address(), item.position_id)
-                                {
-                                    match get_total_token_balance(&wallet_address, &item.mint).await
-                                    {
-                                        Ok(balance) => {
-                                            if residual_balance_requires_retry(
-                                                Some(position_id),
-                                                balance,
-                                            )
-                                            .await
-                                            {
-                                                return VerificationOutcome::Transition(
-                                                    PositionTransition::ExitFailedClearForRetry {
-                                                        position_id,
-                                                    },
-                                                );
-                                            } else {
-                                                return VerificationOutcome::PermanentFailure(
-                          PositionTransition::ExitPermanentFailureSynthetic {
-                            position_id,
-                            exit_time: Utc::now(),
-                          }
-                        );
-                                            }
-                                        }
-                                        Err(_) => {
-                                            return VerificationOutcome::PermanentFailure(
-                                                PositionTransition::ExitPermanentFailureSynthetic {
-                                                    position_id,
-                                                    exit_time: Utc::now(),
-                                                },
-                                            );
-                                        }
-                                    }
-                                } else {
-                                    return VerificationOutcome::PermanentFailure(
-                                        PositionTransition::ExitPermanentFailureSynthetic {
-                                            position_id: item.position_id.unwrap_or_default(),
-                                            exit_time: Utc::now(),
-                                        },
-                                    );
-                                }
+                                return failed_exit_outcome(
+                                    item,
+                                    "Exit transaction reported failed by events".to_owned(),
+                                )
+                                .await;
                             }
                         }
                     }
@@ -679,6 +665,12 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     Ok(remaining_balance) => {
                         // PARTIAL EXIT: Verify expected amount was sold, balance check is informational
                         if item.is_partial_exit {
+                            // The transaction is FINAL: what it sold is what it sold. Retrying
+                            // verification on a mismatch (which is what this did) can never
+                            // change the answer — it just burns attempts until the item is
+                            // ABANDONED, and abandonment used to synthetically close the whole
+                            // position. Record the amount that actually executed and log the
+                            // discrepancy.
                             if let Some(expected) = item.expected_exit_amount {
                                 let tolerance = (expected / 1000).max(10); // 0.1% tolerance or 10 units
                                 if exit_amount < expected.saturating_sub(tolerance)
@@ -687,15 +679,17 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                     logger::warning(
                                         LogTag::Positions,
                                         &format!(
- "Partial exit amount mismatch for mint {}: expected={} actual={} tolerance={}",
+ "Partial exit amount mismatch for mint {}: expected={} actual={} tolerance={} - recording the ACTUAL amount",
                       item.mint, expected, exit_amount, tolerance
                     ),
                                     );
-                                    return VerificationOutcome::RetryTransient(
-                                        "Partial exit amount mismatch - will verify again"
-                                            .to_string(),
-                                    );
                                 }
+                            }
+
+                            if exit_amount == 0 {
+                                return VerificationOutcome::RetryTransient(
+                                    "Partial exit sold zero tokens - will verify again".to_owned(),
+                                );
                             }
 
                             logger::info(
@@ -754,13 +748,40 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 item.position_id.map(|id| id.to_string()).as_deref(),
                                 serde_json::json!({
                                   "position_id": item.position_id,
-                                  "remaining_balance": remaining_balance
+                                  "remaining_balance": remaining_balance,
+                                  "sold": exit_amount
                                 }),
                             )
                             .await;
 
+                            // The swap SUCCEEDED — it sold `exit_amount` tokens and received
+                            // SOL; it just did not empty the wallet (typically tokens split
+                            // across accounts, where close_position_direct deliberately sells
+                            // the primary ATA only). Returning a bare ExitFailedClearForRetry
+                            // here recorded NOTHING: the SOL received vanished from the
+                            // position's proceeds and the tokens sold were still counted as
+                            // held, so realized P&L silently lost this fill. Record it as a
+                            // partial exit, then clear for a retry of the residual.
+                            let sold_pct = {
+                                let total = exit_amount.saturating_add(remaining_balance);
+                                if total > 0 {
+                                    ((exit_amount as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
+                                } else {
+                                    0.0
+                                }
+                            };
+
                             return VerificationOutcome::Transition(
-                                PositionTransition::ExitFailedClearForRetry { position_id },
+                                PositionTransition::ExitResidualClearForRetry {
+                                    position_id,
+                                    exit_amount,
+                                    sol_received: swap_info.effective_sol_received.abs(),
+                                    effective_exit_price: swap_info.calculated_price_sol,
+                                    fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                                    exit_time,
+                                    exit_signature: item.signature.clone(),
+                                    exit_percentage: sold_pct,
+                                },
                             );
                         } else {
                             logger::info(

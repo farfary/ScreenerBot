@@ -6,7 +6,10 @@ pub mod routers;
 pub mod types;
 
 // Re-export router system
-pub use operations::{execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening};
+pub use operations::{
+    execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening,
+    unconfirmed_swap_signature,
+};
 pub use registry::{get_registry, RouterRegistry};
 pub use router::SwapRouter;
 pub use types::{ExitType, Quote, QuoteRequest, RouterType, SwapMode, SwapResult};

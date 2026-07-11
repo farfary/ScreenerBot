@@ -56,6 +56,24 @@ pub enum PositionTransition {
         position_id: i64,
         reason: String,
     },
+    /// A FULL close swap succeeded but left a real (non-dust) balance behind — the
+    /// classic case being a wallet whose tokens are split across several accounts, where
+    /// `close_position_direct` deliberately sells only the primary ATA.
+    ///
+    /// The swap is real: it sold tokens and received SOL. Booking it as a plain failure
+    /// (which is what `ExitFailedClearForRetry` did) silently threw those proceeds away.
+    /// This records the fill exactly like a partial exit AND clears the exit signature so
+    /// the residual can be closed on the next pass.
+    ExitResidualClearForRetry {
+        position_id: i64,
+        exit_amount: u64,
+        sol_received: f64,
+        effective_exit_price: f64,
+        fee_lamports: u64,
+        exit_time: DateTime<Utc>,
+        exit_signature: String,
+        exit_percentage: f64,
+    },
     // ==================== DCA TRANSITIONS ====================
     DcaSubmitted {
         position_id: i64,
@@ -90,6 +108,7 @@ impl PositionTransition {
             | Self::PartialExitSubmitted { position_id, .. }
             | Self::PartialExitVerified { position_id, .. }
             | Self::PartialExitFailed { position_id, .. }
+            | Self::ExitResidualClearForRetry { position_id, .. }
             | Self::DcaSubmitted { position_id, .. }
             | Self::DcaVerified { position_id, .. }
             | Self::DcaFailed { position_id, .. } => Some(*position_id),

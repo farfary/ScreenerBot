@@ -84,8 +84,16 @@ pub async fn check_stop_loss(
     // Check if loss exceeds threshold
     // loss_pct >= threshold means we've lost at least threshold% from entry
     if loss_pct >= threshold_pct {
-        // Determine exit size based on partial exit config
-        let allow_partial = get_stop_loss_allow_partial();
+        // Determine exit size based on partial exit config.
+        //
+        // A partial stop-loss may be taken ONCE. The trigger is `loss_pct >= threshold`,
+        // computed from average_entry_price against the current price — and selling does not
+        // move either. So once a position is below the stop, this fires again on every
+        // monitor cycle: it sold partial_exit_default_pct, then that share of the remainder,
+        // and so on, bleeding the position out in a geometric series and paying fees plus
+        // slippage on every leg, instead of exiting. If the price is STILL under the stop
+        // after we already cut exposure once, the thesis is done — exit fully.
+        let allow_partial = get_stop_loss_allow_partial() && position.partial_exit_count == 0;
         let size_sol = if allow_partial {
             // Use partial exit percentage from positions config
             Some(with_config(|cfg| cfg.positions.partial_exit_default_pct))

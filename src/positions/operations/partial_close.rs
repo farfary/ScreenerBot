@@ -18,6 +18,20 @@ use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 
+/// Back off before the next slippage rung — longer when the router is rate-limiting us.
+async fn backoff_after(error_message: &str) {
+    let lowered = error_message.to_lowercase();
+    if lowered.contains("429") || lowered.contains("rate limit") {
+        logger::warning(
+            LogTag::Positions,
+            "Jupiter rate limit hit, backing off 10 seconds before retry",
+        );
+        sleep(Duration::from_secs(10)).await;
+    } else {
+        sleep(Duration::from_secs(2)).await;
+    }
+}
+
 /// Partially close a position by selling a percentage of remaining tokens
 /// CRITICAL: This does NOT release the semaphore permit - position stays open
 pub async fn partial_close_position(
@@ -127,9 +141,23 @@ pub async fn partial_close_position(
 
     // Manual override starts the ladder; configured steps above it still escalate.
     let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
-    // Slippage retry loop for partial exit
+
+    // Mark the partial pending BEFORE the first submission: the per-mint lock is released
+    // as soon as this function returns, long before verification lands, so this registry is
+    // what stops a second exit from being sized against tokens this one has already sold.
+    crate::positions::state::mark_partial_exit_pending(token_mint).await;
+
+    // ONE ladder: quote and swap at each slippage rung in turn.
+    //
+    // This used to be an initial swap attempt followed by a SECOND loop that started again
+    // at rung 1 — re-submitting the very slippage that had just failed. And any swap error
+    // led to another submission, including the "submitted but not confirmed in time" error,
+    // which means the first sell may well be on chain: retrying it sells the same tokens
+    // TWICE while the position records only one partial.
     let mut last_err: Option<String> = None;
-    let mut quote_opt = None;
+    let mut swap_result = None;
+    let mut submitted_signature: Option<String> = None;
+
     for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
         let quote_request = QuoteRequest {
             input_mint: token_mint.to_string(),
@@ -140,12 +168,9 @@ pub async fn partial_close_position(
             swap_mode: SwapMode::ExactIn,
             exclude_dexes: None,
         };
-        match get_best_quote(quote_request).await {
-            Ok(q) => {
-                quote_opt = Some(q);
-                last_err = None;
-                break;
-            }
+
+        let quote = match get_best_quote(quote_request.clone()).await {
+            Ok(quote) => quote,
             Err(e) => {
                 let err_msg = e.to_string();
                 last_err = Some(format!(
@@ -154,170 +179,111 @@ pub async fn partial_close_position(
                     slippage,
                     err_msg
                 ));
-                let err_lower = err_msg.to_lowercase();
-                if err_lower.contains("429") || err_lower.contains("rate limit") {
-                    logger::warning(
-                        LogTag::Positions,
-                        "Jupiter rate limit hit, backing off 10 seconds before retry",
-                    );
-                    sleep(Duration::from_secs(10)).await;
-                } else {
-                    sleep(Duration::from_secs(2)).await;
-                }
+                backoff_after(&err_msg).await;
                 continue;
             }
-        }
-    }
-    let quote = quote_opt
-        .ok_or_else(|| last_err.unwrap_or_else(|| "Failed to get exit quote".to_owned()))?;
+        };
 
-    logger::info(
-        LogTag::Positions,
-        &format!(
-            "Partial exit quote: {} tokens → {} SOL",
-            exit_amount,
-            quote.output_amount as f64 / 1_000_000_000.0
-        ),
-    );
+        logger::info(
+            LogTag::Positions,
+            &format!(
+                "Partial exit quote ({}% slippage): {} tokens -> {} SOL",
+                slippage,
+                exit_amount,
+                quote.output_amount as f64 / 1_000_000_000.0
+            ),
+        );
 
-    // Mark pending partial BEFORE executing swap to serialize concurrent attempts
-    crate::positions::state::mark_partial_exit_pending(token_mint).await;
-
-    // Execute swap with retry on different slippage levels
-    let mut swap_result = execute_swap_with_fallback(&api_token, quote)
-        .await
-        .map_err(|e| format!("Swap failed: {e}"));
-
-    // If pump.fun bonding curve error on initial attempt, retry with Pump.fun Amm excluded
-    if let Err(ref err_msg) = swap_result {
-        if err_msg.contains("0x1787") || err_msg.contains("6023") {
-            logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "Pump.fun bonding curve error detected for {}, retrying partial exit with alternative DEX route",
-                    token_mint
-                ),
-            );
-            let retry_request = QuoteRequest {
-                input_mint: token_mint.to_string(),
-                output_mint: SOL_MINT.to_string(),
-                input_amount: exit_amount,
-                wallet_address: wallet_address.clone(),
-                slippage_pct: slippage_exit_retry_steps.first().copied().unwrap_or(1.0),
-                swap_mode: SwapMode::ExactIn,
-                exclude_dexes: Some(vec!["Pump.fun Amm".to_string()]),
-            };
-            if let Ok(retry_quote) = get_best_quote(retry_request).await {
-                if let Ok(res) = execute_swap_with_fallback(&api_token, retry_quote).await {
-                    swap_result = Ok(res);
-                }
+        match execute_swap_with_fallback(&api_token, quote).await {
+            Ok(res) => {
+                swap_result = Some(res);
+                last_err = None;
+                break;
             }
-        }
-    }
-
-    if swap_result.is_err() {
-        for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
-            let quote_request = QuoteRequest {
-                input_mint: token_mint.to_string(),
-                output_mint: SOL_MINT.to_string(),
-                input_amount: exit_amount,
-                wallet_address: wallet_address.clone(),
-                slippage_pct: *slippage,
-                swap_mode: SwapMode::ExactIn,
-                exclude_dexes: None,
-            };
-            let q = match get_best_quote(quote_request.clone()).await {
-                Ok(q) => q,
-                Err(e) => {
-                    let err_msg = e.to_string();
-                    last_err = Some(format!(
-                        "Quote failed at step {} ({}%): {}",
-                        i + 1,
-                        slippage,
-                        err_msg
-                    ));
-                    let err_lower = err_msg.to_lowercase();
-                    if err_lower.contains("429") || err_lower.contains("rate limit") {
-                        logger::warning(
-                            LogTag::Positions,
-                            "Jupiter rate limit hit, backing off 10 seconds before retry",
-                        );
-                        sleep(Duration::from_secs(10)).await;
-                    } else {
-                        sleep(Duration::from_secs(2)).await;
-                    }
-                    continue;
-                }
-            };
-            match execute_swap_with_fallback(&api_token, q).await {
-                Ok(res) => {
-                    swap_result = Ok(res);
+            Err(e) => {
+                // Submitted, confirmation timed out: the sell may still land. Stop here and
+                // let verification settle it — another rung would be a second real sell.
+                if let Some(signature) = crate::swaps::unconfirmed_swap_signature(&e) {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Partial exit swap {} for {} was submitted but not confirmed in time - not retrying; verification will settle it",
+                            signature, api_token.symbol
+                        ),
+                    );
+                    submitted_signature = Some(signature);
                     last_err = None;
                     break;
                 }
-                Err(e) => {
-                    let err_msg = e.to_string();
 
-                    // Check for pump.fun bonding curve error (graduated token)
-                    if err_msg.contains("0x1787") || err_msg.contains("6023") {
-                        logger::warning(
-                            LogTag::Positions,
-                            &format!(
-                                "Pump.fun bonding curve error detected for {}, retrying partial exit with alternative DEX route",
-                                token_mint
-                            ),
-                        );
-                        let mut retry_request = quote_request.clone();
-                        retry_request.exclude_dexes = Some(vec!["Pump.fun Amm".to_string()]);
-                        let retry_quote = match get_best_quote(retry_request).await {
-                            Ok(q) => q,
-                            Err(e2) => {
-                                last_err = Some(format!(
-                                    "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
-                                    i + 1, slippage
-                                ));
-                                continue;
-                            }
-                        };
-                        match execute_swap_with_fallback(&api_token, retry_quote).await {
-                            Ok(res) => {
-                                swap_result = Ok(res);
-                                last_err = None;
-                                break;
-                            }
-                            Err(e2) => {
-                                last_err = Some(format!(
-                                    "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
-                                    i + 1, slippage
-                                ));
-                                continue;
+                let err_msg = e.to_string();
+
+                // Pump.fun bonding curve error (graduated token): one retry with that AMM
+                // excluded, at the same slippage.
+                if err_msg.contains("0x1787") || err_msg.contains("6023") {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Pump.fun bonding curve error detected for {}, retrying partial exit with alternative DEX route",
+                            token_mint
+                        ),
+                    );
+
+                    let mut retry_request = quote_request.clone();
+                    retry_request.exclude_dexes = Some(vec!["Pump.fun Amm".to_string()]);
+
+                    match get_best_quote(retry_request).await {
+                        Ok(retry_quote) => {
+                            match execute_swap_with_fallback(&api_token, retry_quote).await {
+                                Ok(res) => {
+                                    swap_result = Some(res);
+                                    last_err = None;
+                                    break;
+                                }
+                                Err(e2) => {
+                                    if let Some(signature) =
+                                        crate::swaps::unconfirmed_swap_signature(&e2)
+                                    {
+                                        submitted_signature = Some(signature);
+                                        last_err = None;
+                                        break;
+                                    }
+                                    last_err = Some(format!(
+                                        "Retry swap without Pump.fun failed: {e2} (step {} slippage {}%)",
+                                        i + 1,
+                                        slippage
+                                    ));
+                                    continue;
+                                }
                             }
                         }
-                    }
-
-                    last_err = Some(format!(
-                        "Partial exit swap failed at step {} ({}%): {}",
-                        i + 1,
-                        slippage,
-                        err_msg
-                    ));
-                    let err_lower = err_msg.to_lowercase();
-                    if err_lower.contains("429") || err_lower.contains("rate limit") {
-                        logger::warning(
-                            LogTag::Positions,
-                            "Jupiter rate limit hit, backing off 10 seconds before retry",
-                        );
-                        sleep(Duration::from_secs(10)).await;
-                    } else {
-                        sleep(Duration::from_secs(2)).await;
+                        Err(e2) => {
+                            last_err = Some(format!(
+                                "Retry without Pump.fun also failed (quote): {e2} (step {} slippage {}%)",
+                                i + 1,
+                                slippage
+                            ));
+                            continue;
+                        }
                     }
                 }
+
+                last_err = Some(format!(
+                    "Partial exit swap failed at step {} ({}%): {}",
+                    i + 1,
+                    slippage,
+                    err_msg
+                ));
+                backoff_after(&err_msg).await;
             }
         }
     }
-    let swap_result = match swap_result {
-        Ok(res) => res,
-        Err(e) => {
+
+    let transaction_signature = match (swap_result, submitted_signature) {
+        (Some(result), _) => result.transaction_signature.clone(),
+        // Submitted but unconfirmed: record the signature and verify it like any other.
+        (None, Some(signature)) => signature,
+        (None, None) => {
             crate::positions::state::clear_partial_exit_pending(token_mint).await;
 
             // Record partial exit failure
@@ -334,11 +300,12 @@ pub async fn partial_close_position(
             )
             .await;
 
-            return Err(format!("Partial exit swap failed: {e}"));
+            return Err(format!(
+                "Partial exit swap failed: {}",
+                last_err.unwrap_or_else(|| "no route".to_owned())
+            ));
         }
     };
-
-    let transaction_signature = swap_result.transaction_signature.clone();
 
     let expiry_height = get_rpc_client()
         .get_block_height()

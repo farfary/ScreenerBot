@@ -121,6 +121,23 @@ pub async fn monitor_positions(
                 continue;
             }
 
+            // A FULL close is already submitted and awaiting verification. The position stays
+            // in `get_open_positions()` until it verifies, so without this the monitor
+            // re-evaluated it every tick, spawned an AutoCloseAction, and had
+            // `close_position_direct` reject it ("already has pending exit transaction") —
+            // an error log and a failed action in the notification centre every 5 seconds.
+            if position.exit_transaction_signature.is_some() && !position.transaction_exit_verified
+            {
+                logger::debug(
+                    LogTag::Trader,
+                    &format!(
+                        "Skipping exit evaluation for {} - a close is already confirming",
+                        position.symbol
+                    ),
+                );
+                continue;
+            }
+
             // A partial exit that has been submitted but not yet verified has already sold
             // tokens the position still counts as held: `remaining_token_amount` is only
             // decremented on verification. Evaluating now would re-trigger the same exit
