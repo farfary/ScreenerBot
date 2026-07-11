@@ -200,6 +200,11 @@ class BillboardDialog {
     });
 
     // Clicking a card (outside its action buttons/links) opens token details.
+    //
+    // The billboard has to close first: it stacks ABOVE the token details dialog
+    // (--z-billboard-dialog 10005 vs --z-dialog 10000), so leaving it open would
+    // cover the details. `onDismiss` reopens it when the user closes the details,
+    // so they land back on the billboard rather than on the page underneath it.
     container.querySelectorAll(".billboard-cat-card").forEach((card) => {
       const mint = card.dataset.mint;
       if (!mint) return;
@@ -208,7 +213,11 @@ class BillboardDialog {
         this.close();
         window.dispatchEvent(
           new CustomEvent("screenerbot:open-token-details", {
-            detail: { mint, symbol: card.dataset.symbol || "" },
+            detail: {
+              mint,
+              symbol: card.dataset.symbol || "",
+              onDismiss: () => this.open(),
+            },
           })
         );
       });

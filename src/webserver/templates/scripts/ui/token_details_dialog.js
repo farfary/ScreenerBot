@@ -1702,8 +1702,14 @@ applyPositionsTabMixin(TokenDetailsDialog);
 
 let globalDialogInstance = null;
 
+// Callback supplied by the opener via `detail.onDismiss`, run once when the user
+// closes the dialog. Openers that are themselves a full-screen overlay (the
+// billboard dialog stacks ABOVE this one, so it cannot simply stay open behind)
+// use it to restore themselves instead of dumping the user on the page below.
+let pendingDismissCallback = null;
+
 window.addEventListener("screenerbot:open-token-details", async (event) => {
-  const { mint, symbol } = event.detail || {};
+  const { mint, symbol, onDismiss } = event.detail || {};
 
   if (!mint) {
     console.error("[TokenDetailsDialog] Event received without mint address");
@@ -1719,6 +1725,9 @@ window.addEventListener("screenerbot:open-token-details", async (event) => {
       console.log("[TokenDetailsDialog] Dialog already open for this token");
       return;
     }
+    // Swapping tokens, not dismissing: the previous opener must NOT be restored
+    // on top of the dialog we are about to show.
+    pendingDismissCallback = null;
     globalDialogInstance.close();
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
@@ -1727,10 +1736,14 @@ window.addEventListener("screenerbot:open-token-details", async (event) => {
   if (!globalDialogInstance) {
     globalDialogInstance = new TokenDetailsDialog({
       onClose: () => {
-        // Keep instance for reuse, just clean up state
+        const dismiss = pendingDismissCallback;
+        pendingDismissCallback = null;
+        if (dismiss) dismiss();
       },
     });
   }
+
+  pendingDismissCallback = typeof onDismiss === "function" ? onDismiss : null;
 
   // Open dialog with minimal token data (dialog will fetch full details)
   await globalDialogInstance.show({ mint, symbol: symbol || "" });
