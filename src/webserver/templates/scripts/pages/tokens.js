@@ -5,7 +5,7 @@ import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
-import { TradeActionDialog } from "../ui/trade_action_dialog.js";
+import { manualTrade } from "../ui/manual_trade.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
 import { showImageLightbox } from "../ui/image_lightbox.js";
@@ -55,7 +55,6 @@ function createLifecycle() {
   let poller = null;
   let ohlcvPoller = null; // Separate poller for OHLCV data
   let tabBar = null;
-  let tradeDialog = null;
   let tokenDetailsDialog = null;
   let walletBalance = 0;
 
@@ -881,109 +880,47 @@ function createLifecycle() {
   };
 
   /**
-   * Shared manual trade handler (buy / add / sell) used by every token-list table AND
-   * the favorites table. Opens the TradeActionDialog then POSTs to the manual endpoints.
-   * `onReload` lets each caller refresh its own view after the trade completes.
+   * Manual trade (buy / add / sell) for every token-list table AND the favorites
+   * table. Delegates to the shared manual-trade flow (ui/manual_trade.js), which owns
+   * the dialog, the payload and the toasts; this only supplies the row's context and
+   * reloads the view afterwards.
    * @param {{action:string, mint:string, row?:object, btn?:HTMLElement, onReload?:Function}} opts
    */
   const performManualTrade = async ({ action, mint, row = {}, btn = null, onReload }) => {
     if (!action || !mint) return;
-    // Lazily ensure the dialog exists (favorites can be opened before the main init).
-    if (!tradeDialog) tradeDialog = new TradeActionDialog();
+
     const symbol = row.symbol || "?";
-    const reload = typeof onReload === "function" ? onReload : () => {};
+    const context = {};
 
-    try {
-      if (action === "buy") {
-        const result = await tradeDialog.open({
-          action: "buy",
-          mint,
-          symbol,
-          context: { mint, balance: walletBalance },
+    if (action === "add") {
+      // DCA presets for the add dialog's size buttons.
+      let entrySizes = [0.005, 0.01, 0.02, 0.05];
+      try {
+        const configData = await requestManager.fetch("/api/config/trader", {
+          priority: "normal",
         });
-        if (!result) return; // User cancelled
-
-        if (btn) btn.disabled = true;
-        await requestManager.fetch("/api/trader/manual/buy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mint,
-            ...(result.amount ? { size_sol: result.amount } : {}),
-            // Manual-management choice from the dialog checkbox (default true).
-            ...(typeof result.manual_management === "boolean"
-              ? { manual_management: result.manual_management }
-              : {}),
-          }),
-          priority: "high",
-        });
-        if (btn) btn.disabled = false;
-        Utils.showToast("Buy placed", "success");
-        reload();
-      } else if (action === "add") {
-        // Fetch config for entry sizes (DCA presets)
-        let entrySizes = [0.005, 0.01, 0.02, 0.05];
-        try {
-          const configData = await requestManager.fetch("/api/config/trader", {
-            priority: "normal",
-          });
-          if (Array.isArray(configData?.data?.entry_sizes)) {
-            entrySizes = configData.data.entry_sizes;
-          }
-        } catch (err) {
-          console.warn("Failed to fetch entry_sizes config:", err);
+        if (Array.isArray(configData?.data?.entry_sizes)) {
+          entrySizes = configData.data.entry_sizes;
         }
-
-        const result = await tradeDialog.open({
-          action: "add",
-          mint,
-          symbol,
-          context: { mint, balance: walletBalance, entrySize: row.entry_sol || 0.005, entrySizes },
-        });
-        if (!result) return;
-
-        if (btn) btn.disabled = true;
-        await requestManager.fetch("/api/trader/manual/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mint,
-            ...(result.amount ? { size_sol: result.amount } : {}),
-          }),
-          priority: "high",
-        });
-        if (btn) btn.disabled = false;
-        Utils.showToast("Added to position", "success");
-        reload();
-      } else if (action === "sell") {
-        const result = await tradeDialog.open({
-          action: "sell",
-          mint,
-          symbol,
-          context: { mint, holdings: row.token_amount, decimals: row.decimals },
-        });
-        if (!result) return;
-
-        const body =
-          result.percentage === 100
-            ? { mint, close_all: true }
-            : { mint, percentage: result.percentage };
-
-        if (btn) btn.disabled = true;
-        await requestManager.fetch("/api/trader/manual/sell", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          priority: "high",
-        });
-        if (btn) btn.disabled = false;
-        Utils.showToast("Sell placed", "success");
-        reload();
+      } catch (err) {
+        console.warn("Failed to fetch entry_sizes config:", err);
       }
-    } catch (err) {
-      if (btn) btn.disabled = false;
-      Utils.showToast(err?.message || "Action failed", "error");
+      context.entrySize = row.entry_sol || 0.005;
+      context.entrySizes = entrySizes;
     }
+
+    const placed = await manualTrade({
+      action,
+      mint,
+      symbol,
+      btn,
+      context,
+      balance: walletBalance,
+      holdings: row.token_amount,
+      decimals: row.decimals,
+    });
+
+    if (placed && typeof onReload === "function") onReload();
   };
 
   // Expose the shared trade handler to sub-modules (favorites table reuses it).
@@ -1707,9 +1644,6 @@ function createLifecycle() {
 
   return {
     init(ctx) {
-      // Initialize trade dialog
-      tradeDialog = new TradeActionDialog();
-
       // Initialize token details dialog
       tokenDetailsDialog = new TokenDetailsDialog();
 
@@ -2053,10 +1987,6 @@ function createLifecycle() {
       const existingLightbox = document.querySelector(".image-lightbox");
       if (existingLightbox) {
         existingLightbox.remove();
-      }
-      if (tradeDialog) {
-        tradeDialog.destroy();
-        tradeDialog = null;
       }
       if (tokenDetailsDialog) {
         tokenDetailsDialog.destroy();

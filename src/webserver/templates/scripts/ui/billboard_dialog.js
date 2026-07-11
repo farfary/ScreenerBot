@@ -17,8 +17,7 @@ import {
   resolveTokenLogoUrl,
   resolveTokenBannerUrl,
 } from "../core/utils.js";
-import { requestManager } from "../core/request_manager.js";
-import { TradeActionDialog } from "./trade_action_dialog.js";
+import { manualTrade } from "./manual_trade.js";
 import { getTokenAccent, fallbackAccent } from "../core/token_accent.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
 // window listener so cards open the token details dialog even when the billboard
@@ -268,50 +267,11 @@ class BillboardDialog {
   }
 
   /**
-   * Buy straight from the card. Mirrors the token-details buy flow: confirm the
-   * size in the shared TradeActionDialog, then POST the manual buy.
+   * Buy straight from the card, via the one shared manual-trade flow (the same one
+   * the context menu, token details and the tokens page use).
    */
   async _handleBuy(mint, symbol) {
-    if (!this.tradeDialog) {
-      this.tradeDialog = new TradeActionDialog();
-    }
-
-    let balance = 0;
-    try {
-      const data = await requestManager.fetch("/api/wallet/balance", { priority: "low" });
-      const parsed = Number(data?.sol_balance);
-      if (Number.isFinite(parsed)) balance = parsed;
-    } catch {
-      // Best-effort: the dialog still opens, just without a balance to size against.
-    }
-
-    try {
-      const result = await this.tradeDialog.open({
-        action: "buy",
-        symbol: symbol || "?",
-        context: { balance, mint },
-      });
-
-      if (!result) return; // cancelled
-
-      const response = await fetch("/api/trader/manual/buy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mint,
-          ...(result.amount ? { size_sol: result.amount } : {}),
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || "Buy failed");
-      }
-
-      Utils.showToast("Buy order placed!", "success");
-    } catch (error) {
-      Utils.showToast(error.message || "Buy failed", "error");
-    }
+    await manualTrade({ action: "buy", mint, symbol });
   }
 
   _renderCategory(category) {

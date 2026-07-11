@@ -58,8 +58,6 @@ export class TokenDetailsDialog {
     this.isOpening = false;
     this.tradeDialog = null;
     this.positionsData = null;
-    this.walletBalance = 0;
-    this.walletBalanceFetchedAt = 0;
     this.advancedChart = null;
     this.chartDataLoaded = false; // Track whether OHLCV data has been loaded
     this._focusTrap = null;

@@ -3,9 +3,7 @@
  * Extracted from token_details_dialog.js to reduce file size
  * Handles buy/sell button actions and trade dialog integration
  */
-import * as Utils from "../../core/utils.js";
-import { TradeActionDialog } from "../trade_action_dialog.js";
-import { requestManager } from "../../core/request_manager.js";
+import { manualTrade } from "../manual_trade.js";
 
 /**
  * Apply trade actions mixin to TokenDetailsDialog class
@@ -15,96 +13,31 @@ export function applyTradeActionsMixin(DialogClass) {
   const proto = DialogClass.prototype;
 
   /**
-   * Ensure trade dialog instance exists
-   * @private
-   */
-  proto._ensureTradeDialog = function () {
-    if (!this.tradeDialog) {
-      this.tradeDialog = new TradeActionDialog();
-    }
-    return this.tradeDialog;
-  };
-
-  /**
-   * Get wallet balance with 10s cache
-   * @private
-   * @returns {Promise<number>} Wallet balance in SOL
-   */
-  proto._getWalletBalance = async function () {
-    const now = Date.now();
-    if (this.walletBalance != null && now - this.walletBalanceFetchedAt < 10000) {
-      return this.walletBalance;
-    }
-
-    try {
-      const data = await requestManager.fetch("/api/wallet/balance", { priority: "low" });
-      const parsedBalance = Number(data?.sol_balance);
-      if (Number.isFinite(parsedBalance)) {
-        this.walletBalance = parsedBalance;
-        this.walletBalanceFetchedAt = now;
-        return this.walletBalance;
-      }
-    } catch (error) {
-      console.warn("[TokenDetailsDialog] Failed to fetch wallet balance", error);
-    }
-
-    this.walletBalance = 0;
-    this.walletBalanceFetchedAt = now;
-    return this.walletBalance;
-  };
-
-  /**
    * Handle buy button click
+   *
+   * The trade itself runs through the shared manual-trade flow (ui/manual_trade.js),
+   * which owns the dialog, the payload and the toasts. This used to be a local copy
+   * that silently dropped the dialog's `manual_management` flag, so a manual buy
+   * from here could be picked up and auto-sold by the trader.
    * @private
    */
   proto._handleBuyClick = async function () {
-    const dialog = this._ensureTradeDialog();
-    const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "?";
+    // Capture the mint BEFORE any await: this.tokenData is nulled when the dialog
+    // closes, and re-reading it after the trade dialog resolves threw.
     const mint = this.tokenData?.mint;
-    const balance = await this._getWalletBalance();
+    const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "?";
 
-    if (!mint) {
-      Utils.showToast("No mint address available", "error");
-      return;
-    }
+    const placed = await manualTrade({
+      action: "buy",
+      mint,
+      symbol,
+      btn: this.dialogEl?.querySelector("#headerBuyBtn"),
+    });
 
-    try {
-      const result = await dialog.open({
-        action: "buy",
-        symbol,
-        context: { balance, mint },
-      });
+    if (!placed) return;
 
-      if (!result) return; // User cancelled
-
-      const buyBtn = this.dialogEl.querySelector("#headerBuyBtn");
-      if (buyBtn) buyBtn.disabled = true;
-
-      const response = await fetch("/api/trader/manual/buy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Use the mint captured before the dialog opened: this.tokenData can
-          // be nulled while the dialog is open (dialog close resets it), and
-          // re-reading it here threw "Cannot read properties of null".
-          mint,
-          ...(result.amount ? { size_sol: result.amount } : {}),
-        }),
-      });
-
-      if (buyBtn) buyBtn.disabled = false;
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || "Buy failed");
-      }
-
-      Utils.showToast("Buy order placed!", "success");
-      this._refreshPositionsData();
-      this.onTradeComplete("buy", mint);
-    } catch (error) {
-      Utils.showToast(error.message || "Buy failed", "error");
-    }
+    this._refreshPositionsData();
+    this.onTradeComplete("buy", mint);
   };
 
   /**
@@ -112,56 +45,21 @@ export function applyTradeActionsMixin(DialogClass) {
    * @private
    */
   proto._handleSellClick = async function () {
-    const dialog = this._ensureTradeDialog();
-    const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "?";
     const mint = this.tokenData?.mint;
+    const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "?";
 
-    if (!mint) {
-      Utils.showToast("No mint address available", "error");
-      return;
-    }
+    const placed = await manualTrade({
+      action: "sell",
+      mint,
+      symbol,
+      holdings: this.fullTokenData?.holdings || 0,
+      btn: this.dialogEl?.querySelector("#headerSellBtn"),
+    });
 
-    // Get holdings for sell percentage calculation
-    const holdings = this.fullTokenData?.holdings || 0;
+    if (!placed) return;
 
-    try {
-      const result = await dialog.open({
-        action: "sell",
-        symbol,
-        context: { mint, holdings },
-      });
-
-      if (!result) return; // User cancelled
-
-      const sellBtn = this.dialogEl.querySelector("#headerSellBtn");
-      if (sellBtn) sellBtn.disabled = true;
-
-      // Use the mint captured before the dialog opened (this.tokenData may be
-      // nulled while the dialog is open).
-      const body =
-        result.percentage === 100
-          ? { mint, close_all: true }
-          : { mint, percentage: result.percentage };
-
-      const response = await fetch("/api/trader/manual/sell", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (sellBtn) sellBtn.disabled = false;
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || "Sell failed");
-      }
-
-      Utils.showToast("Sell order placed!", "success");
-      this._refreshPositionsData();
-      this.onTradeComplete("sell", mint);
-    } catch (error) {
-      Utils.showToast(error.message || "Sell failed", "error");
-    }
+    this._refreshPositionsData();
+    this.onTradeComplete("sell", mint);
   };
 
   /**

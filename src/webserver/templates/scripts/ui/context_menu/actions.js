@@ -18,164 +18,61 @@
 
   function applyActionsMixin(manager) {
     // =========================================================================
-    // Trade Dialog Management
-    // =========================================================================
-
-    /**
-     * Lazily initialize and return cached TradeActionDialog instance
-     */
-    manager._ensureTradeDialog = async function () {
-      if (!this._tradeDialog) {
-        const { TradeActionDialog } = await import("../trade_action_dialog.js");
-        this._tradeDialog = new TradeActionDialog();
-      }
-      return this._tradeDialog;
-    };
-
-    // =========================================================================
     // Token Trading Actions
+    //
+    // All three go through the shared manual-trade flow (ui/manual_trade.js), which
+    // owns the dialog, the payload and the toasts. This file used to hand-roll its
+    // own copy, which had drifted: it dropped the dialog's `manual_management` flag
+    // (so a manual buy could be auto-sold) and POSTed "add" to the /buy endpoint.
     // =========================================================================
 
     /**
      * Buy token action
      */
     manager._buyToken = async function (context) {
-      try {
-        const dialog = await this._ensureTradeDialog();
-
-        const balanceRes = await fetch("/api/wallet/balance");
-        const balanceData = await balanceRes.json();
-        const balance = balanceData?.sol_balance || 0;
-
-        const result = await dialog.open({
-          action: "buy",
-          symbol: context.symbol,
-          context: {
-            balance,
-            mint: context.mint,
-          },
-        });
-
-        if (!result) return;
-
-        const response = await fetch("/api/trader/manual/buy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mint: context.mint,
-            ...(result.amount ? { size_sol: result.amount } : {}),
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.message || "Buy failed");
-        }
-
-        this._showToast("Buy order placed!", "success");
-      } catch (error) {
-        this._showToast(error.message || "Buy failed", "error");
-      }
+      const { manualTrade } = await import("../manual_trade.js");
+      await manualTrade({ action: "buy", mint: context.mint, symbol: context.symbol });
     };
 
     /**
      * Sell token action
      */
     manager._sellToken = async function (context) {
+      const { manualTrade } = await import("../manual_trade.js");
+
+      // Holdings size the sell percentage; 0 is a safe fallback (the dialog just
+      // cannot show a token quote).
+      let holdings = 0;
       try {
-        const dialog = await this._ensureTradeDialog();
-
-        // Fetch token holdings from position for quote calculation
-        let holdings = 0;
-        try {
-          const posRes = await fetch(`/api/positions/${encodeURIComponent(context.mint)}/details`);
-          if (posRes.ok) {
-            const posData = await posRes.json();
-            // /details returns PositionDetailResponse directly; `position` flattens
-            // the summary fields onto itself (no {success,data} envelope).
-            const pos = posData?.position;
-            if (pos) {
-              // Use remaining_token_amount if available (after partial exits), otherwise token_amount
-              holdings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
-            }
+        const posRes = await fetch(`/api/positions/${encodeURIComponent(context.mint)}/details`);
+        if (posRes.ok) {
+          const posData = await posRes.json();
+          // /details returns PositionDetailResponse directly; `position` flattens
+          // the summary fields onto itself (no {success,data} envelope).
+          const pos = posData?.position;
+          if (pos) {
+            // remaining_token_amount reflects partial exits; token_amount is the original.
+            holdings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
           }
-        } catch {
-          // Use 0 as fallback if position fetch fails
         }
-
-        const result = await dialog.open({
-          action: "sell",
-          symbol: context.symbol,
-          context: {
-            mint: context.mint,
-            holdings,
-          },
-        });
-
-        if (!result) return;
-
-        const body =
-          result.percentage === 100
-            ? { mint: context.mint, close_all: true }
-            : { mint: context.mint, percentage: result.percentage };
-
-        const response = await fetch("/api/trader/manual/sell", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.message || "Sell failed");
-        }
-
-        this._showToast("Sell order placed!", "success");
-      } catch (error) {
-        this._showToast(error.message || "Sell failed", "error");
+      } catch {
+        // Use 0 as fallback if position fetch fails
       }
+
+      await manualTrade({
+        action: "sell",
+        mint: context.mint,
+        symbol: context.symbol,
+        holdings,
+      });
     };
 
     /**
      * Add to existing position action
      */
     manager._addToPosition = async function (context) {
-      try {
-        const dialog = await this._ensureTradeDialog();
-
-        const balanceRes = await fetch("/api/wallet/balance");
-        const balanceData = await balanceRes.json();
-        const balance = balanceData?.sol_balance || 0;
-
-        const result = await dialog.open({
-          action: "add",
-          symbol: context.symbol,
-          context: {
-            balance,
-            mint: context.mint,
-          },
-        });
-
-        if (!result) return;
-
-        const response = await fetch("/api/trader/manual/buy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mint: context.mint,
-            size_sol: result.amount,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.message || "Add to position failed");
-        }
-
-        this._showToast("Added to position!", "success");
-      } catch (error) {
-        this._showToast(error.message || "Add to position failed", "error");
-      }
+      const { manualTrade } = await import("../manual_trade.js");
+      await manualTrade({ action: "add", mint: context.mint, symbol: context.symbol });
     };
 
     // =========================================================================
