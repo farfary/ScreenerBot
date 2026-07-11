@@ -21,7 +21,6 @@ const CATEGORIES = [
     title: "Featured Tokens",
     icon: "icon-star",
     key: "featured",
-    isFeatured: true,
   },
   {
     id: "jupiter-organic",
@@ -181,10 +180,22 @@ class BillboardDialog {
     const container = $("#billboard-categories");
     if (!container || !this.data) return;
 
-    container.innerHTML = CATEGORIES.map((cat) => this._renderCategory(cat)).join("");
+    const visible = CATEGORIES.filter((cat) => (this.data[cat.key] || []).length > 0);
+
+    if (visible.length === 0) {
+      container.innerHTML = `
+        <div class="billboard-state billboard-empty">
+          <i class="icon-inbox"></i>
+          <span>No tokens available right now</span>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = visible.map((cat) => this._renderCategory(cat)).join("");
 
     // Attach scroll handlers for each category
-    CATEGORIES.forEach((cat) => {
+    visible.forEach((cat) => {
       this._initScrollBehavior(cat.id);
     });
 
@@ -226,16 +237,6 @@ class BillboardDialog {
 
   _renderCategory(category) {
     const tokens = this.data[category.key] || [];
-
-    if (tokens.length === 0 && !category.isFeatured) {
-      return ""; // Skip empty external categories
-    }
-
-    const emptyState =
-      tokens.length === 0
-        ? '<div class="billboard-cat-empty"><i class="icon-inbox"></i><span>No tokens in this category</span></div>'
-        : "";
-
     const tokenCards = tokens.map((token) => this._renderTokenCard(token)).join("");
 
     const sourceTag = category.source
@@ -257,7 +258,7 @@ class BillboardDialog {
             <i class="icon-chevron-left"></i>
           </button>
           <div class="billboard-cat-tokens" id="billboard-cat-${category.id}">
-            ${emptyState || tokenCards}
+            ${tokenCards}
           </div>
           <button class="billboard-cat-arrow billboard-cat-arrow-right ${tokens.length <= 4 ? "hidden" : ""}" data-dir="right">
             <i class="icon-chevron-right"></i>
@@ -280,10 +281,10 @@ class BillboardDialog {
       : "";
 
     // Small security dot for enriched tokens (higher = safer)
-    let secHtml = '';
+    let secHtml = "";
     if (token.security_score_normalised != null) {
       const s = token.security_score_normalised;
-      const secClass = s >= 70 ? 'good' : s >= 40 ? 'mid' : 'bad';
+      const secClass = s >= 70 ? "good" : s >= 40 ? "mid" : "bad";
       secHtml = `<span class="sec-dot ${secClass}" title="Security: ${s}"></span>`;
     }
 
@@ -291,33 +292,10 @@ class BillboardDialog {
       ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" class="billboard-cat-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="billboard-cat-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
       : `<div class="billboard-cat-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
 
-    // Build metrics line if available (from enrichment or external)
-    let metricsHtml = '';
     const price = token.price_usd ?? token.price_sol;
     const mc = token.market_cap_usd ?? token.fdv_usd;
     const liq = token.liquidity_usd ?? token.liquidity;
     const ch24 = token.price_change_24h ?? token.price_change_h24;
-
-    if (price != null || mc != null || liq != null || ch24 != null) {
-      const parts = [];
-      if (price != null) {
-        const p = typeof price === 'number' ? price.toLocaleString(undefined, {maximumFractionDigits: price < 0.01 ? 6 : 2}) : price;
-        parts.push(`<span class="metric">$${p}</span>`);
-      }
-      if (mc != null) {
-        parts.push(`<span class="metric">MC ${this._formatCompact(mc)}</span>`);
-      }
-      if (liq != null) {
-        parts.push(`<span class="metric">Liq ${this._formatCompact(liq)}</span>`);
-      }
-      if (ch24 != null) {
-        const cls = ch24 >= 0 ? 'pos' : 'neg';
-        parts.push(`<span class="metric ${cls}">${ch24 > 0 ? '+' : ''}${ch24.toFixed(1)}%</span>`);
-      }
-      if (parts.length) {
-        metricsHtml = `<div class="billboard-cat-metrics">${parts.join('')}</div>`;
-      }
-    }
 
     return `
       <div class="billboard-cat-card ${featuredClass}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(name)} (${this._escapeHtml(symbol)})">
@@ -339,10 +317,10 @@ class BillboardDialog {
 
           <!-- Some infos on the right -->
           <div class="metrics-col">
-            ${price != null ? `<div class="price">${typeof price === 'number' ? '$' + price.toLocaleString(undefined, {maximumFractionDigits: price < 0.01 ? 6 : 2}) : price}</div>` : ''}
-            ${ch24 != null ? `<div class="change ${ch24 >= 0 ? 'pos' : 'neg'}">${ch24 > 0 ? '+' : ''}${ch24.toFixed(1)}%</div>` : ''}
-            ${mc != null ? `<div class="meta">MC ${this._formatCompact(mc)}</div>` : ''}
-            ${liq != null ? `<div class="meta">Liq ${this._formatCompact(liq)}</div>` : ''}
+            ${price != null ? `<div class="price">${typeof price === "number" ? "$" + price.toLocaleString(undefined, { maximumFractionDigits: price < 0.01 ? 6 : 2 }) : price}</div>` : ""}
+            ${ch24 != null ? `<div class="change ${ch24 >= 0 ? "pos" : "neg"}">${ch24 > 0 ? "+" : ""}${ch24.toFixed(1)}%</div>` : ""}
+            ${mc != null ? `<div class="meta">MC ${this._formatCompact(mc)}</div>` : ""}
+            ${liq != null ? `<div class="meta">Liq ${this._formatCompact(liq)}</div>` : ""}
           </div>
         </div>
 
@@ -421,10 +399,10 @@ class BillboardDialog {
   }
 
   _formatCompact(n) {
-    if (n == null || !Number.isFinite(n)) return '—';
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    if (n == null || !Number.isFinite(n)) return "—";
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(0) + "K";
     return n.toFixed(0);
   }
 

@@ -558,23 +558,6 @@
    STATES + RESPONSIVE
    ============================================================================= */
 
-.billboard-cat-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-xs, 4px);
-  padding: 20px 12px;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  width: 100%;
-  opacity: 0.6;
-}
-
-.billboard-cat-empty i {
-  font-size: 1.25rem;
-}
-
 .billboard-state {
   display: flex;
   flex-direction: column;
