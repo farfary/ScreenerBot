@@ -96,7 +96,10 @@ input[type="datetime-local"]:hover:not(:disabled, :read-only) {
   border-color: var(--input-border-hover);
 }
 
-/* Focus state */
+/* Focus state - fully custom effect owned by us.
+   We use border + box-shadow only. No browser outline leaking.
+   Text inputs always show a clear custom focus when active (even on mouse),
+   per desktop-app convention for the field you are typing in. */
 input[type="text"]:focus,
 input[type="number"]:focus,
 input[type="password"]:focus,
@@ -107,12 +110,14 @@ input[type="tel"]:focus,
 input[type="date"]:focus,
 input[type="time"]:focus,
 input[type="datetime-local"]:focus {
-  outline: none;
+  outline: none !important; /* ensure no browser default leaks */
   border-color: var(--input-border-focus);
   box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+  caret-color: var(--primary-color); /* our custom caret */
 }
 
-/* Focus-visible for keyboard navigation */
+/* Keyboard-only stronger ring (gated by the global data-input system in theme.js + foundation).
+   We still customize it completely. */
 input[type="text"]:focus-visible,
 input[type="number"]:focus-visible,
 input[type="password"]:focus-visible,
@@ -123,8 +128,10 @@ input[type="tel"]:focus-visible,
 input[type="date"]:focus-visible,
 input[type="time"]:focus-visible,
 input[type="datetime-local"]:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
+  outline: none !important;
+  box-shadow:
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color),
+    0 0 0 2px var(--primary-color);
 }
 
 /* Disabled state */
@@ -220,14 +227,17 @@ textarea:hover:not(:disabled, :read-only) {
 }
 
 textarea:focus {
-  outline: none;
+  outline: none !important;
   border-color: var(--input-border-focus);
   box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+  caret-color: var(--primary-color);
 }
 
 textarea:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
+  outline: none !important;
+  box-shadow:
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color),
+    0 0 0 2px var(--primary-color);
 }
 
 textarea:disabled {
@@ -287,14 +297,17 @@ select:hover:not(:disabled) {
 }
 
 select:focus {
-  outline: none;
+  outline: none !important;
   border-color: var(--input-border-focus);
   box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+  caret-color: var(--primary-color);
 }
 
 select:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
+  outline: none !important;
+  box-shadow:
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color),
+    0 0 0 2px var(--primary-color);
 }
 
 select:disabled {

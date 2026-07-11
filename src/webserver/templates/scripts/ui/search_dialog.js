@@ -129,7 +129,7 @@ function createDialog() {
 
   dialogEl = create("div", { class: "search-dialog-overlay", id: "search-dialog" });
   dialogEl.innerHTML = `
-    <div class="search-dialog" role="dialog" aria-modal="true" aria-labelledby="search-dialog-title">
+    <div class="search-dialog" role="dialog" aria-modal="true">
       <div class="search-dialog-header">
         <div class="search-input-wrapper">
           <i class="search-icon icon-search" aria-hidden="true"></i>
@@ -137,26 +137,22 @@ function createDialog() {
             type="text" 
             id="search-input" 
             class="search-input"
-            placeholder="Search tokens by name, symbol, or mint..." 
+            placeholder="Search name, symbol or mint..." 
             autocomplete="off"
             spellcheck="false"
             aria-label="Search tokens"
           >
-          <kbd class="search-kbd" aria-hidden="true">ESC</kbd>
         </div>
       </div>
       <div class="search-dialog-body">
-        <div id="search-results" class="search-results">
+        <div id="search-results" class="search-results" role="listbox" aria-label="Search results">
           <div class="search-empty">
-            <p class="search-empty-title">Search for tokens</p>
-            <p class="search-hint">Type a name, symbol, or paste a mint address</p>
+            <p class="search-hint">Type token name, symbol or paste mint</p>
           </div>
         </div>
       </div>
       <div class="search-dialog-footer">
-        <span class="search-tip"><kbd>↑↓</kbd> Navigate</span>
-        <span class="search-tip"><kbd>Enter</kbd> View details</span>
-        <span class="search-tip"><kbd>Esc</kbd> Close</span>
+        <span class="search-tip"><kbd>↑</kbd><kbd>↓</kbd> nav &nbsp; <kbd>↵</kbd> open &nbsp; <kbd>esc</kbd> close</span>
       </div>
     </div>
   `;
@@ -187,19 +183,17 @@ async function handleSearch(e) {
   if (query.length < MIN_QUERY_LENGTH) {
     resultsEl.innerHTML = `
       <div class="search-empty">
-        <p class="search-empty-title">Search for tokens</p>
-        <p class="search-hint">Type a name, symbol, or paste a mint address</p>
+        <p class="search-hint">Type token name, symbol or paste mint</p>
       </div>
     `;
     currentResults = [];
     return;
   }
 
-  // Show loading
+  // Show loading — minimal
   resultsEl.innerHTML = `
     <div class="search-loading">
       <i class="icon-loader search-loading-icon"></i>
-      <span>Searching...</span>
     </div>
   `;
 
@@ -233,8 +227,7 @@ function renderResults() {
   if (currentResults.length === 0) {
     resultsEl.innerHTML = `
       <div class="search-empty">
-        <p class="search-empty-title">No tokens found</p>
-        <p class="search-hint">Try a different search term</p>
+        <p class="search-hint">No matches — try different term</p>
       </div>
     `;
     return;
@@ -244,6 +237,7 @@ function renderResults() {
     .map(
       (token, i) => `
     <div class="search-result ${i === selectedIndex ? "selected" : ""}" 
+         id="search-result-${i}"
          data-index="${i}" 
          data-mint="${escapeHTML(token.mint)}"
          role="option"
@@ -264,19 +258,19 @@ function renderResults() {
       </div>
       <div class="search-result-data">
         <div class="search-result-price">${formatCurrencyUSD(token.price_usd)}</div>
-        <div class="search-result-mcap">MCap: ${formatCompactNumber(token.market_cap)}</div>
+        <div class="search-result-mcap">${formatCompactNumber(token.market_cap)}</div>
       </div>
       <div class="search-result-actions">
-        <button class="search-action-btn action-favorite" data-action="favorite" title="Add to Favorites">
+        <button class="btn-icon btn-icon-sm search-action-btn action-favorite" data-action="favorite" title="Add to Favorites" aria-label="Add to Favorites">
           <i class="icon-star"></i>
         </button>
-        <button class="search-action-btn action-blacklist" data-action="blacklist" title="Add to Blacklist">
+        <button class="btn-icon btn-icon-sm search-action-btn action-blacklist" data-action="blacklist" title="Add to Blacklist" aria-label="Add to Blacklist">
           <i class="icon-slash"></i>
         </button>
-        <button class="search-action-btn" data-action="copy" title="Copy Mint Address">
+        <button class="btn-icon btn-icon-sm search-action-btn" data-action="copy" title="Copy Mint Address" aria-label="Copy mint address">
           <i class="icon-copy"></i>
         </button>
-        <button class="search-action-btn" data-action="view" title="View on DexScreener">
+        <button class="btn-icon btn-icon-sm search-action-btn" data-action="view" title="View on DexScreener" aria-label="View on DexScreener">
           <i class="icon-external-link"></i>
         </button>
       </div>
@@ -285,13 +279,45 @@ function renderResults() {
     )
     .join("");
 
-  // Add click handlers
+  // Add click handlers (only on full render)
   resultsEl.querySelectorAll(".search-result").forEach((el) => {
     on(el, "click", handleResultClick);
   });
 
   // Scroll selected item into view
   const selectedEl = resultsEl.querySelector(".search-result.selected");
+  if (selectedEl) {
+    selectedEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+/**
+ * Update only the visual selection (no full re-render).
+ * Much smoother for arrow key navigation.
+ */
+function updateSelectionHighlight() {
+  const resultsEl = $("#search-results", dialogEl);
+  if (!resultsEl) return;
+
+  const input = $("#search-input", dialogEl);
+  const items = resultsEl.querySelectorAll(".search-result");
+  let activeId = null;
+
+  items.forEach((el, i) => {
+    const isSelected = i === selectedIndex;
+    el.classList.toggle("selected", isSelected);
+    el.setAttribute("aria-selected", isSelected ? "true" : "false");
+    if (isSelected) {
+      activeId = el.id || (el.id = `search-result-${i}`);
+    }
+  });
+
+  // Improve a11y: point input at the active option
+  if (input && activeId) {
+    input.setAttribute("aria-activedescendant", activeId);
+  }
+
+  const selectedEl = items[selectedIndex];
   if (selectedEl) {
     selectedEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
@@ -485,13 +511,17 @@ function handleInputKeydown(e) {
   switch (e.key) {
     case "ArrowDown":
       e.preventDefault();
-      selectedIndex = Math.min(selectedIndex + 1, currentResults.length - 1);
-      renderResults();
+      if (currentResults.length > 0) {
+        selectedIndex = Math.min(selectedIndex + 1, currentResults.length - 1);
+        updateSelectionHighlight();
+      }
       break;
     case "ArrowUp":
       e.preventDefault();
-      selectedIndex = Math.max(selectedIndex - 1, 0);
-      renderResults();
+      if (currentResults.length > 0) {
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        updateSelectionHighlight();
+      }
       break;
     case "Enter":
       e.preventDefault();
@@ -559,8 +589,7 @@ export function openDialog() {
 
   $("#search-results", dialogEl).innerHTML = `
     <div class="search-empty">
-      <p class="search-empty-title">Search for tokens</p>
-      <p class="search-hint">Type a name, symbol, or paste a mint address</p>
+      <p class="search-hint">Type token name, symbol or paste mint</p>
     </div>
   `;
 

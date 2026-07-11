@@ -18,8 +18,8 @@ import { HintTrigger } from "./hint_popover.js";
 import "./token_details_dialog.js";
 
 const CONTAINER_ID = "billboard-row";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_NAME_LENGTH = 12; // Max characters for token name display
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_DISPLAY_LENGTH = 14; // name or symbol, prefer symbol for density
 
 // Cache for billboard data
 let cachedTokens = null;
@@ -67,12 +67,14 @@ export function resetBillboardConfigCache() {
 }
 
 /**
- * Truncate text with ellipsis
+ * Truncate for compact display (prefer symbol when possible)
  */
-function truncateName(name, maxLength = MAX_NAME_LENGTH) {
-  if (!name) return "???";
-  if (name.length <= maxLength) return name;
-  return name.slice(0, maxLength - 1) + "…";
+function truncateForDisplay(name, symbol, maxLength = MAX_DISPLAY_LENGTH) {
+  const s = (symbol || "???").toUpperCase();
+  if (s.length <= maxLength) return s;
+  const n = name || s;
+  if (n.length <= maxLength) return n;
+  return n.slice(0, maxLength - 1) + "…";
 }
 
 /**
@@ -390,21 +392,33 @@ class BillboardRow {
   _renderTokenCard(token) {
     const logoUrl = this._getValidLogoUrl(token);
     const featuredClass = token.featured ? "featured" : "";
-    const symbol = token.symbol || "???";
+    const symbol = (token.symbol || "???").toUpperCase();
     const name = token.name || symbol;
     const mint = token.mint || token.id || "";
-    const displayName = truncateName(name);
+    const display = truncateForDisplay(name, symbol);
     const fullTitle = `${name} (${symbol})`;
 
-    // Use placeholder if no valid logo URL
+    // Small inline metric for row (price or 24h change if present)
+    let metric = '';
+    const ch = token.price_change_24h ?? token.price_change_h24;
+    if (ch != null) {
+      const cls = ch >= 0 ? 'pos' : 'neg';
+      metric = `<span class="row-metric ${cls}">${ch > 0 ? '+' : ''}${ch.toFixed(0)}%</span>`;
+    } else if (token.price_usd != null) {
+      const p = token.price_usd;
+      const ps = p < 0.01 ? p.toFixed(4) : p.toFixed(2);
+      metric = `<span class="row-metric">$${ps}</span>`;
+    }
+
     const logoHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="billboard-row-card-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="billboard-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`
-      : `<div class="billboard-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`;
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="billboard-row-card-logo" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/><div class="billboard-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
+      : `<div class="billboard-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
 
     return `
       <div class="billboard-row-card ${featuredClass}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(fullTitle)}">
         ${logoHtml}
-        <span class="billboard-row-card-name">${this._escapeHtml(displayName)}</span>
+        <span class="billboard-row-card-name">${this._escapeHtml(display)}</span>
+        ${metric}
         ${token.featured ? '<i class="icon-star billboard-row-card-star"></i>' : ""}
       </div>
     `;

@@ -213,8 +213,12 @@ function updateBotCard(trader) {
   const card = document.getElementById("botCard");
   const status = document.getElementById("botStatus");
   const pnl = document.getElementById("botPnL");
+  const sep = card ? card.querySelector(".status-sep") : null;
 
   if (!card || !status || !pnl) return;
+
+  // Default: hide separator until we have a real P&L value (keeps loading/preview clean)
+  if (sep) sep.style.visibility = "hidden";
 
   // The bot card is the trader on/off control (see initCardHandlers). Header
   // metrics are the authoritative live source, so mirror the running state here
@@ -236,18 +240,18 @@ function updateBotCard(trader) {
 
   // Update P&L (no trading P&L in preview mode)
   if (previewMode) {
-    pnl.textContent = "—";
+    pnl.innerHTML = "—";
+    if (sep) sep.style.visibility = "hidden";
     pnl.classList.remove("positive", "negative");
     return;
   }
 
-  const pnlText =
-    trader.today_pnl_sol >= 0
-      ? `+${trader.today_pnl_sol.toFixed(3)} SOL`
-      : `${trader.today_pnl_sol.toFixed(3)} SOL`;
+  const sign = trader.today_pnl_sol >= 0 ? "+" : "";
+  const abs = Math.abs(trader.today_pnl_sol).toFixed(3);
 
-  pnl.textContent = pnlText;
-  // Use classList to avoid className replacement flash
+  // Structured for better visual weight: number prominent, unit slightly lighter
+  pnl.innerHTML = `<span class="pnl-num">${sign}${abs}</span><span class="pnl-unit"> SOL</span>`;
+  if (sep) sep.style.visibility = "";
   pnl.classList.remove("positive", "negative");
   pnl.classList.add(trader.today_pnl_sol >= 0 ? "positive" : "negative");
 }

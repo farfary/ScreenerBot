@@ -325,6 +325,13 @@
   --danger-alpha-20: rgb(248, 81, 73, 0.2);
   --danger-alpha-30: rgb(248, 81, 73, 0.3);
 
+  /* Custom selection (text highlight) - fully owned by us */
+  --selection-bg: rgba(6, 182, 212, 0.35);
+  --selection-text: #e6edf3;
+
+  /* Default custom input focus ring (soft glow) */
+  --input-focus-ring-color: var(--primary-alpha-10);
+
   /* Form Control Overrides */
   --select-arrow: var(--select-arrow-dark);
 
@@ -386,22 +393,26 @@
     border-color 0.3s ease;
 }
 
-/* Remove default focus outline on mouse click, keep for keyboard navigation */
+/* =============================================================================
+   Global Focus - Completely customized and owned by us.
+   We never rely on browser default outlines for our UI.
+   ============================================================================= */
+
+/* Kill all native focus outlines. We provide our own effects. */
 *:focus {
-  outline: none;
+  outline: none !important;
 }
 
 *:focus-visible {
-  outline: 2px solid var(--link-color);
-  outline-offset: 2px;
+  outline: none !important;
 }
 
-/* Mouse/touch interaction: suppress focus rings so controls don't stay
-   highlighted after a click (native desktop-app behaviour). Keyboard navigation
-   (Tab/arrows) re-enables them via [data-input="keyboard"] on <html>. Text-entry
-   controls keep their ring so the active field stays obvious. */
+/* Mouse/touch interaction: suppress focus effects on non-text controls
+   (native desktop-app behaviour - no lingering highlight after click).
+   Keyboard navigation (Tab/arrows) re-enables custom effects via data-input.
+   Text inputs/textareas always receive our custom focus effect when focused. */
 html[data-input="mouse"] :focus-visible:not(input):not(textarea):not(select):not([contenteditable="true"]) {
-  outline: none;
+  box-shadow: none;
 }
 
 html[data-input="mouse"] button:focus-visible,
@@ -510,6 +521,30 @@ textarea,
 select,
 [contenteditable="true"] {
   user-select: text;
+}
+
+/* =============================================================================
+   Custom Text Selection (fully controlled by us)
+   =============================================================================
+   No browser defaults. We own the selection appearance in inputs and selectable areas.
+*/
+
+::selection {
+  background: var(--selection-bg, rgba(6, 182, 212, 0.35));
+  color: var(--selection-text, #e6edf3);
+}
+
+::-moz-selection {
+  background: var(--selection-bg, rgba(6, 182, 212, 0.35));
+  color: var(--selection-text, #e6edf3);
+}
+
+[data-theme="light"] {
+  --selection-bg: rgba(59, 130, 246, 0.25);
+  --selection-text: #1f2937;
+
+  /* Use a more visible but still custom focus ring color in light mode */
+  --input-focus-ring-color: rgba(59, 130, 246, 0.15);
 }
 
 /* =============================================================================

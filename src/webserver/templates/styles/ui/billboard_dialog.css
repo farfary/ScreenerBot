@@ -1,17 +1,13 @@
 /**
- * Billboard Dialog Styles - Fullscreen Mode
+ * Billboard Dialog - Full featured + trending view
  *
- * Full-screen dialog showcasing featured tokens from the community
- * plus external sources (Jupiter, DexScreener) in Netflix-style categories.
- * Follows the desktop app style pattern from settings_dialog.css.
+ * Clean desktop-app fullscreen dialog.
+ * Categories with horizontal cards.
+ * Consistent with settings / other dialogs: vars, spacing, flat cards, mono.
  */
 
 /* =============================================================================
-   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
-   Platform-aware layout:
-   - Browser/Windows/Linux: No title bar offset, full height
-   - macOS Electron: 28px title bar for traffic lights + window drag
-   Status bar (24px) at bottom
+   BASE
    ============================================================================= */
 
 .billboard-dialog {
@@ -21,7 +17,7 @@
   display: flex;
   flex-direction: column;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.2s ease;
   pointer-events: none;
 }
 
@@ -30,7 +26,7 @@
   pointer-events: auto;
 }
 
-/* Title bar area - hidden by default (browser/Windows/Linux) */
+/* macOS titlebar spacer */
 .billboard-dialog::before {
   content: "";
   position: absolute;
@@ -38,17 +34,15 @@
   left: 0;
   right: 0;
   height: 0;
-  background: var(--bg-secondary, #161b22);
+  background: var(--bg-secondary);
   z-index: 1;
   transition: height 0.15s ease;
 }
 
-/* macOS Electron: Show title bar background */
 .electron-macos .billboard-dialog::before {
   height: 28px;
 }
 
-/* Backdrop - full coverage by default */
 .billboard-backdrop {
   position: absolute;
   inset: 0 0 24px;
@@ -56,271 +50,253 @@
   cursor: default;
 }
 
-/* macOS Electron: Backdrop starts below title bar */
 .electron-macos .billboard-backdrop {
   top: 28px;
 }
 
-/* =============================================================================
-   CONTAINER
-   ============================================================================= */
-
+/* Container */
 .billboard-container {
   position: relative;
   margin-top: 0;
   margin-bottom: 24px;
-  background: var(--bg-primary, #0d1117);
+  background: var(--bg-primary);
   border: none;
   border-radius: 0;
   box-shadow: none;
   width: 100%;
   flex: 1;
-  max-width: none;
-  max-height: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: billboard-fade-in 0.25s ease-out;
   z-index: 2;
 }
 
-/* macOS Electron: Content starts below title bar */
 .electron-macos .billboard-container {
   margin-top: 28px;
 }
 
-@keyframes billboard-fade-in {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
 /* =============================================================================
-   HEADER - Desktop App Style
+   HEADER — Creative elegant top bar (no form style, no icon)
    ============================================================================= */
 
 .billboard-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 10px 16px;
-  background: var(--bg-secondary, #161b22);
-  border-bottom: 1px solid var(--border-color, #30363d);
+  padding: 32px 32px 22px;
+  background: transparent;
+  border: none;
   flex-shrink: 0;
-  min-height: 56px;
 }
 
-.billboard-header-left {
+.billboard-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.billboard-title {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  position: relative;
+  display: inline-block;
+}
+
+.billboard-title::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 38%;
+  height: 2px;
+  background: linear-gradient(to right, var(--link-color), transparent);
+  border-radius: 1px;
+  opacity: 0.35;
+}
+
+.billboard-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+}
+
+.billboard-actions {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-top: 6px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border-color);
+  opacity: 0.95;
 }
 
-.billboard-icon {
+/* Creative Submit button — elegant pill, premium feel */
+.billboard-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 22px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.billboard-submit-btn:hover {
+  background: var(--link-color);
+  color: #fff;
+  border-color: var(--link-color);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.billboard-submit-btn:active {
+  transform: translateY(0);
+}
+
+/* Close button — follows exact standard dialog close button style (like .settings-close-btn) */
+.billboard-close-btn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: rgb(88, 166, 255, 0.1);
-  border-radius: var(--radius-xl);
-  font-size: 1.1rem;
-  color: var(--link-color, #58a6ff);
-}
-
-.billboard-title h2 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-primary, #e6edf3);
-  letter-spacing: -0.01em;
-}
-
-.billboard-subtitle {
-  font-size: 0.75rem;
-  color: var(--text-secondary, #8b949e);
-  margin-top: 1px;
-}
-
-.billboard-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.billboard-submit-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  background: var(--link-color, #58a6ff);
-  border: none;
-  border-radius: var(--radius-md);
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 600;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  font-size: 1.2rem;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  text-decoration: none;
-}
-
-.billboard-submit-btn:hover {
-  background: #79b8ff;
-  text-decoration: none;
-  color: white;
-}
-
-.billboard-submit-btn i {
-  font-size: 0.875rem;
-}
-
-.billboard-close-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgb(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color, #30363d);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary, #8b949e);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all var(--transition-base);
 }
 
 .billboard-close-btn:hover {
-  background: rgb(248, 81, 73, 0.15);
-  border-color: var(--error, #f85149);
-  color: var(--error, #f85149);
+  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
+  color: var(--danger);
 }
 
 /* =============================================================================
-   BODY - Scrollable Content
+   BODY + CATEGORIES
    ============================================================================= */
 
 .billboard-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-lg, 24px);
+  padding: var(--spacing-md, 16px);
   scrollbar-gutter: stable;
 }
-
-/* =============================================================================
-   CATEGORIES - Netflix-style horizontal rows
-   ============================================================================= */
 
 .billboard-categories {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl, 32px);
+  gap: var(--spacing-lg, 24px);
 }
 
-/* Individual category section */
 .billboard-category {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md, 16px);
+  gap: var(--spacing-sm, 8px);
 }
 
-/* Category header */
+/* Category header - compact */
 .billboard-cat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--spacing-sm, 8px);
+  padding: 0 var(--spacing-xs, 4px);
 }
 
 .billboard-cat-title {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm, 8px);
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 0.9375rem;
+  gap: var(--spacing-xs, 4px);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--text-primary, #e6edf3);
+  color: var(--text-primary);
 }
 
 .billboard-cat-title i {
-  font-size: 1.125rem;
-  color: var(--link-color, #58a6ff);
+  font-size: 0.875rem;
+  color: var(--link-color);
 }
 
 .billboard-cat-source {
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   font-weight: 500;
-  color: var(--text-secondary, #8b949e);
-  background: rgb(255, 255, 255, 0.05);
-  padding: 0.1875rem 0.5rem;
-  border-radius: var(--radius-sm, 4px);
+  color: var(--text-secondary);
+  background: rgb(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .billboard-cat-count {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 0.75rem;
-  color: var(--text-secondary, #8b949e);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
 }
 
-/* Scroll wrapper */
+/* Scroll area */
 .billboard-cat-scroll-wrapper {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-/* Tokens container - horizontal scroll with hidden scrollbar */
 .billboard-cat-tokens {
   display: flex;
-  gap: var(--spacing-md, 16px);
+  gap: var(--spacing-sm, 8px);
   overflow: auto hidden;
   scroll-behavior: smooth;
-  padding: var(--spacing-sm, 8px);
+  padding: 4px 0;
   flex: 1;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Hidden scrollbar - uses global scrollbar-hidden pattern */
-
-/* Scroll arrows */
+/* Arrows - consistent with row */
 .billboard-cat-arrow {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary, #0d1117);
-  border: 1px solid var(--border-color, #30363d);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   cursor: pointer;
   z-index: 10;
   transition: all var(--transition-fast);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.4);
 }
 
 .billboard-cat-arrow:hover {
-  background: var(--bg-secondary, #161b22);
-  color: var(--text-primary, #e6edf3);
-  border-color: var(--link-color, #58a6ff);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--link-color);
 }
 
-.billboard-cat-arrow-left {
-  left: 0;
-}
-
-.billboard-cat-arrow-right {
-  right: 0;
-}
+.billboard-cat-arrow-left { left: 0; }
+.billboard-cat-arrow-right { right: 0; }
 
 .billboard-cat-arrow.hidden {
   opacity: 0;
@@ -328,328 +304,360 @@
 }
 
 .billboard-cat-arrow i {
-  font-size: 1rem;
+  font-size: 0.75rem;
 }
 
 /* =============================================================================
-   TOKEN CARD - Bigger logos and better design
+   TOKEN CARDS - new layout per spec
+   - .logo-col (circle) top left
+   - infos below in .info-col (name, symbol)
+   - some infos in .metrics-col on the right (price, change, meta)
+   - actions at bottom
+   Clean typography, good visual hierarchy
    ============================================================================= */
 
 .billboard-cat-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-sm, 8px);
-  padding: var(--spacing-md, 16px);
-  background: var(--bg-secondary, #161b22);
-  border: 1px solid var(--border-color, #30363d);
-  border-radius: var(--radius-lg, 8px);
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all var(--transition-fast);
   flex-shrink: 0;
-  min-width: 160px;
-  max-width: 180px;
+  min-width: 172px;
+  max-width: 192px;
   position: relative;
 }
 
 .billboard-cat-card:hover {
-  border-color: var(--link-color, #58a6ff);
-  background: var(--bg-card-hover, #1c2128);
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.4);
+  border-color: var(--link-color);
+  background: var(--bg-card-hover);
 }
 
 .billboard-cat-card.featured {
   border-color: var(--warning-color);
-  background: linear-gradient(135deg, var(--warning-alpha-10) 0%, var(--bg-secondary, #161b22) 100%);
 }
 
 .billboard-cat-card.featured:hover {
   border-color: var(--warning-color);
-  box-shadow: 0 8px 24px var(--warning-alpha-20);
 }
 
-/* Token logo - BIGGER size (48px) with animated glow */
-.billboard-cat-logo {
-  position: relative;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-full);
-  object-fit: cover;
-  background: var(--bg-primary, #0d1117);
-  border: 2px solid rgb(255, 255, 255, 0.1);
-  flex-shrink: 0;
-  z-index: 1;
+/* Main horizontal layout: logo | left-infos | right-infos */
+.card-main {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
 }
 
-/* Subtle static glow behind the logo. A whole grid of logos pulsing at once
-   reads as busy/dated, so the glow stays calm and only brightens + grows on
-   card hover. */
+/* Gentle glow */
 .billboard-cat-logo::before,
 .billboard-cat-logo-placeholder::before {
   content: "";
   position: absolute;
-  inset: -6px;
-  background: radial-gradient(
-    circle,
-    rgb(88, 166, 255, 0.18) 0%,
-    rgb(139, 92, 246, 0.1) 50%,
-    transparent 70%
-  );
+  inset: -5px;
+  background: radial-gradient(circle, var(--primary-alpha-10, rgba(88,166,255,0.12)) 0%, transparent 70%);
   border-radius: var(--radius-full);
   z-index: -1;
-  opacity: 0.6;
-  transform: scale(1);
-  transition:
-    opacity var(--transition-base),
-    transform var(--transition-base);
+  opacity: 0.5;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .billboard-cat-card:hover .billboard-cat-logo::before,
 .billboard-cat-card:hover .billboard-cat-logo-placeholder::before {
-  opacity: 1;
-  transform: scale(1.12);
+  opacity: 0.85;
+  transform: scale(1.08);
 }
 
-/* Token logo placeholder - shown when no valid URL */
 .billboard-cat-logo-placeholder {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--bg-secondary, #161b22), var(--bg-primary, #0d1117));
-  border: 2px solid rgb(255, 255, 255, 0.1);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   flex-shrink: 0;
   z-index: 1;
 }
 
 .billboard-cat-logo-placeholder span {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--text-secondary, #8b949e);
+  color: var(--text-secondary);
   text-transform: uppercase;
 }
 
-/* Token info - centered */
-.billboard-cat-info {
+/* Logo column - circle top left */
+.logo-col {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  position: relative;
+}
+
+.billboard-cat-logo,
+.billboard-cat-logo-placeholder {
+  width: 42px;
+  height: 42px;
+  border-radius: 9999px;
+  object-fit: cover;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  display: block;
+}
+
+.billboard-cat-logo-placeholder {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  min-width: 0;
-  width: 100%;
-}
-
-.billboard-cat-name {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 0.8125rem;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--text-primary, #e6edf3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
-  max-width: 100%;
+  color: var(--text-secondary);
 }
 
-.billboard-cat-symbol {
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 0.6875rem;
-  color: var(--text-secondary, #8b949e);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.3;
-}
-
-/* Featured badge */
+/* Featured badge on top of logo (top-leftish) */
 .billboard-cat-badge {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 22px;
-  height: 22px;
+  top: -3px;
+  left: -3px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--warning-color) 0%, var(--warning-color-dark) 100%);
-  border-radius: var(--radius-full);
+  background: var(--warning-color);
+  border-radius: 9999px;
   color: #000;
-  box-shadow: 0 2px 8px var(--warning-alpha-30);
+  font-size: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  z-index: 3;
 }
 
-.billboard-cat-badge i {
+/* Main flex layout for the card */
+.card-main {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* Left column under the logo */
+.info-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cat-name {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
+
+.cat-symbol {
+  font-family: var(--font-mono);
   font-size: 0.625rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
 
-/* Actions row */
-.billboard-cat-actions {
+/* Right column with price etc */
+.metrics-col {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 0;
+  min-width: 62px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.1;
+}
+
+.metrics-col .price {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-feature-settings: "tnum";
+  font-size: 0.75rem;
+}
+
+.metrics-col .change {
+  font-weight: 600;
+  font-size: 0.625rem;
+  font-feature-settings: "tnum";
+}
+
+.metrics-col .change.pos { color: var(--success-color, #10b981); }
+.metrics-col .change.neg { color: var(--error-color, #ef4444); }
+
+.metrics-col .meta {
+  font-size: 0.5625rem;
+  color: var(--text-secondary);
+  font-feature-settings: "tnum";
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+/* Security dot */
+.sec-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   flex-shrink: 0;
-  margin-top: var(--spacing-xs, 4px);
 }
 
-/* Social links */
+.sec-dot.good { background: var(--success-color, #10b981); }
+.sec-dot.mid  { background: #f59e0b; }
+.sec-dot.bad  { background: var(--error-color, #ef4444); }
+
+/* Bottom actions row */
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-color);
+}
+
+.cat-copy-btn,
 .billboard-cat-social {
-  width: 26px;
-  height: 26px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary, #8b949e);
-  text-decoration: none;
-  border-radius: var(--radius-sm, 4px);
-  transition: all var(--transition-fast);
-}
-
-.billboard-cat-social:hover {
-  color: var(--link-color, #58a6ff);
-  background: rgb(88, 166, 255, 0.1);
-}
-
-.billboard-cat-social i {
-  font-size: 0.875rem;
-}
-
-/* Copy button */
-.billboard-cat-copy-btn {
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
   background: transparent;
   border: none;
-  color: var(--text-secondary, #8b949e);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  border-radius: var(--radius-sm, 4px);
   transition: all var(--transition-fast);
 }
 
-.billboard-cat-copy-btn:hover {
-  color: var(--link-color, #58a6ff);
-  background: rgb(88, 166, 255, 0.1);
-}
-
-.billboard-cat-copy-btn i {
-  font-size: 0.875rem;
+.cat-copy-btn:hover,
+.billboard-cat-social:hover {
+  color: var(--link-color);
+  background: var(--primary-alpha-10, rgba(88, 166, 255, 0.08));
 }
 
 /* =============================================================================
-   EMPTY & LOADING STATES
+   STATES + RESPONSIVE
    ============================================================================= */
 
 .billboard-cat-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-sm, 8px);
-  padding: var(--spacing-xl, 32px);
-  color: var(--text-secondary, #8b949e);
-  font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 0.8125rem;
+  gap: var(--spacing-xs, 4px);
+  padding: 20px 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   width: 100%;
+  opacity: 0.6;
 }
 
 .billboard-cat-empty i {
-  font-size: 1.5rem;
-  opacity: 0.5;
+  font-size: 1.25rem;
 }
 
 .billboard-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  padding: 5rem 2rem;
-  color: var(--text-secondary, #8b949e);
+  gap: var(--spacing-sm, 8px);
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .billboard-state i {
-  font-size: 3rem;
-  opacity: 0.5;
+  font-size: 2rem;
+  opacity: 0.6;
 }
 
 .billboard-state span {
-  font-size: 1rem;
+  font-size: 0.875rem;
 }
 
 .billboard-loading i {
-  color: var(--link-color, #58a6ff);
+  color: var(--link-color);
   opacity: 1;
 }
 
 .billboard-error i {
-  color: var(--error, #f85149);
+  color: var(--error-color);
   opacity: 1;
 }
 
-/* Spin animation for loading */
 .spin {
   animation: billboard-spin 1s linear infinite;
 }
 
 @keyframes billboard-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
-
-/* =============================================================================
-   RESPONSIVE ADJUSTMENTS
-   ============================================================================= */
 
 @media (width <= 768px) {
   .billboard-body {
-    padding: var(--spacing-md, 16px);
+    padding: var(--spacing-sm, 12px);
   }
 
   .billboard-categories {
-    gap: var(--spacing-lg, 24px);
+    gap: var(--spacing-md, 16px);
   }
 
   .billboard-cat-card {
-    min-width: 140px;
-    max-width: 160px;
-    padding: var(--spacing-sm, 8px);
+    min-width: 132px;
+    max-width: 148px;
+    padding: 8px;
   }
 
   .billboard-cat-logo,
   .billboard-cat-logo-placeholder {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
   }
 
   .billboard-cat-name {
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
   }
 
   .billboard-cat-symbol {
-    font-size: 0.625rem;
+    font-size: 0.5625rem;
   }
 
   .billboard-cat-arrow {
-    width: 28px;
-    height: 28px;
-  }
-
-  .billboard-submit-btn span {
-    display: none;
+    width: 22px;
+    height: 22px;
   }
 
   .billboard-submit-btn {
-    padding: 6px 10px;
+    padding: 8px 16px;
+    font-size: 0.6875rem;
   }
 }

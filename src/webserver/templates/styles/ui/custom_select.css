@@ -53,7 +53,7 @@ select.cs-enhanced-source {
 .custom-select.open .cs-trigger {
   background: var(--bg-card-hover);
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-alpha-10);
+  box-shadow: 0 0 0 var(--input-focus-ring-width, 3px) var(--input-focus-ring-color, var(--primary-alpha-10));
 }
 
 /* Value display */
@@ -358,8 +358,10 @@ select.cs-enhanced-source {
 
 /* Focus visible for keyboard users */
 .custom-select:focus-visible .cs-trigger {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
+  outline: none !important;
+  box-shadow:
+    0 0 0 var(--input-focus-ring-width, 3px) var(--input-focus-ring-color, var(--primary-alpha-10)),
+    0 0 0 2px var(--primary-color);
 }
 
 /* Reduced motion preference */

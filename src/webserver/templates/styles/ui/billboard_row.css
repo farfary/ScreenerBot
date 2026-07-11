@@ -1,8 +1,9 @@
 /**
  * Billboard Row Styles
  *
- * Compact horizontal scrolling row for featured tokens.
- * Shows logo + truncated name only for minimal footprint.
+ * Clean, minimal horizontal row for featured + trending tokens.
+ * Blends with the dashboard; text + logo focused; no heavy chrome.
+ * Follows 8px scale, flat cards, mono data.
  */
 
 /* ============================================
@@ -13,13 +14,12 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 26px; /* Position above status bar (26px height) */
-  z-index: var(--z-billboard-row); /* Below all overlays; only status bar is above it */
+  bottom: 26px;
+  z-index: var(--z-billboard-row);
   width: 100%;
-  height: 44px; /* Fixed height for predictable layout */
+  height: 48px;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  padding: 0; /* Remove vertical padding, use flex centering */
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -28,7 +28,6 @@
 
 .billboard-row-inner {
   width: 100%;
-  max-width: 100%;
   padding: 0 var(--spacing-md);
   display: flex;
   align-items: center;
@@ -42,7 +41,7 @@
 .billboard-row-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--spacing-xs);
   flex-shrink: 0;
 }
 
@@ -64,13 +63,14 @@
   border: 1px solid var(--border-color);
   color: var(--link-color);
   font-family: var(--font-mono);
-  font-size: 0.5625rem;
+  font-size: 0.625rem;
   font-weight: 500;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
   white-space: nowrap;
+  height: 22px;
 }
 
 .billboard-row-view-all:hover {
@@ -79,11 +79,11 @@
 }
 
 .billboard-row-view-all i {
-  font-size: 0.5rem;
+  font-size: 0.625rem;
 }
 
 /* ============================================
-   SCROLL CONTAINER
+   SCROLL CONTAINER + ARROWS (minimal, clean)
    ============================================ */
 
 .billboard-row-scroll {
@@ -96,7 +96,7 @@
 
 .billboard-row-tokens {
   display: flex;
-  gap: 6px;
+  gap: var(--spacing-xs);
   overflow: hidden auto;
   scroll-behavior: smooth;
   padding: 2px 0;
@@ -104,18 +104,15 @@
   -webkit-overflow-scrolling: touch;
 }
 
-/* Hidden scrollbar - uses global scrollbar-hidden pattern */
+/* Use global hidden scrollbar from scrollbar.css */
 
-/* ============================================
-   SCROLL ARROWS
-   ============================================ */
-
+/* Scroll arrows - subtle */
 .billboard-row-arrow {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -126,7 +123,6 @@
   cursor: pointer;
   z-index: 10;
   transition: all var(--transition-fast);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.3);
 }
 
 .billboard-row-arrow:hover {
@@ -153,14 +149,15 @@
 }
 
 /* ============================================
-   TOKEN CARDS (COMPACT: logo + name)
+   TOKEN CARDS - clean flat cards, consistent with app
+   Logo + name; featured gets subtle treatment (no accent bar)
    ============================================ */
 
 .billboard-row-card {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px 4px 4px;
+  gap: var(--spacing-xs);
+  padding: 3px 8px 3px 4px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -168,6 +165,7 @@
   transition: all var(--transition-fast);
   flex-shrink: 0;
   position: relative;
+  min-height: 28px;
 }
 
 .billboard-row-card:hover {
@@ -176,22 +174,25 @@
   transform: translateY(-1px);
 }
 
+/* Featured: subtle border + star, no heavy treatment */
 .billboard-row-card.featured {
-  border-color: #f59e0b;
+  border-color: var(--warning-color);
+  background: linear-gradient(90deg, rgba(245,158,11,0.06), var(--bg-primary));
 }
 
 .billboard-row-card.featured:hover {
-  border-color: #fbbf24;
+  border-color: var(--warning-color);
 }
 
-/* Logo - 20px for compact view */
+/* Logo */
 .billboard-row-card-logo {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: var(--radius-full);
   object-fit: cover;
   background: var(--bg-secondary);
   flex-shrink: 0;
+  border: 1px solid var(--border-color);
 }
 
 /* Logo placeholder */
@@ -199,28 +200,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: var(--radius-full);
   background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .billboard-row-card-logo-placeholder span {
   font-family: var(--font-mono);
-  font-size: 0.5625rem;
+  font-size: 0.625rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
 }
 
 .billboard-row-card-logo-placeholder i {
-  font-size: 0.5rem;
+  font-size: 0.625rem;
   color: var(--text-secondary);
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
-/* Token name */
+/* Token name - mono, compact */
 .billboard-row-card-name {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
@@ -230,91 +232,108 @@
   line-height: 1;
 }
 
-/* Featured star icon */
+/* Inline metric for compact row */
+.row-metric {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  margin-left: 4px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-feature-settings: "tnum";
+  line-height: 1;
+}
+
+.row-metric.pos { color: var(--success-color, #10b981); }
+.row-metric.neg { color: var(--error-color, #ef4444); }
+
+/* Featured star - small, subtle */
 .billboard-row-card-star {
   font-size: 0.5rem;
-  color: #f59e0b;
+  color: var(--warning-color);
   flex-shrink: 0;
+  margin-left: 2px;
 }
 
 /* ============================================
-   EMPTY STATE (placeholder cards)
+   EMPTY STATE + SKELETON (minimal, integrated)
    ============================================ */
 
 .billboard-row-empty {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   flex: 1;
+  padding-left: var(--spacing-xs);
 }
 
 .billboard-row-empty-cards {
   display: flex;
-  gap: 6px;
+  gap: var(--spacing-xs);
 }
 
 .billboard-row-card-placeholder {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: default;
   pointer-events: none;
+  background: transparent;
+  border-color: var(--border-color);
 }
 
 .billboard-row-card-placeholder:hover {
   transform: none;
   border-color: var(--border-color);
-  background: var(--bg-primary);
+  background: transparent;
 }
 
 .billboard-row-empty-text {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   color: var(--text-secondary);
-  opacity: 0.6;
+  opacity: 0.5;
   white-space: nowrap;
 }
 
-/* ============================================
-   SKELETON LOADING
-   ============================================ */
-
+/* Skeleton */
 .billboard-row-skeleton {
   pointer-events: none;
 }
 
 .billboard-row-skeleton .billboard-row-card-logo-placeholder {
   background: var(--bg-secondary);
+  border-color: transparent;
 }
 
 .billboard-row-skeleton .billboard-row-card-name {
-  width: 48px;
-  height: 10px;
+  width: 42px;
+  height: 9px;
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
 }
 
 .skeleton-pulse {
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes skeleton-pulse {
   0%,
   100% {
-    opacity: 0.4;
+    opacity: 0.35;
   }
-
   50% {
-    opacity: 0.8;
+    opacity: 0.75;
   }
 }
 
 /* ============================================
-   RESPONSIVE
+   RESPONSIVE + HINT
    ============================================ */
 
 @media (width <= 768px) {
   .billboard-row-inner {
     padding: 0 var(--spacing-sm);
-    gap: 6px;
+    gap: var(--spacing-xs);
   }
 
   .billboard-row-label {
@@ -326,40 +345,37 @@
   }
 
   .billboard-row-view-all {
-    padding: 3px;
+    padding: 2px;
     min-width: 18px;
     min-height: 18px;
     justify-content: center;
   }
 
   .billboard-row-view-all i {
-    font-size: 0.5625rem;
+    font-size: 0.625rem;
   }
 
   .billboard-row-arrow {
     width: 18px;
     height: 18px;
   }
-
-  .billboard-row-arrow i {
-    font-size: 0.5rem;
-  }
 }
 
 @media (width <= 480px) {
   .billboard-row {
-    padding: 4px 0;
+    height: 42px;
   }
 
   .billboard-row-card {
-    padding: 3px 6px 3px 3px;
+    padding: 3px 8px 3px 3px;
     gap: 4px;
+    min-height: 28px;
   }
 
   .billboard-row-card-logo,
   .billboard-row-card-logo-placeholder {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
   }
 
   .billboard-row-card-name {
@@ -371,13 +387,9 @@
   }
 }
 
-/* ============================================
-   HINT BUTTON
-   ============================================ */
-
 .billboard-row-header .hint-trigger {
-  margin-left: 4px;
-  opacity: 0.7;
+  margin-left: var(--spacing-xs);
+  opacity: 0.65;
 }
 
 .billboard-row-header .hint-trigger:hover {

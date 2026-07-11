@@ -18,7 +18,6 @@ function createLifecycle() {
   // see fetchData's in-flight guard for why.
   let calendarFetch = null;
   let cachedData = null;
-  let hasLoadedOnce = false;
   // Guards against overlapping dashboard fetches (see fetchData).
   let isFetching = false;
   let calendar = null;
@@ -27,26 +26,20 @@ function createLifecycle() {
   const animationIntervals = [];
 
   /**
-   * Set loading state on dashboard sections
+   * Clear the skeleton and fade the real data in.
+   *
+   * The loading state is only ever entered declaratively, via the `loading`
+   * class baked into the page template — every card (hero included) carries it
+   * at first paint. So this only ever needs to LEAVE that state; there is no
+   * "turn loading back on" path, and there must not be one: the router caches
+   * the page element, so a revisit reuses the already-populated DOM and
+   * re-skeletoning it would flash the cards for no reason.
    */
-  function setLoadingState(isLoading) {
-    const walletHero = document.querySelector(".wallet-hero");
-    const dashboardCards = document.querySelectorAll(".dashboard-card");
-
-    if (isLoading && !hasLoadedOnce) {
-      // Only show loading state on first load
-      walletHero?.classList.add("loading");
-      dashboardCards.forEach((card) => card.classList.add("loading"));
-    } else {
-      // Remove loading state and add loaded animation
-      walletHero?.classList.remove("loading");
-      walletHero?.classList.add("loaded");
-      dashboardCards.forEach((card) => {
-        card.classList.remove("loading");
-        card.classList.add("loaded");
-      });
-      hasLoadedOnce = true;
-    }
+  function markLoaded() {
+    document.querySelectorAll(".dashboard-card").forEach((card) => {
+      card.classList.remove("loading");
+      card.classList.add("loaded");
+    });
   }
 
   // Fetch dashboard data
@@ -75,7 +68,7 @@ function createLifecycle() {
       cachedData = data;
       updateUI(data);
       // Remove loading state after successful data fetch
-      setLoadingState(false);
+      markLoaded();
       // Landing page has rendered real data — the app is fully up. Fire the
       // one-time "frontend ready" signal so the backend can log/observe it.
       notifyClientReady({ page: "home" });
@@ -87,7 +80,7 @@ function createLifecycle() {
       }
       console.error("Error fetching dashboard data:", error);
       // Remove loading state on error to avoid stuck loading
-      setLoadingState(false);
+      markLoaded();
     } finally {
       isFetching = false;
     }
@@ -431,7 +424,7 @@ function createLifecycle() {
       // This provides instant feedback while fresh data loads
       if (cachedData) {
         updateUI(cachedData);
-        setLoadingState(false);
+        markLoaded();
       }
 
       if (!poller) {
@@ -478,14 +471,8 @@ function createLifecycle() {
       customizer?.dispose();
       customizer = null;
 
-      // Note: Don't reset hasLoadedOnce or cachedData here
-      // Preserving them allows instant display on page revisit
-
-      // Remove loaded class so HTML loading state works on next init
-      const walletHero = document.querySelector(".wallet-hero");
-      const dashboardCards = document.querySelectorAll(".dashboard-card");
-      walletHero?.classList.remove("loaded");
-      dashboardCards.forEach((card) => card.classList.remove("loaded"));
+      // Note: cachedData is deliberately kept — it lets a revisit paint real
+      // numbers immediately instead of flashing the skeleton again.
 
       // Clear all animation intervals
       animationIntervals.forEach((interval) => clearInterval(interval));

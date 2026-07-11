@@ -78,9 +78,13 @@
   gap: 1rem;
 }
 
+/* align-items:flex-start is load-bearing for the loading skeleton: a column flex
+   container blockifies and STRETCHES its children, so a skeleton bar on the
+   balance would span the whole column instead of hugging the number. */
 .hero-main {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 0.25rem;
   flex-shrink: 0;
 }
@@ -227,12 +231,14 @@
 }
 
 /* ===== Minimal horizontal stat row across the bottom of the hero (borderless) =====
-   Four inline "label value" items spread evenly. No boxes, no borders. */
+   Four inline "label value" items on a fixed 4-column grid. No boxes, no borders.
+   A grid (not flex + space-between) so each stat keeps a FIXED column: with
+   space-between, every value width change on a poll tick re-spaced its
+   neighbours, so the row visibly twitched as numbers updated. */
 .hero-stats {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.4rem 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem 1rem;
   min-width: 0;
 }
 
@@ -283,6 +289,19 @@
   margin-left: 0.1rem;
 }
 
+/* Ease every value swap: skeleton -> real number (background/colour fade out of
+   the placeholder bar) and profit <-> loss recolouring on later poll ticks. */
+.hero-balance,
+.hero-usd,
+.hero-change,
+.hero-change-value,
+.change-percent,
+.hero-stat-value {
+  transition:
+    color var(--transition-base),
+    background-color var(--transition-base);
+}
+
 /* ===== Content Grid - responsive, reorderable ===== */
 .content-grid {
   display: grid;
@@ -316,6 +335,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: opacity var(--transition-base);
 }
 
 /* Clean header: title left, actions right, a hairline divider bled to the edges. */
@@ -472,6 +492,11 @@
   .content-grid > .hero-card {
     grid-column: 1 / -1;
   }
+
+  /* Four stat columns get too tight to hold "label value" on one line. */
+  .hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (width <= 500px) {
@@ -485,8 +510,9 @@
     padding: 0.75rem;
   }
 
-  /* Sparkline is decorative; drop it first when width is tight. */
-  .hero-spark {
+  /* Sparkline is decorative; drop it first when width is tight. Hide the whole
+     .hero-aside (not just the svg) so its loading skeleton goes with it. */
+  .hero-aside {
     display: none;
   }
 
@@ -508,8 +534,10 @@
   }
 }
 
-/* The hero is itself a .dashboard-card, so it uses the shared card shimmer below
-   — no separate hero shimmer (avoids a double-shimmer on the hero). */
+/* The hero is itself a .dashboard-card and carries `loading` on the CARD (not on
+   its inner .wallet-hero wrapper) — the shimmer below is keyed on
+   `.dashboard-card.loading`, so a `loading` class parked on the inner wrapper
+   left the hero as the ONE card with no shimmer at all. */
 
 /* Loading state for dashboard cards */
 .dashboard-card.loading {
@@ -530,27 +558,60 @@
   background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.03) 50%, transparent 100%);
 }
 
-/* Pulsing placeholder for values in loading state */
+/* Pulsing placeholder bars for values in the loading state.
+   The fill MUST NOT be --bg-secondary: in BOTH themes it is the SAME colour as
+   --bg-card (dark #161b22, light #fff), so a bar painted with it on a card was
+   invisible — the values just vanished and the cards rendered as bare floating
+   labels. --bg-card-hover is the one surface token that reads against a card in
+   both themes. */
 .loading .hero-balance,
 .loading .hero-usd,
+.loading .hero-change,
 .loading .hero-stat-value,
-.loading .hero-change-value,
-.loading .change-percent,
 .loading .position-value,
 .loading .token-value,
 .loading .cell-pnl,
 .loading .cell-value {
   color: transparent;
-  background: var(--bg-secondary);
+  background: var(--bg-card-hover);
   border-radius: var(--radius-sm);
-  min-width: 3ch;
   animation: pulse-subtle 1.5s ease-in-out infinite;
 }
 
-/* Keep the holdings sub-count invisible inside its value's pulse block during
-   loading (it sets its own colour, so it would otherwise show through). */
-.loading .hero-stat-sub {
+/* The hero's values are inline spans / stretched flex children: inline-block
+   makes each one a self-contained bar that hugs its placeholder text, so the
+   skeleton has the same geometry as the real value and nothing jumps on load. */
+.loading .hero-balance,
+.loading .hero-usd,
+.loading .hero-change,
+.loading .hero-stat-value {
+  display: inline-block;
+  min-width: 3ch;
+}
+
+/* Nested spans set their OWN colour, so they'd print straight through the bar
+   they sit inside. The change pill is one single bar, not two nested ones. */
+.loading .hero-unit,
+.loading .hero-stat-sub,
+.loading .hero-change-value,
+.loading .change-percent {
   color: transparent;
+  background: none;
+  animation: none;
+}
+
+/* The sparkline has no points until data arrives, so it left a hole in the top
+   row. Skeleton its wrapper at the svg's exact size and hide the empty svg. */
+.loading .hero-aside {
+  width: 132px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card-hover);
+  animation: pulse-subtle 1.5s ease-in-out infinite;
+}
+
+.loading .hero-spark {
+  visibility: hidden;
 }
 
 @keyframes pulse-subtle {
@@ -564,13 +625,8 @@
   }
 }
 
-/* Smooth transition when data loads */
-.wallet-hero,
-.dashboard-card {
-  transition: opacity var(--transition-base);
-}
-
-.wallet-hero.loaded,
+/* Smooth transition when data loads (the card's opacity transition lives on the
+   base .dashboard-card rule above). */
 .dashboard-card.loaded {
   animation: fade-in 0.3s ease;
 }

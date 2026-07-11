@@ -115,10 +115,10 @@
 .header-row-1 {
   display: flex;
   align-items: center;
-  gap: 20px; /* Reduced from 48px */
-  padding: 0 32px; /* Removed vertical padding, relying on height */
-  height: 72px; /* Increased from 50px to fit cards */
-  background: transparent; /* Inherit from .modern-header */
+  gap: 10px;
+  padding: 0 32px;
+  height: 60px;
+  background: transparent;
 }
 
 /* Electron Windows/Linux: Reserve space for window controls on the right */
@@ -131,161 +131,126 @@
   padding-right: 32px;
 }
 
-/* Brand/Logo - unified container */
+/* Brand/Logo - unified container. Tight cluster with the trader status. */
 .header-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+  padding: 6px 0;
   cursor: pointer;
   flex-shrink: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.header-brand:hover {
-  transform: translateY(-2px);
+  transition: filter 0.2s ease;
 }
 
 /* The logo SVG is monochrome white; render it as a mask so it can be tinted to
    the brand color per theme (dark navy in light mode, light cyan in dark mode)
    to match the brand text — an <img> can't be recolored by CSS. */
 .brand-logo {
-  height: 32px;
-  width: 32px;
+  height: 31px;
+  width: 31px;
   background-color: var(--brand-navy);
   mask: url("/assets/logo.svg") no-repeat center / contain;
-  filter: drop-shadow(0 2px 4px rgb(0, 0, 0, 0.3));
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: filter 0.2s ease, transform 0.2s ease;
 }
 
 .brand-icon {
-  font-size: 28px;
-  filter: drop-shadow(0 2px 4px rgb(0, 0, 0, 0.2));
-  transition: filter 0.3s ease;
+  font-size: 24px;
+  transition: filter 0.2s ease;
 }
 
 .brand-text {
   font-family: var(--font-brand);
-  font-size: 26px;
+  font-size: clamp(17px, 1.5vw, 22px);
   font-weight: 900;
   color: var(--brand-navy);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  text-shadow:
-    0 2px 4px rgb(13, 59, 102, 0.15),
-    0 4px 12px rgb(6, 182, 212, 0.08),
-    0 1px 2px rgb(0, 0, 0, 0.25);
-  position: relative;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-stroke: 0.6px var(--brand-navy);
   paint-order: stroke fill;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: color 0.2s ease, -webkit-text-stroke 0.2s ease;
 }
 
-/* Logo hover effects */
-[data-theme="light"] .header-brand:hover .brand-logo {
-  filter: drop-shadow(0 4px 10px rgb(13, 59, 102, 0.3))
-    drop-shadow(0 2px 5px rgb(59, 130, 246, 0.2)) drop-shadow(0 1px 2px rgb(0, 0, 0, 0.35));
+/* Heavier hover to emphasize weight */
+.header-brand:hover .brand-logo {
+  filter: brightness(1.15) saturate(1.1);
   transform: scale(1.03);
 }
 
-[data-theme="dark"] .header-brand:hover .brand-logo {
-  filter: drop-shadow(0 0 8px rgb(6, 182, 212, 0.5)) drop-shadow(0 2px 6px rgb(0, 0, 0, 0.7));
-  transform: scale(1.03);
+.header-brand:hover .brand-text {
+  color: var(--brand-cyan-light);
 }
-
-/* Hover states are theme-specific, see below */
 
 /* Dark mode brand styling */
 [data-theme="dark"] .brand-logo {
   background-color: var(--brand-cyan-light);
-  filter: drop-shadow(0 0 4px rgb(6, 182, 212, 0.4)) drop-shadow(0 2px 4px rgb(0, 0, 0, 0.6));
 }
 
 [data-theme="dark"] .brand-icon {
-  filter: drop-shadow(0 0 6px rgb(59, 130, 246, 0.5)) drop-shadow(0 2px 4px rgb(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0 6px rgb(6, 182, 212, 0.6)) drop-shadow(0 2px 4px rgb(0, 0, 0, 0.5));
 }
 
 [data-theme="dark"] .brand-text {
   color: var(--brand-cyan-light);
-  text-shadow:
-    0 0 6px rgb(6, 182, 212, 0.5),
-    0 0 12px rgb(6, 182, 212, 0.3),
-    0 2px 4px rgb(0, 0, 0, 0.6);
-  -webkit-text-stroke: 0.6px rgb(224, 247, 255, 0.9);
+  -webkit-text-stroke: 0.65px rgb(200, 240, 255, 0.9);
+  text-shadow: 0 0 8px rgb(6, 182, 212, 0.4);
 }
 
 /* Light mode brand styling */
 [data-theme="light"] .brand-logo {
   background-color: var(--brand-navy);
-  filter: drop-shadow(0 2px 4px rgb(0, 0, 0, 0.3)) drop-shadow(0 1px 2px rgb(0, 0, 0, 0.2));
 }
 
 [data-theme="light"] .brand-icon {
-  filter: drop-shadow(0 2px 4px rgb(0, 0, 0, 0.2)) drop-shadow(0 1px 2px rgb(0, 0, 0, 0.15));
+  filter: drop-shadow(0 2px 6px rgb(13, 59, 102, 0.35)) drop-shadow(0 1px 2px rgb(0, 0, 0, 0.25));
 }
 
 [data-theme="light"] .brand-text {
   color: var(--brand-navy);
-  text-shadow:
-    0 2px 4px rgb(13, 59, 102, 0.15),
-    0 4px 12px rgb(6, 182, 212, 0.08),
-    0 1px 2px rgb(0, 0, 0, 0.25);
   -webkit-text-stroke: 0.6px var(--brand-navy);
+  text-shadow: 0 1px 3px rgb(13, 59, 102, 0.25);
 }
 
 [data-theme="light"] .header-brand:hover .brand-text {
-  color: #0d3b66;
-  text-shadow:
-    0 2px 6px rgb(13, 59, 102, 0.3),
-    0 4px 12px rgb(59, 130, 246, 0.2),
-    0 1px 3px rgb(0, 0, 0, 0.35);
-  -webkit-text-stroke: 0.7px #0d3b66;
-  transform: scale(1.02);
+  color: #0a2f52;
+  -webkit-text-stroke: 0.7px #0a2f52;
 }
 
 [data-theme="dark"] .header-brand:hover .brand-text {
   color: #fff;
-  text-shadow:
-    0 0 10px rgb(6, 182, 212, 0.7),
-    0 0 20px rgb(6, 182, 212, 0.5),
-    0 2px 6px rgb(0, 0, 0, 0.7);
-  -webkit-text-stroke: 0.7px #fff;
-  transform: scale(1.02);
+  text-shadow: 0 0 12px rgb(6, 182, 212, 0.6);
 }
 
 /* Status Groups - Clean flat design, no card styling */
 
-/* Flexible middle region holding the status/metric cards.
-   It absorbs the available space between the brand and the actions, and is the
-   single overflow-safe boundary: if the cards ever exceed the space they scroll
-   horizontally (scrollbar hidden) instead of clipping their content. */
+/* Secondary metric cards region (wallet, SOL price). Scrollable strip when tight.
+   Trader status (bot-card) lives outside this group so it never scrolls away from the brand. */
 .header-cards {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
-  flex: 0 1 auto; /* size to content; shrink (and scroll) only when space is tight */
-  overflow: auto hidden; /* horizontal scroll fallback; never vertical */
-  scrollbar-width: none; /* Firefox */
+  flex: 1 1 auto;
+  overflow: auto hidden;
+  scrollbar-width: none;
   scroll-snap-type: x proximity;
 }
 
 .header-cards::-webkit-scrollbar {
-  display: none; /* WebKit/Blink */
+  display: none;
 }
 
 .header-card {
   position: relative;
   display: flex;
   align-items: center;
-  flex-shrink: 0; /* keep content intact; the .header-cards strip scrolls instead */
+  flex-shrink: 0;
   scroll-snap-align: start;
-  padding: 10px 20px; /* Optimized for better spacing */
+  padding: 6px 12px;
   background: transparent;
-  border-radius: 0;
   border: none;
+  border-radius: 0;
   cursor: pointer;
   transition: all var(--transition-base);
 }
@@ -377,24 +342,68 @@
   background: rgb(248, 81, 73, 0.15);
 }
 
-/* SOL price card — a compact, clickable market-price chip that opens the SOL/USD
-   chart in the token-details dialog. Stays visually consistent with the other
-   transparent header cards; a faint rounded background on hover/focus signals it
-   is interactive. */
+/* SOL price card — clickable (opens SOL/USD chart in token-details dialog).
+   Flat, no background fill whatsoever on hover.
+   All hover effects are strictly on the texts and labels only (no rectangle bg). */
 .sol-price-card {
-  border-radius: var(--radius-md, 6px);
+  border-radius: 0;
+  cursor: pointer;
 }
 
-.sol-price-card:hover {
-  background: rgb(255, 255, 255, 0.05);
+.sol-price-card .card-label,
+.sol-price-card .card-sub,
+.sol-price-card .card-value,
+.sol-price-card .card-change {
+  transition: color 0.1s ease, filter 0.1s ease;
 }
 
-[data-theme="light"] .sol-price-card:hover {
-  background: rgb(0, 0, 0, 0.04);
+.sol-price-card:hover .card-label,
+.sol-price-card:hover .card-sub {
+  color: var(--text-primary);
+}
+
+.sol-price-card:hover .card-value {
+  filter: brightness(1.2);
+}
+
+/* Pure text color boost on the % change — no change to its pill background */
+.sol-price-card:hover .card-change.positive {
+  color: #4ade80;
+}
+
+.sol-price-card:hover .card-change.negative {
+  color: #f87171;
 }
 
 .sol-price-card .card-value {
   letter-spacing: -0.01em;
+}
+
+/* Wallet card (balance + tokens) — same label hover style as SOL price.
+   Only labels get the effect on hover; no background rectangle fill at all.
+   Targets the balance section (SOL amount, TKN count, Worth). */
+.header-card[id="walletCard"] .card-label,
+.header-card[id="walletCard"] .card-sub,
+.header-card[id="walletCard"] .card-value,
+.header-card[id="walletCard"] .card-sub-value,
+.header-card[id="walletCard"] .card-change {
+  transition: color 0.1s ease, filter 0.1s ease;
+}
+
+.header-card[id="walletCard"]:hover .card-label,
+.header-card[id="walletCard"]:hover .card-sub {
+  color: var(--text-primary);
+}
+
+/* Slightly lift the actual balance values on hover for consistency (text only) */
+.header-card[id="walletCard"]:hover .card-value,
+.header-card[id="walletCard"]:hover .card-sub-value {
+  filter: brightness(1.15);
+}
+
+/* Also boost the 24h % change label for the SOL balance */
+.header-card[id="walletCard"]:hover .card-change {
+  filter: brightness(1.2);
 }
 
 .card-sub {
@@ -413,78 +422,119 @@
 }
 
 /* ============================================================================
-   BOT / AUTO-TRADER CARD — clickable state pill (RUNNING / STOPPED + daily P&L)
-   No hard border ring: state reads from a soft tinted fill + coloured text.
-   Layout is fully fluid (clamp) so it scales smoothly at every width, and the
-   secondary "Today" label is revealed only when there is room (see responsive).
+   TRADER STATUS (bot-card)
+   Flat, borderless, always-visible next to brand. 
+   Designed for visual consistency + symmetry at every breakpoint.
+   Two balanced parts: [icon + STATE] · [signed P&L value]
+   State conveyed purely by colour on icon + label. No background, no border, no pill.
    ============================================================================ */
 
-/* Horizontal pill: state on the left, daily P&L on the right */
-.bot-card .card-content {
-  flex-direction: row;
-  align-items: center;
-  gap: clamp(8px, 0.9vw, 16px);
-}
-
-.bot-card .card-top {
-  gap: clamp(5px, 0.4vw, 8px);
-  font-size: inherit;
-}
-
-.bot-card .card-icon {
-  font-size: clamp(15px, 0.4vw + 12px, 19px);
-}
-
-.bot-card .card-status {
-  font-size: clamp(11px, 0.25vw + 9px, 14px);
-  white-space: nowrap;
-}
-
-/* Daily P&L block: separated by spacing only (no divider); value always visible */
-.bot-card .card-bottom {
+.bot-card {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  gap: clamp(4px, 0.4vw, 7px);
-  padding-left: clamp(8px, 0.8vw, 14px);
-  color: inherit;
-  font-size: inherit;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 3px 6px;
+  margin-left: 2px;
+  margin-right: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+  min-height: 38px; /* hit area without adding visual mass */
 }
 
-.bot-card .bot-pnl-label {
-  font-size: 10px;
-  letter-spacing: 0.12em;
+.bot-card:hover {
+  opacity: 0.9;
+  filter: brightness(1.1);
+}
+
+.bot-card:active {
   opacity: 0.7;
 }
 
-.bot-card .card-value {
-  font-size: clamp(13px, 0.4vw + 10px, 18px);
+/* Main row: status group  ·  metric group */
+.bot-card .card-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: clamp(6px, 0.7vw, 12px);
+}
+
+/* Left part: icon + uppercase state label (balanced internally) */
+.bot-card .card-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.bot-card .card-icon {
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.bot-card .card-status {
+  font-size: clamp(11px, 0.85vw + 1px, 12.5px);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
   white-space: nowrap;
+  line-height: 1;
 }
 
-/* ---- State colours: soft tinted fill + matching icon/label ---- */
-.bot-card[data-status="running"] {
-  background: rgb(16, 185, 129, 0.16);
+/* Subtle separator for clear visual division and symmetry */
+.bot-card .status-sep {
+  font-size: clamp(10px, 0.7vw + 2px, 12px);
+  color: var(--text-secondary, #8b949e);
+  opacity: 0.55;
+  line-height: 1;
+  user-select: none;
+  padding: 0 1px;
 }
 
-.bot-card[data-status="running"]:hover {
-  background: rgb(16, 185, 129, 0.24);
+/* Right part: the P&L value (number + unit) */
+.bot-card .card-bottom {
+  display: flex;
+  align-items: center;
 }
 
-.bot-card[data-status="running"] .card-icon {
-  color: #10b981;
-  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.bot-card .card-value {
+  font-size: clamp(11px, 0.85vw + 1px, 12.5px);
+  font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  white-space: nowrap;
+  line-height: 1;
 }
 
+/* Split value for better optical balance and symmetry */
+.bot-card .pnl-num {
+  font-weight: 600;
+}
+
+.bot-card .pnl-unit {
+  font-size: 0.9em;
+  font-weight: 500;
+  opacity: 0.85;
+  letter-spacing: 0.02em;
+}
+
+.bot-card .card-value.positive,
+.bot-card .card-value.negative {
+  /* keep the compact trader-status size even when the positive/negative colour classes are present */
+  font-size: clamp(11px, 0.85vw + 1px, 12.5px);
+}
+
+/* ---- State colours (icon + label only) ---- */
+.bot-card[data-status="running"] .card-icon,
 .bot-card[data-status="running"] .card-status {
   color: #10b981;
 }
 
-.bot-card[data-status="stopped"] {
-  background: rgb(239, 68, 68, 0.16);
-}
-
-.bot-card[data-status="stopped"]:hover {
-  background: rgb(239, 68, 68, 0.24);
+.bot-card[data-status="running"] .card-icon {
+  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .bot-card[data-status="stopped"] .card-icon,
@@ -492,18 +542,9 @@
   color: #ef4444;
 }
 
-.bot-card[data-status="loading"] {
-  background: rgb(251, 191, 36, 0.14);
-}
-
 .bot-card[data-status="loading"] .card-icon,
 .bot-card[data-status="loading"] .card-status {
   color: #fbbf24;
-}
-
-/* preview mode: trading is intentionally off — use a neutral (not alarming) tone */
-.bot-card[data-status="preview"] {
-  background: rgb(88, 166, 255, 0.14);
 }
 
 .bot-card[data-status="preview"] .card-icon,
@@ -511,7 +552,8 @@
   color: #58a6ff;
 }
 
-/* Status Pulse Animation */
+/* Pulse only on the running icon */
+
 @keyframes status-pulse {
   0%,
   100% {
@@ -521,69 +563,46 @@
 
   50% {
     opacity: 0.7;
-    filter: drop-shadow(0 0 8px currentcolor);
+    filter: drop-shadow(0 0 5px currentcolor);
   }
 }
 
-/* Bot Card Interactive States */
-.bot-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  padding: clamp(5px, 0.4vw + 2px, 11px) clamp(10px, 0.9vw + 4px, 18px);
-  background: rgb(255, 255, 255, 0.05);
-  transition:
-    background 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* Subtle interaction feedback (no container bg change) */
 
-.bot-card:hover {
-  background: rgb(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-}
-
-.bot-card:active {
-  transform: scale(0.97);
-}
-
-/* Bot Card Toggle Animation */
 .bot-card.toggling {
-  animation: card-toggle 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: card-toggle 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @keyframes card-toggle {
   0% {
-    transform: scale(1);
+    opacity: 1;
   }
 
-  15% {
-    transform: scale(0.95);
+  20% {
+    opacity: 0.55;
   }
 
-  30% {
-    transform: scale(1.02);
+  40% {
+    opacity: 1;
   }
 
-  50% {
-    transform: scale(0.98);
-  }
-
-  70% {
-    transform: scale(1.01);
+  65% {
+    opacity: 0.8;
   }
 
   100% {
-    transform: scale(1);
+    opacity: 1;
   }
 }
 
-/* Ripple Effect */
+/* Ripple uses the same flat relative container */
+
 .card-ripple {
   position: absolute;
   border-radius: var(--radius-full);
-  background: rgb(255, 255, 255, 0.25);
+  background: rgb(255, 255, 255, 0.18);
   transform: scale(0);
-  animation: ripple-effect 0.6s cubic-bezier(0, 0, 0.2, 1);
+  animation: ripple-effect 0.5s cubic-bezier(0, 0, 0.2, 1);
   pointer-events: none;
 }
 
@@ -594,7 +613,7 @@
   }
 
   100% {
-    transform: scale(2.5);
+    transform: scale(2.1);
     opacity: 0;
   }
 }
@@ -906,88 +925,74 @@
    and the action spacing are traded away in that order as space gets tight, and
    the cards become a horizontal scroll strip on phones so nothing ever clips. */
 
-/* XL desktop (>= 1600px): maximum breathing room */
+/* XL desktop (>= 1600px) */
 @media (width >= 1600px) {
   .header-row-1 {
-    gap: 40px;
+    gap: 16px;
     padding: 0 40px;
   }
 
   .header-cards {
-    gap: 28px;
+    gap: 22px;
   }
 
   .header-card {
-    padding: 12px 24px;
+    padding: 6px 14px;
   }
 
   .header-actions {
-    gap: 18px;
-    padding-left: 40px;
+    padding-left: 28px;
   }
 }
 
-/* Desktop (1440px - 1599px) uses the base rules as-is — full layout, comfortable. */
-
-/* Compact desktop / common laptops (1280px - 1439px): gently trim the wordmark and
-   gaps so the full three cards fit without the scroll safety-net engaging. */
-@media (width >= 1280px) and (width <= 1439px) {
+/* Compact desktop (1280px - 1599px) */
+@media (width >= 1280px) and (width <= 1599px) {
   .header-row-1 {
-    gap: 14px;
+    gap: 9px;
   }
 
   .header-cards {
-    gap: 16px;
-  }
-
-  .brand-text {
-    font-size: 22px;
+    gap: 14px;
   }
 }
 
-/* Small desktop / landscape tablet (1024px - 1279px): tighten + smaller wordmark,
-   all cards still fully visible. */
+/* Small desktop / large tablet (1024px - 1279px) */
 @media (width >= 1024px) and (width <= 1279px) {
   .header-row-1 {
-    gap: 16px;
+    gap: 10px;
     padding: 0 20px;
   }
 
   .header-cards {
-    gap: 14px;
+    gap: 10px;
   }
 
   .header-card {
-    padding: 9px 14px;
+    padding: 4px 10px;
   }
 
   .brand-text {
-    font-size: 20px;
+    font-size: 19px;
   }
 
-  .card-value,
-  .card-value.positive,
-  .card-value.negative {
-    font-size: 16px;
-  }
-
-  /* drop the secondary "Today" detail once space tightens */
-  .bot-card .bot-pnl-label {
-    display: none;
+  .bot-card {
+    padding: 2px 6px;
+    margin-left: 2px;
   }
 
   .header-actions {
-    gap: 10px;
-    padding-left: 18px;
+    gap: 8px;
+    padding-left: 14px;
   }
 }
 
-/* Tablet (768px - 1023px): single compact row. Drop the secondary metric line and
-   the brand wordmark (logo stays) to guarantee everything fits without scrolling. */
+/* Tablet (768px - 1023px): compact. Brand text hidden, trader status stays flat and
+   prominent next to logo. Secondary cards scroll if needed. */
 @media (width >= 768px) and (width <= 1023px) {
   .header-row-1 {
-    gap: 12px;
+    gap: 8px;
     padding: 0 16px;
+    height: 56px;
   }
 
   .header-cards {
@@ -995,44 +1000,33 @@
   }
 
   .header-card {
-    padding: 8px 12px;
+    padding: 4px 8px;
   }
 
-  .card-bottom {
-    display: none; /* primary metric stays; secondary line hidden for space */
+  .brand-text {
+    display: none; /* logo + trader status only */
   }
 
-  /* the bot card's P&L IS its primary metric — keep it inline, drop only the label */
-  .bot-card .card-bottom {
-    display: flex;
-  }
-
-  .bot-card .bot-pnl-label {
-    display: none;
+  .bot-card {
+    margin-left: 2px;
+    padding: 1px 6px;
+    min-height: 34px;
   }
 
   .card-value,
   .card-value.positive,
   .card-value.negative {
-    font-size: 15px;
-  }
-
-  .card-status {
-    font-size: 12px;
-  }
-
-  .brand-text {
-    display: none; /* logo only */
+    font-size: 14px;
   }
 
   .header-action-btn {
-    height: 34px;
-    padding: 7px 9px;
+    height: 32px;
+    padding: 6px 8px;
   }
 
   .header-actions {
-    gap: 8px;
-    padding-left: 14px;
+    gap: 6px;
+    padding-left: 10px;
   }
 }
 
@@ -1138,34 +1132,37 @@
   }
 }
 
-/* Mobile (<= 767px): an explicit 2-row grid — deterministic regardless of source
-   order or flex quirks. Row 1: brand (logo, left) + actions (right). Row 2: the
-   cards as a full-width horizontal scroll strip so the full metrics stay reachable. */
+/* Mobile (<= 767px): 2-row grid. Top: logo + flat trader status | actions.
+   Bottom: secondary cards scroll. Trader status never leaves the brand cluster. */
 @media (width <= 767px) {
   .header-row-1 {
     display: grid;
     grid-template-columns: auto 1fr;
     grid-template-areas:
       "brand actions"
+      "trader trader"
       "cards cards";
     align-items: center;
     height: auto;
-    gap: 8px;
-    padding: 8px 12px;
-  }
-
-  .brand-text {
-    display: none; /* logo only on phones */
+    gap: 4px;
+    padding: 6px 10px;
   }
 
   .header-brand {
     grid-area: brand;
     justify-self: start;
-    padding: 4px 0;
+    padding: 2px 0;
   }
 
   .header-brand:hover {
-    transform: none; /* no lift on touch */
+    transform: none;
+  }
+
+  .bot-card {
+    grid-area: trader;
+    margin: 0;
+    padding: 1px 4px;
+    min-height: 30px;
   }
 
   .header-actions {
@@ -1173,70 +1170,74 @@
     justify-self: end;
     flex-wrap: nowrap;
     margin-left: 0;
-    border-left: none;
     padding-left: 0;
   }
 
-  /* Phones use the dedicated icon row, not the folding drawer: hide the handle and
-     show the buttons inline. */
   .header-actions-toggle {
     display: none;
   }
 
   .header-actions-items {
     flex-wrap: nowrap;
-    gap: 5px;
+    gap: 4px;
   }
 
-  /* Compact square icon buttons so the logo + full action cluster fit one line. */
   .header-action-btn {
-    width: 32px;
-    min-width: 32px;
-    height: 32px;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
     padding: 0;
     justify-content: center;
   }
 
   .header-cards {
     grid-area: cards;
-    gap: 10px;
-    padding: 4px 2px;
-    border-top: 1px solid rgb(255, 255, 255, 0.08);
-    -webkit-overflow-scrolling: touch; /* momentum scroll on iOS */
+    gap: 6px;
+    padding: 3px 2px 2px;
+    border-top: 1px solid rgb(255, 255, 255, 0.07);
+    -webkit-overflow-scrolling: touch;
   }
 
   .header-card {
-    padding: 6px 10px;
+    padding: 3px 8px;
   }
 
-  /* bot card stays a compact state + P&L pill; secondary label stays hidden */
-  .bot-card .bot-pnl-label {
+  .brand-text {
     display: none;
   }
 
   .header-row-3 {
-    display: none; /* hide the live ticker to save vertical space on phones */
+    display: none;
   }
 }
 
-/* Small phones (<= 420px): tighten the action row so logo + buttons stay on one line. */
+/* Small phones (<= 420px) */
 @media (width <= 420px) {
+  .header-row-1 {
+    padding: 5px 8px;
+    gap: 2px;
+  }
+
   .header-action-btn {
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
   }
 
   .action-icon {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .header-actions-items {
-    gap: 4px;
+    gap: 3px;
   }
 
   .header-cards {
-    gap: 8px;
+    gap: 4px;
+  }
+
+  .bot-card {
+    padding: 0 3px;
   }
 }
 

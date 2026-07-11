@@ -2,7 +2,7 @@
   <!-- Reorderable / toggleable card flow -->
   <section class="content-grid" id="homeCardGrid">
     <!-- Card: Wallet hero -->
-    <div class="dashboard-card hero-card" data-card-id="wallet">
+    <div class="dashboard-card hero-card loading" data-card-id="wallet">
       <div class="card-edit-controls">
         <span class="card-drag-handle" title="Drag to reorder"
           ><i class="icon-grip-vertical"></i
@@ -13,16 +13,21 @@
           <span class="toggle-track"></span>
         </label>
       </div>
-      <div class="wallet-hero loading">
+      <!-- Placeholders mirror the exact markup the JS renders (number + small unit
+           span, 4 decimals) so the skeleton occupies the final geometry and the
+           card does not reflow when live data lands. -->
+      <div class="wallet-hero">
         <div class="hero-top">
           <div class="hero-main">
             <div class="hero-label">Portfolio Value</div>
-            <div class="hero-balance" id="walletBalance">0.00 SOL</div>
+            <div class="hero-balance" id="walletBalance">
+              0.0000<span class="hero-unit">SOL</span>
+            </div>
             <div class="hero-sub">
               <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
-              <span class="hero-change" id="homeWalletChange">
-                <span class="hero-change-value change-value">+0.00</span>
-                <span class="change-percent">(+0.00%)</span>
+              <span class="hero-change flat" id="homeWalletChange">
+                <span class="hero-change-value change-value flat">0.0000</span>
+                <span class="change-percent flat">(0.00%)</span>
               </span>
               <span class="hero-change-label">today</span>
             </div>
@@ -44,22 +49,29 @@
         <div class="hero-stats">
           <div class="hero-stat">
             <span class="hero-stat-label">Cash</span>
-            <span class="hero-stat-value" id="heroCash">0.00 SOL</span>
+            <span class="hero-stat-value" id="heroCash"
+              >0.0000<span class="hero-unit">SOL</span></span
+            >
           </div>
           <div class="hero-stat">
             <span class="hero-stat-label">Holdings</span>
             <span class="hero-stat-value">
-              <span id="heroHoldings">0.00 SOL</span>
-              <span class="hero-stat-sub" id="heroHoldingsCount">0</span>
+              <span id="heroHoldings">0.0000<span class="hero-unit">SOL</span></span>
+              <span class="hero-stat-sub" id="heroHoldingsCount"></span>
             </span>
           </div>
           <div class="hero-stat">
             <span class="hero-stat-label">Open P&amp;L</span>
-            <span class="hero-stat-value" id="heroOpenPnl">0.00 SOL</span>
+            <span class="hero-stat-value flat" id="heroOpenPnl"
+              >0.0000<span class="hero-unit">SOL</span>
+              <span class="hero-stat-sub">0.0%</span></span
+            >
           </div>
           <div class="hero-stat">
             <span class="hero-stat-label">Realized Today</span>
-            <span class="hero-stat-value" id="heroRealizedToday">0.00 SOL</span>
+            <span class="hero-stat-value flat" id="heroRealizedToday"
+              >0.0000<span class="hero-unit">SOL</span></span
+            >
           </div>
         </div>
       </div>

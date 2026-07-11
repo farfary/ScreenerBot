@@ -204,22 +204,23 @@
           <span class="brand-text">ScreenerBot</span>
         </div>
 
-        <!-- Status / metric cards (flexible, overflow-safe middle region) -->
-        <div class="header-cards" id="headerCards">
-          <!-- Bot Status Card -->
-          <div class="header-card bot-card" id="botCard" data-status="loading">
-            <div class="card-content">
-              <div class="card-top">
-                <i class="card-icon icon-bot" id="botIcon"></i>
-                <span class="card-status" id="botStatus">LOADING</span>
-              </div>
-              <div class="card-bottom">
-                <span class="card-sub bot-pnl-label">Today</span>
-                <span class="card-value" id="botPnL">—</span>
-              </div>
+        <!-- Trader status: primary control, always visible next to brand.
+             Flat treatment (no pill/border) — state shown via icon + label color only. -->
+        <div class="header-card bot-card" id="botCard" data-status="loading">
+          <div class="card-content">
+            <div class="card-top">
+              <i class="card-icon icon-bot" id="botIcon"></i>
+              <span class="card-status" id="botStatus">LOADING</span>
+            </div>
+            <span class="status-sep" aria-hidden="true" style="visibility:hidden">·</span>
+            <div class="card-bottom">
+              <span class="card-value" id="botPnL">—</span>
             </div>
           </div>
+        </div>
 
+        <!-- Status / metric cards (secondary; scrollable when space is tight) -->
+        <div class="header-cards" id="headerCards">
           <!-- Wallet Card -->
           <div class="header-card" id="walletCard">
             <div class="card-content">
