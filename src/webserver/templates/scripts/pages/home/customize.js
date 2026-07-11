@@ -2,7 +2,7 @@
 import * as AppState from "../../core/app_state.js";
 
 const STATE_KEY = "home.cardLayout";
-const DEFAULT_ORDER = ["wallet", "calendar", "positions", "tokens"];
+const DEFAULT_ORDER = ["wallet", "summary", "calendar", "positions", "tokens"];
 
 /**
  * Create the home card customization controller.
@@ -24,7 +24,9 @@ export function createCustomizer() {
   }
 
   function normalizeLayout(raw) {
-    const order = Array.isArray(raw?.order) ? raw.order.filter((id) => DEFAULT_ORDER.includes(id)) : [];
+    const order = Array.isArray(raw?.order)
+      ? raw.order.filter((id) => DEFAULT_ORDER.includes(id))
+      : [];
     // Append any cards missing from the saved order (e.g. new cards added later).
     for (const id of DEFAULT_ORDER) {
       if (!order.includes(id)) order.push(id);

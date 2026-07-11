@@ -238,27 +238,18 @@ function createLifecycle() {
     if (openPnlEl && data.positions) {
       const v = data.positions.unrealized_pnl_sol || 0;
       const pct = data.positions.unrealized_pnl_percent || 0;
-      openPnlEl.innerHTML = `${signedSolHtml(v)} <span class="hero-tile-sub">${
+      openPnlEl.innerHTML = `${signedSolHtml(v)} <span class="summary-sub">${
         pct >= 0 ? "+" : ""
       }${Utils.formatNumber(pct, 1)}%</span>`;
-      openPnlEl.className = `hero-tile-value ${pnlClass(v)}`;
+      openPnlEl.className = `summary-value ${pnlClass(v)}`;
     }
 
-    // Realized Today tile — banked net P&L today, from trader analytics.
+    // Realized Today — banked net P&L today, from trader analytics.
     const realizedEl = document.getElementById("heroRealizedToday");
     if (realizedEl && data.trader && data.trader.today) {
       const v = data.trader.today.net_pnl_sol || 0;
       realizedEl.innerHTML = signedSolHtml(v);
-      realizedEl.className = `hero-tile-value ${pnlClass(v)}`;
-    }
-
-    // Trader running indicator (the one justified status element).
-    const traderEl = document.getElementById("heroTraderStatus");
-    if (traderEl && data.trader_status) {
-      const running = !!data.trader_status.running;
-      traderEl.dataset.running = running ? "true" : "false";
-      const txt = traderEl.querySelector(".hero-trader-text");
-      if (txt) txt.textContent = running ? "Trader On" : "Trader Off";
+      realizedEl.className = `summary-value ${pnlClass(v)}`;
     }
 
     // Balance-trend sparkline.

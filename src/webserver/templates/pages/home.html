@@ -28,10 +28,6 @@
             </div>
           </div>
           <div class="hero-aside">
-            <span class="hero-trader" id="heroTraderStatus" data-running="false">
-              <span class="hero-trader-dot"></span>
-              <span class="hero-trader-text">Trader Off</span>
-            </span>
             <svg
               class="hero-spark"
               id="heroSpark"
@@ -44,26 +40,40 @@
             </svg>
           </div>
         </div>
-        <div class="hero-tiles">
-          <div class="hero-tile">
-            <div class="hero-tile-label">Cash</div>
-            <div class="hero-tile-value" id="heroCash">0.00 SOL</div>
+      </div>
+    </div>
+
+    <!-- Card: Portfolio summary strip (borderless columns) -->
+    <div class="dashboard-card summary-card loading" data-card-id="summary">
+      <div class="card-edit-controls">
+        <span class="card-drag-handle" title="Drag to reorder"
+          ><i class="icon-grip-vertical"></i
+        ></span>
+        <span class="card-edit-title">Summary</span>
+        <label class="toggle card-toggle">
+          <input type="checkbox" class="card-enable-toggle" data-card-id="summary" checked />
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+      <div class="summary-strip">
+        <div class="summary-stat">
+          <div class="summary-label">Cash</div>
+          <div class="summary-value" id="heroCash">0.00 SOL</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-label">Holdings</div>
+          <div class="summary-value">
+            <span id="heroHoldings">0.00 SOL</span>
+            <span class="summary-sub" id="heroHoldingsCount">0</span>
           </div>
-          <div class="hero-tile">
-            <div class="hero-tile-label">Holdings</div>
-            <div class="hero-tile-value">
-              <span id="heroHoldings">0.00 SOL</span>
-              <span class="hero-tile-sub" id="heroHoldingsCount">0</span>
-            </div>
-          </div>
-          <div class="hero-tile">
-            <div class="hero-tile-label">Open P&amp;L</div>
-            <div class="hero-tile-value" id="heroOpenPnl">0.00 SOL</div>
-          </div>
-          <div class="hero-tile">
-            <div class="hero-tile-label">Realized Today</div>
-            <div class="hero-tile-value" id="heroRealizedToday">0.00 SOL</div>
-          </div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-label">Open P&amp;L</div>
+          <div class="summary-value" id="heroOpenPnl">0.00 SOL</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-label">Realized Today</div>
+          <div class="summary-value" id="heroRealizedToday">0.00 SOL</div>
         </div>
       </div>
     </div>
