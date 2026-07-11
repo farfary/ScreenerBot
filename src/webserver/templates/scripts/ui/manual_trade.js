@@ -202,6 +202,15 @@ export async function manualTrade({
     const identity =
       position || (symbol && logo) ? null : await fetchTokenIdentity(mint);
 
+    // A buy OPENS a position, so buying a token that is already held would create a
+    // second position for the same mint — which the backend now rejects outright
+    // (positions resolve by mint, so duplicates corrupt each other). Adding to the
+    // existing position is what the user means, so switch to it: they get the "Add to
+    // Position" dialog with their current size, instead of an error after confirming.
+    if (action === "buy" && position) {
+      action = "add";
+    }
+
     const dialogContext = {
       ...context,
       mint,

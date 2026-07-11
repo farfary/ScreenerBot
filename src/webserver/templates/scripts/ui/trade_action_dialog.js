@@ -1402,9 +1402,15 @@ export class TradeActionDialog {
       // Allow 1% variance for rounding
       const variance = Math.abs(currentHoldings - expectedHoldings) / expectedHoldings;
       if (variance > 0.01 && expectedHoldings > 0) {
+        // Both are RAW on-chain units — print them scaled, or the warning reads
+        // "Expected 1200000000.00, now 1150000000.00" for 1,200 vs 1,150 tokens.
+        const decimals = this.currentContext.decimals;
+        const scale = (raw) =>
+          Utils.formatCompactNumber(decimals != null ? raw / 10 ** decimals : raw, 2);
+
         return {
           ok: false,
-          error: `Token balance changed. Expected ${expectedHoldings.toFixed(2)}, now ${currentHoldings.toFixed(2)}. Please refresh.`,
+          error: `Token balance changed. Expected ${scale(expectedHoldings)}, now ${scale(currentHoldings)}. Please refresh.`,
         };
       }
 

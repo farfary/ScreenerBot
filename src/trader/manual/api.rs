@@ -39,6 +39,18 @@ pub async fn manual_buy(
     // Step 1: Validation
     action.start_validation().await;
 
+    // A buy OPENS a position. `open_position_with_size` does not check for an existing
+    // one, so buying a token that is already held would create a SECOND open position
+    // for the same mint — and `update_position_state()` resolves by mint (first match),
+    // so the two would corrupt each other's state and the sell/add routes could not tell
+    // them apart. Adding to the existing position is the only correct interpretation.
+    // Enforced here (not in the route) so the AI trading tool is covered too.
+    if positions::is_open_position(mint).await {
+        let error = "Position already open for this token - use add to position instead";
+        action.fail_validation(error).await;
+        return Err(error.to_string());
+    }
+
     // Validate SOL amount
     if !size_sol.is_finite() {
         let error = "Invalid SOL amount: must be finite";
