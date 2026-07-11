@@ -1533,5 +1533,8 @@ export function resolveTokenLogoUrl(token) {
  */
 export function resolveTokenBannerUrl(token) {
   if (!token) return null;
-  return normalizeImageUrl(token.header_image_url || token.header || token.banner_url);
+  // `banner` is the billboard card's field; `header_image_url` is the token detail
+  // API's. Both must be accepted -- matching only one silently renders every card
+  // bannerless (it falls through to the accent gradient, so it LOOKS designed).
+  return normalizeImageUrl(token.banner || token.header_image_url || token.header);
 }
