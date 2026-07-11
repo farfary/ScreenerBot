@@ -173,7 +173,6 @@ pub struct PositionDetailResponse {
     pub position: Option<PositionDetail>,
     pub entries: Vec<EntryRecordResponse>,
     pub exits: Vec<ExitRecordResponse>,
-    pub executions: Vec<PositionExecutionRow>,
     pub transactions: Vec<PositionTransactionSummary>,
     pub state_history: Vec<PositionStateTimelineEntry>,
     pub token_info: Option<PositionTokenInfo>,
@@ -192,23 +191,6 @@ pub struct PositionDetail {
     pub summary: PositionResponse,
     pub phantom_remove: bool,
     pub phantom_first_seen: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PositionExecutionRow {
-    pub kind: String,
-    pub timestamp: Option<i64>,
-    pub price_sol: Option<f64>,
-    pub effective_price_sol: Option<f64>,
-    pub size_sol: Option<f64>,
-    pub total_size_sol: Option<f64>,
-    pub sol_delta: Option<f64>,
-    pub token_amount: Option<u64>,
-    pub signature: Option<String>,
-    pub verified: bool,
-    pub fee_lamports: Option<u64>,
-    pub fee_sol: Option<f64>,
-    pub notes: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

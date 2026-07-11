@@ -33,6 +33,11 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     const typeMap = {
       entry: "Entry",
       exit: "Exit",
+      // A position's swaps are not just entry + exit: every DCA add and every partial
+      // exit is its own transaction with its own signature. A partial exit that is still
+      // confirming has no record yet, so it is labelled from this kind.
+      dca: "DCA Entry",
+      partial_exit: "Partial Exit",
       buy: "Buy",
       sell: "Sell",
       swap: "Swap",

@@ -111,11 +111,16 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
     const stateHistory = this.fullDetails?.state_history || [];
     const symbol = this.fullDetails?.position?.symbol || "tokens";
 
-    // Filter out placeholder exit entries when there are no real exits, then sort newest first
+    // Drop the placeholder exit row unless the position has actually exited. It used to be
+    // keyed on `exits.length === 0`, but a partial exit writes an exit RECORD while the
+    // position stays OPEN — so a position that had merely taken partial profits rendered
+    // an empty "Exit / signature not recorded" card.
+    const positionSummary = this.fullDetails?.position;
+    const isClosed = !!positionSummary?.exit_time || !!positionSummary?.synthetic_exit;
     const transactions = allTransactions
       .filter((tx) => {
         if (tx.available !== false) return true;
-        return !(tx.kind === "exit" && exits.length === 0);
+        return !(tx.kind === "exit" && !isClosed);
       })
       .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0));
 
@@ -153,8 +158,17 @@ export function applySecondaryTabsMixin(PositionDetailsDialog) {
           txTypeLabel = exitRecord.is_partial ? "Partial Exit" : "Exit";
           txTypeClass = "pdd-tx-type-exit";
         } else if (tx.kind) {
-          txType = tx.kind.toLowerCase();
-          txTypeLabel = this._formatTransactionType(tx.kind);
+          // No record yet — a swap that is still confirming (its record is written on
+          // verification). The backend's kind already says which one it is.
+          const kind = tx.kind.toLowerCase();
+          txType = kind === "dca" ? "entry" : kind === "partial_exit" ? "exit" : kind;
+          txTypeLabel = this._formatTransactionType(kind);
+          txTypeClass =
+            txType === "entry"
+              ? "pdd-tx-type-entry"
+              : txType === "exit"
+                ? "pdd-tx-type-exit"
+                : "";
         }
 
         const typeIcon =

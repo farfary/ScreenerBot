@@ -20,13 +20,15 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             let mint = &position.mint;
 
             // Fetch all data concurrently for better performance
-            let (detail, transactions, state_history, (entries, exits)) = tokio::join!(
+            let (detail, state_history, (entries, exits)) = tokio::join!(
                 map_position_to_detail(&position),
-                build_transaction_summaries(&position),
                 load_state_history_entries(&position),
                 load_entry_exit_history(&position)
             );
-            let executions = build_execution_rows(&position);
+
+            // Transaction summaries are built FROM the entry/exit records, so they must
+            // wait for them (local SQLite reads — cheap).
+            let transactions = build_transaction_summaries(&position, &entries, &exits).await;
 
             // Fetch token data from database
             let token_data = tokens::database::get_full_token_async(mint)
@@ -126,7 +128,6 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 position: Some(detail),
                 entries,
                 exits,
-                executions,
                 transactions,
                 state_history,
                 token_info,
@@ -184,70 +185,84 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
     }
 }
 
-fn build_execution_rows(position: &positions::Position) -> Vec<PositionExecutionRow> {
-    let mut rows = Vec::with_capacity(2);
-
-    rows.push(PositionExecutionRow {
-        kind: "entry".to_owned(),
-        timestamp: Some(position.entry_time.timestamp()),
-        price_sol: Some(position.entry_price),
-        effective_price_sol: position.effective_entry_price,
-        size_sol: Some(position.entry_size_sol),
-        total_size_sol: Some(position.total_size_sol),
-        sol_delta: Some(-position.entry_size_sol.abs()),
-        token_amount: position.token_amount,
-        signature: position.entry_transaction_signature.clone(),
-        verified: position.transaction_entry_verified,
-        fee_lamports: position.entry_fee_lamports,
-        fee_sol: lamports_option_to_sol(position.entry_fee_lamports),
-        notes: Some(format!("Position type: {}", position.position_type)),
-    });
-
-    let mut exit_notes: Vec<String> = Vec::new();
-    if position.synthetic_exit {
-        exit_notes.push("Synthetic exit".to_owned());
-    }
-    if let Some(reason) = &position.closed_reason {
-        if !reason.is_empty() {
-            exit_notes.push(reason.clone());
-        }
-    }
-    if !position.transaction_exit_verified && position.exit_time.is_none() {
-        exit_notes.push("Exit pending".to_owned());
-    }
-
-    rows.push(PositionExecutionRow {
-        kind: "exit".to_owned(),
-        timestamp: position.exit_time.map(|dt| dt.timestamp()),
-        price_sol: position.exit_price,
-        effective_price_sol: position.effective_exit_price,
-        size_sol: Some(position.entry_size_sol),
-        total_size_sol: Some(position.total_size_sol),
-        sol_delta: position.sol_received,
-        token_amount: position.token_amount,
-        signature: position.exit_transaction_signature.clone(),
-        verified: position.transaction_exit_verified,
-        fee_lamports: position.exit_fee_lamports,
-        fee_sol: lamports_option_to_sol(position.exit_fee_lamports),
-        notes: if exit_notes.is_empty() {
-            None
-        } else {
-            Some(exit_notes.join(" · "))
-        },
-    });
-
-    rows
-}
-
+/// Every on-chain transaction belonging to a position: the entry, every DCA add, every
+/// partial exit, and the final close.
+///
+/// This used to emit exactly TWO summaries, built from `entry_transaction_signature` and
+/// `exit_transaction_signature`. A position's other swaps — DCA adds and partial exits —
+/// have their own signatures and live only in the entry/exit RECORDS, so they never
+/// appeared, even though the Transactions tab already knows how to label them ("DCA
+/// Entry" / "Partial Exit" — those branches were simply unreachable).
+///
+/// Built from the records, which are the authoritative per-swap history, plus:
+///   - the position's own signatures, for a swap that is submitted but not yet verified
+///     (no record written yet) and for legacy positions that predate the records;
+///   - partial exits still confirming, whose signature lives only in the pending registry
+///     until verification writes the record.
 async fn build_transaction_summaries(
     position: &positions::Position,
+    entries: &[EntryRecordResponse],
+    exits: &[ExitRecordResponse],
 ) -> Vec<PositionTransactionSummary> {
-    let entry_sig = position.entry_transaction_signature.clone();
-    let exit_sig = position.exit_transaction_signature.clone();
+    // (kind, signature), newest last — de-duplicated, first kind wins.
+    let mut planned: Vec<(&str, String)> = Vec::new();
+    let mut push = |kind: &'static str, signature: Option<String>, planned: &mut Vec<_>| {
+        let Some(signature) = signature else { return };
+        if signature.is_empty() {
+            return;
+        }
+        if planned
+            .iter()
+            .any(|(_, existing): &(&str, String)| *existing == signature)
+        {
+            return;
+        }
+        planned.push((kind, signature));
+    };
 
-    let mut summaries = Vec::with_capacity(2);
-    summaries.push(fetch_transaction_summary("entry", entry_sig, position).await);
-    summaries.push(fetch_transaction_summary("exit", exit_sig, position).await);
+    push(
+        "entry",
+        position.entry_transaction_signature.clone(),
+        &mut planned,
+    );
+    for entry in entries {
+        let kind = if entry.is_dca { "dca" } else { "entry" };
+        push(
+            kind,
+            Some(entry.transaction_signature.clone()),
+            &mut planned,
+        );
+    }
+    for exit in exits {
+        let kind = if exit.is_partial {
+            "partial_exit"
+        } else {
+            "exit"
+        };
+        push(kind, Some(exit.transaction_signature.clone()), &mut planned);
+    }
+    for pending in positions::get_pending_partial_exits_for_mint(&position.mint).await {
+        push("partial_exit", Some(pending.signature), &mut planned);
+    }
+    push(
+        "exit",
+        position.exit_transaction_signature.clone(),
+        &mut planned,
+    );
+
+    let mut summaries = Vec::with_capacity(planned.len().max(2));
+    for (kind, signature) in planned {
+        summaries.push(fetch_transaction_summary(kind, Some(signature), position).await);
+    }
+
+    // Placeholder exit row ONLY for a position that has actually exited without a usable
+    // signature (a synthetic / force close). An open position that merely took partial
+    // profits has exit RECORDS but has not exited — it must not show an empty Exit row.
+    let has_exited = position.exit_time.is_some() || position.synthetic_exit;
+    if has_exited && !summaries.iter().any(|s| s.kind == "exit") {
+        summaries.push(fetch_transaction_summary("exit", None, position).await);
+    }
+
     summaries
 }
 
@@ -397,8 +412,4 @@ async fn load_entry_exit_history(
     };
 
     (entries, exits)
-}
-
-fn lamports_option_to_sol(value: Option<u64>) -> Option<f64> {
-    value.map(lamports_to_sol)
 }

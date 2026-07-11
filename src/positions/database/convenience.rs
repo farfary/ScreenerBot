@@ -381,10 +381,17 @@ pub async fn save_exit_record(
 
     let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
+    // Idempotent per (position, signature): one on-chain swap = one exit record. The table
+    // has no unique constraint, so a re-applied verification (retry, restart) would
+    // otherwise insert the SAME exit twice and double it everywhere the records are summed
+    // — the History tab, the chart's exit markers, the "% exited" fallback.
     conn.execute(
-    "INSERT INTO position_exits (position_id, wallet_address, timestamp, amount, price, sol_received, 
-     transaction_signature, is_partial, percentage, fees_lamports) 
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+    "INSERT INTO position_exits (position_id, wallet_address, timestamp, amount, price, sol_received,
+     transaction_signature, is_partial, percentage, fees_lamports)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+     WHERE NOT EXISTS (
+       SELECT 1 FROM position_exits WHERE position_id = ?1 AND transaction_signature = ?7
+     )",
     params![
       position_id,
       wallet_address,
@@ -486,10 +493,15 @@ pub async fn save_entry_record(
 
     let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
+    // Idempotent per (position, signature) — see save_exit_record. A DCA add re-verified
+    // after a restart must not be recorded (and averaged in) twice.
     conn.execute(
-    "INSERT INTO position_entries (position_id, wallet_address, timestamp, amount, price, sol_spent, 
-     transaction_signature, is_dca, fees_lamports) 
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+    "INSERT INTO position_entries (position_id, wallet_address, timestamp, amount, price, sol_spent,
+     transaction_signature, is_dca, fees_lamports)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
+     WHERE NOT EXISTS (
+       SELECT 1 FROM position_entries WHERE position_id = ?1 AND transaction_signature = ?7
+     )",
     params![
       position_id,
       wallet_address,

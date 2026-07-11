@@ -227,6 +227,20 @@ pub async fn get_pending_partial_exit(signature: &str) -> Option<PendingPartialE
     map.get(signature).cloned()
 }
 
+/// Every partial exit currently in flight for a mint (submitted, not yet verified).
+///
+/// Until verification writes its exit record, this registry is the ONLY place a partial
+/// exit's signature lives — it is deliberately not stamped on the position (see
+/// partial_close.rs). The position-details view reads this so an in-flight partial shows
+/// up immediately instead of appearing out of nowhere seconds later.
+pub async fn get_pending_partial_exits_for_mint(mint: &str) -> Vec<PendingPartialExit> {
+    let map = PENDING_PARTIAL_EXIT_DETAILS.read().await;
+    map.values()
+        .filter(|entry| entry.mint == mint)
+        .cloned()
+        .collect()
+}
+
 /// Load pending partial exits from metadata into memory (used at startup)
 pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>, String> {
     let raw = db::get_metadata(PENDING_PARTIAL_EXIT_METADATA_KEY).await?;

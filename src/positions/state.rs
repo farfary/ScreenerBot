@@ -253,6 +253,17 @@ pub async fn get_position_by_id(position_id: i64) -> Option<Position> {
         .cloned()
 }
 
+/// Drop every signature the index maps to this mint.
+///
+/// A position owns MORE signatures than the two on its struct: every partial exit and
+/// every DCA add registers its own signature in the index. Removing only
+/// entry/exit_transaction_signature (as this used to) leaked one index entry per
+/// partial/DCA of every position ever removed.
+async fn remove_all_signatures_for_mint(mint: &str) {
+    let mut index = SIG_TO_MINT_INDEX.write().await;
+    index.retain(|_, indexed_mint| indexed_mint != mint);
+}
+
 /// Remove position from state
 pub async fn remove_position(mint: &str) -> Option<Position> {
     let mut positions = POSITIONS.write().await;
@@ -261,12 +272,7 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
         let removed = positions.remove(index);
 
         // Update indexes
-        if let Some(ref sig) = removed.entry_transaction_signature {
-            SIG_TO_MINT_INDEX.write().await.remove(sig);
-        }
-        if let Some(ref sig) = removed.exit_transaction_signature {
-            SIG_TO_MINT_INDEX.write().await.remove(sig);
-        }
+        remove_all_signatures_for_mint(&removed.mint).await;
         MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
 
         // Release position lock to prevent unbounded POSITION_LOCKS growth
@@ -330,12 +336,7 @@ pub async fn remove_position_by_id(position_id: i64) -> Option<Position> {
         let removed = positions.remove(index);
 
         // Update indexes (mirror remove_position)
-        if let Some(ref sig) = removed.entry_transaction_signature {
-            SIG_TO_MINT_INDEX.write().await.remove(sig);
-        }
-        if let Some(ref sig) = removed.exit_transaction_signature {
-            SIG_TO_MINT_INDEX.write().await.remove(sig);
-        }
+        remove_all_signatures_for_mint(&removed.mint).await;
         MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
 
         {

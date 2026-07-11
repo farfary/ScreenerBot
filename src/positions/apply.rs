@@ -136,7 +136,12 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             exit_time,
         } => {
+            // Tokens sold by THIS close = whatever was still held. Captured before the
+            // update zeroes it, so the exit record below can be written.
+            let mut closed_amount: u64 = 0;
+
             let updated = update_position_state_by_id(position_id, |pos| {
+                closed_amount = pos.remaining_token_amount.unwrap_or_default();
                 pos.transaction_exit_verified = true;
                 pos.effective_exit_price = Some(effective_exit_price);
                 // ACCUMULATE: `sol_received` is the position's total proceeds, and partial
@@ -224,6 +229,37 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 effects.db_updated = true;
                                 effects.position_closed = true;
                                 let _ = force_database_sync().await;
+
+                                // Persist the exit record for the FULL close. Only the PARTIAL
+                                // path used to write one, so a position's final — and largest —
+                                // exit was missing from its own history: the position-details
+                                // History tab and the chart's exit markers are built from these
+                                // records, and showed every partial exit but never the close.
+                                if let Some(exit_signature) =
+                                    position.exit_transaction_signature.as_deref()
+                                {
+                                    if let Err(err) = save_exit_record(
+                                        position_id,
+                                        exit_time,
+                                        closed_amount,
+                                        effective_exit_price,
+                                        sol_received,
+                                        exit_signature,
+                                        false,
+                                        100.0,
+                                        Some(fee_lamports),
+                                    )
+                                    .await
+                                    {
+                                        logger::error(
+                                            LogTag::Positions,
+                                            &format!(
+                                                "Failed to persist exit record for position {}: {}",
+                                                position_id, err
+                                            ),
+                                        );
+                                    }
+                                }
 
                                 // CRITICAL: Release global position permit when position is verified closed
                                 // This allows new positions to be opened, fixing the MAX_OPEN_POSITIONS limit
