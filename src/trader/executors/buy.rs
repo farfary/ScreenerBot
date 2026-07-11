@@ -55,8 +55,13 @@ pub async fn execute_buy_managed(
 
     // Call positions open with size so manual size is honored. `manual_management`
     // flags the position so the auto-trader never auto-sells or auto-DCAs it.
-    match positions::open_position_with_size(&decision.mint, trade_size_sol, manual_management)
-        .await
+    match positions::open_position_with_size(
+        &decision.mint,
+        trade_size_sol,
+        manual_management,
+        decision.slippage_pct,
+    )
+    .await
     {
         Ok(transaction_signature) => {
             logger::info(
@@ -125,7 +130,7 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
         .unwrap_or_else(|| config::get_trade_size_sol() * 0.5); // Default to 50% of initial size
 
     // Call positions::add_to_position to handle DCA entry
-    match positions::add_to_position(&decision.mint, dca_amount_sol).await {
+    match positions::add_to_position(&decision.mint, dca_amount_sol, decision.slippage_pct).await {
         Ok(transaction_signature) => {
             logger::info(
                 LogTag::Trader,

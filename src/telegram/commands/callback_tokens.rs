@@ -460,7 +460,7 @@ pub(super) async fn execute_token_buy(
         .map_err(|e| format!("Failed to send: {e}"))?;
 
     // Execute the buy via manual trading system
-    match manual_add(&token.mint, amount).await {
+    match manual_add(&token.mint, amount, None).await {
         Ok(_) => {
             let success_msg = format!(
                 "✅ <b>Buy Successful</b>\n\n\

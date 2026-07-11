@@ -6,6 +6,10 @@ import { HintTrigger } from "./hint_popover.js";
 import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
 import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 
+// Hard ceiling on a manual slippage override. MUST match the backend's
+// trader::constants::MAX_MANUAL_SLIPPAGE_PCT — the route rejects anything above it.
+const MAX_SLIPPAGE_PCT = 50;
+
 /**
  * TradeActionDialog - Modern modal for buy/add/sell actions
  *
@@ -125,6 +129,13 @@ export class TradeActionDialog {
     this._isSearching = false;
     this._searchKeyListener = this._handleSearchKeyDown.bind(this);
 
+    // Slippage state. null = "Auto" = follow the configured slippage (what the
+    // auto-trader always does); a number is a per-trade manual override.
+    this._slippagePct = null;
+    this._configuredSlippage = null;
+    this._slippageBtnListener = this._handleSlippageBtnClick.bind(this);
+    this._slippageInputListener = this._handleSlippageInputChange.bind(this);
+
     // Quote preview state
     this._quoteData = null;
     this._quoteLoading = false;
@@ -189,6 +200,35 @@ export class TradeActionDialog {
               <span class="trade-action-error-text"></span>
             </div>
           </div>
+          <!--
+            Slippage. "Auto" follows the configured slippage (swaps.slippage.*) —
+            which is what the auto-trader ALWAYS uses. Everything else is a per-trade
+            manual override, for forcing a fill on an illiquid token.
+          -->
+          <div class="trade-action-slippage">
+            <div class="trade-action-slippage-head">
+              <span class="trade-action-slippage-label">Slippage</span>
+              <span class="trade-action-slippage-note"></span>
+            </div>
+            <div class="trade-action-slippage-options">
+              <button type="button" class="trade-action-slippage-btn" data-slippage="auto">Auto</button>
+              <button type="button" class="trade-action-slippage-btn" data-slippage="1">1%</button>
+              <button type="button" class="trade-action-slippage-btn" data-slippage="5">5%</button>
+              <button type="button" class="trade-action-slippage-btn" data-slippage="15">15%</button>
+              <input
+                type="number"
+                class="trade-action-slippage-input"
+                placeholder="Custom"
+                min="0.1"
+                max="50"
+                step="0.1"
+                inputmode="decimal"
+                aria-label="Custom slippage percent"
+              />
+            </div>
+            <div class="trade-action-slippage-warning" data-visible="false"></div>
+          </div>
+
           <!-- Manual management (buy only): keep this position off the auto-trader. -->
           <label class="trade-action-manage-row" data-visible="false">
             <input type="checkbox" class="trade-action-manage-checkbox" checked />
@@ -363,6 +403,10 @@ export class TradeActionDialog {
     this.manageRowEl = overlay.querySelector(".trade-action-manage-row");
     this.manageCheckboxEl = overlay.querySelector(".trade-action-manage-checkbox");
     this.manageHintEl = overlay.querySelector(".trade-action-manage-hint");
+    this.slippageNoteEl = overlay.querySelector(".trade-action-slippage-note");
+    this.slippageInputEl = overlay.querySelector(".trade-action-slippage-input");
+    this.slippageWarningEl = overlay.querySelector(".trade-action-slippage-warning");
+    this.slippageBtns = Array.from(overlay.querySelectorAll(".trade-action-slippage-btn"));
     this.errorEl = overlay.querySelector(".trade-action-error-msg");
     this.errorTextEl = overlay.querySelector(".trade-action-error-text");
     this.confirmBtn = overlay.querySelector('[data-action="confirm"]');
@@ -426,6 +470,8 @@ export class TradeActionDialog {
     this._sliderListener = this._handleSliderInput.bind(this);
     this._maxListener = this._handleMaxClick.bind(this);
     on(this.sliderEl, "input", this._sliderListener);
+    this.slippageBtns.forEach((btn) => on(btn, "click", this._slippageBtnListener));
+    on(this.slippageInputEl, "input", this._slippageInputListener);
     on(this.maxBtn, "click", this._maxListener);
 
     // Quick trade step listeners
@@ -620,6 +666,8 @@ export class TradeActionDialog {
     off(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
     off(this.quoteErrorRetryBtn, "click", this._quoteRefreshListener);
     off(this.sliderEl, "input", this._sliderListener);
+    this.slippageBtns.forEach((btn) => off(btn, "click", this._slippageBtnListener));
+    off(this.slippageInputEl, "input", this._slippageInputListener);
     off(this.maxBtn, "click", this._maxListener);
 
     // Clean up quick trade mode listeners
@@ -679,6 +727,9 @@ export class TradeActionDialog {
     // Manual-management choice is only meaningful when opening a position (buy).
     this._renderManageOption(action);
 
+    // Slippage resets to Auto on every open — an override is per-trade.
+    this._renderSlippage();
+
     // Set confirm button label and reset loading state
     const btnText = this.confirmBtn.querySelector(".btn-text");
     if (btnText) btnText.textContent = config.confirmLabel;
@@ -713,6 +764,100 @@ export class TradeActionDialog {
         HintTrigger.initAll();
       }
     }
+  }
+
+  /**
+   * The configured slippage (swaps.slippage.quote_default_pct) — what "Auto" means,
+   * and what the auto-trader always uses. Fetched once and cached; the dialog still
+   * works without it (Auto just sends no override and the backend applies the same
+   * config value server-side).
+   */
+  async _loadConfiguredSlippage() {
+    if (this._configuredSlippage != null) return this._configuredSlippage;
+
+    try {
+      const res = await fetch("/api/config/swaps");
+      if (res.ok) {
+        const body = await res.json();
+        const pct = Number(body?.data?.slippage?.quote_default_pct);
+        if (Number.isFinite(pct)) this._configuredSlippage = pct;
+      }
+    } catch {
+      // Leave it null — Auto still works, it just cannot show the number.
+    }
+
+    return this._configuredSlippage;
+  }
+
+  /**
+   * Reset the slippage control to Auto (config-driven) for a freshly opened dialog.
+   * A previous trade's override must never leak into the next one.
+   */
+  _renderSlippage() {
+    this._slippagePct = null; // null = Auto = follow config
+    if (this.slippageInputEl) this.slippageInputEl.value = "";
+    this._syncSlippageUi();
+
+    this._loadConfiguredSlippage().then(() => this._syncSlippageUi());
+  }
+
+  /**
+   * Paint the active state, the "Auto = N%" note, and the high-slippage warning.
+   */
+  _syncSlippageUi() {
+    const active = this._slippagePct;
+
+    this.slippageBtns.forEach((btn) => {
+      const value = btn.dataset.slippage;
+      const isActive =
+        value === "auto" ? active == null : active != null && Number(value) === active;
+      btn.classList.toggle("active", isActive);
+    });
+
+    if (this.slippageNoteEl) {
+      this.slippageNoteEl.textContent =
+        active == null
+          ? this._configuredSlippage != null
+            ? `Auto (${this._configuredSlippage}% from settings)`
+            : "Auto (from settings)"
+          : `Override: ${active}%`;
+    }
+
+    // A large override is a real way to lose money to sandwich bots — say so.
+    if (this.slippageWarningEl) {
+      const risky = active != null && active >= 10;
+      this.slippageWarningEl.setAttribute("data-visible", risky ? "true" : "false");
+      if (risky) {
+        this.slippageWarningEl.textContent = `High slippage: you may receive up to ${active}% less than quoted.`;
+      }
+    }
+  }
+
+  /**
+   * Slippage preset / custom input changed. Re-quotes, because the quote must be
+   * priced at the slippage the trade will actually execute with.
+   */
+  _handleSlippageChange(value) {
+    if (value === "auto" || value === "" || value == null) {
+      this._slippagePct = null;
+      if (this.slippageInputEl) this.slippageInputEl.value = "";
+    } else {
+      const pct = Number(value);
+      if (!Number.isFinite(pct) || pct <= 0 || pct > MAX_SLIPPAGE_PCT) return;
+      this._slippagePct = pct;
+    }
+
+    this._syncSlippageUi();
+    this._fetchQuoteDebounced();
+  }
+
+  _handleSlippageBtnClick(e) {
+    const btn = e.currentTarget;
+    this._handleSlippageChange(btn.dataset.slippage);
+  }
+
+  _handleSlippageInputChange() {
+    this._handleSlippageChange(this.slippageInputEl.value.trim());
   }
 
   _getActionIcon(iconName) {
@@ -1291,9 +1436,16 @@ export class TradeActionDialog {
       }
     }
 
-    // Slippage warning check (price impact > 5%)
-    if (this._quoteData && this._quoteData.price_impact_pct > 5) {
-      const confirmed = await this._showSlippageWarning(this._quoteData.price_impact_pct);
+    // Warn when the quoted PRICE IMPACT exceeds the slippage tolerance actually in
+    // force for this trade (the override, else the configured default). This used to
+    // be a hardcoded 5%, which both nagged users who had deliberately set a high
+    // tolerance and stayed silent for those running a tight one.
+    const tolerance = this._slippagePct ?? this._configuredSlippage ?? 5;
+    if (this._quoteData && this._quoteData.price_impact_pct > tolerance) {
+      const confirmed = await this._showSlippageWarning(
+        this._quoteData.price_impact_pct,
+        tolerance
+      );
       if (!confirmed) {
         return; // User cancelled
       }
@@ -1323,6 +1475,12 @@ export class TradeActionDialog {
       }
     }
 
+    // Per-trade slippage override. Only sent when the user picked one — omitting it
+    // is what tells the backend to use the configured slippage.
+    if (this._slippagePct != null) {
+      result.slippage_pct = this._slippagePct;
+    }
+
     // Save to recent trades (for quick mode or any trade with mint)
     if (this.currentContext?.mint) {
       this._saveRecentTrade(this.currentContext.mint, this._currentSymbol);
@@ -1340,9 +1498,10 @@ export class TradeActionDialog {
   /**
    * Show slippage warning dialog for high price impact trades
    * @param {number} impactPct - Price impact percentage
+   * @param {number} tolerance - Slippage tolerance in force (override, else config)
    * @returns {Promise<boolean>} True if user confirms, false if cancelled
    */
-  _showSlippageWarning(impactPct) {
+  _showSlippageWarning(impactPct, tolerance = 5) {
     return new Promise((resolve) => {
       const overlay = document.createElement("div");
       overlay.className = "trade-slippage-warning-overlay";
@@ -1351,9 +1510,9 @@ export class TradeActionDialog {
           <div class="slippage-warning-icon"><i class="icon-triangle-alert"></i></div>
           <div class="slippage-warning-title">High Price Impact Warning</div>
           <div class="slippage-warning-text">
-            This trade has a price impact of <strong>${impactPct.toFixed(2)}%</strong>, 
-            which is higher than recommended (5%). You may receive significantly less 
-            than expected.
+            This trade has a price impact of <strong>${impactPct.toFixed(2)}%</strong>,
+            which exceeds your slippage tolerance of <strong>${tolerance}%</strong>. You may
+            receive significantly less than expected.
           </div>
           <div class="slippage-warning-buttons">
             <button class="slippage-warning-btn cancel">Cancel</button>

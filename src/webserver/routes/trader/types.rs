@@ -39,6 +39,10 @@ pub struct ManualBuyRequest {
     /// Defaults to true: dashboard manual buys are protected unless the user opts out.
     #[serde(default)]
     pub manual_management: Option<bool>,
+    /// Per-trade slippage override in percent. `None` = use the configured slippage
+    /// (`swaps.slippage.*`). Manual trading only — the auto-trader is always config-driven.
+    #[serde(default)]
+    pub slippage_pct: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,6 +50,10 @@ pub struct ManualAddRequest {
     pub mint: String,
     #[serde(default)]
     pub size_sol: Option<f64>,
+    /// Per-trade slippage override in percent. `None` = use the configured slippage
+    /// (`swaps.slippage.*`). Manual trading only — the auto-trader is always config-driven.
+    #[serde(default)]
+    pub slippage_pct: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,6 +65,10 @@ pub struct ManualSellRequest {
     pub close_all: Option<bool>,
     #[serde(default)]
     pub force: Option<bool>,
+    /// Per-trade slippage override in percent. `None` = use the configured slippage
+    /// (`swaps.slippage.*`). Manual trading only — the auto-trader is always config-driven.
+    #[serde(default)]
+    pub slippage_pct: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -164,6 +176,10 @@ pub struct QuotePreviewRequest {
     pub amount_tokens: Option<f64>, // For sell: token amount to sell (whole tokens; legacy)
     #[serde(default)]
     pub percentage: Option<f64>, // For sell: percentage of the real on-chain balance (preferred)
+    /// Slippage the quote is priced at. `None` = configured default. The dialog sends
+    /// whatever the user has selected so the PREVIEW matches what will execute.
+    #[serde(default)]
+    pub slippage_pct: Option<f64>,
     #[serde(default)]
     pub direction: String, // "buy" or "sell", defaults to "buy"
 }

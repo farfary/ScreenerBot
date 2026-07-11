@@ -265,6 +265,8 @@ pub async fn process_dca_opportunities() -> Result<Vec<TradeDecision>, String> {
                 priority: TradePriority::Normal,
                 price_sol: Some(evaluation.calculations.current_price),
                 size_sol: Some(evaluation.calculations.dca_amount_sol),
+                // Auto-trader slippage always follows config.
+                slippage_pct: None,
             });
         } else {
             logger::debug(

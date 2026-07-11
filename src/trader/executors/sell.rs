@@ -45,6 +45,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
             &decision.mint,
             exit_percentage,
             &exit_reason.clone(),
+            decision.slippage_pct,
         )
         .await
         {
@@ -73,7 +74,13 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
         }
     } else {
         // Full exit (either disabled, emergency exit, or 100%)
-        match positions::close_position_direct(&decision.mint, exit_reason.clone()).await {
+        match positions::close_position_direct(
+            &decision.mint,
+            exit_reason.clone(),
+            decision.slippage_pct,
+        )
+        .await
+        {
             Ok(transaction_signature) => {
                 logger::info(
                     LogTag::Trader,

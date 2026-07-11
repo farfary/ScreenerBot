@@ -38,6 +38,8 @@ pub async fn check_risk_limits(
             priority: TradePriority::Emergency,
             price_sol: Some(current_price),
             size_sol: None,
+            // Auto-trader slippage always follows config.
+            slippage_pct: None,
         }));
     }
 

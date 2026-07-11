@@ -25,6 +25,7 @@ pub async fn partial_close_position(
     token_mint: &str,
     exit_percentage: f64,
     exit_reason: &str,
+    slippage_pct: Option<f64>,
 ) -> Result<String, String> {
     // Serialize per-mint operations to avoid overlapping partials/full exits
     let _lock = acquire_position_lock(token_mint).await;
@@ -92,8 +93,8 @@ pub async fn partial_close_position(
     // Get quote for partial exit
     let wallet_address =
         get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
-    let slippage_exit_retry_steps =
-        with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
+    // Manual override starts the ladder; configured steps above it still escalate.
+    let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
     // Slippage retry loop for partial exit
     let mut last_err: Option<String> = None;
     let mut quote_opt = None;

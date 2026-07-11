@@ -8,6 +8,7 @@ use crate::config::with_config;
 use crate::global::{are_core_services_ready, get_pending_services};
 use crate::logger::{self, LogTag};
 use crate::positions;
+use crate::trader::MAX_MANUAL_SLIPPAGE_PCT;
 use crate::webserver::utils::{error_response, success_response};
 
 use super::types::*;
@@ -15,6 +16,29 @@ use super::types::*;
 // =============================================================================
 // MANUAL TRADING HANDLERS
 // =============================================================================
+
+/// Validate a per-trade slippage override.
+///
+/// `None` (the common case) means "follow the configured slippage" and is always
+/// valid. A value must be finite and within (0, MAX_MANUAL_SLIPPAGE_PCT] — an
+/// override is a deliberate escape hatch for illiquid tokens, not a licence to
+/// submit an unbounded one.
+fn validate_slippage(slippage_pct: Option<f64>) -> Result<Option<f64>, Response> {
+    let Some(pct) = slippage_pct else {
+        return Ok(None);
+    };
+
+    if !pct.is_finite() || pct <= 0.0 || pct > MAX_MANUAL_SLIPPAGE_PCT {
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "InvalidSlippage",
+            &format!("slippage_pct must be in (0, {MAX_MANUAL_SLIPPAGE_PCT}]"),
+            Some("Omit slippage_pct to use the configured default"),
+        ));
+    }
+
+    Ok(Some(pct))
+}
 
 pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     // Check force stop
@@ -96,7 +120,13 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     let manual_management = req.manual_management.unwrap_or(true);
 
     // Use standard manual_buy - action tracking is handled inside
-    let result = crate::trader::manual::manual_buy(&req.mint, size, manual_management).await;
+    let slippage_pct = match validate_slippage(req.slippage_pct) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
+    let result =
+        crate::trader::manual::manual_buy(&req.mint, size, manual_management, slippage_pct).await;
 
     match result {
         Ok(tr) => {
@@ -200,7 +230,12 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
     );
 
     // Use trader module - action tracking is handled inside
-    let result = crate::trader::manual::manual_add(&req.mint, size).await;
+    let slippage_pct = match validate_slippage(req.slippage_pct) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
+    let result = crate::trader::manual::manual_add(&req.mint, size, slippage_pct).await;
 
     match result {
         Ok(tr) => {
@@ -312,10 +347,15 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
     );
 
     // Route to trader module - action tracking is handled inside
+    let slippage_pct = match validate_slippage(req.slippage_pct) {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+
     let result = if req.force.unwrap_or_default() {
-        crate::trader::manual::force_sell(&req.mint, pct).await
+        crate::trader::manual::force_sell(&req.mint, pct, slippage_pct).await
     } else {
-        crate::trader::manual::manual_sell(&req.mint, pct).await
+        crate::trader::manual::manual_sell(&req.mint, pct, slippage_pct).await
     };
 
     match result {
@@ -491,7 +531,13 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         output_mint,
         input_amount,
         wallet_address,
-        slippage_pct: with_config(|cfg| cfg.swaps.slippage.quote_default_pct),
+        // Price the preview at the slippage the trade will actually use, so the quote
+        // the user confirms is the quote they get.
+        slippage_pct: match validate_slippage(req.slippage_pct) {
+            Ok(Some(pct)) => pct,
+            Ok(None) => with_config(|cfg| cfg.swaps.slippage.quote_default_pct),
+            Err(resp) => return resp,
+        },
         swap_mode: SwapMode::ExactIn,
         exclude_dexes: None,
     };

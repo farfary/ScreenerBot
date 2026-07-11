@@ -1411,3 +1411,88 @@ body.trade-action-dialog-open {
     animation: none;
   }
 }
+
+/* =============================================================================
+   SLIPPAGE (manual override)
+   "Auto" follows swaps.slippage.* — the same value the auto-trader always uses.
+   Anything else is a per-trade override for forcing a fill on an illiquid token.
+   ============================================================================= */
+
+.trade-action-slippage {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.trade-action-slippage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trade-action-slippage-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trade-action-slippage-note {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+}
+
+.trade-action-slippage-options {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.trade-action-slippage-btn {
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.trade-action-slippage-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.trade-action-slippage-btn.active {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  border-color: var(--primary-color);
+}
+
+.trade-action-slippage-input {
+  width: 84px;
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+/* Shown only for a deliberately high override — losing 15% to a sandwich bot is a
+   real outcome, so it is stated plainly rather than left implicit. */
+.trade-action-slippage-warning {
+  font-size: 0.6875rem;
+  color: var(--warning-color, #d29922);
+}
+
+.trade-action-slippage-warning[data-visible="false"] {
+  display: none;
+}

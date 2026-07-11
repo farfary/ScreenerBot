@@ -20,6 +20,14 @@ pub const EMERGENCY_LOSS_THRESHOLD_PCT: f64 = 90.0;
 pub const MAX_TRADE_SIZE_MULTIPLIER: f64 = 100.0;
 pub const MIN_TRADE_SIZE_SOL: f64 = 0.001;
 
+/// Hard ceiling on a MANUAL per-trade slippage override, in percent.
+///
+/// The config's own slippage fields cap at 25-50%, but a manual override is a
+/// deliberate "get me filled" escape hatch and is allowed to go higher. It is still
+/// bounded: above this the trade is not a trade, it is a donation to the MEV bots.
+/// The auto-trader never uses this — it always follows `swaps.slippage.*`.
+pub const MAX_MANUAL_SLIPPAGE_PCT: f64 = 50.0;
+
 // History limits
 pub const MANUAL_TRADE_HISTORY_LIMIT: usize = 1000;
 

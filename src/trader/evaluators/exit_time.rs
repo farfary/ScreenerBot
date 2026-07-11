@@ -81,6 +81,8 @@ pub async fn check_time_override(
                 priority: TradePriority::High,
                 price_sol: Some(current_price),
                 size_sol: None, // Sell entire position
+                // Auto-trader slippage always follows config.
+                slippage_pct: None,
             }));
         }
     }

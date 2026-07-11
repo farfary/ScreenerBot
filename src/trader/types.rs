@@ -14,6 +14,12 @@ pub struct TradeDecision {
     pub priority: TradePriority,
     pub price_sol: Option<f64>,
     pub size_sol: Option<f64>,
+    /// Per-trade slippage override, in percent.
+    ///
+    /// `None` = follow the configured slippage (`swaps.slippage.*`), which is what the
+    /// AUTO-TRADER always does — it must stay config-driven. Only MANUAL trades set
+    /// this, when the user overrides slippage in the trade dialog.
+    pub slippage_pct: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

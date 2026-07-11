@@ -134,16 +134,22 @@ const FAILURE_MESSAGES = {
  * Build the POST body for a completed dialog result.
  */
 function buildBody(action, mint, result) {
+  // Per-trade slippage override from the dialog. Absent = follow the configured
+  // slippage, which is what the auto-trader always does.
+  const slippage =
+    typeof result.slippage_pct === "number" ? { slippage_pct: result.slippage_pct } : {};
+
   if (action === "sell") {
     // 100% is a full close, which the backend takes as `close_all` rather than a
     // percentage (avoids leaving dust behind).
     return result.percentage === 100
-      ? { mint, close_all: true }
-      : { mint, percentage: result.percentage };
+      ? { mint, close_all: true, ...slippage }
+      : { mint, percentage: result.percentage, ...slippage };
   }
 
   return {
     mint,
+    ...slippage,
     ...(result.amount ? { size_sol: result.amount } : {}),
     // The dialog's manual-management checkbox (default true). Must be forwarded:
     // dropping it silently opts a manual buy back into auto-sell.

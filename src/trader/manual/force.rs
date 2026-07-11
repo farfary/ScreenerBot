@@ -21,7 +21,11 @@ use chrono::Utc;
 /// Creates a high-priority buy decision with ForceBuy reason.
 /// **WARNING:** Bypasses all safety checks including position limits and blacklist.
 /// Action progress is broadcast to dashboard via SSE.
-pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String> {
+pub async fn force_buy(
+    mint: &str,
+    size_sol: f64,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, String> {
     // Get token symbol for action display
     let symbol = crate::tokens::get_full_token_async(mint)
         .await
@@ -83,6 +87,8 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
         priority: TradePriority::High,
         price_sol: None,
         size_sol: Some(size_sol),
+        // Manual trade: honour the user's slippage override (None = config).
+        slippage_pct,
     };
 
     // Execute trade (includes quote + swap). A force buy is always manually managed —
@@ -149,7 +155,11 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
 ///
 /// # Returns
 /// TradeResult with transaction details
-pub async fn force_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResult, String> {
+pub async fn force_sell(
+    mint: &str,
+    percentage: Option<f64>,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, String> {
     let exit_percentage = percentage.unwrap_or(100.0);
 
     // Get token symbol and position for action display
@@ -213,6 +223,8 @@ pub async fn force_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResu
         priority: TradePriority::Emergency,
         price_sol: None,
         size_sol: Some(exit_percentage), // Use size_sol for percentage
+        // Manual trade: honour the user's slippage override (None = config).
+        slippage_pct,
     };
 
     // Execute trade (includes quote + swap)

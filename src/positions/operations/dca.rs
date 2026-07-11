@@ -18,7 +18,11 @@ use chrono::Utc;
 
 /// Add to an existing position (Dollar Cost Averaging)
 /// CRITICAL: This does NOT consume a new semaphore permit - same position
-pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<String, String> {
+pub async fn add_to_position(
+    token_mint: &str,
+    dca_amount_sol: f64,
+    slippage_pct: Option<f64>,
+) -> Result<String, String> {
     // Serialize per-mint DCA operations
     let _lock = acquire_position_lock(token_mint).await;
     // Get position
@@ -87,7 +91,8 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     // Get quote for DCA entry
     let wallet_address =
         get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
-    let slippage = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
+    // Manual override when the user set one in the trade dialog; config default otherwise.
+    let slippage = super::slippage::entry_slippage(slippage_pct);
     let quote_request = QuoteRequest {
         input_mint: SOL_MINT.to_string(),
         output_mint: token_mint.to_string(),

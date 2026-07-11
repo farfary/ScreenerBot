@@ -130,6 +130,8 @@ pub async fn evaluate_exit_for_position(
                                 },
                                 price_sol: Some(current_price),
                                 size_sol: None, // Let executor determine size
+                                // Auto-trader slippage always follows config.
+                                slippage_pct: None,
                             };
 
                             // Record AI exit signal event

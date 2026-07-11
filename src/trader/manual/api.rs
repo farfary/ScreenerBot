@@ -25,6 +25,7 @@ pub async fn manual_buy(
     mint: &str,
     size_sol: f64,
     manual_management: bool,
+    slippage_pct: Option<f64>,
 ) -> Result<TradeResult, String> {
     // Get token symbol for action display
     let symbol = crate::tokens::get_full_token_async(mint)
@@ -98,6 +99,8 @@ pub async fn manual_buy(
         priority: TradePriority::High,
         price_sol: None,
         size_sol: Some(size_sol),
+        // Manual trade: honour the user's slippage override (None = config).
+        slippage_pct,
     };
 
     // Execute trade (includes quote + swap). A manual buy is always a Buy, so route
@@ -166,7 +169,11 @@ pub async fn manual_buy(
 ///
 /// # Returns
 /// TradeResult with transaction details
-pub async fn manual_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResult, String> {
+pub async fn manual_sell(
+    mint: &str,
+    percentage: Option<f64>,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, String> {
     let exit_percentage = percentage.unwrap_or(100.0);
 
     // Get token symbol and position for action display
@@ -230,6 +237,8 @@ pub async fn manual_sell(mint: &str, percentage: Option<f64>) -> Result<TradeRes
         priority: TradePriority::High,
         price_sol: None,
         size_sol: Some(exit_percentage), // Use size_sol for percentage
+        // Manual trade: honour the user's slippage override (None = config).
+        slippage_pct,
     };
 
     // Execute trade (includes quote + swap)
@@ -294,7 +303,11 @@ pub async fn manual_sell(mint: &str, percentage: Option<f64>) -> Result<TradeRes
 ///
 /// # Returns
 /// TradeResult with transaction details
-pub async fn manual_add(mint: &str, size_sol: f64) -> Result<TradeResult, String> {
+pub async fn manual_add(
+    mint: &str,
+    size_sol: f64,
+    slippage_pct: Option<f64>,
+) -> Result<TradeResult, String> {
     // Get token symbol and position for action display
     let symbol = crate::tokens::get_full_token_async(mint)
         .await
@@ -369,6 +382,8 @@ pub async fn manual_add(mint: &str, size_sol: f64) -> Result<TradeResult, String
         priority: TradePriority::High,
         price_sol: None,
         size_sol: Some(size_sol),
+        // Manual trade: honour the user's slippage override (None = config).
+        slippage_pct,
     };
 
     // Execute trade (includes quote + swap)

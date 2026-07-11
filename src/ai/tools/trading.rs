@@ -110,13 +110,13 @@ impl Tool for BuyTokenTool {
         // Execute buy. AI-initiated buys stay auto-managed (manual_management = false)
         // so the AI/auto-trader can manage their exits; only user dashboard buys default
         // to manual management.
-        let result = match manual::manual_buy(&params.mint_address, params.amount_sol, false).await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                return ToolResult::error(format!("Buy failed: {e}"));
-            }
-        };
+        let result =
+            match manual::manual_buy(&params.mint_address, params.amount_sol, false, None).await {
+                Ok(r) => r,
+                Err(e) => {
+                    return ToolResult::error(format!("Buy failed: {e}"));
+                }
+            };
 
         // Build response
         let response = TradeResponse {
@@ -215,13 +215,13 @@ impl Tool for SellTokenTool {
         }
 
         // Execute sell
-        let result = match manual::manual_sell(&params.mint_address, Some(params.percentage)).await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                return ToolResult::error(format!("Sell failed: {e}"));
-            }
-        };
+        let result =
+            match manual::manual_sell(&params.mint_address, Some(params.percentage), None).await {
+                Ok(r) => r,
+                Err(e) => {
+                    return ToolResult::error(format!("Sell failed: {e}"));
+                }
+            };
 
         // Build response
         let response = TradeResponse {
@@ -311,7 +311,7 @@ impl Tool for ClosePositionTool {
         };
 
         // Execute sell (100%)
-        let result = match manual::manual_sell(&position.mint, Some(100.0)).await {
+        let result = match manual::manual_sell(&position.mint, Some(100.0), None).await {
             Ok(r) => r,
             Err(e) => {
                 return ToolResult::error(format!("Close position failed: {e}"));

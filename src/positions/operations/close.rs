@@ -18,6 +18,7 @@ use tokio::time::{sleep, Duration};
 pub async fn close_position_direct(
     token_mint: &str,
     exit_reason: String,
+    slippage_pct: Option<f64>,
 ) -> Result<String, String> {
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
@@ -163,8 +164,8 @@ pub async fn close_position_direct(
     // (often restricted to a single ATA). Using ExactOut with `sell_amount` (token units) makes routers
     // treat it as desired SOL out, causing them to require more tokens than reside in the spending ATA,
     // which leads to SPL Token "insufficient funds"during Transfer. ExactIn avoids that.
-    let slippage_exit_retry_steps =
-        with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
+    // Manual override starts the ladder; configured steps above it still escalate.
+    let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
     // Slippage retry loop for exit
     let mut last_err: Option<String> = None;
     let mut swap_result = None;

@@ -118,6 +118,12 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
 
     const direction = this.currentAction === "sell" ? "sell" : "buy";
 
+    // Price the quote at the slippage this trade will actually execute with, so the
+    // preview the user confirms is the one they get. Omitted when on "Auto" — the
+    // backend then applies the configured default itself.
+    const slippageParam =
+      this._slippagePct != null ? `&slippage_pct=${this._slippagePct}` : "";
+
     try {
       // Build URL based on direction
       let url;
@@ -125,10 +131,10 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         // For sell, amount is the percentage of holdings. Send the percentage and
         // let the backend apply it to the REAL on-chain balance — the stale DB
         // holdings (raw units) must never drive the quoted amount.
-        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&percentage=${amount}&direction=sell`;
+        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&percentage=${amount}&direction=sell${slippageParam}`;
       } else {
         // For buy/add, amount is SOL
-        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&amount_sol=${amount}&direction=buy`;
+        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&amount_sol=${amount}&direction=buy${slippageParam}`;
       }
 
       const response = await fetch(url);

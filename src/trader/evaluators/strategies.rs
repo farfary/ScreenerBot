@@ -139,6 +139,8 @@ impl StrategyEvaluator {
                     priority: TradePriority::Normal,
                     price_sol: Some(price_info.price_sol),
                     size_sol: None, // Will use config default
+                    // Auto-trader slippage always follows config.
+                    slippage_pct: None,
                 }))
             }
             Ok(Ok(None)) => Ok(None),
@@ -324,6 +326,8 @@ impl StrategyEvaluator {
                     priority: TradePriority::Normal,
                     price_sol: Some(current_price),
                     size_sol: None, // Will sell full position or use config
+                    // Auto-trader slippage always follows config.
+                    slippage_pct: None,
                 }))
             }
             Ok(Ok(None)) => Ok(None),

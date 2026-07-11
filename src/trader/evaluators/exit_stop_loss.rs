@@ -117,6 +117,8 @@ pub async fn check_stop_loss(
             priority: TradePriority::High, // High priority for stop loss
             price_sol: Some(current_price),
             size_sol,
+            // Auto-trader slippage always follows config.
+            slippage_pct: None,
         }));
     }
 

@@ -9,6 +9,7 @@ mod close;
 mod dca;
 mod open;
 mod partial_close;
+mod slippage;
 
 pub use close::close_position_direct;
 pub use dca::add_to_position;

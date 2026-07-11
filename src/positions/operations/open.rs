@@ -22,7 +22,8 @@ use serde_json::json;
 /// Open a new position using trade size from configuration (auto-trader path)
 pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
-    open_position_impl(token_mint, trade_size_sol, false).await
+    // Auto-trader entry: slippage always follows config.
+    open_position_impl(token_mint, trade_size_sol, false, None).await
 }
 
 /// Open a new position with an explicit SOL size (used by manual buys).
@@ -34,11 +35,12 @@ pub async fn open_position_with_size(
     token_mint: &str,
     trade_size_sol: f64,
     manual_management: bool,
+    slippage_pct: Option<f64>,
 ) -> Result<String, String> {
     if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
         return Err(format!("Invalid trade size: {trade_size_sol}"));
     }
-    open_position_impl(token_mint, trade_size_sol, manual_management).await
+    open_position_impl(token_mint, trade_size_sol, manual_management, slippage_pct).await
 }
 
 /// Internal helper to open a new position with an explicit SOL size
@@ -46,6 +48,7 @@ async fn open_position_impl(
     token_mint: &str,
     trade_size_sol: f64,
     manual_management: bool,
+    slippage_pct: Option<f64>,
 ) -> Result<String, String> {
     // Ensure the token exists in the local DB. For manual/force buys this lets the user
     // trade tokens that were never tracked by the pool service or that failed filtering
@@ -213,7 +216,8 @@ async fn open_position_impl(
     )
     .await;
 
-    let slippage_quote_default = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
+    // Manual override when the user set one in the trade dialog; config default otherwise.
+    let slippage_quote_default = super::slippage::entry_slippage(slippage_pct);
 
     let quote_request = QuoteRequest {
         input_mint: SOL_MINT.to_string(),

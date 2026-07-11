@@ -69,6 +69,8 @@ pub async fn check_trailing_stop(
                 priority: TradePriority::High, // High priority for trailing stops
                 price_sol: Some(current_price),
                 size_sol: None, // Will sell entire position
+                // Auto-trader slippage always follows config.
+                slippage_pct: None,
             }));
         }
     }

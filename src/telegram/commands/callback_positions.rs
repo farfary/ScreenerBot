@@ -298,7 +298,7 @@ pub(super) async fn execute_sell(
                 .parse_mode(ParseMode::Html)
                 .await;
 
-            match manual_sell(&pos.mint, Some(percent as f64)).await {
+            match manual_sell(&pos.mint, Some(percent as f64), None).await {
                 Ok(result) => {
                     let msg = format!(
                         "✅ <b>Sell Executed</b>\n\n\
@@ -343,7 +343,7 @@ pub(super) async fn execute_dca(
                 .parse_mode(ParseMode::Html)
                 .await;
 
-            match manual_add(&pos.mint, amount).await {
+            match manual_add(&pos.mint, amount, None).await {
                 Ok(_) => {
                     let msg = format!(
                         "✅ <b>DCA Executed</b>\n\n\
@@ -391,7 +391,7 @@ pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<(), 
     let mut failed = 0;
 
     for pos in &positions {
-        match manual_sell(&pos.mint, Some(100.0)).await {
+        match manual_sell(&pos.mint, Some(100.0), None).await {
             Ok(_) => success += 1,
             Err(_) => failed += 1,
         }
@@ -424,7 +424,7 @@ pub(super) async fn execute_blacklist(
     match position {
         Some(pos) => {
             // First close the position
-            let _ = manual_sell(&pos.mint, Some(100.0)).await;
+            let _ = manual_sell(&pos.mint, Some(100.0), None).await;
 
             // Add to blacklist
             let mint_clone = pos.mint.clone();
