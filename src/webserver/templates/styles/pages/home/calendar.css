@@ -358,7 +358,7 @@
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
-.wallet-card .card-edit-controls {
+.hero-card .card-edit-controls {
   margin: 0 0 0.4rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);

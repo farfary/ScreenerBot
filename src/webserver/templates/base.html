@@ -70,11 +70,17 @@
         try {
           const p = new URLSearchParams(location.search).get("theme");
           if (p === "light" || p === "dark") theme = p;
-        } catch { /* no query */ }
+        } catch {
+          /* no query */
+        }
         if (!theme) theme = localStorage.getItem("theme") || "dark";
         document.documentElement.setAttribute("data-theme", theme);
         // Seed localStorage so later reads (theme.js, FOUC) stay consistent.
-        try { localStorage.setItem("theme", theme); } catch { /* unavailable */ }
+        try {
+          localStorage.setItem("theme", theme);
+        } catch {
+          /* unavailable */
+        }
       })();
     </script>
 
@@ -207,7 +213,7 @@
           </div>
 
           <!-- Wallet Card -->
-          <div class="header-card wallet-card" id="walletCard">
+          <div class="header-card" id="walletCard">
             <div class="card-content">
               <div class="card-top">
                 <span class="card-label">SOL</span>
@@ -243,7 +249,6 @@
               </div>
             </div>
           </div>
-
         </div>
 
         <!-- Quick Actions -->

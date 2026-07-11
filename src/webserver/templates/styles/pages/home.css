@@ -30,7 +30,7 @@
    The hero is ONE container like every other card (no nested second box): it is a
    .dashboard-card, and simply layers a soft accent glow on the shared surface to
    read as the primary card. Its inner .wallet-hero is a pure layout wrapper. */
-.wallet-card {
+.hero-card {
   position: relative;
   padding: 0.8rem 1rem;
   background:
@@ -47,7 +47,7 @@
 }
 
 /* Glassy hairline highlight across the hero's very top edge. */
-.wallet-card::before {
+.hero-card::before {
   content: "";
   position: absolute;
   inset: 0 0 auto;
@@ -62,12 +62,14 @@
   pointer-events: none;
 }
 
-/* Single-row hero: headline (left) · compact stats (middle) · sparkline (right).
-   Wraps gracefully when the row gets too narrow. The styled box is .wallet-card. */
+/* Single-row hero: headline (left) · compact stat list (middle) · sparkline
+   (right), spread across the width. Wraps gracefully when the row gets narrow.
+   The styled box is .hero-card. */
 .wallet-hero {
   display: flex;
   align-items: center;
-  gap: 1rem 1.75rem;
+  justify-content: space-between;
+  gap: 0.85rem 1.75rem;
   flex-wrap: wrap;
 }
 
@@ -219,44 +221,44 @@
   fill: color-mix(in srgb, var(--badge-error) 15%, transparent);
 }
 
-/* ===== Compact stat cluster in the MIDDLE of the hero (borderless) ===== */
+/* ===== Compact stat list in the MIDDLE of the hero (borderless) =====
+   Four aligned lines: label on the left, value right-aligned so the numbers form
+   a clean column. Vertical + compact, no boxes/borders. */
 .hero-stats {
-  flex: 1 1 340px;
-  display: grid;
-  grid-template-columns: repeat(4, auto);
-  justify-content: space-between;
-  gap: 0.4rem 1.5rem;
-  align-items: center;
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
   min-width: 0;
 }
 
 .hero-stat {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
   min-width: 0;
 }
 
 .hero-stat-label {
-  font-size: 0.56rem;
+  font-size: 0.62rem;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   white-space: nowrap;
 }
 
 .hero-stat-value {
   font-family: var(--font-data);
-  font-size: 0.98rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--text-primary);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: right;
 }
 
 .hero-stat-value.profit {
@@ -293,7 +295,7 @@
 }
 
 /* Wide cards span the full row / half the grid. */
-.content-grid > .wallet-card {
+.content-grid > .hero-card {
   grid-column: 1 / -1;
 }
 
@@ -460,11 +462,9 @@
 }
 
 @media (width <= 800px) {
-  /* Hero stat cluster wraps to two columns and stops taking a full row. */
+  /* When the hero wraps, the stat list takes its own full-width row. */
   .hero-stats {
     flex-basis: 100%;
-    grid-template-columns: repeat(4, 1fr);
-    justify-content: stretch;
   }
 
   .content-grid {
@@ -472,7 +472,7 @@
   }
 
   .content-grid > .calendar-card,
-  .content-grid > .wallet-card {
+  .content-grid > .hero-card {
     grid-column: 1 / -1;
   }
 }
@@ -484,18 +484,13 @@
     --card-padding: 0.625rem;
   }
 
-  .wallet-card {
+  .hero-card {
     padding: 0.75rem;
   }
 
   /* Sparkline is decorative; drop it first when width is tight. */
   .hero-spark {
     display: none;
-  }
-
-  /* Stats fold to a 2x2 grid on the narrowest screens. */
-  .hero-stats {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .tokens-stats {
@@ -516,23 +511,8 @@
   }
 }
 
-/* Loading state for wallet hero section */
-.wallet-hero.loading {
-  position: relative;
-  overflow: hidden;
-}
-
-.wallet-hero.loading::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.1) 50%, transparent 100%);
-  animation: home-shimmer 1.5s ease-in-out infinite;
-}
-
-[data-theme="dark"] .wallet-hero.loading::after {
-  background: linear-gradient(90deg, transparent 0%, rgb(88 166 255 / 0.08) 50%, transparent 100%);
-}
+/* The hero is itself a .dashboard-card, so it uses the shared card shimmer below
+   — no separate hero shimmer (avoids a double-shimmer on the hero). */
 
 /* Loading state for dashboard cards */
 .dashboard-card.loading {
@@ -568,6 +548,12 @@
   border-radius: var(--radius-sm);
   min-width: 3ch;
   animation: pulse-subtle 1.5s ease-in-out infinite;
+}
+
+/* Keep the holdings sub-count invisible inside its value's pulse block during
+   loading (it sets its own colour, so it would otherwise show through). */
+.loading .hero-stat-sub {
+  color: transparent;
 }
 
 @keyframes pulse-subtle {

@@ -338,6 +338,7 @@
     "tnum" 1,
     "zero" 1;
   color: var(--text-primary, #fff);
+  white-space: nowrap; /* keep numbers on one line; the strip scrolls if tight */
 }
 
 .card-value.positive {
@@ -434,13 +435,12 @@
   white-space: nowrap;
 }
 
-/* Daily P&L block: thin divider + optional label; the value is always visible */
+/* Daily P&L block: separated by spacing only (no divider); value always visible */
 .bot-card .card-bottom {
   display: flex;
   align-items: baseline;
   gap: clamp(4px, 0.4vw, 7px);
   padding-left: clamp(8px, 0.8vw, 14px);
-  border-left: 1px solid rgb(255, 255, 255, 0.14);
   color: inherit;
   font-size: inherit;
 }
@@ -474,10 +474,6 @@
   color: #10b981;
 }
 
-.bot-card[data-status="running"] .card-bottom {
-  border-left-color: rgb(16, 185, 129, 0.28);
-}
-
 .bot-card[data-status="stopped"] {
   background: rgb(239, 68, 68, 0.16);
 }
@@ -489,10 +485,6 @@
 .bot-card[data-status="stopped"] .card-icon,
 .bot-card[data-status="stopped"] .card-status {
   color: #ef4444;
-}
-
-.bot-card[data-status="stopped"] .card-bottom {
-  border-left-color: rgb(239, 68, 68, 0.28);
 }
 
 .bot-card[data-status="loading"] {
@@ -608,8 +600,7 @@
   align-items: center;
   flex-shrink: 0; /* actions stay fully visible; never squeezed or clipped */
   margin-left: auto;
-  border-left: 2px solid rgb(255, 255, 255, 0.1);
-  padding-left: 32px; /* Increased from 24px */
+  padding-left: 32px; /* spacing from the cards (divider removed for a cleaner header) */
 }
 
 /* The action buttons live in their own flex group so they can be collapsed into a
