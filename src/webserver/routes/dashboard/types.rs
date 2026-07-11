@@ -169,12 +169,23 @@ pub struct TradingPeriodStats {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletAnalytics {
+    /// Free (uninvested) SOL sitting in the wallet.
     pub current_balance_sol: f64,
+    /// Number of distinct fungible tokens held.
     pub token_count: usize,
+    /// SOL value of the held tokens (sum of balance_ui * pool price_sol).
     pub tokens_worth_sol: f64,
+    /// Total portfolio value: cash SOL + token holdings value. The hero headline.
+    pub total_equity_sol: f64,
+    /// Wallet SOL balance at 00:00 UTC today — the change baseline.
     pub start_of_day_balance_sol: f64,
+    /// total_equity_sol - start_of_day_balance_sol.
     pub change_sol: f64,
     pub change_percent: f64,
+    /// Current SOL/USD price so the client can render an approximate USD value.
+    pub sol_price_usd: f64,
+    /// Recent wallet SOL-balance samples, OLDEST first, for a trend sparkline.
+    pub balance_history: Vec<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

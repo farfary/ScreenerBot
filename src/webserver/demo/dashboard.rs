@@ -49,13 +49,23 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         all_time: period_stats(&aggregates::period_over(trades.iter()), open_buys),
     };
 
+    let demo_equity = DEMO_SOL_BALANCE + open.current_value_sol;
     let wallet = WalletAnalytics {
         current_balance_sol: DEMO_SOL_BALANCE,
         token_count: open.count,
         tokens_worth_sol: open.current_value_sol,
+        total_equity_sol: demo_equity,
         start_of_day_balance_sol: DEMO_START_BALANCE,
-        change_sol: DEMO_SOL_BALANCE - DEMO_START_BALANCE,
-        change_percent: (DEMO_SOL_BALANCE - DEMO_START_BALANCE) / DEMO_START_BALANCE * 100.0,
+        change_sol: demo_equity - DEMO_START_BALANCE,
+        change_percent: (demo_equity - DEMO_START_BALANCE) / DEMO_START_BALANCE * 100.0,
+        sol_price_usd: 180.0,
+        balance_history: vec![
+            DEMO_START_BALANCE,
+            DEMO_START_BALANCE * 1.01,
+            DEMO_START_BALANCE * 0.99,
+            DEMO_START_BALANCE * 1.03,
+            demo_equity,
+        ],
     };
 
     let positions = PositionsSnapshot {

@@ -97,8 +97,8 @@ function createLifecycle() {
   function updateUI(data) {
     if (!data) return;
 
-    // Update wallet analytics
-    updateWalletStats(data.wallet);
+    // Wallet hero (equity headline, USD, today-change, tiles, sparkline, trader)
+    updateHeroCard(data);
 
     // Update positions snapshot
     updatePositionsStats(data.positions);
@@ -107,46 +107,149 @@ function createLifecycle() {
     updateTokenStats(data.tokens);
   }
 
-  // Update wallet statistics
-  function updateWalletStats(wallet) {
+  // Format a signed SOL value, e.g. "+0.1234" / "-0.0500" / "0.0000".
+  function formatSignedSol(value, decimals = 4) {
+    const v = value || 0;
+    const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+    return `${sign}${Utils.formatSol(Math.abs(v), { decimals })}`;
+  }
+
+  // Profit/loss/flat semantic class for a signed value.
+  function pnlClass(value) {
+    if (value > 0) return "profit";
+    if (value < 0) return "loss";
+    return "flat";
+  }
+
+  // Render the balance-trend sparkline from an oldest-first array of SOL values.
+  function renderSparkline(history) {
+    const line = document.getElementById("heroSparkLine");
+    const svg = document.getElementById("heroSpark");
+    if (!line || !svg) return;
+
+    const pts = Array.isArray(history) ? history.filter((n) => Number.isFinite(n)) : [];
+    if (pts.length < 2) {
+      // Nothing meaningful to plot — hide the line rather than draw a flat stub.
+      line.setAttribute("points", "");
+      svg.classList.add("empty");
+      return;
+    }
+    svg.classList.remove("empty");
+
+    const W = 120;
+    const H = 40;
+    const pad = 3;
+    const min = Math.min(...pts);
+    const max = Math.max(...pts);
+    const range = max - min || 1;
+    const stepX = (W - pad * 2) / (pts.length - 1);
+    const coords = pts
+      .map((v, i) => {
+        const x = pad + i * stepX;
+        const y = pad + (H - pad * 2) * (1 - (v - min) / range);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+    line.setAttribute("points", coords);
+
+    // Colour the trend by net direction across the window.
+    const up = pts[pts.length - 1] >= pts[0];
+    svg.classList.toggle("up", up);
+    svg.classList.toggle("down", !up);
+  }
+
+  // Populate the portfolio hero card from the full dashboard payload.
+  function updateHeroCard(data) {
+    const wallet = data.wallet;
     if (!wallet) return;
 
+    // Headline: total equity (cash + holdings).
     const balanceEl = document.getElementById("walletBalance");
-    const changeEl = document.getElementById("homeWalletChange");
-    const tokensEl = document.getElementById("walletTokens");
-    const tokensWorthEl = document.getElementById("walletTokensWorth");
-    const startDayEl = document.getElementById("walletStartDay");
-
     if (balanceEl) {
-      balanceEl.textContent = Utils.formatSol(wallet.current_balance_sol, {
+      balanceEl.textContent = `${Utils.formatSol(wallet.total_equity_sol, {
         decimals: 4,
-      });
+      })} SOL`;
     }
 
+    // Approximate USD value of total equity.
+    const usdEl = document.getElementById("walletUsd");
+    if (usdEl) {
+      const usd = (wallet.total_equity_sol || 0) * (wallet.sol_price_usd || 0);
+      if (usd > 0) {
+        usdEl.textContent = `≈ $${Utils.formatNumber(usd, 2)}`;
+        usdEl.style.display = "";
+      } else {
+        usdEl.style.display = "none";
+      }
+    }
+
+    // Today change (equity vs start-of-day baseline).
+    const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
-      const changeSign = wallet.change_sol >= 0 ? "+" : "";
-      const changeClass = wallet.change_sol >= 0 ? "profit" : "loss";
+      const cls = pnlClass(wallet.change_sol);
+      const pctSign = wallet.change_percent >= 0 ? "+" : "";
       changeEl.innerHTML = `
-        <span class="hero-change-value change-value ${changeClass}">${changeSign}${Utils.formatSol(
-          wallet.change_sol,
-          { decimals: 4 }
+        <span class="hero-change-value change-value ${cls}">${formatSignedSol(
+          wallet.change_sol
         )}</span>
-        <span class="change-percent ${changeClass}">(${changeSign}${Utils.formatNumber(
+        <span class="change-percent ${cls}">(${pctSign}${Utils.formatNumber(
           wallet.change_percent,
           2
         )}%)</span>
       `;
     }
 
-    if (tokensEl) animateValue(tokensEl, wallet.token_count);
-    if (tokensWorthEl)
-      tokensWorthEl.textContent = Utils.formatSol(wallet.tokens_worth_sol, {
+    // Cash tile — free SOL available to trade.
+    const cashEl = document.getElementById("heroCash");
+    if (cashEl) {
+      cashEl.textContent = `${Utils.formatSol(wallet.current_balance_sol, {
         decimals: 4,
-      });
-    if (startDayEl)
-      startDayEl.textContent = Utils.formatSol(wallet.start_of_day_balance_sol, {
+      })} SOL`;
+    }
+
+    // Holdings tile — SOL value of held tokens, with a token-count subscript.
+    const holdingsEl = document.getElementById("heroHoldings");
+    if (holdingsEl) {
+      holdingsEl.textContent = `${Utils.formatSol(wallet.tokens_worth_sol, {
         decimals: 4,
-      });
+      })} SOL`;
+    }
+    const holdingsCountEl = document.getElementById("heroHoldingsCount");
+    if (holdingsCountEl) {
+      const n = wallet.token_count || 0;
+      holdingsCountEl.textContent = n > 0 ? `${n} token${n === 1 ? "" : "s"}` : "";
+    }
+
+    // Open P&L tile — unrealized, from the positions snapshot.
+    const openPnlEl = document.getElementById("heroOpenPnl");
+    if (openPnlEl && data.positions) {
+      const v = data.positions.unrealized_pnl_sol || 0;
+      const pct = data.positions.unrealized_pnl_percent || 0;
+      openPnlEl.innerHTML = `${formatSignedSol(v)} SOL <span class="hero-tile-sub">${
+        pct >= 0 ? "+" : ""
+      }${Utils.formatNumber(pct, 1)}%</span>`;
+      openPnlEl.className = `hero-tile-value ${pnlClass(v)}`;
+    }
+
+    // Realized Today tile — banked net P&L today, from trader analytics.
+    const realizedEl = document.getElementById("heroRealizedToday");
+    if (realizedEl && data.trader && data.trader.today) {
+      const v = data.trader.today.net_pnl_sol || 0;
+      realizedEl.textContent = `${formatSignedSol(v)} SOL`;
+      realizedEl.className = `hero-tile-value ${pnlClass(v)}`;
+    }
+
+    // Trader running indicator (the one justified status element).
+    const traderEl = document.getElementById("heroTraderStatus");
+    if (traderEl && data.trader_status) {
+      const running = !!data.trader_status.running;
+      traderEl.dataset.running = running ? "true" : "false";
+      const txt = traderEl.querySelector(".hero-trader-text");
+      if (txt) txt.textContent = running ? "Trader On" : "Trader Off";
+    }
+
+    // Balance-trend sparkline.
+    renderSparkline(wallet.balance_history);
   }
 
   // Update positions statistics

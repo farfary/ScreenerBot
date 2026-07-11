@@ -4,7 +4,9 @@
     <!-- Card: Wallet hero -->
     <div class="dashboard-card wallet-card" data-card-id="wallet">
       <div class="card-edit-controls">
-        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-drag-handle" title="Drag to reorder"
+          ><i class="icon-grip-vertical"></i
+        ></span>
         <span class="card-edit-title">Wallet</span>
         <label class="toggle card-toggle">
           <input type="checkbox" class="card-enable-toggle" data-card-id="wallet" checked />
@@ -12,25 +14,55 @@
         </label>
       </div>
       <div class="wallet-hero loading">
-        <div class="hero-main">
-          <div class="hero-label">Current Balance</div>
-          <div class="hero-balance" id="walletBalance">0.00</div>
-          <div class="hero-change" id="homeWalletChange">
-            <span class="hero-change-value change-value">+0.00</span>
-            <span class="change-percent">(+0.00%)</span>
+        <div class="hero-top">
+          <div class="hero-main">
+            <div class="hero-label">Portfolio Value</div>
+            <div class="hero-balance" id="walletBalance">0.00 SOL</div>
+            <div class="hero-sub">
+              <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
+              <span class="hero-change" id="homeWalletChange">
+                <span class="hero-change-value change-value">+0.00</span>
+                <span class="change-percent">(+0.00%)</span>
+              </span>
+              <span class="hero-change-label">today</span>
+            </div>
+          </div>
+          <div class="hero-aside">
+            <span class="hero-trader" id="heroTraderStatus" data-running="false">
+              <span class="hero-trader-dot"></span>
+              <span class="hero-trader-text">Trader Off</span>
+            </span>
+            <svg
+              class="hero-spark"
+              id="heroSpark"
+              viewBox="0 0 120 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polyline class="hero-spark-line" id="heroSparkLine" points="" />
+            </svg>
           </div>
         </div>
-        <div class="hero-stat">
-          <div class="hero-stat-label">Tokens</div>
-          <div class="hero-stat-value" id="walletTokens">0</div>
-        </div>
-        <div class="hero-stat">
-          <div class="hero-stat-label">Tokens Worth</div>
-          <div class="hero-stat-value" id="walletTokensWorth">0.00</div>
-        </div>
-        <div class="hero-stat">
-          <div class="hero-stat-label">Start of Day</div>
-          <div class="hero-stat-value" id="walletStartDay">0.00</div>
+        <div class="hero-tiles">
+          <div class="hero-tile">
+            <div class="hero-tile-label">Cash</div>
+            <div class="hero-tile-value" id="heroCash">0.00 SOL</div>
+          </div>
+          <div class="hero-tile">
+            <div class="hero-tile-label">Holdings</div>
+            <div class="hero-tile-value">
+              <span id="heroHoldings">0.00 SOL</span>
+              <span class="hero-tile-sub" id="heroHoldingsCount">0</span>
+            </div>
+          </div>
+          <div class="hero-tile">
+            <div class="hero-tile-label">Open P&amp;L</div>
+            <div class="hero-tile-value" id="heroOpenPnl">0.00 SOL</div>
+          </div>
+          <div class="hero-tile">
+            <div class="hero-tile-label">Realized Today</div>
+            <div class="hero-tile-value" id="heroRealizedToday">0.00 SOL</div>
+          </div>
         </div>
       </div>
     </div>
@@ -38,7 +70,9 @@
     <!-- Card: Portfolio Calendar -->
     <div class="dashboard-card calendar-card loading" data-card-id="calendar">
       <div class="card-edit-controls">
-        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-drag-handle" title="Drag to reorder"
+          ><i class="icon-grip-vertical"></i
+        ></span>
         <span class="card-edit-title">Portfolio Calendar</span>
         <label class="toggle card-toggle">
           <input type="checkbox" class="card-enable-toggle" data-card-id="calendar" checked />
@@ -49,26 +83,49 @@
         <h2><i class="icon-calendar"></i> Portfolio</h2>
         <div class="calendar-header-right">
           <div class="card-header-actions">
-            <button type="button" class="btn-icon card-customize-trigger" title="Customize dashboard" aria-label="Customize dashboard">
+            <button
+              type="button"
+              class="btn-icon card-customize-trigger"
+              title="Customize dashboard"
+              aria-label="Customize dashboard"
+            >
               <i class="icon-sliders-horizontal"></i>
             </button>
-            <button type="button" class="btn-icon card-reset-trigger" title="Reset layout" aria-label="Reset layout">
+            <button
+              type="button"
+              class="btn-icon card-reset-trigger"
+              title="Reset layout"
+              aria-label="Reset layout"
+            >
               <i class="icon-rotate-ccw"></i>
             </button>
           </div>
           <div class="calendar-nav">
-            <button type="button" class="btn-icon" id="calendarPrev" title="Previous month" aria-label="Previous month">
+            <button
+              type="button"
+              class="btn-icon"
+              id="calendarPrev"
+              title="Previous month"
+              aria-label="Previous month"
+            >
               <i class="icon-chevron-left"></i>
             </button>
             <span class="calendar-month-label" id="calendarMonthLabel">—</span>
-            <button type="button" class="btn-icon" id="calendarNext" title="Next month" aria-label="Next month">
+            <button
+              type="button"
+              class="btn-icon"
+              id="calendarNext"
+              title="Next month"
+              aria-label="Next month"
+            >
               <i class="icon-chevron-right"></i>
             </button>
           </div>
         </div>
       </div>
       <div class="calendar-weekdays">
-        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span
+        ><span>Fri</span><span>Sat</span>
       </div>
       <div class="calendar-grid" id="portfolioCalendarGrid">
         <!-- Static skeleton so the month grid is shaped correctly at first paint,
@@ -131,7 +188,9 @@
     <!-- Card: Positions -->
     <div class="dashboard-card positions-card loading" data-card-id="positions">
       <div class="card-edit-controls">
-        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-drag-handle" title="Drag to reorder"
+          ><i class="icon-grip-vertical"></i
+        ></span>
         <span class="card-edit-title">Positions</span>
         <label class="toggle card-toggle">
           <input type="checkbox" class="card-enable-toggle" data-card-id="positions" checked />
@@ -141,10 +200,20 @@
       <div class="card-header">
         <h2><i class="icon-trending-up"></i> Positions</h2>
         <div class="card-header-actions">
-          <button type="button" class="btn-icon card-customize-trigger" title="Customize dashboard" aria-label="Customize dashboard">
+          <button
+            type="button"
+            class="btn-icon card-customize-trigger"
+            title="Customize dashboard"
+            aria-label="Customize dashboard"
+          >
             <i class="icon-sliders-horizontal"></i>
           </button>
-          <button type="button" class="btn-icon card-reset-trigger" title="Reset layout" aria-label="Reset layout">
+          <button
+            type="button"
+            class="btn-icon card-reset-trigger"
+            title="Reset layout"
+            aria-label="Reset layout"
+          >
             <i class="icon-rotate-ccw"></i>
           </button>
         </div>
@@ -188,7 +257,9 @@
     <!-- Card: Tokens -->
     <div class="dashboard-card tokens-card loading" data-card-id="tokens">
       <div class="card-edit-controls">
-        <span class="card-drag-handle" title="Drag to reorder"><i class="icon-grip-vertical"></i></span>
+        <span class="card-drag-handle" title="Drag to reorder"
+          ><i class="icon-grip-vertical"></i
+        ></span>
         <span class="card-edit-title">Tokens</span>
         <label class="toggle card-toggle">
           <input type="checkbox" class="card-enable-toggle" data-card-id="tokens" checked />
@@ -198,10 +269,20 @@
       <div class="card-header">
         <h2><i class="icon-coins"></i> Tokens</h2>
         <div class="card-header-actions">
-          <button type="button" class="btn-icon card-customize-trigger" title="Customize dashboard" aria-label="Customize dashboard">
+          <button
+            type="button"
+            class="btn-icon card-customize-trigger"
+            title="Customize dashboard"
+            aria-label="Customize dashboard"
+          >
             <i class="icon-sliders-horizontal"></i>
           </button>
-          <button type="button" class="btn-icon card-reset-trigger" title="Reset layout" aria-label="Reset layout">
+          <button
+            type="button"
+            class="btn-icon card-reset-trigger"
+            title="Reset layout"
+            aria-label="Reset layout"
+          >
             <i class="icon-rotate-ccw"></i>
           </button>
         </div>

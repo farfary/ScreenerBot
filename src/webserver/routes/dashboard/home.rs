@@ -9,7 +9,6 @@ use crate::global::{
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::trader::is_trader_running;
-use crate::wallet::get_current_wallet_status;
 use crate::webserver::demo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
@@ -53,7 +52,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
             alltime_stats_result,
         ),
         // Wallet data
-        current_wallet_result,
+        recent_snapshots_result,
         start_of_day_balance_result,
         // Positions data
         open_positions_result,
@@ -72,8 +71,9 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 positions::get_period_trading_stats(epoch_start, Some(now)),
             )
         },
-        // Wallet current status
-        get_current_wallet_status(),
+        // Wallet snapshots (newest first) — [0] is the current status, the rest
+        // form the balance-trend sparkline.
+        crate::wallet::get_recent_wallet_snapshots(30),
         // Start of day balance
         crate::wallet::get_balance_at_time(today_start),
         // Open positions
@@ -117,24 +117,34 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         all_time: convert_stats(alltime_stats_result),
     };
 
-    // Process wallet analytics from parallel results
-    let current_wallet = current_wallet_result.ok().flatten();
-    let start_of_day_balance_sol =
-        start_of_day_balance_result
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| {
-                current_wallet
-                    .as_ref()
-                    .map(|w| w.sol_balance)
-                    .unwrap_or_default()
-            });
+    // Process wallet analytics from parallel results. Snapshots come newest-first:
+    // [0] is the current wallet, the tail (reversed to oldest-first) is the trend.
+    let recent_snapshots = recent_snapshots_result.unwrap_or_default();
+    let current_wallet = recent_snapshots.first();
+    let start_of_day_balance_sol = start_of_day_balance_result
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| current_wallet.map(|w| w.sol_balance).unwrap_or_default());
 
-    let current_balance_sol = current_wallet
-        .as_ref()
-        .map(|w| w.sol_balance)
-        .unwrap_or_default();
-    let change_sol = current_balance_sol - start_of_day_balance_sol;
+    let current_balance_sol = current_wallet.map(|w| w.sol_balance).unwrap_or_default();
+
+    // Holdings value: sum each held token's UI balance times its live pool price in
+    // SOL. Tokens without a fresh pool price contribute 0 (never fabricate a value).
+    let tokens_worth_sol: f64 = current_wallet
+        .map(|w| {
+            w.token_balances
+                .iter()
+                .filter_map(|tb| {
+                    crate::pools::get_pool_price(&tb.mint).map(|p| tb.balance_ui * p.price_sol)
+                })
+                .sum()
+        })
+        .unwrap_or(0.0);
+
+    // Total equity is the true "what I have" figure and drives both the headline
+    // and the today-change (kept consistent with the start-of-day baseline).
+    let total_equity_sol = current_balance_sol + tokens_worth_sol;
+    let change_sol = total_equity_sol - start_of_day_balance_sol;
     let change_percent = if start_of_day_balance_sol > 0.0 {
         (change_sol / start_of_day_balance_sol) * 100.0
     } else {
@@ -142,17 +152,26 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     };
 
     let token_count = current_wallet
-        .as_ref()
         .map(|w| w.total_tokens_count as usize)
         .unwrap_or_default();
+
+    // Oldest-first SOL-balance trend for the sparkline (reverse of newest-first).
+    let balance_history: Vec<f64> = recent_snapshots
+        .iter()
+        .rev()
+        .map(|s| s.sol_balance)
+        .collect();
 
     let wallet = WalletAnalytics {
         current_balance_sol,
         token_count,
-        tokens_worth_sol: 0.0, // TODO: Calculate from token balances with prices
+        tokens_worth_sol,
+        total_equity_sol,
         start_of_day_balance_sol,
         change_sol,
         change_percent,
+        sol_price_usd: crate::sol_price::get_sol_price(),
+        balance_history,
     };
 
     // Process positions snapshot from parallel results
