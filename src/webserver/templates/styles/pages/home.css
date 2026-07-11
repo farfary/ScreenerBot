@@ -30,22 +30,49 @@
   overflow: visible;
 }
 
-/* On-brand card surface (never the old flat blue slab). A whisper of accent tint
-   distinguishes the hero from the plain cards below, in both themes. */
+/* On-brand premium surface (never the old flat blue slab): a soft accent glow in
+   the top-right corner over a subtle diagonal tint, a hairline border and a
+   layered soft shadow give it depth and lift it above the plain cards below. */
 .wallet-hero {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--primary) 7%, var(--bg-card)),
-    var(--bg-card) 55%
-  );
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      130% 150% at 100% 0%,
+      color-mix(in srgb, var(--primary) 14%, transparent) 0%,
+      transparent 48%
+    ),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--primary) 5%, var(--bg-card)),
+      var(--bg-card) 62%
+    );
   border: 1px solid var(--border-color);
-  border-radius: var(--card-radius);
-  padding: 0.875rem 1rem;
+  border-radius: var(--radius-xl);
+  padding: 1.05rem 1.15rem;
   color: var(--text-primary);
-  box-shadow: 0 1px 4px var(--shadow-md);
+  box-shadow:
+    0 6px 22px -8px var(--shadow-lg),
+    0 1px 2px var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.85rem;
+}
+
+/* Glassy hairline highlight across the very top edge. */
+.wallet-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--primary) 35%, transparent),
+    transparent
+  );
+  opacity: 0.7;
+  pointer-events: none;
 }
 
 /* Top row: headline + USD/change left, trader status + sparkline right. */
@@ -64,23 +91,32 @@
 }
 
 .hero-label {
-  font-size: 0.65rem;
+  font-size: 0.64rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 .hero-balance {
   font-family: var(--font-data);
-  font-size: clamp(1.6rem, 2.6vw, 2.15rem);
+  font-size: clamp(1.8rem, 2.9vw, 2.45rem);
   font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: 0.01em;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
   color: var(--text-primary);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
+}
+
+/* The unit (SOL) rides small and muted so the number carries the weight. */
+.hero-unit {
+  font-size: 0.46em;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  margin-left: 0.35em;
 }
 
 .hero-sub {
@@ -98,16 +134,28 @@
   color: var(--text-secondary);
 }
 
+/* Tinted pill so today's direction reads instantly. */
 .hero-change {
   display: inline-flex;
-  gap: 0.35rem;
+  gap: 0.3rem;
   align-items: baseline;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
+  padding: 0.12rem 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+}
+
+.hero-change.profit {
+  background: color-mix(in srgb, var(--badge-online) 15%, transparent);
+}
+
+.hero-change.loss {
+  background: color-mix(in srgb, var(--badge-error) 15%, transparent);
 }
 
 .hero-change-value {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   letter-spacing: 0.01em;
 }
 
@@ -178,9 +226,10 @@
 }
 
 .hero-spark {
-  width: 120px;
-  height: 40px;
+  width: 132px;
+  height: 44px;
   display: block;
+  overflow: visible;
 }
 
 .hero-spark.empty {
@@ -196,12 +245,26 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* Soft area under the line for depth (an area chart, not a bare line). */
+.hero-spark-area {
+  stroke: none;
+  fill: color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
 .hero-spark.up .hero-spark-line {
   stroke: var(--badge-online);
 }
 
+.hero-spark.up .hero-spark-area {
+  fill: color-mix(in srgb, var(--badge-online) 15%, transparent);
+}
+
 .hero-spark.down .hero-spark-line {
   stroke: var(--badge-error);
+}
+
+.hero-spark.down .hero-spark-area {
+  fill: color-mix(in srgb, var(--badge-error) 15%, transparent);
 }
 
 /* Bottom row: the four breakdown tiles. */
@@ -212,25 +275,35 @@
 }
 
 .hero-tile {
-  padding: 0.5rem 0.625rem;
-  background: var(--bg-primary);
+  padding: 0.55rem 0.7rem;
+  background: color-mix(in srgb, var(--bg-primary) 55%, transparent);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   min-width: 0;
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.hero-tile:hover {
+  transform: translateY(-1px);
+  background: var(--bg-primary);
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border-color));
 }
 
 .hero-tile-label {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.25rem;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.3rem;
 }
 
 .hero-tile-value {
   font-family: var(--font-data);
-  font-size: clamp(0.85rem, 1.1vw, 1rem);
+  font-size: clamp(0.9rem, 1.15vw, 1.05rem);
   font-weight: 600;
   color: var(--text-primary);
   font-feature-settings:
@@ -239,6 +312,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Within a tile the unit shrinks a touch less than in the headline. */
+.hero-tile-value .hero-unit {
+  font-size: 0.68em;
+  margin-left: 0.25em;
 }
 
 .hero-tile-sub {

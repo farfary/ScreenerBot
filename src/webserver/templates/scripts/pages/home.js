@@ -114,6 +114,16 @@ function createLifecycle() {
     return `${sign}${Utils.formatSol(Math.abs(v), { decimals })}`;
   }
 
+  // Number + a small muted "SOL" unit span, e.g. `0.1234<span class=hero-unit>SOL</span>`.
+  function solHtml(value, decimals = 4) {
+    return `${Utils.formatSol(value || 0, { decimals })}<span class="hero-unit">SOL</span>`;
+  }
+
+  // Signed variant of solHtml for the P&L tiles.
+  function signedSolHtml(value, decimals = 4) {
+    return `${formatSignedSol(value, decimals)}<span class="hero-unit">SOL</span>`;
+  }
+
   // Profit/loss/flat semantic class for a signed value.
   function pnlClass(value) {
     if (value > 0) return "profit";
@@ -124,6 +134,7 @@ function createLifecycle() {
   // Render the balance-trend sparkline from an oldest-first array of SOL values.
   function renderSparkline(history) {
     const line = document.getElementById("heroSparkLine");
+    const area = document.getElementById("heroSparkArea");
     const svg = document.getElementById("heroSpark");
     if (!line || !svg) return;
 
@@ -131,6 +142,7 @@ function createLifecycle() {
     if (pts.length < 2) {
       // Nothing meaningful to plot — hide the line rather than draw a flat stub.
       line.setAttribute("points", "");
+      if (area) area.setAttribute("points", "");
       svg.classList.add("empty");
       return;
     }
@@ -152,6 +164,11 @@ function createLifecycle() {
       .join(" ");
     line.setAttribute("points", coords);
 
+    // Close the same path down to the baseline for the soft area fill.
+    if (area) {
+      area.setAttribute("points", `${pad.toFixed(1)},${H} ${coords} ${(W - pad).toFixed(1)},${H}`);
+    }
+
     // Colour the trend by net direction across the window.
     const up = pts[pts.length - 1] >= pts[0];
     svg.classList.toggle("up", up);
@@ -166,9 +183,7 @@ function createLifecycle() {
     // Headline: total equity (cash + holdings).
     const balanceEl = document.getElementById("walletBalance");
     if (balanceEl) {
-      balanceEl.textContent = `${Utils.formatSol(wallet.total_equity_sol, {
-        decimals: 4,
-      })} SOL`;
+      balanceEl.innerHTML = solHtml(wallet.total_equity_sol, 4);
     }
 
     // Approximate USD value of total equity.
@@ -183,11 +198,13 @@ function createLifecycle() {
       }
     }
 
-    // Today change (equity vs start-of-day baseline).
+    // Today change (equity vs start-of-day baseline). The container itself is a
+    // tinted pill, so it carries the profit/loss class too.
     const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
       const cls = pnlClass(wallet.change_sol);
       const pctSign = wallet.change_percent >= 0 ? "+" : "";
+      changeEl.className = `hero-change ${cls}`;
       changeEl.innerHTML = `
         <span class="hero-change-value change-value ${cls}">${formatSignedSol(
           wallet.change_sol
@@ -202,17 +219,13 @@ function createLifecycle() {
     // Cash tile — free SOL available to trade.
     const cashEl = document.getElementById("heroCash");
     if (cashEl) {
-      cashEl.textContent = `${Utils.formatSol(wallet.current_balance_sol, {
-        decimals: 4,
-      })} SOL`;
+      cashEl.innerHTML = solHtml(wallet.current_balance_sol, 4);
     }
 
     // Holdings tile — SOL value of held tokens, with a token-count subscript.
     const holdingsEl = document.getElementById("heroHoldings");
     if (holdingsEl) {
-      holdingsEl.textContent = `${Utils.formatSol(wallet.tokens_worth_sol, {
-        decimals: 4,
-      })} SOL`;
+      holdingsEl.innerHTML = solHtml(wallet.tokens_worth_sol, 4);
     }
     const holdingsCountEl = document.getElementById("heroHoldingsCount");
     if (holdingsCountEl) {
@@ -225,7 +238,7 @@ function createLifecycle() {
     if (openPnlEl && data.positions) {
       const v = data.positions.unrealized_pnl_sol || 0;
       const pct = data.positions.unrealized_pnl_percent || 0;
-      openPnlEl.innerHTML = `${formatSignedSol(v)} SOL <span class="hero-tile-sub">${
+      openPnlEl.innerHTML = `${signedSolHtml(v)} <span class="hero-tile-sub">${
         pct >= 0 ? "+" : ""
       }${Utils.formatNumber(pct, 1)}%</span>`;
       openPnlEl.className = `hero-tile-value ${pnlClass(v)}`;
@@ -235,7 +248,7 @@ function createLifecycle() {
     const realizedEl = document.getElementById("heroRealizedToday");
     if (realizedEl && data.trader && data.trader.today) {
       const v = data.trader.today.net_pnl_sol || 0;
-      realizedEl.textContent = `${formatSignedSol(v)} SOL`;
+      realizedEl.innerHTML = signedSolHtml(v);
       realizedEl.className = `hero-tile-value ${pnlClass(v)}`;
     }
 
