@@ -76,46 +76,39 @@
 }
 
 /* =============================================================================
-   HEADER — Creative elegant top bar (no form style, no icon)
+   HEADER — same skin as the other full-screen dialogs (token/position details)
    ============================================================================= */
 
+/* Paints --bg-secondary, identical to the .billboard-dialog::before title-bar
+   strip above it, so the macOS traffic-light area and the header are one
+   continuous surface with no tonal step. Do NOT make this transparent: the
+   container below is --bg-primary and the strip would show as a seam. */
 .billboard-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  padding: 32px 32px 22px;
-  background: transparent;
-  border: none;
+  gap: 20px;
+  padding: 14px 20px 12px;
+  min-height: 68px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .billboard-title-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  min-width: 0;
 }
 
 .billboard-title {
   margin: 0;
-  font-size: 1.875rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--text-primary);
-  letter-spacing: -0.03em;
-  line-height: 1;
-  position: relative;
-  display: inline-block;
-}
-
-.billboard-title::after {
-  content: "";
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 38%;
-  height: 2px;
-  background: linear-gradient(to right, var(--link-color), transparent);
-  border-radius: 1px;
-  opacity: 0.35;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .billboard-subtitle {
@@ -123,71 +116,69 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 400;
-  letter-spacing: 0.02em;
-  opacity: 0.8;
 }
 
 .billboard-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 6px;
-  padding-left: 20px;
-  border-left: 1px solid var(--border-color);
-  opacity: 0.95;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-/* Creative Submit button — elegant pill, premium feel */
 .billboard-submit-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 9px 22px;
-  background: transparent;
+  height: 32px;
+  padding: 0 14px;
+  background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   border: 1px solid var(--border-color);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-fast);
   text-decoration: none;
   white-space: nowrap;
 }
 
 .billboard-submit-btn:hover {
-  background: var(--link-color);
-  color: #fff;
-  border-color: var(--link-color);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: var(--bg-card-hover);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
-.billboard-submit-btn:active {
-  transform: translateY(0);
-}
-
-/* Close button — follows exact standard dialog close button style (like .settings-close-btn) */
+/* Close button — the standard full-screen-dialog close control (.dialog-close) */
 .billboard-close-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: 1.2rem;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  margin-left: 4px;
 }
 
 .billboard-close-btn:hover {
-  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
+  background: var(--danger-alpha-15);
+  border-color: var(--danger);
   color: var(--danger);
+}
+
+.billboard-close-btn i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 /* =============================================================================
@@ -657,7 +648,7 @@
   }
 
   .billboard-submit-btn {
-    padding: 8px 16px;
-    font-size: 0.6875rem;
+    padding: 0 10px;
+    font-size: 0.75rem;
   }
 }
