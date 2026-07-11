@@ -14,66 +14,51 @@
         </label>
       </div>
       <div class="wallet-hero loading">
-        <div class="hero-top">
-          <div class="hero-main">
-            <div class="hero-label">Portfolio Value</div>
-            <div class="hero-balance" id="walletBalance">0.00 SOL</div>
-            <div class="hero-sub">
-              <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
-              <span class="hero-change" id="homeWalletChange">
-                <span class="hero-change-value change-value">+0.00</span>
-                <span class="change-percent">(+0.00%)</span>
-              </span>
-              <span class="hero-change-label">today</span>
-            </div>
-          </div>
-          <div class="hero-aside">
-            <svg
-              class="hero-spark"
-              id="heroSpark"
-              viewBox="0 0 120 40"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <polygon class="hero-spark-area" id="heroSparkArea" points="" />
-              <polyline class="hero-spark-line" id="heroSparkLine" points="" />
-            </svg>
+        <div class="hero-main">
+          <div class="hero-label">Portfolio Value</div>
+          <div class="hero-balance" id="walletBalance">0.00 SOL</div>
+          <div class="hero-sub">
+            <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
+            <span class="hero-change" id="homeWalletChange">
+              <span class="hero-change-value change-value">+0.00</span>
+              <span class="change-percent">(+0.00%)</span>
+            </span>
+            <span class="hero-change-label">today</span>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Card: Portfolio summary strip (borderless columns) -->
-    <div class="dashboard-card summary-card loading" data-card-id="summary">
-      <div class="card-edit-controls">
-        <span class="card-drag-handle" title="Drag to reorder"
-          ><i class="icon-grip-vertical"></i
-        ></span>
-        <span class="card-edit-title">Summary</span>
-        <label class="toggle card-toggle">
-          <input type="checkbox" class="card-enable-toggle" data-card-id="summary" checked />
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-      <div class="summary-strip">
-        <div class="summary-stat">
-          <div class="summary-label">Cash</div>
-          <div class="summary-value" id="heroCash">0.00 SOL</div>
-        </div>
-        <div class="summary-stat">
-          <div class="summary-label">Holdings</div>
-          <div class="summary-value">
-            <span id="heroHoldings">0.00 SOL</span>
-            <span class="summary-sub" id="heroHoldingsCount">0</span>
+        <!-- Compact borderless stat cluster in the middle of the hero. -->
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <span class="hero-stat-label">Cash</span>
+            <span class="hero-stat-value" id="heroCash">0.00 SOL</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label">Holdings</span>
+            <span class="hero-stat-value">
+              <span id="heroHoldings">0.00 SOL</span>
+              <span class="hero-stat-sub" id="heroHoldingsCount">0</span>
+            </span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label">Open P&amp;L</span>
+            <span class="hero-stat-value" id="heroOpenPnl">0.00 SOL</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-label">Realized Today</span>
+            <span class="hero-stat-value" id="heroRealizedToday">0.00 SOL</span>
           </div>
         </div>
-        <div class="summary-stat">
-          <div class="summary-label">Open P&amp;L</div>
-          <div class="summary-value" id="heroOpenPnl">0.00 SOL</div>
-        </div>
-        <div class="summary-stat">
-          <div class="summary-label">Realized Today</div>
-          <div class="summary-value" id="heroRealizedToday">0.00 SOL</div>
+        <div class="hero-aside">
+          <svg
+            class="hero-spark"
+            id="heroSpark"
+            viewBox="0 0 120 40"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <polygon class="hero-spark-area" id="heroSparkArea" points="" />
+            <polyline class="hero-spark-line" id="heroSparkLine" points="" />
+          </svg>
         </div>
       </div>
     </div>

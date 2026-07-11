@@ -2,7 +2,7 @@
 import * as AppState from "../../core/app_state.js";
 
 const STATE_KEY = "home.cardLayout";
-const DEFAULT_ORDER = ["wallet", "summary", "calendar", "positions", "tokens"];
+const DEFAULT_ORDER = ["wallet", "calendar", "positions", "tokens"];
 
 /**
  * Create the home card customization controller.

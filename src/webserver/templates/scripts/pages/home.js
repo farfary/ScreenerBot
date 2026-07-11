@@ -238,10 +238,10 @@ function createLifecycle() {
     if (openPnlEl && data.positions) {
       const v = data.positions.unrealized_pnl_sol || 0;
       const pct = data.positions.unrealized_pnl_percent || 0;
-      openPnlEl.innerHTML = `${signedSolHtml(v)} <span class="summary-sub">${
+      openPnlEl.innerHTML = `${signedSolHtml(v)} <span class="hero-stat-sub">${
         pct >= 0 ? "+" : ""
       }${Utils.formatNumber(pct, 1)}%</span>`;
-      openPnlEl.className = `summary-value ${pnlClass(v)}`;
+      openPnlEl.className = `hero-stat-value ${pnlClass(v)}`;
     }
 
     // Realized Today — banked net P&L today, from trader analytics.
@@ -249,7 +249,7 @@ function createLifecycle() {
     if (realizedEl && data.trader && data.trader.today) {
       const v = data.trader.today.net_pnl_sol || 0;
       realizedEl.innerHTML = signedSolHtml(v);
-      realizedEl.className = `summary-value ${pnlClass(v)}`;
+      realizedEl.className = `hero-stat-value ${pnlClass(v)}`;
     }
 
     // Balance-trend sparkline.
