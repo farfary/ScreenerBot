@@ -219,9 +219,13 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         return error_response(StatusCode::BAD_REQUEST, "NoOpenPosition", error_msg, None);
     }
 
+    // Default add size = the configured DCA size (a fraction of the trade size). The
+    // fraction must come from `trader.dca_size_percentage`, never a hardcoded 0.5.
     let size = match req.size_sol {
         Some(v) if v.is_finite() && v > 0.0 => v,
-        _ => with_config(|cfg| cfg.trader.trade_size_sol * 0.5), // default add = 50% size
+        _ => {
+            with_config(|cfg| cfg.trader.trade_size_sol * (cfg.trader.dca_size_percentage / 100.0))
+        }
     };
 
     logger::info(

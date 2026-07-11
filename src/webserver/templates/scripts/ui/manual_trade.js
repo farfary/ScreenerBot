@@ -112,6 +112,39 @@ async function fetchTokenIdentity(mint) {
   }
 }
 
+/**
+ * The trader's configured sizing, used to build the "Add to Position" presets.
+ *
+ * `trade_size_sol` x `dca_size_percentage` is exactly what the BACKEND adds when no
+ * size is sent, so showing it as a preset means the user sees the amount they are
+ * about to commit instead of confirming an invisible default. Read from config —
+ * never hardcoded. Cached: it is only re-read when the dialog module reloads.
+ */
+let traderDefaults = null;
+
+async function fetchTraderDefaults() {
+  if (traderDefaults) return traderDefaults;
+
+  try {
+    // Config GET routes wrap the section in { data, timestamp }.
+    const body = await requestManager.fetch("/api/config/trader", { priority: "low" });
+    const tradeSize = Number(body?.data?.trade_size_sol);
+    const dcaPct = Number(body?.data?.dca_size_percentage);
+
+    if (Number.isFinite(tradeSize) && tradeSize > 0) {
+      traderDefaults = {
+        tradeSize,
+        dcaSize:
+          Number.isFinite(dcaPct) && dcaPct > 0 ? tradeSize * (dcaPct / 100) : tradeSize,
+      };
+    }
+  } catch {
+    // The dialog still opens — the user just types an amount instead of picking one.
+  }
+
+  return traderDefaults;
+}
+
 const ENDPOINTS = {
   buy: "/api/trader/manual/buy",
   add: "/api/trader/manual/add",
@@ -235,6 +268,26 @@ export async function manualTrade({
 
     if (action !== "sell") {
       dialogContext.balance = walletBalance ?? 0;
+    }
+
+    // "Add to Position" presets. Only the tokens page ever passed its own, so every
+    // other entry point (positions page, context menu, token details) opened the DCA
+    // dialog with ZERO preset buttons and no preselected amount — a blank form.
+    // Resolve them here, from the position and from config, so every caller gets them.
+    if (action === "add") {
+      const defaults = await fetchTraderDefaults();
+
+      // The multiplier presets (1.0x / 1.5x / 2.0x) are sized off the money already in
+      // the position — the natural basis for averaging in. Fall back to the configured
+      // trade size when the position's size could not be resolved.
+      if (dialogContext.entrySize == null) {
+        dialogContext.entrySize = position?.currentSize ?? defaults?.tradeSize ?? null;
+      }
+      // Flat preset: the configured DCA size — the same amount the backend uses when
+      // no size_sol is sent.
+      if (!dialogContext.entrySizes?.length && defaults?.dcaSize) {
+        dialogContext.entrySizes = [Number(defaults.dcaSize.toFixed(4))];
+      }
     }
 
     const result = await getDialog().open({

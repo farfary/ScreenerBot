@@ -30,16 +30,32 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
 
     // Determine exit type based on configuration and reason
     let partial_exit_enabled = with_config(|cfg| cfg.positions.partial_exit_enabled);
-    // Note: StopLoss is NOT an emergency exit - it respects stop_loss_allow_partial config
+
+    // A USER-initiated exit already carries an explicit percentage: the user picked it
+    // in the trade dialog. `positions.partial_exit_enabled` decides whether the
+    // AUTO-TRADER may take partial profits on its own — it must never be allowed to
+    // silently upgrade the user's 25% take-profit into a FULL exit, which sells the
+    // entire position without asking. That is exactly what this did before, with no
+    // error and no warning: turning off auto partial exits made manual take-profit
+    // impossible, in the most destructive way possible.
+    let is_user_exit = matches!(
+        decision.reason,
+        TradeReason::ManualExit | TradeReason::ForceSell
+    );
+
+    // Emergencies must fully liquidate regardless of any percentage.
+    // Note: StopLoss is NOT an emergency exit - it respects stop_loss_allow_partial config.
+    // ForceSell is NOT one either: it means "bypass the safety checks", not "sell
+    // everything" — a force sell with a percentage is still a partial exit.
     let is_emergency_exit = matches!(
         decision.reason,
-        TradeReason::Blacklisted | TradeReason::ForceSell | TradeReason::RiskManagement
+        TradeReason::Blacklisted | TradeReason::RiskManagement
     );
 
     // Emergency exits are always full exits, otherwise check config and percentage
     let exit_reason = format!("{:?}", decision.reason);
 
-    if partial_exit_enabled && !is_emergency_exit && exit_percentage < 100.0 {
+    if (partial_exit_enabled || is_user_exit) && !is_emergency_exit && exit_percentage < 100.0 {
         // Partial exit
         match positions::partial_close_position(
             &decision.mint,

@@ -84,5 +84,5 @@ pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
 pub use types::{
     EntryRecord, ExitRecord, GiveUpReason, PendingDcaSwap, PendingPartialExit, Position,
-    PriceSource, VerificationKind, VerificationOutcome,
+    PriceSource, TradeOrigin, VerificationKind, VerificationOutcome,
 };

@@ -8,7 +8,7 @@ use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_position_lock, clear_pending_dca_swap, register_pending_dca_swap,
 };
-use crate::positions::types::PendingDcaSwap;
+use crate::positions::types::{PendingDcaSwap, TradeOrigin};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
@@ -22,6 +22,7 @@ pub async fn add_to_position(
     token_mint: &str,
     dca_amount_sol: f64,
     slippage_pct: Option<f64>,
+    origin: TradeOrigin,
 ) -> Result<String, String> {
     // Serialize per-mint DCA operations
     let _lock = acquire_position_lock(token_mint).await;
@@ -32,29 +33,36 @@ pub async fn add_to_position(
 
     let position_id = position.id.ok_or_else(|| "Position has no ID".to_owned())?;
 
-    // Check DCA limits from config
-    let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);
-    if !dca_enabled {
-        return Err("DCA is disabled in configuration".to_owned());
-    }
+    // The DCA config governs what the AUTO-TRADER may do on its own — it is not a
+    // capability switch for the user. A manual "Add to Position" from the dashboard is
+    // the user overriding the bot, so `dca_enabled`, `dca_max_count` and the cooldown
+    // do not apply to it. Gating manual adds on them meant anyone who simply did not
+    // want automatic DCA got "DCA is disabled in configuration" when clicking Add, and
+    // a user who did want to average down was told to wait out the BOT's cooldown.
+    if origin == TradeOrigin::Auto {
+        let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);
+        if !dca_enabled {
+            return Err("DCA is disabled in configuration".to_owned());
+        }
 
-    let max_dca_count = with_config(|cfg| cfg.trader.dca_max_count);
-    if position.dca_count >= max_dca_count as u32 {
-        return Err(format!(
-            "Maximum DCA count reached: {} (max: {})",
-            position.dca_count, max_dca_count
-        ));
-    }
-
-    // Check DCA cooldown
-    if let Some(last_dca) = position.last_dca_time {
-        let cooldown_minutes = with_config(|cfg| cfg.trader.dca_cooldown_minutes);
-        let elapsed = Utc::now().signed_duration_since(last_dca).num_minutes();
-        if elapsed < cooldown_minutes {
+        let max_dca_count = with_config(|cfg| cfg.trader.dca_max_count);
+        if position.dca_count >= max_dca_count as u32 {
             return Err(format!(
-                "DCA cooldown active: {} minutes remaining",
-                cooldown_minutes - elapsed
+                "Maximum DCA count reached: {} (max: {})",
+                position.dca_count, max_dca_count
             ));
+        }
+
+        // Check DCA cooldown
+        if let Some(last_dca) = position.last_dca_time {
+            let cooldown_minutes = with_config(|cfg| cfg.trader.dca_cooldown_minutes);
+            let elapsed = Utc::now().signed_duration_since(last_dca).num_minutes();
+            if elapsed < cooldown_minutes {
+                return Err(format!(
+                    "DCA cooldown active: {} minutes remaining",
+                    cooldown_minutes - elapsed
+                ));
+            }
         }
     }
 

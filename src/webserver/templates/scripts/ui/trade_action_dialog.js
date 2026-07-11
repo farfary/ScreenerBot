@@ -62,7 +62,9 @@ const ACTION_CONFIG = {
     confirmLabel: "Add Position",
     inputLabel: "Custom Amount",
     inputPlaceholder: "Enter SOL amount",
-    inputHint: "Leave empty for 50% of original entry",
+    // The backend's default add is trade_size_sol x dca_size_percentage — NOT "50% of
+    // the original entry", which is what this used to claim.
+    inputHint: "Leave empty for the configured DCA size",
     colorClass: "action-add",
     presets: [], // Dynamic, built from context
   },
@@ -985,6 +987,7 @@ export class TradeActionDialog {
     }
 
     if (action === "add") {
+      /** @type {Array<Object>} */
       const presets = [];
 
       // Multipliers based on entry size
@@ -1025,6 +1028,15 @@ export class TradeActionDialog {
             group: "entry",
           });
         });
+      }
+
+      // Add presets are built from context, so unlike buy/sell none of them is marked
+      // as the default — and `open()` preselects `[data-default="true"]`. With nothing
+      // preselected the dialog showed no amount and fetched no quote, so the user
+      // confirmed an invisible backend default. Preselect the first preset instead: the
+      // amount is then on screen, quoted, before anything is committed.
+      if (presets.length > 0 && !presets.some((p) => p.default)) {
+        presets[0].default = true;
       }
 
       return presets;
@@ -1371,7 +1383,9 @@ export class TradeActionDialog {
     }
 
     if (action === "sell") {
-      if (value <= 0 || value > 100) {
+      // The floor is 1, not 0: the executor clamps the exit percentage to [1, 100], so
+      // anything below 1 would be silently rounded UP and sell more than asked.
+      if (value < 1 || value > 100) {
         return "Percentage must be between 1 and 100";
       }
     }

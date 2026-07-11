@@ -1,7 +1,7 @@
 //! Buy operation execution
 
 use crate::logger::{self, LogTag};
-use crate::positions;
+use crate::positions::{self, TradeOrigin};
 use crate::trader::config;
 use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
 
@@ -115,22 +115,45 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
         return Ok(TradeResult::failure(decision.clone(), error, 0));
     }
 
+    // A manual "Add to Position" is the user overriding the bot, so the auto-trader's
+    // DCA policy (enabled / max count / cooldown) does not gate it. Everything else —
+    // strategies, the DCA evaluator — is the bot acting on its own and stays bound by
+    // that config.
+    let origin = if matches!(
+        decision.reason,
+        TradeReason::ManualEntry | TradeReason::ForceBuy
+    ) {
+        TradeOrigin::Manual
+    } else {
+        TradeOrigin::Auto
+    };
+
     logger::info(
         LogTag::Trader,
         &format!(
-            "Executing DCA for position {} token {}",
+            "Executing DCA for position {} token {} (origin: {:?})",
             decision.position_id.as_deref().unwrap_or("unknown"),
-            decision.mint
+            decision.mint,
+            origin
         ),
     );
 
-    // Determine DCA amount from decision or config
-    let dca_amount_sol = decision
-        .size_sol
-        .unwrap_or_else(|| config::get_trade_size_sol() * 0.5); // Default to 50% of initial size
+    // Determine DCA amount from decision, else the configured DCA size (a fraction of
+    // the trade size). Never hardcode the fraction — `trader.dca_size_percentage` is
+    // the single source of truth for it.
+    let dca_amount_sol = decision.size_sol.unwrap_or_else(|| {
+        config::get_trade_size_sol() * (config::get_dca_size_percentage() / 100.0)
+    });
 
     // Call positions::add_to_position to handle DCA entry
-    match positions::add_to_position(&decision.mint, dca_amount_sol, decision.slippage_pct).await {
+    match positions::add_to_position(
+        &decision.mint,
+        dca_amount_sol,
+        decision.slippage_pct,
+        origin,
+    )
+    .await
+    {
         Ok(transaction_signature) => {
             logger::info(
                 LogTag::Trader,
