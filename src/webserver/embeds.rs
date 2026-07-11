@@ -228,6 +228,7 @@ pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.
 pub const CORE_MENU_MANAGER: &str = include_str!("templates/scripts/core/menu_manager.js");
 pub const CORE_APP_STATE: &str = include_str!("templates/scripts/core/app_state.js");
 pub const CORE_POLLER: &str = include_str!("templates/scripts/core/poller.js");
+pub const CORE_ESCAPE_STACK: &str = include_str!("templates/scripts/core/escape_stack.js");
 pub const CORE_DOM: &str = include_str!("templates/scripts/core/dom.js");
 pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
 pub const CORE_BOOTSTRAP: &str = include_str!("templates/scripts/core/bootstrap.js");

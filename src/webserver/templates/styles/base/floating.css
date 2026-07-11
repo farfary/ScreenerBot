@@ -28,6 +28,13 @@
      Only the bottom status bar (--z-status-bar) stays above it. */
   --z-billboard-row: 800;
   --z-notification-panel: 9000;
+
+  /* The billboard DIALOG is a full-screen view, not a modal on top of one: token
+     details (and every other dialog) open FROM it and must stack ABOVE it, so it
+     sits at the bottom of the dialog stack -- below --z-dialog-overlay. Raising it
+     above --z-dialog would force it to be destroyed before a dialog could show,
+     which is why closing token details used to dump the user on the page below. */
+  --z-billboard-dialog: 9500;
   --z-dialog: 10000;
   --z-dialog-overlay: 9999;
   --z-trade-dialog: 10001;
@@ -37,7 +44,6 @@
   --z-search-dialog: 10004;
   --z-context-menu-overlay: 10005;
   --z-context-menu: 10006;
-  --z-billboard-dialog: 10005;
   --z-pool-selector-overlay: 10005;
   --z-pool-selector: 10005;
   --z-toast: 10010;

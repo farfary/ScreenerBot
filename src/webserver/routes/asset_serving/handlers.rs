@@ -57,6 +57,7 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
         "menu_manager.js" => Some(embeds::CORE_MENU_MANAGER),
         "app_state.js" => Some(embeds::CORE_APP_STATE),
         "poller.js" => Some(embeds::CORE_POLLER),
+        "escape_stack.js" => Some(embeds::CORE_ESCAPE_STACK),
         "dom.js" => Some(embeds::CORE_DOM),
         "utils.js" => Some(embeds::CORE_UTILS),
         "bootstrap.js" => Some(embeds::CORE_BOOTSTRAP),

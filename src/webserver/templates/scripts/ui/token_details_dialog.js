@@ -5,6 +5,7 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { Poller } from "../core/poller.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
@@ -714,12 +715,14 @@ export class TokenDetailsDialog {
 
     this.dialogEl.classList.remove("active");
 
-    setTimeout(() => {
-      if (this._escapeHandler) {
-        document.removeEventListener("keydown", this._escapeHandler);
-        this._escapeHandler = null;
-      }
+    // Hand Escape back to the overlay underneath immediately, not after the
+    // close animation, so it is responsive the moment this dialog starts closing.
+    if (this._releaseEscape) {
+      this._releaseEscape();
+      this._releaseEscape = null;
+    }
 
+    setTimeout(() => {
       if (this.dialogEl) {
         if (this._closeHandler) {
           const closeBtn = this.dialogEl.querySelector(".dialog-close");
@@ -1289,12 +1292,9 @@ export class TokenDetailsDialog {
     this._backdropHandler = () => this.close();
     backdrop.addEventListener("click", this._backdropHandler);
 
-    this._escapeHandler = (e) => {
-      if (e.key === "Escape") {
-        this.close();
-      }
-    };
-    document.addEventListener("keydown", this._escapeHandler);
+    // Escape is owned by the shared stack: this dialog can be stacked on top of
+    // another overlay (the billboard dialog), and only the topmost may react.
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Trade action buttons
     const buyBtn = this.dialogEl.querySelector("#headerBuyBtn");
@@ -1702,14 +1702,8 @@ applyPositionsTabMixin(TokenDetailsDialog);
 
 let globalDialogInstance = null;
 
-// Callback supplied by the opener via `detail.onDismiss`, run once when the user
-// closes the dialog. Openers that are themselves a full-screen overlay (the
-// billboard dialog stacks ABOVE this one, so it cannot simply stay open behind)
-// use it to restore themselves instead of dumping the user on the page below.
-let pendingDismissCallback = null;
-
 window.addEventListener("screenerbot:open-token-details", async (event) => {
-  const { mint, symbol, onDismiss } = event.detail || {};
+  const { mint, symbol } = event.detail || {};
 
   if (!mint) {
     console.error("[TokenDetailsDialog] Event received without mint address");
@@ -1725,9 +1719,6 @@ window.addEventListener("screenerbot:open-token-details", async (event) => {
       console.log("[TokenDetailsDialog] Dialog already open for this token");
       return;
     }
-    // Swapping tokens, not dismissing: the previous opener must NOT be restored
-    // on top of the dialog we are about to show.
-    pendingDismissCallback = null;
     globalDialogInstance.close();
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
@@ -1736,14 +1727,10 @@ window.addEventListener("screenerbot:open-token-details", async (event) => {
   if (!globalDialogInstance) {
     globalDialogInstance = new TokenDetailsDialog({
       onClose: () => {
-        const dismiss = pendingDismissCallback;
-        pendingDismissCallback = null;
-        if (dismiss) dismiss();
+        // Keep instance for reuse, just clean up state
       },
     });
   }
-
-  pendingDismissCallback = typeof onDismiss === "function" ? onDismiss : null;
 
   // Open dialog with minimal token data (dialog will fetch full details)
   await globalDialogInstance.show({ mint, symbol: symbol || "" });

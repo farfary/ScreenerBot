@@ -6,6 +6,7 @@
  */
 
 import { $ } from "../core/dom.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { openExternal, resolveTokenLogoUrl } from "../core/utils.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
 // window listener so cards open the token details dialog even when the billboard
@@ -84,8 +85,9 @@ class BillboardDialog {
         }
       }, 250);
     }
-    if (this._handleKeydown) {
-      document.removeEventListener("keydown", this._handleKeydown);
+    if (this._releaseEscape) {
+      this._releaseEscape();
+      this._releaseEscape = null;
     }
     this.isOpen = false;
   }
@@ -139,11 +141,9 @@ class BillboardDialog {
       });
     }
 
-    // Close on Escape key
-    this._handleKeydown = (e) => {
-      if (e.key === "Escape") this.close();
-    };
-    document.addEventListener("keydown", this._handleKeydown);
+    // Escape is owned by the shared stack, so while token details is open on top
+    // of the billboard a single Escape closes only the details dialog.
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Animate in
     requestAnimationFrame(() => {
@@ -200,24 +200,17 @@ class BillboardDialog {
     });
 
     // Clicking a card (outside its action buttons/links) opens token details.
-    //
-    // The billboard has to close first: it stacks ABOVE the token details dialog
-    // (--z-billboard-dialog 10005 vs --z-dialog 10000), so leaving it open would
-    // cover the details. `onDismiss` reopens it when the user closes the details,
-    // so they land back on the billboard rather than on the page underneath it.
+    // The billboard stays open UNDERNEATH (--z-billboard-dialog sits below
+    // --z-dialog), so closing the details dialog reveals the billboard again
+    // instead of the page below it.
     container.querySelectorAll(".billboard-cat-card").forEach((card) => {
       const mint = card.dataset.mint;
       if (!mint) return;
       card.addEventListener("click", (e) => {
         if (e.target.closest("a, button, .billboard-cat-actions")) return;
-        this.close();
         window.dispatchEvent(
           new CustomEvent("screenerbot:open-token-details", {
-            detail: {
-              mint,
-              symbol: card.dataset.symbol || "",
-              onDismiss: () => this.open(),
-            },
+            detail: { mint, symbol: card.dataset.symbol || "" },
           })
         );
       });
