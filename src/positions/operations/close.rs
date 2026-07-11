@@ -53,19 +53,23 @@ pub async fn close_position_direct(
 
     let _lock = acquire_position_lock(token_mint).await;
 
-    // RACE CONDITION PREVENTION: a partial exit already in flight has SOLD tokens that
-    // this close would try to sell again — its verification (which decrements
-    // `remaining_token_amount`) has not landed yet. Wait for it.
+    // A pending partial exit does NOT block a full close, and must not: this is the path a
+    // stop-loss, a manual close and a force sell all take, so refusing it while a partial
+    // confirms would block the user's emergency exit for as long as that verification runs
+    // — which, if the partial's tx is slow to index, can be minutes.
     //
-    // This check is what the old comment here CLAIMED was happening ("partial exits are
-    // tracked separately via PENDING_PARTIAL_EXITS and serialized"). It was not: nothing
-    // read that registry. What actually blocked a full close was the partial's signature
-    // being stamped onto `exit_transaction_signature` below — which never got cleared, so
-    // instead of serializing the two it blocked every future close FOREVER.
+    // It is also unnecessary. A full close is sized from the WALLET BALANCE, read fresh from
+    // chain below, so whatever a pending partial already sold is simply not there to sell
+    // again. Only a second PARTIAL can oversell, because that sizes a percentage off the
+    // position's `remaining_token_amount`, which the pending partial has not yet decremented
+    // — and `partial_close_position` refuses exactly that case.
     if crate::positions::state::is_partial_exit_pending(token_mint).await {
-        return Err(
-            "A partial exit is still confirming for this position - retry the close shortly"
-                .to_owned(),
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Closing {} while a partial exit is still confirming - the close is sized from the on-chain balance, so it cannot double-sell",
+                api_token.symbol
+            ),
         );
     }
 

@@ -136,6 +136,21 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             exit_time,
         } => {
+            // IDEMPOTENCE: this transition ACCUMULATES (`sol_received +=`,
+            // `total_exited_amount +=`), so applying it twice for the same close would double
+            // the proceeds and corrupt P&L. The queue dedupes by signature only while an item
+            // is IN it — once polled it is gone, so a re-enqueue can hand the same exit back.
+            // `transaction_exit_verified` is exactly the "this close is already booked" flag.
+            if let Some(position) = get_position_by_id(position_id).await {
+                if position.transaction_exit_verified {
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!("Exit for position {position_id} already verified - skipping"),
+                    );
+                    return Ok(effects);
+                }
+            }
+
             // Tokens sold by THIS close = whatever was still held. Captured before the
             // update zeroes it, so the exit record below can be written.
             let mut closed_amount: u64 = 0;
@@ -599,6 +614,26 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_signature,
             exit_percentage,
         } => {
+            // IDEMPOTENCE: everything below ACCUMULATES (remaining -=, total_exited +=,
+            // sol_received +=, partial_exit_count += 1). Applying the same partial twice
+            // would sell the same tokens twice on paper. The exit record is the token: one
+            // swap = one record (its insert is INSERT ... WHERE NOT EXISTS on the signature).
+            if super::db::exit_record_exists(position_id, &exit_signature).await {
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "Partial exit {exit_signature} already recorded for position {position_id} - skipping"
+                    ),
+                );
+                // Still drop the pending marks, or the mint stays flagged as "a partial exit
+                // is confirming" and every later exit for it is refused.
+                if let Some(position) = get_position_by_id(position_id).await {
+                    let _ = super::state::clear_pending_partial_exit(&exit_signature).await;
+                    super::state::clear_partial_exit_pending(&position.mint).await;
+                }
+                return Ok(effects);
+            }
+
             let updated = update_position_state_by_id(position_id, |pos| {
                 // Update remaining token amount
                 if let Some(remaining) = pos.remaining_token_amount {
@@ -713,17 +748,17 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 None
                             };
 
-                            // Feed the period loss limit. `record_realized_loss` was only ever
-                            // called on a FULL exit, so losses realized by partial exits (a
-                            // partial stop-loss, say) were invisible to the limiter and could
-                            // never trip it.
-                            if let Some(pnl) = partial_pnl {
-                                if pnl < 0.0 {
-                                    crate::trader::safety::loss_limit::record_realized_loss(
-                                        pnl.abs(),
-                                    );
-                                }
-                            }
+                            // NOTE: a partial exit must NOT be fed to the loss limiter.
+                            //
+                            // The limiter's unit of account is the CLOSED POSITION: its baseline
+                            // is rebuilt by `initialize_from_history` from
+                            // `get_period_trading_stats`, which sums `pnl` over positions with
+                            // `transaction_exit_verified = 1 AND exit_time IS NOT NULL`. Feeding
+                            // it a partial would (a) double-count, because the close then records
+                            // the position's TOTAL pnl — which already includes this partial's
+                            // proceeds — and (b) not survive a restart, since the rebuilt
+                            // baseline only sees closed positions. The loss lands, in full and
+                            // exactly once, when the position closes.
 
                             crate::events::record_position_event(
                                 &position_id.to_string(),

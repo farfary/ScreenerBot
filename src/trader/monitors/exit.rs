@@ -138,21 +138,6 @@ pub async fn monitor_positions(
                 continue;
             }
 
-            // A partial exit that has been submitted but not yet verified has already sold
-            // tokens the position still counts as held: `remaining_token_amount` is only
-            // decremented on verification. Evaluating now would re-trigger the same exit
-            // against a stale amount every tick until it confirms.
-            if positions::is_partial_exit_pending(&position.mint).await {
-                logger::debug(
-                    LogTag::Trader,
-                    &format!(
-                        "Skipping exit evaluation for {} - a partial exit is still confirming",
-                        position.symbol
-                    ),
-                );
-                continue;
-            }
-
             let sem = semaphore.clone();
             let shutdown_check = shutdown.clone();
             let position_mint = position.mint.clone();
@@ -240,6 +225,28 @@ pub async fn monitor_positions(
             }
 
             if let Some(decision) = evaluation.decision {
+                // A PARTIAL exit sizes its percentage off `remaining_token_amount`, which a
+                // partial already in flight has not decremented yet — a second one would
+                // oversell, and `partial_close_position` refuses it anyway. Skip it here so we
+                // do not spawn a doomed action every tick while the first confirms.
+                //
+                // A FULL exit is NOT skipped: it is sized from the on-chain balance, so it
+                // cannot double-sell, and it is the path a stop-loss takes. Blocking it here
+                // would suspend the position's stop-loss for as long as the partial takes to
+                // verify — exactly when the price is moving.
+                if decision.exit_percentage.is_some()
+                    && positions::is_partial_exit_pending(&decision.mint).await
+                {
+                    logger::debug(
+                        LogTag::Trader,
+                        &format!(
+                            "Skipping partial exit for {} - a partial exit is still confirming",
+                            evaluation.symbol
+                        ),
+                    );
+                    continue;
+                }
+
                 // Create action for dashboard visibility
                 let action = actions::AutoCloseAction::new(
                     &decision.mint,

@@ -419,6 +419,31 @@ pub async fn save_exit_record(
 }
 
 /// Get exit history for a position
+/// Has this exact swap already been recorded as an exit for this position?
+///
+/// The idempotency token for applying an exit transition. `PartialExitVerified` ACCUMULATES
+/// (`sol_received +=`, `total_exited_amount +=`, `partial_exit_count += 1`), so applying it
+/// twice for the same signature would double the proceeds and the tokens sold. The queue
+/// dedupes by signature only while an item is IN it — once polled it is gone, so a
+/// re-enqueue (startup rehydrate, a manual re-verification) can hand the same swap back.
+pub async fn exit_record_exists(position_id: i64, transaction_signature: &str) -> bool {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let Some(db) = db_guard.as_ref() else {
+        return false;
+    };
+
+    let Ok(conn) = db.pool.get() else {
+        return false;
+    };
+
+    conn.query_row(
+        "SELECT 1 FROM position_exits WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
+        params![position_id, transaction_signature],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
 pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard
