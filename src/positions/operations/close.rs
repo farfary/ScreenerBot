@@ -73,12 +73,14 @@ pub async fn close_position_direct(
     if let Some(existing_position) = crate::positions::state::get_position_by_mint(token_mint).await
     {
         if let Some(pending_sig) = &existing_position.exit_transaction_signature {
+            // Never slice a signature blindly: `&sig[..8]` panics on anything shorter (a
+            // truncated or malformed value in the DB would take the process down here).
+            let short_sig: String = pending_sig.chars().take(8).collect();
             logger::warning(
                 LogTag::Positions,
                 &format!(
                     "Position {} already has pending exit transaction: {}",
-                    api_token.symbol,
-                    &pending_sig[..8]
+                    api_token.symbol, &short_sig
                 ),
             );
             crate::events::record_position_event_flexible(
@@ -108,7 +110,7 @@ pub async fn close_position_direct(
 
             return Err(format!(
                 "Position already has pending exit transaction: {}",
-                &pending_sig[..8]
+                &short_sig
             ));
         }
     }

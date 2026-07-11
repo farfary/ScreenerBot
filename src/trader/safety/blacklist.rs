@@ -59,6 +59,7 @@ pub async fn check_blacklist_exit(
             priority: TradePriority::Emergency,
             price_sol: Some(current_price),
             size_sol: None, // Sell entire position
+            exit_percentage: None,
             // Auto-trader slippage always follows config.
             slippage_pct: None,
         });

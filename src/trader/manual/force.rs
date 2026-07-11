@@ -87,6 +87,7 @@ pub async fn force_buy(
         priority: TradePriority::High,
         price_sol: None,
         size_sol: Some(size_sol),
+        exit_percentage: None,
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
     };
@@ -222,7 +223,8 @@ pub async fn force_sell(
         timestamp: Utc::now(),
         priority: TradePriority::Emergency,
         price_sol: None,
-        size_sol: Some(exit_percentage), // Use size_sol for percentage
+        size_sol: None,
+        exit_percentage: Some(exit_percentage),
         // Manual trade: honour the user's slippage override (None = config).
         slippage_pct,
     };

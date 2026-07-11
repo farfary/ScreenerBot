@@ -94,7 +94,7 @@ pub async fn check_stop_loss(
         // slippage on every leg, instead of exiting. If the price is STILL under the stop
         // after we already cut exposure once, the thesis is done — exit fully.
         let allow_partial = get_stop_loss_allow_partial() && position.partial_exit_count == 0;
-        let size_sol = if allow_partial {
+        let exit_percentage = if allow_partial {
             // Use partial exit percentage from positions config
             Some(with_config(|cfg| cfg.positions.partial_exit_default_pct))
         } else {
@@ -124,7 +124,8 @@ pub async fn check_stop_loss(
             timestamp: Utc::now(),
             priority: TradePriority::High, // High priority for stop loss
             price_sol: Some(current_price),
-            size_sol,
+            size_sol: None,
+            exit_percentage,
             // Auto-trader slippage always follows config.
             slippage_pct: None,
         }));

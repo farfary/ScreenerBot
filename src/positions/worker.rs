@@ -201,6 +201,10 @@ pub async fn initialize_positions_system() -> Result<(), String> {
 
         // Reconcile semaphore capacity with existing open positions
         reconcile_global_position_semaphore(max_open_positions).await;
+
+        // The slot registry makes releases idempotent, so it must start out matching the
+        // positions that actually hold a slot.
+        super::state::rebuild_position_slot_holders().await;
     }
 
     logger::info(LogTag::Positions, "Positions system initialized");

@@ -100,8 +100,19 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         }
     }
 
+    // Is the position actually CLOSED? `exit_price` alone does NOT mean closed: it is the
+    // market price stamped by close_position_direct BEFORE the swap, and a close that then
+    // failed (or only partially filled) leaves it set on a position that is still open —
+    // ExitFailedClearForRetry clears the signature, not this. Keying "closed" off it meant a
+    // live position with a failed close fell into the closed branches below and had its P&L
+    // computed as proceeds-minus-cost, ignoring every token it still holds: a near-total
+    // loss on a healthy position. check_risk_limits force-exits at >90% loss on that number.
+    let is_closed = position.exit_time.is_some();
+
     // For closed positions, prioritize sol_received for most accurate P&L
-    if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
+    if let (true, Some(exit_price), Some(sol_received)) =
+        (is_closed, position.exit_price, position.sol_received)
+    {
         // Total SOL invested vs total SOL received. `total_size_sol` includes every DCA add
         // (it equals entry_size_sol when there was none), whereas entry_size_sol counts only
         // the first buy — so averaging down understated the cost basis and overstated profit.
@@ -129,8 +140,10 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         return (net_pnl_sol, net_pnl_percent);
     }
 
-    // Fallback for closed positions without sol_received (backward compatibility)
-    if let Some(exit_price) = position.exit_price {
+    // Fallback for closed positions without sol_received (backward compatibility).
+    // Same gate: `exit_price` is set before the swap, so it is present on open positions
+    // whose close failed — those must fall through to the OPEN calculation below.
+    if let (true, Some(exit_price)) = (is_closed, position.exit_price) {
         let entry_price = position
             .effective_entry_price
             .unwrap_or(position.entry_price);

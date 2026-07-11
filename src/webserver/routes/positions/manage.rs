@@ -99,7 +99,7 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
 
     // Archiving an open position removes it from active management — free its slot.
     if was_open {
-        positions::state::release_global_position_permit();
+        positions::state::release_position_slot(position_id).await;
     }
 
     logger::info(
@@ -155,7 +155,11 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
     // If this position is still open it re-enters active management — reclaim a slot.
     let reclaimed = if holds_open_slot(&position) {
         let ok = positions::state::try_consume_global_position_permit();
-        if !ok {
+        if ok {
+            // Register it as a slot holder, or the release when it eventually closes finds
+            // no holder, does nothing, and the slot stays consumed forever.
+            positions::state::register_position_slot(position_id).await;
+        } else {
             logger::warning(
                 LogTag::Positions,
                 &format!(
@@ -285,7 +289,7 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
     positions::remove_position_by_id(position_id).await;
 
     if was_open {
-        positions::state::release_global_position_permit();
+        positions::state::release_position_slot(position_id).await;
     }
 
     logger::info(

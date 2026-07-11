@@ -11,9 +11,9 @@ use super::db::{
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
-        clear_pending_dca_swap, get_position_by_id, get_position_by_mint,
-        release_global_position_permit, remove_position, remove_signature_from_index,
-        update_position_state, update_position_state_by_id, POSITIONS,
+        clear_pending_dca_swap, get_position_by_id, get_position_by_mint, release_position_slot,
+        remove_position, remove_signature_from_index, update_position_state,
+        update_position_state_by_id, POSITIONS,
     },
     transitions::PositionTransition,
 };
@@ -263,7 +263,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
                                 // CRITICAL: Release global position permit when position is verified closed
                                 // This allows new positions to be opened, fixing the MAX_OPEN_POSITIONS limit
-                                release_global_position_permit();
+                                release_position_slot(position_id).await;
 
                                 // Record an exit verified event with basic P&L if computable
                                 let pnl_sol =
@@ -372,6 +372,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 pos.exit_transaction_signature = None;
                 pos.transaction_exit_verified = false;
                 pos.closed_reason = Some("exit_retry_pending".to_owned());
+                // The close did not happen: drop the exit price it stamped on the way in.
+                // Leaving it set marks a still-OPEN position with exit data, which every
+                // "is this closed?" check that looks at exit_price gets wrong.
+                pos.exit_price = None;
+                pos.effective_exit_price = None;
             })
             .await;
 
@@ -407,13 +412,41 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             position_id,
             exit_time,
         } => {
+            // A synthetic exit writes the position off: the tokens are gone (or the exit can
+            // no longer be verified), and no SOL comes back for whatever was still held. It
+            // recorded NO P&L at all — pnl stayed None — so these positions were invisible to
+            // the period trading stats AND to the loss limiter: a rugged position closed this
+            // way never counted as a loss anywhere. Realized proceeds from earlier partial
+            // exits still stand; only the remainder is written off.
+            let mut realized_pnl = 0.0;
+
             let updated = update_position_state_by_id(position_id, |pos| {
                 pos.synthetic_exit = true;
                 pos.transaction_exit_verified = true;
                 pos.exit_time = Some(exit_time);
                 pos.closed_reason = Some("synthetic_exit_permanent_failure".to_owned());
+
+                realized_pnl = pos.sol_received.unwrap_or_default() - pos.total_size_sol;
+                pos.pnl = Some(realized_pnl);
+                pos.pnl_percent = Some(if pos.total_size_sol > 0.0 {
+                    (realized_pnl / pos.total_size_sol) * 100.0
+                } else {
+                    0.0
+                });
+                pos.unrealized_pnl = None;
+                pos.unrealized_pnl_percent = None;
+
+                // Nothing is held any more — roll the remainder into the exited total.
+                if let Some(remaining) = pos.remaining_token_amount {
+                    pos.total_exited_amount += remaining;
+                    pos.remaining_token_amount = Some(0);
+                }
             })
             .await;
+
+            if updated && realized_pnl < 0.0 {
+                crate::trader::safety::loss_limit::record_realized_loss(realized_pnl.abs());
+            }
 
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -436,7 +469,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             effects.db_updated = true;
                             effects.position_closed = true;
                             // Release global slot for synthetic exits as well
-                            release_global_position_permit();
+                            release_position_slot(position_id).await;
                             logger::debug(
                                 LogTag::Positions,
                                 &format!(
@@ -492,7 +525,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     );
 
                     // Orphan entries also occupied a slot originally; free it now
-                    release_global_position_permit();
+                    release_position_slot(position_id).await;
                     logger::debug(
                         LogTag::Positions,
                         &format!(

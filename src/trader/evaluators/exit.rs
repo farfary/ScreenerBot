@@ -129,7 +129,8 @@ pub async fn evaluate_exit_for_position(
                                     _ => crate::trader::types::TradePriority::Normal,
                                 },
                                 price_sol: Some(current_price),
-                                size_sol: None, // Let executor determine size
+                                size_sol: None,
+                                exit_percentage: None, // Full exit
                                 // Auto-trader slippage always follows config.
                                 slippage_pct: None,
                             };

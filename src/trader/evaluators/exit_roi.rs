@@ -47,6 +47,7 @@ pub async fn check_roi_exit(
             priority: TradePriority::Normal,
             price_sol: Some(current_price),
             size_sol: None, // Will sell entire position
+            exit_percentage: None,
             // Auto-trader slippage always follows config.
             slippage_pct: None,
         }));

@@ -89,7 +89,8 @@ async fn open_position_impl(
     // IMPORTANT: We will "forget"this permit ONLY after the position is successfully
     // created & added to in‑memory state so that the semaphore capacity remains reduced
     // for the lifetime of the open position. All terminal close paths MUST call
-    // release_global_position_permit() (verified exit, synthetic exit, orphan removal).
+    // release_position_slot(id) (verified exit, synthetic exit, orphan removal, archive,
+    // delete, force close) — which is idempotent, so only the first of them frees the slot.
     // Any early error returns (before we forget the permit) will automatically drop it
     // and thus NOT consume a slot.
     let mut _global_permit = acquire_global_position_permit().await?;
@@ -320,6 +321,11 @@ async fn open_position_impl(
     // calling forget() so the permit is NOT returned on drop. Terminal transitions will
     // explicitly release it.
     _global_permit.forget();
+
+    // The slot is now held by THIS position. Registering it makes the release idempotent:
+    // archive / force-close / exit-verification can all run for the same position, and only
+    // the first of them may hand the permit back.
+    crate::positions::state::register_position_slot(position_id).await;
     add_signature_to_index(&transaction_signature, &api_token.mint).await;
 
     // Record a position opened event for durability

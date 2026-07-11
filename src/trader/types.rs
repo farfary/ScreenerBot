@@ -13,7 +13,18 @@ pub struct TradeDecision {
     pub timestamp: DateTime<Utc>,
     pub priority: TradePriority,
     pub price_sol: Option<f64>,
+    /// Trade size in SOL — for BUY and DCA only.
+    ///
+    /// It does NOT carry a sell size: a Sell's size is a percentage of the position, and
+    /// that lives in [`TradeDecision::exit_percentage`].
     pub size_sol: Option<f64>,
+    /// How much of the position a SELL exits, in percent (0, 100].
+    ///
+    /// `None` = a full exit. This used to be smuggled through `size_sol` ("Use size_sol for
+    /// percentage"), so the same field meant SOL on a buy and a PERCENTAGE on a sell —
+    /// silently, with nothing to catch a value put in the wrong one. A 50 in `size_sol` was
+    /// either half a position or 50 SOL depending only on the action.
+    pub exit_percentage: Option<f64>,
     /// Per-trade slippage override, in percent.
     ///
     /// `None` = follow the configured slippage (`swaps.slippage.*`), which is what the

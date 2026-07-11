@@ -147,8 +147,11 @@ pub async fn acquire_global_position_permit(
     }
 }
 
-/// Release a global position permit when a position is closed
-/// This should be called after a position is successfully closed and verified
+/// Release a global position permit (low-level).
+///
+/// Prefer [`release_position_slot`], which is idempotent per position. This primitive adds
+/// a permit unconditionally and is only for reconciliation, which recomputes the whole
+/// semaphore from the open-position count.
 pub fn release_global_position_permit() {
     let semaphore = get_global_position_semaphore();
     semaphore.add_permits(1);
@@ -159,6 +162,48 @@ pub fn release_global_position_permit() {
             semaphore.available_permits()
         ),
     );
+}
+
+/// Position IDs that currently hold a global position slot.
+///
+/// A slot must be released EXACTLY ONCE per position, and several terminal paths can run
+/// for the SAME one: archiving or force-closing an OPEN position frees its slot straight
+/// away, and the exit verification that was already queued frees it AGAIN when it lands.
+/// Each double release hands the trader a slot it does not own, so it opens MORE positions
+/// than `max_open_positions` — the risk limit silently exceeded, and only repaired by the
+/// reconcile at the next startup. Tracking the holders makes releasing idempotent.
+static SLOT_HOLDERS: LazyLock<RwLock<std::collections::HashSet<i64>>> =
+    LazyLock::new(|| RwLock::new(std::collections::HashSet::new()));
+
+/// Record that a position now holds a global slot (it consumed a permit).
+pub async fn register_position_slot(position_id: i64) {
+    SLOT_HOLDERS.write().await.insert(position_id);
+}
+
+/// Free the slot held by a position — at most once, however many terminal paths run.
+pub async fn release_position_slot(position_id: i64) {
+    let held = SLOT_HOLDERS.write().await.remove(&position_id);
+
+    if !held {
+        logger::debug(
+            LogTag::Positions,
+            &format!("Position {position_id} holds no slot - nothing to release"),
+        );
+        return;
+    }
+
+    release_global_position_permit();
+}
+
+/// Rebuild the slot registry from the positions that are actually open (startup).
+pub async fn rebuild_position_slot_holders() {
+    let open_ids: std::collections::HashSet<i64> = get_open_positions()
+        .await
+        .iter()
+        .filter_map(|position| position.id)
+        .collect();
+
+    *SLOT_HOLDERS.write().await = open_ids;
 }
 
 /// Try to consume one global position permit at runtime (e.g. when an already-open

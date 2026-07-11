@@ -136,8 +136,15 @@ pub(super) async fn force_close_position(
         // Continue anyway — in-memory state is already updated and semaphore should be released
     }
 
-    // 8. Release the semaphore permit
-    positions::state::release_global_position_permit();
+    // 8. Release the semaphore permit (idempotent: a queued exit verification for this same
+    // position must not hand the slot back a second time).
+    positions::state::release_position_slot(position_id).await;
+
+    // 9. A force close realizes the loss on everything still held. It was never fed to the
+    // period loss limit, so writing off position after position could not pause entries.
+    if pnl < 0.0 {
+        crate::trader::safety::loss_limit::record_realized_loss(pnl.abs());
+    }
 
     logger::info(
         LogTag::Positions,
