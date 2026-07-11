@@ -2,12 +2,15 @@
  * Billboard Dialog - Shows featured tokens and external sources
  *
  * Displays community-submitted tokens plus Jupiter and DexScreener trending tokens
- * in a Netflix-style category layout with horizontal scrolling rows.
+ * as profile-style cards in a responsive grid: the whole page scrolls, so every
+ * token in a category is reachable without a per-row horizontal scroll.
  */
 
 import { $ } from "../core/dom.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
-import { openExternal, resolveTokenLogoUrl } from "../core/utils.js";
+import * as Utils from "../core/utils.js";
+import { openExternal, resolveTokenLogoUrl, resolveTokenBannerUrl } from "../core/utils.js";
+import { getTokenAccent, fallbackAccent } from "../core/token_accent.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
 // window listener so cards open the token details dialog even when the billboard
 // dialog is opened from a page (e.g. Home) that doesn't otherwise load it.
@@ -194,20 +197,15 @@ class BillboardDialog {
 
     container.innerHTML = visible.map((cat) => this._renderCategory(cat)).join("");
 
-    // Attach scroll handlers for each category
-    visible.forEach((cat) => {
-      this._initScrollBehavior(cat.id);
-    });
-
     // Clicking a card (outside its action buttons/links) opens token details.
     // The billboard stays open UNDERNEATH (--z-billboard-dialog sits below
     // --z-dialog), so closing the details dialog reveals the billboard again
     // instead of the page below it.
-    container.querySelectorAll(".billboard-cat-card").forEach((card) => {
+    container.querySelectorAll(".bb-card").forEach((card) => {
       const mint = card.dataset.mint;
       if (!mint) return;
       card.addEventListener("click", (e) => {
-        if (e.target.closest("a, button, .billboard-cat-actions")) return;
+        if (e.target.closest("a, button")) return;
         window.dispatchEvent(
           new CustomEvent("screenerbot:open-token-details", {
             detail: { mint, symbol: card.dataset.symbol || "" },
@@ -216,8 +214,9 @@ class BillboardDialog {
       });
     });
 
-    // Attach copy handlers
-    container.querySelectorAll(".billboard-cat-copy-btn").forEach((btn) => {
+    // Attach copy handlers. The selector previously did not match the rendered
+    // class (.cat-copy-btn), so copying a mint silently did nothing.
+    container.querySelectorAll(".bb-card-copy").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -255,142 +254,174 @@ class BillboardDialog {
           </div>
           <span class="billboard-cat-count">${tokens.length} tokens</span>
         </div>
-        <div class="billboard-cat-scroll-wrapper">
-          <button class="billboard-cat-arrow billboard-cat-arrow-left hidden" data-dir="left">
-            <i class="icon-chevron-left"></i>
-          </button>
-          <div class="billboard-cat-tokens" id="billboard-cat-${category.id}">
-            ${tokenCards}
-          </div>
-          <button class="billboard-cat-arrow billboard-cat-arrow-right ${tokens.length <= 4 ? "hidden" : ""}" data-dir="right">
-            <i class="icon-chevron-right"></i>
-          </button>
+        <div class="billboard-cat-grid" id="billboard-cat-${category.id}">
+          ${tokenCards}
         </div>
       </div>
     `;
   }
 
+  /**
+   * Render one token card, laid out like a social profile: banner across the top,
+   * circular avatar straddling its lower edge, identity and stats beneath.
+   *
+   * Every stat is optional -- the backend fills them from our local database only,
+   * so a token we do not track simply shows fewer cells rather than "-" filler.
+   */
   _renderTokenCard(token) {
     const logoUrl = resolveTokenLogoUrl(token);
+    const bannerUrl = resolveTokenBannerUrl(token);
     const name = token.name || "Unknown";
     const symbol = (token.symbol || "???").toUpperCase();
-    const mint = token.mint || token.id || "";
-    const featuredClass = token.featured ? "featured" : "";
-    const socials = this._buildSocialIcons(token);
+    const mint = token.mint || "";
 
-    const badge = token.featured
-      ? '<span class="billboard-cat-badge"><i class="icon-star"></i></span>'
-      : "";
-
-    // Small security dot for enriched tokens (higher = safer)
-    let secHtml = "";
-    if (token.security_score_normalised != null) {
-      const s = token.security_score_normalised;
-      const secClass = s >= 70 ? "good" : s >= 40 ? "mid" : "bad";
-      secHtml = `<span class="sec-dot ${secClass}" title="Security: ${s}"></span>`;
+    // Tint the card with the token's own colour. Sampling the logo is async (and
+    // may fail on a CORS-locked CDN), so the card is painted immediately with the
+    // deterministic mint-derived accent and upgraded in place once the logo is
+    // sampled -- no layout shift, no flash of un-tinted card.
+    const accent = fallbackAccent(mint);
+    if (logoUrl) {
+      getTokenAccent(mint, logoUrl).then((resolved) => this._applyAccent(mint, resolved));
     }
 
-    const logoHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" class="billboard-cat-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="billboard-cat-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
-      : `<div class="billboard-cat-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
+    const initial = this._escapeHtml(symbol.charAt(0));
 
-    const price = token.price_usd ?? token.price_sol;
-    const mc = token.market_cap_usd ?? token.fdv_usd;
-    const liq = token.liquidity_usd ?? token.liquidity;
-    const ch24 = token.price_change_24h ?? token.price_change_h24;
+    // A missing banner falls back to a gradient built from the accent, so the top
+    // of the card is never dead white space.
+    const bannerHtml = bannerUrl
+      ? `<img src="${this._escapeHtml(bannerUrl)}" alt="" class="bb-card-banner-img" loading="lazy" onerror="this.remove()"/>`
+      : "";
+
+    const avatarHtml = logoUrl
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="bb-card-avatar-img" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'bb-card-avatar-initial',textContent:'${initial}'}))"/>`
+      : `<span class="bb-card-avatar-initial">${initial}</span>`;
+
+    const change = token.price_change_24h;
+    const changeHtml =
+      change != null
+        ? `<span class="bb-card-change ${change >= 0 ? "pos" : "neg"}">${change > 0 ? "+" : ""}${change.toFixed(1)}%</span>`
+        : "";
+
+    const priceHtml =
+      token.price_usd != null
+        ? `<span class="bb-card-price">${Utils.formatCurrencyUSD(token.price_usd)}</span>`
+        : "";
+
+    const txns =
+      token.txns_24h_buys != null || token.txns_24h_sells != null
+        ? (token.txns_24h_buys || 0) + (token.txns_24h_sells || 0)
+        : null;
+
+    const stats = [
+      ["Market Cap", token.market_cap, "compact"],
+      ["Liquidity", token.liquidity_usd, "compact"],
+      ["Vol 24H", token.volume_24h, "compact"],
+      ["Holders", token.holders, "count"],
+      ["Txns 24H", txns, "count"],
+    ]
+      .filter(([, value]) => value != null)
+      .map(
+        ([label, value, kind]) => `
+          <div class="bb-card-stat">
+            <span class="bb-card-stat-label">${label}</span>
+            <span class="bb-card-stat-value">${
+              kind === "compact"
+                ? Utils.formatCompactNumber(value, { prefix: "$" })
+                : Utils.formatCompactNumber(value)
+            }</span>
+          </div>`
+      )
+      .join("");
 
     return `
-      <div class="billboard-cat-card ${featuredClass}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(name)} (${this._escapeHtml(symbol)})">
-        <div class="card-main">
-          <!-- Logo top left -->
-          <div class="logo-col">
-            ${logoHtml}
-            ${badge}
-          </div>
+      <article class="bb-card${token.featured ? " featured" : ""}"
+        data-mint="${this._escapeHtml(mint)}"
+        data-symbol="${this._escapeHtml(symbol)}"
+        style="--bb-hue:${accent.hue};--bb-sat:${accent.saturation}%"
+        title="${this._escapeHtml(name)} (${this._escapeHtml(symbol)})">
 
-          <!-- Infos below logo -->
-          <div class="info-col">
-            <div class="name-row">
-              <span class="cat-name">${this._escapeHtml(name)}</span>
-              ${secHtml}
-            </div>
-            <span class="cat-symbol">${this._escapeHtml(symbol)}</span>
-          </div>
+        <div class="bb-card-banner">${bannerHtml}</div>
 
-          <!-- Some infos on the right -->
-          <div class="metrics-col">
-            ${price != null ? `<div class="price">${typeof price === "number" ? "$" + price.toLocaleString(undefined, { maximumFractionDigits: price < 0.01 ? 6 : 2 }) : price}</div>` : ""}
-            ${ch24 != null ? `<div class="change ${ch24 >= 0 ? "pos" : "neg"}">${ch24 > 0 ? "+" : ""}${ch24.toFixed(1)}%</div>` : ""}
-            ${mc != null ? `<div class="meta">MC ${this._formatCompact(mc)}</div>` : ""}
-            ${liq != null ? `<div class="meta">Liq ${this._formatCompact(liq)}</div>` : ""}
+        <div class="bb-card-head">
+          <div class="bb-card-avatar">${avatarHtml}</div>
+          <div class="bb-card-head-meta">
+            ${priceHtml}
+            ${changeHtml}
           </div>
         </div>
 
-        <div class="card-actions">
-          ${socials}
-          <button class="cat-copy-btn" data-mint="${this._escapeHtml(mint)}" title="Copy mint">
+        <div class="bb-card-identity">
+          <div class="bb-card-name-row">
+            <span class="bb-card-name">${this._escapeHtml(name)}</span>
+            ${token.featured ? '<i class="icon-star bb-card-featured" title="Featured"></i>' : ""}
+          </div>
+          <div class="bb-card-sub">
+            <span class="bb-card-symbol">${this._escapeHtml(symbol)}</span>
+            ${this._renderSecurity(token.security_score)}
+          </div>
+        </div>
+
+        ${stats ? `<div class="bb-card-stats">${stats}</div>` : ""}
+
+        <div class="bb-card-actions">
+          <div class="bb-card-socials">${this._buildSocialIcons(token)}</div>
+          <button class="bb-card-copy" data-mint="${this._escapeHtml(mint)}" title="Copy mint">
             <i class="icon-copy"></i>
           </button>
         </div>
-      </div>
+      </article>
     `;
+  }
+
+  /**
+   * Security badge. The score is normalised so HIGHER IS SAFER.
+   */
+  _renderSecurity(score) {
+    if (score == null) return "";
+
+    const level = score >= 70 ? "good" : score >= 40 ? "mid" : "bad";
+    const label = score >= 70 ? "Safe" : score >= 40 ? "Caution" : "Risky";
+
+    return `<span class="bb-card-security ${level}" title="Security score: ${score}/100">${label}</span>`;
+  }
+
+  /**
+   * Repaint a card's tint once its logo colour has been sampled. The card may
+   * already be gone (dialog closed, category re-rendered), hence the lookup.
+   */
+  _applyAccent(mint, accent) {
+    if (!accent || !this.dialogEl) return;
+
+    const selector = `.bb-card[data-mint="${CSS.escape(mint)}"]`;
+    this.dialogEl.querySelectorAll(selector).forEach((card) => {
+      card.style.setProperty("--bb-hue", accent.hue);
+      card.style.setProperty("--bb-sat", `${accent.saturation}%`);
+    });
   }
 
   _buildSocialIcons(token) {
     const icons = [];
     if (token.website) {
       icons.push(
-        `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Website"><i class="icon-globe"></i></a>`
+        `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Website"><i class="icon-globe"></i></a>`
       );
     }
     if (token.twitter) {
       icons.push(
-        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Twitter"><i class="icon-twitter"></i></a>`
+        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Twitter"><i class="icon-twitter"></i></a>`
       );
     }
     if (token.telegram) {
       icons.push(
-        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Telegram"><i class="icon-send"></i></a>`
+        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Telegram"><i class="icon-send"></i></a>`
       );
     }
     if (token.discord) {
       icons.push(
-        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Discord"><i class="icon-message-circle"></i></a>`
+        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Discord"><i class="icon-message-circle"></i></a>`
       );
     }
     return icons.join("");
-  }
-
-  _initScrollBehavior(categoryId) {
-    const container = document.getElementById(`billboard-cat-${categoryId}`);
-    if (!container) return;
-
-    const wrapper = container.closest(".billboard-cat-scroll-wrapper");
-    if (!wrapper) return;
-
-    const leftArrow = wrapper.querySelector(".billboard-cat-arrow-left");
-    const rightArrow = wrapper.querySelector(".billboard-cat-arrow-right");
-
-    const updateArrows = () => {
-      const { scrollLeft, scrollWidth, clientWidth } = container;
-      const atStart = scrollLeft <= 0;
-      const atEnd = scrollLeft + clientWidth >= scrollWidth - 10;
-      if (leftArrow) leftArrow.classList.toggle("hidden", atStart);
-      if (rightArrow) rightArrow.classList.toggle("hidden", atEnd);
-    };
-
-    container.addEventListener("scroll", updateArrows);
-    if (leftArrow) {
-      leftArrow.addEventListener("click", () => {
-        container.scrollBy({ left: -300, behavior: "smooth" });
-      });
-    }
-    if (rightArrow) {
-      rightArrow.addEventListener("click", () => {
-        container.scrollBy({ left: 300, behavior: "smooth" });
-      });
-    }
-    updateArrows();
   }
 
   _escapeHtml(text) {
@@ -400,13 +431,6 @@ class BillboardDialog {
     return div.innerHTML;
   }
 
-  _formatCompact(n) {
-    if (n == null || !Number.isFinite(n)) return "—";
-    if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-    if (n >= 1e3) return (n / 1e3).toFixed(0) + "K";
-    return n.toFixed(0);
-  }
 
 }
 

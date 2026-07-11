@@ -10,49 +10,13 @@
 //! 2. our local token database (DexScreener image, then GeckoTerminal image),
 //! 3. a live DexScreener batch lookup for whatever is still missing.
 
-use super::types::{BillboardToken, ExternalToken};
+use super::types::BillboardCard;
 use crate::apis::dexscreener::MAX_TOKENS_PER_REQUEST;
 use crate::apis::get_api_manager;
 use crate::connectivity;
 use crate::logger::{self, LogTag};
 use crate::tokens;
 use std::collections::HashMap;
-
-/// A billboard token that carries a logo URL, regardless of the field name the
-/// source struct uses (`logo_url` on our featured tokens, `logo` on external ones).
-pub(super) trait HasLogo {
-    fn mint(&self) -> &str;
-    fn logo(&self) -> Option<&str>;
-    fn set_logo(&mut self, url: Option<String>);
-}
-
-impl HasLogo for BillboardToken {
-    fn mint(&self) -> &str {
-        &self.mint
-    }
-
-    fn logo(&self) -> Option<&str> {
-        self.logo_url.as_deref()
-    }
-
-    fn set_logo(&mut self, url: Option<String>) {
-        self.logo_url = url;
-    }
-}
-
-impl HasLogo for ExternalToken {
-    fn mint(&self) -> &str {
-        &self.mint
-    }
-
-    fn logo(&self) -> Option<&str> {
-        self.logo.as_deref()
-    }
-
-    fn set_logo(&mut self, url: Option<String>) {
-        self.logo = url;
-    }
-}
 
 /// Normalize a provider-supplied logo URL, or return `None` if it is unusable.
 ///
@@ -90,22 +54,22 @@ pub(super) fn normalize_logo_url(raw: Option<&str>) -> Option<String> {
     None
 }
 
-/// Resolve a logo for every token that lacks one, in place.
+/// Resolve a logo for every card that lacks one, in place.
 ///
 /// Normalizes what the provider gave us, then backfills the remainder from the
 /// local database and finally from a live DexScreener lookup. Best-effort: any
 /// failing stage simply leaves the logo unset and the frontend placeholder stands.
-pub(super) async fn fill_missing_logos<T: HasLogo>(tokens: &mut [T]) {
-    if tokens.is_empty() {
+pub(super) async fn fill_missing_logos(cards: &mut [BillboardCard]) {
+    if cards.is_empty() {
         return;
     }
 
-    for token in tokens.iter_mut() {
-        let normalized = normalize_logo_url(token.logo());
-        token.set_logo(normalized);
+    for card in cards.iter_mut() {
+        card.logo = normalize_logo_url(card.logo.as_deref());
+        card.banner = normalize_logo_url(card.banner.as_deref());
     }
 
-    let mut missing = missing_mints(tokens);
+    let mut missing = missing_mints(cards);
     if missing.is_empty() {
         return;
     }
@@ -113,14 +77,14 @@ pub(super) async fn fill_missing_logos<T: HasLogo>(tokens: &mut [T]) {
     // Stage 1: our own database — free, already holds DexScreener + GeckoTerminal
     // images for every token we have ever fetched market data for.
     match tokens::database::get_token_images_batch_async(missing.clone()).await {
-        Ok(images) => apply_logos(tokens, &images),
+        Ok(images) => apply_logos(cards, &images),
         Err(e) => logger::debug(
             LogTag::Webserver,
             &format!("[BILLBOARD] DB logo lookup failed: {e}"),
         ),
     }
 
-    missing = missing_mints(tokens);
+    missing = missing_mints(cards);
     if missing.is_empty() {
         return;
     }
@@ -128,15 +92,15 @@ pub(super) async fn fill_missing_logos<T: HasLogo>(tokens: &mut [T]) {
     // Stage 2: live DexScreener lookup for tokens we have no market data for yet
     // (freshly trending tokens are routinely newer than our database).
     let images = fetch_dexscreener_logos(&missing).await;
-    apply_logos(tokens, &images);
+    apply_logos(cards, &images);
 }
 
 /// Mints whose logo is still unresolved.
-fn missing_mints<T: HasLogo>(tokens: &[T]) -> Vec<String> {
-    let mut mints: Vec<String> = tokens
+fn missing_mints(cards: &[BillboardCard]) -> Vec<String> {
+    let mut mints: Vec<String> = cards
         .iter()
-        .filter(|t| t.logo().is_none())
-        .map(|t| t.mint().to_owned())
+        .filter(|c| c.logo.is_none())
+        .map(|c| c.mint.clone())
         .collect();
     mints.sort_unstable();
     mints.dedup();
@@ -144,13 +108,13 @@ fn missing_mints<T: HasLogo>(tokens: &[T]) -> Vec<String> {
 }
 
 /// Assign resolved logos back onto the tokens that are still missing one.
-fn apply_logos<T: HasLogo>(tokens: &mut [T], images: &HashMap<String, String>) {
-    for token in tokens.iter_mut() {
-        if token.logo().is_some() {
+fn apply_logos(cards: &mut [BillboardCard], images: &HashMap<String, String>) {
+    for card in cards.iter_mut() {
+        if card.logo.is_some() {
             continue;
         }
-        if let Some(url) = images.get(token.mint()) {
-            token.set_logo(normalize_logo_url(Some(url)));
+        if let Some(url) = images.get(&card.mint) {
+            card.logo = normalize_logo_url(Some(url));
         }
     }
 }

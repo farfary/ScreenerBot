@@ -244,302 +244,320 @@
   color: var(--text-secondary);
 }
 
-/* Scroll area */
-.billboard-cat-scroll-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
+/* =============================================================================
+   CATEGORY GRID
+   Cards wrap into a responsive grid and the BODY scrolls vertically, so every
+   token in a category is reachable. (Previously each category was a single
+   horizontally-scrolling row, hiding most of its tokens behind arrows.)
+   ============================================================================= */
 
-.billboard-cat-tokens {
-  display: flex;
-  gap: var(--spacing-sm, 8px);
-  overflow: auto hidden;
-  scroll-behavior: smooth;
-  padding: 4px 0;
-  flex: 1;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Arrows - consistent with row */
-.billboard-cat-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-  cursor: pointer;
-  z-index: 10;
-  transition: all var(--transition-fast);
-}
-
-.billboard-cat-arrow:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-  border-color: var(--link-color);
-}
-
-.billboard-cat-arrow-left { left: 0; }
-.billboard-cat-arrow-right { right: 0; }
-
-.billboard-cat-arrow.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.billboard-cat-arrow i {
-  font-size: 0.75rem;
+.billboard-cat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-md, 16px);
+  align-items: start;
 }
 
 /* =============================================================================
-   TOKEN CARDS - new layout per spec
-   - .logo-col (circle) top left
-   - infos below in .info-col (name, symbol)
-   - some infos in .metrics-col on the right (price, change, meta)
-   - actions at bottom
-   Clean typography, good visual hierarchy
+   TOKEN CARD - social-profile layout
+   Banner across the top (rounded on its top corners only, square at the bottom),
+   circular avatar straddling the banner's lower edge, identity + stats beneath.
+
+   Each card carries --bb-hue / --bb-sat, derived from the token's logo (or, when
+   it has none, a stable hash of its mint). Every tint below is an ALPHA wash built
+   from those, so it layers over the theme's own surfaces and stays readable in
+   both light and dark rather than baking in a fixed colour.
    ============================================================================= */
 
-.billboard-cat-card {
+.bb-card {
+  --bb-hue: 210;
+  --bb-sat: 55%;
+  --bb-tint: hsl(var(--bb-hue), var(--bb-sat), 50%);
+
+  position: relative;
   display: flex;
   flex-direction: column;
-  padding: 8px 10px;
-  background: var(--bg-secondary);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
+  overflow: hidden;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  min-width: 172px;
-  max-width: 192px;
-  position: relative;
+  transition:
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
-.billboard-cat-card:hover {
-  border-color: var(--link-color);
-  background: var(--bg-card-hover);
-}
-
-.billboard-cat-card.featured {
-  border-color: var(--warning-color);
-}
-
-.billboard-cat-card.featured:hover {
-  border-color: var(--warning-color);
-}
-
-/* Main horizontal layout: logo | left-infos | right-infos */
-.card-main {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  margin-bottom: 4px;
-}
-
-/* Gentle glow */
-.billboard-cat-logo::before,
-.billboard-cat-logo-placeholder::before {
+/* The wash: strong enough to read as "this token's colour", light enough that the
+   text tokens above it keep their contrast in both themes. */
+.bb-card::before {
   content: "";
   position: absolute;
-  inset: -5px;
-  background: radial-gradient(circle, var(--primary-alpha-10, rgba(88,166,255,0.12)) 0%, transparent 70%);
-  border-radius: var(--radius-full);
-  z-index: -1;
-  opacity: 0.5;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  inset: 0;
+  background: var(--bb-tint);
+  opacity: 0.05;
+  pointer-events: none;
 }
 
-.billboard-cat-card:hover .billboard-cat-logo::before,
-.billboard-cat-card:hover .billboard-cat-logo-placeholder::before {
-  opacity: 0.85;
-  transform: scale(1.08);
+[data-theme="dark"] .bb-card::before {
+  opacity: 0.08;
 }
 
-.billboard-cat-logo-placeholder {
+.bb-card:hover {
+  border-color: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.55);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px hsl(var(--bb-hue), var(--bb-sat), 30%, 0.18);
+}
+
+.bb-card.featured {
+  border-color: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.4);
+}
+
+/* --- Banner ---------------------------------------------------------------- */
+
+/* Fixed 3:1 box. The image is object-fit: cover, so banners of any source width
+   fill it edge to edge with no letterboxing -- they are cropped, never padded. */
+.bb-card-banner {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+
+  /* Bannerless tokens get a gradient from the token's own accent instead of a
+     blank strip, so the card never opens on dead white space. */
+  background:
+    linear-gradient(
+      135deg,
+      hsl(var(--bb-hue), var(--bb-sat), 55%, 0.55) 0%,
+      hsl(calc(var(--bb-hue) + 40), var(--bb-sat), 45%, 0.35) 100%
+    ),
+    var(--bg-card-hover);
+  overflow: hidden;
+}
+
+.bb-card-banner-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* --- Head: avatar straddling the banner's lower edge ----------------------- */
+
+.bb-card-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+
+  /* Pulls the row up by half the avatar, so the avatar sits half over the banner
+     and half below it. */
+  margin-top: -26px;
+}
+
+.bb-card-avatar {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-full);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  width: 52px;
+  height: 52px;
   flex-shrink: 0;
-  z-index: 1;
+  border-radius: var(--radius-full);
+
+  /* Ring in the CARD's background, not a colour, so the avatar reads as cut out
+     of the banner in either theme. */
+  border: 3px solid var(--bg-card);
+  background: hsl(var(--bb-hue), var(--bb-sat), 50%);
+  overflow: hidden;
 }
 
-.billboard-cat-logo-placeholder span {
+.bb-card-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bb-card-avatar-initial {
   font-family: var(--font-mono);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
   text-transform: uppercase;
 }
 
-/* Logo column - circle top left */
-.logo-col {
-  flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  position: relative;
-}
-
-.billboard-cat-logo,
-.billboard-cat-logo-placeholder {
-  width: 42px;
-  height: 42px;
-  border-radius: 9999px;
-  object-fit: cover;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  display: block;
-}
-
-.billboard-cat-logo-placeholder {
+/* Price/change ride in the space to the right of the avatar, which would
+   otherwise be empty. */
+.bb-card-head-meta {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: baseline;
+  gap: 6px;
+  padding-bottom: 4px;
+  min-width: 0;
+}
+
+.bb-card-price {
   font-family: var(--font-mono);
   font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-feature-settings: "tnum";
+}
+
+.bb-card-change {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   font-weight: 600;
-  color: var(--text-secondary);
+  font-feature-settings: "tnum";
 }
 
-/* Featured badge on top of logo (top-leftish) */
-.billboard-cat-badge {
-  position: absolute;
-  top: -3px;
-  left: -3px;
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--warning-color);
-  border-radius: 9999px;
-  color: #000;
-  font-size: 0.5rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  z-index: 3;
+.bb-card-change.pos {
+  color: var(--success-color);
 }
 
-/* Main flex layout for the card */
-.card-main {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
+.bb-card-change.neg {
+  color: var(--error-color);
 }
 
-/* Left column under the logo */
-.info-col {
+/* --- Identity -------------------------------------------------------------- */
+
+.bb-card-identity {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px 0;
   min-width: 0;
-  flex: 1;
-  gap: 1px;
 }
 
-.name-row {
+.bb-card-name-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
 }
 
-.cat-name {
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-  font-weight: 600;
+.bb-card-name {
+  font-size: 0.9375rem;
+  font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.15;
 }
 
-.cat-symbol {
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-/* Right column with price etc */
-.metrics-col {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: 0;
-  min-width: 62px;
-  text-align: right;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  line-height: 1.1;
-}
-
-.metrics-col .price {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-feature-settings: "tnum";
-  font-size: 0.75rem;
-}
-
-.metrics-col .change {
-  font-weight: 600;
-  font-size: 0.625rem;
-  font-feature-settings: "tnum";
-}
-
-.metrics-col .change.pos { color: var(--success-color, #10b981); }
-.metrics-col .change.neg { color: var(--error-color, #ef4444); }
-
-.metrics-col .meta {
-  font-size: 0.5625rem;
-  color: var(--text-secondary);
-  font-feature-settings: "tnum";
-  opacity: 0.85;
-  margin-top: 1px;
-}
-
-/* Security dot */
-.sec-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+.bb-card-featured {
   flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--warning-color, #d29922);
 }
 
-.sec-dot.good { background: var(--success-color, #10b981); }
-.sec-dot.mid  { background: #f59e0b; }
-.sec-dot.bad  { background: var(--error-color, #ef4444); }
-
-/* Bottom actions row */
-.card-actions {
+.bb-card-sub {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  padding-top: 4px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bb-card-symbol {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bb-card-security {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bb-card-security.good {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.bb-card-security.mid {
+  color: var(--warning-color, #d29922);
+  background: var(--warning-alpha-10, rgb(210, 153, 34, 0.12));
+}
+
+.bb-card-security.bad {
+  color: var(--error-color);
+  background: var(--danger-alpha-10);
+}
+
+/* --- Stats ----------------------------------------------------------------- */
+
+.bb-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 12px;
+}
+
+.bb-card-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px;
+  background: var(--bg-card-hover);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.bb-card-stat-label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.bb-card-stat-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-feature-settings: "tnum";
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Actions --------------------------------------------------------------- */
+
+.bb-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding: 8px 12px;
   border-top: 1px solid var(--border-color);
 }
 
-.cat-copy-btn,
-.billboard-cat-social {
-  width: 18px;
-  height: 18px;
+.bb-card-socials {
   display: flex;
   align-items: center;
+  gap: 2px;
+}
+
+.bb-card-social,
+.bb-card-copy {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  font-size: 0.6875rem;
+  width: 26px;
+  height: 26px;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   background: transparent;
   border: none;
@@ -548,10 +566,15 @@
   transition: all var(--transition-fast);
 }
 
-.cat-copy-btn:hover,
-.billboard-cat-social:hover {
-  color: var(--link-color);
-  background: var(--primary-alpha-10, rgba(88, 166, 255, 0.08));
+.bb-card-social:hover,
+.bb-card-copy:hover {
+  color: hsl(var(--bb-hue), var(--bb-sat), 45%);
+  background: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.12);
+}
+
+[data-theme="dark"] .bb-card-social:hover,
+[data-theme="dark"] .bb-card-copy:hover {
+  color: hsl(var(--bb-hue), var(--bb-sat), 70%);
 }
 
 /* =============================================================================
@@ -596,6 +619,12 @@
   to { transform: rotate(360deg); }
 }
 
+@media (width <= 1100px) {
+  .billboard-cat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (width <= 768px) {
   .billboard-body {
     padding: var(--spacing-sm, 12px);
@@ -605,29 +634,12 @@
     gap: var(--spacing-md, 16px);
   }
 
-  .billboard-cat-card {
-    min-width: 132px;
-    max-width: 148px;
-    padding: 8px;
+  .billboard-cat-grid {
+    grid-template-columns: 1fr;
   }
 
-  .billboard-cat-logo,
-  .billboard-cat-logo-placeholder {
-    width: 36px;
-    height: 36px;
-  }
-
-  .billboard-cat-name {
-    font-size: 0.6875rem;
-  }
-
-  .billboard-cat-symbol {
-    font-size: 0.5625rem;
-  }
-
-  .billboard-cat-arrow {
-    width: 22px;
-    height: 22px;
+  .bb-card-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .billboard-submit-btn {
