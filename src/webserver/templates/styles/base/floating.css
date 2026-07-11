@@ -13,6 +13,11 @@
      Complete z-index system for all floating UI
      ========================================================================== */
   --z-header: 1000;
+
+  /* macOS Electron title-bar drag layer: transparent, paints nothing, but must
+     sit just ABOVE the header (which is explicitly no-drag) so the traffic-light
+     strip stays draggable. */
+  --z-titlebar-drag: 1001;
   --z-dropdown: 1000;
   --z-select: 1000;
   --z-tooltip: 1500;

@@ -2,12 +2,19 @@
    ELECTRON TITLE BAR AREA - macOS/Windows/Linux Native Integration
    ============================================================================ */
 
-/* Title bar background area - sits behind traffic lights at the very top.
-   The topmost pixels start at --titlebar-top-color and gradient down into the
-   header background (--titlebar-bg), so the header blends seamlessly into the
-   native window chrome. The header's own colors/style are untouched. Only
-   rendered on macOS Electron (see .electron-macos rule below); browser and
-   non-macOS platforms keep the flat fallback. */
+/* Native title-bar DRAG LAYER (macOS Electron only) - paints NOTHING.
+
+   titleBarStyle 'hiddenInset' makes the window internally frameless: AppKit sets
+   titlebarAppearsTransparent, so the native title bar draws no background and the
+   web content spans the full window frame. The topmost pixels are therefore OURS
+   alone - macOS applies no tint, material or darkening there.
+
+   Consequently the title-bar strip and the header must never be two separately
+   painted surfaces: two surfaces can drift apart and produce a visible seam. The
+   HEADER paints the whole area itself (padding-top below), and this element only
+   provides the -webkit-app-region drag zone under the traffic lights. It stays
+   fully transparent - do NOT give it a background. It must sit ABOVE the header
+   (which is explicitly no-drag) or the window would not be draggable there. */
 .electron-titlebar-bg {
   display: none; /* Hidden by default (browser mode) */
   position: fixed;
@@ -15,19 +22,14 @@
   left: 0;
   right: 0;
   height: 28px; /* Standard macOS title bar height */
-  z-index: 999;
-  background: linear-gradient(
-    to bottom,
-    var(--titlebar-top-color, var(--titlebar-bg, #0d1117)),
-    var(--titlebar-bg, #0d1117)
-  );
+  z-index: var(--z-titlebar-drag);
+  background: transparent;
   user-select: none;
   -webkit-app-region: drag; /* Enable native drag for this region */
   app-region: drag;
-  transition: background-color var(--transition-normal);
 }
 
-/* Show title bar background on macOS in Electron */
+/* Show the drag layer on macOS in Electron */
 .electron-macos .electron-titlebar-bg {
   display: block;
 }
@@ -55,9 +57,12 @@
   app-region: no-drag;
 }
 
-/* Electron macOS: Push header down to sit below title bar area */
+/* Electron macOS: the header extends UP under the traffic lights and paints the
+   title-bar strip itself (padding, NOT margin). One surface from the window's
+   first pixel down to the header border means there is no seam to mismatch -
+   in either theme, at any time. */
 .electron-macos .modern-header {
-  margin-top: 28px; /* Height of title bar area */
+  padding-top: 28px; /* Height of the native title bar area */
 }
 
 /* preview mode banner — shown when wallet + RPC setup was skipped */
@@ -1242,11 +1247,6 @@
 [data-theme="light"] {
   --header-bg: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
   --header-solid-bg: #f1f5f9;
-  --titlebar-bg: #f1f5f9;
-
-  /* Colour of the abovest pixel line of the title-bar area; blends down into
-     --titlebar-bg. macOS uses this today; Windows/Linux overrides below. */
-  --titlebar-top-color: rgb(235, 239, 243);
   --header-border: #d1d5db;
   --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.08);
   --ticker-bg: linear-gradient(180deg, #e2e8f0 0%, #f1f5f9 100%);
@@ -1258,11 +1258,6 @@
 [data-theme="dark"] {
   --header-bg: linear-gradient(135deg, #0a192f 0%, #1e3a5f 50%, #0e2a47 100%);
   --header-solid-bg: #0d1117;
-  --titlebar-bg: #0d1117;
-
-  /* Colour of the abovest pixel line of the title-bar area; blends down into
-     --titlebar-bg. macOS uses this today; Windows/Linux overrides below. */
-  --titlebar-top-color: rgb(11, 15, 20);
   --header-border: #30363d;
   --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   --ticker-bg: linear-gradient(180deg, rgb(15, 23, 42, 0.85) 0%, rgb(15, 23, 42, 0.7) 100%);
@@ -1271,29 +1266,18 @@
   --ticker-hover-bg: rgb(255, 255, 255, 0.04);
 }
 
-/* ----------------------------------------------------------------------------
-   Per-OS title-bar top colour overrides (FUTURE-READY)
-   ----------------------------------------------------------------------------
-   The blend only renders where a custom title-bar element is shown — macOS today
-   (.electron-titlebar-bg under .electron-macos). The values in the theme blocks
-   above are the macOS colours. Windows/Linux currently render no title-bar
-   element, so these overrides have no visual effect yet; uncomment and set real
-   per-platform colours when those title bars get styled. `data-theme` lives on
-   <html>, the platform class on <body>, so the override targets the body class
-   and cascades into .electron-titlebar-bg via CSS variable inheritance.
-
-[data-theme="light"] body.electron-window-controls { --titlebar-top-color: rgb(235, 239, 243); }
-[data-theme="dark"]  body.electron-window-controls { --titlebar-top-color: rgb(11, 15, 20); }
-   ---------------------------------------------------------------------------- */
-
 /* ============================================================================
    ACCESSIBILITY
    ============================================================================ */
 
+/* Custom focus for header controls - fully owned by us.
+   Uses our input focus tokens + a visible ring for keyboard users. */
 .header-card:focus-visible,
 .header-action-btn:focus-visible {
-  outline: 2px solid #60a5fa;
-  outline-offset: 2px;
+  outline: none !important;
+  box-shadow:
+    0 0 0 2px var(--primary-alpha-10, rgba(88, 166, 255, 0.1)),
+    0 0 0 2px var(--primary-color, #3b82f6);
 }
 
 /* Reduced motion */

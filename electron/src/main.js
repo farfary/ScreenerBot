@@ -51,11 +51,14 @@ function getBackendExtraArgs() {
   return raw.split(/\s+/).map(arg => arg.trim()).filter(Boolean);
 }
 
-// Window/splash base color per theme — must match the dashboard's --bg-primary
-// (foundation.css: light #f8f9fb, dark #0d1117) so the splash and the brief
-// pre-paint window chrome render in the same theme as the last run.
+// Window/splash base color per theme — matches the dashboard's title-bar/header
+// surface (header.css --titlebar-bg / --header-solid-bg: light #f1f5f9, dark
+// #0d1117). titleBarStyle 'hiddenInset' makes the native title bar transparent,
+// so this color is what shows under the traffic lights in any unpainted frame
+// (pre-paint, renderer reload, resize) — keeping it identical to the title-bar
+// element means the top of the window never changes color, in either theme.
 function themeBackgroundColor(theme) {
-  return theme === 'light' ? '#f8f9fb' : '#0d1117';
+  return theme === 'light' ? '#f1f5f9' : '#0d1117';
 }
 
 /**
