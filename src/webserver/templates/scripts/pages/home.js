@@ -114,14 +114,20 @@ function createLifecycle() {
     return `${sign}${Utils.formatSol(Math.abs(v), { decimals })}`;
   }
 
-  // Number + a small muted "SOL" unit span, e.g. `0.1234<span class=hero-unit>SOL</span>`.
+  // Number + a small muted "SOL" unit span. Suppress formatSol's built-in
+  // " SOL" suffix so the unit isn't doubled.
   function solHtml(value, decimals = 4) {
-    return `${Utils.formatSol(value || 0, { decimals })}<span class="hero-unit">SOL</span>`;
+    return `${Utils.formatSol(value || 0, { decimals, suffix: "" })}<span class="hero-unit">SOL</span>`;
   }
 
-  // Signed variant of solHtml for the P&L tiles.
+  // Signed variant of solHtml for the P&L stats.
   function signedSolHtml(value, decimals = 4) {
-    return `${formatSignedSol(value, decimals)}<span class="hero-unit">SOL</span>`;
+    const v = value || 0;
+    const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+    return `${sign}${Utils.formatSol(Math.abs(v), {
+      decimals,
+      suffix: "",
+    })}<span class="hero-unit">SOL</span>`;
   }
 
   // Profit/loss/flat semantic class for a signed value.

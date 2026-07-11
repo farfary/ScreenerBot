@@ -14,19 +14,33 @@
         </label>
       </div>
       <div class="wallet-hero loading">
-        <div class="hero-main">
-          <div class="hero-label">Portfolio Value</div>
-          <div class="hero-balance" id="walletBalance">0.00 SOL</div>
-          <div class="hero-sub">
-            <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
-            <span class="hero-change" id="homeWalletChange">
-              <span class="hero-change-value change-value">+0.00</span>
-              <span class="change-percent">(+0.00%)</span>
-            </span>
-            <span class="hero-change-label">today</span>
+        <div class="hero-top">
+          <div class="hero-main">
+            <div class="hero-label">Portfolio Value</div>
+            <div class="hero-balance" id="walletBalance">0.00 SOL</div>
+            <div class="hero-sub">
+              <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
+              <span class="hero-change" id="homeWalletChange">
+                <span class="hero-change-value change-value">+0.00</span>
+                <span class="change-percent">(+0.00%)</span>
+              </span>
+              <span class="hero-change-label">today</span>
+            </div>
+          </div>
+          <div class="hero-aside">
+            <svg
+              class="hero-spark"
+              id="heroSpark"
+              viewBox="0 0 120 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon class="hero-spark-area" id="heroSparkArea" points="" />
+              <polyline class="hero-spark-line" id="heroSparkLine" points="" />
+            </svg>
           </div>
         </div>
-        <!-- Compact borderless stat cluster in the middle of the hero. -->
+        <!-- Minimal horizontal stat row across the bottom of the hero. -->
         <div class="hero-stats">
           <div class="hero-stat">
             <span class="hero-stat-label">Cash</span>
@@ -47,18 +61,6 @@
             <span class="hero-stat-label">Realized Today</span>
             <span class="hero-stat-value" id="heroRealizedToday">0.00 SOL</span>
           </div>
-        </div>
-        <div class="hero-aside">
-          <svg
-            class="hero-spark"
-            id="heroSpark"
-            viewBox="0 0 120 40"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <polygon class="hero-spark-area" id="heroSparkArea" points="" />
-            <polyline class="hero-spark-line" id="heroSparkLine" points="" />
-          </svg>
         </div>
       </div>
     </div>
