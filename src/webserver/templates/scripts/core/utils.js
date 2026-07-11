@@ -1499,23 +1499,39 @@ export const {
 })();
 
 /**
- * Resolve a token's displayable logo URL, or null when there is none to show.
- *
- * Accepts whichever field the source used (`logo_url` on billboard/featured
- * tokens, `logo` on external ones, `icon` straight from a provider) and only
- * returns a URL an <img> can actually load.
+ * Normalize any provider-supplied image URL, or return null if an <img> could
+ * not load it (blank, relative, data:, ipfs://, ...).
  *
  * The scheme test is case-insensitive on purpose: providers do ship capitalized
  * schemes (Jupiter serves ANSEM's icon as "Https://www.blackbullsol.com/..."),
- * and a case-sensitive check silently discarded those into a letter placeholder.
+ * and a case-sensitive check silently discarded those.
  */
-export function resolveTokenLogoUrl(token) {
-  if (!token) return null;
-  const raw = token.logo_url || token.logo || token.icon || token.image_url;
+export function normalizeImageUrl(raw) {
   if (typeof raw !== "string") return null;
 
   const url = raw.trim();
   if (!url) return null;
 
   return /^https?:\/\//i.test(url) ? url : null;
+}
+
+/**
+ * Resolve a token's displayable logo URL, or null when there is none to show.
+ *
+ * Accepts whichever field the source used (`logo_url` on billboard/featured
+ * tokens, `logo` on external ones, `icon` straight from a provider).
+ */
+export function resolveTokenLogoUrl(token) {
+  if (!token) return null;
+  return normalizeImageUrl(token.logo_url || token.logo || token.icon || token.image_url);
+}
+
+/**
+ * Resolve a token's wide banner/header image, or null when it has none.
+ * Only DexScreener supplies these (1500x500), so most tokens have none and the
+ * banner must simply be absent rather than showing a placeholder.
+ */
+export function resolveTokenBannerUrl(token) {
+  if (!token) return null;
+  return normalizeImageUrl(token.header_image_url || token.header || token.banner_url);
 }

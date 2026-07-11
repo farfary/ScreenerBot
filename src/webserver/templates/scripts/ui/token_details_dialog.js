@@ -10,7 +10,11 @@ import { requestManager } from "../core/request_manager.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { showImageLightbox } from "./image_lightbox.js";
-import { renderOverviewTab, renderOverviewLeft } from "./token_details/overview_tab.js";
+import {
+  renderOverviewTab,
+  renderOverviewLeft,
+  renderOverviewBanner,
+} from "./token_details/overview_tab.js";
 import { renderSecurityTab } from "./token_details/security_tab.js";
 import {
   renderPoolsTab,
@@ -675,12 +679,25 @@ export class TokenDetailsDialog {
     if (!content || !this.fullTokenData) return;
     if (content.dataset.loaded !== "true") return;
 
-    const overviewTable = content.querySelector(".overview-left");
-    if (!overviewTable) return;
+    // The banner has its own slot, repainted only when the URL itself changes.
+    // The dialog opens with minimal row data (no banner), so it appears once the
+    // full token detail lands -- but it must NOT be recreated on every poll tick,
+    // which would re-decode the image and flicker.
+    const bannerSlot = content.querySelector("#overviewBannerSlot");
+    if (bannerSlot) {
+      const bannerUrl = Utils.resolveTokenBannerUrl(this.fullTokenData);
+      if (bannerUrl !== this.__bannerUrl) {
+        this.__bannerUrl = bannerUrl;
+        bannerSlot.innerHTML = renderOverviewBanner(this.fullTokenData);
+      }
+    }
 
-    // Repaint only the left column (live metrics/details) and only when its
-    // markup changed, so the chart on the right is untouched and unchanged polls
-    // cause no flicker. Previously this called a non-existent
+    const liveRegion = content.querySelector("#overviewLive");
+    if (!liveRegion) return;
+
+    // Repaint only the live metrics/details, and only when their markup changed,
+    // so the chart on the right and the banner above are untouched and unchanged
+    // polls cause no flicker. Previously this called a non-existent
     // `_buildOverviewContent`, which threw on every poll and falsely flipped the
     // "Token" source dot to an error.
     const html = renderOverviewLeft(this.fullTokenData, {
@@ -689,7 +706,7 @@ export class TokenDetailsDialog {
       formatShortAddress: this._formatShortAddress.bind(this),
       getRejectionDisplayLabel: this._getRejectionDisplayLabel.bind(this),
     });
-    this._renderHtmlIfChanged(overviewTable, html, "__ovHtml");
+    this._renderHtmlIfChanged(liveRegion, html, "__ovHtml");
   }
 
   close() {
@@ -838,6 +855,9 @@ export class TokenDetailsDialog {
       this.positionsData = null;
       this._positionsFetching = false;
       this._positionsLastPoll = 0;
+      // The instance is reused for the next token, so the banner must not be
+      // considered already-painted when a different token opens.
+      this.__bannerUrl = undefined;
 
       this.onClose();
     }, 300);

@@ -20,7 +20,8 @@ export function renderOverviewTab(token, options = {}) {
   return `
     <div class="overview-split-layout">
       <div class="overview-left">
-        ${renderOverviewLeft(token, options)}
+        <div class="overview-banner-slot" id="overviewBannerSlot">${renderOverviewBanner(token)}</div>
+        <div class="overview-live" id="overviewLive">${renderOverviewLeft(token, options)}</div>
       </div>
       <div class="overview-right">
         <div class="chart-container">
@@ -84,6 +85,36 @@ export function renderOverviewLeft(token, options = {}) {
     formatShortAddress,
     getRejectionDisplayLabel,
   })}`;
+}
+
+/**
+ * Render the token's wide banner, or nothing when it has none.
+ *
+ * Kept OUT of `renderOverviewLeft` on purpose: that column is re-rendered via
+ * innerHTML on every poll tick whose metrics changed, which would recreate the
+ * <img> element each time. This lives in its own slot that only repaints when
+ * the banner URL itself changes (see `_refreshOverviewTab`).
+ *
+ * @param {Object} token - Token data object
+ * @returns {string} HTML string, or "" when the token has no banner
+ */
+export function renderOverviewBanner(token) {
+  const url = Utils.resolveTokenBannerUrl(token);
+  if (!url) return "";
+
+  // A dead banner URL removes the element entirely rather than leaving a broken
+  // image frame -- the banner is strictly optional chrome.
+  return `
+    <div class="token-banner">
+      <img
+        src="${Utils.escapeHtml(url)}"
+        alt=""
+        class="token-banner-img"
+        loading="lazy"
+        onerror="this.closest('.token-banner').remove()"
+      />
+    </div>
+  `;
 }
 
 function buildQuickStats(token) {

@@ -26,6 +26,27 @@
   background: var(--bg-primary);
 }
 
+/* Token banner (DexScreener header image, 1500x500). Optional: most tokens have
+   none, and the slot then renders nothing at all rather than a placeholder. */
+.token-banner {
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-primary);
+  line-height: 0;
+}
+
+.token-banner-img {
+  display: block;
+  width: 100%;
+
+  /* Matches the source 3:1 ratio, so the space is reserved before the image
+     decodes and the stats below never shift once it lands. */
+  aspect-ratio: 3 / 1;
+  object-fit: cover;
+}
+
 /* Quick Stats Bar */
 .quick-stats {
   display: grid;
