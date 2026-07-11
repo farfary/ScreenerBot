@@ -386,40 +386,44 @@
   text-transform: uppercase;
 }
 
-/* Price/change ride in the space to the right of the avatar, which would
-   otherwise be empty. */
-.bb-card-head-meta {
+/* Socials + copy ride in the space to the right of the avatar, which would
+   otherwise sit empty. This replaced a footer action bar that, for the many
+   tokens with no socials at all, rendered as an empty strip holding one button. */
+.bb-card-head-actions {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 2px;
   padding-bottom: 4px;
-  min-width: 0;
 }
 
-.bb-card-price {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-feature-settings: "tnum";
-}
-
-.bb-card-change {
-  font-family: var(--font-mono);
+.bb-card-social,
+.bb-card-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   font-size: 0.75rem;
-  font-weight: 600;
-  font-feature-settings: "tnum";
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.bb-card-change.pos {
-  color: var(--success-color);
+.bb-card-social:hover,
+.bb-card-copy:hover {
+  color: hsl(var(--bb-hue), var(--bb-sat), 45%);
+  background: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.12);
 }
 
-.bb-card-change.neg {
-  color: var(--error-color);
+[data-theme="dark"] .bb-card-social:hover,
+[data-theme="dark"] .bb-card-copy:hover {
+  color: hsl(var(--bb-hue), var(--bb-sat), 70%);
 }
 
-/* --- Identity -------------------------------------------------------------- */
+/* --- Identity: price/change sit beside the name and symbol they describe ---- */
 
 .bb-card-identity {
   display: flex;
@@ -429,9 +433,9 @@
   min-width: 0;
 }
 
-.bb-card-name-row {
+.bb-card-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
   min-width: 0;
 }
@@ -449,13 +453,6 @@
   flex-shrink: 0;
   font-size: 0.75rem;
   color: var(--warning-color, #d29922);
-}
-
-.bb-card-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
 }
 
 .bb-card-symbol {
@@ -493,11 +490,43 @@
   background: var(--danger-alpha-10);
 }
 
+/* `margin-left: auto` pins these to the right edge of their own row, so price
+   lines up with the name and change lines up with the symbol. */
+.bb-card-price,
+.bb-card-change {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
+}
+
+.bb-card-price {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bb-card-change {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.bb-card-change.pos {
+  color: var(--success-color);
+}
+
+.bb-card-change.neg {
+  color: var(--error-color);
+}
+
 /* --- Stats ----------------------------------------------------------------- */
 
+/* Flex-wrap, not a fixed grid: with 5 stats a 3-column grid leaves a visible
+   empty cell on the last row. Wrapping lets the final row's cells grow to fill
+   the width whatever the stat count (a token missing one simply shows fewer). */
 .bb-card-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 12px;
 }
@@ -506,6 +535,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  flex: 1 1 calc(33.333% - 6px);
   padding: 6px 8px;
   background: var(--bg-card-hover);
   border-radius: var(--radius-md);
@@ -530,51 +560,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* --- Actions --------------------------------------------------------------- */
-
-.bb-card-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: auto;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border-color);
-}
-
-.bb-card-socials {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.bb-card-social,
-.bb-card-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.bb-card-social:hover,
-.bb-card-copy:hover {
-  color: hsl(var(--bb-hue), var(--bb-sat), 45%);
-  background: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.12);
-}
-
-[data-theme="dark"] .bb-card-social:hover,
-[data-theme="dark"] .bb-card-copy:hover {
-  color: hsl(var(--bb-hue), var(--bb-sat), 70%);
 }
 
 /* =============================================================================

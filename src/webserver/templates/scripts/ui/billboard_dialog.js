@@ -344,31 +344,28 @@ class BillboardDialog {
 
         <div class="bb-card-head">
           <div class="bb-card-avatar">${avatarHtml}</div>
-          <div class="bb-card-head-meta">
-            ${priceHtml}
-            ${changeHtml}
+          <div class="bb-card-head-actions">
+            ${this._buildSocialIcons(token)}
+            <button class="bb-card-copy" data-mint="${this._escapeHtml(mint)}" title="Copy mint">
+              <i class="icon-copy"></i>
+            </button>
           </div>
         </div>
 
         <div class="bb-card-identity">
-          <div class="bb-card-name-row">
+          <div class="bb-card-row">
             <span class="bb-card-name">${this._escapeHtml(name)}</span>
             ${token.featured ? '<i class="icon-star bb-card-featured" title="Featured"></i>' : ""}
+            ${priceHtml}
           </div>
-          <div class="bb-card-sub">
+          <div class="bb-card-row">
             <span class="bb-card-symbol">${this._escapeHtml(symbol)}</span>
             ${this._renderSecurity(token.security_score)}
+            ${changeHtml}
           </div>
         </div>
 
         ${stats ? `<div class="bb-card-stats">${stats}</div>` : ""}
-
-        <div class="bb-card-actions">
-          <div class="bb-card-socials">${this._buildSocialIcons(token)}</div>
-          <button class="bb-card-copy" data-mint="${this._escapeHtml(mint)}" title="Copy mint">
-            <i class="icon-copy"></i>
-          </button>
-        </div>
       </article>
     `;
   }
