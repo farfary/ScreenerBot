@@ -55,10 +55,16 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             let entry_price = position
                 .effective_entry_price
                 .unwrap_or(position.entry_price);
-            let entry_cost = position.entry_size_sol;
+            // total_size_sol includes DCA adds; entry_size_sol is only the first buy, so
+            // it understated the cost of every averaged-in position being closed.
+            let entry_cost = position.total_size_sol;
+            // Proceeds from any partial exits taken before this close.
+            let realized_sol = position.sol_received.unwrap_or_default();
 
-            // Calculate estimated P&L based on current price (closing in progress)
-            if let Some(token_amount) = position.token_amount {
+            // Calculate estimated P&L based on current price (closing in progress). Value
+            // what is LEFT — after partial exits the original token_amount is no longer in
+            // the wallet.
+            if let Some(token_amount) = position.remaining_token_amount.or(position.token_amount) {
                 let token_decimals_opt = get_decimals(&position.mint).await;
                 if let Some(token_decimals) = token_decimals_opt {
                     let ui_token_amount =
@@ -72,7 +78,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                         .map_or(0.0, |fee| lamports_to_sol(fee));
                     let estimated_sell_fee = buy_fee;
                     let total_fees = buy_fee + estimated_sell_fee;
-                    let net_pnl_sol = current_value - entry_cost - total_fees;
+                    let net_pnl_sol = current_value + realized_sol - entry_cost - total_fees;
                     let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
                     return (net_pnl_sol, net_pnl_percent);
@@ -96,8 +102,11 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 
     // For closed positions, prioritize sol_received for most accurate P&L
     if let (Some(exit_price), Some(sol_received)) = (position.exit_price, position.sol_received) {
-        // Use actual SOL invested vs SOL received for closed positions
-        let sol_invested = position.entry_size_sol;
+        // Total SOL invested vs total SOL received. `total_size_sol` includes every DCA add
+        // (it equals entry_size_sol when there was none), whereas entry_size_sol counts only
+        // the first buy — so averaging down understated the cost basis and overstated profit.
+        // `sol_received` accumulates partial exits plus the final close.
+        let sol_invested = position.total_size_sol;
 
         // Use actual transaction fees only — profit_extra_needed is a decision buffer,
         // not an actual cost. Including it here inflates losses by ~2% on small trades.
@@ -211,6 +220,13 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             // Use total_size_sol (includes DCA) instead of entry_size_sol
             let entry_cost = position.total_size_sol;
 
+            // SOL already taken off the table by partial exits. `sol_received` accumulates
+            // across them, and for a still-open position it is exactly the realized
+            // proceeds. Omitting it valued the REMAINING tokens against the FULL entry
+            // cost, so a position that sold half at 2x — already break-even in cash —
+            // reported roughly a 50% LOSS, and the exit monitor sees that number.
+            let realized_sol = position.sol_received.unwrap_or_default();
+
             // Account for actual fees only — profit_extra_needed is a decision
             // buffer, not an actual cost (inflates losses ~2% on small trades)
             let buy_fee = position
@@ -218,7 +234,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                 .map_or(0.0, |fee| lamports_to_sol(fee));
             let estimated_sell_fee = buy_fee;
             let total_fees = buy_fee + estimated_sell_fee;
-            let net_pnl_sol = current_value - entry_cost - total_fees;
+            let net_pnl_sol = current_value + realized_sol - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
 
             return (net_pnl_sol, net_pnl_percent);

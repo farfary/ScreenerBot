@@ -40,6 +40,51 @@ pub async fn clear_partial_exit_pending(mint: &str) {
     }
 }
 
+/// Is a partial exit currently in flight (submitted, not yet verified) for this mint?
+///
+/// This registry is what SERIALIZES exits: the per-mint position lock only covers the
+/// submit, and is released while verification is still pending for several seconds, so
+/// the lock alone cannot stop a second exit from being sized against a
+/// `remaining_token_amount` that the first exit has not decremented yet.
+///
+/// The counter existed but NOTHING read it — it was write-only, and both
+/// `close_position_direct` and `partial_close_position` believed something else was
+/// serializing them. Nothing was.
+pub async fn is_partial_exit_pending(mint: &str) -> bool {
+    let map = PENDING_PARTIAL_EXITS.read().await;
+    map.get(mint).is_some_and(|count| *count > 0)
+}
+
+/// Drop every pending partial exit recorded for a mint (counter + durable details).
+///
+/// Used by failure handling, which knows the position but not necessarily the
+/// signature — a partial exit is no longer recorded on the position itself.
+pub async fn clear_pending_partial_exits_for_mint(mint: &str) -> Result<(), String> {
+    let removed: Vec<String> = {
+        let mut details = PENDING_PARTIAL_EXIT_DETAILS.write().await;
+        let signatures: Vec<String> = details
+            .iter()
+            .filter(|(_, entry)| entry.mint == mint)
+            .map(|(signature, _)| signature.clone())
+            .collect();
+        for signature in &signatures {
+            details.remove(signature);
+        }
+        signatures
+    };
+
+    {
+        let mut counters = PENDING_PARTIAL_EXITS.write().await;
+        counters.remove(mint);
+    }
+
+    if removed.is_empty() {
+        return Ok(());
+    }
+
+    persist_pending_partial_exits().await
+}
+
 /// Persist current pending DCA map to the database metadata store
 async fn persist_pending_dca_swaps() -> Result<(), String> {
     let pending: Vec<PendingDcaSwap> = {

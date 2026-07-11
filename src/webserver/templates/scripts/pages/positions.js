@@ -193,9 +193,17 @@ function createLifecycle() {
     return `<span class="chip warning">${count} exit${count > 1 ? "s" : ""}</span>`;
   };
 
-  const currentSizeCell = (remaining, original) => {
-    if (!remaining || !original || original === 0) return "—";
-    const pct = Math.round((remaining / original) * 100);
+  // How much of the position is still held.
+  //
+  // The denominator is NOT `token_amount`: that field is the tokens bought at ENTRY and
+  // never grows on a DCA, while `remaining_token_amount` does — so a DCA'd position
+  // reported >100% held. Tokens ever acquired = what is left + what has been exited,
+  // which is correct for DCA and partial exits alike.
+  const currentSizeCell = (remaining, totalExited) => {
+    if (remaining == null) return "—";
+    const acquired = remaining + (totalExited || 0);
+    if (acquired <= 0) return "—";
+    const pct = Math.round((remaining / acquired) * 100);
     const cls = pct === 100 ? "success" : pct >= 50 ? "warning" : "danger";
     return `<span class="chip ${cls}">${pct}%</span>`;
   };
@@ -380,7 +388,7 @@ function createLifecycle() {
           label: "Size",
           sortable: true,
           minWidth: 80,
-          render: (_v, r) => currentSizeCell(r.remaining_token_amount, r.token_amount),
+          render: (_v, r) => currentSizeCell(r.remaining_token_amount, r.total_exited_amount),
         },
         {
           id: "partial_exit_count",

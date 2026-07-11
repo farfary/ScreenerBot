@@ -76,20 +76,19 @@ pub(super) async fn force_close_position(
         .or(position.current_price)
         .unwrap_or(0.0);
 
-    // 4. Calculate P&L for the force-closed position
-    let (pnl, pnl_percent) = if exit_price > 0.0 {
-        // Use exit_price=0 for effective (no SOL received), so P&L is a total loss
-        let pnl_sol = -position.total_size_sol;
-        let pnl_pct = if position.total_size_sol > 0.0 {
-            (pnl_sol / position.total_size_sol) * 100.0
-        } else {
-            0.0
-        };
-        (pnl_sol, pnl_pct)
+    // 4. Calculate P&L for the force-closed position.
+    //
+    // A force close writes off only what is STILL HELD — it recovers no SOL for the
+    // remaining tokens. But SOL already realized by partial exits is money in the wallet
+    // and stays on the books. Booking a flat -total_size_sol (as this did, while also
+    // zeroing sol_received below) reported a position that took 80% profit before the
+    // token died as a TOTAL LOSS of everything invested.
+    let realized_sol = position.sol_received.unwrap_or_default();
+    let pnl = realized_sol - position.total_size_sol;
+    let pnl_percent = if position.total_size_sol > 0.0 {
+        (pnl / position.total_size_sol) * 100.0
     } else {
-        let pnl_sol = -position.total_size_sol;
-        let pnl_pct = -100.0;
-        (pnl_sol, pnl_pct)
+        0.0
     };
 
     // 5. Update in-memory state
@@ -99,7 +98,11 @@ pub(super) async fn force_close_position(
         pos.effective_exit_price = Some(0.0);
         pos.transaction_exit_verified = true;
         pos.closed_reason = Some(closed_reason.clone());
-        pos.sol_received = Some(0.0);
+        // Keep the SOL realized by partial exits — the force close recovers nothing for
+        // the REMAINING tokens, it does not undo the exits already taken.
+        pos.sol_received = Some(realized_sol);
+        pos.total_exited_amount += pos.remaining_token_amount.unwrap_or_default();
+        pos.remaining_token_amount = Some(0);
         pos.synthetic_exit = true;
         pos.pnl = Some(pnl);
         pos.pnl_percent = Some(pnl_percent);
@@ -115,7 +118,9 @@ pub(super) async fn force_close_position(
     db_position.effective_exit_price = Some(0.0);
     db_position.transaction_exit_verified = true;
     db_position.closed_reason = Some(closed_reason.clone());
-    db_position.sol_received = Some(0.0);
+    db_position.sol_received = Some(realized_sol);
+    db_position.total_exited_amount += db_position.remaining_token_amount.unwrap_or_default();
+    db_position.remaining_token_amount = Some(0);
     db_position.synthetic_exit = true;
     db_position.pnl = Some(pnl);
     db_position.pnl_percent = Some(pnl_percent);

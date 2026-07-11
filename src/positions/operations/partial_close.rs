@@ -3,7 +3,6 @@
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
-use crate::positions::db::save_position;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_position_lock, add_signature_to_index, clear_pending_partial_exit,
@@ -14,7 +13,7 @@ use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{
     calculate_partial_amount, execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode,
 };
-use crate::utils::get_wallet_address;
+use crate::utils::{get_total_token_balance, get_wallet_address};
 use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
@@ -38,6 +37,19 @@ pub async fn partial_close_position(
         ));
     }
 
+    // Refuse to overlap two partial exits. The per-mint lock above only covers the
+    // SUBMIT: it is released as soon as this function returns, while verification (which
+    // is what decrements `remaining_token_amount`) is still seconds away. Without this
+    // check a second partial — the exit monitor ticking again, or the user clicking sell
+    // — sized its percentage against a remaining amount the first exit had already sold,
+    // and the position was oversold.
+    if crate::positions::state::is_partial_exit_pending(token_mint).await {
+        return Err(
+            "A partial exit is already in flight for this position - wait for it to confirm"
+                .to_owned(),
+        );
+    }
+
     // Get position
     let position = crate::positions::state::get_position_by_mint(token_mint)
         .await
@@ -51,12 +63,35 @@ pub async fn partial_close_position(
         .or(position.token_amount)
         .ok_or_else(|| "Position has no token amount".to_owned())?;
 
-    // NOTE: No wallet balance verification here to avoid RPC latency during critical exit.
-    // The swap executor will fail gracefully if balance is insufficient.
-    // Consider adding periodic wallet balance reconciliation in monitoring service.
+    // Size against what the WALLET actually holds, not only what the position believes.
+    // The quote preview (`/api/trader/quote`) already prices the percentage against the
+    // real on-chain balance, so sizing execution off the DB alone made the preview and
+    // the trade disagree whenever the two drifted — and a DB amount larger than the real
+    // balance simply failed the swap with insufficient funds. Take the LOWER of the two:
+    // never sell more than the wallet has, never more than the position owns.
+    let wallet_address =
+        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
+
+    let sell_base = match get_total_token_balance(&wallet_address, token_mint).await {
+        Ok(on_chain) if on_chain > 0 => {
+            if on_chain != remaining_amount {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Partial exit balance drift for {}: position={} on-chain={} — sizing against the lower",
+                        position.symbol, remaining_amount, on_chain
+                    ),
+                );
+            }
+            on_chain.min(remaining_amount)
+        }
+        // The balance lookup is best-effort: an RPC hiccup must not block an exit. Fall
+        // back to the position's own accounting, which is what this always used.
+        _ => remaining_amount,
+    };
 
     // Calculate partial exit amount
-    let exit_amount = calculate_partial_amount(remaining_amount, exit_percentage);
+    let exit_amount = calculate_partial_amount(sell_base, exit_percentage);
 
     if exit_amount == 0 {
         return Err("Calculated exit amount is zero".to_owned());
@@ -66,7 +101,7 @@ pub async fn partial_close_position(
         LogTag::Positions,
         &format!(
             "Partial exit initiated: {} | {}% ({} of {} tokens) | Reason: {}",
-            position.symbol, exit_percentage, exit_amount, remaining_amount, exit_reason
+            position.symbol, exit_percentage, exit_amount, sell_base, exit_reason
         ),
     );
 
@@ -90,9 +125,6 @@ pub async fn partial_close_position(
         .map_err(|e| format!("Failed to get token: {e}"))?
         .ok_or_else(|| format!("Token not found: {token_mint}"))?;
 
-    // Get quote for partial exit
-    let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
     // Manual override starts the ladder; configured steps above it still escalate.
     let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
     // Slippage retry loop for partial exit
@@ -339,17 +371,27 @@ pub async fn partial_close_position(
         ));
     }
 
-    // Update position state (mark as partial exit pending)
-    crate::positions::state::update_position_state(token_mint, |pos| {
-        pos.exit_transaction_signature = Some(transaction_signature.clone());
-        // Do NOT set exit_time - position is still open!
-    })
-    .await;
-
-    // Save updated position to DB
-    if let Some(updated_pos) = crate::positions::state::get_position_by_mint(token_mint).await {
-        save_position(&updated_pos).await?;
-    }
+    // A partial exit must NOT be written to `position.exit_transaction_signature`.
+    //
+    // That field means "a FULL exit is in flight / has happened", and the rest of the
+    // system reads it that way. Stamping a partial's signature on it — which is what
+    // this used to do, and which nothing ever cleared, because PartialExitVerified
+    // deliberately leaves exit_signature/exit_time alone — permanently poisoned the
+    // position:
+    //   - `close_position_direct` refuses to run while it is set ("Position already has
+    //     pending exit transaction"), so after ONE partial take-profit the position
+    //     could never be fully closed again: not by stop-loss, not by take-profit, not
+    //     by a manual or force close. It was stuck open with the remainder forever.
+    //   - `transaction_exit_verified` is never set for a partial, so on every restart
+    //     the worker saw an "unverified exit signature" and re-enqueued the partial's
+    //     signature as a FULL-exit verification — which closes the position and releases
+    //     the semaphore permit while the tokens are still in the wallet.
+    //   - P&L took its "closing in progress" branch forever after (see pnl.rs).
+    //
+    // The partial exit is already durable without it: PENDING_PARTIAL_EXIT_DETAILS is
+    // persisted to metadata and rehydrated into a partial verification item at startup,
+    // and the queue item carries the mint, position id, expected amount and percentage.
+    // The signature index below is all the position state a partial needs.
 
     // Add signature to index
     add_signature_to_index(&transaction_signature, token_mint).await;

@@ -139,9 +139,23 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             let updated = update_position_state_by_id(position_id, |pos| {
                 pos.transaction_exit_verified = true;
                 pos.effective_exit_price = Some(effective_exit_price);
-                pos.sol_received = Some(sol_received);
+                // ACCUMULATE: `sol_received` is the position's total proceeds, and partial
+                // exits have already added theirs. Overwriting it here (as this did) threw
+                // away every SOL taken off the table earlier, so a position that took 50%
+                // profit and then closed reported only the final close's proceeds — closed
+                // P&L, which is computed straight off this field, understated the profit by
+                // the whole partial exit.
+                pos.sol_received = Some(pos.sol_received.unwrap_or_default() + sol_received);
                 pos.exit_fee_lamports = Some(fee_lamports);
                 pos.exit_time = Some(exit_time);
+
+                // A full close sells whatever is left, so nothing remains held. Roll it into
+                // the exited total: the Holdings / "% exited" cards read these two fields and
+                // otherwise kept showing a closed position's sold tokens as still held.
+                if let Some(remaining) = pos.remaining_token_amount {
+                    pos.total_exited_amount += remaining;
+                    pos.remaining_token_amount = Some(0);
+                }
 
                 // CRITICAL FIX: Update closed_reason to remove pending verification suffix
                 // This ensures database state matches verification status
@@ -645,18 +659,22 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // Queue Telegram notification for partial exit
                             if with_config(|c| c.telegram.enabled && c.telegram.notify_partial_exit)
                             {
-                                // Calculate remaining percentage
-                                let remaining_pct = if let (Some(remaining), Some(total)) =
-                                    (position.remaining_token_amount, position.token_amount)
-                                {
-                                    if total > 0 {
-                                        (remaining as f64 / total as f64) * 100.0
+                                // Calculate remaining percentage against tokens ever
+                                // ACQUIRED (still held + already exited). `token_amount` is
+                                // only the entry buy and does not grow on a DCA, so using it
+                                // reported more than 100% still held for any averaged-in
+                                // position.
+                                let remaining_pct =
+                                    if let Some(remaining) = position.remaining_token_amount {
+                                        let acquired = remaining + position.total_exited_amount;
+                                        if acquired > 0 {
+                                            (remaining as f64 / acquired as f64) * 100.0
+                                        } else {
+                                            0.0
+                                        }
                                     } else {
-                                        0.0
-                                    }
-                                } else {
-                                    100.0 - exit_percentage
-                                };
+                                        100.0 - exit_percentage
+                                    };
                                 // Calculate realized PnL for this partial exit
                                 let partial_pnl = sol_received
                                     - (exit_amount as f64 / 10_f64.powi(9)
@@ -707,17 +725,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     position_id, reason
                 ),
             );
+            // Clear the pending partial by MINT: a partial exit is not recorded on the
+            // position (`exit_transaction_signature` means a FULL exit), so the signature
+            // this used to read from there was either absent or, worse, some other exit's.
             if let Some(position) = get_position_by_id(position_id).await {
-                if let Some(exit_sig) = position.exit_transaction_signature.clone() {
-                    if let Err(err) = super::state::clear_pending_partial_exit(&exit_sig).await {
-                        logger::error(
-              LogTag::Positions,
-              &format!(
-                "Failed to clear pending partial exit {} during failure handling for position {}: {}",
-                exit_sig, position_id, err
-              ),
-            );
-                    }
+                if let Err(err) =
+                    super::state::clear_pending_partial_exits_for_mint(&position.mint).await
+                {
+                    logger::error(
+                        LogTag::Positions,
+                        &format!(
+                            "Failed to clear pending partial exits for {} during failure handling of position {}: {}",
+                            position.mint, position_id, err
+                        ),
+                    );
                 }
                 super::state::clear_partial_exit_pending(&position.mint).await;
             }

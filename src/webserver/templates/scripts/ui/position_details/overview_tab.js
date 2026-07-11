@@ -147,14 +147,18 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
   proto._buildCurrentStateCard = function (pos, isOpen, exits = []) {
     const currentPrice = pos.current_price;
     const remainingTokens = pos.remaining_token_amount;
-    const originalTokens = pos.token_amount;
     const verified = pos.transaction_entry_verified;
     const partialExitCount = pos.partial_exit_count || 0;
 
+    // Tokens ever acquired = still held + already exited. NOT `token_amount`, which is
+    // only the ENTRY buy and never grows on a DCA — measuring against it reported a
+    // DCA'd position as >100% held and understated the percentage sold.
+    const acquiredTokens = (remainingTokens || 0) + (pos.total_exited_amount || 0);
+
     // Calculate holdings percentage (both values are raw u64, so ratio works directly)
     let holdingsPercent = 100;
-    if (originalTokens && remainingTokens) {
-      holdingsPercent = (remainingTokens / originalTokens) * 100;
+    if (acquiredTokens > 0 && remainingTokens != null) {
+      holdingsPercent = (remainingTokens / acquiredTokens) * 100;
     }
 
     // Calculate current value in SOL using proper decimals conversion
@@ -163,7 +167,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     if (isOpen) {
       // Partial exit stats (tokens sold + SOL recovered so far)
       const tokensSold = exits.reduce((sum, e) => sum + (e.amount || 0), 0);
-      const pctSold = originalTokens > 0 ? (tokensSold / originalTokens) * 100 : 0;
+      const pctSold = acquiredTokens > 0 ? (tokensSold / acquiredTokens) * 100 : 0;
       const solRecoveredSoFar = exits.reduce((sum, e) => sum + (e.sol_received || 0), 0);
 
       return `
@@ -222,7 +226,7 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     const solReceived = pos.sol_received;
     const closedReason = pos.closed_reason;
     const totalExited = pos.total_exited_amount || exits.reduce((sum, e) => sum + (e.amount || 0), 0);
-    const pctExited = originalTokens > 0 ? (totalExited / originalTokens) * 100 : 0;
+    const pctExited = acquiredTokens > 0 ? (totalExited / acquiredTokens) * 100 : 0;
 
     return `
       <div class="pdd-stat-card">

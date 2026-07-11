@@ -225,15 +225,18 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         (0, 0.0, 0.0)
     } else {
         let count = matching_closed.len();
+        // Cost basis is total_size_sol (entry + every DCA add), not entry_size_sol — the
+        // first buy alone. Against the latter, an averaged-down position looked profitable
+        // whenever it merely recovered its FIRST buy.
         let total_pnl: f64 = matching_closed
             .iter()
-            .filter_map(|p| p.sol_received.map(|received| received - p.entry_size_sol))
+            .filter_map(|p| p.sol_received.map(|received| received - p.total_size_sol))
             .sum();
         let wins = matching_closed
             .iter()
             .filter(|p| {
                 p.sol_received
-                    .map(|r| r > p.entry_size_sol)
+                    .map(|r| r > p.total_size_sol)
                     .unwrap_or_default()
             })
             .count();

@@ -121,6 +121,21 @@ pub async fn monitor_positions(
                 continue;
             }
 
+            // A partial exit that has been submitted but not yet verified has already sold
+            // tokens the position still counts as held: `remaining_token_amount` is only
+            // decremented on verification. Evaluating now would re-trigger the same exit
+            // against a stale amount every tick until it confirms.
+            if positions::is_partial_exit_pending(&position.mint).await {
+                logger::debug(
+                    LogTag::Trader,
+                    &format!(
+                        "Skipping exit evaluation for {} - a partial exit is still confirming",
+                        position.symbol
+                    ),
+                );
+                continue;
+            }
+
             let sem = semaphore.clone();
             let shutdown_check = shutdown.clone();
             let position_mint = position.mint.clone();

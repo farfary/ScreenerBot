@@ -53,8 +53,23 @@ pub async fn close_position_direct(
 
     let _lock = acquire_position_lock(token_mint).await;
 
-    // RACE CONDITION PREVENTION: Only block if a FULL exit is pending.
-    // Partial exits are tracked separately via PENDING_PARTIAL_EXITS and serialized.
+    // RACE CONDITION PREVENTION: a partial exit already in flight has SOLD tokens that
+    // this close would try to sell again — its verification (which decrements
+    // `remaining_token_amount`) has not landed yet. Wait for it.
+    //
+    // This check is what the old comment here CLAIMED was happening ("partial exits are
+    // tracked separately via PENDING_PARTIAL_EXITS and serialized"). It was not: nothing
+    // read that registry. What actually blocked a full close was the partial's signature
+    // being stamped onto `exit_transaction_signature` below — which never got cleared, so
+    // instead of serializing the two it blocked every future close FOREVER.
+    if crate::positions::state::is_partial_exit_pending(token_mint).await {
+        return Err(
+            "A partial exit is still confirming for this position - retry the close shortly"
+                .to_owned(),
+        );
+    }
+
+    // Only block if a FULL exit is already pending for this position.
     if let Some(existing_position) = crate::positions::state::get_position_by_mint(token_mint).await
     {
         if let Some(pending_sig) = &existing_position.exit_transaction_signature {

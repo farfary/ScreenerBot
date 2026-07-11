@@ -78,15 +78,15 @@ pub async fn initialize_positions_system() -> Result<(), String> {
                     }
                 }
 
-                // Rehydrate partial-exit pending registry: if a position has an unverified
-                // exit signature but remains open (no exit_time), mark as pending partial.
-                // Full closure transitions would release the permit; partial exits should not.
-                if position.exit_transaction_signature.is_some()
-                    && !position.transaction_exit_verified
-                    && position.exit_time.is_none()
-                {
-                    super::state::mark_partial_exit_pending(&position.mint).await;
-                }
+                // NOTE: pending PARTIAL exits are NOT recovered from the position here.
+                // They are rehydrated below from the durable PENDING_PARTIAL_EXIT_DETAILS
+                // metadata, which rebuilds both the counter and the verification items.
+                //
+                // Inferring them from `exit_transaction_signature` (as this used to) was
+                // only possible because partial_close wrongly stamped its signature there,
+                // and it made the block above enqueue that same partial signature as a
+                // FULL-exit verification — closing the position and releasing its permit
+                // while the remaining tokens were still in the wallet, on every restart.
             }
 
             // Populate state
