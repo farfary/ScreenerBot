@@ -346,8 +346,6 @@
 .bb-card-head {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 8px;
   padding: 0 12px;
 
   /* Pulls the row up by half the avatar, so the avatar sits half over the banner
@@ -386,18 +384,30 @@
   text-transform: uppercase;
 }
 
-/* Socials + copy ride in the space to the right of the avatar, which would
-   otherwise sit empty. This replaced a footer action bar that, for the many
-   tokens with no socials at all, rendered as an empty strip holding one button. */
-.bb-card-head-actions {
+/* --- Actions footer -------------------------------------------------------- */
+
+.bb-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Socials (only when the token has them) + the always-present shortcuts, which
+   need nothing but the mint. */
+.bb-card-links {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-bottom: 4px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .bb-card-social,
-.bb-card-copy {
+.bb-card-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -413,14 +423,48 @@
 }
 
 .bb-card-social:hover,
-.bb-card-copy:hover {
+.bb-card-link:hover {
   color: hsl(var(--bb-hue), var(--bb-sat), 45%);
   background: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.12);
 }
 
 [data-theme="dark"] .bb-card-social:hover,
-[data-theme="dark"] .bb-card-copy:hover {
+[data-theme="dark"] .bb-card-link:hover {
   color: hsl(var(--bb-hue), var(--bb-sat), 70%);
+}
+
+/* The one primary action on the card. Deliberately the success/buy green rather
+   than the token accent: it must read as the same "buy" control everywhere,
+   not change colour per token. */
+.bb-card-buy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+  border: 1px solid var(--success-alpha-10);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.bb-card-buy:hover {
+  color: #fff;
+  background: var(--success-color);
+  border-color: var(--success-color);
+}
+
+.bb-card-buy i {
+  font-size: 0.75rem;
 }
 
 /* --- Identity: price/change sit beside the name and symbol they describe ---- */

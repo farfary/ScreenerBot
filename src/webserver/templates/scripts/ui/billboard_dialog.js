@@ -9,7 +9,16 @@
 import { $ } from "../core/dom.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Utils from "../core/utils.js";
-import { openExternal, resolveTokenLogoUrl, resolveTokenBannerUrl } from "../core/utils.js";
+import {
+  openExternal,
+  openDexScreener,
+  openGMGN,
+  openSolscan,
+  resolveTokenLogoUrl,
+  resolveTokenBannerUrl,
+} from "../core/utils.js";
+import { requestManager } from "../core/request_manager.js";
+import { TradeActionDialog } from "./trade_action_dialog.js";
 import { getTokenAccent, fallbackAccent } from "../core/token_accent.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
 // window listener so cards open the token details dialog even when the billboard
@@ -214,26 +223,95 @@ class BillboardDialog {
       });
     });
 
-    // Attach copy handlers. The selector previously did not match the rendered
-    // class (.cat-copy-btn), so copying a mint silently did nothing.
-    container.querySelectorAll(".bb-card-copy").forEach((btn) => {
+    // One delegated listener for every card action, so adding a shortcut is a
+    // markup change only. stopPropagation keeps a shortcut click from also
+    // opening the token details dialog behind it.
+    container.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const mint = btn.dataset.mint;
-        if (mint) {
-          navigator.clipboard.writeText(mint).then(() => {
-            const icon = btn.querySelector("i");
-            if (icon) {
-              icon.className = "icon-check";
-              setTimeout(() => {
-                icon.className = "icon-copy";
-              }, 1500);
-            }
-          });
+
+        const card = btn.closest(".bb-card");
+        const mint = btn.dataset.mint || card?.dataset.mint;
+        if (!mint) return;
+
+        switch (btn.dataset.action) {
+          case "dexscreener":
+            openDexScreener(mint);
+            break;
+          case "gmgn":
+            openGMGN(mint);
+            break;
+          case "solscan":
+            openSolscan(mint);
+            break;
+          case "copy":
+            this._copyMint(btn, mint);
+            break;
+          case "buy":
+            this._handleBuy(mint, card?.dataset.symbol || "");
+            break;
         }
       });
     });
+  }
+
+  _copyMint(btn, mint) {
+    navigator.clipboard.writeText(mint).then(() => {
+      const icon = btn.querySelector("i");
+      if (!icon) return;
+      icon.className = "icon-check";
+      setTimeout(() => {
+        icon.className = "icon-copy";
+      }, 1500);
+    });
+  }
+
+  /**
+   * Buy straight from the card. Mirrors the token-details buy flow: confirm the
+   * size in the shared TradeActionDialog, then POST the manual buy.
+   */
+  async _handleBuy(mint, symbol) {
+    if (!this.tradeDialog) {
+      this.tradeDialog = new TradeActionDialog();
+    }
+
+    let balance = 0;
+    try {
+      const data = await requestManager.fetch("/api/wallet/balance", { priority: "low" });
+      const parsed = Number(data?.sol_balance);
+      if (Number.isFinite(parsed)) balance = parsed;
+    } catch {
+      // Best-effort: the dialog still opens, just without a balance to size against.
+    }
+
+    try {
+      const result = await this.tradeDialog.open({
+        action: "buy",
+        symbol: symbol || "?",
+        context: { balance, mint },
+      });
+
+      if (!result) return; // cancelled
+
+      const response = await fetch("/api/trader/manual/buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mint,
+          ...(result.amount ? { size_sol: result.amount } : {}),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || "Buy failed");
+      }
+
+      Utils.showToast("Buy order placed!", "success");
+    } catch (error) {
+      Utils.showToast(error.message || "Buy failed", "error");
+    }
   }
 
   _renderCategory(category) {
@@ -344,12 +422,6 @@ class BillboardDialog {
 
         <div class="bb-card-head">
           <div class="bb-card-avatar">${avatarHtml}</div>
-          <div class="bb-card-head-actions">
-            ${this._buildSocialIcons(token)}
-            <button class="bb-card-copy" data-mint="${this._escapeHtml(mint)}" title="Copy mint">
-              <i class="icon-copy"></i>
-            </button>
-          </div>
         </div>
 
         <div class="bb-card-identity">
@@ -366,7 +438,40 @@ class BillboardDialog {
         </div>
 
         ${stats ? `<div class="bb-card-stats">${stats}</div>` : ""}
+
+        <div class="bb-card-actions">
+          <div class="bb-card-links">
+            ${this._buildSocialIcons(token)}
+            ${this._buildShortcuts(mint)}
+          </div>
+          <button class="bb-card-buy" data-action="buy" title="Buy ${this._escapeHtml(symbol)}">
+            <i class="icon-zap"></i>
+            <span>Buy</span>
+          </button>
+        </div>
       </article>
+    `;
+  }
+
+  /**
+   * Explorer / chart shortcuts plus copy-mint. Always available — they only need
+   * the mint, unlike the socials, which most tokens simply do not have.
+   */
+  _buildShortcuts(mint) {
+    const safeMint = this._escapeHtml(mint);
+    return `
+      <button class="bb-card-link" data-action="dexscreener" data-mint="${safeMint}" title="DexScreener">
+        <i class="icon-chart-candlestick"></i>
+      </button>
+      <button class="bb-card-link" data-action="gmgn" data-mint="${safeMint}" title="GMGN">
+        <i class="icon-trending-up"></i>
+      </button>
+      <button class="bb-card-link" data-action="solscan" data-mint="${safeMint}" title="Solscan">
+        <i class="icon-search"></i>
+      </button>
+      <button class="bb-card-link bb-card-copy" data-action="copy" data-mint="${safeMint}" title="Copy mint">
+        <i class="icon-copy"></i>
+      </button>
     `;
   }
 
