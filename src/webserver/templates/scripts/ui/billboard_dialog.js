@@ -6,7 +6,7 @@
  */
 
 import { $ } from "../core/dom.js";
-import { openExternal } from "../core/utils.js";
+import { openExternal, resolveTokenLogoUrl } from "../core/utils.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
 // window listener so cards open the token details dialog even when the billboard
 // dialog is opened from a page (e.g. Home) that doesn't otherwise load it.
@@ -269,7 +269,7 @@ class BillboardDialog {
   }
 
   _renderTokenCard(token) {
-    const logoUrl = this._getValidLogoUrl(token);
+    const logoUrl = resolveTokenLogoUrl(token);
     const name = token.name || "Unknown";
     const symbol = (token.symbol || "???").toUpperCase();
     const mint = token.mint || token.id || "";
@@ -406,18 +406,6 @@ class BillboardDialog {
     return n.toFixed(0);
   }
 
-  /**
-   * Get a valid logo URL - only use if starts with http:// or https://
-   * @param {Object} token - Token object with potential logo fields
-   * @returns {string|null} Valid URL or null for placeholder
-   */
-  _getValidLogoUrl(token) {
-    const url = token.logo_url || token.logo || token.icon || null;
-    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
-      return url;
-    }
-    return null;
-  }
 }
 
 // Singleton instance

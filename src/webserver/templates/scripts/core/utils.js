@@ -1497,3 +1497,25 @@ export const {
   // Return Utils from IIFE above (it's in module scope)
   return (typeof window !== "undefined" && window.Utils) || {};
 })();
+
+/**
+ * Resolve a token's displayable logo URL, or null when there is none to show.
+ *
+ * Accepts whichever field the source used (`logo_url` on billboard/featured
+ * tokens, `logo` on external ones, `icon` straight from a provider) and only
+ * returns a URL an <img> can actually load.
+ *
+ * The scheme test is case-insensitive on purpose: providers do ship capitalized
+ * schemes (Jupiter serves ANSEM's icon as "Https://www.blackbullsol.com/..."),
+ * and a case-sensitive check silently discarded those into a letter placeholder.
+ */
+export function resolveTokenLogoUrl(token) {
+  if (!token) return null;
+  const raw = token.logo_url || token.logo || token.icon || token.image_url;
+  if (typeof raw !== "string") return null;
+
+  const url = raw.trim();
+  if (!url) return null;
+
+  return /^https?:\/\//i.test(url) ? url : null;
+}

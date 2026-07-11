@@ -8,6 +8,7 @@
  */
 
 import { $ } from "../core/dom.js";
+import { resolveTokenLogoUrl } from "../core/utils.js";
 import { openBillboard } from "./billboard_dialog.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
@@ -390,7 +391,7 @@ class BillboardRow {
    * Render a single compact token card (logo + name only)
    */
   _renderTokenCard(token) {
-    const logoUrl = this._getValidLogoUrl(token);
+    const logoUrl = resolveTokenLogoUrl(token);
     const featuredClass = token.featured ? "featured" : "";
     const symbol = (token.symbol || "???").toUpperCase();
     const name = token.name || symbol;
@@ -434,18 +435,6 @@ class BillboardRow {
     return div.innerHTML;
   }
 
-  /**
-   * Get a valid logo URL - only use if starts with http:// or https://
-   * @param {Object} token - Token object with potential logo fields
-   * @returns {string|null} Valid URL or null for placeholder
-   */
-  _getValidLogoUrl(token) {
-    const url = token.logo_url || token.logo || token.icon || null;
-    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
-      return url;
-    }
-    return null;
-  }
 }
 
 // Singleton instance

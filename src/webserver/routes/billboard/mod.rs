@@ -6,6 +6,7 @@
 
 mod cache;
 mod handlers;
+mod logos;
 pub mod types;
 
 use crate::webserver::state::AppState;
