@@ -355,6 +355,15 @@ pub async fn get_recent_closed_positions_for_mint(
     }
 }
 
+/// Every position ever opened on a mint (open, closed, archived), oldest first.
+pub async fn get_all_positions_for_mint(mint: &str) -> Result<Vec<Position>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_all_positions_for_mint(mint).await,
+        None => Err("Positions database not initialized".to_owned()),
+    }
+}
+
 // ==================== EXIT/ENTRY HISTORY FUNCTIONS ====================
 
 /// Save an exit record to history

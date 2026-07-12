@@ -1,10 +1,16 @@
 /**
- * Activity event card — one swap of a position, rendered from the merged event the
- * backend serves (`/api/positions/{key}/details` → `activity`).
+ * Activity event card — one event in a token's all-time history, rendered from the merged
+ * event the backend serves (`/api/positions/{key}/activity`).
  *
- * Each event already carries BOTH halves of the swap: the position record (booked amount,
- * price, SOL, exit percentage) and the on-chain transaction (status, fee, router, slot,
- * transfers), plus the running position state after it settled. Nothing is joined here.
+ * A POSITION SWAP already carries BOTH halves: the position record (booked amount, price,
+ * SOL, exit percentage) and the on-chain transaction (status, fee, router, slot, transfers),
+ * plus the running state of its position after it settled. Nothing is joined here.
+ *
+ * A WALLET EVENT is a transaction that touched the mint without belonging to any position —
+ * a transfer, an airdrop, a swap made in another app. It has no price, no cost basis and no
+ * position, and it must never look like one.
+ *
+ * Token amounts arrive as whole tokens (the server scaled them by the mint's decimals).
  *
  * Pure render functions — no dialog state, no listeners. The tab wires interaction with a
  * single delegated handler.
@@ -16,6 +22,23 @@ const KIND_LABEL = {
   dca: "DCA Entry",
   partial_exit: "Partial Exit",
   exit: "Exit",
+  buy: "Wallet Buy",
+  sell: "Wallet Sell",
+  transfer: "Transfer",
+  ata: "Token Account",
+  other: "Transaction",
+};
+
+const KIND_ICON = {
+  entry: "icon-circle-arrow-down",
+  dca: "icon-circle-arrow-down",
+  partial_exit: "icon-circle-arrow-up",
+  exit: "icon-circle-arrow-up",
+  buy: "icon-circle-arrow-down",
+  sell: "icon-circle-arrow-up",
+  transfer: "icon-arrow-right-left",
+  ata: "icon-wallet",
+  other: "icon-activity",
 };
 
 const STATE_META = {
@@ -35,8 +58,21 @@ export function activityEventKey(event) {
 
 /** Human label, numbered once a side has more than one event ("DCA Entry #2"). */
 function eventLabel(event, sideCount) {
-  const base = KIND_LABEL[event.kind] || "Swap";
+  const base = KIND_LABEL[event.kind] || "Transaction";
   return sideCount > 1 ? `${base} #${event.sequence}` : base;
+}
+
+/**
+ * Which round of trading this swap belongs to. Only shown once the token has been traded
+ * more than once — with a single position it would be noise on every card.
+ */
+function positionChip(event, ctx) {
+  if (event.side === "wallet") {
+    return '<span class="pdd-act-chip-pos is-wallet">Wallet</span>';
+  }
+  if (ctx.positionCount < 2 || event.position_index == null) return "";
+  const isCurrent = event.position_id === ctx.currentPositionId;
+  return `<span class="pdd-act-chip-pos${isCurrent ? " is-current" : ""}">Position ${event.position_index}</span>`;
 }
 
 function statChip(label, value, extraClass = "") {
@@ -60,19 +96,21 @@ function detailCell(label, value) {
 /** The token / SOL / price / P&L row — the numbers a trader reads first. */
 function renderFlow(event, ctx) {
   const isExit = event.side === "exit";
+  const isWallet = event.side === "wallet";
   const cells = [];
 
   const amount = event.token_amount;
-  if (amount != null) {
-    const ui = Utils.formatCompactNumber(ctx.toUi(amount));
+  if (amount != null && amount !== 0) {
+    // A wallet event's direction is whatever the chain did, not a position side.
+    const outgoing = isExit || (isWallet && event.kind === "sell");
     // A swap still confirming has NOT been booked: the registry knows what was submitted,
     // the position does not. Say so rather than printing it as a settled amount.
-    const label = event.recorded ? "Tokens" : "Tokens (expected)";
+    const label = !isWallet && !event.recorded ? "Tokens (expected)" : "Tokens";
     cells.push(`
       <div class="pdd-act-flow-cell">
         <span class="pdd-act-flow-label">${label}</span>
-        <span class="pdd-act-flow-value ${isExit ? "negative" : "positive"}">
-          ${isExit ? "-" : "+"}${ui} ${Utils.escapeHtml(ctx.symbol)}
+        <span class="pdd-act-flow-value ${outgoing ? "negative" : "positive"}">
+          ${outgoing ? "-" : "+"}${Utils.formatCompactNumber(amount)} ${Utils.escapeHtml(ctx.symbol)}
         </span>
       </div>`);
   }
@@ -83,6 +121,18 @@ function renderFlow(event, ctx) {
         <span class="pdd-act-flow-label">${isExit ? "SOL Received" : "SOL Spent"}</span>
         <span class="pdd-act-flow-value ${isExit ? "positive" : "negative"}">
           ${isExit ? "+" : "-"}${Utils.formatSol(event.sol_amount, { decimals: 4, suffix: "" })} SOL
+        </span>
+      </div>`);
+  }
+
+  // A wallet event has no position record, so its SOL is the wallet's net delta (fee
+  // included) rather than a booked entry/exit amount — a different number, labelled as one.
+  if (isWallet && event.sol_change != null && event.sol_change !== 0) {
+    cells.push(`
+      <div class="pdd-act-flow-cell">
+        <span class="pdd-act-flow-label">Wallet SOL</span>
+        <span class="pdd-act-flow-value ${event.sol_change >= 0 ? "positive" : "negative"}">
+          ${event.sol_change >= 0 ? "+" : ""}${Utils.formatSol(event.sol_change, { decimals: 6, suffix: "" })} SOL
         </span>
       </div>`);
   }
@@ -146,21 +196,21 @@ function renderChips(event, ctx) {
 
 /**
  * The position AFTER this swap settled — held tokens, cost basis still on the books, and
- * the average entry price those two imply. Only a BOOKED swap moves these, which is why a
- * pending event has none.
+ * the average entry price those two imply. Only a BOOKED position swap moves these, so a
+ * pending swap and a wallet event have none.
  */
 function renderAfter(event, ctx) {
   if (event.tokens_after == null || event.invested_after == null) return "";
 
-  const heldUi = ctx.toUi(event.tokens_after);
-  const avgEntry = heldUi > 0 ? event.invested_after / heldUi : null;
+  const held = event.tokens_after;
+  const avgEntry = held > 0 ? event.invested_after / held : null;
 
   return `
     <div class="pdd-act-after">
       <span class="pdd-act-after-title">After</span>
       <span class="pdd-act-after-item">
         <span class="pdd-act-after-label">Held</span>
-        <span class="pdd-act-after-value">${Utils.formatCompactNumber(heldUi)} ${Utils.escapeHtml(ctx.symbol)}</span>
+        <span class="pdd-act-after-value">${Utils.formatCompactNumber(held)} ${Utils.escapeHtml(ctx.symbol)}</span>
       </span>
       <span class="pdd-act-after-item">
         <span class="pdd-act-after-label">Invested</span>
@@ -253,12 +303,13 @@ function renderDetails(event) {
 /**
  * Render one activity card.
  * @param {Object} event - merged activity event from the API
- * @param {Object} ctx - { symbol, solPriceUsd, expanded:Set, toUi(fn), formatPrice(fn), sideCounts }
+ * @param {Object} ctx - { symbol, solPriceUsd, expanded:Set, formatPrice(fn), sideCounts,
+ *                         positionCount, currentPositionId }
  */
 export function renderActivityCard(event, ctx) {
   const key = activityEventKey(event);
   const isExit = event.side === "exit";
-  const sideCount = isExit ? ctx.sideCounts.exit : ctx.sideCounts.entry;
+  const sideCount = ctx.sideCounts[event.side] ?? 0;
   const stateMeta = STATE_META[event.state] || STATE_META.pending;
   const expanded = ctx.expanded.has(key);
 
@@ -278,10 +329,11 @@ export function renderActivityCard(event, ctx) {
     <article class="pdd-act-card${expanded ? " is-open" : ""}" data-side="${event.side}" data-state="${event.state}" data-key="${Utils.escapeHtml(key)}">
       <div class="pdd-act-head">
         <span class="pdd-act-icon">
-          <i class="${isExit ? "icon-circle-arrow-up" : "icon-circle-arrow-down"}"></i>
+          <i class="${KIND_ICON[event.kind] || "icon-activity"}"></i>
         </span>
         <span class="pdd-act-label">${eventLabel(event, sideCount)}</span>
         ${pctTag}
+        ${positionChip(event, ctx)}
         <span class="pdd-act-head-right">
           <span class="pdd-act-time" title="${Utils.formatTimestamp(event.timestamp)}">${Utils.formatTimeAgo(event.timestamp)}</span>
           <span class="pdd-act-state pdd-act-state-${event.state}">

@@ -52,6 +52,39 @@ impl PositionsDatabase {
         Ok(result)
     }
 
+    /// EVERY position ever opened on a mint — open, closed and archived — oldest first.
+    ///
+    /// A token can be traded, exited and re-entered any number of times, and each round is
+    /// its own position row with its own entry/exit records. This is what the token's
+    /// all-time activity view is built from; the single-position lookups
+    /// (`get_position_by_mint`, `get_latest_position_by_mint`) each answer a narrower
+    /// question and would silently drop every earlier round.
+    pub async fn get_all_positions_for_mint(&self, mint: &str) -> Result<Vec<Position>, String> {
+        let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
+        let query = format!(
+            "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
+             WHERE mint = ?1 AND wallet_address = ?2 ORDER BY entry_time ASC"
+        );
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare positions-for-mint query: {e}"))?;
+
+        let rows = stmt
+            .query_map(params![mint, wallet_address], |row| {
+                self.row_to_position(row)
+            })
+            .map_err(|e| format!("Failed to execute positions-for-mint query: {e}"))?;
+
+        let mut positions = Vec::new();
+        for row in rows.flatten() {
+            positions.push(row);
+        }
+        Ok(positions)
+    }
+
     /// Get position by entry transaction signature
     pub async fn get_position_by_entry_signature(
         &self,

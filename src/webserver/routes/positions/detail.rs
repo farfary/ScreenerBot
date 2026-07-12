@@ -3,7 +3,6 @@
 use axum::{extract::Path, http::StatusCode, response::Response};
 use chrono::Utc;
 
-use super::activity::build_activity;
 use super::list::map_position_to_response_async;
 use super::types::*;
 use crate::logger::{self, LogTag};
@@ -20,15 +19,10 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             let mint = &position.mint;
 
             // Fetch all data concurrently for better performance
-            let (detail, state_history, (entries, exits)) = tokio::join!(
+            let (detail, (entries, exits)) = tokio::join!(
                 map_position_to_detail(&position),
-                load_state_history_entries(&position),
                 load_entry_exit_history(&position)
             );
-
-            // The activity timeline is built FROM the entry/exit records, so it must wait
-            // for them (local SQLite reads — cheap).
-            let (activity, activity_totals) = build_activity(&position, &entries, &exits).await;
 
             // Fetch token data from database
             let token_data = tokens::database::get_full_token_async(mint)
@@ -128,9 +122,6 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 position: Some(detail),
                 entries,
                 exits,
-                activity,
-                activity_totals,
-                state_history,
                 token_info,
                 market_data,
                 security,
@@ -169,7 +160,9 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
 /// context menu) is asking "is this token held right now", and answering with a closed
 /// position made the dashboard turn a Buy into an Add that the trade route then rejected
 /// with "no open position for this token".
-async fn resolve_position_by_key(key: &str) -> Result<Option<positions::Position>, String> {
+pub(super) async fn resolve_position_by_key(
+    key: &str,
+) -> Result<Option<positions::Position>, String> {
     if let Some(id_part) = key.strip_prefix("id:") {
         let id: i64 = id_part
             .parse()
@@ -189,62 +182,6 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
         summary: map_position_to_response_async(position).await,
         phantom_remove: position.phantom_remove,
         phantom_first_seen: position.phantom_first_seen.map(|dt| dt.timestamp()),
-    }
-}
-
-async fn load_state_history_entries(
-    position: &positions::Position,
-) -> Vec<PositionStateTimelineEntry> {
-    let Some(id) = position.id else {
-        return Vec::new();
-    };
-
-    let db_arc = match positions::get_positions_database().await {
-        Ok(db) => db,
-        Err(err) => {
-            logger::info(
-                LogTag::Webserver,
-                &format!(
-                    "Failed to access positions database for position {}: {}",
-                    id, err
-                ),
-            );
-            return Vec::new();
-        }
-    };
-
-    let db_clone = {
-        let db_guard = db_arc.lock().await;
-        db_guard.clone()
-    };
-
-    let Some(db) = db_clone else {
-        logger::info(
-            LogTag::Webserver,
-            &format!(
-                "Positions database not initialized when loading history for position {}",
-                id
-            ),
-        );
-        return Vec::new();
-    };
-
-    match db.get_position_state_history(id).await {
-        Ok(history) => history
-            .into_iter()
-            .map(|entry| PositionStateTimelineEntry {
-                state: entry.state.to_string(),
-                changed_at: entry.changed_at.timestamp(),
-                reason: entry.reason,
-            })
-            .collect(),
-        Err(err) => {
-            logger::info(
-                LogTag::Webserver,
-                &format!("Failed to load state history for position {id}: {err}"),
-            );
-            Vec::new()
-        }
     }
 }
 

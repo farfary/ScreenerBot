@@ -57,9 +57,7 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     // on-chain decimals column, so it survives market-data loss) over token_info,
     // which is null when full-token assembly fails for a delisted/rugged token.
     return (
-      this.fullDetails?.position?.token_decimals ??
-      this.fullDetails?.token_info?.decimals ??
-      9
+      this.fullDetails?.position?.token_decimals ?? this.fullDetails?.token_info?.decimals ?? 9
     );
   };
 

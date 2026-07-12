@@ -161,15 +161,16 @@ impl ExternalLinks {
     }
 }
 
+/// NOTE: the token's activity timeline is deliberately NOT here. It spans every position
+/// ever opened on the mint plus every wallet transaction that touched it, which is far more
+/// work than this route should carry — `/details` is also hit by the trade dialog on every
+/// manual trade, the row context menu and the token-details Positions tab. It has its own
+/// lazily-fetched endpoint: `GET /api/positions/{key}/activity` ([`TokenActivityResponse`]).
 #[derive(Debug, Serialize)]
 pub struct PositionDetailResponse {
     pub position: Option<PositionDetail>,
     pub entries: Vec<EntryRecordResponse>,
     pub exits: Vec<ExitRecordResponse>,
-    /// The position's swaps as ONE merged timeline (see [`PositionActivityEvent`]).
-    pub activity: Vec<PositionActivityEvent>,
-    pub activity_totals: PositionActivityTotals,
-    pub state_history: Vec<PositionStateTimelineEntry>,
     pub token_info: Option<PositionTokenInfo>,
     pub market_data: Option<PositionMarketData>,
     pub security: Option<PositionSecuritySummary>,
@@ -197,26 +198,66 @@ pub struct TransactionTokenTransferSummary {
     pub program_id: String,
 }
 
-/// One swap in a position's life — the opening buy, every DCA add, every partial exit and
-/// the final close — with the position RECORD and the on-chain TRANSACTION merged into a
-/// single event.
+/// Everything that ever happened to a token in this wallet: every swap of every position
+/// ever opened on the mint, plus every wallet transaction that touched the mint without
+/// belonging to a position at all.
 ///
-/// The two used to be served as separate arrays (`entries`/`exits` and `transactions`) and
-/// the dashboard re-joined them by signature in two different tabs, each losing something
-/// the other had: the record view had no chain status/fee/router, and the chain view had no
-/// timestamp for a swap that was not in the transaction cache (it sorted to the bottom
-/// showing "—" even though its record carried the real time). One event, one join, one
-/// source of truth.
+/// Served by `GET /api/positions/{key}/activity`. A token can be entered, exited and
+/// re-entered any number of times, and each round is its own position — showing only the
+/// position the dialog was opened on would hide every earlier round, and showing only
+/// position swaps would hide transfers, airdrops and swaps made outside the bot.
+///
+/// **All token amounts in this payload are UI amounts (whole tokens), already scaled by
+/// `token_decimals` server-side.** The record side stores raw on-chain units and the
+/// transaction side stores UI amounts; converting here is what lets the two live in one
+/// event, and it keeps decimals handling out of the frontend entirely.
+#[derive(Debug, Serialize)]
+pub struct TokenActivityResponse {
+    pub mint: String,
+    pub symbol: String,
+    pub token_decimals: u8,
+    /// Every position ever opened on this mint, oldest first.
+    pub positions: Vec<ActivityPositionSummary>,
+    /// The whole timeline, oldest first (the order the running state is derived in).
+    pub events: Vec<ActivityEvent>,
+    pub totals: ActivityTotals,
+    /// Position state changes, tagged with the position they belong to.
+    pub state_history: Vec<ActivityStateChange>,
+    pub sol_price_usd: Option<f64>,
+    pub fetched_at: String,
+}
+
+/// One round of trading a token: a position from its opening buy to its close.
+#[derive(Debug, Serialize)]
+pub struct ActivityPositionSummary {
+    pub id: i64,
+    /// 1-based, chronological — "Position 2" is the second time we ever bought this token.
+    pub index: u32,
+    pub opened_at: i64,
+    pub closed_at: Option<i64>,
+    pub is_open: bool,
+    pub archived: bool,
+    pub swaps: usize,
+    pub sol_invested: f64,
+    pub sol_returned: f64,
+    /// Realized P&L booked by this position's exits.
+    pub realized_pnl: f64,
+}
+
+/// One event on the timeline: a position swap, or a wallet transaction that touched the
+/// mint outside of any position.
 ///
 /// A swap that is submitted but not yet verified has NO record yet — its numbers land on
 /// the position only on verification — so the record half is `None` and `state` is
-/// `pending`. That is deliberate: the activity list must never report tokens or SOL that
-/// the position has not actually booked.
+/// `pending`. That is deliberate: the timeline must never report tokens or SOL that the
+/// position has not actually booked.
 #[derive(Debug, Serialize)]
-pub struct PositionActivityEvent {
-    /// `entry` | `dca` | `partial_exit` | `exit`
+pub struct ActivityEvent {
+    /// Position swaps: `entry` | `dca` | `partial_exit` | `exit`.
+    /// Wallet events: `buy` | `sell` | `transfer` | `ata` | `other`.
     pub kind: String,
-    /// `entry` | `exit` — which side of the book this event is on.
+    /// `entry` | `exit` | `wallet` — which side of the book this event is on. A `wallet`
+    /// event belongs to no position and never moves a position's cost basis.
     pub side: String,
     /// 1-based index within its side, so the UI can label "DCA #2" / "Exit #3".
     pub sequence: u32,
@@ -226,12 +267,16 @@ pub struct PositionActivityEvent {
     /// Record time when recorded, else the chain's, else the pending registry's submit time.
     pub timestamp: Option<i64>,
 
+    // --- which round of trading this belongs to (None for a wallet event) ---
+    pub position_id: Option<i64>,
+    pub position_index: Option<u32>,
+
     // --- position record (written on verification) ---
     /// True once verification wrote the entry/exit record — i.e. the position has booked it.
     pub recorded: bool,
     pub record_id: Option<i64>,
-    /// Raw on-chain token units (scale by the token's decimals before display).
-    pub token_amount: Option<u64>,
+    /// UI amount (whole tokens), already scaled by decimals.
+    pub token_amount: Option<f64>,
     /// SOL per whole token.
     pub price: Option<f64>,
     /// SOL spent (entry side) or received (exit side).
@@ -241,8 +286,8 @@ pub struct PositionActivityEvent {
     /// Swap fee booked on the record, when it carried one.
     pub record_fee_sol: Option<f64>,
 
-    // --- on-chain transaction (from the transactions cache) ---
-    /// False when the transaction is not in the cache — the record half still stands.
+    // --- on-chain transaction ---
+    /// False when the transaction is not in the local cache — the record half still stands.
     pub available: bool,
     pub status: Option<String>,
     pub success: Option<bool>,
@@ -259,10 +304,10 @@ pub struct PositionActivityEvent {
     pub notes: Option<String>,
     pub token_transfers: Vec<TransactionTokenTransferSummary>,
 
-    // --- running position state AFTER this event ---
-    /// Tokens held once this event settled (raw units).
-    pub tokens_after: Option<u64>,
-    /// Cost basis still on the books once this event settled (SOL).
+    // --- running state of THIS EVENT'S POSITION, after it settled ---
+    /// Tokens the position held once this event settled (UI amount).
+    pub tokens_after: Option<f64>,
+    /// Cost basis still on the position's books once this event settled (SOL).
     pub invested_after: Option<f64>,
     /// Exits only: the cost basis of the tokens this swap sold, valued at the average entry
     /// price in force AT THAT MOMENT — not the position's final average.
@@ -272,29 +317,34 @@ pub struct PositionActivityEvent {
     pub realized_pnl_percent: Option<f64>,
 }
 
-/// Aggregates over the whole activity timeline, so the UI never re-sums the events itself.
+/// All-time aggregates over the token's whole timeline, so the UI never re-sums it.
 #[derive(Debug, Default, Serialize)]
-pub struct PositionActivityTotals {
+pub struct ActivityTotals {
     pub events: usize,
+    pub positions: usize,
     pub entries: usize,
     pub dca_entries: usize,
     pub exits: usize,
     pub partial_exits: usize,
+    /// Wallet transactions that touched the mint outside any position.
+    pub wallet_events: usize,
     pub pending: usize,
     pub failed: usize,
-    /// Raw token units.
-    pub tokens_bought: u64,
-    pub tokens_sold: u64,
+    /// UI amounts (whole tokens), position swaps only.
+    pub tokens_bought: f64,
+    pub tokens_sold: f64,
     pub sol_invested: f64,
     pub sol_returned: f64,
-    /// Network fees across every swap that reported one.
+    /// Network fees across EVERY event that reported one, wallet events included.
     pub network_fees_sol: f64,
-    /// Sum of the per-exit realized P&L.
+    /// Sum of the per-exit realized P&L across every position.
     pub realized_pnl: f64,
 }
 
 #[derive(Debug, Serialize)]
-pub struct PositionStateTimelineEntry {
+pub struct ActivityStateChange {
+    pub position_id: i64,
+    pub position_index: u32,
     pub state: String,
     pub changed_at: i64,
     pub reason: Option<String>,

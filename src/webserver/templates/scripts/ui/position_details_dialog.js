@@ -39,8 +39,13 @@ export class PositionDetailsDialog {
     this._managementChangedHandler = null;
     this._focusTrap = null;
     this._lastRenderedFp = null;
-    // Activity tab view state — kept on the dialog so the 5s poll's re-render restores the
-    // filter, the order and every card the user had expanded.
+    // The token's all-time activity: its own payload (own endpoint, fetched lazily) plus
+    // the view state, kept on the dialog so a poll's re-render restores the filter, the
+    // order and every card the user had expanded.
+    this._activity = null;
+    this._activityLoading = false;
+    this._activityError = null;
+    this._activityRenderedFp = null;
     this._activityFilter = "all";
     this._activitySort = "newest";
     this._activityExpanded = new Set();
@@ -74,9 +79,7 @@ export class PositionDetailsDialog {
       this.fullDetails = null;
       this.currentTab = "overview";
       this._lastRenderedFp = null;
-      this._activityFilter = "all";
-      this._activitySort = "newest";
-      this._activityExpanded = new Set();
+      this._resetActivityState();
 
       this._createDialog();
       this._attachEventHandlers();
@@ -128,6 +131,28 @@ export class PositionDetailsDialog {
     } finally {
       this.isLoading = false;
     }
+
+    // The token's all-time activity is its own (much heavier) endpoint and is refreshed
+    // only while its tab is open — see activity_tab.js.
+    if (this.currentTab === "activity") {
+      this._fetchActivity();
+    }
+  }
+
+  /**
+   * Drop everything the activity tab held. The delegated listener lives on the tab-content
+   * node, which the dialog element takes with it — but the REFERENCE must go too, or the
+   * next open would see a handler already set and skip binding one onto the fresh DOM.
+   */
+  _resetActivityState() {
+    this._activity = null;
+    this._activityLoading = false;
+    this._activityError = null;
+    this._activityRenderedFp = null;
+    this._activityFilter = "all";
+    this._activitySort = "newest";
+    this._activityExpanded = new Set();
+    this._activityClickHandler = null;
   }
 
   /**
@@ -339,11 +364,7 @@ export class PositionDetailsDialog {
         this.dialogEl = null;
       }
 
-      // The activity tab's delegated listener lives on the tab-content node, which the
-      // dialog element took with it — but the reference must go too, or the next open
-      // would skip binding a handler onto the fresh DOM.
-      this._activityClickHandler = null;
-      this._activityExpanded = new Set();
+      this._resetActivityState();
 
       this.positionData = null;
       this.fullDetails = null;
@@ -381,7 +402,7 @@ export class PositionDetailsDialog {
     this._backdropHandler = null;
     this._tabHandlers = null;
     this._copyMintHandler = null;
-    this._activityClickHandler = null;
+    this._resetActivityState();
     this.positionData = null;
     this.fullDetails = null;
   }
@@ -546,11 +567,17 @@ export class PositionDetailsDialog {
     // Social links — icon-only, compact
     const socials = [];
     if (tokenInfo?.website)
-      socials.push(`<a href="${Utils.escapeHtml(tokenInfo.website)}" target="_blank" rel="noopener" class="meta-social-link" title="Website"><i class="icon-globe"></i></a>`);
+      socials.push(
+        `<a href="${Utils.escapeHtml(tokenInfo.website)}" target="_blank" rel="noopener" class="meta-social-link" title="Website"><i class="icon-globe"></i></a>`
+      );
     if (tokenInfo?.twitter)
-      socials.push(`<a href="${Utils.escapeHtml(tokenInfo.twitter)}" target="_blank" rel="noopener" class="meta-social-link" title="Twitter / X"><i class="icon-twitter"></i></a>`);
+      socials.push(
+        `<a href="${Utils.escapeHtml(tokenInfo.twitter)}" target="_blank" rel="noopener" class="meta-social-link" title="Twitter / X"><i class="icon-twitter"></i></a>`
+      );
     if (tokenInfo?.telegram)
-      socials.push(`<a href="${Utils.escapeHtml(tokenInfo.telegram)}" target="_blank" rel="noopener" class="meta-social-link" title="Telegram"><i class="icon-send"></i></a>`);
+      socials.push(
+        `<a href="${Utils.escapeHtml(tokenInfo.telegram)}" target="_blank" rel="noopener" class="meta-social-link" title="Telegram"><i class="icon-send"></i></a>`
+      );
 
     // Explorer chips
     const explorers = [
@@ -811,16 +838,13 @@ export class PositionDetailsDialog {
       case "chart":
         this._renderChartTab(content);
         break;
-      case "activity": {
-        // Redrawing the timeline on every poll tick would collapse the expanded cards and
-        // yank the scroll position, so it only redraws when the timeline actually changed.
-        const fp = this._activityFingerprint();
-        if ((this._lastRenderedFp ??= {}).activity !== fp) {
-          this._renderActivityTab(content);
-          this._lastRenderedFp.activity = fp;
-        }
+      case "activity":
+        // The token's all-time activity lives behind its own endpoint. Paint whatever we
+        // already have (guarded, so an expanded card survives a poll), then fetch it the
+        // first time the tab is opened.
+        this._paintActivity(content);
+        if (!this._activity && !this._activityLoading) this._fetchActivity();
         break;
-      }
     }
   }
 

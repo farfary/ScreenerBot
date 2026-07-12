@@ -349,11 +349,7 @@ export function applyChartTabMixin(PositionDetailsDialog) {
       pnlPct = ((current - avgEntry) / avgEntry) * 100;
     }
     const pnlClass =
-      pnlPct === null || pnlPct === undefined
-        ? ""
-        : pnlPct >= 0
-          ? "pdd-positive"
-          : "pdd-negative";
+      pnlPct === null || pnlPct === undefined ? "" : pnlPct >= 0 ? "pdd-positive" : "pdd-negative";
     const pnlText =
       pnlPct === null || pnlPct === undefined
         ? "—"

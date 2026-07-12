@@ -74,6 +74,80 @@
 }
 
 /* =============================================================================
+   TRADING ROUNDS — every position ever opened on this token
+   ============================================================================= */
+
+.position-details-dialog .pdd-act-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-act-round-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .pdd-act-round {
+  display: grid;
+  grid-template-columns: 100px 80px 1fr auto auto;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: 7px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.position-details-dialog .pdd-act-round.is-current {
+  border-color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.position-details-dialog .pdd-act-round-index {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-act-round-status {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-round-span,
+.position-details-dialog .pdd-act-round-swaps {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.position-details-dialog .pdd-act-round-pnl {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-round-pnl.pdd-positive {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-act-round-pnl.pdd-negative {
+  color: var(--danger);
+}
+
+/* =============================================================================
    TOOLBAR — filters + chronological order
    ============================================================================= */
 
@@ -227,6 +301,12 @@
   color: var(--danger);
 }
 
+/* A wallet event belongs to no position: neutral, so it never reads as a trade of ours. */
+.position-details-dialog .pdd-act-card[data-side="wallet"] .pdd-act-icon {
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+}
+
 .position-details-dialog .pdd-act-label {
   font-size: 0.75rem;
   font-weight: 700;
@@ -242,6 +322,10 @@
   color: var(--danger);
 }
 
+.position-details-dialog .pdd-act-card[data-side="wallet"] .pdd-act-label {
+  color: var(--text-secondary);
+}
+
 .position-details-dialog .pdd-act-tag {
   padding: 2px 7px;
   font-size: 0.65rem;
@@ -250,6 +334,30 @@
   border-radius: var(--radius-full);
   background: var(--warning-alpha-20);
   color: var(--warning-color);
+}
+
+/* Which round of trading this event belongs to (only when there is more than one). */
+.position-details-dialog .pdd-act-chip-pos {
+  padding: 2px 8px;
+  font-size: 0.63rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-chip-pos.is-current {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-alpha-10);
+}
+
+.position-details-dialog .pdd-act-chip-pos.is-wallet {
+  border-style: dashed;
 }
 
 .position-details-dialog .pdd-act-head-right {
@@ -705,8 +813,7 @@
 }
 
 .position-details-dialog .pdd-act-state-row {
-  display: grid;
-  grid-template-columns: 140px 1fr auto;
+  display: flex;
   align-items: center;
   gap: var(--spacing-md);
   padding: 6px 10px;
@@ -716,6 +823,8 @@
 }
 
 .position-details-dialog .pdd-act-state-name {
+  flex: 0 0 auto;
+  min-width: 130px;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -724,6 +833,8 @@
 }
 
 .position-details-dialog .pdd-act-state-reason {
+  flex: 1;
+  min-width: 0;
   font-size: 0.7rem;
   color: var(--text-secondary);
   font-style: italic;
@@ -733,6 +844,7 @@
 }
 
 .position-details-dialog .pdd-act-state-time {
+  flex-shrink: 0;
   font-size: 0.7rem;
   color: var(--text-muted);
   font-family: var(--font-data);
@@ -759,11 +871,20 @@
   }
 
   .position-details-dialog .pdd-act-state-row {
-    grid-template-columns: 1fr auto;
+    flex-wrap: wrap;
   }
 
   .position-details-dialog .pdd-act-state-reason {
-    grid-column: 1 / -1;
+    flex-basis: 100%;
     white-space: normal;
+  }
+
+  .position-details-dialog .pdd-act-round {
+    grid-template-columns: 1fr auto;
+  }
+
+  .position-details-dialog .pdd-act-round-span,
+  .position-details-dialog .pdd-act-round-swaps {
+    grid-column: 1 / -1;
   }
 }

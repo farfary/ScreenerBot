@@ -56,7 +56,7 @@ pub use loss_detection::{
 // Database and library exports
 pub use db::{
     delete_archived_positions, delete_position_by_id, force_database_sync,
-    get_closed_positions as get_db_closed_positions,
+    get_all_positions_for_mint, get_closed_positions as get_db_closed_positions,
     get_closed_positions_count_since as get_db_closed_positions_count_since,
     get_closed_positions_since as get_db_closed_positions_since, get_daily_trading_stats,
     get_entry_history, get_exit_history,

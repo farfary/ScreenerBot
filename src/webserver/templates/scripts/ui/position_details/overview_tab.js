@@ -228,7 +228,8 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     const exitPrice = pos.average_exit_price || pos.exit_price;
     const solReceived = pos.sol_received;
     const closedReason = pos.closed_reason;
-    const totalExited = pos.total_exited_amount || exits.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const totalExited =
+      pos.total_exited_amount || exits.reduce((sum, e) => sum + (e.amount || 0), 0);
     const pctExited = acquiredTokens > 0 ? (totalExited / acquiredTokens) * 100 : 0;
 
     return `
@@ -463,8 +464,6 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       </div>
     `;
   };
-
-
 
   /**
    * Get CSS class for risk level

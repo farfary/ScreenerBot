@@ -17,6 +17,7 @@ mod manage;
 pub mod types;
 
 // Re-export handler functions
+use activity::get_token_activity;
 use debug::get_position_debug_info;
 use detail::get_position_details;
 use force_close::force_close_position;
@@ -37,6 +38,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         // the `:position_id` param route so it is matched first.
         .route("/positions/archived", delete(delete_all_archived))
         .route("/positions/:key/details", get(get_position_details))
+        // The token's ALL-TIME activity (every position ever opened on the mint + every
+        // wallet transaction that touched it). Separate from `/details` on purpose — that
+        // route is on the manual-trade path and must stay cheap.
+        .route("/positions/:key/activity", get(get_token_activity))
         .route("/positions/:mint/debug", get(get_position_debug_info))
         .route(
             "/positions/:position_id/force-close",
