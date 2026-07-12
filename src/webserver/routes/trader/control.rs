@@ -27,6 +27,24 @@ pub async fn get_trader_status() -> Response {
 
 /// POST /api/trader/start - Start the trader
 pub async fn start_trader_handler() -> Response {
+    if crate::global::is_preview_mode() || !crate::global::is_initialization_complete() {
+        return error_response(
+            StatusCode::CONFLICT,
+            "TraderUnavailable",
+            "Complete wallet and RPC setup before enabling Auto Trader",
+            None,
+        );
+    }
+
+    if crate::global::is_force_stopped() {
+        return error_response(
+            StatusCode::CONFLICT,
+            "ForceStopActive",
+            "Clear the emergency stop before enabling Auto Trader",
+            None,
+        );
+    }
+
     if is_trader_running() {
         return error_response(
             StatusCode::BAD_REQUEST,

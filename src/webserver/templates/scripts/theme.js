@@ -38,6 +38,24 @@
   const themeIcon = document.getElementById("themeIcon");
   const themeText = document.getElementById("themeText");
 
+  function updateThemeControl(theme) {
+    const targetTheme = theme === "dark" ? "light" : "dark";
+    if (themeIcon) {
+      themeIcon.className =
+        targetTheme === "light" ? "action-icon icon-sun" : "action-icon icon-moon";
+    }
+    if (themeText) themeText.textContent = targetTheme === "light" ? "Light" : "Dark";
+    if (themeToggle) {
+      const label = `Switch to ${targetTheme} theme`;
+      themeToggle.setAttribute("aria-label", label);
+      themeToggle.title = label;
+    }
+  }
+
+  // The early head script has already stamped data-theme. Reflect it before the
+  // server preference request so the action icon never flashes the wrong target.
+  updateThemeControl(html.getAttribute("data-theme") || "dark");
+
   // Check if running in Electron
   const isElectron = window.electronAPI !== undefined;
 
@@ -128,13 +146,6 @@
       }
     } catch { /* not in Electron */ }
 
-    // Update UI elements
-    if (theme === "dark") {
-      themeIcon.className = "action-icon icon-sun";
-      if (themeText) themeText.textContent = "Light";
-    } else {
-      themeIcon.className = "action-icon icon-moon";
-      if (themeText) themeText.textContent = "Dark";
-    }
+    updateThemeControl(theme);
   }
 })();

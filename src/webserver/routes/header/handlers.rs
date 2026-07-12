@@ -4,11 +4,9 @@ use crate::config::with_config;
 use crate::connectivity::state::are_critical_endpoints_healthy;
 use crate::filtering::global_store;
 use crate::global::are_core_services_ready;
-use crate::positions::state::get_open_positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::services::{get_service_manager, ServiceHealth};
-use crate::trader::is_trader_running;
-use crate::wallet::get_current_wallet_status;
+use crate::wallet::{get_balance_at_time, get_current_wallet_status};
 
 use super::types::*;
 
@@ -20,61 +18,96 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
     let now = chrono::Utc::now();
 
-    // Trader info. In preview mode trading is disabled outright, so report the
-    // trader as neither enabled nor running regardless of the persisted config value.
+    let today_start = now
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap_or_default()
+        .and_utc();
+
+    // Header collectors are independent. Keep the frequently-polled endpoint bounded by
+    // running database/service work concurrently and reusing each result once.
+    let store = global_store();
+    let (today_stats, wallet_snapshot, start_balance, filtering_stats, system) = tokio::join!(
+        crate::positions::get_period_trading_stats(today_start, Some(now)),
+        get_current_wallet_status(),
+        get_balance_at_time(today_start),
+        store.get_stats(),
+        calculate_system_health(),
+    );
+
     let preview = crate::global::is_preview_mode();
-    let trader_enabled = !preview && with_config(|cfg| cfg.trader.enabled);
-    let trader_running = !preview && is_trader_running();
-
-    // Calculate today's P&L from positions
-    let (today_pnl_sol, today_pnl_percent) = calculate_today_pnl().await;
-
-    // Trader uptime (simplified - would need actual start time tracking)
-    let uptime_seconds = if trader_running {
-        // TODO: Track actual start time - for now use placeholder
-        0
+    let (trader_enabled, entry_enabled, exit_enabled) = with_config(|cfg| {
+        (
+            cfg.trader.enabled,
+            cfg.trader.entry_monitor_enabled,
+            cfg.trader.exit_monitor_enabled,
+        )
+    });
+    let trader_state = if preview {
+        TraderHeaderState::Preview
+    } else if crate::global::is_force_stopped() {
+        TraderHeaderState::ForceStopped
+    } else if !trader_enabled {
+        TraderHeaderState::Stopped
+    } else if !are_core_services_ready() {
+        TraderHeaderState::Waiting
+    } else if !entry_enabled && !exit_enabled {
+        TraderHeaderState::Idle
+    } else if entry_enabled && crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
+        TraderHeaderState::EntryPaused
     } else {
-        0
+        TraderHeaderState::Running
     };
+
+    let today_pnl_sol = today_stats
+        .as_ref()
+        .map(|stats| stats.net_pnl_sol)
+        .unwrap_or_default();
+    let start_balance_sol = start_balance.ok().flatten();
+    let today_pnl_percent = start_balance_sol
+        .filter(|balance| *balance > f64::EPSILON)
+        .map(|balance| today_pnl_sol / balance * 100.0)
+        .unwrap_or_default();
 
     let trader = TraderHeaderInfo {
-        running: trader_running,
-        enabled: trader_enabled,
+        enabled: !preview && trader_enabled,
+        state: trader_state,
         today_pnl_sol,
         today_pnl_percent,
-        uptime_seconds,
     };
 
-    // Wallet info
-    let wallet = if let Ok(Some(snapshot)) = get_current_wallet_status().await {
-        // Calculate 24h change (would need historical data - placeholder for now)
-        let change_24h_sol = 0.0; // TODO: Implement 24h delta calculation
-        let change_24h_percent = 0.0;
-
-        // Calculate total token worth (simplified)
-        let tokens_worth_sol = snapshot.token_balances.len() as f64 * 0.1; // Placeholder
+    let wallet = if let Ok(Some(snapshot)) = wallet_snapshot {
+        let change_today_sol = start_balance_sol.map(|start| snapshot.sol_balance - start);
+        let change_today_percent = start_balance_sol
+            .filter(|start| *start > f64::EPSILON)
+            .map(|start| (snapshot.sol_balance - start) / start * 100.0);
+        let tokens_worth_sol = snapshot
+            .token_balances
+            .iter()
+            .filter_map(|balance| {
+                crate::pools::get_pool_price(&balance.mint)
+                    .map(|price| balance.balance_ui * price.price_sol)
+            })
+            .sum();
 
         WalletHeaderInfo {
             sol_balance: snapshot.sol_balance,
-            change_24h_sol,
-            change_24h_percent,
-            token_count: snapshot.token_balances.len(),
+            change_today_sol,
+            change_today_percent,
+            token_count: snapshot.total_tokens_count as usize,
             tokens_worth_sol,
             last_updated: snapshot.snapshot_time.to_rfc3339(),
         }
     } else {
         WalletHeaderInfo {
             sol_balance: 0.0,
-            change_24h_sol: 0.0,
-            change_24h_percent: 0.0,
+            change_today_sol: None,
+            change_today_percent: None,
             token_count: 0,
             tokens_worth_sol: 0.0,
             last_updated: now.to_rfc3339(),
         }
     };
-
-    // Positions info
-    let positions_info = calculate_positions_info().await;
 
     // RPC info
     let rpc = if let Some(stats) = get_global_rpc_stats() {
@@ -104,27 +137,20 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         }
     };
 
-    // Filtering info
-    let filtering = {
-        let store = global_store();
-        match store.get_stats().await {
-            Ok(stats) => FilteringHeaderInfo {
-                monitoring_count: stats.total_tokens,
-                passed_count: stats.passed_filtering,
-                rejected_count: stats.total_tokens.saturating_sub(stats.passed_filtering),
-                last_refresh: stats.updated_at.to_rfc3339(),
-            },
-            Err(_) => FilteringHeaderInfo {
-                monitoring_count: 0,
-                passed_count: 0,
-                rejected_count: 0,
-                last_refresh: now.to_rfc3339(),
-            },
-        }
+    let filtering = match filtering_stats {
+        Ok(stats) => FilteringHeaderInfo {
+            monitoring_count: stats.total_tokens,
+            passed_count: stats.passed_filtering,
+            rejected_count: stats.total_tokens.saturating_sub(stats.passed_filtering),
+            last_refresh: stats.updated_at.to_rfc3339(),
+        },
+        Err(_) => FilteringHeaderInfo {
+            monitoring_count: 0,
+            passed_count: 0,
+            rejected_count: 0,
+            last_refresh: now.to_rfc3339(),
+        },
     };
-
-    // System info
-    let system = calculate_system_health().await;
 
     // SOL/USD price for the header price card.
     let sol = SolHeaderInfo {
@@ -135,51 +161,12 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     Json(HeaderMetricsResponse {
         trader,
         wallet,
-        positions: positions_info,
         rpc,
         filtering,
         system,
         sol,
         timestamp: now.to_rfc3339(),
     })
-}
-
-async fn calculate_today_pnl() -> (f64, f64) {
-    // Get all closed positions from today
-    let today_start = chrono::Utc::now()
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .unwrap_or_else(|| chrono::NaiveDateTime::default());
-    let today_start_ts = today_start.and_utc().timestamp();
-
-    // Get all closed positions from state and filter for today
-    let all_positions = get_open_positions().await;
-
-    // For now, return 0 until we implement proper P&L tracking
-    // TODO: Implement today's P&L calculation from closed positions
-    (0.0, 0.0)
-}
-
-async fn calculate_positions_info() -> PositionsHeaderInfo {
-    let open_positions = get_open_positions().await;
-    let open_count = open_positions.len() as i64;
-
-    let total_invested_sol: f64 = open_positions.iter().map(|p| p.total_size_sol).sum();
-
-    let unrealized_pnl_sol: f64 = open_positions.iter().filter_map(|p| p.unrealized_pnl).sum();
-
-    let unrealized_pnl_percent = if total_invested_sol > 0.0 {
-        (unrealized_pnl_sol / total_invested_sol) * 100.0
-    } else {
-        0.0
-    };
-
-    PositionsHeaderInfo {
-        open_count,
-        unrealized_pnl_sol,
-        unrealized_pnl_percent,
-        total_invested_sol,
-    }
 }
 
 async fn calculate_system_health() -> SystemHeaderInfo {

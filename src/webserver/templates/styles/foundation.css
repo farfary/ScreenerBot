@@ -106,6 +106,12 @@
   --error-color-light: #fee2e2;
   --error-color-dark: #dc2626;
 
+  /* High-contrast semantic foregrounds for small status text on light surfaces. */
+  --semantic-success-text: #047857;
+  --semantic-warning-text: #92400e;
+  --semantic-error-text: #b91c1c;
+  --semantic-info-text: #1d4ed8;
+
   /* Semantic Aliases */
   --surface-color: var(--bg-card);
   --background-color: var(--bg-primary);
@@ -286,6 +292,12 @@
   --error-color: #f85149;
   --error-color-light: #da363315;
   --error-color-dark: #da3633;
+
+  /* Bright status foregrounds remain readable on dark surfaces. */
+  --semantic-success-text: #3fb950;
+  --semantic-warning-text: #e3b341;
+  --semantic-error-text: #f85149;
+  --semantic-info-text: #58a6ff;
 
   /* Semantic Aliases */
   --surface-color: var(--bg-card);

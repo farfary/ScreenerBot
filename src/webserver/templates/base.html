@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
@@ -199,65 +199,86 @@
       <!-- Row 1: Main Control Bar -->
       <div class="header-row header-row-1">
         <!-- Logo & Brand -->
-        <div class="header-brand" id="headerBrand">
-          <span class="brand-logo" role="img" aria-label="ScreenerBot"></span>
+        <button
+          type="button"
+          class="header-brand"
+          id="headerBrand"
+          aria-label="Open dashboard home"
+          title="Dashboard home"
+        >
+          <span class="brand-logo" aria-hidden="true"></span>
           <span class="brand-text">ScreenerBot</span>
-        </div>
+        </button>
 
         <!-- Trader status: primary control, always visible next to brand.
              Flat treatment (no pill/border) — state shown via icon + label color only. -->
-        <div class="header-card bot-card" id="botCard" data-status="loading">
-          <div class="card-content">
-            <div class="card-top">
-              <i class="card-icon icon-bot" id="botIcon"></i>
+        <button
+          type="button"
+          class="header-card bot-card"
+          id="botCard"
+          data-status="loading"
+          aria-label="Auto Trader status loading"
+          aria-pressed="false"
+          aria-busy="true"
+          disabled
+        >
+          <span class="card-content">
+            <span class="card-top">
+              <i class="card-icon icon-bot" id="botIcon" aria-hidden="true"></i>
+              <span class="card-label">Auto</span>
               <span class="card-status" id="botStatus">LOADING</span>
-            </div>
-            <span class="status-sep" aria-hidden="true" style="visibility:hidden">·</span>
-            <div class="card-bottom">
+            </span>
+            <span class="card-bottom">
+              <span class="card-sub">Today</span>
               <span class="card-value" id="botPnL">—</span>
-            </div>
-          </div>
-        </div>
+            </span>
+          </span>
+        </button>
 
         <!-- Status / metric cards (secondary; scrollable when space is tight) -->
         <div class="header-cards" id="headerCards">
           <!-- Wallet Card -->
-          <div class="header-card" id="walletCard">
-            <div class="card-content">
-              <div class="card-top">
+          <button
+            type="button"
+            class="header-card"
+            id="walletCard"
+            aria-label="Wallet summary; open Positions"
+            title="Wallet summary · open Positions"
+          >
+            <span class="card-content">
+              <span class="card-top">
                 <span class="card-label">SOL</span>
                 <span class="card-value" id="walletSol">—</span>
                 <span class="card-change" id="walletChange">—</span>
-              </div>
-              <div class="card-bottom">
+              </span>
+              <span class="card-bottom">
                 <span class="card-sub">TKN</span>
                 <span class="card-sub-value" id="walletTokenCount">—</span>
                 <span class="card-sub">Worth</span>
                 <span class="card-sub-value" id="walletTokenWorth">—</span>
-              </div>
-            </div>
-          </div>
+              </span>
+            </span>
+          </button>
 
           <!-- SOL Price Card (click → SOL/USD chart in token-details dialog) -->
-          <div
+          <button
+            type="button"
             class="header-card sol-price-card"
             id="solPriceCard"
-            role="button"
-            tabindex="0"
             aria-label="SOL price in USD — open chart"
             title="SOL price · click for chart"
           >
-            <div class="card-content">
-              <div class="card-top">
+            <span class="card-content">
+              <span class="card-top">
                 <span class="card-label">SOL/USD</span>
                 <span class="card-value" id="solPriceValue">—</span>
-              </div>
-              <div class="card-bottom">
+              </span>
+              <span class="card-bottom">
                 <span class="card-sub">24h</span>
                 <span class="card-change" id="solPriceChange">—</span>
-              </div>
-            </div>
-          </div>
+              </span>
+            </span>
+          </button>
         </div>
 
         <!-- Quick Actions -->
@@ -266,70 +287,87 @@
                would crowd the info cards. Hover/focus fans the items out to the left. -->
           <button
             type="button"
-            class="header-actions-toggle"
+            class="header-actions-toggle btn-icon"
             id="headerActionsToggle"
-            aria-label="Show actions"
-            title="Actions"
+            aria-label="More header actions"
+            title="More actions"
+            aria-controls="headerActionsItems"
             aria-expanded="false"
           >
-            <i class="action-icon icon-chevrons-left"></i>
+            <i class="action-icon icon-ellipsis" aria-hidden="true"></i>
           </button>
 
-          <div class="header-actions-items" id="headerActionsItems">
+          <div
+            class="header-actions-items"
+            id="headerActionsItems"
+            role="group"
+            aria-label="Header actions"
+          >
             <!-- Search -->
             <button
-              class="header-action-btn"
+              type="button"
+              class="header-action-btn btn-icon"
               id="searchBtn"
-              aria-label="Search tokens (Cmd+K)"
-              title="Search tokens (⌘K)"
+              aria-label="Search tokens"
+              title="Search tokens (Ctrl/Cmd+K)"
             >
-              <i class="action-icon icon-search"></i>
+              <i class="action-icon icon-search" aria-hidden="true"></i>
             </button>
 
             <!-- Billboard -->
             <button
-              class="header-action-btn"
+              type="button"
+              class="header-action-btn btn-icon"
               id="billboard-btn"
-              aria-label="Billboard - Featured Tokens"
-              title="Billboard - Featured Tokens"
+              aria-label="Featured tokens"
+              title="Featured tokens"
             >
-              <i class="action-icon icon-megaphone"></i>
+              <i class="action-icon icon-megaphone" aria-hidden="true"></i>
             </button>
 
             <!-- Notifications -->
             <button
               type="button"
-              class="header-action-btn"
+              class="header-action-btn btn-icon"
               id="notificationBtn"
-              aria-label="Notifications"
+              aria-label="Actions and notifications"
+              title="Actions and notifications"
             >
-              <i class="action-icon icon-bell"></i>
-              <span class="action-badge" id="notificationBadge" style="display: none">0</span>
+              <i class="action-icon icon-bell" aria-hidden="true"></i>
+              <span class="action-badge" id="notificationBadge" hidden>0</span>
             </button>
 
-            <!-- Power Menu -->
+            <!-- Restart -->
             <button
-              class="header-action-btn"
-              id="powerMenuBtn"
-              aria-label="Power Menu"
-              title="Power Menu"
+              type="button"
+              class="header-action-btn btn-icon"
+              id="restartBtn"
+              aria-label="Restart ScreenerBot"
+              title="Restart ScreenerBot"
             >
-              <i class="action-icon icon-power"></i>
+              <i class="action-icon icon-refresh-cw" aria-hidden="true"></i>
             </button>
 
             <!-- Theme Toggle -->
             <button
               type="button"
-              class="header-action-btn"
+              class="header-action-btn btn-icon"
               id="themeToggle"
               aria-label="Toggle theme"
+              title="Toggle theme"
             >
-              <i class="action-icon icon-moon" id="themeIcon"></i>
+              <i class="action-icon icon-moon" id="themeIcon" aria-hidden="true"></i>
             </button>
 
             <!-- Settings -->
-            <button type="button" class="header-action-btn" id="settingsBtn" aria-label="Settings">
-              <i class="action-icon icon-settings"></i>
+            <button
+              type="button"
+              class="header-action-btn btn-icon"
+              id="settingsBtn"
+              aria-label="Settings"
+              title="Settings"
+            >
+              <i class="action-icon icon-settings" aria-hidden="true"></i>
             </button>
           </div>
         </div>
@@ -346,7 +384,8 @@
       <div class="header-row header-row-3">
         <div class="ticker-container">
           <div class="ticker-scroll" id="tickerScroll">
-            <div
+            <button
+              type="button"
               class="ticker-segment"
               id="tickerMonitoring"
               title="Tokens being monitored by Pool Service"
@@ -355,8 +394,9 @@
               <span class="ticker-text"
                 >Monitoring: <strong id="tickerMonitoringCount">—</strong></span
               >
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               class="ticker-segment"
               id="tickerFiltering"
               title="Tokens that passed/failed filtering criteria"
@@ -366,11 +406,18 @@
                 >Passed: <strong id="tickerPassedCount">—</strong> · Rejected:
                 <strong id="tickerRejectedCount">—</strong></span
               >
-            </div>
-            <div class="ticker-segment" id="tickerPnL" title="Today's realized profit and loss">
+            </button>
+            <button
+              type="button"
+              class="ticker-segment"
+              id="tickerPnL"
+              title="Today's realized profit and loss"
+            >
               <i class="ticker-icon icon-trending-up"></i>
-              <span class="ticker-text">Today P&L: <strong id="tickerTodayPnL">—</strong></span>
-            </div>
+              <span class="ticker-text"
+                >Today P&amp;L: <strong class="ticker-value" id="tickerTodayPnL">—</strong></span
+              >
+            </button>
             <div
               class="ticker-segment"
               id="tickerRPC"
@@ -382,7 +429,8 @@
                 <strong id="tickerRPCSuccess">—</strong>%</span
               >
             </div>
-            <div
+            <button
+              type="button"
               class="ticker-segment"
               id="tickerServices"
               title="Background services health status"
@@ -391,7 +439,7 @@
               <span class="ticker-text" id="tickerServicesText"
                 ><span class="status-dot"></span>Services: <strong>Loading</strong></span
               >
-            </div>
+            </button>
           </div>
         </div>
       </div>

@@ -2,12 +2,11 @@
 import { loadPage } from "./router.js";
 import { Poller } from "./poller.js";
 import * as Utils from "./utils.js";
-import { Dropdown } from "../ui/dropdown.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { requestManager } from "./request_manager.js";
 import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
+import { createHeaderMetrics } from "./header_metrics.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
 import { playToggleOn, playToggleOff } from "./sounds.js";
@@ -16,30 +15,22 @@ import { playToggleOn, playToggleOff } from "./sounds.js";
 // Without this the event fires into the void on pages that don't load the dialog.
 import "../ui/token_details_dialog.js";
 
-const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
-
 const state = {
-  enabled: false,
-  running: false,
+  traderEnabled: false,
+  traderStatus: "loading",
   available: false,
   loading: false,
-  connected: false,
   bootstrapping: true,
-  uiReady: false,
-  coreReady: false,
   bootstrapStatus: null,
 };
 
-let metricsPoller = null;
-let powerDropdown = null;
-let traderDropdown = null;
 let bootstrapUnsubscribe = null;
+let headerMetrics = null;
 
 function getElements() {
   return {
     connectionStatus: document.getElementById("connectionStatus"),
     connectionIcon: document.getElementById("connectionIcon"),
-    notificationBadge: document.getElementById("notificationBadge"),
   };
 }
 
@@ -47,19 +38,18 @@ function applyStatus(newStatus) {
   if (!newStatus || typeof newStatus !== "object") {
     return;
   }
-  if (typeof newStatus.enabled === "boolean") {
-    state.enabled = newStatus.enabled;
-  }
-  if (typeof newStatus.running === "boolean") {
-    state.running = newStatus.running;
-  }
+  const enabled =
+    typeof newStatus.enabled === "boolean" ? newStatus.enabled : newStatus.running;
+  if (typeof enabled === "boolean") state.traderEnabled = enabled;
   state.available = true;
   updateConnectionStatus(true);
+  headerMetrics?.syncBotControlState();
 }
 
 function setAvailability(isAvailable) {
   state.available = isAvailable;
   updateConnectionStatus(isAvailable);
+  headerMetrics?.syncBotControlState();
 }
 
 function updateConnectionStatus(isConnected) {
@@ -67,8 +57,6 @@ function updateConnectionStatus(isConnected) {
   if (!elements.connectionStatus || !elements.connectionIcon) {
     return;
   }
-
-  state.connected = isConnected;
 
   elements.connectionStatus.classList.remove("connected", "disconnected", "connecting");
 
@@ -83,35 +71,9 @@ function updateConnectionStatus(isConnected) {
   }
 }
 
-/**
- * Create a ripple effect on click for interactive elements
- */
-function createRippleEffect(element, event) {
-  const ripple = document.createElement("span");
-  ripple.className = "card-ripple";
-
-  const rect = element.getBoundingClientRect();
-  const size = Math.max(rect.width, rect.height);
-  const x = event.clientX - rect.left - size / 2;
-  const y = event.clientY - rect.top - size / 2;
-
-  ripple.style.cssText = `
-    width: ${size}px;
-    height: ${size}px;
-    left: ${x}px;
-    top: ${y}px;
-  `;
-
-  element.appendChild(ripple);
-
-  // Remove ripple after animation
-  ripple.addEventListener("animationend", () => {
-    ripple.remove();
-  });
-}
-
 function setLoading(isLoading) {
   state.loading = Boolean(isLoading);
+  headerMetrics?.syncBotControlState();
 }
 
 // Open the wallet + RPC setup dialog so the user can complete setup from preview mode
@@ -144,10 +106,7 @@ function applyBootstrapStatus(status) {
   updatePreviewBanner(status);
   const initializationRequired = Boolean(status?.initialization_required);
   const uiReady = Boolean(status && (status.ui_ready || initializationRequired));
-  const coreReady = Boolean(status?.ready_for_requests);
 
-  state.uiReady = uiReady;
-  state.coreReady = coreReady;
   state.bootstrapping = !uiReady;
 
   if (state.bootstrapping) {
@@ -163,277 +122,10 @@ function applyBootstrapStatus(status) {
   state.loading = false;
   state.available = true;
   updateConnectionStatus(true);
+  headerMetrics?.syncBotControlState();
 }
 
-// ============================================================================
-// HEADER METRICS (New Advanced Header Design)
-// ============================================================================
-
-async function fetchHeaderMetrics() {
-  try {
-    const data = await requestManager.fetch("/api/header/metrics", {
-      method: "GET",
-      headers: { "X-Requested-With": "fetch" },
-      cache: "no-store",
-      priority: "high",
-      skipQueue: true,
-      skipDedup: true,
-    });
-
-    updateHeaderMetrics(data);
-    return data;
-  } catch (err) {
-    if (err?.name !== "AbortError" && err?.name !== "TimeoutError") {
-      console.error("[Header] Failed to fetch metrics:", err);
-    }
-    return null;
-  }
-}
-
-function updateHeaderMetrics(metrics) {
-  if (!metrics) return;
-
-  // Update Bot Card
-  updateBotCard(metrics.trader);
-
-  // Update Wallet Card
-  updateWalletCard(metrics.wallet);
-
-  // Update SOL Price Card
-  updateSolPriceCard(metrics.sol);
-
-  // Update Positions Card
-  updatePositionsCard(metrics.positions, metrics.rpc);
-
-  // Update Ticker
-  updateTicker(metrics);
-}
-
-function updateBotCard(trader) {
-  const card = document.getElementById("botCard");
-  const status = document.getElementById("botStatus");
-  const pnl = document.getElementById("botPnL");
-  const sep = card ? card.querySelector(".status-sep") : null;
-
-  if (!card || !status || !pnl) return;
-
-  // Default: hide separator until we have a real P&L value (keeps loading/preview clean)
-  if (sep) sep.style.visibility = "hidden";
-
-  // The bot card is the trader on/off control (see initCardHandlers). Header
-  // metrics are the authoritative live source, so mirror the running state here
-  // — otherwise the click handler can't tell start from stop.
-  if (trader && typeof trader.running === "boolean") {
-    state.running = trader.running;
-    state.available = true;
-  }
-
-  const previewMode = Boolean(state.bootstrapStatus?.preview_mode);
-
-  // Update status. In preview mode trading is intentionally off — show a neutral
-  // "PREVIEW" state instead of an alarming "STOPPED".
-  const statusText = previewMode ? "PREVIEW" : trader.running ? "RUNNING" : "STOPPED";
-  const statusAttr = previewMode ? "preview" : trader.running ? "running" : "stopped";
-
-  card.setAttribute("data-status", statusAttr);
-  status.textContent = statusText;
-
-  // Update P&L (no trading P&L in preview mode)
-  if (previewMode) {
-    pnl.innerHTML = "—";
-    if (sep) sep.style.visibility = "hidden";
-    pnl.classList.remove("positive", "negative");
-    return;
-  }
-
-  const sign = trader.today_pnl_sol >= 0 ? "+" : "";
-  const abs = Math.abs(trader.today_pnl_sol).toFixed(3);
-
-  // Structured for better visual weight: number prominent, unit slightly lighter
-  pnl.innerHTML = `<span class="pnl-num">${sign}${abs}</span><span class="pnl-unit"> SOL</span>`;
-  if (sep) sep.style.visibility = "";
-  pnl.classList.remove("positive", "negative");
-  pnl.classList.add(trader.today_pnl_sol >= 0 ? "positive" : "negative");
-}
-
-function updateWalletCard(wallet) {
-  const sol = document.getElementById("walletSol");
-  const change = document.getElementById("walletChange");
-  const tokenCount = document.getElementById("walletTokenCount");
-  const tokenWorth = document.getElementById("walletTokenWorth");
-
-  if (!sol) return;
-
-  // preview mode: no wallet configured — show neutral placeholders.
-  if (state.bootstrapStatus?.preview_mode) {
-    sol.textContent = "—";
-    if (change) {
-      change.textContent = "—";
-      change.classList.remove("positive", "negative");
-    }
-    if (tokenCount) tokenCount.textContent = "—";
-    if (tokenWorth) tokenWorth.textContent = "—";
-    return;
-  }
-
-  // Update SOL balance
-  sol.textContent = wallet.sol_balance.toFixed(3);
-
-  // Update 24h change
-  if (change) {
-    const changeText =
-      wallet.change_24h_percent >= 0
-        ? `↑${Math.abs(wallet.change_24h_percent).toFixed(1)}%`
-        : `↓${Math.abs(wallet.change_24h_percent).toFixed(1)}%`;
-
-    change.textContent = changeText;
-    // Use classList to avoid className replacement flash
-    change.classList.remove("positive", "negative");
-    change.classList.add(wallet.change_24h_percent >= 0 ? "positive" : "negative");
-  }
-
-  // Update token count
-  if (tokenCount) {
-    tokenCount.textContent = wallet.token_count.toString();
-  }
-
-  // Update token worth
-  if (tokenWorth) {
-    tokenWorth.textContent = `${wallet.tokens_worth_sol.toFixed(2)} SOL`;
-  }
-}
-
-function updateSolPriceCard(sol) {
-  const value = document.getElementById("solPriceValue");
-  const change = document.getElementById("solPriceChange");
-  if (!value || !change) return;
-
-  const price = sol && Number.isFinite(sol.price_usd) ? sol.price_usd : 0;
-  value.textContent =
-    price > 0
-      ? `$${price.toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`
-      : "—";
-
-  const pct = sol && Number.isFinite(sol.change_24h_percent) ? sol.change_24h_percent : null;
-  if (pct === null) {
-    change.textContent = "—";
-    change.classList.remove("positive", "negative");
-  } else {
-    change.textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
-    change.classList.toggle("positive", pct >= 0);
-    change.classList.toggle("negative", pct < 0);
-  }
-}
-
-function updatePositionsCard(positions, rpc) {
-  const count = document.getElementById("positionsCount");
-  const pnl = document.getElementById("positionsPnL");
-  const rpcSuccess = document.getElementById("rpcSuccess");
-  const rpcLatency = document.getElementById("rpcLatency");
-
-  if (!count) return;
-
-  // Update positions count
-  count.textContent = positions.open_count.toString();
-
-  // Update unrealized P&L
-  if (pnl) {
-    const pnlText =
-      positions.unrealized_pnl_sol >= 0
-        ? `+${positions.unrealized_pnl_sol.toFixed(3)}`
-        : `${positions.unrealized_pnl_sol.toFixed(3)}`;
-
-    pnl.textContent = pnlText;
-    pnl.className = `card-change ${positions.unrealized_pnl_sol >= 0 ? "positive" : "negative"}`;
-  }
-
-  // Update RPC stats
-  if (rpcSuccess) {
-    rpcSuccess.textContent = `${rpc.success_rate_percent.toFixed(0)}%`;
-  }
-
-  if (rpcLatency) {
-    rpcLatency.textContent = `${rpc.avg_latency_ms}ms`;
-  }
-}
-
-function updateTicker(metrics) {
-  // Update monitoring count
-  const monitoringCount = document.getElementById("tickerMonitoringCount");
-  if (monitoringCount) {
-    monitoringCount.textContent = metrics.filtering.monitoring_count.toString();
-  }
-
-  // Update passed/rejected counts
-  const passedCount = document.getElementById("tickerPassedCount");
-  const rejectedCount = document.getElementById("tickerRejectedCount");
-  if (passedCount) {
-    passedCount.textContent = metrics.filtering.passed_count.toString();
-  }
-  if (rejectedCount) {
-    rejectedCount.textContent = metrics.filtering.rejected_count.toString();
-  }
-
-  // Update today P&L
-  const todayPnL = document.getElementById("tickerTodayPnL");
-  if (todayPnL) {
-    const pnlText =
-      metrics.trader.today_pnl_sol >= 0
-        ? `+${metrics.trader.today_pnl_sol.toFixed(3)} SOL (↑${metrics.trader.today_pnl_percent.toFixed(1)}%)`
-        : `${metrics.trader.today_pnl_sol.toFixed(3)} SOL (↓${Math.abs(metrics.trader.today_pnl_percent).toFixed(1)}%)`;
-
-    todayPnL.textContent = pnlText;
-    todayPnL.style.color = metrics.trader.today_pnl_sol >= 0 ? "#10b981" : "#ef4444";
-  }
-
-  // Update RPC calls
-  const rpcCalls = document.getElementById("tickerRPCCalls");
-  const rpcSuccess = document.getElementById("tickerRPCSuccess");
-  if (rpcCalls) {
-    rpcCalls.textContent = metrics.rpc.calls_per_minute.toFixed(1);
-  }
-  if (rpcSuccess) {
-    rpcSuccess.textContent = metrics.rpc.success_rate_percent.toFixed(0);
-  }
-
-  // Update services status
-  const servicesText = document.getElementById("tickerServicesText");
-  if (servicesText) {
-    if (metrics.system.all_services_healthy) {
-      servicesText.innerHTML = '<span class="status-dot"></span>Services: <strong>Healthy</strong>';
-      servicesText.style.color = "";
-    } else {
-      const unhealthyCount = metrics.system.unhealthy_services.length;
-      const dotClass = metrics.system.critical_degraded ? "error" : "warning";
-      servicesText.innerHTML = `<span class="status-dot ${dotClass}"></span>Services: <strong>${unhealthyCount} Issues</strong>`;
-      servicesText.style.color = "";
-    }
-  }
-}
-
-function startMetricsPolling() {
-  if (metricsPoller) {
-    metricsPoller.cleanup();
-  }
-
-  metricsPoller = new Poller(() => fetchHeaderMetrics(), {
-    label: "HeaderMetrics",
-    interval: METRICS_POLL_INTERVAL,
-    pauseWhenHidden: true, // Pause when tab hidden
-  });
-
-  metricsPoller.start({ silent: true });
-
-  // Add visibility change handler
-  setupVisibilityHandler();
-}
-
-// ============================================================================
-// END HEADER METRICS
-// ============================================================================
+headerMetrics = createHeaderMetrics({ state, setAvailability });
 
 async function controlTrader(action) {
   if (state.loading) {
@@ -457,7 +149,8 @@ async function controlTrader(action) {
     const payload = await res.json().catch(() => null);
 
     if (!res.ok) {
-      const message = payload?.message || `Trader request failed (${res.status})`;
+      const message =
+        payload?.error?.message || payload?.message || `Trader request failed (${res.status})`;
       throw new Error(message);
     }
 
@@ -465,6 +158,11 @@ async function controlTrader(action) {
       applyStatus(payload.status);
     }
 
+    if (action === "start") {
+      playToggleOn();
+    } else {
+      playToggleOff();
+    }
     Utils.showToast(`Trader ${action === "start" ? "started" : "stopped"}`, "success");
   } catch (err) {
     console.error("[TraderHeader] Control action failed", err);
@@ -474,7 +172,7 @@ async function controlTrader(action) {
     setLoading(false);
     // Refresh the header immediately so the bot card reflects the new state
     // without waiting for the next metrics tick.
-    fetchHeaderMetrics();
+    headerMetrics.fetchHeaderMetrics().catch(() => {});
   }
 }
 
@@ -506,11 +204,8 @@ function initTraderControls() {
   // Initialize settings button
   initSettingsButton();
 
-  // Initialize power menu dropdown
-  initPowerMenu();
-
-  // Initialize trader dropdown (future)
-  initTraderDropdown();
+  // Initialize restart control
+  initRestartButton();
 
   // Initialize notifications
   initNotifications();
@@ -521,13 +216,14 @@ function initTraderControls() {
   // Initialize scroll navigation for main header tabs
   initHeaderTabsScroll();
 
-  // Setup visibility handling for pollers
-  setupVisibilityHandler();
-
   waitForReady()
-    .then(() => fetchHeaderMetrics())
-    .then(() => {
-      startMetricsPolling();
+    .then(async () => {
+      try {
+        await headerMetrics.fetchHeaderMetrics();
+      } catch {
+        // The poller remains active and will recover after a transient first fetch.
+      }
+      headerMetrics.startMetricsPolling();
     })
     .catch((error) => {
       console.error("[Header] Failed to initialize after bootstrap", error);
@@ -535,23 +231,42 @@ function initTraderControls() {
 }
 
 function initHeaderActionsToggle() {
-  // On mid screens the action buttons collapse behind a handle and reveal on hover
-  // (handled purely in CSS). Touch devices can't hover, so the handle also toggles
-  // an `.is-open` class on tap; an outside tap/click closes it.
   const actions = document.getElementById("headerActions");
   const toggle = document.getElementById("headerActionsToggle");
   if (!actions || !toggle) return;
+  const drawerMode = window.matchMedia(
+    "(min-width: 800px) and (max-width: 1279px), (max-width: 500px)",
+  );
 
-  const close = () => {
+  const open = () => {
+    if (!drawerMode.matches) return;
+    actions.classList.add("is-open");
+    toggle.setAttribute("aria-expanded", "true");
+  };
+
+  const close = ({ restoreFocus = false } = {}) => {
     actions.classList.remove("is-open");
     toggle.setAttribute("aria-expanded", "false");
+    if (restoreFocus && !toggle.hidden) toggle.focus();
   };
 
   toggle.addEventListener("click", (event) => {
     event.stopPropagation();
-    const open = actions.classList.toggle("is-open");
-    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    if (actions.classList.contains("is-open")) {
+      close();
+    } else {
+      open();
+    }
   });
+  actions.addEventListener("mouseenter", open);
+  actions.addEventListener("mouseleave", () => {
+    if (!actions.contains(document.activeElement)) close();
+  });
+  actions.addEventListener("focusin", open);
+  actions.addEventListener("focusout", (event) => {
+    if (!actions.contains(event.relatedTarget)) close();
+  });
+  drawerMode.addEventListener("change", () => close());
 
   // Close when tapping/clicking anywhere outside the actions cluster.
   document.addEventListener("click", (event) => {
@@ -563,49 +278,41 @@ function initHeaderActionsToggle() {
   // Close on Escape for keyboard users.
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && actions.classList.contains("is-open")) {
-      close();
+      event.preventDefault();
+      close({ restoreFocus: true });
     }
   });
 }
 
 function initCardHandlers() {
-  // Bot card - toggle trader with ripple effect and sound
+  const brand = document.getElementById("headerBrand");
+  brand?.addEventListener("click", () => loadPage("home"));
+
+  // Bot card is both a truthful status summary and the master Auto Trader control.
   const botCard = document.getElementById("botCard");
   if (botCard) {
-    botCard.addEventListener("click", (event) => {
+    botCard.addEventListener("click", () => {
       if (!state.available || state.loading) return;
 
-      // Create ripple effect
-      createRippleEffect(botCard, event);
-
-      // Add toggle animation class
-      botCard.classList.add("toggling");
-      setTimeout(() => botCard.classList.remove("toggling"), 600);
-
-      const action = state.running ? "stop" : "start";
-
-      // Play appropriate sound
-      if (action === "start") {
-        playToggleOn();
-      } else {
-        playToggleOff();
+      if (state.traderStatus === "preview") {
+        openSetupWizard();
+        return;
+      }
+      if (["force_stopped", "idle", "entry_paused"].includes(state.traderStatus)) {
+        loadPage("trader");
+        return;
       }
 
-      controlTrader(action);
+      controlTrader(state.traderEnabled ? "stop" : "start");
     });
-    botCard.style.cursor = "pointer";
-
-    // Add tooltip hint
-    botCard.setAttribute("title", "Click to toggle Auto Trader");
   }
 
-  // Wallet card - navigate to wallet page
+  // The owner-confirmed destination for the compact wallet summary is Positions.
   const walletCard = document.getElementById("walletCard");
   if (walletCard) {
     walletCard.addEventListener("click", () => {
       loadPage("positions");
     });
-    walletCard.style.cursor = "pointer";
   }
 
   // SOL price card - open the SOL/USD chart in the shared token-details dialog.
@@ -624,21 +331,6 @@ function initCardHandlers() {
       );
     };
     solPriceCard.addEventListener("click", openSolDetails);
-    solPriceCard.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openSolDetails();
-      }
-    });
-  }
-
-  // Positions card - navigate to positions page
-  const positionsCard = document.getElementById("positionsCard");
-  if (positionsCard) {
-    positionsCard.addEventListener("click", () => {
-      loadPage("positions");
-    });
-    positionsCard.style.cursor = "pointer";
   }
 
   // Ticker segments - navigate to relevant pages
@@ -680,57 +372,13 @@ function initSettingsButton() {
   });
 }
 
-function initPowerMenu() {
-  const powerBtn = document.getElementById("powerMenuBtn");
-  if (!powerBtn) return;
-
-  powerDropdown = new Dropdown({
-    trigger: powerBtn,
-    align: "right",
-    items: [
-      {
-        id: "restart",
-        icon: "<i class='icon-refresh-cw'></i>",
-        label: "Restart Bot",
-      },
-      {
-        id: "pause-services",
-        icon: "<i class='icon-pause'></i>",
-        label: "Pause Services",
-        badge: "Soon",
-        disabled: true,
-      },
-      { divider: true },
-      {
-        id: "shutdown",
-        icon: "<i class='icon-power'></i>",
-        label: "Shutdown",
-        danger: true,
-        disabled: true,
-        badge: "Soon",
-      },
-      { divider: true },
-      {
-        id: "system-info",
-        icon: "<i class='icon-info'></i>",
-        label: "System Info",
-        disabled: true,
-      },
-    ],
-    onSelect: handlePowerMenuAction,
-  });
-}
-
-function initTraderDropdown() {
-  // Placeholder for future trader dropdown menu
-  // Will add: Start, Stop, Restart, View Logs options
+function initRestartButton() {
+  document.getElementById("restartBtn")?.addEventListener("click", () => handleRestart());
 }
 
 // ============================================================================
 // HEADER TABS SCROLL NAVIGATION
 // ============================================================================
-
-let headerTabsScrollCleanup = null;
 
 function initHeaderTabsScroll() {
   const headerRow = document.querySelector(".header-row-2");
@@ -753,8 +401,12 @@ function initHeaderTabsScroll() {
     // Only handle if there's horizontal overflow
     if (headerRow.scrollWidth <= headerRow.clientWidth) return;
 
-    // Convert vertical scroll to horizontal
+    // Convert vertical scroll only while the row can move in that direction; at
+    // either boundary, let the page receive the wheel event normally.
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      const maxScrollLeft = headerRow.scrollWidth - headerRow.clientWidth;
+      const canMove = event.deltaY < 0 ? headerRow.scrollLeft > 0 : headerRow.scrollLeft < maxScrollLeft;
+      if (!canMove) return;
       event.preventDefault();
       headerRow.scrollLeft += event.deltaY;
       updateScrollIndicators();
@@ -777,18 +429,11 @@ function initHeaderTabsScroll() {
   // Initial update
   requestAnimationFrame(updateScrollIndicators);
 
-  // Cleanup function
-  headerTabsScrollCleanup = () => {
-    headerRow.removeEventListener("wheel", wheelHandler);
-    headerRow.removeEventListener("scroll", scrollHandler);
-    resizeObserver.disconnect();
-  };
 }
 
 // END HEADER TABS SCROLL NAVIGATION
 
 let notificationsInitialized = false;
-let notificationUnsubscribe = null;
 
 function initNotifications() {
   if (notificationsInitialized) {
@@ -801,7 +446,7 @@ function initNotifications() {
   if (!notifBtn) return;
 
   // Subscribe to notification updates
-  notificationUnsubscribe = notificationManager.subscribe((event) => {
+  notificationManager.subscribe((event) => {
     if (event.type === "summary" && event.summary) {
       updateNotificationBadge(event.summary.unread);
     }
@@ -856,27 +501,15 @@ function formatActionType(actionType) {
 
 function updateNotificationBadge(count) {
   const badge = document.getElementById("notificationBadge");
+  const button = document.getElementById("notificationBtn");
   if (!badge) return;
 
   badge.textContent = count > 99 ? "99+" : count.toString();
-  badge.style.display = count > 0 ? "flex" : "none";
-}
-
-async function handlePowerMenuAction(action) {
-  switch (action) {
-    case "restart":
-      await handleRestart();
-      break;
-    case "pause-services":
-      Utils.showToast("Pause Services feature coming soon", "info");
-      break;
-    case "shutdown":
-      Utils.showToast("Shutdown feature coming soon", "info");
-      break;
-    case "system-info":
-      Utils.showToast("System Info panel coming soon", "info");
-      break;
-  }
+  badge.hidden = count <= 0;
+  button?.setAttribute(
+    "aria-label",
+    count > 0 ? `Actions and notifications, ${count} unread` : "Actions and notifications",
+  );
 }
 
 async function handleRestart() {
@@ -927,7 +560,7 @@ async function handleRestart() {
             }
           }
         },
-        { label: "RestartReconnect", interval: 1000 }
+        { label: "RestartReconnect", getInterval: () => 1000 },
       );
       reconnectPoller.start();
     }, 2000);
@@ -935,29 +568,6 @@ async function handleRestart() {
     console.error("[Header] Restart failed:", err);
     Utils.showToast(err.message, "error");
   }
-}
-
-function setupVisibilityHandler() {
-  // Prevent duplicate listeners
-  if (window.__headerVisibilityHandlerAdded) {
-    return;
-  }
-
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      // Pause header poller when tab hidden
-      if (metricsPoller && metricsPoller.isActive()) {
-        metricsPoller.pause();
-      }
-    } else {
-      // Resume header poller when tab visible
-      if (metricsPoller && metricsPoller.isActive()) {
-        metricsPoller.resume();
-      }
-    }
-  });
-
-  window.__headerVisibilityHandlerAdded = true;
 }
 
 if (document.readyState === "loading") {

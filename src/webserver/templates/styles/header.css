@@ -1,81 +1,58 @@
-/* ============================================================================
-   ELECTRON TITLE BAR AREA - macOS/Windows/Linux Native Integration
-   ============================================================================ */
+/* Global dashboard header: shell, brand, metrics, and actions. */
 
-/* Native title-bar DRAG LAYER (macOS Electron only) - paints NOTHING.
-
-   titleBarStyle 'hiddenInset' makes the window internally frameless: AppKit sets
-   titlebarAppearsTransparent, so the native title bar draws no background and the
-   web content spans the full window frame. The topmost pixels are therefore OURS
-   alone - macOS applies no tint, material or darkening there.
-
-   Consequently the title-bar strip and the header must never be two separately
-   painted surfaces: two surfaces can drift apart and produce a visible seam. The
-   HEADER paints the whole area itself (padding-top below), and this element only
-   provides the -webkit-app-region drag zone under the traffic lights. It stays
-   fully transparent - do NOT give it a background. It must sit ABOVE the header
-   (which is explicitly no-drag) or the window would not be draggable there. */
+/* Electron title-bar drag layer. It must stay transparent: the header paints the
+   macOS title-bar and header as one surface so no theme seam can appear. */
 .electron-titlebar-bg {
-  display: none; /* Hidden by default (browser mode) */
+  display: none;
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 28px; /* Standard macOS title bar height */
+  inset: 0 0 auto;
+  height: 28px;
   z-index: var(--z-titlebar-drag);
   background: transparent;
   user-select: none;
-  -webkit-app-region: drag; /* Enable native drag for this region */
+  -webkit-app-region: drag;
   app-region: drag;
 }
 
-/* Show the drag layer on macOS in Electron */
 .electron-macos .electron-titlebar-bg {
   display: block;
 }
 
-/* ============================================================================
-   HEADER CONTAINER
-   ============================================================================ */
-
 .modern-header {
+  --header-inline-padding: 32px;
+
   position: sticky;
   top: 0;
   width: 100%;
   z-index: var(--z-header);
-  background: var(--header-solid-bg, #0d1117);
-  border-bottom: 1px solid var(--header-border, #30363d);
-  box-shadow: var(--header-shadow, 0 4px 20px rgb(0, 0, 0, 0.4));
-  font-family: var(--header-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   flex-shrink: 0;
+  background: var(--header-solid-bg, var(--bg-primary));
+  border-bottom: 1px solid var(--header-border, var(--border-color));
+  box-shadow: var(--header-shadow, 0 4px 20px var(--shadow-md));
+  font-family: var(--font-sans);
   transition:
-    background-color 0.3s ease,
-    box-shadow 0.3s ease;
-
-  /* Explicitly block dragging on header - only titlebar should be draggable */
+    background-color var(--transition-normal),
+    box-shadow var(--transition-normal);
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
 
-/* Electron macOS: the header extends UP under the traffic lights and paints the
-   title-bar strip itself (padding, NOT margin). One surface from the window's
-   first pixel down to the header border means there is no seam to mismatch -
-   in either theme, at any time. */
 .electron-macos .modern-header {
-  padding-top: 28px; /* Height of the native title bar area */
+  padding-top: 28px;
 }
 
-/* preview mode banner — shown when wallet + RPC setup was skipped */
+/* Preview setup banner */
 .preview-banner {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.5rem 1rem;
-  background: var(--warning-bg, #3a2a12);
-  border-bottom: 1px solid var(--warning-border, #5a4012);
-  color: var(--warning-text, #e3b341);
+  gap: 10px;
+  padding: 8px var(--header-inline-padding);
+  background: var(--warning-alpha-10);
+  border-bottom: 1px solid var(--warning-alpha-30);
+  color: var(--semantic-warning-text);
   font-size: 0.8125rem;
   font-weight: 600;
+  line-height: 1.35;
 }
 
 .preview-banner[hidden] {
@@ -94,101 +71,91 @@
 
 .preview-banner-btn {
   flex-shrink: 0;
-  padding: 0.3125rem 0.875rem;
-  border-radius: var(--radius-md, 6px);
-  border: 1px solid var(--warning-text, #e3b341);
+  padding: 5px 14px;
+  border: 1px solid var(--semantic-warning-text);
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--warning-text, #e3b341);
-  font-size: 0.8125rem;
+  color: var(--semantic-warning-text);
+  font: inherit;
   font-weight: 700;
   cursor: pointer;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+    background-color var(--transition-base),
+    color var(--transition-base);
 }
 
 .preview-banner-btn:hover {
-  background: var(--warning-text, #e3b341);
-  color: var(--header-solid-bg, #0d1117);
+  background: var(--semantic-warning-text);
+  color: var(--header-solid-bg, var(--bg-primary));
 }
 
+/* Main row */
 .header-row-1 {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 32px;
   height: 60px;
+  padding: 0 var(--header-inline-padding);
   background: transparent;
 }
 
-/* Electron Windows/Linux: Reserve space for window controls on the right */
 .electron-window-controls .header-row-1 {
   padding-right: 160px;
 }
 
-/* Electron macOS: Traffic lights are on left, right side follows standard spacing */
 .electron-macos .header-row-1 {
-  padding-right: 32px;
+  padding-right: var(--header-inline-padding);
 }
 
-/* Brand/Logo - unified container. Tight cluster with the trader status. */
+/* Preserve the current heavy theme-tinted logo and wordmark treatment. */
 .header-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
-  cursor: pointer;
   flex-shrink: 0;
-  transition: filter 0.2s ease;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
-/* The logo SVG is monochrome white; render it as a mask so it can be tinted to
-   the brand color per theme (dark navy in light mode, light cyan in dark mode)
-   to match the brand text — an <img> can't be recolored by CSS. */
 .brand-logo {
-  height: 31px;
   width: 31px;
+  height: 31px;
+  flex-shrink: 0;
   background-color: var(--brand-navy);
   mask: url("/assets/logo.svg") no-repeat center / contain;
-  transition: filter 0.2s ease, transform 0.2s ease;
-}
-
-.brand-icon {
-  font-size: 24px;
-  transition: filter 0.2s ease;
+  transition:
+    filter var(--transition-base),
+    transform var(--transition-base);
 }
 
 .brand-text {
+  color: var(--brand-navy);
   font-family: var(--font-brand);
   font-size: clamp(17px, 1.5vw, 22px);
   font-weight: 900;
-  color: var(--brand-navy);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-stroke: 0.6px var(--brand-navy);
   paint-order: stroke fill;
-  transition: color 0.2s ease, -webkit-text-stroke 0.2s ease;
+  transition:
+    color var(--transition-base),
+    -webkit-text-stroke var(--transition-base);
 }
 
-/* Heavier hover to emphasize weight */
 .header-brand:hover .brand-logo {
   filter: brightness(1.15) saturate(1.1);
   transform: scale(1.03);
 }
 
-.header-brand:hover .brand-text {
-  color: var(--brand-cyan-light);
-}
-
-/* Dark mode brand styling */
 [data-theme="dark"] .brand-logo {
   background-color: var(--brand-cyan-light);
-}
-
-[data-theme="dark"] .brand-icon {
-  filter: drop-shadow(0 0 6px rgb(6, 182, 212, 0.6)) drop-shadow(0 2px 4px rgb(0, 0, 0, 0.5));
 }
 
 [data-theme="dark"] .brand-text {
@@ -197,13 +164,8 @@
   text-shadow: 0 0 8px rgb(6, 182, 212, 0.4);
 }
 
-/* Light mode brand styling */
 [data-theme="light"] .brand-logo {
   background-color: var(--brand-navy);
-}
-
-[data-theme="light"] .brand-icon {
-  filter: drop-shadow(0 2px 6px rgb(13, 59, 102, 0.35)) drop-shadow(0 1px 2px rgb(0, 0, 0, 0.25));
 }
 
 [data-theme="light"] .brand-text {
@@ -222,1082 +184,315 @@
   text-shadow: 0 0 12px rgb(6, 182, 212, 0.6);
 }
 
-/* Status Groups - Clean flat design, no card styling */
-
-/* Secondary metric cards region (wallet, SOL price). Scrollable strip when tight.
-   Trader status (bot-card) lives outside this group so it never scrolls away from the brand. */
-.header-cards {
+/* Truthful two-line metric summaries */
+.modern-header .header-cards {
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-width: 0;
+  justify-content: flex-end;
   flex: 1 1 auto;
+  min-width: 0;
+  gap: 12px;
   overflow: auto hidden;
   scrollbar-width: none;
   scroll-snap-type: x proximity;
 }
 
-.header-cards::-webkit-scrollbar {
+.modern-header .header-cards::-webkit-scrollbar {
   display: none;
 }
 
-.header-card {
+.modern-header .header-card {
   position: relative;
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  scroll-snap-align: start;
-  padding: 6px 12px;
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
-  border: none;
-  border-radius: 0;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.15;
+  text-align: left;
   cursor: pointer;
-  transition: all var(--transition-base);
+  scroll-snap-align: start;
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast),
+    filter var(--transition-fast);
 }
 
-.header-card:hover {
-  background: transparent;
+.modern-header .header-card:hover:not(:disabled) {
+  background: var(--primary-alpha-5);
 }
 
-.card-content {
+.modern-header .header-card:active:not(:disabled) {
+  opacity: 0.75;
+}
+
+.modern-header .header-card:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.modern-header .card-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
-.card-top {
+.modern-header .card-top,
+.modern-header .card-bottom {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
-}
-
-.card-bottom {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-secondary, rgb(255, 255, 255, 0.7));
-}
-
-.card-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.card-status {
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.card-label {
-  font-size: 11px;
-  color: var(--text-secondary, rgb(255, 255, 255, 0.5));
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  font-weight: 600;
-}
-
-.card-value {
-  font-size: 18px;
-  font-weight: 600;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  color: var(--text-primary, #fff);
-  white-space: nowrap; /* keep numbers on one line; the strip scrolls if tight */
-}
-
-.card-value.positive {
-  font-size: 18px;
-  color: #3fb950;
-}
-
-.card-value.negative {
-  font-size: 18px;
-  color: #f85149;
-}
-
-.card-change {
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--font-data);
-  font-feature-settings: "tnum" 1;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-}
-
-.card-change.positive {
-  font-size: 13px;
-  color: #3fb950;
-  background: rgb(63, 185, 80, 0.15);
-}
-
-.card-change.negative {
-  font-size: 13px;
-  color: #f85149;
-  background: rgb(248, 81, 73, 0.15);
-}
-
-/* SOL price card — clickable (opens SOL/USD chart in token-details dialog).
-   Flat, no background fill whatsoever on hover.
-   All hover effects are strictly on the texts and labels only (no rectangle bg). */
-.sol-price-card {
-  border-radius: 0;
-  cursor: pointer;
-}
-
-.sol-price-card .card-label,
-.sol-price-card .card-sub,
-.sol-price-card .card-value,
-.sol-price-card .card-change {
-  transition: color 0.1s ease, filter 0.1s ease;
-}
-
-.sol-price-card:hover .card-label,
-.sol-price-card:hover .card-sub {
-  color: var(--text-primary);
-}
-
-.sol-price-card:hover .card-value {
-  filter: brightness(1.2);
-}
-
-/* Pure text color boost on the % change — no change to its pill background */
-.sol-price-card:hover .card-change.positive {
-  color: #4ade80;
-}
-
-.sol-price-card:hover .card-change.negative {
-  color: #f87171;
-}
-
-.sol-price-card .card-value {
-  letter-spacing: -0.01em;
-}
-
-/* Wallet card (balance + tokens) — same label hover style as SOL price.
-   Only labels get the effect on hover; no background rectangle fill at all.
-   Targets the balance section (SOL amount, TKN count, Worth). */
-.header-card[id="walletCard"] .card-label,
-.header-card[id="walletCard"] .card-sub,
-.header-card[id="walletCard"] .card-value,
-.header-card[id="walletCard"] .card-sub-value,
-.header-card[id="walletCard"] .card-change {
-  transition: color 0.1s ease, filter 0.1s ease;
-}
-
-.header-card[id="walletCard"]:hover .card-label,
-.header-card[id="walletCard"]:hover .card-sub {
-  color: var(--text-primary);
-}
-
-/* Slightly lift the actual balance values on hover for consistency (text only) */
-.header-card[id="walletCard"]:hover .card-value,
-.header-card[id="walletCard"]:hover .card-sub-value {
-  filter: brightness(1.15);
-}
-
-/* Also boost the 24h % change label for the SOL balance */
-.header-card[id="walletCard"]:hover .card-change {
-  filter: brightness(1.2);
-}
-
-.card-sub {
-  font-size: 10px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-}
-
-.card-sub-value {
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--metric-font);
-  color: var(--text-primary);
-}
-
-/* ============================================================================
-   TRADER STATUS (bot-card)
-   Flat, borderless, always-visible next to brand. 
-   Designed for visual consistency + symmetry at every breakpoint.
-   Two balanced parts: [icon + STATE] · [signed P&L value]
-   State conveyed purely by colour on icon + label. No background, no border, no pill.
-   ============================================================================ */
-
-.bot-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  padding: 3px 6px;
-  margin-left: 2px;
-  margin-right: 2px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  cursor: pointer;
-  transition: opacity 0.15s ease, filter 0.15s ease;
-  min-height: 38px; /* hit area without adding visual mass */
-}
-
-.bot-card:hover {
-  opacity: 0.9;
-  filter: brightness(1.1);
-}
-
-.bot-card:active {
-  opacity: 0.7;
-}
-
-/* Main row: status group  ·  metric group */
-.bot-card .card-content {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: clamp(6px, 0.7vw, 12px);
-}
-
-/* Left part: icon + uppercase state label (balanced internally) */
-.bot-card .card-top {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.bot-card .card-icon {
-  font-size: 14px;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.bot-card .card-status {
-  font-size: clamp(11px, 0.85vw + 1px, 12.5px);
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  gap: 7px;
+  min-height: 16px;
+  line-height: 1.15;
   white-space: nowrap;
+}
+
+.modern-header .card-icon {
+  flex-shrink: 0;
+  font-size: 14px;
   line-height: 1;
 }
 
-/* Subtle separator for clear visual division and symmetry */
-.bot-card .status-sep {
-  font-size: clamp(10px, 0.7vw + 2px, 12px);
-  color: var(--text-secondary, #8b949e);
-  opacity: 0.55;
+.modern-header .card-status {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.065em;
   line-height: 1;
-  user-select: none;
-  padding: 0 1px;
+  text-transform: uppercase;
 }
 
-/* Right part: the P&L value (number + unit) */
-.bot-card .card-bottom {
-  display: flex;
-  align-items: center;
+.modern-header .card-label,
+.modern-header .card-sub {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
-.bot-card .card-value {
-  font-size: clamp(11px, 0.85vw + 1px, 12.5px);
-  font-weight: 600;
+.modern-header .card-value,
+.modern-header .card-sub-value,
+.modern-header .card-change {
+  color: var(--text-primary);
   font-family: var(--font-data);
   font-feature-settings: "tnum" 1, "zero" 1;
   white-space: nowrap;
-  line-height: 1;
 }
 
-/* Split value for better optical balance and symmetry */
-.bot-card .pnl-num {
-  font-weight: 600;
+.modern-header .card-value {
+  font-size: 16px;
+  font-weight: 650;
 }
 
-.bot-card .pnl-unit {
+.modern-header .card-sub-value,
+.modern-header .card-change {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.modern-header .card-change {
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+}
+
+.modern-header .positive,
+.modern-header .ticker-value.positive {
+  color: var(--semantic-success-text);
+}
+
+.modern-header .negative,
+.modern-header .ticker-value.negative {
+  color: var(--semantic-error-text);
+}
+
+.modern-header .neutral,
+.modern-header .ticker-value.neutral {
+  color: var(--text-secondary);
+}
+
+.modern-header .card-change.positive {
+  background: var(--success-alpha-10);
+}
+
+.modern-header .card-change.negative {
+  background: var(--danger-alpha-10);
+}
+
+.modern-header .card-change.neutral {
+  background: var(--bg-card-hover);
+}
+
+.modern-header .sol-price-card .card-value {
+  letter-spacing: -0.01em;
+}
+
+/* Auto Trader is vertical on desktop: state above, Today P&L below. */
+.modern-header .bot-card {
+  min-width: 138px;
+  margin-inline: 2px;
+}
+
+.modern-header .bot-card .card-top,
+.modern-header .bot-card .card-bottom {
+  gap: 5px;
+}
+
+.modern-header .bot-card .card-value {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.modern-header .bot-card .pnl-unit {
+  margin-left: 2px;
   font-size: 0.9em;
   font-weight: 500;
-  opacity: 0.85;
-  letter-spacing: 0.02em;
+  opacity: 0.82;
 }
 
-.bot-card .card-value.positive,
-.bot-card .card-value.negative {
-  /* keep the compact trader-status size even when the positive/negative colour classes are present */
-  font-size: clamp(11px, 0.85vw + 1px, 12.5px);
+.modern-header .bot-card[data-status="running"] .card-icon,
+.modern-header .bot-card[data-status="running"] .card-status {
+  color: var(--semantic-success-text);
 }
 
-/* ---- State colours (icon + label only) ---- */
-.bot-card[data-status="running"] .card-icon,
-.bot-card[data-status="running"] .card-status {
-  color: #10b981;
+.modern-header .bot-card[data-status="running"] .card-icon {
+  animation: header-status-pulse 2.4s ease-in-out infinite;
 }
 
-.bot-card[data-status="running"] .card-icon {
-  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.modern-header .bot-card[data-status="force_stopped"] .card-icon,
+.modern-header .bot-card[data-status="force_stopped"] .card-status {
+  color: var(--semantic-error-text);
 }
 
-.bot-card[data-status="stopped"] .card-icon,
-.bot-card[data-status="stopped"] .card-status {
-  color: #ef4444;
+.modern-header .bot-card[data-status="waiting"] .card-icon,
+.modern-header .bot-card[data-status="waiting"] .card-status,
+.modern-header .bot-card[data-status="idle"] .card-icon,
+.modern-header .bot-card[data-status="idle"] .card-status,
+.modern-header .bot-card[data-status="entry_paused"] .card-icon,
+.modern-header .bot-card[data-status="entry_paused"] .card-status,
+.modern-header .bot-card[data-status="loading"] .card-icon,
+.modern-header .bot-card[data-status="loading"] .card-status {
+  color: var(--semantic-warning-text);
 }
 
-.bot-card[data-status="loading"] .card-icon,
-.bot-card[data-status="loading"] .card-status {
-  color: #fbbf24;
+.modern-header .bot-card[data-status="preview"] .card-icon,
+.modern-header .bot-card[data-status="preview"] .card-status {
+  color: var(--semantic-info-text);
 }
 
-.bot-card[data-status="preview"] .card-icon,
-.bot-card[data-status="preview"] .card-status {
-  color: #58a6ff;
+.modern-header .bot-card[data-status="stopped"] .card-icon,
+.modern-header .bot-card[data-status="stopped"] .card-status {
+  color: var(--text-secondary);
 }
 
-/* Pulse only on the running icon */
-
-@keyframes status-pulse {
+@keyframes header-status-pulse {
   0%,
   100% {
     opacity: 1;
-    filter: drop-shadow(0 0 0 currentcolor);
   }
 
   50% {
-    opacity: 0.7;
-    filter: drop-shadow(0 0 5px currentcolor);
+    opacity: 0.58;
   }
 }
 
-/* Subtle interaction feedback (no container bg change) */
-
-.bot-card.toggling {
-  animation: card-toggle 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes card-toggle {
-  0% {
-    opacity: 1;
-  }
-
-  20% {
-    opacity: 0.55;
-  }
-
-  40% {
-    opacity: 1;
-  }
-
-  65% {
-    opacity: 0.8;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
-/* Ripple uses the same flat relative container */
-
-.card-ripple {
-  position: absolute;
-  border-radius: var(--radius-full);
-  background: rgb(255, 255, 255, 0.18);
-  transform: scale(0);
-  animation: ripple-effect 0.5s cubic-bezier(0, 0, 0.2, 1);
-  pointer-events: none;
-}
-
-@keyframes ripple-effect {
-  0% {
-    transform: scale(0);
-    opacity: 1;
-  }
-
-  100% {
-    transform: scale(2.1);
-    opacity: 0;
-  }
-}
-
-/* Quick Actions */
-.header-actions {
+/* Compact icon actions leave room for the right-side financial summaries. */
+.modern-header .header-actions {
   display: flex;
   align-items: center;
-  flex-shrink: 0; /* actions stay fully visible; never squeezed or clipped */
-  margin-left: auto;
-  padding-left: 32px; /* spacing from the cards (divider removed for a cleaner header) */
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding-left: 8px;
 }
 
-/* The action buttons live in their own flex group so they can be collapsed into a
-   floating panel on mid screens (see the folding-drawer block in RESPONSIVE). */
-.header-actions-items {
+.modern-header .header-actions-items {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
 }
 
-/* Collapsed handle — only shown on mid screens where the full row would crowd the
-   info cards. Hidden (and unused) at desktop and mobile widths. */
-.header-actions-toggle {
+.modern-header .header-actions-toggle {
   display: none;
 }
 
-.header-action-dropdown {
+.modern-header .header-action-btn,
+.modern-header .header-actions-toggle {
   position: relative;
-}
-
-.header-action-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  height: 36px;
-  background: transparent;
-  border: 1px solid rgb(255, 255, 255, 0.15);
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  font-size: 14px;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
-.header-action-btn:hover {
-  background: rgb(59, 130, 246, 0.15);
-  border-color: rgb(59, 130, 246, 0.4);
-  transform: translateY(-1px);
+.modern-header .header-action-btn:hover,
+.modern-header .header-actions-toggle:hover {
+  border-color: var(--primary-alpha-40);
+  background: var(--primary-alpha-10);
+  color: var(--text-primary);
 }
 
-.action-icon {
+.modern-header .action-icon {
   font-size: 16px;
+  line-height: 1;
 }
 
-.action-text {
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--metric-font);
-}
-
-.action-badge {
+.modern-header .action-badge {
   position: absolute;
   top: -6px;
   right: -6px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ef4444;
-  color: #fff;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--error-color);
+  box-shadow: 0 2px 6px var(--shadow-md);
+  color: var(--header-text);
   font-size: 10px;
   font-weight: 700;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.4);
-}
-
-/* ============================================================================
-   ROW 2: NAVIGATION TABS (44px)
-   ============================================================================ */
-
-/* Wrapper for scroll indicators - indicators positioned here stay fixed at edges */
-.header-row-2-wrapper {
-  position: relative;
-  overflow: hidden;
-}
-
-/* Scroll overflow fade indicators - on wrapper so they don't scroll with content */
-.header-row-2-wrapper::before,
-.header-row-2-wrapper::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 40px;
-  pointer-events: none;
-  z-index: 5;
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-.header-row-2-wrapper::before {
-  left: 0;
-  background: linear-gradient(to right, var(--bg-secondary), transparent);
-}
-
-.header-row-2-wrapper::after {
-  right: 0;
-  background: linear-gradient(to left, var(--bg-secondary), transparent);
-}
-
-.header-row-2-wrapper.can-scroll-left::before {
-  opacity: 1;
-}
-
-.header-row-2-wrapper.can-scroll-right::after {
-  opacity: 1;
-}
-
-.header-row-2 {
-  height: 36px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  overflow: auto hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Hidden scrollbar - uses global scrollbar-hidden pattern */
-
-.nav-tabs {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  padding: 0 32px; /* Aligned with header-row-1 */
-  gap: 8px;
-}
-
-.nav-tabs a {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
-  text-decoration: none;
-  border-bottom: 3px solid transparent;
-  transition: all var(--transition-base);
-  white-space: nowrap;
-}
-
-.nav-tabs a:hover {
-  color: var(--text-primary);
-  background: rgb(59, 130, 246, 0.1);
-}
-
-.nav-tabs a.active {
-  color: #60a5fa;
-  border-bottom-color: #60a5fa;
-  background: rgb(59, 130, 246, 0.12);
-  box-shadow: 0 0 12px rgb(59, 130, 246, 0.3);
-}
-
-/* ============================================================================
-   ROW 3: LIVE METRICS TICKER (24px)
-   ============================================================================ */
-
-.header-row-3 {
-  height: 24px;
-  background: var(--ticker-bg, rgb(15, 23, 42, 0.7));
-  border-top: 1px solid var(--ticker-border, rgb(255, 255, 255, 0.06));
-  overflow: hidden;
-  box-shadow: inset 0 1px 0 var(--ticker-shadow, rgb(255, 255, 255, 0.02));
-}
-
-.ticker-container {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.ticker-scroll {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  padding: 0 32px; /* Aligned with header-row-1 */
-  gap: 0;
-  white-space: nowrap;
-}
-
-.ticker-scroll.scrolling {
-  animation: ticker-scroll 60s linear infinite;
-}
-
-@keyframes ticker-scroll {
-  0% {
-    transform: translateX(0);
-  }
-
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-.ticker-segment {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 16px;
-  height: 100%;
-  font-size: 0.6875rem;
-  font-family: var(--font-data);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  letter-spacing: 0.01em;
-  border-right: 1px solid var(--ticker-border, rgb(255, 255, 255, 0.06));
-  position: relative;
-}
-
-.ticker-segment:last-child {
-  border-right: none;
-}
-
-.ticker-segment:hover {
-  color: var(--text-primary);
-  background: var(--ticker-hover-bg, rgb(255, 255, 255, 0.04));
-}
-
-.ticker-icon {
-  font-size: 0.6875rem;
   line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  opacity: 0.6;
-  transition: opacity var(--transition-fast);
+  animation: none;
 }
 
-.ticker-segment:hover .ticker-icon {
-  opacity: 1;
+.modern-header .action-badge[hidden] {
+  display: none;
 }
 
-.ticker-text {
-  font-family: var(--font-data);
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  line-height: 1;
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.ticker-text strong {
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 0.75rem;
-}
-
-.ticker-text i {
-  font-size: 0.625rem;
-  line-height: 1;
-  margin-left: 3px;
-  vertical-align: middle;
-}
-
-/* Status indicator styling for services */
-.ticker-segment .status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--success-color, #3fb950);
-  margin-right: 2px;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-.ticker-segment .status-dot.warning {
-  background: var(--warning-color, #fbbf24);
-}
-
-.ticker-segment .status-dot.error {
-  background: var(--error-color, #f85149);
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.5;
-  }
-}
-
-/* ============================================================================
-   RESPONSIVE BREAKPOINTS
-   ============================================================================ */
-
-/* The ladder degrades progressively and the ranges never overlap, so exactly one
-   tier applies at any width: XL desktop -> desktop -> small desktop ->
-   tablet -> mobile -> small phone. The brand wordmark, the secondary metric line,
-   and the action spacing are traded away in that order as space gets tight, and
-   the cards become a horizontal scroll strip on phones so nothing ever clips. */
-
-/* XL desktop (>= 1600px) */
-@media (width >= 1600px) {
-  .header-row-1 {
-    gap: 16px;
-    padding: 0 40px;
-  }
-
-  .header-cards {
-    gap: 22px;
-  }
-
-  .header-card {
-    padding: 6px 14px;
-  }
-
-  .header-actions {
-    padding-left: 28px;
-  }
-}
-
-/* Compact desktop (1280px - 1599px) */
-@media (width >= 1280px) and (width <= 1599px) {
-  .header-row-1 {
-    gap: 9px;
-  }
-
-  .header-cards {
-    gap: 14px;
-  }
-}
-
-/* Small desktop / large tablet (1024px - 1279px) */
-@media (width >= 1024px) and (width <= 1279px) {
-  .header-row-1 {
-    gap: 10px;
-    padding: 0 20px;
-  }
-
-  .header-cards {
-    gap: 10px;
-  }
-
-  .header-card {
-    padding: 4px 10px;
-  }
-
-  .brand-text {
-    font-size: 19px;
-  }
-
-  .bot-card {
-    padding: 2px 6px;
-    margin-left: 2px;
-  }
-
-  .header-actions {
-    gap: 8px;
-    padding-left: 14px;
-  }
-}
-
-/* Tablet (768px - 1023px): compact. Brand text hidden, trader status stays flat and
-   prominent next to logo. Secondary cards scroll if needed. */
-@media (width >= 768px) and (width <= 1023px) {
-  .header-row-1 {
-    gap: 8px;
-    padding: 0 16px;
-    height: 56px;
-  }
-
-  .header-cards {
-    gap: 6px;
-  }
-
-  .header-card {
-    padding: 4px 8px;
-  }
-
-  .brand-text {
-    display: none; /* logo + trader status only */
-  }
-
-  .bot-card {
-    margin-left: 2px;
-    padding: 1px 6px;
-    min-height: 34px;
-  }
-
-  .card-value,
-  .card-value.positive,
-  .card-value.negative {
-    font-size: 14px;
-  }
-
-  .header-action-btn {
-    height: 32px;
-    padding: 6px 8px;
-  }
-
-  .header-actions {
-    gap: 6px;
-    padding-left: 10px;
-  }
-}
-
-/* ----------------------------------------------------------------------------
-   FOLDING ACTION DRAWER — mid screens only (tablet → small desktop, 768-1279px)
-   The action buttons are the widest fixed block on the row, so on the screens
-   where they would otherwise crowd (and overlap) the info cards, they collapse to
-   a single handle. Only the handle stays in flow, which frees the whole row for
-   the cards. On hover / keyboard focus the buttons reveal as a floating panel to
-   the LEFT of the handle — properly spaced, never overlapping, on a solid header
-   backdrop so it sits cleanly above the cards. At >= 1280px the full row shows;
-   <= 767px keeps the dedicated mobile icon row below.
-   ---------------------------------------------------------------------------- */
-@media (width >= 768px) and (width <= 1279px) {
-  .header-actions {
-    position: relative;
-    padding-left: 0;
-    border-left: none;
-  }
-
-  /* The collapsed handle is the only thing in flow → cards get the whole row. */
-  .header-actions-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 36px;
-    padding: 0;
-    background: transparent;
-    border: 1px solid rgb(255, 255, 255, 0.15);
-    border-radius: var(--radius-lg);
-    color: var(--text-primary);
-    cursor: pointer;
-    transition:
-      background-color 0.2s ease,
-      border-color 0.2s ease;
-  }
-
-  .header-actions-toggle .action-icon {
-    font-size: 18px;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .header-actions:hover .header-actions-toggle,
-  .header-actions:focus-within .header-actions-toggle,
-  .header-actions.is-open .header-actions-toggle {
-    background: rgb(59, 130, 246, 0.15);
-    border-color: rgb(59, 130, 246, 0.4);
-  }
-
-  /* chevrons flip to hint "collapse" once the drawer is open */
-  .header-actions:hover .header-actions-toggle .action-icon,
-  .header-actions:focus-within .header-actions-toggle .action-icon,
-  .header-actions.is-open .header-actions-toggle .action-icon {
-    transform: rotate(180deg);
-  }
-
-  /* Floating panel of buttons, anchored just left of the handle. */
-  .header-actions-items {
-    position: absolute;
-    top: 50%;
-    right: calc(100% + 8px);
-    z-index: 30;
-    gap: 10px;
-    padding: 6px 10px;
-    background: var(--header-solid-bg);
-    border: 1px solid var(--header-border, rgb(255, 255, 255, 0.12));
-    border-radius: var(--radius-xl);
-    box-shadow: 0 12px 32px rgb(0, 0, 0, 0.38);
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(-50%) translateX(12px) scale(0.98);
-    transform-origin: right center;
-    transition:
-      opacity 0.22s ease,
-      transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-      visibility 0s linear 0.28s;
-  }
-
-  /* Invisible bridge across the 8px gap so moving mouse handle->panel never
-     drops :hover (no flicker). */
-  .header-actions-items::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    right: -8px;
-    width: 8px;
-  }
-
-  .header-actions:hover .header-actions-items,
-  .header-actions:focus-within .header-actions-items,
-  .header-actions.is-open .header-actions-items {
-    opacity: 1;
-    visibility: visible;
-    pointer-events: auto;
-    transform: translateY(-50%) translateX(0) scale(1);
-    transition:
-      opacity 0.22s ease,
-      transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
-      visibility 0s;
-  }
-}
-
-/* Mobile (<= 767px): 2-row grid. Top: logo + flat trader status | actions.
-   Bottom: secondary cards scroll. Trader status never leaves the brand cluster. */
-@media (width <= 767px) {
-  .header-row-1 {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    grid-template-areas:
-      "brand actions"
-      "trader trader"
-      "cards cards";
-    align-items: center;
-    height: auto;
-    gap: 4px;
-    padding: 6px 10px;
-  }
-
-  .header-brand {
-    grid-area: brand;
-    justify-self: start;
-    padding: 2px 0;
-  }
-
-  .header-brand:hover {
-    transform: none;
-  }
-
-  .bot-card {
-    grid-area: trader;
-    margin: 0;
-    padding: 1px 4px;
-    min-height: 30px;
-  }
-
-  .header-actions {
-    grid-area: actions;
-    justify-self: end;
-    flex-wrap: nowrap;
-    margin-left: 0;
-    padding-left: 0;
-  }
-
-  .header-actions-toggle {
-    display: none;
-  }
-
-  .header-actions-items {
-    flex-wrap: nowrap;
-    gap: 4px;
-  }
-
-  .header-action-btn {
-    width: 30px;
-    min-width: 30px;
-    height: 30px;
-    padding: 0;
-    justify-content: center;
-  }
-
-  .header-cards {
-    grid-area: cards;
-    gap: 6px;
-    padding: 3px 2px 2px;
-    border-top: 1px solid rgb(255, 255, 255, 0.07);
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .header-card {
-    padding: 3px 8px;
-  }
-
-  .brand-text {
-    display: none;
-  }
-
-  .header-row-3 {
-    display: none;
-  }
-}
-
-/* Small phones (<= 420px) */
-@media (width <= 420px) {
-  .header-row-1 {
-    padding: 5px 8px;
-    gap: 2px;
-  }
-
-  .header-action-btn {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
-  }
-
-  .action-icon {
-    font-size: 14px;
-  }
-
-  .header-actions-items {
-    gap: 3px;
-  }
-
-  .header-cards {
-    gap: 4px;
-  }
-
-  .bot-card {
-    padding: 0 3px;
-  }
-}
-
-/* ============================================================================
-   THEME SUPPORT
-   ============================================================================ */
-
-[data-theme="light"] {
-  --header-bg: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
-  --header-solid-bg: #f1f5f9;
-  --header-border: #d1d5db;
-  --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.08);
-  --ticker-bg: linear-gradient(180deg, #e2e8f0 0%, #f1f5f9 100%);
-  --ticker-border: rgb(0, 0, 0, 0.08);
-  --ticker-shadow: rgb(255, 255, 255, 0.5);
-  --ticker-hover-bg: rgb(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] {
-  --header-bg: linear-gradient(135deg, #0a192f 0%, #1e3a5f 50%, #0e2a47 100%);
-  --header-solid-bg: #0d1117;
-  --header-border: #30363d;
-  --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
-  --ticker-bg: linear-gradient(180deg, rgb(15, 23, 42, 0.85) 0%, rgb(15, 23, 42, 0.7) 100%);
-  --ticker-border: rgb(255, 255, 255, 0.06);
-  --ticker-shadow: rgb(255, 255, 255, 0.02);
-  --ticker-hover-bg: rgb(255, 255, 255, 0.04);
-}
-
-/* ============================================================================
-   ACCESSIBILITY
-   ============================================================================ */
-
-/* Custom focus for header controls - fully owned by us.
-   Uses our input focus tokens + a visible ring for keyboard users. */
-.header-card:focus-visible,
-.header-action-btn:focus-visible {
-  outline: none !important;
+html[data-input="keyboard"] .modern-header button:focus-visible,
+html[data-input="keyboard"] .modern-header a:focus-visible {
   box-shadow:
-    0 0 0 2px var(--primary-alpha-10, rgba(88, 166, 255, 0.1)),
-    0 0 0 2px var(--primary-color, #3b82f6);
+    0 0 0 2px var(--header-solid-bg, var(--bg-primary)),
+    0 0 0 4px var(--primary-color);
 }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .header-card,
-  .header-action-btn,
-  .ticker-segment {
+  .modern-header,
+  .modern-header .brand-logo,
+  .modern-header .brand-text,
+  .modern-header .header-card,
+  .modern-header .header-action-btn,
+  .modern-header .header-actions-toggle {
     transition: none;
   }
 
-  .ticker-scroll.scrolling {
+  .modern-header .bot-card[data-status="running"] .card-icon {
     animation: none;
-  }
-
-  @keyframes status-pulse {
-    0%,
-    100% {
-      opacity: 1;
-      filter: none;
-    }
   }
 }

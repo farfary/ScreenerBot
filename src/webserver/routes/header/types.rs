@@ -4,7 +4,6 @@ use serde::Serialize;
 pub struct HeaderMetricsResponse {
     pub trader: TraderHeaderInfo,
     pub wallet: WalletHeaderInfo,
-    pub positions: PositionsHeaderInfo,
     pub rpc: RpcHeaderInfo,
     pub filtering: FilteringHeaderInfo,
     pub system: SystemHeaderInfo,
@@ -21,29 +20,32 @@ pub struct SolHeaderInfo {
 
 #[derive(Debug, Serialize)]
 pub struct TraderHeaderInfo {
-    pub running: bool,
     pub enabled: bool,
+    pub state: TraderHeaderState,
     pub today_pnl_sol: f64,
     pub today_pnl_percent: f64,
-    pub uptime_seconds: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TraderHeaderState {
+    Preview,
+    ForceStopped,
+    Stopped,
+    Waiting,
+    Idle,
+    EntryPaused,
+    Running,
 }
 
 #[derive(Debug, Serialize)]
 pub struct WalletHeaderInfo {
     pub sol_balance: f64,
-    pub change_24h_sol: f64,
-    pub change_24h_percent: f64,
+    pub change_today_sol: Option<f64>,
+    pub change_today_percent: Option<f64>,
     pub token_count: usize,
     pub tokens_worth_sol: f64,
     pub last_updated: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct PositionsHeaderInfo {
-    pub open_count: i64,
-    pub unrealized_pnl_sol: f64,
-    pub unrealized_pnl_percent: f64,
-    pub total_invested_sol: f64,
 }
 
 #[derive(Debug, Serialize)]

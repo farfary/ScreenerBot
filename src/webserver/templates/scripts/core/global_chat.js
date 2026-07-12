@@ -32,7 +32,8 @@ class GlobalChat {
   _buildDOM() {
     // Header action button
     this._btn = document.createElement("button");
-    this._btn.className = "header-action-btn global-chat-btn";
+    this._btn.type = "button";
+    this._btn.className = "header-action-btn btn-icon global-chat-btn";
     this._btn.setAttribute("aria-label", "AI Assistant");
     this._btn.setAttribute("title", "AI Assistant");
     this._btn.innerHTML = '<i class="action-icon icon-bot-message-square"></i>';
@@ -48,7 +49,7 @@ class GlobalChat {
             <i class="icon-bot-message-square"></i>
             AI Assistant
           </div>
-          <button class="global-chat-dialog-close" aria-label="Close chat" title="Close (Esc)">
+          <button type="button" class="global-chat-dialog-close" aria-label="Close chat" title="Close (Esc)">
             <i class="icon-x"></i>
           </button>
         </div>

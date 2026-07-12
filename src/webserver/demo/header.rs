@@ -3,8 +3,8 @@
 use chrono::Utc;
 
 use crate::webserver::routes::header::{
-    FilteringHeaderInfo, HeaderMetricsResponse, PositionsHeaderInfo, RpcHeaderInfo, SolHeaderInfo,
-    SystemHeaderInfo, TraderHeaderInfo, WalletHeaderInfo,
+    FilteringHeaderInfo, HeaderMetricsResponse, RpcHeaderInfo, SolHeaderInfo, SystemHeaderInfo,
+    TraderHeaderInfo, TraderHeaderState, WalletHeaderInfo,
 };
 
 use super::aggregates;
@@ -31,28 +31,20 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
 
     let today_pnl_percent = today.net_pnl_sol / DEMO_START_BALANCE * 100.0;
     let trader = TraderHeaderInfo {
-        running: true,
         enabled: true,
+        state: TraderHeaderState::Running,
         today_pnl_sol: today.net_pnl_sol,
         today_pnl_percent,
-        uptime_seconds: 3 * 24 * 3600 + 7 * 3600 + 23 * 60 + 45,
     };
 
     let change_24h_sol = DEMO_SOL_BALANCE - DEMO_START_BALANCE;
     let wallet = WalletHeaderInfo {
         sol_balance: DEMO_SOL_BALANCE,
-        change_24h_sol,
-        change_24h_percent: change_24h_sol / DEMO_START_BALANCE * 100.0,
+        change_today_sol: Some(change_24h_sol),
+        change_today_percent: Some(change_24h_sol / DEMO_START_BALANCE * 100.0),
         token_count: open.count,
         tokens_worth_sol: open.current_value_sol,
         last_updated: now.to_rfc3339(),
-    };
-
-    let positions = PositionsHeaderInfo {
-        open_count: open.count as i64,
-        unrealized_pnl_sol: open.unrealized_pnl_sol,
-        unrealized_pnl_percent: open.unrealized_pnl_percent,
-        total_invested_sol: open.invested_sol,
     };
 
     let rpc = RpcHeaderInfo {
@@ -78,7 +70,6 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
     HeaderMetricsResponse {
         trader,
         wallet,
-        positions,
         rpc,
         filtering,
         system,

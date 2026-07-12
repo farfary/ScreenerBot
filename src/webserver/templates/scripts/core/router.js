@@ -59,14 +59,19 @@ function ensurePageStyles(pageName) {
 }
 
 export function setActiveTab(pageName) {
+  let activeTab = null;
   document.querySelectorAll("nav .tab").forEach((tab) => {
     const tabPage = tab.getAttribute("data-page");
     if (tabPage === pageName) {
       tab.classList.add("active");
+      tab.setAttribute("aria-current", "page");
+      activeTab = tab;
     } else {
       tab.classList.remove("active");
+      tab.removeAttribute("aria-current");
     }
   });
+  activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 export function registerCleanup(handler) {

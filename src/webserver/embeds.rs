@@ -18,6 +18,8 @@ pub(super) const FLOATING_STYLES: &str = include_str!("templates/styles/base/flo
 pub(super) const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 pub(super) const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 pub(super) const HEADER_STYLES: &str = include_str!("templates/styles/header.css");
+pub(super) const HEADER_RESPONSIVE_STYLES: &str =
+    include_str!("templates/styles/header_responsive.css");
 pub(super) const DROPDOWN_STYLES: &str = include_str!("templates/styles/ui/dropdown.css");
 pub(super) const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 pub(super) const FORM_CONTROLS_STYLES: &str =
@@ -238,6 +240,7 @@ pub const CORE_CONNECTIVITY_WATCHER: &str =
     include_str!("templates/scripts/core/connectivity_watcher.js");
 pub const CORE_TOOLTIP: &str = include_str!("templates/scripts/core/tooltip.js");
 pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
+pub const CORE_HEADER_METRICS: &str = include_str!("templates/scripts/core/header_metrics.js");
 pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
 pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");
 pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");

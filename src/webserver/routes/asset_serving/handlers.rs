@@ -66,6 +66,7 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
         "connectivity_watcher.js" => Some(embeds::CORE_CONNECTIVITY_WATCHER),
         "tooltip.js" => Some(embeds::CORE_TOOLTIP),
         "header.js" => Some(embeds::CORE_HEADER),
+        "header_metrics.js" => Some(embeds::CORE_HEADER_METRICS),
         "notifications.js" => Some(embeds::CORE_NOTIFICATIONS),
         "toast.js" => Some(embeds::CORE_TOAST),
         "request_manager.js" => Some(embeds::CORE_REQUEST_MANAGER),

@@ -67,6 +67,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         &lucide_css,
         LAYOUT_STYLES,
         HEADER_STYLES,
+        HEADER_RESPONSIVE_STYLES,
         COMPONENT_STYLES,
         DROPDOWN_STYLES,
         COMMON_STYLES,
@@ -282,9 +283,14 @@ fn nav_tabs(active: &str) -> String {
         } else {
             ""
         };
+        let aria_current = if active == "initialization" {
+            " aria-current=\"page\""
+        } else {
+            ""
+        };
         return format!(
-            "<a href=\"#\" data-page=\"initialization\" class=\"tab{}\"><i class=\"icon-settings\"></i> Setup</a>",
-            active_class
+            "<a href=\"/initialization\" data-page=\"initialization\" class=\"tab{}\"{}><i class=\"icon-settings\"></i> Setup</a>",
+            active_class, aria_current
         );
     }
 
@@ -296,10 +302,15 @@ fn nav_tabs(active: &str) -> String {
     tabs.iter()
         .map(|tab| {
             let active_class = if tab.id == active { " active" } else { "" };
-            // Use data-page attribute for client-side routing (SPA)
+            let aria_current = if tab.id == active {
+                " aria-current=\"page\""
+            } else {
+                ""
+            };
+            // Real hrefs preserve expected link behavior; data-page keeps SPA routing fast.
             format!(
-                "<a href=\"#\" data-page=\"{}\" class=\"tab{}\"><i class=\"{}\"></i> {}</a>",
-                tab.id, active_class, tab.icon, tab.label
+                "<a href=\"/{}\" data-page=\"{}\" class=\"tab{}\"{}><i class=\"{}\"></i> {}</a>",
+                tab.id, tab.id, active_class, aria_current, tab.icon, tab.label
             )
         })
         .collect::<Vec<_>>()
