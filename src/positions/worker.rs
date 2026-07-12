@@ -243,6 +243,23 @@ pub async fn start_positions_manager_service(
     Ok(verification_handle)
 }
 
+/// Wait for the next verification cycle: whichever comes first, the adaptive nap elapsing or NEW
+/// work being enqueued.
+///
+/// The nap alone was dead time bolted onto the front of every trade. It is computed BEFORE the
+/// queue is read (5s while the queue is empty), so a swap enqueued a moment after the worker
+/// dozed off simply waited it out — even though the swap is already CONFIRMED on chain by then
+/// (the executors enqueue only after `sign_send_and_confirm_transaction` returns) and a fresh
+/// item is immediately due. Nothing was pending but the worker's alarm clock. On a DCA that is
+/// exactly the gap the user sees: the notification says the buy is done, but the SOL and tokens
+/// only reach the position when `DcaVerified` is applied by this loop.
+async fn wait_for_next_cycle(nap: Duration) {
+    tokio::select! {
+        _ = sleep(nap) => {}
+        _ = super::queue::wait_for_new_work() => {}
+    }
+}
+
 /// Verification worker loop
 async fn verification_worker(shutdown: Arc<Notify>) {
     logger::info(LogTag::Positions, "Starting verification worker");
@@ -312,7 +329,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
         logger::info(LogTag::Positions, "Stopping verification worker");
                break;
              }
-             _ = sleep(sleep_duration) => {
+             _ = wait_for_next_cycle(sleep_duration) => {
                // GUARD: Re-enqueue any missing verifications that should be queued but aren't
                let mut requeued_count = 0;
                let (queue_size_before, signatures_in_queue) = super::queue::get_queue_status().await;

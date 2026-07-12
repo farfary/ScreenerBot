@@ -4,7 +4,7 @@ use super::types::{GiveUpReason, VerificationKind};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::collections::VecDeque;
 use std::sync::LazyLock;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 
 /// Maximum verification attempts before giving up. Sized to span ~24h together
 /// with the long-tail backoff table below.
@@ -327,10 +327,34 @@ impl VerificationQueue {
 static VERIFICATION_QUEUE: LazyLock<RwLock<VerificationQueue>> =
     LazyLock::new(|| RwLock::new(VerificationQueue::new()));
 
+/// Wakes the verification worker the moment NEW work arrives.
+///
+/// The worker runs on an adaptive nap (5s while the queue is empty), and it computes that nap
+/// BEFORE it looks at the queue — so a swap enqueued a moment after it dozed off sat there for
+/// the rest of the nap before anyone even tried to verify it. That is dead time bolted onto the
+/// front of every trade: the swap is already CONFIRMED on chain when it is enqueued (the
+/// executors enqueue only after `sign_send_and_confirm_transaction` returns), and a fresh item
+/// is immediately due (`next_retry_at: None`), so there is nothing to wait for. It is why a DCA
+/// whose notification already said "done" took another 10-15s to show up on the position: the
+/// tokens and SOL only land on the position when the verification applies `DcaVerified`.
+///
+/// Only `enqueue_verification` signals — a `requeue_verification` after a failed attempt carries
+/// a backoff and must NOT drag the worker back out of bed to look at an item that is not due.
+/// `notify_one` stores a permit, so a signal fired while the worker is mid-cycle is not lost.
+static QUEUE_SIGNAL: LazyLock<Notify> = LazyLock::new(Notify::new);
+
 /// Enqueue verification item
 pub async fn enqueue_verification(item: VerificationItem) {
-    let mut queue = VERIFICATION_QUEUE.write().await;
-    queue.enqueue(item);
+    {
+        let mut queue = VERIFICATION_QUEUE.write().await;
+        queue.enqueue(item);
+    }
+    QUEUE_SIGNAL.notify_one();
+}
+
+/// Resolves as soon as new work is enqueued (see [`QUEUE_SIGNAL`]).
+pub async fn wait_for_new_work() {
+    QUEUE_SIGNAL.notified().await;
 }
 
 /// Poll batch of verification items
