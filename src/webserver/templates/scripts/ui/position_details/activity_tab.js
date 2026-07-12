@@ -133,14 +133,46 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
     content.innerHTML = `
       <div class="pdd-activity">
         ${this._buildActivitySummary(totals, ctx)}
-        ${this._buildActivityRounds(positions, ctx)}
+        ${this._buildActivityContext(positions, stateHistory, ctx)}
         ${this._buildActivityToolbar(totals)}
         <div class="pdd-act-list">${cards}</div>
-        ${this._buildStateHistory(stateHistory, ctx)}
       </div>`;
 
     this._applyActivityFilter(content);
     this._bindActivityHandlers(content);
+  };
+
+  /**
+   * The two lists that give the timeline its context, side by side: what rounds of trading
+   * the token has been through, and what the positions' state machine did. Both are short,
+   * scannable and reference-only, so they belong next to each other above the feed rather
+   * than stacked around it — the state history used to sit below every event card, where a
+   * long timeline buried it.
+   *
+   * Either can be absent (one round of trading needs no round list), and whichever is left
+   * takes the full width rather than leaving a hole.
+   */
+  proto._buildActivityContext = function (positions, stateHistory, ctx) {
+    const panels = [
+      this._buildActivityRounds(positions, ctx),
+      this._buildStateHistory(stateHistory, ctx),
+    ].filter(Boolean);
+
+    if (panels.length === 0) return "";
+    return `<div class="pdd-act-context${panels.length === 1 ? " is-single" : ""}">${panels.join("")}</div>`;
+  };
+
+  /** The shared panel shell — one header treatment for both lists. */
+  proto._activityPanel = function (icon, title, count, body) {
+    return `
+      <section class="pdd-act-panel">
+        <header class="pdd-act-panel-head">
+          <i class="${icon}"></i>
+          <span class="pdd-act-panel-title">${title}</span>
+          <span class="pdd-act-count">${count}</span>
+        </header>
+        <div class="pdd-act-panel-body">${body}</div>
+      </section>`;
   };
 
   /**
@@ -157,10 +189,14 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
     const realizedBasis = (totals.sol_returned || 0) - realized;
     const realizedPct = realizedBasis > 0 ? (realized / realizedBasis) * 100 : null;
 
-    const notes = [];
+    // Rounds first, then anything worth flagging. The notes used to REPLACE the round count
+    // rather than follow it, so as soon as the token saw one wallet event you could no
+    // longer tell how many times it had been traded.
+    const rounds = totals.positions || 0;
+    const notes = [`${rounds} position${rounds === 1 ? "" : "s"}`];
+    if (totals.wallet_events) notes.push(`${totals.wallet_events} wallet`);
     if (totals.pending) notes.push(`${totals.pending} pending`);
     if (totals.failed) notes.push(`${totals.failed} failed`);
-    if (totals.wallet_events) notes.push(`${totals.wallet_events} wallet`);
 
     const cell = (label, value, sub = "", cls = "") => `
       <div class="pdd-act-sum-cell">
@@ -173,15 +209,10 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
     const tone = (value) => (value >= 0 ? "pdd-positive" : "pdd-negative");
     const sol = (value, decimals = 4) =>
       `${Utils.formatSol(value || 0, { decimals, suffix: "" })} SOL`;
-    const rounds = totals.positions || 0;
 
     return `
       <div class="pdd-act-summary">
-        ${cell(
-          "Events",
-          String(totals.events ?? 0),
-          notes.length ? notes.join(" · ") : `${rounds} position${rounds === 1 ? "" : "s"}`
-        )}
+        ${cell("Events", String(totals.events ?? 0), notes.join(" · "))}
         ${cell(
           "Bought",
           `${Utils.formatCompactNumber(totals.tokens_bought || 0)} ${Utils.escapeHtml(ctx.symbol)}`,
@@ -210,7 +241,9 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
   proto._buildActivityRounds = function (positions, ctx) {
     if (positions.length < 2) return "";
 
-    const rows = positions
+    // Newest round first, to match the feed's default order.
+    const rows = [...positions]
+      .reverse()
       .map((position) => {
         const isCurrent = position.id === ctx.currentPositionId;
         const pnl = position.realized_pnl || 0;
@@ -218,29 +251,20 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
         const closed = position.closed_at ? Utils.formatTimeAgo(position.closed_at) : "in progress";
 
         return `
-          <div class="pdd-act-round${isCurrent ? " is-current" : ""}">
-            <span class="pdd-act-round-index">Position ${position.index}</span>
-            <span class="pdd-act-round-status">${status}</span>
-            <span class="pdd-act-round-span" title="Opened ${Utils.formatTimestamp(position.opened_at)}">
-              ${Utils.formatTimeAgo(position.opened_at)} &rarr; ${closed}
+          <div class="pdd-act-row${isCurrent ? " is-current" : ""}">
+            <span class="pdd-act-row-name">Position ${position.index}</span>
+            <span class="pdd-act-round-status is-${status.toLowerCase()}">${status}</span>
+            <span class="pdd-act-row-note" title="Opened ${Utils.formatTimestamp(position.opened_at)}">
+              ${Utils.formatTimeAgo(position.opened_at)} &rarr; ${closed} &middot; ${position.swaps} swap${position.swaps === 1 ? "" : "s"}
             </span>
-            <span class="pdd-act-round-swaps">${position.swaps} swap${position.swaps === 1 ? "" : "s"}</span>
-            <span class="pdd-act-round-pnl ${pnl >= 0 ? "pdd-positive" : "pdd-negative"}">
+            <span class="pdd-act-row-value ${pnl >= 0 ? "pdd-positive" : "pdd-negative"}">
               ${pnl >= 0 ? "+" : ""}${Utils.formatSol(pnl, { decimals: 4, suffix: "" })} SOL
             </span>
           </div>`;
       })
       .join("");
 
-    return `
-      <section class="pdd-act-rounds">
-        <h3 class="pdd-act-section-title">
-          <i class="icon-layers"></i>
-          Trading Rounds
-          <span class="pdd-act-section-count">${positions.length}</span>
-        </h3>
-        <div class="pdd-act-round-list">${rows}</div>
-      </section>`;
+    return this._activityPanel("icon-layers", "Trading Rounds", positions.length, rows);
   };
 
   proto._buildActivityToolbar = function (totals) {
@@ -257,7 +281,7 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
       .map(
         ([id, label, count]) => `
         <button type="button" class="pdd-act-filter${this._activityFilter === id ? " active" : ""}" data-filter="${id}">
-          ${label}<span class="pdd-act-filter-count">${count}</span>
+          ${label}<span class="pdd-act-count">${count}</span>
         </button>`
       )
       .join("");
@@ -285,28 +309,20 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
       .sort((a, b) => (b.changed_at ?? 0) - (a.changed_at ?? 0))
       .map(
         (entry) => `
-        <div class="pdd-act-state-row">
-          <span class="pdd-act-state-name">${Utils.escapeHtml(entry.state)}</span>
+        <div class="pdd-act-row">
+          <span class="pdd-act-row-name">${Utils.escapeHtml(entry.state)}</span>
           ${
             ctx.positionCount > 1
               ? `<span class="pdd-act-chip-pos">Position ${entry.position_index}</span>`
               : ""
           }
-          <span class="pdd-act-state-reason">${entry.reason ? Utils.escapeHtml(entry.reason) : ""}</span>
-          <span class="pdd-act-state-time" title="${Utils.formatTimestamp(entry.changed_at)}">${Utils.formatTimeAgo(entry.changed_at)}</span>
+          <span class="pdd-act-row-note">${entry.reason ? Utils.escapeHtml(entry.reason) : ""}</span>
+          <span class="pdd-act-row-time" title="${Utils.formatTimestamp(entry.changed_at)}">${Utils.formatTimeAgo(entry.changed_at)}</span>
         </div>`
       )
       .join("");
 
-    return `
-      <section class="pdd-act-states">
-        <h3 class="pdd-act-section-title">
-          <i class="icon-history"></i>
-          State History
-          <span class="pdd-act-section-count">${stateHistory.length}</span>
-        </h3>
-        <div class="pdd-act-state-list">${rows}</div>
-      </section>`;
+    return this._activityPanel("icon-history", "State History", stateHistory.length, rows);
   };
 
   /** Show only the cards the active filter selects. */

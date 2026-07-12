@@ -75,26 +75,33 @@ function positionChip(event, ctx) {
   return `<span class="pdd-act-chip-pos${isCurrent ? " is-current" : ""}">Position ${event.position_index}</span>`;
 }
 
-function statChip(label, value, extraClass = "") {
+/**
+ * THE label/value cell — the only one on this card, deliberately.
+ *
+ * The card used to present the same label→value pair four different ways: big stacked
+ * "flow" cells, an inline chip row, the inline "after" strip, and a third, smaller stacked
+ * grid inside the expanded panel. Four typographic systems on one card is what made it read
+ * as unstyled. Everything now goes through this cell; `key` only raises the emphasis of the
+ * numbers a trader reads first (tokens, SOL, price, realized P&L).
+ */
+function metric(label, value, { key = false, tone = "" } = {}) {
   if (value === null || value === undefined || value === "") return "";
   return `
-    <span class="pdd-act-chip ${extraClass}">
-      <span class="pdd-act-chip-label">${label}</span>
-      <span class="pdd-act-chip-value">${value}</span>
-    </span>`;
-}
-
-function detailCell(label, value) {
-  if (value === null || value === undefined || value === "") return "";
-  return `
-    <div class="pdd-act-detail">
-      <span class="pdd-act-detail-label">${label}</span>
-      <span class="pdd-act-detail-value">${value}</span>
+    <div class="pdd-act-metric${key ? " is-key" : ""}">
+      <span class="pdd-act-metric-label">${label}</span>
+      <span class="pdd-act-metric-value ${tone}">${value}</span>
     </div>`;
 }
 
-/** The token / SOL / price / P&L row — the numbers a trader reads first. */
-function renderFlow(event, ctx) {
+const sol = (value, decimals = 4) => `${Utils.formatSol(value, { decimals, suffix: "" })} SOL`;
+
+/**
+ * Everything the swap did, in ONE grid: the headline numbers first, then what it cost and
+ * where it routed. Folding the old chip row in here is what lets the grid fill the dialog's
+ * width — three stretched cells used to leave craters between them — and makes every card
+ * line up column-for-column with the one above it.
+ */
+function renderMetrics(event, ctx) {
   const isExit = event.side === "exit";
   const isWallet = event.side === "wallet";
   const cells = [];
@@ -106,92 +113,82 @@ function renderFlow(event, ctx) {
     // A swap still confirming has NOT been booked: the registry knows what was submitted,
     // the position does not. Say so rather than printing it as a settled amount.
     const label = !isWallet && !event.recorded ? "Tokens (expected)" : "Tokens";
-    cells.push(`
-      <div class="pdd-act-flow-cell">
-        <span class="pdd-act-flow-label">${label}</span>
-        <span class="pdd-act-flow-value ${outgoing ? "negative" : "positive"}">
-          ${outgoing ? "-" : "+"}${Utils.formatCompactNumber(amount)} ${Utils.escapeHtml(ctx.symbol)}
-        </span>
-      </div>`);
+    cells.push(
+      metric(
+        label,
+        `${outgoing ? "-" : "+"}${Utils.formatCompactNumber(amount)} ${Utils.escapeHtml(ctx.symbol)}`,
+        { key: true, tone: outgoing ? "negative" : "positive" }
+      )
+    );
   }
 
   if (event.sol_amount != null) {
-    cells.push(`
-      <div class="pdd-act-flow-cell">
-        <span class="pdd-act-flow-label">${isExit ? "SOL Received" : "SOL Spent"}</span>
-        <span class="pdd-act-flow-value ${isExit ? "positive" : "negative"}">
-          ${isExit ? "+" : "-"}${Utils.formatSol(event.sol_amount, { decimals: 4, suffix: "" })} SOL
-        </span>
-      </div>`);
+    cells.push(
+      metric(
+        isExit ? "SOL Received" : "SOL Spent",
+        `${isExit ? "+" : "-"}${sol(event.sol_amount)}`,
+        { key: true, tone: isExit ? "positive" : "negative" }
+      )
+    );
   }
 
   // A wallet event has no position record, so its SOL is the wallet's net delta (fee
   // included) rather than a booked entry/exit amount — a different number, labelled as one.
   if (isWallet && event.sol_change != null && event.sol_change !== 0) {
-    cells.push(`
-      <div class="pdd-act-flow-cell">
-        <span class="pdd-act-flow-label">Wallet SOL</span>
-        <span class="pdd-act-flow-value ${event.sol_change >= 0 ? "positive" : "negative"}">
-          ${event.sol_change >= 0 ? "+" : ""}${Utils.formatSol(event.sol_change, { decimals: 6, suffix: "" })} SOL
-        </span>
-      </div>`);
+    cells.push(
+      metric("Wallet SOL", `${event.sol_change >= 0 ? "+" : ""}${sol(event.sol_change, 6)}`, {
+        key: true,
+        tone: event.sol_change >= 0 ? "positive" : "negative",
+      })
+    );
   }
 
   if (event.price != null) {
-    cells.push(`
-      <div class="pdd-act-flow-cell">
-        <span class="pdd-act-flow-label">${isExit ? "Exit Price" : "Entry Price"}</span>
-        <span class="pdd-act-flow-value">${ctx.formatPrice(event.price)} SOL</span>
-      </div>`);
+    cells.push(
+      metric(isExit ? "Exit Price" : "Entry Price", `${ctx.formatPrice(event.price)} SOL`, {
+        key: true,
+      })
+    );
   }
 
   if (isExit && event.realized_pnl != null) {
     const pnl = event.realized_pnl;
-    const cls = pnl >= 0 ? "positive" : "negative";
     const sign = pnl >= 0 ? "+" : "";
     const pct =
       event.realized_pnl_percent != null
         ? `<small>${sign}${Utils.formatNumber(event.realized_pnl_percent, 2)}%</small>`
         : "";
-    cells.push(`
-      <div class="pdd-act-flow-cell">
-        <span class="pdd-act-flow-label">Realized P&amp;L</span>
-        <span class="pdd-act-flow-value ${cls}">
-          ${sign}${Utils.formatSol(pnl, { decimals: 4, suffix: "" })} SOL ${pct}
-        </span>
-      </div>`);
+    cells.push(
+      metric("Realized P&L", `${sign}${sol(pnl)} ${pct}`, {
+        key: true,
+        tone: pnl >= 0 ? "positive" : "negative",
+      })
+    );
   }
 
-  return cells.length ? `<div class="pdd-act-flow">${cells.join("")}</div>` : "";
-}
+  if (isExit && event.cost_basis != null) {
+    cells.push(metric("Cost Basis", sol(event.cost_basis)));
+  }
 
-/** Secondary chips: what it cost and where it routed. */
-function renderChips(event, ctx) {
-  const chips = [];
+  if (event.sol_amount != null && ctx.solPriceUsd) {
+    cells.push(metric("Value", Utils.formatCurrencyUSD(event.sol_amount * ctx.solPriceUsd)));
+  }
 
   const fee = event.fee_sol ?? event.record_fee_sol;
   if (fee != null && fee > 0) {
-    chips.push(statChip("Fee", `${Utils.formatSol(fee, { decimals: 6, suffix: "" })} SOL`));
-  }
-  if (event.side === "exit" && event.cost_basis != null) {
-    chips.push(
-      statChip(
-        "Cost Basis",
-        `${Utils.formatSol(event.cost_basis, { decimals: 4, suffix: "" })} SOL`
-      )
-    );
-  }
-  if (event.sol_amount != null && ctx.solPriceUsd) {
-    chips.push(statChip("Value", Utils.formatCurrencyUSD(event.sol_amount * ctx.solPriceUsd)));
-  }
-  if (event.router) {
-    chips.push(statChip("Router", Utils.escapeHtml(event.router), "pdd-act-chip-router"));
-  }
-  if (event.slot != null) {
-    chips.push(statChip("Slot", Utils.formatNumber(event.slot, 0)));
+    cells.push(metric("Network Fee", sol(fee, 6)));
   }
 
-  return chips.length ? `<div class="pdd-act-chips">${chips.join("")}</div>` : "";
+  if (event.router) {
+    cells.push(metric("Router", Utils.escapeHtml(event.router)));
+  }
+
+  if (event.slot != null) {
+    cells.push(metric("Slot", Utils.formatNumber(event.slot, 0)));
+  }
+
+  const rendered = cells.filter(Boolean).join("");
+  return rendered ? `<div class="pdd-act-metrics">${rendered}</div>` : "";
 }
 
 /**
@@ -207,14 +204,14 @@ function renderAfter(event, ctx) {
 
   return `
     <div class="pdd-act-after">
-      <span class="pdd-act-after-title">After</span>
+      <span class="pdd-act-after-title">Position after</span>
       <span class="pdd-act-after-item">
         <span class="pdd-act-after-label">Held</span>
         <span class="pdd-act-after-value">${Utils.formatCompactNumber(held)} ${Utils.escapeHtml(ctx.symbol)}</span>
       </span>
       <span class="pdd-act-after-item">
         <span class="pdd-act-after-label">Invested</span>
-        <span class="pdd-act-after-value">${Utils.formatSol(event.invested_after, { decimals: 4, suffix: "" })} SOL</span>
+        <span class="pdd-act-after-value">${sol(event.invested_after)}</span>
       </span>
       ${
         avgEntry
@@ -245,7 +242,7 @@ function renderTransfers(event) {
 
   return `
     <div class="pdd-act-xfers">
-      <span class="pdd-act-detail-title">Token Transfers</span>
+      <span class="pdd-act-subhead">Token Transfers</span>
       <table class="pdd-act-xfer-table">
         <thead>
           <tr><th>Amount</th><th>Mint</th><th>From</th><th>To</th></tr>
@@ -255,36 +252,29 @@ function renderTransfers(event) {
     </div>`;
 }
 
-/** The full on-chain record, revealed on demand. */
+/** The full on-chain record, revealed on demand — same metric cell as the card above it. */
 function renderDetails(event) {
   const cells = [
-    detailCell("Status", event.status ? Utils.escapeHtml(event.status) : null),
-    detailCell(
+    metric("Status", event.status ? Utils.escapeHtml(event.status) : null),
+    metric(
       "Transaction Type",
       event.transaction_type ? Utils.escapeHtml(event.transaction_type) : null
     ),
-    detailCell("Direction", event.direction ? Utils.escapeHtml(event.direction) : null),
-    detailCell("Slot", event.slot != null ? Utils.formatNumber(event.slot, 0) : null),
-    detailCell("Block Time", event.block_time ? Utils.formatTimestamp(event.block_time) : null),
-    detailCell(
+    metric("Direction", event.direction ? Utils.escapeHtml(event.direction) : null),
+    metric("Block Time", event.block_time ? Utils.formatTimestamp(event.block_time) : null),
+    metric(
       "Wallet SOL Change",
       event.sol_change != null
-        ? `${event.sol_change >= 0 ? "+" : ""}${Utils.formatSol(event.sol_change, { decimals: 6, suffix: "" })} SOL`
+        ? `${event.sol_change >= 0 ? "+" : ""}${sol(event.sol_change, 6)}`
         : null
     ),
-    detailCell(
-      "Network Fee",
-      event.fee_sol != null
-        ? `${Utils.formatSol(event.fee_sol, { decimals: 6, suffix: "" })} SOL`
-        : null
-    ),
-    detailCell("Instructions", event.instructions_count ?? null),
-    detailCell(
+    metric("Instructions", event.instructions_count ?? null),
+    metric(
       "Compute Units",
       event.compute_units != null ? Utils.formatNumber(event.compute_units, 0) : null
     ),
-    detailCell("Accounts", event.accounts_count ?? null),
-    detailCell("Record ID", event.record_id ?? null),
+    metric("Accounts", event.accounts_count ?? null),
+    metric("Record ID", event.record_id ?? null),
   ]
     .filter(Boolean)
     .join("");
@@ -295,7 +285,7 @@ function renderDetails(event) {
        </div>`
     : "";
 
-  const grid = cells ? `<div class="pdd-act-detail-grid">${cells}</div>` : "";
+  const grid = cells ? `<div class="pdd-act-metrics is-compact">${cells}</div>` : "";
 
   return `<div class="pdd-act-details">${note}${grid}${renderTransfers(event)}</div>`;
 }
@@ -341,8 +331,7 @@ export function renderActivityCard(event, ctx) {
           </span>
         </span>
       </div>
-      ${renderFlow(event, ctx)}
-      ${renderChips(event, ctx)}
+      ${renderMetrics(event, ctx)}
       ${renderAfter(event, ctx)}
       <div class="pdd-act-foot">
         <span class="pdd-act-sig-group">${sigGroup}</span>
