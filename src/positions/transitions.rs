@@ -128,4 +128,22 @@ impl PositionTransition {
     pub fn requires_db_update(&self) -> bool {
         !matches!(self, Self::UpdatePriceTracking { .. })
     }
+
+    /// True for the transitions that mean SOL or tokens actually moved in the wallet.
+    ///
+    /// These fire a wallet balance refresh so the displayed worth catches up within a
+    /// second or two of the swap. Only the VERIFIED variants qualify: a submitted swap
+    /// has not settled yet, and a failed one moved nothing. This is a backstop for the
+    /// wallet's logsSubscribe stream, which normally sees the same swap first — both
+    /// are coalesced into a single refresh.
+    pub fn affects_wallet_balance(&self) -> bool {
+        matches!(
+            self,
+            Self::EntryVerified { .. }
+                | Self::ExitVerified { .. }
+                | Self::PartialExitVerified { .. }
+                | Self::ExitResidualClearForRetry { .. }
+                | Self::DcaVerified { .. }
+        )
+    }
 }

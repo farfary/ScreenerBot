@@ -37,13 +37,18 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
         today_pnl_percent,
     };
 
-    let change_24h_sol = DEMO_SOL_BALANCE - DEMO_START_BALANCE;
+    // Demo must model the real thing: the headline is WORTH (cash + holdings), measured
+    // against the start-of-day worth — identical to the home hero's demo numbers. Showing
+    // cash here while the hero showed equity made the two cards disagree on screen.
+    let demo_equity = DEMO_SOL_BALANCE + open.current_value_sol;
+    let change_today_sol = demo_equity - DEMO_START_BALANCE;
     let wallet = WalletHeaderInfo {
         sol_balance: DEMO_SOL_BALANCE,
-        change_today_sol: Some(change_24h_sol),
-        change_today_percent: Some(change_24h_sol / DEMO_START_BALANCE * 100.0),
-        token_count: open.count,
         tokens_worth_sol: open.current_value_sol,
+        total_equity_sol: demo_equity,
+        change_today_sol: Some(change_today_sol),
+        change_today_percent: Some(change_today_sol / DEMO_START_BALANCE * 100.0),
+        token_count: open.count,
         last_updated: now.to_rfc3339(),
     };
 

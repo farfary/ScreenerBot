@@ -55,6 +55,7 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         token_count: open.count,
         tokens_worth_sol: open.current_value_sol,
         total_equity_sol: demo_equity,
+        unpriced_token_count: 0,
         start_of_day_balance_sol: DEMO_START_BALANCE,
         change_sol: demo_equity - DEMO_START_BALANCE,
         change_percent: (demo_equity - DEMO_START_BALANCE) / DEMO_START_BALANCE * 100.0,

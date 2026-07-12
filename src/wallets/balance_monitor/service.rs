@@ -24,6 +24,7 @@ use super::database::{
     increment_snapshots, GLOBAL_WALLET_DB,
 };
 use super::types::*;
+use super::worth::{publish_snapshot, settle_refresh_burst, wait_for_refresh_request};
 
 // =============================================================================
 // INITIALIZATION
@@ -38,6 +39,19 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
 
     let db = super::database::WalletDatabase::new().await?;
     let latest_snapshot_time = db.get_latest_snapshot_time()?;
+
+    // Hydrate the live worth cache from the last persisted snapshot so the header and
+    // the home hero show a real figure immediately, instead of zeroes until the first
+    // collection tick lands.
+    match db.get_latest_snapshot_with_balances() {
+        Ok(Some(snapshot)) => publish_snapshot(Arc::new(snapshot)),
+        Ok(None) => {}
+        Err(err) => logger::warning(
+            LogTag::Wallet,
+            &format!("Failed to hydrate live wallet worth from last snapshot: {err}"),
+        ),
+    }
+
     *db_lock = Some(db);
 
     hydrate_wallet_snapshot_status(latest_snapshot_time);
@@ -67,25 +81,27 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         &format!("Collecting wallet snapshot for {}", &wallet_address[..8]),
     );
 
-    // Add small delay to avoid overwhelming RPC client
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Get SOL balance
-    let sol_balance = rpc_client
-        .get_sol_balance(&wallet_address)
-        .await
-        .map_err(|e| format!("Failed to get SOL balance: {e}"))?;
+    // The two reads run concurrently and without artificial delays. They used to be
+    // serialized behind 500ms sleeps each, which bought nothing (the RPC client does
+    // its own rate limiting) and put a full second of latency in front of every
+    // refresh — including the ones fired the instant a trade confirms, which is
+    // exactly when the number has to be right.
+    let (sol_balance, token_accounts) = tokio::try_join!(
+        async {
+            rpc_client
+                .get_sol_balance(&wallet_address)
+                .await
+                .map_err(|e| format!("Failed to get SOL balance: {e}"))
+        },
+        async {
+            rpc_client
+                .get_all_token_accounts_str(&wallet_address)
+                .await
+                .map_err(|e| format!("Failed to get token accounts: {e}"))
+        }
+    )?;
 
     let sol_balance_lamports = crate::utils::sol_to_lamports(sol_balance);
-
-    // Add another small delay before token accounts fetch
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Get all token accounts (includes both tokens and NFTs)
-    let token_accounts = rpc_client
-        .get_all_token_accounts_str(&wallet_address)
-        .await
-        .map_err(|e| format!("Failed to get token accounts: {e}"))?;
 
     // Separate fungible tokens and NFTs
     let mut token_balances = Vec::new();
@@ -165,11 +181,25 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     let total_tokens_count = token_balances.len() as u32;
     let total_nfts_count = nft_balances.len() as u32;
 
+    // Value the holdings at the prices in force right now, so the persisted row is a
+    // point-in-time worth. Historical rows can never be re-valued honestly later (we
+    // would be pricing yesterday's holdings at today's price), so it has to happen here.
+    let tokens_worth_sol: f64 = token_balances
+        .iter()
+        .filter_map(|balance| {
+            crate::pools::get_pool_price(&balance.mint)
+                .map(|price| balance.balance_ui * price.price_sol)
+        })
+        .sum();
+
     logger::debug(
         LogTag::Wallet,
         &format!(
-            "Collected snapshot: SOL {:.6}, {} tokens, {} NFTs",
-            sol_balance, total_tokens_count, total_nfts_count
+            "Collected snapshot: SOL {:.6}, {} tokens, {} NFTs, worth {:.6} SOL",
+            sol_balance,
+            total_tokens_count,
+            total_nfts_count,
+            sol_balance + tokens_worth_sol
         ),
     );
 
@@ -179,11 +209,34 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         snapshot_time,
         sol_balance,
         sol_balance_lamports,
+        total_equity_sol: sol_balance + tokens_worth_sol,
         total_tokens_count,
         total_nfts_count,
         token_balances,
         nft_balances,
     })
+}
+
+/// Collect a fresh snapshot, publish it as the live worth, and persist it.
+///
+/// The ONE path that produces a snapshot. Publishing happens before the database
+/// write so the UI reflects a new balance immediately even if the write is slow, and
+/// still would if it failed.
+async fn collect_publish_and_store() -> Result<Arc<WalletSnapshot>, String> {
+    let snapshot = Arc::new(collect_wallet_snapshot().await?);
+
+    increment_operations();
+    increment_snapshots();
+    publish_snapshot(Arc::clone(&snapshot));
+
+    let db_guard = GLOBAL_WALLET_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => {
+            db.save_wallet_snapshot(&snapshot)?;
+            Ok(snapshot)
+        }
+        None => Err("Wallet database not initialized".to_owned()),
+    }
 }
 
 pub async fn start_wallet_monitoring_service(
@@ -234,6 +287,34 @@ pub async fn start_wallet_monitoring_service(
                     logger::info(LogTag::Wallet, "Wallet monitoring service shutting down");
                     break;
                 }
+                // Something changed the wallet on-chain — the bot's own swap, or the
+                // owner moving funds from another app. Both reach us through the
+                // wallet's logsSubscribe stream, so the balance is refreshed within a
+                // couple of seconds instead of waiting out the snapshot interval.
+                _ = wait_for_refresh_request() => {
+                    // Runs in the branch BODY, which select! never cancels — so the
+                    // debounce can never swallow the notification that woke us.
+                    settle_refresh_burst().await;
+                    if crate::connectivity::is_network_offline() {
+                        continue;
+                    }
+                    match collect_publish_and_store().await {
+                        Ok(snapshot) => logger::debug(
+                            LogTag::Wallet,
+                            &format!(
+                                "Wallet activity refresh - SOL: {:.6}, worth: {:.6} SOL",
+                                snapshot.sol_balance, snapshot.total_equity_sol
+                            ),
+                        ),
+                        Err(e) => {
+                            increment_errors();
+                            logger::warning(LogTag::Wallet, &format!("Activity-triggered wallet refresh failed: {e}"));
+                        }
+                    }
+                    // The interval exists to catch what the stream misses, so restart it
+                    // from now — a fresh snapshot means no periodic one is due yet.
+                    interval.reset();
+                }
                 _ = interval.tick() => {
                     // Skip the RPC-backed snapshot while the network is confirmed
                     // offline — it would only fail with "No providers available".
@@ -241,38 +322,17 @@ pub async fn start_wallet_monitoring_service(
                     if crate::connectivity::is_network_offline() {
                         continue;
                     }
-                    // Collect wallet snapshot
-                    match collect_wallet_snapshot().await {
+                    match collect_publish_and_store().await {
                         Ok(snapshot) => {
-                            // Track metrics
-                            increment_operations();
-                            increment_snapshots();
-
-                            // Save to database
-                            let db_guard = GLOBAL_WALLET_DB.lock().await;
-                            match db_guard.as_ref() {
-                                Some(db) => {
-                                    match db.save_wallet_snapshot(&snapshot) {
-                                        Ok(snapshot_id) => {
-                                            logger::debug(
-                                                LogTag::Wallet,
-                                                &format!(
-                                                    "Saved snapshot ID {} - SOL: {:.6}, Tokens: {}",
-                                                    snapshot_id,
-                                                    snapshot.sol_balance,
-                                                    snapshot.total_tokens_count
-                                                )
-                                            );
-                                        }
-                                        Err(e) => {
-                                            logger::error(LogTag::Wallet, &format!("Failed to save wallet snapshot: {e}"));
-                                        }
-                                    }
-                                }
-                                None => {
-                                    logger::error(LogTag::Wallet, "Wallet database not initialized");
-                                }
-                            }
+                            logger::debug(
+                                LogTag::Wallet,
+                                &format!(
+                                    "Saved snapshot - SOL: {:.6}, Tokens: {}, worth: {:.6} SOL",
+                                    snapshot.sol_balance,
+                                    snapshot.total_tokens_count,
+                                    snapshot.total_equity_sol
+                                )
+                            );
                         }
                         Err(e) => {
                             increment_errors();
@@ -425,18 +485,8 @@ pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, Strin
 /// holdings list (SOL balance + token balances straight from RPC) instead of
 /// waiting for the next periodic tick. Returns the freshly captured snapshot.
 pub async fn force_wallet_snapshot() -> Result<WalletSnapshot, String> {
-    let snapshot = collect_wallet_snapshot().await?;
-    increment_operations();
-    increment_snapshots();
-
-    let db_guard = GLOBAL_WALLET_DB.lock().await;
-    match db_guard.as_ref() {
-        Some(db) => {
-            db.save_wallet_snapshot(&snapshot)?;
-            Ok(snapshot)
-        }
-        None => Err("Wallet database not initialized".to_owned()),
-    }
+    let snapshot = collect_publish_and_store().await?;
+    Ok((*snapshot).clone())
 }
 
 /// Get SOL balance at or before a specific time (optimized single-value query)

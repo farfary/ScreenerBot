@@ -8,6 +8,12 @@ use serde::{Deserialize, Serialize};
 // =============================================================================
 
 /// Wallet balance snapshot
+///
+/// `token_balances`/`nft_balances` are only populated by the collector and by
+/// `get_latest_snapshot_with_balances()`. The list query (`get_recent_snapshots`)
+/// leaves them EMPTY for cost reasons — so NEVER compute a holdings value by
+/// summing `token_balances` off an arbitrary snapshot (that silently produced a
+/// permanent 0 in the header and home hero). Ask `get_wallet_worth()` instead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletSnapshot {
     pub id: Option<i64>,
@@ -15,10 +21,54 @@ pub struct WalletSnapshot {
     pub snapshot_time: DateTime<Utc>,
     pub sol_balance: f64,
     pub sol_balance_lamports: u64,
+    /// Cash + token holdings valued at the pool prices in force when the snapshot
+    /// was taken. Historical rows written before this column existed read back as
+    /// `sol_balance` (COALESCE), never 0.
+    pub total_equity_sol: f64,
     pub total_tokens_count: u32,
     pub total_nfts_count: u32,
     pub token_balances: Vec<SnapshotTokenBalance>,
     pub nft_balances: Vec<NftBalance>,
+}
+
+/// The wallet's full worth — the ONE figure every surface must show.
+///
+/// Cash plus every fungible token held, each valued at its live price. Built by
+/// `get_wallet_worth()` from the in-memory live snapshot and priced at call time,
+/// so it tracks price movement continuously and balance movement within seconds
+/// of any on-chain activity (see `request_balance_refresh`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletWorth {
+    /// Free (uninvested) SOL.
+    pub sol_balance: f64,
+    /// SOL value of every held fungible token we can price.
+    pub tokens_worth_sol: f64,
+    /// sol_balance + tokens_worth_sol. The headline.
+    pub total_equity_sol: f64,
+    /// Distinct fungible tokens held.
+    pub token_count: usize,
+    /// Held tokens we could not price (no live pool price, no market data). They
+    /// contribute 0 — we never fabricate a value — so a non-zero count here means
+    /// the worth is a known-low estimate.
+    pub unpriced_token_count: usize,
+    /// When the underlying balances were captured on-chain.
+    pub updated_at: DateTime<Utc>,
+    /// False until the first snapshot lands (worth is all zeroes).
+    pub has_snapshot: bool,
+}
+
+impl Default for WalletWorth {
+    fn default() -> Self {
+        Self {
+            sol_balance: 0.0,
+            tokens_worth_sol: 0.0,
+            total_equity_sol: 0.0,
+            token_count: 0,
+            unpriced_token_count: 0,
+            updated_at: Utc::now(),
+            has_snapshot: false,
+        }
+    }
 }
 
 /// Token balance record (fungible tokens only)

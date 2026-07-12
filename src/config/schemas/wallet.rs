@@ -8,15 +8,15 @@ config_struct! {
     pub struct WalletConfig {
         #[metadata(field_metadata! {
             label: "Snapshot Interval",
-            hint: "Seconds between wallet balance snapshots",
-            min: 15,
+            hint: "Seconds between periodic wallet balance snapshots. This is only the backstop — any on-chain activity refreshes the balance within seconds",
+            min: 10,
             max: 600,
             step: 5,
             unit: "seconds",
             impact: "medium",
             category: "Wallet",
         })]
-        snapshot_interval_secs: u64 = 60,
+        snapshot_interval_secs: u64 = 15,
 
         #[metadata(field_metadata! {
             label: "Flow Cache Update",

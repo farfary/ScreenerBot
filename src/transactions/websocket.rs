@@ -253,6 +253,15 @@ impl SolanaWebSocketClient {
                                         &format!("New transaction detected: {signature}"),
                                     );
 
+                                    // The wallet just changed on-chain. This subscription
+                                    // mentions the wallet, so it sees EVERYTHING — our own
+                                    // swaps and anything the owner does from another app —
+                                    // which makes it the one place that can keep the
+                                    // displayed worth honest. Refresh the balance now
+                                    // rather than waiting out the snapshot interval
+                                    // (coalesced, so a burst costs one refresh).
+                                    crate::wallet::request_balance_refresh();
+
                                     // Send signature to transaction processor
                                     if self.tx_sender.send(signature.to_string()).is_err() {
                                         logger::info(

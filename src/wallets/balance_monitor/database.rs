@@ -116,6 +116,15 @@ impl WalletDatabase {
         )
         .ok(); // Ignore error if column already exists
 
+        // Schema v4. Nullable on purpose: rows written before worth was tracked have
+        // no honest equity to backfill (we would have to value yesterday's holdings at
+        // today's prices), so they read back as their SOL balance via COALESCE.
+        conn.execute(
+            "ALTER TABLE wallet_snapshots ADD COLUMN total_equity_sol REAL",
+            [],
+        )
+        .ok(); // Ignore error if column already exists
+
         // Create all indexes
         for index_sql in WALLET_INDEXES {
             conn.execute(index_sql, [])
@@ -162,46 +171,28 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to get wallet database connection: {e}"))
     }
 
-    /// Get recent wallet snapshots
+    /// Get recent wallet snapshots.
+    ///
+    /// Token/NFT balances are NOT loaded (one query per snapshot would make the home
+    /// dashboard's 30-snapshot history 30x more expensive). Callers that need holdings
+    /// must use `get_wallet_worth()` (live) or `get_latest_snapshot_with_balances()`.
     pub fn get_recent_snapshots(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
             .prepare(
                 r#"
-            SELECT id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, COALESCE(total_nfts_count, 0)
-            FROM wallet_snapshots 
-            ORDER BY snapshot_time DESC 
+            SELECT id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports,
+                   COALESCE(total_equity_sol, sol_balance), total_tokens_count, COALESCE(total_nfts_count, 0)
+            FROM wallet_snapshots
+            ORDER BY snapshot_time DESC
             LIMIT ?1
             "#
             )
             .map_err(|e| format!("Failed to prepare snapshots query: {e}"))?;
 
         let snapshot_iter = stmt
-            .query_map(params![limit], |row| {
-                let snapshot_time_str: String = row.get(2)?;
-                let snapshot_time = DateTime::parse_from_rfc3339(&snapshot_time_str)
-                    .map_err(|_| {
-                        rusqlite::Error::InvalidColumnType(
-                            2,
-                            "Invalid snapshot_time".to_owned(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?
-                    .with_timezone(&Utc);
-
-                Ok(WalletSnapshot {
-                    id: Some(row.get(0)?),
-                    wallet_address: row.get(1)?,
-                    snapshot_time,
-                    sol_balance: row.get(3)?,
-                    sol_balance_lamports: row.get::<_, i64>(4)? as u64,
-                    total_tokens_count: row.get::<_, i64>(5)? as u32,
-                    total_nfts_count: row.get::<_, i64>(6)? as u32,
-                    token_balances: Vec::new(), // Loaded separately if needed
-                    nft_balances: Vec::new(),   // Loaded separately if needed
-                })
-            })
+            .query_map(params![limit], |row| Self::map_snapshot_row(row))
             .map_err(|e| format!("Failed to execute snapshots query: {e}"))?;
 
         let mut snapshots = Vec::new();
@@ -211,6 +202,50 @@ impl WalletDatabase {
         }
 
         Ok(snapshots)
+    }
+
+    /// The newest snapshot WITH its token and NFT balances loaded.
+    ///
+    /// Used once at startup to hydrate the live worth cache, so the header and hero
+    /// show a real figure before the first collection tick rather than zeroes.
+    pub fn get_latest_snapshot_with_balances(&self) -> Result<Option<WalletSnapshot>, String> {
+        let mut snapshot = match self.get_recent_snapshots(1)?.into_iter().next() {
+            Some(snapshot) => snapshot,
+            None => return Ok(None),
+        };
+
+        if let Some(id) = snapshot.id {
+            snapshot.token_balances = self.get_token_balances(id)?;
+            snapshot.nft_balances = self.get_nft_balances(id)?;
+        }
+
+        Ok(Some(snapshot))
+    }
+
+    fn map_snapshot_row(row: &rusqlite::Row) -> rusqlite::Result<WalletSnapshot> {
+        let snapshot_time_str: String = row.get(2)?;
+        let snapshot_time = DateTime::parse_from_rfc3339(&snapshot_time_str)
+            .map_err(|_| {
+                rusqlite::Error::InvalidColumnType(
+                    2,
+                    "Invalid snapshot_time".to_owned(),
+                    rusqlite::types::Type::Text,
+                )
+            })?
+            .with_timezone(&Utc);
+
+        Ok(WalletSnapshot {
+            id: Some(row.get(0)?),
+            wallet_address: row.get(1)?,
+            snapshot_time,
+            sol_balance: row.get(3)?,
+            sol_balance_lamports: row.get::<_, i64>(4)? as u64,
+            total_equity_sol: row.get(5)?,
+            total_tokens_count: row.get::<_, i64>(6)? as u32,
+            total_nfts_count: row.get::<_, i64>(7)? as u32,
+            token_balances: Vec::new(), // Loaded separately if needed
+            nft_balances: Vec::new(),   // Loaded separately if needed
+        })
     }
 
     /// Get wallet monitoring statistics

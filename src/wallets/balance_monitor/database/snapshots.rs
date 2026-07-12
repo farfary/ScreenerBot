@@ -19,14 +19,16 @@ impl WalletDatabase {
             .query_row(
                 r#"
             INSERT INTO wallet_snapshots (
-                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, total_nfts_count
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id
+                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol,
+                total_tokens_count, total_nfts_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING id
             "#,
                 params![
                     snapshot.wallet_address,
                     snapshot.snapshot_time.to_rfc3339(),
                     snapshot.sol_balance,
                     snapshot.sol_balance_lamports as i64,
+                    snapshot.total_equity_sol,
                     snapshot.total_tokens_count as i64,
                     snapshot.total_nfts_count as i64
                 ],
@@ -91,18 +93,24 @@ impl WalletDatabase {
         Ok(snapshot_id)
     }
 
-    /// Get SOL balance at or before a specific time (optimized for single value)
-    /// Uses idx_wallet_snapshots_time index for fast descending time lookup
+    /// Wallet WORTH (cash + holdings) at or before a specific time.
+    ///
+    /// This is the baseline every "change today" figure is measured against, so it has
+    /// to be the same quantity as the headline. Reading `sol_balance` here while the
+    /// headline showed equity meant a wallet holding tokens reported a phantom gain
+    /// equal to its entire holdings value, every day. Rows predating the equity column
+    /// fall back to their SOL balance.
+    /// Uses idx_wallet_snapshots_time index for fast descending time lookup.
     pub fn get_balance_at_time(&self, target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
         let conn = self.get_connection()?;
 
         let result = conn
             .query_row(
                 r#"
-            SELECT sol_balance 
-            FROM wallet_snapshots 
+            SELECT COALESCE(total_equity_sol, sol_balance)
+            FROM wallet_snapshots
             WHERE datetime(snapshot_time) <= datetime(?1)
-            ORDER BY snapshot_time DESC 
+            ORDER BY snapshot_time DESC
             LIMIT 1
             "#,
                 params![target_time.to_rfc3339()],
@@ -114,9 +122,9 @@ impl WalletDatabase {
         Ok(result)
     }
 
-    /// Get the end-of-day SOL balance for each calendar day (UTC) within a period.
+    /// Get the end-of-day wallet WORTH for each calendar day (UTC) within a period.
     /// Picks the last snapshot recorded on each day. Used by the home portfolio calendar.
-    /// Returns pairs of (YYYY-MM-DD, sol_balance) ordered ascending by day.
+    /// Returns pairs of (YYYY-MM-DD, total_equity_sol) ordered ascending by day.
     pub fn get_daily_end_balances(
         &self,
         start: DateTime<Utc>,
@@ -127,7 +135,7 @@ impl WalletDatabase {
         let mut stmt = conn
             .prepare(
                 r#"
-            SELECT strftime('%Y-%m-%d', snapshot_time) AS day, sol_balance
+            SELECT strftime('%Y-%m-%d', snapshot_time) AS day, COALESCE(total_equity_sol, sol_balance)
             FROM wallet_snapshots
             WHERE id IN (
                 SELECT MAX(id)

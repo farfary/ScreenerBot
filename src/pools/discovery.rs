@@ -244,11 +244,17 @@ impl PoolDiscovery {
 
         // Always include tokens with open positions for price monitoring
         let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;
+        // ...and everything the wallet actually holds. A token the bot never traded (an
+        // airdrop, a buy made elsewhere) would otherwise never be priced, so it would
+        // count as zero in the wallet's worth — silently understating the headline.
+        // These are the mints whose price the reported worth depends on, so they rank
+        // with position tokens, not with the discovery tail.
+        let held_mints: Vec<String> = crate::wallet::get_held_mints();
         let initial_count = tokens.len();
 
         let mut token_set: std::collections::HashSet<String> = tokens.iter().cloned().collect();
 
-        for mint in open_position_mints.iter() {
+        for mint in open_position_mints.iter().chain(held_mints.iter()) {
             if !is_stablecoin_mint(mint) && !token_set.contains(mint) {
                 token_set.insert(mint.clone());
                 tokens.push(mint.clone());
@@ -260,7 +266,7 @@ impl PoolDiscovery {
             logger::info(
                 LogTag::PoolDiscovery,
                 &format!(
-                    "Added {} open position tokens to monitoring set",
+                    "Added {} position/wallet-held tokens to monitoring set",
                     added_count
                 ),
             );
@@ -274,27 +280,33 @@ impl PoolDiscovery {
         // Early stablecoin filtering
         tokens.retain(|m| !is_stablecoin_mint(m));
 
-        // Cap to max_watched, prioritizing position tokens
+        // Cap to max_watched, prioritizing tokens we hold or have a position in — those
+        // are the ones a missing price actually costs the user (a wrong P&L, an
+        // understated wallet worth). Discovery candidates take what is left.
         if tokens.len() > max_watched {
-            let open_position_mints_set: std::collections::HashSet<String> =
-                open_position_mints.iter().cloned().collect();
+            let priority_mints: std::collections::HashSet<String> = open_position_mints
+                .iter()
+                .chain(held_mints.iter())
+                .cloned()
+                .collect();
 
-            let (mut position_tokens, mut other_tokens): (Vec<String>, Vec<String>) = tokens
+            let (mut priority_tokens, mut other_tokens): (Vec<String>, Vec<String>) = tokens
                 .into_iter()
-                .partition(|mint| open_position_mints_set.contains(mint));
+                .partition(|mint| priority_mints.contains(mint));
 
-            let remaining_slots = max_watched.saturating_sub(position_tokens.len());
+            let remaining_slots = max_watched.saturating_sub(priority_tokens.len());
             other_tokens.truncate(remaining_slots);
 
-            position_tokens.extend(other_tokens);
-            tokens = position_tokens;
+            let prioritized = priority_tokens.len();
+            priority_tokens.extend(other_tokens);
+            tokens = priority_tokens;
 
             logger::info(
                 LogTag::PoolDiscovery,
                 &format!(
-                    "Truncated to {} tokens (prioritized {} position tokens)",
+                    "Truncated to {} tokens (prioritized {} position/held tokens)",
                     tokens.len(),
-                    open_position_mints_set.len()
+                    prioritized
                 ),
             );
         }

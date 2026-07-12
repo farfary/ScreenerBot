@@ -1,7 +1,9 @@
 //! Balance monitor database schema — table definitions for balance tracking.
 
 // Database schema version
-pub(super) const WALLET_SCHEMA_VERSION: u32 = 3;
+// 4: total_equity_sol on wallet_snapshots — the baseline/history for every wallet
+//    figure is now full worth (cash + holdings), not cash alone.
+pub(super) const WALLET_SCHEMA_VERSION: u32 = 4;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
@@ -14,6 +16,7 @@ CREATE TABLE IF NOT EXISTS wallet_snapshots (
     snapshot_time TEXT NOT NULL,
     sol_balance REAL NOT NULL,
     sol_balance_lamports INTEGER NOT NULL,
+    total_equity_sol REAL,
     total_tokens_count INTEGER NOT NULL DEFAULT 0,
     total_nfts_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))

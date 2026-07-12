@@ -39,6 +39,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
     let requires_db_update = transition.requires_db_update();
 
+    // A verified swap means SOL and tokens have actually moved. Tell the wallet monitor
+    // to re-read the balance now, so the header/hero worth reflects the trade within a
+    // second or two instead of at the next snapshot interval.
+    if transition.affects_wallet_balance() {
+        crate::wallet::request_balance_refresh();
+    }
+
     match transition {
         // =================================================================
         // ENTRY

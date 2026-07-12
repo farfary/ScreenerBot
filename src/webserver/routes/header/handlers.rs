@@ -6,7 +6,7 @@ use crate::filtering::global_store;
 use crate::global::are_core_services_ready;
 use crate::rpc::get_global_rpc_stats;
 use crate::services::{get_service_manager, ServiceHealth};
-use crate::wallet::{get_balance_at_time, get_current_wallet_status};
+use crate::wallet::{get_balance_at_time, get_wallet_worth};
 
 use super::types::*;
 
@@ -27,13 +27,17 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     // Header collectors are independent. Keep the frequently-polled endpoint bounded by
     // running database/service work concurrently and reusing each result once.
     let store = global_store();
-    let (today_stats, wallet_snapshot, start_balance, filtering_stats, system) = tokio::join!(
+    let (today_stats, start_balance, filtering_stats, system) = tokio::join!(
         crate::positions::get_period_trading_stats(today_start, Some(now)),
-        get_current_wallet_status(),
         get_balance_at_time(today_start),
         store.get_stats(),
         calculate_system_health(),
     );
+
+    // The wallet's worth is served from the live in-memory snapshot, priced now — no
+    // database read on this once-a-second endpoint, and the exact same figure the home
+    // hero renders.
+    let worth = get_wallet_worth();
 
     let preview = crate::global::is_preview_mode();
     let (trader_enabled, entry_enabled, exit_enabled) = with_config(|cfg| {
@@ -76,37 +80,16 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         today_pnl_percent,
     };
 
-    let wallet = if let Ok(Some(snapshot)) = wallet_snapshot {
-        let change_today_sol = start_balance_sol.map(|start| snapshot.sol_balance - start);
-        let change_today_percent = start_balance_sol
+    let wallet = WalletHeaderInfo {
+        sol_balance: worth.sol_balance,
+        tokens_worth_sol: worth.tokens_worth_sol,
+        total_equity_sol: worth.total_equity_sol,
+        change_today_sol: start_balance_sol.map(|start| worth.total_equity_sol - start),
+        change_today_percent: start_balance_sol
             .filter(|start| *start > f64::EPSILON)
-            .map(|start| (snapshot.sol_balance - start) / start * 100.0);
-        let tokens_worth_sol = snapshot
-            .token_balances
-            .iter()
-            .filter_map(|balance| {
-                crate::pools::get_pool_price(&balance.mint)
-                    .map(|price| balance.balance_ui * price.price_sol)
-            })
-            .sum();
-
-        WalletHeaderInfo {
-            sol_balance: snapshot.sol_balance,
-            change_today_sol,
-            change_today_percent,
-            token_count: snapshot.total_tokens_count as usize,
-            tokens_worth_sol,
-            last_updated: snapshot.snapshot_time.to_rfc3339(),
-        }
-    } else {
-        WalletHeaderInfo {
-            sol_balance: 0.0,
-            change_today_sol: None,
-            change_today_percent: None,
-            token_count: 0,
-            tokens_worth_sol: 0.0,
-            last_updated: now.to_rfc3339(),
-        }
+            .map(|start| (worth.total_equity_sol - start) / start * 100.0),
+        token_count: worth.token_count,
+        last_updated: worth.updated_at.to_rfc3339(),
     };
 
     // RPC info

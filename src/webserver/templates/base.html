@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
@@ -237,25 +237,26 @@
 
         <!-- Status / metric cards (secondary; scrollable when space is tight) -->
         <div class="header-cards" id="headerCards">
-          <!-- Wallet Card -->
+          <!-- Wallet Card — headline is the full wallet worth (cash + holdings), the
+               same figure the home hero shows. The bottom row breaks it down. -->
           <button
             type="button"
             class="header-card"
             id="walletCard"
-            aria-label="Wallet summary; open Positions"
-            title="Wallet summary · open Positions"
+            aria-label="Wallet worth; open Positions"
+            title="Wallet worth (SOL + tokens) · open Positions"
           >
             <span class="card-content">
               <span class="card-top">
-                <span class="card-label">SOL</span>
-                <span class="card-value" id="walletSol">—</span>
+                <span class="card-label">WORTH</span>
+                <span class="card-value" id="walletWorth">—</span>
                 <span class="card-change" id="walletChange">—</span>
               </span>
               <span class="card-bottom">
+                <span class="card-sub">SOL</span>
+                <span class="card-sub-value" id="walletSol">—</span>
                 <span class="card-sub">TKN</span>
                 <span class="card-sub-value" id="walletTokenCount">—</span>
-                <span class="card-sub">Worth</span>
-                <span class="card-sub-value" id="walletTokenWorth">—</span>
               </span>
             </span>
           </button>

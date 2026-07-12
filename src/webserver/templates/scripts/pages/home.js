@@ -229,7 +229,15 @@ function createLifecycle() {
     const holdingsCountEl = document.getElementById("heroHoldingsCount");
     if (holdingsCountEl) {
       const n = wallet.token_count || 0;
-      holdingsCountEl.textContent = n > 0 ? `${n} token${n === 1 ? "" : "s"}` : "";
+      // A held token we cannot price contributes 0 to the worth. Say so rather than
+      // quietly reporting a headline that is short by an unknown amount.
+      const unpriced = wallet.unpriced_token_count || 0;
+      const label = n > 0 ? `${n} token${n === 1 ? "" : "s"}` : "";
+      holdingsCountEl.textContent = unpriced > 0 ? `${label} · ${unpriced} unpriced` : label;
+      holdingsCountEl.title =
+        unpriced > 0
+          ? `${unpriced} held token${unpriced === 1 ? " has" : "s have"} no price available and count as 0 in the total`
+          : "";
     }
 
     // Open P&L tile — unrealized, from the positions snapshot.

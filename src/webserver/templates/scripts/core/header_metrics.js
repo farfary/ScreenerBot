@@ -5,6 +5,10 @@ import { formatNumber } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
 
+// Wallet SOL figures render with the same precision as the home hero — a headline that
+// reads 1.234 in one place and 1.2345 in the other looks like two different numbers.
+const WALLET_SOL_DECIMALS = 4;
+
 const TRADER_STATES = {
   preview: {
     label: "PREVIEW",
@@ -81,27 +85,34 @@ function updateBotCard(trader, state) {
   setValueClass(pnl, value);
 }
 
+// The card headlines the wallet's full WORTH (cash + every token held), which is the
+// identical figure — and identical formatting — the home hero renders. Both read
+// `total_equity_sol` off the backend's one wallet-worth source, so they cannot drift.
+// The bottom row breaks the headline down into its cash part and the token count.
 function updateWalletCard(wallet, state) {
   const card = document.getElementById("walletCard");
+  const worth = document.getElementById("walletWorth");
   const sol = document.getElementById("walletSol");
   const change = document.getElementById("walletChange");
   const tokenCount = document.getElementById("walletTokenCount");
-  const tokenWorth = document.getElementById("walletTokenWorth");
-  if (!card || !sol) return;
+  if (!card || !worth) return;
 
   if (state.traderStatus === "preview" || !wallet) {
-    sol.textContent = "—";
+    worth.textContent = "—";
+    if (sol) sol.textContent = "—";
     if (change) {
       change.textContent = "—";
       change.classList.remove("positive", "negative", "neutral");
     }
     if (tokenCount) tokenCount.textContent = "—";
-    if (tokenWorth) tokenWorth.textContent = "—";
     return;
   }
 
+  const equity = finiteNumber(wallet.total_equity_sol);
+  worth.textContent = formatNumber(equity, WALLET_SOL_DECIMALS);
+
   const balance = finiteNumber(wallet.sol_balance);
-  sol.textContent = formatNumber(balance, 3);
+  if (sol) sol.textContent = formatNumber(balance, WALLET_SOL_DECIMALS);
 
   const changePercent = finiteNumber(wallet.change_today_percent);
   if (change) {
@@ -116,12 +127,9 @@ function updateWalletCard(wallet, state) {
   }
 
   if (tokenCount) tokenCount.textContent = formatNumber(wallet.token_count, 0);
-  if (tokenWorth) {
-    tokenWorth.textContent = `${formatNumber(wallet.tokens_worth_sol, 2)} SOL`;
-  }
   card.setAttribute(
     "aria-label",
-    `Wallet: ${formatNumber(balance, 3)} SOL and ${formatNumber(wallet.token_count, 0)} tokens; open Positions`,
+    `Wallet worth: ${formatNumber(equity, WALLET_SOL_DECIMALS)} SOL (${formatNumber(balance, WALLET_SOL_DECIMALS)} SOL cash, ${formatNumber(wallet.token_count, 0)} tokens); open Positions`
   );
 }
 
@@ -158,7 +166,8 @@ function updateTicker(metrics) {
   const rpcSuccess = document.getElementById("tickerRPCSuccess");
   const servicesText = document.getElementById("tickerServicesText");
 
-  if (monitoringCount) monitoringCount.textContent = formatNumber(metrics.filtering?.monitoring_count, 0);
+  if (monitoringCount)
+    monitoringCount.textContent = formatNumber(metrics.filtering?.monitoring_count, 0);
   if (passedCount) passedCount.textContent = formatNumber(metrics.filtering?.passed_count, 0);
   if (rejectedCount) rejectedCount.textContent = formatNumber(metrics.filtering?.rejected_count, 0);
 

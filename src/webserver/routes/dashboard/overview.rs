@@ -11,7 +11,7 @@ use crate::positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
-use crate::wallet::get_current_wallet_status;
+use crate::wallet::get_wallet_worth;
 use crate::webserver::demo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
@@ -27,20 +27,14 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
         return Json(demo::get_demo_dashboard_overview());
     }
 
-    // Get wallet info
-    let wallet_info = match get_current_wallet_status().await {
-        Ok(Some(snapshot)) => WalletInfo {
-            sol_balance: snapshot.sol_balance,
-            sol_balance_lamports: snapshot.sol_balance_lamports,
-            total_tokens_count: snapshot.total_tokens_count as usize,
-            last_updated: Some(snapshot.snapshot_time.to_rfc3339()),
-        },
-        _ => WalletInfo {
-            sol_balance: 0.0,
-            sol_balance_lamports: 0,
-            total_tokens_count: 0,
-            last_updated: None,
-        },
+    // Wallet info from the live worth cache — same source as the header and the home
+    // hero, and free of a database read on a polled endpoint.
+    let worth = get_wallet_worth();
+    let wallet_info = WalletInfo {
+        sol_balance: worth.sol_balance,
+        sol_balance_lamports: crate::utils::sol_to_lamports(worth.sol_balance),
+        total_tokens_count: worth.token_count,
+        last_updated: worth.has_snapshot.then(|| worth.updated_at.to_rfc3339()),
     };
 
     // Get positions summary

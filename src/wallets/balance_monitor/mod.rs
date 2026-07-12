@@ -16,6 +16,7 @@ mod dashboard;
 mod database;
 mod service;
 mod types;
+mod worth;
 
 // Re-export public API
 pub use service::{
@@ -43,10 +44,14 @@ pub use cache::get_cached_wallet_snapshot_status;
 pub use dashboard::get_wallet_dashboard_data;
 pub use database::get_wallet_service_metrics;
 
+// The single source of truth for what the wallet is worth, and the hook that keeps
+// it live. Every user-facing wallet figure goes through `get_wallet_worth()`.
+pub use worth::{get_held_mints, get_wallet_worth, request_balance_refresh};
+
 // Re-export public types
 pub use types::{
     CachePerformanceMetrics, DailyFlowPoint, DashboardCacheFreshness, DashboardCacheMetadata,
     DashboardDataSource, NftBalance, SnapshotTokenBalance, WalletBalancePoint, WalletDashboardData,
     WalletFlowCacheStats, WalletFlowMetrics, WalletMonitorStats, WalletNftOverview, WalletSnapshot,
-    WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview,
+    WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview, WalletWorth,
 };
