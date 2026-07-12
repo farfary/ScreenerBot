@@ -27,8 +27,14 @@ impl PositionsDatabase {
         Ok(result)
     }
 
-    /// Get position by mint
-    pub async fn get_position_by_mint(&self, mint: &str) -> Result<Option<Position>, String> {
+    /// The most recent position for a mint, OPEN OR CLOSED (ORDER BY entry_time DESC).
+    ///
+    /// This is the history lookup — callers that want the tradeable position must use the
+    /// in-memory `state::get_position_by_mint`, which returns only an open one.
+    pub async fn get_latest_position_by_mint(
+        &self,
+        mint: &str,
+    ) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 

@@ -412,17 +412,32 @@ async fn rebuild_position_indexes(positions: &[Position]) {
     }
 }
 
-/// Get position by mint
+/// Is this position OPEN — the single definition, used by every reader.
+///
+/// A close that is still confirming counts as open (`exit_transaction_signature` set but
+/// not yet verified): the tokens are still held, and the close/verification paths must be
+/// able to find the position they are working on.
+///
+/// Having two definitions of "has a position" is what made a buy impossible after a close:
+/// the read side (`get_position_by_mint`) used to fall back to ANY position with that mint,
+/// closed ones included, so the dashboard saw a dead position as "held" and switched the
+/// user's Buy to an Add — which the write side then rejected with "no open position",
+/// because `is_open_position` (below) correctly excluded it.
+pub(crate) fn is_position_open(position: &Position) -> bool {
+    !position.archived
+        && position.position_type == "buy"
+        && position.exit_time.is_none()
+        && (position.exit_transaction_signature.is_none() || !position.transaction_exit_verified)
+}
+
+/// The OPEN position for a mint, or None. A closed position is never returned —
+/// history is reached explicitly by position id (`get_position_by_id`).
 pub async fn get_position_by_mint(mint: &str) -> Option<Position> {
     let positions = POSITIONS.read().await;
-    // Prefer open positions (no exit) over closed ones to avoid stale match
-    let open = positions.iter().find(|p| {
-        p.mint == mint && p.exit_time.is_none() && p.exit_transaction_signature.is_none()
-    });
-    if let Some(pos) = open {
-        return Some(pos.clone());
-    }
-    positions.iter().find(|p| p.mint == mint).cloned()
+    positions
+        .iter()
+        .find(|p| p.mint == mint && is_position_open(p))
+        .cloned()
 }
 
 /// Get all open positions (archived positions are excluded — they live in the Archived tab)
@@ -430,12 +445,7 @@ pub async fn get_open_positions() -> Vec<Position> {
     let positions = POSITIONS.read().await;
     positions
         .iter()
-        .filter(|p| {
-            !p.archived
-                && p.position_type == "buy"
-                && p.exit_time.is_none()
-                && (p.exit_transaction_signature.is_none() || !p.transaction_exit_verified)
-        })
+        .filter(|p| is_position_open(p))
         .cloned()
         .collect()
 }
@@ -466,12 +476,10 @@ pub async fn is_open_position(mint: &str) -> bool {
     // Check existing open position first
     {
         let positions = POSITIONS.read().await;
-        if positions.iter().any(|p| {
-            p.mint == mint
-                && p.position_type == "buy"
-                && p.exit_time.is_none()
-                && (p.exit_transaction_signature.is_none() || !p.transaction_exit_verified)
-        }) {
+        if positions
+            .iter()
+            .any(|p| p.mint == mint && is_position_open(p))
+        {
             return true;
         }
     }

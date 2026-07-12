@@ -162,6 +162,12 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
     }
 }
 
+/// `id:<n>` resolves ANY position (open, closed or archived) — that is how the Closed and
+/// Archived tabs open their rows. A MINT key resolves only the OPEN position: every caller
+/// that looks a position up by mint (the trade dialog, the token-details Positions tab, the
+/// context menu) is asking "is this token held right now", and answering with a closed
+/// position made the dashboard turn a Buy into an Add that the trade route then rejected
+/// with "no open position for this token".
 async fn resolve_position_by_key(key: &str) -> Result<Option<positions::Position>, String> {
     if let Some(id_part) = key.strip_prefix("id:") {
         let id: i64 = id_part

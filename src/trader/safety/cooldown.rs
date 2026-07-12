@@ -22,7 +22,7 @@ pub async fn is_in_reentry_cooldown(mint: &str) -> Result<bool, String> {
     }
 
     // Check if there's a closed position within cooldown period
-    if let Ok(Some(position)) = positions::db::get_position_by_mint(mint).await {
+    if let Ok(Some(position)) = positions::db::get_latest_position_by_mint(mint).await {
         // Only check cooldown if position was closed (has exit time)
         if let Some(exit_time) = position.exit_time {
             let elapsed = Utc::now().signed_duration_since(exit_time).num_minutes();

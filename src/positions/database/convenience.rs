@@ -268,11 +268,11 @@ pub async fn get_daily_trading_stats(
     }
 }
 
-/// Get position by mint from database
-pub async fn get_position_by_mint(mint: &str) -> Result<Option<Position>, String> {
+/// The most recent position for a mint from the database, OPEN OR CLOSED.
+pub async fn get_latest_position_by_mint(mint: &str) -> Result<Option<Position>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_position_by_mint(mint).await,
+        Some(db) => db.get_latest_position_by_mint(mint).await,
         None => Err("Positions database not initialized".to_owned()),
     }
 }

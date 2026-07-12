@@ -130,7 +130,7 @@ async fn open_position_impl(
 
     // Extra safety: consult database for any existing open or unverified position for this mint.
     // This covers edge cases across restarts or rare state desyncs where in-memory guards miss.
-    if let Ok(db_pos_opt) = positions_db::get_position_by_mint(&api_token.mint).await {
+    if let Ok(db_pos_opt) = positions_db::get_latest_position_by_mint(&api_token.mint).await {
         if let Some(db_pos) = db_pos_opt {
             let is_still_open = db_pos.position_type == "buy"
                 && db_pos.exit_time.is_none()
