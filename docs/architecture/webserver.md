@@ -717,6 +717,14 @@ The webserver is designed for low-latency responses across all endpoints, with c
 - Parallelizes independent I/O operations
 - Minimizes total latency by running queries concurrently
 
+**`/api/positions/{key}/activity`** — All-time activity for the token
+- Fetched lazily only while the Position Details Activity tab is open
+- Merges every position round, entry/exit records, pending operations, state changes,
+  on-chain transaction details and unclaimed wallet-only transactions for the mint
+- Returns chronological events with server-derived running cost basis and realized P&L
+- The frontend groups the history by trading round, keeps each lifecycle chronological,
+  and places wallet-only activity in a separate expandable chapter
+
 #### Transaction Collection
 
 **Transaction collector service** — Background data aggregation

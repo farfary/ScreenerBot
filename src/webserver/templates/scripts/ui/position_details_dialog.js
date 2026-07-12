@@ -47,8 +47,9 @@ export class PositionDetailsDialog {
     this._activityError = null;
     this._activityRenderedFp = null;
     this._activityFilter = "all";
-    this._activitySort = "newest";
     this._activityExpanded = new Set();
+    this._activityOpenRounds = new Set();
+    this._activityRoundsInitialized = false;
     this._activityClickHandler = null;
   }
 
@@ -150,8 +151,9 @@ export class PositionDetailsDialog {
     this._activityError = null;
     this._activityRenderedFp = null;
     this._activityFilter = "all";
-    this._activitySort = "newest";
     this._activityExpanded = new Set();
+    this._activityOpenRounds = new Set();
+    this._activityRoundsInitialized = false;
     this._activityClickHandler = null;
   }
 

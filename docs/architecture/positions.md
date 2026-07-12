@@ -731,6 +731,21 @@ position can be opened; unarchiving an open position reclaims a permit
 (`try_consume_global_position_permit`). Removing does **not** sell — tokens stay
 in the wallet.
 
+### Token Activity History
+
+`GET /api/positions/{key}/activity` lazily builds the selected token's complete
+wallet history. It merges entry/exit records, pending position operations,
+on-chain transaction details, position state changes, every historical position
+for the mint, and wallet-only transactions that were not claimed by a position.
+Token amounts are converted to whole-token UI units by the server.
+
+The Position Details Activity tab presents this response as expandable trading
+rounds. The current or newest round opens by default; events within each round
+remain chronological, meaningful state changes share the same timeline, and
+transactions outside ScreenerBot live in a separate wallet-only chapter. The
+collapsed event row contains the human-readable action and outcome; accounting,
+signature, routing, fees and transfer details use progressive disclosure.
+
 ### System
 
 | Function | Purpose |

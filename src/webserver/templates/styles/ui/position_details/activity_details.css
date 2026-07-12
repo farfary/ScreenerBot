@@ -1,0 +1,160 @@
+/* Position Details Activity — expanded accounting and chain records. */
+
+.position-details-dialog .pdd-act-details {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.position-details-dialog .pdd-act-card.is-open .pdd-act-details {
+  display: flex;
+}
+
+.position-details-dialog .pdd-act-position-after,
+.position-details-dialog .pdd-act-xfers {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.position-details-dialog .pdd-act-position-after h4,
+.position-details-dialog .pdd-act-xfers h4 {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.position-details-dialog .pdd-act-position-after {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.position-details-dialog .pdd-act-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px var(--spacing-md);
+}
+
+.position-details-dialog .pdd-act-detail-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-act-detail-metric > span {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .pdd-act-detail-metric > strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font: 600 0.72rem/1.35 var(--font-data);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.position-details-dialog .pdd-act-note.is-error {
+  border-color: var(--danger-alpha-30);
+  background: var(--danger-alpha-10);
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-act-signature {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.position-details-dialog .pdd-act-sig {
+  color: var(--link-color);
+  font: 500 0.68rem/1.3 var(--font-mono);
+  cursor: pointer;
+}
+
+.position-details-dialog .pdd-act-sig-copy,
+.position-details-dialog .pdd-act-sig-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.position-details-dialog .pdd-act-sig-copy:hover,
+.position-details-dialog .pdd-act-sig-link:hover {
+  background: var(--bg-card-hover);
+  color: var(--link-color);
+}
+
+.position-details-dialog .pdd-act-sig-na {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-style: italic;
+}
+
+.position-details-dialog .pdd-act-xfers {
+  overflow-x: auto;
+}
+
+.position-details-dialog .pdd-act-xfer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 500 0.68rem/1.3 var(--font-data);
+}
+
+.position-details-dialog .pdd-act-xfer-table th,
+.position-details-dialog .pdd-act-xfer-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-xfer-table th {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  text-transform: uppercase;
+}
+
+.position-details-dialog .pdd-act-xfer-amount {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.position-details-dialog .pdd-act-filter-empty {
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-align: center;
+}

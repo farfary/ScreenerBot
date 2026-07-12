@@ -169,6 +169,8 @@ pub(super) const POSITION_DETAILS_CHART_STYLES: &str =
     include_str!("templates/styles/ui/position_details/chart.css");
 pub(super) const POSITION_DETAILS_ACTIVITY_STYLES: &str =
     include_str!("templates/styles/ui/position_details/activity.css");
+pub(super) const POSITION_DETAILS_ACTIVITY_DETAILS_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/activity_details.css");
 
 // CSS Styles - Settings and Misc
 pub(super) const SETTINGS_BASE_STYLES: &str = include_str!("templates/styles/settings/base.css");

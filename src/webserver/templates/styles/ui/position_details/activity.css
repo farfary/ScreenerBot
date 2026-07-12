@@ -1,7 +1,4 @@
-/* =============================================================================
-   ACTIVITY TAB — the position's swaps as ONE merged timeline
-   (record + on-chain transaction + running position state)
-   ============================================================================= */
+/* Position Details — round-grouped token activity timeline. */
 
 .position-details-dialog .pdd-activity {
   display: flex;
@@ -9,217 +6,117 @@
   gap: var(--spacing-md);
 }
 
-/* =============================================================================
-   SUMMARY STRIP — totals for the whole timeline
-   ============================================================================= */
-
+/* All-time summary */
 .position-details-dialog .pdd-act-summary {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 1px;
-  background: var(--border-color);
+  grid-template-columns: minmax(190px, 0.8fr) minmax(420px, 2fr);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
   overflow: hidden;
 }
 
-.position-details-dialog .pdd-act-sum-cell {
+.position-details-dialog .pdd-act-summary-lead {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  justify-content: center;
   gap: 3px;
-  padding: 10px 8px;
-  background: var(--bg-secondary);
-  min-width: 0;
+  padding: var(--spacing-md);
+  border-right: 1px solid var(--border-color);
 }
 
-.position-details-dialog .pdd-act-sum-label {
-  font-size: 0.58rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-
-.position-details-dialog .pdd-act-sum-value {
-  font-size: 0.9rem;
-  font-weight: 700;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.position-details-dialog .pdd-act-sum-value.pdd-positive {
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-act-sum-value.pdd-negative {
-  color: var(--danger);
-}
-
-.position-details-dialog .pdd-act-sum-sub {
-  font-size: 0.65rem;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-/* =============================================================================
-   CONTEXT ROW — Trading Rounds and State History, side by side
-   Two short reference lists that frame the feed below them. Either can be absent
-   (one round of trading needs no round list); whichever is left takes the width.
-   ============================================================================= */
-
-.position-details-dialog .pdd-act-context {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-md);
-  align-items: start;
-}
-
-.position-details-dialog .pdd-act-context.is-single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-/* THE panel — one header treatment for every list in this tab. */
-.position-details-dialog .pdd-act-panel {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.position-details-dialog .pdd-act-panel-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.position-details-dialog .pdd-act-panel-head i {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.position-details-dialog .pdd-act-panel-title {
-  font-size: 0.68rem;
+.position-details-dialog .pdd-act-summary-eyebrow,
+.position-details-dialog .pdd-act-summary-item > span {
+  font-size: 0.62rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-secondary);
-}
-
-/* A list this long is reference material — it scrolls rather than pushing the feed down. */
-.position-details-dialog .pdd-act-panel-body {
-  display: flex;
-  flex-direction: column;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-/* THE list row — shared by the rounds and the state history, so the two columns
-   sit on the same baseline instead of drifting apart. */
-.position-details-dialog .pdd-act-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  min-width: 0;
-}
-
-.position-details-dialog .pdd-act-row:last-child {
-  border-bottom: none;
-}
-
-.position-details-dialog .pdd-act-row.is-current {
-  background: var(--primary-alpha-10);
-}
-
-.position-details-dialog .pdd-act-row-name {
-  flex-shrink: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-primary);
-}
-
-.position-details-dialog .pdd-act-row-note {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.position-details-dialog .pdd-act-row-time {
-  flex-shrink: 0;
-  font-size: 0.7rem;
   color: var(--text-muted);
-  font-family: var(--font-data);
-  white-space: nowrap;
 }
 
-.position-details-dialog .pdd-act-row-value {
-  flex-shrink: 0;
-  margin-left: auto;
-  font-size: 0.78rem;
-  font-weight: 700;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  white-space: nowrap;
+.position-details-dialog .pdd-act-summary-pnl {
+  font: 700 1.15rem/1.3 var(--font-data);
 }
 
-.position-details-dialog .pdd-act-row-value.pdd-positive {
+.position-details-dialog .is-positive {
   color: var(--success-color);
 }
 
-.position-details-dialog .pdd-act-row-value.pdd-negative {
+.position-details-dialog .is-negative {
   color: var(--danger);
 }
 
-.position-details-dialog .pdd-act-round-status {
-  flex-shrink: 0;
-  font-size: 0.63rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
+.position-details-dialog .pdd-act-summary-caption {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
 }
 
-.position-details-dialog .pdd-act-round-status.is-open {
-  color: var(--success-color);
+.position-details-dialog .pdd-act-summary-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-/* =============================================================================
-   TOOLBAR — filters + chronological order
-   ============================================================================= */
+.position-details-dialog .pdd-act-summary-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px var(--spacing-md);
+  border-right: 1px solid var(--border-subtle);
+}
 
-.position-details-dialog .pdd-act-toolbar {
+.position-details-dialog .pdd-act-summary-item:last-child {
+  border-right: none;
+}
+
+.position-details-dialog .pdd-act-summary-item strong {
+  overflow: hidden;
+  font: 700 0.84rem/1.3 var(--font-data);
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-summary-item small {
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .pdd-act-summary-meta {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  flex-wrap: wrap;
+  padding: 7px var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-summary-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.position-details-dialog .pdd-act-summary-alert {
+  color: var(--warning-color);
+}
+
+/* Sticky browsing controls */
+.position-details-dialog .pdd-act-toolbar {
+  position: sticky;
+  top: -16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: 10px 0;
+  background: var(--bg-primary);
 }
 
 .position-details-dialog .pdd-act-filters {
@@ -233,605 +130,477 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--bg-secondary);
+  min-height: 30px;
+  padding: 5px 11px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .position-details-dialog .pdd-act-filter:hover {
-  color: var(--text-primary);
   border-color: var(--border-hover);
+  color: var(--text-primary);
 }
 
 .position-details-dialog .pdd-act-filter.active {
-  background: var(--primary-alpha-15);
   border-color: var(--primary);
+  background: var(--primary-alpha-15);
   color: var(--primary);
 }
 
-/* THE count chip — the filter pills and the panel headers had two different ones. */
-.position-details-dialog .pdd-act-count {
-  font-family: var(--font-data);
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 0 6px;
+.position-details-dialog .pdd-act-filter > span {
+  min-width: 18px;
+  padding: 0 5px;
   border-radius: var(--radius-full);
   background: var(--bg-primary);
-  border: 1px solid var(--border-color);
   color: var(--text-muted);
+  font: 700 0.65rem/1.35 var(--font-data);
+  text-align: center;
 }
 
-.position-details-dialog .pdd-act-filter .pdd-act-count {
-  border-color: transparent;
-}
-
-.position-details-dialog .pdd-act-filter.active .pdd-act-count {
+.position-details-dialog .pdd-act-filter.active > span {
   background: var(--primary-alpha-20);
   color: var(--primary);
 }
 
-/* Matches the pills it sits beside — it used to be the one radius-md control in a
-   radius-full row. */
-.position-details-dialog .pdd-act-sort {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.position-details-dialog .pdd-act-sort:hover {
-  color: var(--text-primary);
-  border-color: var(--border-hover);
-}
-
-.position-details-dialog .pdd-act-sort i {
-  font-size: 13px;
-}
-
-/* =============================================================================
-   EVENT CARD
-   ============================================================================= */
-
+/* Trading-round chapters */
 .position-details-dialog .pdd-act-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.position-details-dialog .pdd-act-card {
-  background: var(--bg-secondary);
+.position-details-dialog .pdd-act-round {
+  overflow: hidden;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast);
+  background: var(--bg-secondary);
 }
 
-.position-details-dialog .pdd-act-card:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-hover);
+.position-details-dialog .pdd-act-round.is-current {
+  border-color: var(--primary-alpha-30);
 }
 
-.position-details-dialog .pdd-act-card.is-filtered-out {
+.position-details-dialog .pdd-act-round.is-filtered-out,
+.position-details-dialog .pdd-act-card.is-filtered-out,
+.position-details-dialog .pdd-act-milestone.is-filtered-out {
   display: none;
 }
 
-.position-details-dialog .pdd-act-filter-empty {
-  padding: var(--spacing-lg);
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-}
-
-/* Head: kind, sequence, exit %, time, state */
-.position-details-dialog .pdd-act-head {
+.position-details-dialog .pdd-act-round-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.position-details-dialog .pdd-act-icon {
+.position-details-dialog .pdd-act-round-toggle:hover {
+  background: var(--bg-card-hover);
+}
+
+.position-details-dialog .pdd-act-round-index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-full);
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: 700 0.78rem/1 var(--font-data);
 }
 
-.position-details-dialog .pdd-act-icon i {
-  font-size: 14px;
+.position-details-dialog .is-current .pdd-act-round-index {
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
-.position-details-dialog .pdd-act-card[data-side="entry"] .pdd-act-icon {
-  background: var(--success-alpha-20);
-  color: var(--success-color);
+.position-details-dialog .pdd-act-round-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
 }
 
-.position-details-dialog .pdd-act-card[data-side="exit"] .pdd-act-icon {
-  background: var(--danger-alpha-20);
-  color: var(--danger);
+.position-details-dialog .pdd-act-round-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
-/* A wallet event belongs to no position: neutral, so it never reads as a trade of ours. */
-.position-details-dialog .pdd-act-card[data-side="wallet"] .pdd-act-icon {
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-}
-
-.position-details-dialog .pdd-act-label {
-  font-size: 0.75rem;
+.position-details-dialog .pdd-act-current-badge,
+.position-details-dialog .pdd-act-round-status {
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  font-size: 0.58rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.position-details-dialog .pdd-act-card[data-side="entry"] .pdd-act-label {
+.position-details-dialog .pdd-act-current-badge {
+  background: var(--primary-alpha-15);
+  color: var(--primary);
+}
+
+.position-details-dialog .pdd-act-round-status {
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-round-status.is-open {
+  background: var(--success-alpha-15);
   color: var(--success-color);
 }
 
-.position-details-dialog .pdd-act-card[data-side="exit"] .pdd-act-label {
-  color: var(--danger);
-}
-
-.position-details-dialog .pdd-act-card[data-side="wallet"] .pdd-act-label {
-  color: var(--text-secondary);
-}
-
-/* The exit percentage. Tinted with the card's own accent — a yellow tag next to a red
-   EXIT label read as a third, unrelated status. */
-.position-details-dialog .pdd-act-tag {
-  padding: 2px 7px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  font-family: var(--font-data);
-  border-radius: var(--radius-full);
-  background: var(--danger-alpha-15);
-  color: var(--danger);
-}
-
-/* Which round of trading this event belongs to (only when there is more than one). */
-.position-details-dialog .pdd-act-chip-pos {
-  padding: 2px 8px;
-  font-size: 0.63rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-radius: var(--radius-full);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+.position-details-dialog .pdd-act-round-date {
+  overflow: hidden;
   color: var(--text-muted);
+  font: 500 0.68rem/1.35 var(--font-data);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.position-details-dialog .pdd-act-chip-pos.is-current {
-  border-color: var(--primary);
-  color: var(--primary);
-  background: var(--primary-alpha-10);
-}
-
-.position-details-dialog .pdd-act-chip-pos.is-wallet {
-  border-style: dashed;
-}
-
-.position-details-dialog .pdd-act-head-right {
+.position-details-dialog .pdd-act-round-facts {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-left: auto;
+  gap: var(--spacing-md);
   flex-shrink: 0;
+  font: 600 0.72rem/1.3 var(--font-data);
+  color: var(--text-secondary);
 }
 
-.position-details-dialog .pdd-act-time {
-  font-size: 0.7rem;
+.position-details-dialog .pdd-act-round-facts > span:not(.pdd-act-round-count) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .pdd-act-round-facts small {
   color: var(--text-muted);
-  font-family: var(--font-data);
+  font: 600 0.56rem/1.2 var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .pdd-act-round-count {
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+.position-details-dialog .pdd-act-round-facts > i {
+  transition: transform var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-round.is-open .pdd-act-round-facts > i {
+  transform: rotate(180deg);
+}
+
+.position-details-dialog .pdd-act-round-body {
+  position: relative;
+  display: none;
+  padding: 6px 14px 12px 46px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.position-details-dialog .pdd-act-round.is-open .pdd-act-round-body {
+  display: block;
+}
+
+/* Compact event rows */
+.position-details-dialog .pdd-act-card,
+.position-details-dialog .pdd-act-milestone {
+  position: relative;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.position-details-dialog .pdd-act-card::before,
+.position-details-dialog .pdd-act-milestone::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -17px;
+  width: 1px;
+  background: var(--border-color);
+}
+
+.position-details-dialog .pdd-act-card:first-child::before {
+  top: 30px;
+}
+
+.position-details-dialog .pdd-act-card:last-child::before {
+  bottom: calc(100% - 30px);
+}
+
+.position-details-dialog .pdd-act-milestone:first-child::before {
+  top: 22px;
+}
+
+.position-details-dialog .pdd-act-milestone:last-child::before {
+  bottom: calc(100% - 22px);
+}
+
+.position-details-dialog .pdd-act-card:last-child,
+.position-details-dialog .pdd-act-milestone:last-child {
+  border-bottom: none;
+}
+
+.position-details-dialog .pdd-act-node,
+.position-details-dialog .pdd-act-milestone-node {
+  position: absolute;
+  z-index: 1;
+  top: 17px;
+  left: -30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .pdd-act-card[data-side="entry"] .pdd-act-node {
+  border-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-15);
+  color: var(--primary);
+}
+
+.position-details-dialog .pdd-act-card[data-side="wallet"] .pdd-act-node {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-node i,
+.position-details-dialog .pdd-act-milestone-node i {
+  font-size: 12px;
+}
+
+.position-details-dialog .pdd-act-expand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  width: 100%;
+  padding: 11px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.position-details-dialog .pdd-act-expand:hover .pdd-act-description {
+  color: var(--primary);
+}
+
+.position-details-dialog .pdd-act-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-act-event-topline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.position-details-dialog .pdd-act-event-topline > strong {
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.position-details-dialog .pdd-act-description {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-event-time {
+  color: var(--text-muted);
+  font: 500 0.66rem/1.35 var(--font-data);
 }
 
 .position-details-dialog .pdd-act-state {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
-  font-size: 0.68rem;
-  font-weight: 600;
+  padding: 2px 6px;
   border-radius: var(--radius-full);
+  font-size: 0.58rem;
+  font-weight: 700;
 }
 
-.position-details-dialog .pdd-act-state i {
-  font-size: 11px;
-}
-
-.position-details-dialog .pdd-act-state-confirmed {
-  background: var(--success-alpha-15);
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-act-state-pending {
+.position-details-dialog .pdd-act-state.is-pending {
   background: var(--warning-alpha-15);
   color: var(--warning-color);
 }
 
-.position-details-dialog .pdd-act-state-failed {
+.position-details-dialog .pdd-act-state.is-failed {
   background: var(--danger-alpha-15);
   color: var(--danger);
 }
 
-.position-details-dialog .pdd-act-state-synthetic {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
+.position-details-dialog .pdd-act-state.is-synthetic {
   border: 1px solid var(--border-color);
+  color: var(--text-secondary);
 }
 
-/* =============================================================================
-   METRICS — THE label/value grid, and the only one on the card
-   The card used to carry four different label/value treatments (big stacked "flow"
-   cells, an inline chip row, the inline "after" strip and a smaller stacked grid in
-   the expanded panel). One grid now carries the headline numbers AND what the swap
-   cost, which is also what lets it fill the dialog's width instead of stretching
-   three lonely cells across it.
-   ============================================================================= */
-
-.position-details-dialog .pdd-act-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px var(--spacing-md);
-  padding: 10px 12px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.position-details-dialog .pdd-act-metrics.is-compact {
-  border-top: none;
-  padding: 0;
-}
-
-.position-details-dialog .pdd-act-metric {
+.position-details-dialog .pdd-act-event-side {
   display: flex;
+  align-items: flex-end;
   flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.position-details-dialog .pdd-act-metric-label {
-  font-size: 0.6rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.position-details-dialog .pdd-act-metric-value {
-  font-size: 0.78rem;
-  font-weight: 600;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* The numbers a trader reads first. */
-.position-details-dialog .pdd-act-metric.is-key .pdd-act-metric-value {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.position-details-dialog .pdd-act-metric-value small {
-  font-size: 0.72rem;
-  font-weight: 600;
-  opacity: 0.85;
-  margin-left: 3px;
-}
-
-.position-details-dialog .pdd-act-metric-value.positive {
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-act-metric-value.negative {
-  color: var(--danger);
-}
-
-/* Position after: the state this swap left its position in — a different subject from
-   the swap's own numbers, so it keeps its own recessed strip. */
-.position-details-dialog .pdd-act-after {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  padding: 6px 12px;
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-primary);
-}
-
-.position-details-dialog .pdd-act-after-title {
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
-
-.position-details-dialog .pdd-act-after-item {
-  display: inline-flex;
-  align-items: baseline;
   gap: 5px;
-  font-size: 0.7rem;
-}
-
-.position-details-dialog .pdd-act-after-label {
-  color: var(--text-muted);
-}
-
-.position-details-dialog .pdd-act-after-value {
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-weight: 600;
-}
-
-/* Foot: signature + expand */
-.position-details-dialog .pdd-act-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 12px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.position-details-dialog .pdd-act-sig-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.position-details-dialog .pdd-act-sig {
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  color: var(--link-color);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color var(--transition-fast);
-}
-
-.position-details-dialog .pdd-act-sig:hover {
-  color: var(--link-hover);
-  text-decoration: underline;
-}
-
-.position-details-dialog .pdd-act-sig-na {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.position-details-dialog .pdd-act-sig-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
-}
-
-.position-details-dialog .pdd-act-sig-copy:hover {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.position-details-dialog .pdd-act-sig-copy i {
-  font-size: 11px;
-}
-
-.position-details-dialog .pdd-act-sig-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-decoration: none;
-  padding: 3px 8px;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
-.position-details-dialog .pdd-act-sig-link:hover {
-  background: var(--bg-primary);
-  color: var(--link-color);
+.position-details-dialog .pdd-act-outcome {
+  color: var(--text-secondary);
+  font: 700 0.74rem/1.3 var(--font-data);
 }
 
-.position-details-dialog .pdd-act-sig-link i {
-  font-size: 12px;
-}
-
-.position-details-dialog .pdd-act-expand {
+.position-details-dialog .pdd-act-details-label {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 0.64rem;
 }
 
-.position-details-dialog .pdd-act-expand:hover {
-  color: var(--text-primary);
-  border-color: var(--border-hover);
-}
-
-.position-details-dialog .pdd-act-expand i {
-  font-size: 12px;
+.position-details-dialog .pdd-act-details-label i {
   transition: transform var(--transition-fast);
 }
 
-.position-details-dialog .pdd-act-card.is-open .pdd-act-expand i {
+.position-details-dialog .pdd-act-card.is-open .pdd-act-details-label i {
   transform: rotate(180deg);
 }
 
-/* =============================================================================
-   EXPANDED DETAILS — the full on-chain record
-   ============================================================================= */
-
-.position-details-dialog .pdd-act-details {
-  display: none;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  padding: 10px 12px 12px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
-}
-
-.position-details-dialog .pdd-act-card.is-open .pdd-act-details {
-  display: flex;
-}
-
-.position-details-dialog .pdd-act-note {
+/* State milestones share the timeline without competing with trades. */
+.position-details-dialog .pdd-act-milestone {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-}
-
-.position-details-dialog .pdd-act-note.is-error {
-  color: var(--danger);
-  border-color: var(--danger-alpha-30);
-  background: var(--danger-alpha-10);
-}
-
-.position-details-dialog .pdd-act-note i {
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-/* Token transfers */
-.position-details-dialog .pdd-act-subhead {
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  gap: var(--spacing-md);
+  min-height: 48px;
+  padding: 8px 0;
   color: var(--text-muted);
 }
 
-.position-details-dialog .pdd-act-xfers {
+.position-details-dialog .pdd-act-milestone-node {
+  top: 11px;
+  width: 22px;
+  height: 22px;
+  left: -28px;
+}
+
+.position-details-dialog .pdd-act-milestone-main {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  overflow-x: auto;
+  flex: 1;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 
-.position-details-dialog .pdd-act-xfer-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.72rem;
-  font-family: var(--font-data);
-}
-
-.position-details-dialog .pdd-act-xfer-table th {
-  text-align: left;
-  padding: 4px 8px;
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-color);
-  white-space: nowrap;
-}
-
-.position-details-dialog .pdd-act-xfer-table td {
-  padding: 5px 8px;
+.position-details-dialog .pdd-act-milestone-main strong {
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.68rem;
+  text-transform: capitalize;
+}
+
+.position-details-dialog .pdd-act-milestone-main span,
+.position-details-dialog .pdd-act-milestone time {
+  overflow: hidden;
+  font: 500 0.64rem/1.35 var(--font-data);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.position-details-dialog .pdd-act-xfer-table tr:last-child td {
-  border-bottom: none;
-}
-
-.position-details-dialog .pdd-act-xfer-amount {
-  color: var(--text-primary);
-  font-weight: 700;
-}
-
-/* =============================================================================
-   RESPONSIVE
-   ============================================================================= */
 
 @media (width <= 1100px) {
   .position-details-dialog .pdd-act-summary {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr;
   }
 
-  /* Two lists side by side stop being readable well before the dialog does. */
-  .position-details-dialog .pdd-act-context {
-    grid-template-columns: minmax(0, 1fr);
+  .position-details-dialog .pdd-act-summary-lead {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .position-details-dialog .pdd-act-round-facts > span:not(.pdd-act-round-count) {
+    display: none;
   }
 }
 
 @media (width <= 640px) {
-  .position-details-dialog .pdd-act-summary {
-    grid-template-columns: repeat(2, 1fr);
+  .position-details-dialog .pdd-act-summary-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .position-details-dialog .pdd-act-toolbar {
+  .position-details-dialog .pdd-act-summary-item:nth-child(2) {
+    border-right: none;
+  }
+
+  .position-details-dialog .pdd-act-summary-item:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .position-details-dialog .pdd-act-toolbar,
+  .position-details-dialog .pdd-act-summary-meta {
     align-items: stretch;
+    flex-direction: column;
   }
 
-  .position-details-dialog .pdd-act-row {
-    flex-wrap: wrap;
+  .position-details-dialog .pdd-act-round-count {
+    display: none;
   }
 
-  .position-details-dialog .pdd-act-row-note {
-    flex-basis: 100%;
-    white-space: normal;
+  .position-details-dialog .pdd-act-round-body {
+    padding-right: 8px;
+  }
+
+  .position-details-dialog .pdd-act-expand {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .position-details-dialog .pdd-act-event-side {
+    align-items: flex-start;
+  }
+
+  .position-details-dialog .pdd-act-milestone {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

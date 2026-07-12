@@ -1,23 +1,8 @@
 /**
- * Activity Tab Mixin for the Position Details Dialog.
+ * Activity Tab Mixin for the Position Details dialog.
  *
- * ONE tab for everything that ever happened to this TOKEN — not just to the position the
- * dialog was opened on. A token can be entered, exited and re-entered any number of times,
- * and each round is its own position; showing only the current one hid every earlier round.
- * On top of that the wallet can touch a mint without any position at all (a transfer, an
- * airdrop, a swap made in another app), and none of that was visible anywhere.
- *
- * So the timeline is served whole by `GET /api/positions/{key}/activity`, which merges each
- * swap's position RECORD with its on-chain TRANSACTION, walks the result chronologically to
- * derive every position's running state and each exit's realized P&L, and tags every event
- * with the round it belongs to.
- *
- * It is fetched LAZILY, only while this tab is open: it spans every position and scans the
- * wallet's transactions, which is far more work than the dialog's 5s `/details` poll — the
- * same poll the trade dialog and the row context menu ride on — should ever carry.
- *
- * All token amounts in the payload are already whole tokens (the server scaled them by the
- * mint's decimals), so nothing here converts.
+ * Activity is organized into trading rounds. Each round is a self-contained lifecycle,
+ * while transactions that never belonged to a position live in a separate wallet chapter.
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
@@ -26,10 +11,6 @@ import { activityEventKey, renderActivityCard } from "./activity_event.js";
 export function applyActivityTabMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
 
-  /**
-   * Fetch the token's all-time activity. Called when the tab is first opened and on every
-   * dialog poll tick WHILE it is open, so a fresh DCA or exit shows up live.
-   */
   proto._fetchActivity = async function () {
     if (this._activityLoading) return;
     this._activityLoading = true;
@@ -48,19 +29,9 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
     }
 
     const content = this.dialogEl?.querySelector('[data-tab-content="activity"]');
-    if (content && this.currentTab === "activity") {
-      this._paintActivity(content);
-    }
+    if (content && this.currentTab === "activity") this._paintActivity(content);
   };
 
-  /**
-   * Render, but only when the timeline actually changed. Both the poll tick and the tab
-   * switch come through here; an unconditional redraw every 5s would collapse every
-   * expanded card and yank the scroll position out from under the user.
-   *
-   * The sort toggle deliberately bypasses this and calls `_renderActivityTab` directly —
-   * the data is identical, only the order changed.
-   */
   proto._paintActivity = function (content) {
     const fingerprint = this._activityFingerprint();
     if (fingerprint === this._activityRenderedFp) return;
@@ -97,262 +68,282 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
       return;
     }
 
-    // The Wallet / Pending / Failed pills only exist while such an event does. Once the
-    // last one settles its pill disappears, so a filter still pointing at it would hide
-    // every card with no lit pill to click back — fall back to All.
-    const available = new Set(["all", "entry", "exit"]);
-    if (totals.wallet_events) available.add("wallet");
-    if (totals.pending) available.add("pending");
-    if (totals.failed) available.add("failed");
-    if (!available.has(this._activityFilter)) this._activityFilter = "all";
-
-    // The server builds the timeline oldest-first (the order its running state is derived
-    // in). Display defaults to newest-first.
-    const ordered = this._activitySort === "oldest" ? events : [...events].reverse();
-
-    const currentId = this._activity.positions?.length
-      ? (this.fullDetails?.position?.id ?? this.positionData?.id ?? null)
-      : null;
-
+    const currentPositionId = this.fullDetails?.position?.id ?? this.positionData?.id ?? null;
     const ctx = {
       symbol: this._activity.symbol || this.fullDetails?.position?.symbol || "tokens",
       solPriceUsd: this._activity.sol_price_usd || null,
       expanded: this._activityExpanded,
       formatPrice: (price) => this._formatPrice(price),
-      currentPositionId: currentId,
-      positionCount: positions.length,
-      sideCounts: {
-        entry: events.filter((event) => event.side === "entry").length,
-        exit: events.filter((event) => event.side === "exit").length,
-        wallet: events.filter((event) => event.side === "wallet").length,
-      },
+      currentPositionId,
     };
 
-    const cards = ordered.map((event) => renderActivityCard(event, ctx)).join("");
+    this._initializeActivityRounds(positions, currentPositionId);
 
     content.innerHTML = `
       <div class="pdd-activity">
-        ${this._buildActivitySummary(totals, ctx)}
-        ${this._buildActivityContext(positions, stateHistory, ctx)}
-        ${this._buildActivityToolbar(totals)}
-        <div class="pdd-act-list">${cards}</div>
+        ${this._buildActivitySummary(totals, events)}
+        ${this._buildActivityToolbar(totals, events)}
+        ${this._buildActivityTimeline(positions, events, stateHistory, ctx)}
       </div>`;
 
     this._applyActivityFilter(content);
     this._bindActivityHandlers(content);
   };
 
-  /**
-   * The two lists that give the timeline its context, side by side: what rounds of trading
-   * the token has been through, and what the positions' state machine did. Both are short,
-   * scannable and reference-only, so they belong next to each other above the feed rather
-   * than stacked around it — the state history used to sit below every event card, where a
-   * long timeline buried it.
-   *
-   * Either can be absent (one round of trading needs no round list), and whichever is left
-   * takes the full width rather than leaving a hole.
-   */
-  proto._buildActivityContext = function (positions, stateHistory, ctx) {
-    const panels = [
-      this._buildActivityRounds(positions, ctx),
-      this._buildStateHistory(stateHistory, ctx),
-    ].filter(Boolean);
+  proto._initializeActivityRounds = function (positions, currentPositionId) {
+    if (this._activityRoundsInitialized) return;
+    this._activityRoundsInitialized = true;
 
-    if (panels.length === 0) return "";
-    return `<div class="pdd-act-context${panels.length === 1 ? " is-single" : ""}">${panels.join("")}</div>`;
+    const current = positions.find((position) => position.id === currentPositionId);
+    const newest = positions.at(-1);
+    const initial = current || newest;
+    if (initial) this._activityOpenRounds.add(`position:${initial.id || initial.index}`);
   };
 
-  /** The shared panel shell — one header treatment for both lists. */
-  proto._activityPanel = function (icon, title, count, body) {
-    return `
-      <section class="pdd-act-panel">
-        <header class="pdd-act-panel-head">
-          <i class="${icon}"></i>
-          <span class="pdd-act-panel-title">${title}</span>
-          <span class="pdd-act-count">${count}</span>
-        </header>
-        <div class="pdd-act-panel-body">${body}</div>
-      </section>`;
-  };
-
-  /**
-   * All-time headline totals for the token. The server sums these while it walks the
-   * events, so the numbers here can never drift from the cards below them.
-   */
-  proto._buildActivitySummary = function (totals, ctx) {
-    const usd = (sol) =>
-      ctx.solPriceUsd && sol ? Utils.formatCurrencyUSD(sol * ctx.solPriceUsd) : "";
-
-    const netFlow = (totals.sol_returned || 0) - (totals.sol_invested || 0);
+  proto._buildActivitySummary = function (totals, events) {
     const realized = totals.realized_pnl || 0;
-    // The basis the realized P&L was earned on: proceeds minus profit.
     const realizedBasis = (totals.sol_returned || 0) - realized;
     const realizedPct = realizedBasis > 0 ? (realized / realizedBasis) * 100 : null;
-
-    // Rounds first, then anything worth flagging. The notes used to REPLACE the round count
-    // rather than follow it, so as soon as the token saw one wallet event you could no
-    // longer tell how many times it had been traded.
-    const rounds = totals.positions || 0;
-    const notes = [`${rounds} position${rounds === 1 ? "" : "s"}`];
-    if (totals.wallet_events) notes.push(`${totals.wallet_events} wallet`);
-    if (totals.pending) notes.push(`${totals.pending} pending`);
-    if (totals.failed) notes.push(`${totals.failed} failed`);
-
-    const cell = (label, value, sub = "", cls = "") => `
-      <div class="pdd-act-sum-cell">
-        <span class="pdd-act-sum-label">${label}</span>
-        <span class="pdd-act-sum-value ${cls}">${value}</span>
-        <span class="pdd-act-sum-sub">${sub || "&nbsp;"}</span>
-      </div>`;
-
-    const sign = (value) => (value >= 0 ? "+" : "");
-    const tone = (value) => (value >= 0 ? "pdd-positive" : "pdd-negative");
+    const sign = realized >= 0 ? "+" : "";
+    const tone = realized >= 0 ? "is-positive" : "is-negative";
     const sol = (value, decimals = 4) =>
       `${Utils.formatSol(value || 0, { decimals, suffix: "" })} SOL`;
 
+    const timestamps = events
+      .map((event) => event.timestamp)
+      .filter((timestamp) => Number.isFinite(timestamp));
+    const first = timestamps.length ? Math.min(...timestamps) : null;
+    const last = timestamps.length ? Math.max(...timestamps) : null;
+    const range = first
+      ? `${Utils.formatTimestamp(first, { includeSeconds: false })} – ${Utils.formatTimestamp(last, { includeSeconds: false })}`
+      : "No dated events";
+
+    const alerts = [];
+    if (totals.pending) alerts.push(`${totals.pending} pending`);
+    if (totals.failed) alerts.push(`${totals.failed} failed`);
+
+    const item = (label, value, extra = "") => `
+      <span class="pdd-act-summary-item">
+        <span>${label}</span>
+        <strong>${value}</strong>
+        ${extra ? `<small>${extra}</small>` : ""}
+      </span>`;
+
     return `
-      <div class="pdd-act-summary">
-        ${cell("Events", String(totals.events ?? 0), notes.join(" · "))}
-        ${cell(
-          "Bought",
-          `${Utils.formatCompactNumber(totals.tokens_bought || 0)} ${Utils.escapeHtml(ctx.symbol)}`,
-          `${sol(totals.sol_invested)} spent`
-        )}
-        ${cell(
-          "Sold",
-          `${Utils.formatCompactNumber(totals.tokens_sold || 0)} ${Utils.escapeHtml(ctx.symbol)}`,
-          `${sol(totals.sol_returned)} received`
-        )}
-        ${cell("Network Fees", sol(totals.network_fees_sol, 6), usd(totals.network_fees_sol))}
-        ${cell(
-          "Realized P&L",
-          `${sign(realized)}${sol(realized)}`,
-          realizedPct !== null ? `${sign(realizedPct)}${Utils.formatNumber(realizedPct, 2)}%` : "",
-          tone(realized)
-        )}
-        ${cell("Net Flow", `${sign(netFlow)}${sol(netFlow)}`, usd(netFlow), tone(netFlow))}
-      </div>`;
+      <section class="pdd-act-summary">
+        <div class="pdd-act-summary-lead">
+          <span class="pdd-act-summary-eyebrow">All-time token history</span>
+          <strong class="pdd-act-summary-pnl ${tone}">${sign}${sol(realized)}</strong>
+          <span class="pdd-act-summary-caption">Realized P&amp;L${
+            realizedPct !== null ? ` · ${sign}${Utils.formatNumber(realizedPct, 2)}%` : ""
+          }</span>
+        </div>
+        <div class="pdd-act-summary-facts">
+          ${item("Trading rounds", totals.positions || 0, `${totals.events || 0} events`)}
+          ${item("Capital invested", sol(totals.sol_invested))}
+          ${item("Capital returned", sol(totals.sol_returned))}
+          ${item("Network fees", sol(totals.network_fees_sol, 6))}
+        </div>
+        <div class="pdd-act-summary-meta">
+          <span><i class="icon-calendar"></i>${range}</span>
+          ${
+            alerts.length
+              ? `<span class="pdd-act-summary-alert"><i class="icon-triangle-alert"></i>${alerts.join(" · ")}</span>`
+              : ""
+          }
+        </div>
+      </section>`;
   };
 
-  /**
-   * Every round of trading this token. Rendered only when there is more than one — with a
-   * single position the cards' own chips already say everything this would.
-   */
-  proto._buildActivityRounds = function (positions, ctx) {
-    if (positions.length < 2) return "";
-
-    // Newest round first, to match the feed's default order.
-    const rows = [...positions]
-      .reverse()
-      .map((position) => {
-        const isCurrent = position.id === ctx.currentPositionId;
-        const pnl = position.realized_pnl || 0;
-        const status = position.is_open ? "Open" : position.archived ? "Archived" : "Closed";
-        const closed = position.closed_at ? Utils.formatTimeAgo(position.closed_at) : "in progress";
-
-        return `
-          <div class="pdd-act-row${isCurrent ? " is-current" : ""}">
-            <span class="pdd-act-row-name">Position ${position.index}</span>
-            <span class="pdd-act-round-status is-${status.toLowerCase()}">${status}</span>
-            <span class="pdd-act-row-note" title="Opened ${Utils.formatTimestamp(position.opened_at)}">
-              ${Utils.formatTimeAgo(position.opened_at)} &rarr; ${closed} &middot; ${position.swaps} swap${position.swaps === 1 ? "" : "s"}
-            </span>
-            <span class="pdd-act-row-value ${pnl >= 0 ? "pdd-positive" : "pdd-negative"}">
-              ${pnl >= 0 ? "+" : ""}${Utils.formatSol(pnl, { decimals: 4, suffix: "" })} SOL
-            </span>
-          </div>`;
-      })
-      .join("");
-
-    return this._activityPanel("icon-layers", "Trading Rounds", positions.length, rows);
-  };
-
-  proto._buildActivityToolbar = function (totals) {
+  proto._buildActivityToolbar = function (totals, events) {
+    const tradeCount = (totals.entries || 0) + (totals.exits || 0);
+    const issueCount = events.filter((event) =>
+      ["pending", "failed", "synthetic"].includes(event.state)
+    ).length;
     const filters = [
-      ["all", "All", totals.events ?? 0],
-      ["entry", "Entries", totals.entries ?? 0],
-      ["exit", "Exits", totals.exits ?? 0],
+      ["all", "All", totals.events || 0],
+      ["trades", "Trades", tradeCount],
+      ["entry", "Entries", totals.entries || 0],
+      ["exit", "Exits", totals.exits || 0],
     ];
     if (totals.wallet_events) filters.push(["wallet", "Wallet", totals.wallet_events]);
-    if (totals.pending) filters.push(["pending", "Pending", totals.pending]);
-    if (totals.failed) filters.push(["failed", "Failed", totals.failed]);
+    if (issueCount) filters.push(["issues", "Issues", issueCount]);
 
-    const pills = filters
+    const available = new Set(filters.map(([id]) => id));
+    if (!available.has(this._activityFilter)) this._activityFilter = "all";
+
+    const buttons = filters
       .map(
         ([id, label, count]) => `
         <button type="button" class="pdd-act-filter${this._activityFilter === id ? " active" : ""}" data-filter="${id}">
-          ${label}<span class="pdd-act-count">${count}</span>
+          ${label}<span>${count}</span>
         </button>`
       )
       .join("");
 
-    const oldestFirst = this._activitySort === "oldest";
     return `
       <div class="pdd-act-toolbar">
-        <div class="pdd-act-filters">${pills}</div>
-        <button type="button" class="pdd-act-sort" id="pddActSort" title="Toggle chronological order">
-          <i class="icon-arrow-up-down"></i>
-          <span>${oldestFirst ? "Oldest first" : "Newest first"}</span>
-        </button>
+        <div class="pdd-act-filters" aria-label="Activity filters">${buttons}</div>
       </div>`;
   };
 
-  /**
-   * The positions' own state machine (opening, open, closing, closed, failed retries…) —
-   * the context that explains WHY the swaps above happened, and the only place a state
-   * change with no swap of its own is visible at all.
-   */
-  proto._buildStateHistory = function (stateHistory, ctx) {
-    if (!stateHistory.length) return "";
+  proto._buildActivityTimeline = function (positions, events, stateHistory, ctx) {
+    const orderedPositions = [...positions].reverse();
 
-    const rows = [...stateHistory]
-      .sort((a, b) => (b.changed_at ?? 0) - (a.changed_at ?? 0))
-      .map(
-        (entry) => `
-        <div class="pdd-act-row">
-          <span class="pdd-act-row-name">${Utils.escapeHtml(entry.state)}</span>
-          ${
-            ctx.positionCount > 1
-              ? `<span class="pdd-act-chip-pos">Position ${entry.position_index}</span>`
-              : ""
-          }
-          <span class="pdd-act-row-note">${entry.reason ? Utils.escapeHtml(entry.reason) : ""}</span>
-          <span class="pdd-act-row-time" title="${Utils.formatTimestamp(entry.changed_at)}">${Utils.formatTimeAgo(entry.changed_at)}</span>
-        </div>`
+    const rounds = orderedPositions.map((position) => {
+      const roundEvents = events.filter(
+        (event) =>
+          event.position_id === position.id ||
+          (event.position_id == null && event.position_index === position.index)
+      );
+      const roundStates = stateHistory.filter(
+        (state) => state.position_id === position.id || state.position_index === position.index
+      );
+      return this._buildActivityRound(position, roundEvents, roundStates, ctx);
+    });
+
+    const walletEvents = events.filter((event) => event.side === "wallet");
+    if (walletEvents.length) rounds.push(this._buildWalletActivity(walletEvents, ctx));
+
+    return `<div class="pdd-act-list">${rounds.join("")}</div>`;
+  };
+
+  proto._buildActivityRound = function (position, events, stateHistory, ctx) {
+    const key = `position:${position.id || position.index}`;
+    const isOpen = this._activityOpenRounds.has(key);
+    const isCurrent = position.id === ctx.currentPositionId;
+    const status = position.is_open ? "Open" : position.archived ? "Archived" : "Closed";
+    const pnl = position.realized_pnl || 0;
+    const sign = pnl >= 0 ? "+" : "";
+    const duration = position.closed_at
+      ? `${Utils.formatTimestamp(position.opened_at, { includeSeconds: false })} – ${Utils.formatTimestamp(position.closed_at, { includeSeconds: false })}`
+      : `Opened ${Utils.formatTimestamp(position.opened_at, { includeSeconds: false })}`;
+
+    const items = [
+      ...events.map((event) => ({ type: "event", timestamp: event.timestamp || 0, event })),
+      ...stateHistory.map((state) => ({
+        type: "state",
+        timestamp: state.changed_at || 0,
+        state,
+      })),
+    ]
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .map((item) =>
+        item.type === "event"
+          ? renderActivityCard(item.event, ctx)
+          : this._buildStateMilestone(item.state)
       )
       .join("");
 
-    return this._activityPanel("icon-history", "State History", stateHistory.length, rows);
+    return `
+      <section class="pdd-act-round${isOpen ? " is-open" : ""}${isCurrent ? " is-current" : ""}" data-round="${key}">
+        <button type="button" class="pdd-act-round-toggle" data-round-toggle="${key}" aria-expanded="${isOpen}">
+          <span class="pdd-act-round-index">${position.index}</span>
+          <span class="pdd-act-round-main">
+            <span class="pdd-act-round-title">
+              Position ${position.index}
+              ${isCurrent ? '<span class="pdd-act-current-badge">Current</span>' : ""}
+              <span class="pdd-act-round-status is-${status.toLowerCase()}">${status}</span>
+            </span>
+            <span class="pdd-act-round-date">${duration}</span>
+          </span>
+          <span class="pdd-act-round-facts">
+            <span><small>Invested</small>${Utils.formatSol(position.sol_invested || 0, { decimals: 4 })}</span>
+            <span><small>Returned</small>${Utils.formatSol(position.sol_returned || 0, { decimals: 4 })}</span>
+            <strong class="${pnl >= 0 ? "is-positive" : "is-negative"}">${sign}${Utils.formatSol(pnl, { decimals: 4 })}</strong>
+            <span class="pdd-act-round-count">${position.swaps} event${position.swaps === 1 ? "" : "s"}</span>
+            <i class="icon-chevron-down"></i>
+          </span>
+        </button>
+        <div class="pdd-act-round-body">${items}</div>
+      </section>`;
   };
 
-  /** Show only the cards the active filter selects. */
+  proto._buildWalletActivity = function (events, ctx) {
+    const key = "wallet";
+    const isOpen = this._activityOpenRounds.has(key);
+    const first = events.at(0)?.timestamp;
+    const last = events.at(-1)?.timestamp;
+    const range = first
+      ? `${Utils.formatTimestamp(first, { includeSeconds: false })} – ${Utils.formatTimestamp(last, { includeSeconds: false })}`
+      : "Dates unavailable";
+    const items = [...events]
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .map((event) => renderActivityCard(event, ctx))
+      .join("");
+
+    return `
+      <section class="pdd-act-round is-wallet${isOpen ? " is-open" : ""}" data-round="${key}">
+        <button type="button" class="pdd-act-round-toggle" data-round-toggle="${key}" aria-expanded="${isOpen}">
+          <span class="pdd-act-round-index"><i class="icon-wallet"></i></span>
+          <span class="pdd-act-round-main">
+            <span class="pdd-act-round-title">Wallet-only activity</span>
+            <span class="pdd-act-round-date">Transactions outside ScreenerBot · ${range}</span>
+          </span>
+          <span class="pdd-act-round-facts">
+            <span class="pdd-act-round-count">${events.length} event${events.length === 1 ? "" : "s"}</span>
+            <i class="icon-chevron-down"></i>
+          </span>
+        </button>
+        <div class="pdd-act-round-body">${items}</div>
+      </section>`;
+  };
+
+  proto._buildStateMilestone = function (state) {
+    const normalized = String(state.state || "state").toLowerCase();
+    return `
+      <div class="pdd-act-milestone" data-side="state" data-state="${Utils.escapeHtml(normalized)}">
+        <span class="pdd-act-milestone-node"><i class="icon-history"></i></span>
+        <span class="pdd-act-milestone-main">
+          <strong>Position ${Utils.escapeHtml(state.state)}</strong>
+          ${state.reason ? `<span>${Utils.escapeHtml(state.reason)}</span>` : ""}
+        </span>
+        <time title="${Utils.formatTimestamp(state.changed_at)}">${Utils.formatTimestamp(state.changed_at, { includeSeconds: false })}</time>
+      </div>`;
+  };
+
   proto._applyActivityFilter = function (content) {
     const filter = this._activityFilter;
-    content.querySelectorAll(".pdd-act-card").forEach((card) => {
-      const match =
-        filter === "all" || card.dataset.side === filter || card.dataset.state === filter;
-      card.classList.toggle("is-filtered-out", !match);
+    const matches = (item) => {
+      const side = item.dataset.side;
+      const state = item.dataset.state;
+      if (filter === "all") return true;
+      if (filter === "trades") return side === "entry" || side === "exit" || side === "state";
+      if (filter === "issues")
+        return (
+          ["pending", "failed", "synthetic"].includes(state) ||
+          state?.includes("fail") ||
+          state?.includes("pending")
+        );
+      return side === filter;
+    };
+
+    content.querySelectorAll(".pdd-act-card, .pdd-act-milestone").forEach((item) => {
+      item.classList.toggle("is-filtered-out", !matches(item));
+    });
+
+    let visibleGroups = 0;
+    content.querySelectorAll(".pdd-act-round").forEach((round) => {
+      const visible = round.querySelectorAll(
+        ".pdd-act-card:not(.is-filtered-out), .pdd-act-milestone:not(.is-filtered-out)"
+      ).length;
+      round.classList.toggle("is-filtered-out", visible === 0);
+      if (visible > 0) visibleGroups += 1;
     });
 
     const list = content.querySelector(".pdd-act-list");
     if (!list) return;
-    const visible = list.querySelectorAll(".pdd-act-card:not(.is-filtered-out)").length;
     let empty = list.querySelector(".pdd-act-filter-empty");
-    if (visible === 0 && !empty) {
+    if (visibleGroups === 0 && !empty) {
       empty = document.createElement("div");
       empty.className = "pdd-act-filter-empty";
-      empty.textContent = "No events match this filter";
+      empty.textContent = "No activity matches this filter";
       list.appendChild(empty);
-    } else if (visible > 0 && empty) {
+    } else if (visibleGroups > 0 && empty) {
       empty.remove();
     }
   };
 
-  /**
-   * ONE delegated listener for the whole tab (filters, sort, expand, copy). The tab content
-   * node outlives every re-render, so binding here — rather than per element on each render
-   * — means nothing to unbind and nothing to leak when a poll redraws the list.
-   */
   proto._bindActivityHandlers = function (content) {
     if (this._activityClickHandler) return;
 
@@ -360,8 +351,21 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
       const copyEl = event.target.closest("[data-copy]");
       if (copyEl) {
         event.preventDefault();
+        event.stopPropagation();
         Utils.copyToClipboard(copyEl.dataset.copy);
         Utils.showToast("Signature copied", "success");
+        return;
+      }
+
+      const roundBtn = event.target.closest(".pdd-act-round-toggle");
+      if (roundBtn) {
+        const key = roundBtn.dataset.roundToggle;
+        const round = roundBtn.closest(".pdd-act-round");
+        const open = !round.classList.contains("is-open");
+        round.classList.toggle("is-open", open);
+        roundBtn.setAttribute("aria-expanded", String(open));
+        if (open) this._activityOpenRounds.add(key);
+        else this._activityOpenRounds.delete(key);
         return;
       }
 
@@ -372,8 +376,8 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
         const open = !card.classList.contains("is-open");
         card.classList.toggle("is-open", open);
         expandBtn.setAttribute("aria-expanded", String(open));
-        expandBtn.querySelector("span").textContent = open ? "Hide" : "Details";
-        // Survives the poll re-render.
+        const label = expandBtn.querySelector(".pdd-act-details-label");
+        if (label) label.firstChild.textContent = open ? "Hide details" : "Details";
         if (open) this._activityExpanded.add(key);
         else this._activityExpanded.delete(key);
         return;
@@ -384,24 +388,16 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
         this._activityFilter = filterBtn.dataset.filter;
         content
           .querySelectorAll(".pdd-act-filter")
-          .forEach((btn) => btn.classList.toggle("active", btn === filterBtn));
+          .forEach((button) => button.classList.toggle("active", button === filterBtn));
         this._applyActivityFilter(content);
         return;
       }
 
-      if (event.target.closest("#pddActSort")) {
-        this._activitySort = this._activitySort === "oldest" ? "newest" : "oldest";
-        this._renderActivityTab(content);
-      }
     };
 
     content.addEventListener("click", this._activityClickHandler);
   };
 
-  /**
-   * What the tab is currently showing. Covers the loading and error states too, or a failed
-   * load would fingerprint the same as "no data yet" and never paint its message.
-   */
   proto._activityFingerprint = function () {
     if (this._activityError) return `error:${this._activityError}`;
     if (!this._activity) return "loading";
