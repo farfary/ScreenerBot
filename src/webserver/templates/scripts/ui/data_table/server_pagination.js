@@ -183,10 +183,12 @@ export function applyServerPaginationMixin(DataTable) {
       this._setLoadingState(true, { subtle: useSubtle });
     }
 
-    try {
-      const controller = this._createAbortController();
-      this._pagination.abortController = controller;
+    // Declared outside the try so the catch/finally can tell whether THIS load is still the
+    // current one before touching shared state.
+    const controller = this._createAbortController();
+    this._pagination.abortController = controller;
 
+    try {
       const result = await loadPage({
         direction: "page",
         page: pageNumber,
@@ -196,6 +198,14 @@ export function applyServerPaginationMixin(DataTable) {
         signal: controller.signal,
         table: this,
       });
+
+      // Discard a superseded response. `_loadServerPage` overwrites `abortController`
+      // without cancelling the previous page load, so two can be in flight at once (a poll
+      // tick landing while the user clicks to page 3). Without this check the SLOWER one
+      // wins whenever it finishes last, and the table lands on a page nobody asked for.
+      if (this._pagination?.abortController !== controller) {
+        return;
+      }
 
       if (result) {
         const normalized = this._normalizePageResult(result);
@@ -264,9 +274,12 @@ export function applyServerPaginationMixin(DataTable) {
         this._log("error", "Failed to load server page:", err);
       }
     } finally {
-      this._setLoadingState(false);
-      if (this._pagination) {
+      // Only the CURRENT load may clear the shared loading state and abort handle. A
+      // superseded load doing it would switch off the indicator the newer load just switched
+      // on, and drop the handle used to cancel it.
+      if (this._pagination?.abortController === controller) {
         this._pagination.abortController = null;
+        this._setLoadingState(false);
       }
     }
   };
@@ -1000,6 +1013,16 @@ export function applyServerPaginationMixin(DataTable) {
         // though the live values changed. Nested values are compared by value via
         // JSON so a new fetch's fresh object references don't falsely flag change.
         const keys = Object.keys(newRow);
+
+        // Only the NEW row's keys are walked below, so a field that DISAPPEARED (present on
+        // the old row, absent on the new one) would never be looked at and the row would be
+        // reported unchanged — a transient flag that pages set conditionally (a "just closed"
+        // highlight, a live "selling" state) could then never clear. Key counts differing is
+        // enough to catch it: a same-count set with a swapped key still differs on the new key.
+        if (keys.length !== Object.keys(oldRow ?? {}).length) {
+          return false;
+        }
+
         for (const key of keys) {
           const val = newRow[key];
           if (val !== null && typeof val === "object") {

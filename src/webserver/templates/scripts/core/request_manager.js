@@ -133,6 +133,49 @@ class RequestManager {
       return this.inFlight.get(key);
     }
 
+    // Dedup bookkeeping.
+    //
+    // An entry in `inFlight` is a promise that a LATER caller of the same URL will be
+    // handed instead of issuing its own request, so it must only ever hold a request
+    // that can still deliver. Two paths used to leave a DEAD promise in the map:
+    //
+    //   1. A request that is aborted while still queued (activeCount was at the limit)
+    //      rejects on the early-return below, which sits before the try/finally that
+    //      removes the key — yet the promise was still registered afterwards. The key
+    //      was then poisoned for the lifetime of the page: every future request for that
+    //      URL was handed the same already-rejected promise and failed instantly. A
+    //      polled table whose fetch was ever aborted mid-queue therefore went permanently
+    //      stale and only a full page reload brought it back.
+    //   2. An aborted request stayed in the map until its rejection propagated, so a
+    //      caller that aborts and immediately re-requests the same URL in the same tick
+    //      (exactly what a table reload does: cancel, then load) was handed the corpse of
+    //      the request it had just killed.
+    //
+    // So: the entry is released the moment the request is known dead (on abort, not on
+    // rejection), it is never registered if it died before registration, and it is only
+    // ever removed while it still points at THIS promise — a settling request must never
+    // evict the newer one that replaced it under the same key.
+    const dedupEntry = { promise: null };
+    let settled = false;
+    const releaseDedupEntry = () => {
+      settled = true;
+      if (dedupEntry.promise && this.inFlight.get(key) === dedupEntry.promise) {
+        this.inFlight.delete(key);
+      }
+    };
+
+    // Watch the caller's signal HERE, not inside the executor below: a request that is still
+    // waiting in the concurrency queue has not run the executor yet, so it would not have been
+    // listening when its caller aborted, and its entry would stay in the map — the very case
+    // that poisoned the key.
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        releaseDedupEntry();
+      } else {
+        externalSignal.addEventListener("abort", releaseDedupEntry, { once: true });
+      }
+    }
+
     // Create the fetch promise with connection retry logic
     const fetchPromise = new Promise((resolve, reject) => {
       const executeWithRetry = async (retryCount = 0) => {
@@ -199,7 +242,9 @@ class RequestManager {
             this._isConnectionError(error) &&
             retryCount < MAX_CONNECTION_RETRIES
           ) {
-            this.activeCount--;
+            // NOTE: no `activeCount--` here — the `finally` below owns the decrement and
+            // runs on this return too. Doing both dropped the count by one per retry, so
+            // it drifted negative and the concurrency limit stopped applying at all.
             // Wait before retry (progressive delay)
             const retryDelay = CONNECTION_RETRY_DELAY_MS * (retryCount + 1);
             console.debug(
@@ -229,7 +274,7 @@ class RequestManager {
           }
           clearTimeout(timeoutId);
           this.activeCount--;
-          this.inFlight.delete(key);
+          releaseDedupEntry();
 
           // Process next queued request
           this._processQueue();
@@ -249,8 +294,11 @@ class RequestManager {
       }
     });
 
-    // Track in-flight request
-    if (!skipDedup) {
+    // Track in-flight request. The executor above runs synchronously, so a request that
+    // was handed an already-aborted signal has ALREADY rejected by now — registering it
+    // would hand that rejection to every future caller of this URL.
+    dedupEntry.promise = fetchPromise;
+    if (!skipDedup && !settled) {
       this.inFlight.set(key, fetchPromise);
     }
 

@@ -134,6 +134,12 @@ import { applyClientPaginationMixin } from "./data_table/client_pagination.js";
 import { applyServerPaginationMixin } from "./data_table/server_pagination.js";
 import { applyEventHandlersMixin } from "./data_table/event_handlers.js";
 
+// Reload reasons that mean "give me the current rows" rather than "the query changed".
+// These coalesce with a load already in flight instead of cancelling it — see
+// `_isSupersededByInFlightLoad`. Every other reason (sort, search, filter, view-change,
+// mode-switch, manual, …) still cancels and restarts, because its answer would differ.
+const BACKGROUND_RELOAD_REASONS = new Set(["poll", "init", "initial", "refresh"]);
+
 const BLOCKING_STATE_VARIANTS = ["loading", "info", "warning", "error"];
 const BLOCKING_STATE_DEFAULT_ICONS = {
   loading: "icon-loader",
@@ -963,7 +969,7 @@ export class DataTable {
 
     return data
       .map((row, index) => {
-        const rowId = row[this.options.rowIdField] || index;
+        const rowId = this._getRowId(row, index);
         const isSelected = this.state.selectedRows.has(rowId);
         const customClass = this._computeRowClass(row);
         const rowClass = [isSelected ? "selected" : "", customClass]
@@ -975,11 +981,25 @@ export class DataTable {
           data-row-id="${rowId}"
           class="${rowClass}"${customClass ? ` data-dt-row-class="${customClass}"` : ""}
         >
-          ${this._renderRow(row)}
+          ${this._renderRow(row, index)}
         </tr>
       `;
       })
       .join("");
+  }
+
+  /**
+   * The DOM identity of a row (`data-row-id`).
+   *
+   * `_renderBody`, `_renderRow`, `_updateTableBody` and `_rowOrderMatchesDom` must agree on
+   * this EXACTLY: if they disagree, the in-place diff cannot match a row to its <tr> and
+   * silently degrades into rebuilding the whole body. They used `row[field] || index` in some
+   * places and `row[field] ?? index` in another, which part ways for a falsy-but-valid id
+   * (0, ""). One helper, one answer.
+   */
+  _getRowId(row, index) {
+    const value = row?.[this.options.rowIdField];
+    return value === undefined || value === null || value === "" ? index : value;
   }
 
   /**
@@ -1052,6 +1072,41 @@ export class DataTable {
   }
 
   /**
+   * Refresh ONE existing <tr> against its row data: selection class, per-row state class and
+   * every visible cell's content. The row's STRUCTURE (which cells exist, in what order) is
+   * left alone — that is the caller's business.
+   */
+  _updateRowCells(tr, row, visibleColumns, rowId) {
+    const rowIdStr = String(rowId);
+
+    const isSelected = this.state.selectedRows.has(rowId);
+    if (tr.classList.contains("selected") !== isSelected) {
+      tr.classList.toggle("selected", isSelected);
+    }
+
+    // Keep the optional per-row state class in sync (pending/selling/etc.)
+    this._syncRowClass(tr, row);
+
+    visibleColumns.forEach((col) => {
+      const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
+      if (!td) return;
+
+      const cellContent = this._renderCellContent(col, row);
+      const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
+      const newContent = shouldClamp
+        ? `<div class="dt-cell-clamp">${cellContent}</div>`
+        : cellContent;
+
+      if (td.innerHTML !== newContent) {
+        td.innerHTML = newContent;
+      }
+      if (td.dataset.rowId !== rowIdStr) {
+        td.dataset.rowId = rowIdStr;
+      }
+    });
+  }
+
+  /**
    * Update table body in-place (diffing) to avoid full reload
    */
   _updateTableBody(newData) {
@@ -1068,7 +1123,22 @@ export class DataTable {
     }
 
     const visibleColumns = this._getOrderedColumns();
-    const rowIdField = this.options.rowIdField;
+
+    // FAST PATH — same rows, same order: only cell VALUES can differ.
+    //
+    // The general path below pushes every <tr> through a DocumentFragment, which DETACHES and
+    // RE-INSERTS the entire body even when nothing moved. On a table that polls once a second
+    // that is a full re-layout of every row per tick, it restarts CSS animations, and it yanks
+    // the row out from under the cursor mid-hover. Rows only need to move when the row set or
+    // its order actually changes; the overwhelmingly common live update (a price ticked, a
+    // position's size grew) changes neither.
+    if (this._rowOrderMatchesDom(newData)) {
+      const domRows = tbody.children;
+      newData.forEach((row, index) => {
+        this._updateRowCells(domRows[index], row, visibleColumns, this._getRowId(row, index));
+      });
+      return;
+    }
 
     // Index existing rows
     const existingRows = new Map();
@@ -1084,48 +1154,15 @@ export class DataTable {
     const fragment = document.createDocumentFragment();
 
     newData.forEach((row, index) => {
-      const rowId = row[rowIdField] || index;
+      const rowId = this._getRowId(row, index);
       const rowIdStr = String(rowId);
-      let tr = existingRows.get(rowIdStr);
+      const existing = existingRows.get(rowIdStr);
 
-      if (tr) {
+      if (existing) {
         // Update existing row
         existingRows.delete(rowIdStr);
-
-        // Update selection state
-        const isSelected = this.state.selectedRows.has(rowId);
-        if (tr.classList.contains("selected") !== isSelected) {
-          tr.classList.toggle("selected", isSelected);
-        }
-
-        // Keep the optional per-row state class in sync (pending/selling/etc.)
-        this._syncRowClass(tr, row);
-
-        // Update cells
-        visibleColumns.forEach((col) => {
-          const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
-          if (td) {
-            const cellContent = this._renderCellContent(col, row);
-
-            // Handle wrapping wrapper
-            const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
-
-            let newContent = shouldClamp
-              ? `<div class="dt-cell-clamp">${cellContent}</div>`
-              : cellContent;
-
-            if (td.innerHTML !== newContent) {
-              td.innerHTML = newContent;
-            }
-
-            // Update data-row-id on TD just in case
-            if (td.dataset.rowId !== rowIdStr) {
-              td.dataset.rowId = rowIdStr;
-            }
-          }
-        });
-
-        fragment.appendChild(tr);
+        this._updateRowCells(existing, row, visibleColumns, rowId);
+        fragment.appendChild(existing);
       } else {
         // Create new row
         const tr = document.createElement("tr");
@@ -1134,7 +1171,7 @@ export class DataTable {
           tr.classList.add("selected");
         }
         this._syncRowClass(tr, row);
-        tr.innerHTML = this._renderRow(row);
+        tr.innerHTML = this._renderRow(row, index);
         // Subtle enter animation only on incremental updates (not initial load),
         // so freshly-injected rows (e.g. a pending buy) slide in gracefully.
         if (hadRows && !this._prefersReducedMotion()) {
@@ -1200,9 +1237,10 @@ export class DataTable {
   /**
    * Render individual row cells
    */
-  _renderRow(row) {
+  _renderRow(row, rowIndex = 0) {
     const visibleColumns = this._getOrderedColumns();
     const floatingCount = this._getFloatingColumnCount(visibleColumns);
+    const rowId = this._getRowId(row, rowIndex);
 
     return visibleColumns
       .map((col, index) => {
@@ -1232,7 +1270,7 @@ export class DataTable {
         return `
         <td data-column-id="${col.id}"
             class="${cellClass} ${wrapClass} ${sticky.classes}"${sticky.attr}
-            data-row-id="${row[this.options.rowIdField] || ""}">
+            data-row-id="${rowId}">
           ${content}
         </td>
       `;
@@ -1705,21 +1743,55 @@ export class DataTable {
    * Hovering is deliberately NOT in here — see `_renderTable`.
    */
   _isEditingOrMenuOpen() {
+    // The settings dialog is portalled to <body>; detect it via the body class.
     if (document.body.classList.contains("table-settings-open")) {
+      return true;
+    }
+
+    // This table's own header context menu (pin / hide column) is portalled too.
+    if (this._headerColMenu) {
       return true;
     }
 
     const container = this.elements?.container;
     if (!container) return false;
 
+    // A focused control that HOLDS USER STATE — rewriting the cell around it would blur it
+    // and throw away what was typed or selected.
+    //
+    // A focused BUTTON deliberately does NOT count. Chromium focuses a button on click and
+    // KEEPS it focused afterwards, so counting it here froze the table permanently the first
+    // time anyone pressed a row action, a toolbar button or a pagination button — and gave no
+    // clue why, since focus rings are suppressed under [data-input="mouse"]. Nothing is lost
+    // by re-rendering under a focused button: it carries no state.
     const activeEl = document.activeElement;
-    if (activeEl && container.contains(activeEl)) {
+    if (activeEl && activeEl !== document.body && container.contains(activeEl)) {
       const tag = activeEl.tagName?.toLowerCase();
-      if (tag === "select" || tag === "input" || tag === "button") {
+      if (
+        tag === "input" ||
+        tag === "select" ||
+        tag === "textarea" ||
+        activeEl.isContentEditable === true
+      ) {
         return true;
       }
     }
 
+    // An open row-actions dropdown lives INSIDE a cell, so re-rendering that cell would close
+    // it. It was never actually matched by the selectors below — it only survived a poll by
+    // accident, because its trigger button held focus (see above). Now that a focused button
+    // no longer blocks, it has to be detected for real.
+    if (container.querySelector(".dt-actions-dropdown-menu.open")) {
+      return true;
+    }
+
+    const columnMenu = container.querySelector(".dt-column-menu");
+    if (columnMenu && columnMenu.style.display === "block") {
+      return true;
+    }
+
+    // Menus a page portals out of the table (e.g. the tokens links dropdown, which is
+    // created on open and removed on close).
     return Boolean(
       document.querySelector(".links-dropdown-menu, .dropdown-menu.open, [data-dropdown-open]")
     );
@@ -1736,48 +1808,25 @@ export class DataTable {
     const tbody = this.elements?.tbody;
     if (!tbody) return false;
 
-    const domRows = Array.from(tbody.children);
+    const domRows = tbody.children;
     if (domRows.length !== rows.length) return false;
 
-    const rowIdField = this.options.rowIdField;
     return rows.every(
       (row, index) =>
-        domRows[index].getAttribute("data-row-id") === String(row[rowIdField] ?? index)
+        domRows[index].getAttribute("data-row-id") === String(this._getRowId(row, index))
     );
   }
 
+  /**
+   * Is the user interacting with the table in a way that a re-render could disturb?
+   *
+   * Hover is the only thing this adds over `_isEditingOrMenuOpen()`, and it blocks far less:
+   * `_renderTable` still applies value-only updates while hovering (nothing moves), it just
+   * won't restructure the rows under the cursor. Everything else must share one definition —
+   * keeping two copies is how they drifted apart in the first place.
+   */
   _isUserInteracting() {
-    // Check explicit hover tracking (set by mouseenter/mouseleave events)
-    if (this._isHovering) {
-      return true;
-    }
-
-    // Settings dialog is appended to document.body (outside container) — detect via body class
-    if (document.body.classList.contains("table-settings-open")) {
-      return true;
-    }
-
-    const container = this.elements?.container;
-    if (!container) return false;
-
-    // Check if any select element inside table is focused or open
-    const activeEl = document.activeElement;
-    if (activeEl && container.contains(activeEl)) {
-      const tag = activeEl.tagName?.toLowerCase();
-      if (tag === "select" || tag === "input" || tag === "button") {
-        return true;
-      }
-    }
-
-    // Check for open dropdown menus (may be outside container, in document body)
-    const openDropdown = document.querySelector(
-      ".links-dropdown-menu, .dropdown-menu.open, [data-dropdown-open]"
-    );
-    if (openDropdown) {
-      return true;
-    }
-
-    return false;
+    return this._isHovering || this._isEditingOrMenuOpen();
   }
 
   /**
@@ -1800,13 +1849,14 @@ export class DataTable {
       // cannot shift, and it is safe to apply while hovering. Anything with an open menu or
       // a focused control inside the table still waits, because re-rendering that cell would
       // close or blur it.
+      const visibleRows = this._getClientPaginatedData();
       const canUpdateValuesInPlace =
         this.elements?.tbody &&
         !this._isEditingOrMenuOpen() &&
-        this._rowOrderMatchesDom(this._getClientPaginatedData());
+        this._rowOrderMatchesDom(visibleRows);
 
       if (canUpdateValuesInPlace) {
-        this._updateTableBody(this._getClientPaginatedData());
+        this._updateTableBody(visibleRows);
         return;
       }
 
@@ -2013,6 +2063,10 @@ export class DataTable {
       return this.refresh(options);
     }
 
+    if (this._isSupersededByInFlightLoad(options)) {
+      return this._pagination.pendingRequest ?? Promise.resolve(null);
+    }
+
     // If in pages mode (hybrid pagination), use server page loading
     // Preserve current page during refresh unless resetPage is true
     if (this._serverPaginationMode === "pages" && this._hasHybridPaginationModes()) {
@@ -2092,6 +2146,38 @@ export class DataTable {
         this._setLoadingState(false);
       }
     });
+  }
+
+  /**
+   * Should this reload defer to a load that is ALREADY in flight instead of killing it?
+   *
+   * `reload()` cancels any in-flight request before starting its own — correct when the
+   * QUERY changed (sort, filter, view switch): the old response is for a question we are
+   * no longer asking. It is wrong for a background refresh, and it livelocked the table:
+   * a poller fires every `pollingInterval` ms (1000 by default) and each tick aborted the
+   * previous tick's still-running fetch before issuing an identical one. Whenever the
+   * request took longer than the interval — a big list, a busy backend, or just waiting
+   * out RequestManager's 4-request concurrency limit — NO poll ever reached `_applyPageResult`,
+   * so the table kept polling forever while displaying the values it had painted before the
+   * stall. That is the "positions table is stale until Ctrl+R" bug.
+   *
+   * A background refresh only ever asks "give me the current rows". A load already in flight
+   * is asking exactly that, so the right answer is to wait for it, not to shoot it and ask
+   * again. Reasons that change WHAT is being asked still cancel and restart, and `force`
+   * overrides.
+   */
+  _isSupersededByInFlightLoad(options = {}) {
+    if (options.force) {
+      return false;
+    }
+    const reason = options.reason ?? "reload";
+    if (!BACKGROUND_RELOAD_REASONS.has(reason)) {
+      return false;
+    }
+    const pagination = this._pagination;
+    return Boolean(
+      pagination?.loadingInitial || pagination?.loadingNext || pagination?.loadingPrev
+    );
   }
 
   loadNext(options = {}) {

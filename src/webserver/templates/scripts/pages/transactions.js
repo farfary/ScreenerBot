@@ -356,16 +356,17 @@ function createLifecycle() {
       return true;
     }
 
-    // Skip if any UI interaction is in progress (dropdown, input focus, hover)
+    // Skip only while a control inside the table holds user state a reload would destroy (a
+    // focused text input or select). Hovering and focused BUTTONS must NOT skip the poll: this
+    // guard gates the FETCH, so they stopped the table receiving data at all — and a clicked
+    // button stays focused in Chromium, which froze the table indefinitely after any click.
+    // DataTable already updates values in place under the cursor without moving anything.
     const container = table?.elements?.container;
     if (container) {
-      const hoveredRow = container.querySelector("tr[data-row-id]:hover");
-      if (hoveredRow) return true;
-
       const focusedElement = document.activeElement;
       if (focusedElement && container.contains(focusedElement)) {
         const tagName = focusedElement.tagName?.toLowerCase();
-        if (tagName === "input" || tagName === "select" || tagName === "button") return true;
+        if (tagName === "input" || tagName === "select" || tagName === "textarea") return true;
       }
     }
 

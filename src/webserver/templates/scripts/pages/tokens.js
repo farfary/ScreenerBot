@@ -479,25 +479,22 @@ function createLifecycle() {
       return true;
     }
 
-    // Skip if page size select is focused or dropdown is open
+    // Skip while a control inside the table holds user state a reload would destroy: a focused
+    // text input, or an open/focused select (incl. the page-size select).
+    //
+    // Hovering, and a focused BUTTON, deliberately do NOT skip the poll any more. They used to,
+    // and because this guard gates the FETCH (not just the render), the table stopped receiving
+    // data at all: resting the pointer on it, or merely having clicked any button in it once
+    // (Chromium leaves a clicked button focused), froze every value until the pointer moved
+    // away — with no visible cue, since focus rings are suppressed for mouse input. Neither
+    // needs the fetch stopped: DataTable applies value-only updates in place while hovering
+    // (nothing moves under the cursor), and a focused button carries nothing to lose.
     const container = table?.elements?.container;
     if (container) {
-      const pageSizeSelect = container.querySelector("[data-pagination-size]");
-      if (pageSizeSelect && document.activeElement === pageSizeSelect) {
-        return true;
-      }
-
-      // Skip if any row is currently being hovered (prevents hover state loss)
-      const hoveredRow = container.querySelector("tr[data-row-id]:hover");
-      if (hoveredRow) {
-        return true;
-      }
-
-      // Skip if any input, select, or button in table is focused
       const focusedElement = document.activeElement;
       if (focusedElement && container.contains(focusedElement)) {
         const tagName = focusedElement.tagName?.toLowerCase();
-        if (tagName === "input" || tagName === "select" || tagName === "button") {
+        if (tagName === "input" || tagName === "select" || tagName === "textarea") {
           return true;
         }
       }
