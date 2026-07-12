@@ -65,7 +65,6 @@
   font-style: italic;
 }
 
-
 .position-details-dialog .pdd-dex-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -75,40 +74,6 @@
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-}
-
-/* Keep legacy pdd-card for backwards compatibility */
-.position-details-dialog .pdd-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.position-details-dialog .pdd-card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: var(--spacing-xs);
-}
-
-.position-details-dialog .pdd-card-title i {
-  font-size: 14px;
-  opacity: 0.7;
-}
-
-.position-details-dialog .pdd-card-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
 }
 
 .position-details-dialog .pdd-stat-row {
@@ -135,6 +100,14 @@
     "zero" 1;
 }
 
+/* Inline share-of-total next to a stat value ("1.2M (35.0%)"). */
+.position-details-dialog .pdd-stat-pct {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
+
 .position-details-dialog .pdd-verified {
   color: var(--success-color);
   display: inline-flex;
@@ -155,54 +128,6 @@
 
 .position-details-dialog .pdd-unverified i {
   font-size: 14px;
-}
-
-/* P&L Display */
-.position-details-dialog .pdd-pnl-display {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 12px;
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-sm);
-}
-
-.position-details-dialog .pdd-pnl-display.pdd-positive {
-  background: var(--success-alpha-10);
-}
-
-.position-details-dialog .pdd-pnl-display.pdd-negative {
-  background: var(--danger-alpha-10);
-}
-
-.position-details-dialog .pdd-pnl-value {
-  font-size: 1.25rem;
-  font-weight: 700;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.position-details-dialog .pdd-positive .pdd-pnl-value {
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-negative .pdd-pnl-value {
-  color: var(--danger);
-}
-
-.position-details-dialog .pdd-pnl-percent {
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.position-details-dialog .pdd-positive .pdd-pnl-percent {
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-negative .pdd-pnl-percent {
-  color: var(--danger);
 }
 
 /* Explorer chips — used in the header meta row */
@@ -346,6 +271,3 @@
 .position-details-dialog .pdd-pnl-stat-value.pdd-positive {
   color: var(--success-color);
 }
-
-
-

@@ -11,7 +11,7 @@ import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { applyOverviewTabMixin } from "./position_details/overview_tab.js";
 import { applyChartTabMixin } from "./position_details/chart_tab.js";
-import { applySecondaryTabsMixin } from "./position_details/secondary_tabs.js";
+import { applyActivityTabMixin } from "./position_details/activity_tab.js";
 import { applyUtilitiesMixin } from "./position_details/utilities.js";
 
 export class PositionDetailsDialog {
@@ -35,11 +35,16 @@ export class PositionDetailsDialog {
     this._backdropHandler = null;
     this._copyMintHandler = null;
     this._actionHandlers = null;
-    this._filterHandlers = null;
     this._manualToggleHandler = null;
     this._managementChangedHandler = null;
     this._focusTrap = null;
     this._lastRenderedFp = null;
+    // Activity tab view state — kept on the dialog so the 5s poll's re-render restores the
+    // filter, the order and every card the user had expanded.
+    this._activityFilter = "all";
+    this._activitySort = "newest";
+    this._activityExpanded = new Set();
+    this._activityClickHandler = null;
   }
 
   /**
@@ -69,6 +74,9 @@ export class PositionDetailsDialog {
       this.fullDetails = null;
       this.currentTab = "overview";
       this._lastRenderedFp = null;
+      this._activityFilter = "all";
+      this._activitySort = "newest";
+      this._activityExpanded = new Set();
 
       this._createDialog();
       this._attachEventHandlers();
@@ -174,13 +182,14 @@ export class PositionDetailsDialog {
   }
 
   /**
-   * Show error message in dialog
+   * Show error message in dialog. Uses the shared empty state — `pdd-error-state` had no
+   * CSS rule anywhere, so a failed load rendered as unstyled text in the corner.
    */
   _showError(message) {
     const content = this.dialogEl?.querySelector(".tab-content.active");
     if (content) {
       content.innerHTML = `
-        <div class="pdd-error-state">
+        <div class="pdd-empty-state">
           <i class="icon-circle-alert"></i>
           <p>${Utils.escapeHtml(message)}</p>
         </div>
@@ -326,17 +335,15 @@ export class PositionDetailsDialog {
           this._actionHandlers = null;
         }
 
-        // Clean up filter button handlers
-        if (this._filterHandlers) {
-          this._filterHandlers.forEach(({ element, handler }) => {
-            element.removeEventListener("click", handler);
-          });
-          this._filterHandlers = null;
-        }
-
         this.dialogEl.remove();
         this.dialogEl = null;
       }
+
+      // The activity tab's delegated listener lives on the tab-content node, which the
+      // dialog element took with it — but the reference must go too, or the next open
+      // would skip binding a handler onto the fresh DOM.
+      this._activityClickHandler = null;
+      this._activityExpanded = new Set();
 
       this.positionData = null;
       this.fullDetails = null;
@@ -374,6 +381,7 @@ export class PositionDetailsDialog {
     this._backdropHandler = null;
     this._tabHandlers = null;
     this._copyMintHandler = null;
+    this._activityClickHandler = null;
     this.positionData = null;
     this.fullDetails = null;
   }
@@ -427,7 +435,7 @@ export class PositionDetailsDialog {
                 ${logoUrl ? `<img src="${Utils.escapeHtml(logoUrl)}" alt="${Utils.escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${Utils.escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="logo-placeholder">${Utils.escapeHtml(symbol.charAt(0))}</div>`}
               </div>
               <div class="header-title">
-                <span class="title-main">${Utils.escapeHtml(symbol)}</span>
+                <span class="title-main" id="pdd-dialog-title">${Utils.escapeHtml(symbol)}</span>
                 <span class="title-sub">${Utils.escapeHtml(name)}</span>
               </div>
               <div class="header-badges">
@@ -466,13 +474,9 @@ export class PositionDetailsDialog {
             <i class="icon-chart-bar"></i>
             Chart
           </button>
-          <button class="tab-button" data-tab="history">
-            <i class="icon-clock"></i>
-            History
-          </button>
-          <button class="tab-button" data-tab="transactions">
-            <i class="icon-list"></i>
-            Transactions
+          <button class="tab-button" data-tab="activity">
+            <i class="icon-activity"></i>
+            Activity
           </button>
           <div class="pdd-trade-actions">
             ${
@@ -496,10 +500,7 @@ export class PositionDetailsDialog {
           <div class="tab-content" data-tab-content="chart">
             <div class="loading-spinner">Loading...</div>
           </div>
-          <div class="tab-content" data-tab-content="history">
-            <div class="loading-spinner">Loading...</div>
-          </div>
-          <div class="tab-content" data-tab-content="transactions">
+          <div class="tab-content" data-tab-content="activity">
             <div class="loading-spinner">Loading...</div>
           </div>
         </div>
@@ -581,9 +582,13 @@ export class PositionDetailsDialog {
       const scoreStr = score !== null && score !== undefined ? `${score} · ` : "";
       const authorityBadges = [];
       if (security.has_mint_authority)
-        authorityBadges.push(`<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Mint Auth</span>`);
+        authorityBadges.push(
+          '<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Mint Auth</span>'
+        );
       if (security.has_freeze_authority)
-        authorityBadges.push(`<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Freeze Auth</span>`);
+        authorityBadges.push(
+          '<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Freeze Auth</span>'
+        );
       securityHtml = `<div class="meta-security-group"><span class="meta-security-badge ${riskClass}"><i class="icon-shield"></i> ${scoreStr}${riskLabel}</span>${authorityBadges.join("")}</div>`;
     }
 
@@ -806,62 +811,31 @@ export class PositionDetailsDialog {
       case "chart":
         this._renderChartTab(content);
         break;
-      case "history": {
-        const fp = this._historyFingerprint();
-        if ((this._lastRenderedFp ??= {}).history !== fp) {
-          this._renderHistoryTab(content);
-          this._lastRenderedFp.history = fp;
-        }
-        break;
-      }
-      case "transactions": {
-        const fp = this._txFingerprint();
-        if ((this._lastRenderedFp ??= {}).transactions !== fp) {
-          this._renderTransactionsTab(content);
-          this._lastRenderedFp.transactions = fp;
+      case "activity": {
+        // Redrawing the timeline on every poll tick would collapse the expanded cards and
+        // yank the scroll position, so it only redraws when the timeline actually changed.
+        const fp = this._activityFingerprint();
+        if ((this._lastRenderedFp ??= {}).activity !== fp) {
+          this._renderActivityTab(content);
+          this._lastRenderedFp.activity = fp;
         }
         break;
       }
     }
   }
 
-  _historyFingerprint() {
-    const entries = this.fullDetails?.entries || [];
-    const exits = this.fullDetails?.exits || [];
-    return `e${entries.length}:${entries.at(-1)?.timestamp ?? 0}|x${exits.length}:${exits.at(-1)?.timestamp ?? 0}`;
-  }
-
-  _txFingerprint() {
-    const txs = this.fullDetails?.transactions || [];
-    const sh = this.fullDetails?.state_history || [];
-    return `t${txs.length}:${txs.at(-1)?.signature?.slice(0, 8) ?? ""}|s${sh.length}`;
-  }
-
   // ===========================================================================
-  // OVERVIEW TAB
+  // OVERVIEW TAB — applyOverviewTabMixin()
+  // CHART TAB    — applyChartTabMixin()
+  // ACTIVITY TAB — applyActivityTabMixin()
+  // UTILITIES    — applyUtilitiesMixin()
   // ===========================================================================
-  // Methods are added via applyOverviewTabMixin()
-
-  // ===========================================================================
-  // CHART TAB
-  // ===========================================================================
-  // Methods are added via applyChartTabMixin()
-
-  // ===========================================================================
-  // TOKEN TAB
-  // ===========================================================================
-  // Methods are added via applySecondaryTabsMixin()
-
-  // ===========================================================================
-  // UTILITY METHODS
-  // ===========================================================================
-  // Methods are added via applyUtilitiesMixin()
 }
 
 // Apply mixins to add tab rendering methods
 applyOverviewTabMixin(PositionDetailsDialog);
 applyChartTabMixin(PositionDetailsDialog);
-applySecondaryTabsMixin(PositionDetailsDialog);
+applyActivityTabMixin(PositionDetailsDialog);
 applyUtilitiesMixin(PositionDetailsDialog);
 
 // ============================================================================

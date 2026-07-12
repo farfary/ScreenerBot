@@ -1,0 +1,769 @@
+/* =============================================================================
+   ACTIVITY TAB — the position's swaps as ONE merged timeline
+   (record + on-chain transaction + running position state)
+   ============================================================================= */
+
+.position-details-dialog .pdd-activity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* =============================================================================
+   SUMMARY STRIP — totals for the whole timeline
+   ============================================================================= */
+
+.position-details-dialog .pdd-act-summary {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1px;
+  background: var(--border-color);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.position-details-dialog .pdd-act-sum-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 8px;
+  background: var(--bg-secondary);
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-act-sum-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-sum-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.position-details-dialog .pdd-act-sum-value.pdd-positive {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-act-sum-value.pdd-negative {
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-act-sum-sub {
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* =============================================================================
+   TOOLBAR — filters + chronological order
+   ============================================================================= */
+
+.position-details-dialog .pdd-act-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.position-details-dialog .pdd-act-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.position-details-dialog .pdd-act-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-filter:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.position-details-dialog .pdd-act-filter.active {
+  background: var(--primary-alpha-15);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.position-details-dialog .pdd-act-filter-count {
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-filter.active .pdd-act-filter-count {
+  background: var(--primary-alpha-20);
+  color: var(--primary);
+}
+
+.position-details-dialog .pdd-act-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-sort:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.position-details-dialog .pdd-act-sort i {
+  font-size: 13px;
+}
+
+/* =============================================================================
+   EVENT CARD
+   ============================================================================= */
+
+.position-details-dialog .pdd-act-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.position-details-dialog .pdd-act-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+
+.position-details-dialog .pdd-act-card.is-filtered-out {
+  display: none;
+}
+
+.position-details-dialog .pdd-act-filter-empty {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Head: kind, sequence, exit %, time, state */
+.position-details-dialog .pdd-act-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+}
+
+.position-details-dialog .pdd-act-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-act-icon i {
+  font-size: 14px;
+}
+
+.position-details-dialog .pdd-act-card[data-side="entry"] .pdd-act-icon {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-act-card[data-side="exit"] .pdd-act-icon {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-act-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.position-details-dialog .pdd-act-card[data-side="entry"] .pdd-act-label {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-act-card[data-side="exit"] .pdd-act-label {
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-act-tag {
+  padding: 2px 7px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  border-radius: var(--radius-full);
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+.position-details-dialog .pdd-act-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-act-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+}
+
+.position-details-dialog .pdd-act-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: var(--radius-full);
+}
+
+.position-details-dialog .pdd-act-state i {
+  font-size: 11px;
+}
+
+.position-details-dialog .pdd-act-state-confirmed {
+  background: var(--success-alpha-15);
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-act-state-pending {
+  background: var(--warning-alpha-15);
+  color: var(--warning-color);
+}
+
+.position-details-dialog .pdd-act-state-failed {
+  background: var(--danger-alpha-15);
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-act-state-synthetic {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+/* Flow: the numbers a trader reads first */
+.position-details-dialog .pdd-act-flow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px var(--spacing-md);
+  padding: 9px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.position-details-dialog .pdd-act-flow-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-act-flow-label {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .pdd-act-flow-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.position-details-dialog .pdd-act-flow-value small {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.85;
+  margin-left: 3px;
+}
+
+.position-details-dialog .pdd-act-flow-value.positive {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-act-flow-value.negative {
+  color: var(--danger);
+}
+
+/* Chips: fee, cost basis, value, router, slot */
+.position-details-dialog .pdd-act-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.position-details-dialog .pdd-act-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.7rem;
+}
+
+.position-details-dialog .pdd-act-chip-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.position-details-dialog .pdd-act-chip-value {
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-weight: 600;
+}
+
+.position-details-dialog .pdd-act-chip-router .pdd-act-chip-value {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.65rem;
+}
+
+/* After: the position once this swap settled */
+.position-details-dialog .pdd-act-after {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+}
+
+.position-details-dialog .pdd-act-after-title {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-after-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.7rem;
+}
+
+.position-details-dialog .pdd-act-after-label {
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-after-value {
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-weight: 600;
+}
+
+/* Foot: signature + expand */
+.position-details-dialog .pdd-act-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.position-details-dialog .pdd-act-sig-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-act-sig {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--link-color);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-sig:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+.position-details-dialog .pdd-act-sig-na {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.position-details-dialog .pdd-act-sig-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-sig-copy:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-act-sig-copy i {
+  font-size: 11px;
+}
+
+.position-details-dialog .pdd-act-sig-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-act-sig-link:hover {
+  background: var(--bg-primary);
+  color: var(--link-color);
+}
+
+.position-details-dialog .pdd-act-sig-link i {
+  font-size: 12px;
+}
+
+.position-details-dialog .pdd-act-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-expand:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.position-details-dialog .pdd-act-expand i {
+  font-size: 12px;
+  transition: transform var(--transition-fast);
+}
+
+.position-details-dialog .pdd-act-card.is-open .pdd-act-expand i {
+  transform: rotate(180deg);
+}
+
+/* =============================================================================
+   EXPANDED DETAILS — the full on-chain record
+   ============================================================================= */
+
+.position-details-dialog .pdd-act-details {
+  display: none;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.position-details-dialog .pdd-act-card.is-open .pdd-act-details {
+  display: flex;
+}
+
+.position-details-dialog .pdd-act-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.position-details-dialog .pdd-act-note.is-error {
+  color: var(--danger);
+  border-color: var(--danger-alpha-30);
+  background: var(--danger-alpha-10);
+}
+
+.position-details-dialog .pdd-act-note i {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-act-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px var(--spacing-md);
+}
+
+.position-details-dialog .pdd-act-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-act-detail-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .pdd-act-detail-value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.position-details-dialog .pdd-act-detail-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* Token transfers */
+.position-details-dialog .pdd-act-xfers {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.position-details-dialog .pdd-act-xfer-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  font-family: var(--font-data);
+}
+
+.position-details-dialog .pdd-act-xfer-table th {
+  text-align: left;
+  padding: 4px 8px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-xfer-table td {
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-xfer-table tr:last-child td {
+  border-bottom: none;
+}
+
+.position-details-dialog .pdd-act-xfer-amount {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* =============================================================================
+   STATE HISTORY — the position's own state machine
+   ============================================================================= */
+
+.position-details-dialog .pdd-act-states {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-act-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.position-details-dialog .pdd-act-section-title i {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+.position-details-dialog .pdd-act-section-count {
+  font-family: var(--font-data);
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .pdd-act-state-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .pdd-act-state-row {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.position-details-dialog .pdd-act-state-name {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-act-state-reason {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-act-state-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  white-space: nowrap;
+}
+
+/* =============================================================================
+   RESPONSIVE
+   ============================================================================= */
+
+@media (width <= 1100px) {
+  .position-details-dialog .pdd-act-summary {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (width <= 640px) {
+  .position-details-dialog .pdd-act-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .position-details-dialog .pdd-act-toolbar {
+    align-items: stretch;
+  }
+
+  .position-details-dialog .pdd-act-state-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .position-details-dialog .pdd-act-state-reason {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+}

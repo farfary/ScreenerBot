@@ -165,12 +165,10 @@ pub(super) const POSITION_DETAILS_BASE_STYLES: &str =
     include_str!("templates/styles/ui/position_details/base.css");
 pub(super) const POSITION_DETAILS_OVERVIEW_STYLES: &str =
     include_str!("templates/styles/ui/position_details/overview.css");
-pub(super) const POSITION_DETAILS_HISTORY_STYLES: &str =
-    include_str!("templates/styles/ui/position_details/history.css");
-pub(super) const POSITION_DETAILS_TRANSACTIONS_STYLES: &str =
-    include_str!("templates/styles/ui/position_details/transactions.css");
-pub(super) const POSITION_DETAILS_TRANSACTIONS_DETAIL_STYLES: &str =
-    include_str!("templates/styles/ui/position_details/transactions_detail.css");
+pub(super) const POSITION_DETAILS_CHART_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/chart.css");
+pub(super) const POSITION_DETAILS_ACTIVITY_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/activity.css");
 
 // CSS Styles - Settings and Misc
 pub(super) const SETTINGS_BASE_STYLES: &str = include_str!("templates/styles/settings/base.css");
@@ -312,10 +310,10 @@ pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/position_details_dialog.js");
-pub const POSITION_DETAILS_ANALYTICS_TAB_JS: &str =
-    include_str!("templates/scripts/ui/position_details/analytics_tab.js");
-pub const POSITION_DETAILS_SECONDARY_TABS_JS: &str =
-    include_str!("templates/scripts/ui/position_details/secondary_tabs.js");
+pub const POSITION_DETAILS_ACTIVITY_TAB_JS: &str =
+    include_str!("templates/scripts/ui/position_details/activity_tab.js");
+pub const POSITION_DETAILS_ACTIVITY_EVENT_JS: &str =
+    include_str!("templates/scripts/ui/position_details/activity_event.js");
 pub const POSITION_DETAILS_OVERVIEW_TAB_JS: &str =
     include_str!("templates/scripts/ui/position_details/overview_tab.js");
 pub const POSITION_DETAILS_CHART_TAB_JS: &str =

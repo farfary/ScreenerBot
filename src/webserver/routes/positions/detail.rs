@@ -3,6 +3,7 @@
 use axum::{extract::Path, http::StatusCode, response::Response};
 use chrono::Utc;
 
+use super::activity::build_activity;
 use super::list::map_position_to_response_async;
 use super::types::*;
 use crate::logger::{self, LogTag};
@@ -10,7 +11,6 @@ use crate::pools;
 use crate::positions;
 use crate::sol_price;
 use crate::tokens;
-use crate::transactions::{get_transaction, TokenTransfer};
 use crate::utils::lamports_to_sol;
 use crate::webserver::utils::{error_response, success_response};
 
@@ -26,9 +26,9 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 load_entry_exit_history(&position)
             );
 
-            // Transaction summaries are built FROM the entry/exit records, so they must
-            // wait for them (local SQLite reads — cheap).
-            let transactions = build_transaction_summaries(&position, &entries, &exits).await;
+            // The activity timeline is built FROM the entry/exit records, so it must wait
+            // for them (local SQLite reads — cheap).
+            let (activity, activity_totals) = build_activity(&position, &entries, &exits).await;
 
             // Fetch token data from database
             let token_data = tokens::database::get_full_token_async(mint)
@@ -128,7 +128,8 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 position: Some(detail),
                 entries,
                 exits,
-                transactions,
+                activity,
+                activity_totals,
                 state_history,
                 token_info,
                 market_data,
@@ -188,119 +189,6 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
         summary: map_position_to_response_async(position).await,
         phantom_remove: position.phantom_remove,
         phantom_first_seen: position.phantom_first_seen.map(|dt| dt.timestamp()),
-    }
-}
-
-/// Every on-chain transaction belonging to a position: the entry, every DCA add, every
-/// partial exit, and the final close.
-///
-/// This used to emit exactly TWO summaries, built from `entry_transaction_signature` and
-/// `exit_transaction_signature`. A position's other swaps — DCA adds and partial exits —
-/// have their own signatures and live only in the entry/exit RECORDS, so they never
-/// appeared, even though the Transactions tab already knows how to label them ("DCA
-/// Entry" / "Partial Exit" — those branches were simply unreachable).
-///
-/// Built from the records, which are the authoritative per-swap history, plus:
-///   - the position's own signatures, for a swap that is submitted but not yet verified
-///     (no record written yet) and for legacy positions that predate the records;
-///   - partial exits still confirming, whose signature lives only in the pending registry
-///     until verification writes the record.
-async fn build_transaction_summaries(
-    position: &positions::Position,
-    entries: &[EntryRecordResponse],
-    exits: &[ExitRecordResponse],
-) -> Vec<PositionTransactionSummary> {
-    // (kind, signature), newest last — de-duplicated, first kind wins.
-    let mut planned: Vec<(&str, String)> = Vec::new();
-    let mut push = |kind: &'static str, signature: Option<String>, planned: &mut Vec<_>| {
-        let Some(signature) = signature else { return };
-        if signature.is_empty() {
-            return;
-        }
-        if planned
-            .iter()
-            .any(|(_, existing): &(&str, String)| *existing == signature)
-        {
-            return;
-        }
-        planned.push((kind, signature));
-    };
-
-    push(
-        "entry",
-        position.entry_transaction_signature.clone(),
-        &mut planned,
-    );
-    for entry in entries {
-        let kind = if entry.is_dca { "dca" } else { "entry" };
-        push(
-            kind,
-            Some(entry.transaction_signature.clone()),
-            &mut planned,
-        );
-    }
-    for exit in exits {
-        let kind = if exit.is_partial {
-            "partial_exit"
-        } else {
-            "exit"
-        };
-        push(kind, Some(exit.transaction_signature.clone()), &mut planned);
-    }
-    for pending in positions::get_pending_partial_exits_for_mint(&position.mint).await {
-        push("partial_exit", Some(pending.signature), &mut planned);
-    }
-    push(
-        "exit",
-        position.exit_transaction_signature.clone(),
-        &mut planned,
-    );
-
-    let mut summaries = Vec::with_capacity(planned.len().max(2));
-    for (kind, signature) in planned {
-        summaries.push(fetch_transaction_summary(kind, Some(signature), position).await);
-    }
-
-    // Placeholder exit row ONLY for a position that has actually exited without a usable
-    // signature (a synthetic / force close). An open position that merely took partial
-    // profits has exit RECORDS but has not exited — it must not show an empty Exit row.
-    let has_exited = position.exit_time.is_some() || position.synthetic_exit;
-    if has_exited && !summaries.iter().any(|s| s.kind == "exit") {
-        summaries.push(fetch_transaction_summary("exit", None, position).await);
-    }
-
-    summaries
-}
-
-async fn fetch_transaction_summary(
-    kind: &str,
-    signature: Option<String>,
-    position: &positions::Position,
-) -> PositionTransactionSummary {
-    match signature {
-        Some(sig) => match get_transaction(&sig).await {
-            Ok(Some(tx)) => PositionTransactionSummary::from_transaction(kind, sig, &tx, position),
-            Ok(None) => PositionTransactionSummary::missing(
-                kind,
-                Some(sig),
-                Some("Transaction not available in cache".to_owned()),
-            ),
-            Err(err) => {
-                logger::info(
-                    LogTag::Webserver,
-                    &format!("Failed to load {kind} transaction {sig}: {err}"),
-                );
-                PositionTransactionSummary::missing(kind, Some(sig), Some(err))
-            }
-        },
-        None => {
-            let note = if kind == "exit" && position.synthetic_exit {
-                "Synthetic exit - no signature".to_owned()
-            } else {
-                "Signature not recorded".to_owned()
-            };
-            PositionTransactionSummary::missing(kind, None, Some(note))
-        }
     }
 }
 

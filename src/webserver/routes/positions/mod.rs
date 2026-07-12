@@ -8,6 +8,7 @@ use std::sync::Arc;
 use crate::webserver::state::AppState;
 
 // Module declarations
+mod activity;
 mod debug;
 mod detail;
 mod force_close;

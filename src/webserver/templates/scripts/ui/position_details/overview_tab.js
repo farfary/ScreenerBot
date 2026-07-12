@@ -5,6 +5,10 @@
 import * as Utils from "../../core/utils.js";
 import { manualTrade } from "../manual_trade.js";
 
+const LAMPORTS_PER_SOL = 1e9;
+
+const lamportsToSol = (lamports) => (lamports ? lamports / LAMPORTS_PER_SOL : 0);
+
 /**
  * Apply overview tab methods to PositionDetailsDialog prototype
  * @param {class} PositionDetailsDialog - The PositionDetailsDialog class
@@ -23,14 +27,13 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       return;
     }
 
+    // Security, links, token info and pool info are rendered by the header meta row, not
+    // here — reading them into locals this function never used was left over from an
+    // earlier layout.
     const isOpen = pos.position_type !== "closed";
     const marketData = this.fullDetails?.market_data;
-    const security = this.fullDetails?.security;
-    const externalLinks = this.fullDetails?.external_links;
     const positionAge = this.fullDetails?.position_age_seconds;
     const solPriceUsd = this.fullDetails?.sol_price_usd;
-    const tokenInfo = this.fullDetails?.token_info;
-    const poolInfo = this.fullDetails?.pool_info;
     const entries = this.fullDetails?.entries || [];
     const exits = this.fullDetails?.exits || [];
 
@@ -296,19 +299,14 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
       drawdown = ((currentPrice - highestPrice) / highestPrice) * 100;
     }
 
-    // Fee breakdown
-    let entryFees = 0;
-    if (pos.entry_fee_lamports) {
-      entryFees = pos.entry_fee_lamports / 1e9;
-    } else if (entries.length > 0) {
-      entryFees = entries.reduce((sum, e) => sum + (e.fee_lamports || 0) / 1e9, 0);
-    }
-    let exitFees = 0;
-    if (pos.exit_fee_lamports) {
-      exitFees = pos.exit_fee_lamports / 1e9;
-    } else if (exits.length > 0) {
-      exitFees = exits.reduce((sum, e) => sum + (e.fee_lamports || 0) / 1e9, 0);
-    }
+    // Fee breakdown. The position's own fee fields cover only the entry and the final
+    // close; every DCA add and partial exit carries its own fee on its RECORD, and the
+    // records report it in SOL (`fees_sol`) — the fallback used to read `fee_lamports`,
+    // a field the API does not send, so it silently summed to zero on every DCA'd or
+    // partially-exited position.
+    const recordFees = (records) => records.reduce((sum, r) => sum + (r.fees_sol || 0), 0);
+    const entryFees = recordFees(entries) || lamportsToSol(pos.entry_fee_lamports);
+    const exitFees = recordFees(exits) || lamportsToSol(pos.exit_fee_lamports);
     const totalFees = entryFees + exitFees;
     const totalInvested = pos.total_size_sol || 0;
     const feePct = totalInvested > 0 && totalFees > 0 ? (totalFees / totalInvested) * 100 : 0;

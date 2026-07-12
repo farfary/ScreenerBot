@@ -143,6 +143,21 @@ pub async fn clear_pending_dca_swap(signature: &str) -> Result<Option<PendingDca
     Ok(removed)
 }
 
+/// Every DCA swap currently in flight for a mint (submitted, not yet verified).
+///
+/// Symmetric to [`get_pending_partial_exits_for_mint`]. Until `DcaVerified` writes its
+/// entry record, a DCA's signature lives ONLY here — it is never stamped on the position
+/// (`entry_transaction_signature` is the original entry and never changes). Without this
+/// read an in-flight add was invisible in the position's activity list until verification
+/// landed seconds later, even though the notification centre already announced it.
+pub async fn get_pending_dca_swaps_for_mint(mint: &str) -> Vec<PendingDcaSwap> {
+    let map = PENDING_DCA_SWAPS.read().await;
+    map.values()
+        .filter(|entry| entry.mint == mint)
+        .cloned()
+        .collect()
+}
+
 /// Load pending DCA swaps from metadata into memory (used at startup)
 pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>, String> {
     let raw = db::get_metadata(PENDING_DCA_METADATA_KEY).await?;

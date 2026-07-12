@@ -1,13 +1,6 @@
 //! Position route types — data structures for position API responses.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
-use crate::positions;
-use crate::transactions::{
-    TokenTransfer, Transaction, TransactionDirection, TransactionStatus, TransactionType,
-};
-use crate::utils::lamports_to_sol;
 
 #[derive(Debug, Deserialize)]
 pub struct PositionsQuery {
@@ -173,7 +166,9 @@ pub struct PositionDetailResponse {
     pub position: Option<PositionDetail>,
     pub entries: Vec<EntryRecordResponse>,
     pub exits: Vec<ExitRecordResponse>,
-    pub transactions: Vec<PositionTransactionSummary>,
+    /// The position's swaps as ONE merged timeline (see [`PositionActivityEvent`]).
+    pub activity: Vec<PositionActivityEvent>,
+    pub activity_totals: PositionActivityTotals,
     pub state_history: Vec<PositionStateTimelineEntry>,
     pub token_info: Option<PositionTokenInfo>,
     pub market_data: Option<PositionMarketData>,
@@ -202,86 +197,100 @@ pub struct TransactionTokenTransferSummary {
     pub program_id: String,
 }
 
+/// One swap in a position's life — the opening buy, every DCA add, every partial exit and
+/// the final close — with the position RECORD and the on-chain TRANSACTION merged into a
+/// single event.
+///
+/// The two used to be served as separate arrays (`entries`/`exits` and `transactions`) and
+/// the dashboard re-joined them by signature in two different tabs, each losing something
+/// the other had: the record view had no chain status/fee/router, and the chain view had no
+/// timestamp for a swap that was not in the transaction cache (it sorted to the bottom
+/// showing "—" even though its record carried the real time). One event, one join, one
+/// source of truth.
+///
+/// A swap that is submitted but not yet verified has NO record yet — its numbers land on
+/// the position only on verification — so the record half is `None` and `state` is
+/// `pending`. That is deliberate: the activity list must never report tokens or SOL that
+/// the position has not actually booked.
 #[derive(Debug, Serialize)]
-pub struct PositionTransactionSummary {
+pub struct PositionActivityEvent {
+    /// `entry` | `dca` | `partial_exit` | `exit`
     pub kind: String,
+    /// `entry` | `exit` — which side of the book this event is on.
+    pub side: String,
+    /// 1-based index within its side, so the UI can label "DCA #2" / "Exit #3".
+    pub sequence: u32,
+    /// `pending` | `confirmed` | `failed` | `synthetic`
+    pub state: String,
     pub signature: Option<String>,
+    /// Record time when recorded, else the chain's, else the pending registry's submit time.
+    pub timestamp: Option<i64>,
+
+    // --- position record (written on verification) ---
+    /// True once verification wrote the entry/exit record — i.e. the position has booked it.
+    pub recorded: bool,
+    pub record_id: Option<i64>,
+    /// Raw on-chain token units (scale by the token's decimals before display).
+    pub token_amount: Option<u64>,
+    /// SOL per whole token.
+    pub price: Option<f64>,
+    /// SOL spent (entry side) or received (exit side).
+    pub sol_amount: Option<f64>,
+    /// Exits only — percentage of the then-remaining position this swap sold.
+    pub exit_percentage: Option<f64>,
+    /// Swap fee booked on the record, when it carried one.
+    pub record_fee_sol: Option<f64>,
+
+    // --- on-chain transaction (from the transactions cache) ---
+    /// False when the transaction is not in the cache — the record half still stands.
     pub available: bool,
     pub status: Option<String>,
     pub success: Option<bool>,
-    pub timestamp: Option<i64>,
     pub slot: Option<u64>,
     pub block_time: Option<i64>,
     pub fee_sol: Option<f64>,
-    pub fee_lamports: Option<u64>,
     pub direction: Option<String>,
     pub transaction_type: Option<String>,
     pub router: Option<String>,
     pub sol_change: Option<f64>,
     pub instructions_count: Option<usize>,
+    pub compute_units: Option<u64>,
+    pub accounts_count: Option<usize>,
     pub notes: Option<String>,
     pub token_transfers: Vec<TransactionTokenTransferSummary>,
+
+    // --- running position state AFTER this event ---
+    /// Tokens held once this event settled (raw units).
+    pub tokens_after: Option<u64>,
+    /// Cost basis still on the books once this event settled (SOL).
+    pub invested_after: Option<f64>,
+    /// Exits only: the cost basis of the tokens this swap sold, valued at the average entry
+    /// price in force AT THAT MOMENT — not the position's final average.
+    pub cost_basis: Option<f64>,
+    /// Exits only: `sol_amount - cost_basis`.
+    pub realized_pnl: Option<f64>,
+    pub realized_pnl_percent: Option<f64>,
 }
 
-impl PositionTransactionSummary {
-    pub fn from_transaction(
-        kind: &str,
-        signature: String,
-        tx: &Transaction,
-        position: &positions::Position,
-    ) -> Self {
-        let fee_sol = if let Some(lamports) = tx.fee_lamports {
-            Some(lamports_to_sol(lamports))
-        } else if tx.fee_sol > 0.0 {
-            Some(tx.fee_sol)
-        } else {
-            None
-        };
-
-        let router = tx.token_swap_info.as_ref().map(|info| info.router.clone());
-
-        Self {
-            kind: kind.to_string(),
-            signature: Some(signature.clone()),
-            available: true,
-            status: Some(describe_transaction_status(&tx.status)),
-            success: Some(tx.success),
-            timestamp: Some(tx.timestamp.timestamp()),
-            slot: tx.slot,
-            block_time: tx.block_time,
-            fee_sol,
-            fee_lamports: tx.fee_lamports,
-            direction: Some(describe_transaction_direction(&tx.direction)),
-            transaction_type: Some(describe_transaction_type(&tx.transaction_type)),
-            router,
-            sol_change: Some(tx.sol_balance_change),
-            instructions_count: Some(tx.instructions_count),
-            notes: tx.error_message.clone(),
-            token_transfers: map_token_transfers(position, &tx.token_transfers),
-        }
-    }
-
-    pub fn missing(kind: &str, signature: Option<String>, notes: Option<String>) -> Self {
-        Self {
-            kind: kind.to_string(),
-            signature,
-            available: false,
-            status: None,
-            success: None,
-            timestamp: None,
-            slot: None,
-            block_time: None,
-            fee_sol: None,
-            fee_lamports: None,
-            direction: None,
-            transaction_type: None,
-            router: None,
-            sol_change: None,
-            instructions_count: None,
-            notes,
-            token_transfers: Vec::new(),
-        }
-    }
+/// Aggregates over the whole activity timeline, so the UI never re-sums the events itself.
+#[derive(Debug, Default, Serialize)]
+pub struct PositionActivityTotals {
+    pub events: usize,
+    pub entries: usize,
+    pub dca_entries: usize,
+    pub exits: usize,
+    pub partial_exits: usize,
+    pub pending: usize,
+    pub failed: usize,
+    /// Raw token units.
+    pub tokens_bought: u64,
+    pub tokens_sold: u64,
+    pub sol_invested: f64,
+    pub sol_returned: f64,
+    /// Network fees across every swap that reported one.
+    pub network_fees_sol: f64,
+    /// Sum of the per-exit realized P&L.
+    pub realized_pnl: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -289,79 +298,4 @@ pub struct PositionStateTimelineEntry {
     pub state: String,
     pub changed_at: i64,
     pub reason: Option<String>,
-}
-
-// Helper functions used by impl block
-
-fn map_token_transfers(
-    position: &positions::Position,
-    transfers: &[TokenTransfer],
-) -> Vec<TransactionTokenTransferSummary> {
-    let mut relevant: Vec<&TokenTransfer> = transfers
-        .iter()
-        .filter(|transfer| transfer.mint == position.mint)
-        .collect();
-
-    if relevant.is_empty() {
-        relevant = transfers.iter().collect();
-    }
-
-    relevant
-        .into_iter()
-        .take(8)
-        .map(|transfer| TransactionTokenTransferSummary {
-            mint: transfer.mint.clone(),
-            amount: transfer.amount,
-            from: transfer.from.clone(),
-            to: transfer.to.clone(),
-            program_id: transfer.program_id.clone(),
-        })
-        .collect()
-}
-
-fn describe_transaction_status(status: &TransactionStatus) -> String {
-    match status {
-        TransactionStatus::Pending => "Pending".to_owned(),
-        TransactionStatus::Confirmed => "Confirmed".to_owned(),
-        TransactionStatus::Finalized => "Finalized".to_owned(),
-        TransactionStatus::Failed(err) => format!("Failed: {err}"),
-    }
-}
-
-fn describe_transaction_direction(direction: &TransactionDirection) -> String {
-    match direction {
-        TransactionDirection::Incoming => "Incoming".to_owned(),
-        TransactionDirection::Outgoing => "Outgoing".to_owned(),
-        TransactionDirection::Internal => "Internal".to_owned(),
-        TransactionDirection::Unknown => "Unknown".to_owned(),
-    }
-}
-
-fn describe_transaction_type(transaction_type: &TransactionType) -> String {
-    match transaction_type {
-        TransactionType::Buy => "Buy".to_owned(),
-        TransactionType::Sell => "Sell".to_owned(),
-        TransactionType::Transfer => "Transfer".to_owned(),
-        TransactionType::Compute => "Compute".to_owned(),
-        TransactionType::AtaOperation => "ATA Operation".to_owned(),
-        TransactionType::Failed => "Failed".to_owned(),
-        TransactionType::Unknown => "Unknown".to_owned(),
-        TransactionType::SwapSolToToken { router, .. } => {
-            format!("Swap SOL→Token ({router})")
-        }
-        TransactionType::SwapTokenToSol { router, .. } => {
-            format!("Swap Token→SOL ({router})")
-        }
-        TransactionType::SwapTokenToToken { router, .. } => {
-            format!("Swap Token→Token ({router})")
-        }
-        TransactionType::SolTransfer { .. } => "SOL Transfer".to_owned(),
-        TransactionType::TokenTransfer { mint, amount, .. } => {
-            format!("Token Transfer {} ({:.4})", mint, amount)
-        }
-        TransactionType::AtaClose { token_mint, .. } => {
-            format!("ATA Close ({token_mint})")
-        }
-        TransactionType::Other { description, .. } => description.clone(),
-    }
 }
