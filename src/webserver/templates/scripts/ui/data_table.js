@@ -1697,6 +1697,55 @@ export class DataTable {
    * Check if user is currently interacting with table controls
    * Skip render during interaction to preserve UI state (dropdowns, focus, hover)
    */
+  /**
+   * Is a menu, editor or settings panel open that a re-render would DESTROY?
+   *
+   * This is the subset of "interacting" that must block updates outright: replacing a
+   * cell's innerHTML under an open dropdown or a focused input closes/blurs it.
+   * Hovering is deliberately NOT in here — see `_renderTable`.
+   */
+  _isEditingOrMenuOpen() {
+    if (document.body.classList.contains("table-settings-open")) {
+      return true;
+    }
+
+    const container = this.elements?.container;
+    if (!container) return false;
+
+    const activeEl = document.activeElement;
+    if (activeEl && container.contains(activeEl)) {
+      const tag = activeEl.tagName?.toLowerCase();
+      if (tag === "select" || tag === "input" || tag === "button") {
+        return true;
+      }
+    }
+
+    return Boolean(
+      document.querySelector(".links-dropdown-menu, .dropdown-menu.open, [data-dropdown-open]")
+    );
+  }
+
+  /**
+   * Do the rows currently in the DOM match `rows` one-for-one, in the same order?
+   *
+   * If they do, an update changes only CELL VALUES: nothing moves, nothing is added or
+   * removed, and the scroll position cannot shift. That is safe to apply even while the
+   * pointer is over the table.
+   */
+  _rowOrderMatchesDom(rows) {
+    const tbody = this.elements?.tbody;
+    if (!tbody) return false;
+
+    const domRows = Array.from(tbody.children);
+    if (domRows.length !== rows.length) return false;
+
+    const rowIdField = this.options.rowIdField;
+    return rows.every(
+      (row, index) =>
+        domRows[index].getAttribute("data-row-id") === String(row[rowIdField] ?? index)
+    );
+  }
+
   _isUserInteracting() {
     // Check explicit hover tracking (set by mouseenter/mouseleave events)
     if (this._isHovering) {
@@ -1737,6 +1786,30 @@ export class DataTable {
   _renderTable(renderOptions = {}) {
     // Skip render during user interaction (unless forced)
     if (!renderOptions.force && this._isUserInteracting()) {
+      // HOVERING MUST NOT FREEZE THE TABLE.
+      //
+      // This used to skip the render outright whenever the pointer was over the table —
+      // so resting the mouse on it froze every value indefinitely. Polls kept fetching and
+      // the state kept updating, but the DOM was never touched: a position whose size and
+      // holdings had changed (a DCA landing, say) went on showing its old numbers until the
+      // page was reloaded. That is the bug it looked like: "the table is wrong until Ctrl+R".
+      //
+      // The skip exists to stop rows jumping out from under the cursor mid-click. That is a
+      // STRUCTURAL concern — rows added, removed or reordered. When the row set and order
+      // are unchanged, an update only rewrites cell contents: nothing moves, the scroll
+      // cannot shift, and it is safe to apply while hovering. Anything with an open menu or
+      // a focused control inside the table still waits, because re-rendering that cell would
+      // close or blur it.
+      const canUpdateValuesInPlace =
+        this.elements?.tbody &&
+        !this._isEditingOrMenuOpen() &&
+        this._rowOrderMatchesDom(this._getClientPaginatedData());
+
+      if (canUpdateValuesInPlace) {
+        this._updateTableBody(this._getClientPaginatedData());
+        return;
+      }
+
       this._log("debug", "Skipping render during user interaction");
       return;
     }

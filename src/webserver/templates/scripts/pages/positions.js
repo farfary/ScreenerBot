@@ -24,6 +24,13 @@ const SUB_TABS = [
 // position keeps showing until it is fully closed.
 const ACTION_BUY_TYPES = new Set(["swap_buy", "position_open"]);
 const ACTION_SELL_TYPES = new Set(["swap_sell", "position_close", "position_partial_exit"]);
+// A DCA ("add to position") acts on a position that ALREADY exists, so it is neither a
+// pending-buy row nor a sell. It had no state at all here, which left the add invisible:
+// the row's Total Invested and Holdings only move once the DCA is VERIFIED on chain
+// (`total_size_sol += sol_spent`, `remaining_token_amount += tokens_bought`), several
+// seconds later — so the table just sat there showing the pre-DCA numbers with no hint
+// that anything was happening.
+const ACTION_DCA_TYPES = new Set(["position_dca"]);
 
 // Keep showing a just-finished buy as pending for a short grace window so the row
 // doesn't flicker out between "swap done" and the position appearing on next poll.
@@ -520,6 +527,7 @@ function createLifecycle() {
     const now = Date.now();
     const buyByMint = new Map();
     const sellByMint = new Map();
+    const dcaByMint = new Map();
 
     const considerBuy = (n, kind) => {
       if (!ACTION_BUY_TYPES.has(n?.action_type)) return;
@@ -559,10 +567,18 @@ function createLifecycle() {
       sellByMint.set(mint, { step: shortStep(n.state?.current_step) });
     };
 
+    const considerDca = (n) => {
+      if (!ACTION_DCA_TYPES.has(n?.action_type)) return;
+      const mint = actionMint(n);
+      if (!mint) return;
+      dcaByMint.set(mint, { step: shortStep(n.state?.current_step) });
+    };
+
     try {
       notificationManager.getActive().forEach((n) => {
         considerBuy(n, "active");
         considerSell(n);
+        considerDca(n);
       });
       notificationManager.getCompleted({ includeDismissed: false }).forEach((n) => {
         considerBuy(n, "completed");
@@ -574,7 +590,7 @@ function createLifecycle() {
       console.warn("[Positions] deriveLive failed:", err);
     }
 
-    return { buyByMint, sellByMint };
+    return { buyByMint, sellByMint, dcaByMint };
   };
 
   // Merge live action state into the server rows: annotate real rows with their
@@ -593,18 +609,25 @@ function createLifecycle() {
       });
     }
 
-    const { buyByMint, sellByMint } = deriveLive();
+    const { buyByMint, sellByMint, dcaByMint } = deriveLive();
     const presentMints = new Set(base.map((r) => r.mint));
 
     const annotated = base.map((r) => {
       let st = "open";
       let step = null;
       const sell = sellByMint.get(r.mint);
+      const dca = dcaByMint.get(r.mint);
       if (sell) {
         st = "selling";
         step = sell.step;
       } else if (r.exit_transaction_signature && !r.transaction_exit_verified) {
         st = "closing";
+      } else if (dca) {
+        // An add is in flight. Its SOL and tokens only land on the row once the DCA is
+        // VERIFIED, so without this the row looks untouched and the user assumes the add
+        // was lost.
+        st = "buying";
+        step = dca.step || "Adding";
       }
       return { ...r, _state: st, _stepLabel: step };
     });
@@ -953,7 +976,11 @@ function createLifecycle() {
           } catch (err) {
             console.warn("Failed to fetch entry_sizes config:", err);
           }
-          context.entrySize = row.entry_sol || row.sol_size;
+          // The positions API returns NEITHER `entry_sol` NOR `sol_size` — both were dead
+          // reads, so this was always undefined and the add dialog's multiplier presets
+          // (1.0x / 1.5x / 2.0x) never had a basis. `total_size_sol` is the money actually in
+          // the position (entry + every DCA), which is what an add should be sized against.
+          context.entrySize = row.total_size_sol ?? row.entry_size_sol;
           context.entrySizes = entrySizes;
         }
 
