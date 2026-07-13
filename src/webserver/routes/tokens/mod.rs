@@ -13,6 +13,7 @@ use crate::webserver::state::AppState;
 mod blacklist;
 mod detail;
 mod favorites;
+mod identity;
 mod list;
 mod ohlcv;
 pub mod types;
@@ -21,6 +22,7 @@ pub mod types;
 use blacklist::{add_to_blacklist, get_blacklist_status, remove_from_blacklist};
 use detail::{get_token_analysis, get_token_detail, refresh_token_data};
 use favorites::{add_favorite, get_favorites, remove_favorite, update_favorite};
+use identity::get_token_identities;
 use list::{filter_tokens, get_tokens_stats, search_tokens};
 use ohlcv::{
     deprioritize_token_ohlcv, focus_token, get_token_dexscreener, get_token_ohlcv,
@@ -43,6 +45,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tokens/stats", get(get_tokens_stats))
         .route("/tokens/filter", post(filter_tokens))
         .route("/tokens/search", get(search_tokens))
+        .route("/tokens/identities", get(get_token_identities))
         .route("/tokens/favorites", get(get_favorites))
         .route("/tokens/favorites", post(add_favorite))
         .route("/tokens/favorites/:mint", delete(remove_favorite))

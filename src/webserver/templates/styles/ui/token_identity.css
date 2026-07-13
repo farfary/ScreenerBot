@@ -1,0 +1,190 @@
+/* =============================================================================
+   TOKEN IDENTITY — shared asset logo / chip / full-mint component
+   Rendered by scripts/ui/token_identity.js. Used anywhere the dashboard names an
+   asset, so every surface shows the same logo, symbol, name and FULL mint.
+   ============================================================================= */
+
+/* --- Logo ---------------------------------------------------------------- */
+
+.ti-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+}
+
+.ti-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Brand glyph (the Solana logomark) — 101x88 on a transparent canvas, so cropping it
+   edge to edge like a square provider avatar cuts the mark off. Inset it and letterbox
+   it inside the circle so the WHOLE mark is visible.
+
+   The inset MUST be em-based, never a percentage: percentage padding resolves against
+   the CONTAINING BLOCK's width, not the element's own, so on a wide row a `padding: 22%`
+   grew this fixed 22px box to the padding sum (~270px) and — under border-box — left a
+   zero-size content area, i.e. a huge empty circle with no logo in it. Each size class
+   sets font-size equal to its box size, so 0.16em is a constant proportional inset. */
+.ti-logo-brand {
+  padding: 0.16em;
+  background: var(--bg-card-hover);
+}
+
+.ti-logo-brand img {
+  object-fit: contain;
+}
+
+/* The letter avatar sits after the <img>; it is only revealed when the image is
+   absent or removed by its onerror handler (so a dead provider URL degrades to a
+   letter instead of a broken-image glyph). */
+.ti-logo img + .ti-logo-fallback {
+  display: none;
+}
+
+.ti-logo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.6em;
+  line-height: 1;
+}
+
+.ti-logo-xs {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ti-logo-sm {
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+}
+
+.ti-logo-md {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+.ti-logo-lg {
+  width: 44px;
+  height: 44px;
+  font-size: 44px;
+}
+
+/* --- Chip ---------------------------------------------------------------- */
+
+.ti-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ti-chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ti-chip-symbol {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.ti-chip-md .ti-chip-symbol,
+.ti-chip-lg .ti-chip-symbol {
+  font-size: 0.95rem;
+}
+
+.ti-chip-name {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Full address (mint, account, pool, program, signature) ---------------- */
+
+/* Addresses are never cropped: they wrap. Cropping is what makes two different
+   tokens — or two different accounts — look like the same one. */
+.ti-address {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ti-address-value {
+  min-width: 0;
+  color: var(--text-muted);
+  font: 500 0.7rem/1.35 var(--font-mono);
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.ti-address-value:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.ti-address-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.ti-address-copy:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.ti-address-copy i {
+  font-size: 11px;
+}
+
+/* --- Inline (logo + symbol) ---------------------------------------------- */
+
+.ti-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ti-inline-symbol {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}

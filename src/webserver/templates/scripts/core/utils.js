@@ -1538,3 +1538,26 @@ export function resolveTokenBannerUrl(token) {
   // bannerless (it falls through to the accent gradient, so it LOOKS designed).
   return normalizeImageUrl(token.banner || token.header_image_url || token.header);
 }
+
+/**
+ * Global `[data-copy]` delegation: any element carrying `data-copy="<text>"`
+ * copies that text on click, from anywhere in the dashboard.
+ *
+ * It lives here, once, because the markup that uses it is shared (token identity
+ * chips, mint addresses, signatures) and a per-dialog listener meant the button
+ * silently did nothing on any surface that had not loaded that dialog's module.
+ * A container-scoped handler that calls stopPropagation (position activity) still
+ * wins -- the event never reaches this one.
+ */
+if (typeof document !== "undefined" && !window.__copyDelegationInstalled) {
+  window.__copyDelegationInstalled = true;
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest("[data-copy]");
+    if (!trigger) return;
+    const text = trigger.dataset.copy;
+    if (!text) return;
+    event.preventDefault();
+    copyToClipboard(text);
+    showToast("Copied to clipboard", "success");
+  });
+}

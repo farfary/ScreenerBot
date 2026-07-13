@@ -157,6 +157,8 @@ pub(super) const TOKEN_DETAILS_TRANSACTIONS_SHARED_STYLES: &str =
     include_str!("templates/styles/token_details/transactions_shared.css");
 
 // CSS Styles - Transaction and Position Details
+pub(super) const TOKEN_IDENTITY_STYLES: &str =
+    include_str!("templates/styles/ui/token_identity.css");
 pub(super) const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
 pub(super) const TRANSACTION_DETAILS_TAB_CONTENT_STYLES: &str =
@@ -306,6 +308,7 @@ pub const TABLE_SETTINGS_DIALOG_UI: &str =
 pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
 pub const IMAGE_LIGHTBOX_UI: &str = include_str!("templates/scripts/ui/image_lightbox.js");
+pub const TOKEN_IDENTITY_UI: &str = include_str!("templates/scripts/ui/token_identity.js");
 pub const TOKEN_DETAILS_OVERVIEW_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/overview_tab.js");
 pub const TOKEN_DETAILS_SECURITY_TAB_UI: &str =
