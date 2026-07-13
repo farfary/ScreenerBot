@@ -199,6 +199,22 @@ pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
 pub const LOGO_PNG: &[u8] = include_bytes!("assets/logo.png");
 pub const LIGHTWEIGHT_CHARTS_JS: &[u8] = include_bytes!("assets/lightweight-charts.js");
 
+// Solana brand assets (solana.com/branding) - Public for asset_serving.rs.
+// The logomark is the gradient SOL glyph used wherever the dashboard renders SOL as
+// an asset (token identity chips, balance rows). The wordmark/logotype variants are
+// kept alongside it so the whole official kit ships with the binary.
+pub const SOLANA_LOGO_MARK_SVG: &str = include_str!("assets/solana/solanaLogoMark.svg");
+pub const SOLANA_LOGO_MARK_PNG: &[u8] = include_bytes!("assets/solana/solanaLogoMark.png");
+pub const SOLANA_WORD_MARK_SVG: &str = include_str!("assets/solana/solanaWordMark.svg");
+pub const SOLANA_WORD_MARK_PNG: &[u8] = include_bytes!("assets/solana/solanaWordMark.png");
+pub const SOLANA_LOGO_SVG: &str = include_str!("assets/solana/solanaLogo.svg");
+pub const SOLANA_LOGO_PNG: &[u8] = include_bytes!("assets/solana/solanaLogo.png");
+pub const SOLANA_VERTICAL_LOGO_SVG: &str = include_str!("assets/solana/solanaVerticalLogo.svg");
+pub const SOLANA_VERTICAL_LOGO_PNG: &[u8] = include_bytes!("assets/solana/solanaVerticalLogo.png");
+pub const SOLANA_FOUNDATION_LOGO_SVG: &str = include_str!("assets/solana/solanaFoundationLogo.svg");
+pub const SOLANA_FOUNDATION_LOGO_PNG: &[u8] =
+    include_bytes!("assets/solana/solanaFoundationLogo.png");
+
 // AI Provider logos - Public for asset_serving.rs
 pub const PROVIDER_OPENAI: &[u8] = include_bytes!("assets/providers/openai.png");
 pub const PROVIDER_ANTHROPIC: &[u8] = include_bytes!("assets/providers/anthropic.png");

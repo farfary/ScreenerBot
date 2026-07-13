@@ -68,6 +68,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/assets/:file", get(get_asset))
         .route("/assets/fonts/:file", get(get_font))
         .route("/assets/providers/:file", get(get_provider_logo))
+        .route("/assets/solana/:file", get(get_solana_asset))
         .nest("/api", api_routes())
         .with_state(state)
 }

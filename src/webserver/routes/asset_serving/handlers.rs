@@ -244,6 +244,33 @@ pub async fn get_asset(Path(file): Path<String>) -> Response {
     }
 }
 
+/// Serve the official Solana brand assets (solana.com/branding), embedded in the binary.
+pub async fn get_solana_asset(Path(file): Path<String>) -> Response {
+    let svg = [(http_header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")];
+    let png = [(http_header::CONTENT_TYPE, "image/png")];
+    match file.as_str() {
+        "solanaLogoMark.svg" => (StatusCode::OK, svg, embeds::SOLANA_LOGO_MARK_SVG).into_response(),
+        "solanaLogoMark.png" => (StatusCode::OK, png, embeds::SOLANA_LOGO_MARK_PNG).into_response(),
+        "solanaWordMark.svg" => (StatusCode::OK, svg, embeds::SOLANA_WORD_MARK_SVG).into_response(),
+        "solanaWordMark.png" => (StatusCode::OK, png, embeds::SOLANA_WORD_MARK_PNG).into_response(),
+        "solanaLogo.svg" => (StatusCode::OK, svg, embeds::SOLANA_LOGO_SVG).into_response(),
+        "solanaLogo.png" => (StatusCode::OK, png, embeds::SOLANA_LOGO_PNG).into_response(),
+        "solanaVerticalLogo.svg" => {
+            (StatusCode::OK, svg, embeds::SOLANA_VERTICAL_LOGO_SVG).into_response()
+        }
+        "solanaVerticalLogo.png" => {
+            (StatusCode::OK, png, embeds::SOLANA_VERTICAL_LOGO_PNG).into_response()
+        }
+        "solanaFoundationLogo.svg" => {
+            (StatusCode::OK, svg, embeds::SOLANA_FOUNDATION_LOGO_SVG).into_response()
+        }
+        "solanaFoundationLogo.png" => {
+            (StatusCode::OK, png, embeds::SOLANA_FOUNDATION_LOGO_PNG).into_response()
+        }
+        _ => (StatusCode::NOT_FOUND, "Solana asset not found").into_response(),
+    }
+}
+
 /// Serve AI provider logos
 pub async fn get_provider_logo(Path(file): Path<String>) -> Response {
     let content_type = [(http_header::CONTENT_TYPE, "image/png")];
