@@ -1,0 +1,105 @@
+/* =============================================================================
+   TRANSACTION DETAILS — BALANCES
+   ============================================================================= */
+
+.transaction-details-dialog .tx-balances-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0;
+}
+
+.transaction-details-dialog .balance-section {
+  overflow: hidden;
+  margin-bottom: 0;
+  padding: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.transaction-details-dialog .balance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.transaction-details-dialog .balance-table th {
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.transaction-details-dialog .balance-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .balance-table tr:last-child td {
+  border-bottom: none;
+}
+
+.transaction-details-dialog .balance-table .numeric {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  text-align: right;
+}
+
+.transaction-details-dialog .balance-table .positive {
+  color: var(--success-color);
+}
+
+.transaction-details-dialog .balance-table .negative {
+  color: var(--danger);
+}
+
+.transaction-details-dialog .balance-summary {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.transaction-details-dialog .summary-item {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transaction-details-dialog .summary-label {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.transaction-details-dialog .summary-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+}
+
+.transaction-details-dialog .summary-value.positive {
+  color: var(--success-color);
+}
+
+.transaction-details-dialog .summary-value.negative {
+  color: var(--danger);
+}

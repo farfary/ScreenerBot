@@ -161,8 +161,14 @@ pub(super) const TOKEN_IDENTITY_STYLES: &str =
     include_str!("templates/styles/ui/token_identity.css");
 pub(super) const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
+pub(super) const TRANSACTION_DETAILS_OVERVIEW_STYLES: &str =
+    include_str!("templates/styles/ui/transaction_details/overview.css");
+pub(super) const TRANSACTION_DETAILS_BALANCES_STYLES: &str =
+    include_str!("templates/styles/ui/transaction_details/balances.css");
 pub(super) const TRANSACTION_DETAILS_TAB_CONTENT_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details/tab_content.css");
+pub(super) const POSITION_DETAILS_HEADER_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/header.css");
 pub(super) const POSITION_DETAILS_BASE_STYLES: &str =
     include_str!("templates/styles/ui/position_details/base.css");
 pub(super) const POSITION_DETAILS_OVERVIEW_STYLES: &str =

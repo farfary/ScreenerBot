@@ -1,0 +1,530 @@
+/* =============================================================================
+   POSITION DETAILS — identity, metrics and header metadata
+   ============================================================================= */
+
+.position-details-dialog .dialog-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.position-details-dialog .header-top-row {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) auto auto;
+  align-items: start;
+  width: 100%;
+  column-gap: 20px;
+  row-gap: 8px;
+  padding: 14px 20px 12px;
+  min-height: 110px;
+}
+
+.position-details-dialog .meta-token-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .meta-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.position-details-dialog .meta-metric-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .meta-metric-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.position-details-dialog .meta-security-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.position-details-dialog .meta-security-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.position-details-dialog .meta-security-badge i {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.position-details-dialog .meta-security-badge.pdd-risk-low {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.position-details-dialog .meta-security-badge.pdd-risk-medium {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+.position-details-dialog .meta-security-badge.pdd-risk-high {
+  background: var(--danger-alpha-15);
+  color: var(--danger);
+}
+
+.position-details-dialog .meta-security-badge.pdd-risk-unknown {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.position-details-dialog .meta-authority-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.56rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--danger-alpha-10);
+  color: var(--danger);
+}
+
+.position-details-dialog .meta-authority-badge i {
+  font-size: 11px;
+}
+
+.position-details-dialog .header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.position-details-dialog .header-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .header-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.position-details-dialog .header-logo .logo-placeholder {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.position-details-dialog .header-identity {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.position-details-dialog .header-title-row,
+.position-details-dialog .header-token-context-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.position-details-dialog .header-token-context-row:empty {
+  display: none;
+}
+
+.position-details-dialog .header-title {
+  display: flex;
+  flex-flow: row nowrap;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.position-details-dialog .header-title .title-main {
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-details-dialog .header-title .title-symbol {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.position-details-dialog .header-security {
+  min-width: 0;
+}
+
+.position-details-dialog .header-mint-full {
+  color: var(--text-muted);
+  font: 500 0.75rem/1.35 var(--font-mono);
+  letter-spacing: -0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.position-details-dialog .header-shortcuts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px 5px;
+  min-width: 0;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.position-details-dialog .pdd-header-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.position-details-dialog .pdd-header-shortcut:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-header-shortcut i {
+  font-size: 0.7rem;
+}
+
+/* Header Center - Price Section */
+.position-details-dialog .header-center {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.position-details-dialog .header-badges {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+}
+
+.position-details-dialog .header-badges > .hint-trigger {
+  margin-left: 0;
+}
+
+.position-details-dialog .header-price {
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
+  align-items: stretch;
+  gap: 22px;
+  width: auto;
+}
+
+.position-details-dialog .price-loading {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .header-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 3px;
+  min-width: 132px;
+  padding: 2px 0;
+}
+
+.position-details-dialog .header-metric-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+}
+
+.position-details-dialog .header-metric-value {
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-details-dialog .header-metric.pdd-positive .header-metric-value,
+.position-details-dialog .header-metric.pdd-positive .header-metric-sub {
+  color: var(--success-color);
+}
+
+.position-details-dialog .header-metric.pdd-negative .header-metric-value,
+.position-details-dialog .header-metric.pdd-negative .header-metric-sub {
+  color: var(--danger);
+}
+
+.position-details-dialog .header-metric-value small {
+  margin-left: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .header-metric-sub {
+  min-height: 0.85rem;
+  font-size: 0.75rem;
+  font-family: var(--font-data);
+  color: var(--text-muted);
+}
+
+.position-details-dialog .header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-top: 10px;
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.position-details-dialog .header-lower-row {
+  display: flex;
+  align-items: center;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  gap: 16px;
+  min-width: 0;
+  min-height: 24px;
+  padding-left: 68px;
+}
+
+.position-details-dialog .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.position-details-dialog .pdd-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-header-action:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-header-action.favorite-btn:hover {
+  border-color: var(--warning-color);
+  color: var(--warning-color);
+}
+
+.position-details-dialog .pdd-header-action.favorite-btn.active {
+  background: var(--warning-alpha-20);
+  border-color: var(--warning-color);
+  color: var(--warning-color);
+}
+
+.position-details-dialog .pdd-header-action.favorite-btn.active:hover {
+  filter: brightness(1.15);
+}
+
+.position-details-dialog .pdd-header-action i {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.position-details-dialog .pdd-header-action:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Badges */
+.position-details-dialog .pdd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-sizing: border-box;
+  min-height: 24px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.position-details-dialog .pdd-badge-success {
+  background: var(--success-alpha-20);
+  border-color: var(--success-alpha-30);
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-badge-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.position-details-dialog .pdd-badge-info {
+  background: var(--primary-alpha-20);
+  color: var(--primary-color);
+}
+
+.position-details-dialog .pdd-badge-warning {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+/* Manual management: position opened by a manual/force buy; auto-trader skips it. */
+.position-details-dialog .pdd-badge-manual {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+  border-color: var(--warning-alpha-30);
+}
+
+/* Interactive manual-management toggle (open positions). */
+.position-details-dialog .pdd-manual-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.position-details-dialog .pdd-manual-toggle i {
+  font-size: 0.85em;
+}
+
+/* ON: manually managed (auto-trader off) — warning accent like the row badge. */
+.position-details-dialog .pdd-manual-toggle.is-on {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+  border-color: var(--warning-alpha-30);
+}
+
+/* OFF: auto-managed — muted/neutral so it reads as the non-protected state. */
+.position-details-dialog .pdd-manual-toggle.is-off {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+.position-details-dialog .pdd-manual-toggle:hover {
+  filter: brightness(1.1);
+}
+
+/* Close Button */
+.position-details-dialog .dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.position-details-dialog .dialog-close:hover {
+  background: var(--danger-alpha-15);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.position-details-dialog .dialog-close svg,
+.position-details-dialog .dialog-close i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+}

@@ -5,6 +5,16 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { requestManager } from "../core/request_manager.js";
+import {
+  getIdentity,
+  isSolMint,
+  renderAssetInline,
+  renderAddress,
+  renderTokenChip,
+  renderTokenLogo,
+  resolveIdentities,
+  SOL_MINT,
+} from "./token_identity.js";
 
 export class TransactionDetailsDialog {
   constructor(options = {}) {
@@ -73,6 +83,10 @@ export class TransactionDetailsDialog {
         }
       );
       this.fullTransactionData = data;
+      // Resolve every asset the transaction touches BEFORE the first render, so no
+      // tab ever paints a bare mint and then swaps in a logo underneath the user.
+      await resolveIdentities(this._collectMints(data));
+      if (!this.dialogEl) return;
       this._updateDialogContent();
     } catch (error) {
       console.error("Error loading transaction details:", error);
@@ -173,13 +187,8 @@ export class TransactionDetailsDialog {
               </div>
               <div class="header-title">
                 <span class="title-main">${typeLabel}</span>
-                <span class="title-sub mono-text" id="headerSignature">${Utils.escapeHtml(tx.signature)}</span>
-              </div>
-            </div>
-            <div class="header-center">
-              <div class="header-badges" id="headerBadges">
-                ${statusBadge}
-                ${this._getDirectionBadge(tx.direction)}
+                <span class="title-sub mono-text" id="headerSignature" title="${Utils.escapeHtml(tx.signature)}">${Utils.escapeHtml(tx.signature)}</span>
+                <div class="header-assets" id="headerAssets"></div>
               </div>
             </div>
             <div class="header-right">
@@ -200,9 +209,15 @@ export class TransactionDetailsDialog {
             </div>
           </div>
           <div class="header-meta-row" id="headerMetaRow">
-            <span class="meta-item" id="metaTimestamp"><i class="icon-clock"></i> <span>—</span></span>
-            <span class="meta-item" id="metaSlot"><i class="icon-layers"></i> Slot: <span>—</span></span>
-            <span class="meta-item" id="metaFee"><i class="icon-zap"></i> Fee: <span>—</span></span>
+            <div class="header-badges" id="headerBadges">
+              ${statusBadge}
+              ${this._getDirectionBadge(tx.direction)}
+            </div>
+            <div class="header-meta-items">
+              <span class="meta-item" id="metaTimestamp"><i class="icon-clock"></i> <span>—</span></span>
+              <span class="meta-item" id="metaSlot"><i class="icon-layers"></i> Slot: <span>—</span></span>
+              <span class="meta-item" id="metaFee"><i class="icon-zap"></i> Fee: <span>—</span></span>
+            </div>
           </div>
         </div>
 
@@ -259,9 +274,95 @@ export class TransactionDetailsDialog {
     `;
   }
 
+  /**
+   * Every mint this transaction touches. Resolved in one batch so the swap legs,
+   * the balance rows and the ATA rows all name the same assets.
+   */
+  _collectMints(tx) {
+    const mints = [];
+    const push = (mint) => {
+      if (mint) mints.push(mint);
+    };
+
+    const swap = tx.token_swap_info || tx.token_info;
+    if (swap) {
+      push(swap.input_mint);
+      push(swap.output_mint);
+      push(swap.mint);
+    }
+    push(tx.swap_pnl_info?.token_mint);
+
+    const richType = typeof tx.transaction_type === "object" ? tx.transaction_type : {};
+    push(richType.TokenTransfer?.mint);
+
+    (tx.token_transfers || []).forEach((transfer) => push(transfer.mint));
+    (tx.token_balance_changes || []).forEach((change) => push(change.mint));
+    (tx.ata_operations || []).forEach((op) => push(op.token_mint || op.mint));
+
+    return mints;
+  }
+
+  /** The token this transaction is ABOUT — the non-SOL leg of a swap, or the asset moved. */
+  _primaryMint(tx) {
+    const swap = tx.token_swap_info || tx.token_info;
+    if (swap) {
+      if (swap.mint && !isSolMint(swap.mint)) return swap.mint;
+      if (swap.output_mint && !isSolMint(swap.output_mint)) return swap.output_mint;
+      if (swap.input_mint && !isSolMint(swap.input_mint)) return swap.input_mint;
+      return SOL_MINT;
+    }
+    if (tx.swap_pnl_info?.token_mint) return tx.swap_pnl_info.token_mint;
+
+    const richType = typeof tx.transaction_type === "object" ? tx.transaction_type : {};
+    if (richType.SolTransfer) return SOL_MINT;
+
+    const transferMint = richType.TokenTransfer?.mint || tx.token_transfers?.[0]?.mint;
+    if (transferMint) return transferMint;
+
+    const changed = (tx.token_balance_changes || []).find((change) => change.mint);
+    return changed ? changed.mint : null;
+  }
+
+  /**
+   * Header asset strip: which assets moved, with their logos, and the FULL mint of
+   * the token the transaction is about. Without it the dialog named a transaction
+   * only by its signature — the one thing a user cannot read.
+   */
+  _buildHeaderAssets(tx) {
+    const swap = tx.token_swap_info || tx.token_info;
+    const primary = this._primaryMint(tx);
+
+    let assets = "";
+    if (swap && swap.input_mint && swap.output_mint) {
+      assets = `
+        ${renderTokenChip(swap.input_mint, { size: "sm", showName: false })}
+        <i class="icon-arrow-right tx-asset-arrow" aria-hidden="true"></i>
+        ${renderTokenChip(swap.output_mint, { size: "sm", showName: false })}
+      `;
+    } else if (primary) {
+      assets = renderTokenChip(primary, { size: "sm" });
+    } else {
+      return "";
+    }
+
+    const identity = primary ? getIdentity(primary) : null;
+    const name = identity?.name && identity.name !== identity.symbol ? identity.name : "";
+
+    return `
+      <div class="header-asset-strip">${assets}</div>
+      ${name ? `<span class="header-asset-name">${Utils.escapeHtml(name)}</span>` : ""}
+      ${primary ? renderAddress(primary) : ""}
+    `;
+  }
+
   _updateHeader() {
     const tx = this.fullTransactionData;
     if (!tx) return;
+
+    const assetsEl = this.dialogEl?.querySelector("#headerAssets");
+    if (assetsEl) {
+      assetsEl.innerHTML = this._buildHeaderAssets(tx);
+    }
 
     const badgesEl = this.dialogEl?.querySelector("#headerBadges");
     if (badgesEl) {
@@ -393,111 +494,222 @@ export class TransactionDetailsDialog {
     const tx = this.fullTransactionData;
     if (!tx) return;
 
-    const swapHtml = this._buildSwapSection(tx);
-    const pnlHtml = this._buildPnLSection(tx);
-    const tokenHtml = this._buildTokenSection(tx);
-    const hasExtraSections = swapHtml || pnlHtml || tokenHtml;
+    const failed = tx.success === false || Boolean(tx.status?.Failed);
+    const failureMessage = tx.error_message || (failed ? "No program error was provided." : "");
+    const routeHtml = this._buildOverviewRoute(tx);
 
     content.innerHTML = `
-      <div class="tx-overview-layout${hasExtraSections ? "" : " single-column"}">
-        <div class="overview-section">
-          <div class="section-header">Transaction Details</div>
-          <div class="info-grid">
-            ${this._buildInfoRow("Signature", this._buildSignatureValue(tx.signature))}
-            ${this._buildInfoRow("Status", this._getStatusBadge(tx.status, tx.success))}
-            ${this._buildInfoRow("Type", this._getTypeBadge(tx.transaction_type))}
-            ${this._buildInfoRow("Direction", this._getDirectionBadge(tx.direction))}
-            ${this._buildInfoRow("Timestamp", Utils.formatTimestamp(tx.timestamp || tx.block_time))}
-            ${this._buildInfoRow("Slot", tx.slot ? Utils.formatNumber(tx.slot, { decimals: 0 }) : "—")}
-            ${this._buildInfoRow("Fee", Utils.formatSol(tx.fee_sol, { decimals: 9 }) || "—")}
-            ${tx.error_message ? this._buildInfoRow("Error", `<span class="error-text">${Utils.escapeHtml(tx.error_message)}</span>`) : ""}
+      <div class="tx-overview-layout">
+        ${
+          failureMessage
+            ? `<div class="tx-failure-callout" role="alert"><i class="icon-circle-alert"></i><div><strong>Transaction failed</strong><span>${Utils.escapeHtml(failureMessage)}</span></div></div>`
+            : ""
+        }
+        ${this._buildOverviewStory(tx)}
+        ${this._buildOverviewMetrics(tx)}
+        <div class="tx-overview-details${routeHtml ? "" : " single-column"}">
+          ${routeHtml}
+          ${this._buildOverviewTechnical(tx)}
+        </div>
+      </div>
+    `;
+  }
+
+  _buildOverviewStory(tx) {
+    const swap = tx.token_swap_info || tx.token_info;
+    if (swap) {
+      const router = swap.router ? `via ${Utils.escapeHtml(swap.router)}` : "";
+      return `
+        <section class="tx-story-card">
+          <div class="tx-story-heading"><span>What happened</span>${router ? `<small>${router}</small>` : ""}</div>
+          <div class="tx-flow">
+            ${this._buildFlowSide("Paid", swap.input_ui_amount, swap.input_mint, "")}
+            <span class="tx-flow-arrow" aria-hidden="true"><i class="icon-arrow-right"></i></span>
+            ${this._buildFlowSide("Received", swap.output_ui_amount, swap.output_mint, "tx-flow-received")}
           </div>
+        </section>`;
+    }
+
+    const richType = typeof tx.transaction_type === "object" ? tx.transaction_type : {};
+    const solTransfer = richType.SolTransfer;
+    const tokenTransfer = richType.TokenTransfer || tx.token_transfers?.[0];
+    if (solTransfer || tokenTransfer) {
+      const transfer = solTransfer || tokenTransfer;
+      const mint = solTransfer ? SOL_MINT : transfer.mint;
+      return `
+        <section class="tx-story-card">
+          <div class="tx-story-heading"><span>What happened</span><small>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</small></div>
+          <div class="tx-transfer-asset">${renderTokenChip(mint, { size: "md", showMint: true })}</div>
+          <div class="tx-flow">
+            <div class="tx-flow-side">
+              <span class="tx-flow-label">From</span>
+              <strong class="tx-flow-address" title="${Utils.escapeHtml(transfer.from || "")}">${this._shortenAddress(transfer.from)}</strong>
+            </div>
+            <span class="tx-flow-arrow" aria-hidden="true"><i class="icon-arrow-right"></i></span>
+            <div class="tx-flow-side tx-flow-received">
+              <span class="tx-flow-label">To</span>
+              <strong class="tx-flow-address" title="${Utils.escapeHtml(transfer.to || "")}">${this._shortenAddress(transfer.to)}</strong>
+            </div>
+          </div>
+          <div class="tx-story-amount"><span>Amount</span><strong>${this._formatOverviewAmount(transfer.amount)} ${renderAssetInline(mint, { size: "xs" })}</strong></div>
+        </section>`;
+    }
+
+    const netChange = Number(tx.sol_balance_change);
+    const hasNetChange = Number.isFinite(netChange);
+    return `
+      <section class="tx-story-card">
+        <div class="tx-story-heading"><span>What happened</span></div>
+        <div class="tx-generic-result">
+          <i class="${this._getTypeIcon(tx.transaction_type)}"></i>
+          <div><strong>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</strong><span>${hasNetChange ? `Net wallet change: ${Utils.formatPnL(netChange, { decimals: 6 })}` : "Processed on Solana"}</span></div>
         </div>
-
-        ${swapHtml}
-        ${pnlHtml}
-        ${tokenHtml}
-      </div>
-    `;
+      </section>`;
   }
 
-  _buildSignatureValue(signature) {
-    if (!signature) return "—";
-    const short = `${signature.slice(0, 12)}...${signature.slice(-12)}`;
+  /** One leg of a swap: amount, then the asset it is denominated in (logo + symbol + full mint). */
+  _buildFlowSide(label, amount, mint, sideClass) {
+    const identity = getIdentity(mint);
     return `
-      <span class="signature-value">
-        <span class="mono-text" title="${Utils.escapeHtml(signature)}">${Utils.escapeHtml(short)}</span>
-        <button class="copy-btn-inline" data-copy="${Utils.escapeHtml(signature)}" title="Copy">
-          <i class="icon-copy"></i>
-        </button>
-        <a href="https://solscan.io/tx/${Utils.escapeHtml(signature)}" target="_blank" class="link-btn-inline" title="View on Solscan">
-          <i class="icon-external-link"></i>
-        </a>
-      </span>
-    `;
+      <div class="tx-flow-side ${sideClass}">
+        <span class="tx-flow-label">${Utils.escapeHtml(label)}</span>
+        <strong title="${this._formatOverviewExact(amount)}">${this._formatOverviewAmount(amount)}</strong>
+        <span class="tx-flow-asset">
+          ${renderTokenLogo(identity, { size: "xs" })}
+          <span>${Utils.escapeHtml(identity.symbol || "Unknown asset")}</span>
+        </span>
+        ${mint ? renderAddress(mint) : ""}
+      </div>`;
   }
 
-  _buildInfoRow(label, value) {
-    return `
-      <div class="info-row">
-        <span class="info-label">${Utils.escapeHtml(label)}</span>
-        <span class="info-value">${value}</span>
-      </div>
-    `;
-  }
-
-  _buildSwapSection(tx) {
-    const swapInfo = tx.token_swap_info || tx.token_info;
-    if (!swapInfo) return "";
-
-    return `
-      <div class="overview-section">
-        <div class="section-header">Swap Details</div>
-        <div class="info-grid">
-          ${this._buildInfoRow("Router", Utils.escapeHtml(swapInfo.router || "—"))}
-          ${this._buildInfoRow("Swap Type", Utils.escapeHtml(swapInfo.swap_type || "—"))}
-          ${this._buildInfoRow("Input", `${Utils.formatNumber(swapInfo.input_ui_amount || 0, { decimals: 9 })} ${this._getMintLabel(swapInfo.input_mint)}`)}
-          ${this._buildInfoRow("Output", `${Utils.formatNumber(swapInfo.output_ui_amount || 0, { decimals: 9 })} ${this._getMintLabel(swapInfo.output_mint)}`)}
-          ${swapInfo.pool_address ? this._buildInfoRow("Pool", this._buildAddressLink(swapInfo.pool_address, "account")) : ""}
-        </div>
-      </div>
-    `;
-  }
-
-  _buildPnLSection(tx) {
+  _buildOverviewMetrics(tx) {
     const pnl = tx.swap_pnl_info;
-    if (!pnl) return "";
+    const swap = tx.token_swap_info || tx.token_info;
+    const metrics = [];
+    const add = (label, value, tone = "", title = "") => {
+      if (!value) return;
+      metrics.push(
+        `<div class="tx-execution-metric ${tone}"${title ? ` title="${title}"` : ""}><span>${label}</span><strong>${value}</strong></div>`
+      );
+    };
 
-    return `
-      <div class="overview-section">
-        <div class="section-header">P&L Analysis</div>
-        <div class="info-grid">
-          ${this._buildInfoRow("Token", `${Utils.escapeHtml(pnl.token_symbol || "Unknown")} <span class="mono-text-sm">${this._shortenAddress(pnl.token_mint)}</span>`)}
-          ${this._buildInfoRow("Type", pnl.swap_type || "—")}
-          ${this._buildInfoRow("SOL Amount", Utils.formatSol(pnl.sol_amount, { decimals: 9 }))}
-          ${this._buildInfoRow("Token Amount", Utils.formatNumber(pnl.token_amount, { decimals: 9 }))}
-          ${this._buildInfoRow("Calculated Price", Utils.formatPriceSol(pnl.calculated_price_sol, { decimals: 12 }) + " SOL")}
-          ${pnl.effective_sol_spent ? this._buildInfoRow("Effective SOL Spent", Utils.formatSol(pnl.effective_sol_spent, { decimals: 9 })) : ""}
-          ${pnl.effective_sol_received ? this._buildInfoRow("Effective SOL Received", Utils.formatSol(pnl.effective_sol_received, { decimals: 9 })) : ""}
-          ${pnl.estimated_pnl_sol !== null && pnl.estimated_pnl_sol !== undefined ? this._buildInfoRow("Estimated P&L", Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 })) : ""}
-        </div>
-      </div>
-    `;
+    const price = pnl?.calculated_price_sol ?? tx.calculated_token_price_sol;
+    if (price !== null && price !== undefined) {
+      add(
+        "Execution price",
+        `${Utils.formatPriceSol(price, { decimals: 8 })} SOL`,
+        "",
+        `${Utils.formatPriceSol(price, { decimals: 12 })} SOL`
+      );
+    }
+
+    if (pnl) {
+      const swapType = String(pnl.swap_type || swap?.swap_type || "").toLowerCase();
+      const isSell = swapType.includes("sell") || swapType.includes("token_to_sol");
+      const effective = isSell ? pnl.effective_sol_received : pnl.effective_sol_spent;
+      if (effective !== null && effective !== undefined) {
+        add(
+          isSell ? "Effective received" : "Effective spent",
+          Utils.formatSol(effective, { decimals: 6 }),
+          "",
+          Utils.formatSol(effective, { decimals: 9 })
+        );
+      }
+    }
+
+    if (tx.fee_sol !== null && tx.fee_sol !== undefined) {
+      add(
+        "Network fee",
+        Utils.formatSol(tx.fee_sol, { decimals: 6 }),
+        "",
+        Utils.formatSol(tx.fee_sol, { decimals: 9 })
+      );
+    }
+
+    if (pnl?.estimated_pnl_sol !== null && pnl?.estimated_pnl_sol !== undefined) {
+      const tone =
+        pnl.estimated_pnl_sol > 0 ? "positive" : pnl.estimated_pnl_sol < 0 ? "negative" : "";
+      add("Estimated P&L", Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 }), tone);
+    }
+
+    if (!swap && Number.isFinite(Number(tx.sol_balance_change))) {
+      const change = Number(tx.sol_balance_change);
+      add(
+        "Net SOL change",
+        Utils.formatPnL(change, { decimals: 6 }),
+        change > 0 ? "positive" : change < 0 ? "negative" : ""
+      );
+    }
+
+    return metrics.length > 0
+      ? `<section class="tx-execution-strip"><div class="tx-section-label">Execution</div><div class="tx-execution-grid">${metrics.join("")}</div></section>`
+      : "";
   }
 
-  _buildTokenSection(tx) {
-    if (!tx.token_symbol && !tx.token_decimals) return "";
+  _buildOverviewRoute(tx) {
+    const swap = tx.token_swap_info || tx.token_info;
+    if (!swap) return "";
+    const rows = [];
+    if (swap.router)
+      rows.push(["Router", `<span class="tx-router-name">${Utils.escapeHtml(swap.router)}</span>`]);
+    rows.push(["Input asset", this._buildOverviewAsset(swap.input_mint)]);
+    rows.push(["Output asset", this._buildOverviewAsset(swap.output_mint)]);
+    if (swap.pool_address)
+      rows.push(["Pool", renderAddress(swap.pool_address, { explorer: "account" })]);
+    if (swap.program_id)
+      rows.push(["Program", renderAddress(swap.program_id, { explorer: "account" })]);
+    return `<section class="tx-detail-card"><div class="tx-detail-heading">Route and assets</div><div class="tx-detail-list">${rows.map(([label, value]) => this._buildOverviewDetailRow(label, value)).join("")}</div></section>`;
+  }
 
-    return `
-      <div class="overview-section">
-        <div class="section-header">Token Info</div>
-        <div class="info-grid">
-          ${tx.token_symbol ? this._buildInfoRow("Symbol", Utils.escapeHtml(tx.token_symbol)) : ""}
-          ${tx.token_decimals !== undefined ? this._buildInfoRow("Decimals", tx.token_decimals) : ""}
-          ${tx.calculated_token_price_sol ? this._buildInfoRow("Price", Utils.formatPriceSol(tx.calculated_token_price_sol, { decimals: 12 }) + " SOL") : ""}
-        </div>
-      </div>
-    `;
+  _buildOverviewTechnical(tx) {
+    const rows = [
+      ["Signature", renderAddress(tx.signature, { explorer: "tx" })],
+      ["Timestamp", Utils.formatTimestamp(tx.timestamp || tx.block_time)],
+      [
+        "Slot",
+        tx.slot !== null && tx.slot !== undefined
+          ? Utils.formatNumber(tx.slot, { decimals: 0 })
+          : "—",
+      ],
+      [
+        "Exact fee",
+        tx.fee_sol !== null && tx.fee_sol !== undefined
+          ? Utils.formatSol(tx.fee_sol, { decimals: 9 })
+          : "—",
+      ],
+      ["Accounts", Utils.formatNumber(tx.accounts_count ?? 0, { decimals: 0 })],
+      ["Instructions", Utils.formatNumber(tx.instructions_count ?? 0, { decimals: 0 })],
+    ];
+    if (tx.compute_units_consumed !== null && tx.compute_units_consumed !== undefined) {
+      rows.push(["Compute units", Utils.formatNumber(tx.compute_units_consumed, { decimals: 0 })]);
+    }
+    if (tx.token_decimals !== null && tx.token_decimals !== undefined) {
+      rows.push(["Token decimals", String(tx.token_decimals)]);
+    }
+    return `<details class="tx-technical-card"><summary><span><strong>Technical details</strong><small>Signature, slot and resources</small></span><i class="icon-chevron-down"></i></summary><div class="tx-detail-list">${rows.map(([label, value]) => this._buildOverviewDetailRow(label, value)).join("")}</div></details>`;
+  }
+
+  _buildOverviewDetailRow(label, value) {
+    return `<div class="tx-detail-row"><span>${Utils.escapeHtml(label)}</span><div>${value}</div></div>`;
+  }
+
+  _buildOverviewAsset(mint) {
+    if (!mint) return "—";
+    return `<span class="tx-asset-reference">${renderTokenChip(mint, { size: "sm", showMint: true })}</span>`;
+  }
+
+  _formatOverviewAmount(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    const absolute = Math.abs(number);
+    if (absolute >= 1_000) return Utils.formatCompactNumber(number, { digits: 2 });
+    const decimals = absolute >= 1 ? 4 : absolute >= 0.01 ? 6 : 9;
+    return Utils.formatNumber(number, { decimals }).replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1");
+  }
+
+  _formatOverviewExact(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Utils.formatNumber(number, { decimals: 9 }) : "Unavailable";
   }
 
   // =========================================================================
@@ -515,7 +727,7 @@ export class TransactionDetailsDialog {
       <div class="tx-balances-layout">
         <div class="balance-section">
           <div class="section-header">
-            <span>SOL Balance Changes</span>
+            <span class="section-title">${renderTokenLogo(SOL_MINT, { size: "xs" })} SOL Balance Changes</span>
             <span class="section-count">${solChanges.length}</span>
           </div>
           ${solChanges.length > 0 ? this._buildSolChangesTable(solChanges) : '<div class="empty-message">No SOL balance changes</div>'}
@@ -523,7 +735,7 @@ export class TransactionDetailsDialog {
 
         <div class="balance-section">
           <div class="section-header">
-            <span>Token Balance Changes</span>
+            <span class="section-title"><i class="icon-coins"></i> Token Balance Changes</span>
             <span class="section-count">${tokenChanges.length}</span>
           </div>
           ${tokenChanges.length > 0 ? this._buildTokenChangesTable(tokenChanges) : '<div class="empty-message">No token balance changes</div>'}
@@ -532,11 +744,11 @@ export class TransactionDetailsDialog {
         <div class="balance-summary">
           <div class="summary-item">
             <span class="summary-label">Net SOL Change</span>
-            <span class="summary-value ${tx.sol_balance_change >= 0 ? "positive" : "negative"}">${Utils.formatPnL(tx.sol_balance_change, { decimals: 9 })}</span>
+            <span class="summary-value ${tx.sol_balance_change >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatPnL(tx.sol_balance_change, { decimals: 9 })}</span>
           </div>
           <div class="summary-item">
             <span class="summary-label">Transaction Fee</span>
-            <span class="summary-value negative">-${Utils.formatSol(tx.fee_sol, { decimals: 9 })}</span>
+            <span class="summary-value negative">${renderTokenLogo(SOL_MINT, { size: "xs" })} -${Utils.formatSol(tx.fee_sol, { decimals: 9 })}</span>
           </div>
         </div>
       </div>
@@ -548,7 +760,7 @@ export class TransactionDetailsDialog {
       .map(
         (c) => `
       <tr>
-        <td class="mono-text">${this._buildAddressLink(c.account, "account")}</td>
+        <td class="tx-address-cell">${renderAddress(c.account, { explorer: "account" })}</td>
         <td class="numeric">${Utils.formatSol(c.pre_balance, { decimals: 9, suffix: "" })}</td>
         <td class="numeric">${Utils.formatSol(c.post_balance, { decimals: 9, suffix: "" })}</td>
         <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${c.change >= 0 ? "+" : ""}${Utils.formatSol(c.change, { decimals: 9, suffix: "" })}</td>
@@ -577,7 +789,8 @@ export class TransactionDetailsDialog {
       .map(
         (c) => `
       <tr>
-        <td class="mono-text">${this._buildAddressLink(c.mint, "token")}</td>
+        <td>${renderTokenChip(c.mint, { size: "sm" })}</td>
+        <td class="tx-mint-cell">${renderAddress(c.mint)}</td>
         <td class="numeric">${c.pre_balance !== null ? Utils.formatNumber(c.pre_balance, { decimals: c.decimals || 9 }) : "—"}</td>
         <td class="numeric">${c.post_balance !== null ? Utils.formatNumber(c.post_balance, { decimals: c.decimals || 9 }) : "—"}</td>
         <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${c.change >= 0 ? "+" : ""}${Utils.formatNumber(c.change, { decimals: c.decimals || 9 })}</td>
@@ -590,7 +803,8 @@ export class TransactionDetailsDialog {
       <table class="balance-table">
         <thead>
           <tr>
-            <th>Token Mint</th>
+            <th>Token</th>
+            <th>Mint Address</th>
             <th>Pre Balance</th>
             <th>Post Balance</th>
             <th>Change</th>
@@ -661,7 +875,7 @@ export class TransactionDetailsDialog {
         <div class="instruction-card-body">
           <div class="instruction-detail">
             <span class="detail-label">Program ID</span>
-            <span class="detail-value">${this._buildAddressLink(programId, "account")}</span>
+            <span class="detail-value">${renderAddress(programId, { explorer: "account" })}</span>
           </div>
           ${
             accounts.length > 0
@@ -669,7 +883,7 @@ export class TransactionDetailsDialog {
             <div class="instruction-accounts">
               <span class="detail-label">Accounts (${accounts.length})</span>
               <div class="accounts-list">
-                ${accounts.map((acc, i) => `<div class="account-item"><span class="account-index">${i}</span>${this._buildAddressLink(acc, "account")}</div>`).join("")}
+                ${accounts.map((acc, i) => `<div class="account-item"><span class="account-index">${i}</span>${renderAddress(acc, { explorer: "account" })}</div>`).join("")}
               </div>
             </div>
           `
@@ -815,15 +1029,15 @@ export class TransactionDetailsDialog {
           </div>
           <div class="ata-stat">
             <span class="stat-label">Rent Spent</span>
-            <span class="stat-value negative">-${Utils.formatSol(analysis.total_rent_spent || 0, { decimals: 9 })}</span>
+            <span class="stat-value negative">${renderTokenLogo(SOL_MINT, { size: "xs" })} -${Utils.formatSol(analysis.total_rent_spent || 0, { decimals: 9 })}</span>
           </div>
           <div class="ata-stat">
             <span class="stat-label">Rent Recovered</span>
-            <span class="stat-value positive">+${Utils.formatSol(analysis.total_rent_recovered || 0, { decimals: 9 })}</span>
+            <span class="stat-value positive">${renderTokenLogo(SOL_MINT, { size: "xs" })} +${Utils.formatSol(analysis.total_rent_recovered || 0, { decimals: 9 })}</span>
           </div>
           <div class="ata-stat highlight">
             <span class="stat-label">Net Rent Impact</span>
-            <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${analysis.net_rent_impact >= 0 ? "+" : ""}${Utils.formatSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
+            <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${analysis.net_rent_impact >= 0 ? "+" : ""}${Utils.formatSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
           </div>
         </div>
       </div>
@@ -832,17 +1046,19 @@ export class TransactionDetailsDialog {
 
   _buildAtaOperationsList(operations) {
     const rows = operations
-      .map(
-        (op) => `
+      .map((op) => {
+        const mint = op.token_mint || op.mint;
+        return `
       <tr>
         <td><span class="badge ${op.operation_type === "Creation" ? "info" : "warning"}">${op.operation_type}</span></td>
-        <td class="mono-text">${this._buildAddressLink(op.account_address, "account")}</td>
-        <td class="mono-text">${this._buildAddressLink(op.token_mint || op.mint, "token")}</td>
+        <td class="tx-address-cell">${renderAddress(op.account_address, { explorer: "account" })}</td>
+        <td>${renderTokenChip(mint, { size: "sm", showName: false })}</td>
+        <td class="tx-mint-cell">${renderAddress(mint)}</td>
         <td class="numeric">${Utils.formatSol(op.rent_amount || op.rent_cost_sol || 0, { decimals: 9 })}</td>
         <td>${op.is_wsol ? '<span class="badge secondary">WSOL</span>' : "—"}</td>
       </tr>
-    `
-      )
+    `;
+      })
       .join("");
 
     return `
@@ -853,7 +1069,8 @@ export class TransactionDetailsDialog {
             <tr>
               <th>Type</th>
               <th>Account</th>
-              <th>Token Mint</th>
+              <th>Token</th>
+              <th>Mint Address</th>
               <th>Rent (SOL)</th>
               <th>WSOL</th>
             </tr>
@@ -953,29 +1170,6 @@ export class TransactionDetailsDialog {
     return icons[typeStr] || "icon-info";
   }
 
-  _getTypeBadge(type) {
-    const label = this._getTypeLabel(type);
-    const typeStr = typeof type === "string" ? type : Object.keys(type)[0] || "Unknown";
-    const variants = {
-      Buy: "success",
-      Sell: "error",
-      SwapSolToToken: "success",
-      SwapTokenToSol: "error",
-      SwapTokenToToken: "info",
-      Transfer: "secondary",
-      SolTransfer: "secondary",
-      TokenTransfer: "secondary",
-      Compute: "secondary",
-      AtaOperation: "secondary",
-      AtaClose: "secondary",
-      Failed: "error",
-      Unknown: "secondary",
-      Other: "secondary",
-    };
-    const variant = variants[typeStr] || "secondary";
-    return `<span class="badge ${variant}">${Utils.escapeHtml(label)}</span>`;
-  }
-
   _getStatusBadge(status, success) {
     if (!status) return '<span class="badge secondary">Unknown</span>';
 
@@ -1021,44 +1215,4 @@ export class TransactionDetailsDialog {
     if (address.length <= 12) return Utils.escapeHtml(address);
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   }
-
-  _buildAddressLink(address, type = "account") {
-    if (!address) return "—";
-    const url =
-      type === "token"
-        ? `https://solscan.io/token/${address}`
-        : `https://solscan.io/account/${address}`;
-    // Show FULL address, not shortened
-    return `
-      <span class="address-full">
-        <a href="${url}" target="_blank" rel="noopener" class="mono-text address-link" title="View on Solscan">${Utils.escapeHtml(address)}</a>
-        <button class="copy-btn-mini" data-copy="${Utils.escapeHtml(address)}" title="Copy address">
-          <i class="icon-copy"></i>
-        </button>
-      </span>
-    `;
-  }
-
-  _getMintLabel(mint) {
-    if (!mint) return "Unknown";
-    // Known mints
-    const known = {
-      So11111111111111111111111111111111111111112: "SOL",
-      EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: "USDC",
-      Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: "USDT",
-    };
-    return known[mint] || this._shortenAddress(mint);
-  }
 }
-
-// Initialize copy button handlers via event delegation
-document.addEventListener("click", (e) => {
-  const copyBtn = e.target.closest("[data-copy]");
-  if (copyBtn) {
-    const text = copyBtn.dataset.copy;
-    if (text) {
-      Utils.copyToClipboard(text);
-      Utils.showToast("Copied!", "success");
-    }
-  }
-});

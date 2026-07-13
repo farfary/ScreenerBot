@@ -34,6 +34,7 @@ export class PositionDetailsDialog {
     this._closeHandler = null;
     this._backdropHandler = null;
     this._copyMintHandler = null;
+    this._favoriteHandler = null;
     this._actionHandlers = null;
     this._manualToggleHandler = null;
     this._managementChangedHandler = null;
@@ -41,7 +42,7 @@ export class PositionDetailsDialog {
     this._lastRenderedFp = null;
     // The token's all-time activity: its own payload (own endpoint, fetched lazily) plus
     // the view state, kept on the dialog so a poll's re-render restores the filter, the
-    // order and every card the user had expanded.
+    // filter and every card the user had expanded.
     this._activity = null;
     this._activityLoading = false;
     this._activityError = null;
@@ -84,6 +85,7 @@ export class PositionDetailsDialog {
 
       this._createDialog();
       this._attachEventHandlers();
+      this._checkFavoriteState();
 
       requestAnimationFrame(() => {
         if (this.dialogEl) {
@@ -314,14 +316,6 @@ export class PositionDetailsDialog {
           this._backdropHandler = null;
         }
 
-        if (this._copyMintHandler) {
-          const copyBtn = this.dialogEl.querySelector("#pddCopyMintBtn");
-          if (copyBtn) {
-            copyBtn.removeEventListener("click", this._copyMintHandler);
-          }
-          this._copyMintHandler = null;
-        }
-
         if (this._tabHandlers) {
           this._tabHandlers.forEach(({ element, handler }) => {
             element.removeEventListener("click", handler);
@@ -402,8 +396,9 @@ export class PositionDetailsDialog {
 
     this._closeHandler = null;
     this._backdropHandler = null;
-    this._tabHandlers = null;
     this._copyMintHandler = null;
+    this._favoriteHandler = null;
+    this._tabHandlers = null;
     this._resetActivityState();
     this.positionData = null;
     this.fullDetails = null;
@@ -429,8 +424,8 @@ export class PositionDetailsDialog {
     const logoUrl = pos.logo_url || "";
     const isOpen = pos.position_type !== "closed";
     const statusBadge = isOpen
-      ? '<span class="pdd-badge pdd-badge-success">Open</span>'
-      : '<span class="pdd-badge pdd-badge-secondary">Closed</span>';
+      ? '<span class="pdd-badge pdd-position-status pdd-badge-success">Open</span>'
+      : '<span class="pdd-badge pdd-position-status pdd-badge-secondary">Closed</span>';
     // Manual management: open positions get an interactive toggle (enable/disable the
     // auto-trader for this position); closed positions just show the historical state.
     const manualHint = this._renderManualHint();
@@ -457,13 +452,16 @@ export class PositionDetailsDialog {
               <div class="header-logo">
                 ${logoUrl ? `<img src="${Utils.escapeHtml(logoUrl)}" alt="${Utils.escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${Utils.escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="logo-placeholder">${Utils.escapeHtml(symbol.charAt(0))}</div>`}
               </div>
-              <div class="header-title">
-                <span class="title-main" id="pdd-dialog-title">${Utils.escapeHtml(symbol)}</span>
-                <span class="title-sub">${Utils.escapeHtml(name)}</span>
-              </div>
-              <div class="header-badges">
-                ${statusBadge}
-                ${manualBadge}
+              <div class="header-identity">
+                <div class="header-title-row">
+                  <div class="header-title">
+                    <span class="title-main" id="pdd-dialog-title">${Utils.escapeHtml(name)}</span>
+                    <span class="title-symbol">$${Utils.escapeHtml(symbol.toUpperCase())}</span>
+                  </div>
+                  <div class="header-security" id="pddHeaderSecurity"></div>
+                </div>
+                <div class="header-token-context-row" id="pddHeaderPool"></div>
+                <div class="header-mint-full" title="${Utils.escapeHtml(pos.mint)}">${Utils.escapeHtml(pos.mint)}</div>
               </div>
             </div>
             <div class="header-center">
@@ -473,10 +471,13 @@ export class PositionDetailsDialog {
             </div>
             <div class="header-right">
               <div class="header-actions">
-                <button class="action-btn" id="pddCopyMintBtn" title="Copy Mint Address">
+                <button class="pdd-header-action favorite-btn" id="pddFavoriteBtn" type="button" title="Add to Favorites">
+                  <i class="icon-star"></i>
+                </button>
+                <button class="pdd-header-action" id="pddCopyMintBtn" type="button" title="Copy Mint Address">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/token/${Utils.escapeHtml(pos.mint)}" target="_blank" class="action-btn" title="View on Solscan">
+                <a href="https://solscan.io/token/${Utils.escapeHtml(pos.mint)}" target="_blank" rel="noopener" class="pdd-header-action" title="View on Solscan" aria-label="View token on Solscan">
                   <i class="icon-external-link"></i>
                 </a>
               </div>
@@ -484,10 +485,15 @@ export class PositionDetailsDialog {
                 <i class="icon-x"></i>
               </button>
             </div>
+            <div class="header-lower-row">
+              <div class="header-badges">
+                ${statusBadge}
+                ${manualBadge}
+              </div>
+              <div class="header-shortcuts" id="pddHeaderShortcuts"></div>
+            </div>
           </div>
         </div>
-        <div class="header-meta-row" id="pddHeaderMeta"></div>
-
         <div class="dialog-tabs">
           <button class="tab-button active" data-tab="overview">
             <i class="icon-info"></i>
@@ -502,6 +508,7 @@ export class PositionDetailsDialog {
             Activity
           </button>
           <div class="pdd-trade-actions">
+            <span class="pdd-trade-actions-label">${isOpen ? "Manage position" : "Position"}</span>
             ${
               isOpen
                 ? `
@@ -543,21 +550,42 @@ export class PositionDetailsDialog {
       priceContainer.innerHTML = this._buildHeaderPrice(pos);
     }
 
-    const metaContainer = this.dialogEl?.querySelector("#pddHeaderMeta");
-    if (metaContainer) {
-      metaContainer.innerHTML = this._buildHeaderMeta();
-    }
+    const securityContainer = this.dialogEl?.querySelector("#pddHeaderSecurity");
+    if (securityContainer) securityContainer.innerHTML = this._buildHeaderSecurity();
+
+    const poolContainer = this.dialogEl?.querySelector("#pddHeaderPool");
+    if (poolContainer) poolContainer.innerHTML = this._buildHeaderPoolContext();
+
+    const shortcutsContainer = this.dialogEl?.querySelector("#pddHeaderShortcuts");
+    if (shortcutsContainer) shortcutsContainer.innerHTML = this._buildHeaderShortcuts();
   }
 
-  _buildHeaderMeta() {
-    const pos = this.fullDetails?.position;
-    const tokenInfo = this.fullDetails?.token_info;
-    const poolInfo = this.fullDetails?.pool_info;
-    const links = this.fullDetails?.external_links || {};
+  _buildHeaderSecurity() {
     const security = this.fullDetails?.security;
-    const mint = pos?.mint;
+    if (!security) return "";
 
-    // Mint chip + DEX badge + pool liquidity
+    const score = security.score_normalized;
+    const riskLevel = security.risk_level || "unknown";
+    const riskClass = this._getRiskLevelClass(riskLevel);
+    const riskLabel = this._getRiskLevelLabel(riskLevel);
+    const scoreStr = score !== null && score !== undefined ? ` · ${score}/100` : "";
+    const authorityBadges = [];
+    if (security.has_mint_authority) {
+      authorityBadges.push(
+        '<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Mint Auth</span>'
+      );
+    }
+    if (security.has_freeze_authority) {
+      authorityBadges.push(
+        '<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Freeze Auth</span>'
+      );
+    }
+
+    return `<div class="meta-security-group"><span class="meta-security-badge ${riskClass}"><i class="icon-shield"></i> ${riskLabel}${scoreStr}</span>${authorityBadges.join("")}</div>`;
+  }
+
+  _buildHeaderPoolContext() {
+    const poolInfo = this.fullDetails?.pool_info;
     const dexBadge = poolInfo?.dex_name
       ? `<span class="pdd-dex-badge">${Utils.escapeHtml(poolInfo.dex_name)}</span>`
       : "";
@@ -566,70 +594,98 @@ export class PositionDetailsDialog {
         ? `<span class="meta-metric"><span class="meta-metric-label">Liq</span><span class="meta-metric-value">${Utils.formatSol(poolInfo.liquidity_sol, { decimals: 2, suffix: "" })} SOL</span></span>`
         : "";
 
-    // Social links — icon-only, compact
-    const socials = [];
-    if (tokenInfo?.website)
-      socials.push(
-        `<a href="${Utils.escapeHtml(tokenInfo.website)}" target="_blank" rel="noopener" class="meta-social-link" title="Website"><i class="icon-globe"></i></a>`
-      );
-    if (tokenInfo?.twitter)
-      socials.push(
-        `<a href="${Utils.escapeHtml(tokenInfo.twitter)}" target="_blank" rel="noopener" class="meta-social-link" title="Twitter / X"><i class="icon-twitter"></i></a>`
-      );
-    if (tokenInfo?.telegram)
-      socials.push(
-        `<a href="${Utils.escapeHtml(tokenInfo.telegram)}" target="_blank" rel="noopener" class="meta-social-link" title="Telegram"><i class="icon-send"></i></a>`
-      );
+    return dexBadge || poolLiqHtml
+      ? `<div class="meta-token-group">${dexBadge}${poolLiqHtml}</div>`
+      : "";
+  }
 
-    // Explorer chips
-    const explorers = [
-      ["Solscan", links.solscan],
-      ["DexScreener", links.dexscreener],
-      ["Birdeye", links.birdeye],
-      ["RugCheck", links.rugcheck],
-      ["Photon", links.photon],
-    ]
+  _buildHeaderShortcuts() {
+    const tokenInfo = this.fullDetails?.token_info;
+    const links = this.fullDetails?.external_links || {};
+    const shortcuts = [
+      ["Website", tokenInfo?.website, "icon-globe"],
+      ["X", tokenInfo?.twitter, "icon-twitter"],
+      ["Telegram", tokenInfo?.telegram, "icon-send"],
+      ["Solscan", links.solscan, "icon-external-link"],
+      ["DexScreener", links.dexscreener, "icon-external-link"],
+      ["Birdeye", links.birdeye, "icon-external-link"],
+      ["RugCheck", links.rugcheck, "icon-external-link"],
+      ["Photon", links.photon, "icon-external-link"],
+    ];
+
+    return shortcuts
       .filter(([, url]) => url)
       .map(
-        ([label, url]) =>
-          `<a href="${Utils.escapeHtml(url)}" target="_blank" rel="noopener" class="pdd-explorer-chip"><i class="icon-external-link"></i>${label}</a>`
-      );
+        ([label, url, icon]) =>
+          `<a href="${Utils.escapeHtml(url)}" target="_blank" rel="noopener" class="pdd-header-shortcut" title="Open ${label}" aria-label="Open ${label}"><i class="${icon}"></i><span>${label}</span></a>`
+      )
+      .join("");
+  }
 
-    const sep = socials.length > 0 && explorers.length > 0 ? '<span class="meta-sep"></span>' : "";
-    const linksGroupHtml =
-      socials.length > 0 || explorers.length > 0
-        ? `<div class="meta-links-group">${socials.join("")}${sep}${explorers.join("")}</div>`
-        : "";
-
-    // Security badge — compact score + risk level + authority warnings
-    let securityHtml = "";
-    if (security) {
-      const score = security.score_normalized;
-      const riskLevel = security.risk_level || "unknown";
-      const riskClass = this._getRiskLevelClass(riskLevel);
-      const riskLabel = this._getRiskLevelLabel(riskLevel);
-      const scoreStr = score !== null && score !== undefined ? `${score} · ` : "";
-      const authorityBadges = [];
-      if (security.has_mint_authority)
-        authorityBadges.push(
-          '<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Mint Auth</span>'
-        );
-      if (security.has_freeze_authority)
-        authorityBadges.push(
-          '<span class="meta-authority-badge"><i class="icon-triangle-alert"></i> Freeze Auth</span>'
-        );
-      securityHtml = `<div class="meta-security-group"><span class="meta-security-badge ${riskClass}"><i class="icon-shield"></i> ${scoreStr}${riskLabel}</span>${authorityBadges.join("")}</div>`;
+  async _checkFavoriteState() {
+    const mint = this.positionData?.mint;
+    if (!mint) return;
+    try {
+      const response = await fetch("/api/tokens/favorites");
+      if (!response.ok) return;
+      const data = await response.json();
+      const favorites = data.favorites || [];
+      this._updateFavoriteButton(favorites.some((favorite) => favorite.mint === mint));
+    } catch {
+      // Best-effort state check; the button remains available if this request fails.
     }
+  }
 
-    return `
-      <div class="meta-token-group">
-        ${mint ? Utils.renderAddressChip(mint, { kind: "token" }) : ""}
-        ${dexBadge}
-        ${poolLiqHtml}
-      </div>
-      ${linksGroupHtml}
-      ${securityHtml}
-    `;
+  _updateFavoriteButton(isFavorite) {
+    const button = this.dialogEl?.querySelector("#pddFavoriteBtn");
+    if (!button) return;
+    button.classList.toggle("active", isFavorite);
+    button.title = isFavorite ? "Remove from Favorites" : "Add to Favorites";
+  }
+
+  async _toggleFavorite() {
+    const button = this.dialogEl?.querySelector("#pddFavoriteBtn");
+    const position = this.fullDetails?.position || this.positionData;
+    if (!button || button.disabled || !position?.mint) return;
+
+    const currentlyFavorite = button.classList.contains("active");
+    button.disabled = true;
+    try {
+      if (currentlyFavorite) {
+        const response = await fetch(`/api/tokens/favorites/${encodeURIComponent(position.mint)}`, {
+          method: "DELETE",
+        });
+        if (!response.ok) throw new Error("Failed to remove favorite");
+      } else {
+        const response = await fetch("/api/tokens/favorites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mint: position.mint,
+            symbol: position.symbol || null,
+            name: position.name || null,
+            logo_url: position.logo_url || null,
+          }),
+        });
+        if (!response.ok) throw new Error("Failed to add favorite");
+      }
+
+      const isFavorite = !currentlyFavorite;
+      this._updateFavoriteButton(isFavorite);
+      Utils.showToast(
+        `${position.symbol || "Token"} ${isFavorite ? "added to" : "removed from"} favorites`,
+        "success"
+      );
+      window.dispatchEvent(
+        new CustomEvent("screenerbot:favorites-changed", {
+          detail: { mint: position.mint, isFavorite },
+        })
+      );
+    } catch (error) {
+      Utils.showToast(error.message || "Failed to update favorites", "error");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   /**
@@ -640,59 +696,31 @@ export class PositionDetailsDialog {
     const currentPrice = pos?.current_price;
     const entryPrice = pos?.average_entry_price || pos?.entry_price;
     const isOpen = pos?.position_type !== "closed";
+    const pnl = isOpen ? pos?.unrealized_pnl : pos?.pnl;
+    const pnlPct = isOpen ? pos?.unrealized_pnl_percent : pos?.pnl_percent;
+    const pnlPositive = pnl != null && pnl >= 0;
+    const pnlTone = pnl == null ? "" : pnlPositive ? "pdd-positive" : "pdd-negative";
+    const pnlSign = pnlPositive ? "+" : "";
+    const pnlAbs = Math.abs(pnl || 0);
+    const pnlDecimals = pnlAbs > 0 && pnlAbs < 0.0001 ? 8 : pnlAbs < 0.01 ? 6 : 4;
+    const pnlValue =
+      pnl == null
+        ? "—"
+        : `${pnlSign}${Utils.formatSol(pnl, { decimals: pnlDecimals, suffix: "" })}`;
+    const pnlPercent = pnlPct == null ? "" : `${pnlSign}${Utils.formatNumber(pnlPct, 2)}%`;
 
-    let priceHtml = "";
-    if (currentPrice !== null && currentPrice !== undefined) {
-      priceHtml = `
-        <div class="price-block">
-          <div class="price-sol-row">
-            <span class="price-sol">${this._formatPrice(currentPrice)}</span>
-            <span class="price-sol-unit">SOL</span>
-          </div>
-          <span class="price-label">Current Price</span>
-        </div>
-      `;
-    }
-
-    // P&L display
-    let pnlHtml = "";
-    if (isOpen && pos?.unrealized_pnl !== undefined) {
-      const pnl = pos.unrealized_pnl;
-      const pnlPct = pos.unrealized_pnl_percent;
-      const pnlClass = pnl != null && pnl >= 0 ? "pdd-positive" : "pdd-negative";
-      const sign = pnl != null && pnl >= 0 ? "+" : "";
-      pnlHtml = `
-        <div class="pnl-block ${pnlClass}">
-          <span class="pnl-value">${sign}${Utils.formatSol(pnl, { decimals: 4, suffix: "" })}</span>
-          <span class="pnl-percent">${sign}${Utils.formatNumber(pnlPct, 2)}%</span>
-        </div>
-      `;
-    } else if (!isOpen && pos?.pnl !== undefined) {
-      const pnl = pos.pnl;
-      const pnlPct = pos.pnl_percent;
-      const pnlClass = pnl != null && pnl >= 0 ? "pdd-positive" : "pdd-negative";
-      const sign = pnl != null && pnl >= 0 ? "+" : "";
-      pnlHtml = `
-        <div class="pnl-block ${pnlClass}">
-          <span class="pnl-value">${sign}${Utils.formatSol(pnl, { decimals: 4, suffix: "" })}</span>
-          <span class="pnl-percent">${sign}${Utils.formatNumber(pnlPct, 2)}%</span>
-        </div>
-      `;
-    }
+    const metric = (label, value, unit = "", sub = "", className = "") => `
+      <div class="header-metric ${className}">
+        <span class="header-metric-label">${label}</span>
+        <span class="header-metric-value">${value}${unit ? `<small>${unit}</small>` : ""}</span>
+        <span class="header-metric-sub">${sub || "&nbsp;"}</span>
+      </div>`;
 
     return `
-      ${priceHtml}
-      ${pnlHtml}
-      <div class="price-metrics">
-        <div class="metric-item">
-          <span class="metric-label">Entry</span>
-          <span class="metric-value">${this._formatPrice(entryPrice)}</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Invested</span>
-          <span class="metric-value">${Utils.formatSol(pos?.total_size_sol, { decimals: 4 })}</span>
-        </div>
-      </div>
+      ${metric("Current price", currentPrice != null ? this._formatPrice(currentPrice) : "—", "SOL")}
+      ${metric(isOpen ? "Unrealized P&L" : "Realized P&L", pnlValue, "SOL", pnlPercent, pnlTone)}
+      ${metric("Average entry", entryPrice != null ? this._formatPrice(entryPrice) : "—", "SOL")}
+      ${metric("Invested", Utils.formatSol(pos?.total_size_sol, { decimals: 4, suffix: "" }), "SOL")}
     `;
   }
 
@@ -708,22 +736,23 @@ export class PositionDetailsDialog {
     this._backdropHandler = () => this.close();
     backdrop.addEventListener("click", this._backdropHandler);
 
+    const copyMintButton = this.dialogEl.querySelector("#pddCopyMintBtn");
+    this._copyMintHandler = () => {
+      Utils.copyToClipboard(this.positionData.mint);
+      Utils.showToast("Mint address copied", "success");
+    };
+    copyMintButton.addEventListener("click", this._copyMintHandler);
+
+    const favoriteButton = this.dialogEl.querySelector("#pddFavoriteBtn");
+    this._favoriteHandler = () => this._toggleFavorite();
+    favoriteButton.addEventListener("click", this._favoriteHandler);
+
     this._escapeHandler = (e) => {
       if (e.key === "Escape") {
         this.close();
       }
     };
     document.addEventListener("keydown", this._escapeHandler);
-
-    // Copy mint button
-    const copyBtn = this.dialogEl.querySelector("#pddCopyMintBtn");
-    if (copyBtn) {
-      this._copyMintHandler = () => {
-        Utils.copyToClipboard(this.positionData.mint);
-        Utils.showToast("Mint address copied!", "success");
-      };
-      copyBtn.addEventListener("click", this._copyMintHandler);
-    }
 
     // Trade action buttons (now in the top tab bar). Bound once; pos is resolved
     // fresh at click time so it always reflects the latest details.

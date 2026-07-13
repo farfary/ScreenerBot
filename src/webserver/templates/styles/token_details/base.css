@@ -410,7 +410,7 @@
 }
 
 /* Right section - Trade actions & controls */
-.header-right {
+.token-details-dialog .header-right {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -479,13 +479,13 @@
   height: 14px;
 }
 
-.header-actions {
+.token-details-dialog .header-actions {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.action-btn {
+.token-details-dialog .action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -493,6 +493,7 @@
   height: 32px;
   min-width: 32px;
   min-height: 32px;
+  padding: 0;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -503,36 +504,36 @@
   flex-shrink: 0;
 }
 
-.action-btn:hover {
+.token-details-dialog .action-btn:hover {
   background: var(--bg-card-hover);
   border-color: var(--text-muted);
   color: var(--text-primary);
 }
 
-.action-btn.favorite-btn:hover {
-  border-color: var(--warning, #f0b429);
-  color: var(--warning, #f0b429);
+.token-details-dialog .action-btn.favorite-btn:hover {
+  border-color: var(--warning-color);
+  color: var(--warning-color);
 }
 
-.action-btn.favorite-btn.active {
-  background: color-mix(in srgb, var(--warning, #f0b429) 20%, transparent);
-  border-color: var(--warning, #f0b429);
-  color: var(--warning, #f0b429);
+.token-details-dialog .action-btn.favorite-btn.active {
+  background: var(--warning-alpha-20);
+  border-color: var(--warning-color);
+  color: var(--warning-color);
 }
 
-.action-btn.favorite-btn.active:hover {
+.token-details-dialog .action-btn.favorite-btn.active:hover {
   filter: brightness(1.15);
 }
 
-.action-btn svg,
-.action-btn i {
+.token-details-dialog .action-btn svg,
+.token-details-dialog .action-btn i {
   width: 14px;
   height: 14px;
   font-size: 14px;
   line-height: 1;
 }
 
-.dialog-close {
+.token-details-dialog .dialog-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -540,6 +541,7 @@
   height: 32px;
   min-width: 32px;
   min-height: 32px;
+  padding: 0;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -550,14 +552,14 @@
   margin-left: 4px;
 }
 
-.dialog-close:hover {
+.token-details-dialog .dialog-close:hover {
   background: var(--danger-alpha-15);
   border-color: var(--danger);
   color: var(--danger);
 }
 
-.dialog-close svg,
-.dialog-close i {
+.token-details-dialog .dialog-close svg,
+.token-details-dialog .dialog-close i {
   width: 16px;
   height: 16px;
   font-size: 16px;

@@ -97,518 +97,6 @@
 }
 
 /* =============================================================================
-   HEADER
-   ============================================================================= */
-
-.position-details-dialog .dialog-header {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.position-details-dialog .header-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 16px;
-  padding: 12px 16px;
-  min-height: 64px;
-}
-
-/* Meta row: token identity, links, and security — shown after details load */
-.position-details-dialog .header-meta-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 7px 16px;
-  border-top: 1px solid var(--border-color);
-  min-height: 36px;
-}
-
-.position-details-dialog .header-meta-row:empty {
-  display: none;
-}
-
-.position-details-dialog .meta-token-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.position-details-dialog .meta-metric {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.position-details-dialog .meta-metric-label {
-  font-size: 0.625rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.position-details-dialog .meta-metric-value {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.position-details-dialog .meta-links-group {
-  display: flex;
-  align-items: center;
-  gap: 4px 6px;
-  flex: 1;
-  flex-wrap: wrap;
-}
-
-.position-details-dialog .meta-sep {
-  width: 1px;
-  height: 14px;
-  background: var(--border-color);
-  flex-shrink: 0;
-  margin: 0 2px;
-}
-
-.position-details-dialog .meta-social-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  text-decoration: none;
-  font-size: 14px;
-  transition: all var(--transition-fast);
-}
-
-.position-details-dialog .meta-social-link:hover {
-  color: var(--text-primary);
-  border-color: var(--border-color);
-  background: var(--bg-card-hover);
-}
-
-.position-details-dialog .meta-security-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.position-details-dialog .meta-security-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: var(--radius-sm);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.position-details-dialog .meta-security-badge i {
-  font-size: 12px;
-  opacity: 0.85;
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-low {
-  background: var(--success-alpha-20);
-  color: var(--success-color);
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-medium {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-high {
-  background: var(--danger-alpha-15);
-  color: var(--danger);
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-unknown {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.position-details-dialog .meta-authority-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  background: var(--danger-alpha-10);
-  color: var(--danger);
-}
-
-.position-details-dialog .meta-authority-badge i {
-  font-size: 11px;
-}
-
-.position-details-dialog .header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
-  min-width: 200px;
-}
-
-.position-details-dialog .header-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full);
-  overflow: hidden;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.position-details-dialog .header-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.position-details-dialog .header-logo .logo-placeholder {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-
-.position-details-dialog .header-title {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.position-details-dialog .header-title .title-main {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
-}
-
-.position-details-dialog .header-title .title-sub {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-weight: 400;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.position-details-dialog .header-badges {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Header Center - Price Section */
-.position-details-dialog .header-center {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.position-details-dialog .header-price {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.position-details-dialog .price-loading {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-
-.position-details-dialog .price-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.position-details-dialog .price-sol-row {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.position-details-dialog .price-sol {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.position-details-dialog .price-sol-unit {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.position-details-dialog .price-label {
-  font-size: 0.625rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.position-details-dialog .pnl-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
-}
-
-.position-details-dialog .pnl-block.pdd-positive {
-  background: var(--success-alpha-10);
-}
-
-.position-details-dialog .pnl-block.pdd-negative {
-  background: var(--danger-alpha-10);
-}
-
-.position-details-dialog .pnl-value {
-  font-size: 1rem;
-  font-weight: 600;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.position-details-dialog .pdd-positive .pnl-value {
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-negative .pnl-value {
-  color: var(--danger);
-}
-
-.position-details-dialog .pnl-percent {
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.position-details-dialog .pdd-positive .pnl-percent {
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-negative .pnl-percent {
-  color: var(--danger);
-}
-
-.position-details-dialog .price-metrics {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-left: 16px;
-  border-left: 1px solid var(--border-color);
-}
-
-.position-details-dialog .metric-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.position-details-dialog .metric-label {
-  font-size: 0.625rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.position-details-dialog .metric-value {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-/* Header Right Section */
-.position-details-dialog .header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.position-details-dialog .header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.position-details-dialog .header-actions .action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-decoration: none;
-  flex-shrink: 0;
-}
-
-.position-details-dialog .header-actions .action-btn:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-color);
-  color: var(--text-primary);
-}
-
-.position-details-dialog .header-actions .action-btn i {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 1;
-}
-
-/* Badges */
-.position-details-dialog .pdd-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.position-details-dialog .pdd-badge-success {
-  background: var(--success-alpha-20);
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-badge-secondary {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.position-details-dialog .pdd-badge-info {
-  background: var(--primary-alpha-20);
-  color: var(--primary-color);
-}
-
-.position-details-dialog .pdd-badge-warning {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-}
-
-/* Manual management: position opened by a manual/force buy; auto-trader skips it. */
-.position-details-dialog .pdd-badge-manual {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-  border: 1px solid var(--warning-color);
-}
-
-/* Interactive manual-management toggle (open positions). */
-.position-details-dialog .pdd-manual-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: all var(--transition-fast, 0.15s ease);
-}
-
-.position-details-dialog .pdd-manual-toggle i {
-  font-size: 0.85em;
-}
-
-/* ON: manually managed (auto-trader off) — warning accent like the row badge. */
-.position-details-dialog .pdd-manual-toggle.is-on {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-  border: 1px solid var(--warning-color);
-}
-
-/* OFF: auto-managed — muted/neutral so it reads as the non-protected state. */
-.position-details-dialog .pdd-manual-toggle.is-off {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.position-details-dialog .pdd-manual-toggle:hover {
-  filter: brightness(1.1);
-}
-
-/* Close Button */
-.position-details-dialog .dialog-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  min-width: 30px;
-  min-height: 30px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.position-details-dialog .dialog-close:hover {
-  background: var(--danger-alpha-15);
-  border-color: var(--danger-alpha-30);
-  color: var(--danger);
-}
-
-.position-details-dialog .dialog-close svg,
-.position-details-dialog .dialog-close i {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 1;
-}
-
-/* =============================================================================
    TAB BAR
    ============================================================================= */
 
@@ -629,8 +117,18 @@
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  padding-left: 12px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-color);
   flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-trade-actions-label {
+  margin-right: 2px;
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .position-details-dialog .pdd-trade-btn {
@@ -702,7 +200,7 @@
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
-  inline-size: 136px;
+  min-inline-size: 112px;
   padding: 6px 14px;
   background: transparent;
   border: none;
@@ -841,39 +339,54 @@
    RESPONSIVE — dialog shell
    ============================================================================= */
 
-@media (width <= 800px) {
-  .position-details-dialog .dialog-header {
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 12px;
-  }
-
+@media (width <= 1500px) {
   .position-details-dialog .header-top-row {
-    flex-wrap: wrap;
+    grid-template-columns: minmax(360px, 1fr) auto auto;
+    column-gap: 16px;
+    row-gap: 8px;
   }
+}
 
-  .position-details-dialog .header-left {
-    min-width: auto;
+@media (width <= 1100px) {
+  .position-details-dialog .header-top-row {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .position-details-dialog .header-center {
-    order: 3;
-    flex: 1 0 100%;
-    justify-content: flex-start;
-  }
-
-  .position-details-dialog .header-price {
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-
-  .position-details-dialog .price-metrics {
-    border-left: none;
-    padding-left: 0;
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .position-details-dialog .header-right {
-    margin-left: auto;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .position-details-dialog .header-lower-row {
+    grid-row: 3;
+  }
+}
+
+@media (width <= 800px) {
+  .position-details-dialog .header-top-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    padding: 10px 12px;
+  }
+
+  .position-details-dialog .header-left {
+    min-width: 0;
+  }
+
+  .position-details-dialog .header-center {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .position-details-dialog .header-price {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 20px;
   }
 
   .position-details-dialog .tab-content {
@@ -882,21 +395,44 @@
 }
 
 @media (width <= 500px) {
-  .position-details-dialog .header-title .title-sub {
-    display: none;
-  }
-
   .position-details-dialog .dialog-tabs {
     padding: 6px 12px;
   }
 
   .position-details-dialog .tab-button {
-    inline-size: 112px;
+    min-inline-size: 96px;
     padding: 6px 10px;
     font-size: 0.7rem;
   }
 
   .position-details-dialog .tab-button i {
     display: none;
+  }
+
+  .position-details-dialog .pdd-trade-actions-label {
+    display: none;
+  }
+
+  .position-details-dialog .header-price {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 20px;
+  }
+
+  .position-details-dialog .header-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .position-details-dialog .header-mint-full {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .position-details-dialog .header-right {
+    padding-top: 4px;
+  }
+
+  .position-details-dialog .header-lower-row {
+    padding-left: 56px;
   }
 }
