@@ -11,10 +11,7 @@
  * - --tab-bar-text-color: Default text color
  * - --tab-bar-text-active: Active tab text color
  * - --tab-bar-border-color: Border colors
- * - --tab-bar-hover-bg: Hover background
  * - --tab-bar-active-border: Active tab border color
- * - --tab-bar-height: Tab height
- * - --tab-bar-gap: Spacing between tabs
  */
 
 /* ============================================================================
@@ -28,66 +25,26 @@
   --tab-bar-text-color: var(--text-secondary);
   --tab-bar-text-active: var(--link-color);
   --tab-bar-border-color: var(--border-color);
-  --tab-bar-hover-bg: var(--bg-card-hover);
   --tab-bar-active-border: var(--link-color);
 
   /* Tab bar dimensions */
-  --tab-bar-height: auto;
-  --tab-bar-gap: 4px;
-  --tab-bar-padding-x: 12px;
   --tab-bar-padding-y: 8px;
-  --tab-bar-font-size: 0.95em;
   --tab-bar-sub-font-size: 0.9em;
-
-  /* Transitions */
-  --tab-bar-transition: all var(--transition-base);
 }
 
 /* ============================================================================
    Main Tabs (First Row)
    ============================================================================ */
 
-/* Tabs use hidden scrollbar pattern - horizontal scroll without visible scrollbar */
-.tabs {
-  background: var(--tab-bar-bg-primary);
-  padding: 0 4px;
-  box-shadow: 0 1px 3px var(--shadow-md);
-  display: flex;
-  overflow-x: auto;
-  flex: 0 0 auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.tab {
-  padding: var(--tab-bar-padding-y) var(--tab-bar-padding-x);
-  text-decoration: none;
-  color: var(--tab-bar-text-color);
-  font-weight: 500;
-  border-bottom: 3px solid transparent;
-  transition: var(--tab-bar-transition);
-  white-space: nowrap;
-  font-size: var(--tab-bar-font-size);
-  cursor: pointer;
-  user-select: none;
-  position: relative;
-}
-
-.tab:hover {
-  background: var(--tab-bar-hover-bg);
-  color: var(--tab-bar-text-active);
-}
-
+/* A main tab (`.tab`, server-rendered into `.nav-tabs`) is styled by
+   `header_responsive.css` — see `.nav-tabs a`, which is the single source. The
+   padding/colour/border/hover/active block that used to live here was fully shadowed by
+   it (`.nav-tabs a` outranks `.tab`), so editing it changed nothing on screen. Only the
+   keyboard focus ring remains ours; `foundation.css` suppresses it for mouse input. */
 .tab:focus-visible {
   outline: 2px solid var(--tab-bar-active-border);
   outline-offset: -2px;
   z-index: 1;
-}
-
-.tab.active {
-  color: var(--tab-bar-text-active);
-  border-bottom-color: var(--tab-bar-active-border);
-  background: var(--tab-bar-hover-bg);
-  font-weight: 600;
 }
 
 /* ============================================================================
@@ -196,7 +153,6 @@
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-  .tab,
   .sub-tab {
     transition: none;
   }
@@ -208,12 +164,12 @@
 
 /* stylelint-disable-next-line media-feature-name-value-no-unknown */
 @media (prefers-contrast: high) {
-  .tab,
+  .nav-tabs a,
   .sub-tab {
     border: 1px solid currentcolor;
   }
 
-  .tab.active,
+  .nav-tabs a.active,
   .sub-tab.active {
     background: var(--tab-bar-text-active);
     color: var(--tab-bar-bg-primary);
@@ -228,13 +184,7 @@
 /* Tablet and below: Reduce padding for more tabs visible */
 @media (width <= 1024px) {
   :root {
-    --tab-bar-padding-x: 10px;
-    --tab-bar-font-size: 0.9em;
     --tab-bar-sub-font-size: 0.85em;
-  }
-
-  .tabs {
-    padding: 0 2px;
   }
 
   .sub-tabs-container {
@@ -246,14 +196,8 @@
 /* Mobile: Further reduce for small screens */
 @media (width <= 768px) {
   :root {
-    --tab-bar-padding-x: 8px;
     --tab-bar-padding-y: 6px;
-    --tab-bar-font-size: 0.85em;
     --tab-bar-sub-font-size: 0.8em;
-  }
-
-  .tabs {
-    box-shadow: 0 1px 2px var(--shadow-sm);
   }
 
   .sub-tabs-container {
@@ -270,7 +214,6 @@
 /* Very small screens: Minimal padding */
 @media (width <= 425px) {
   :root {
-    --tab-bar-padding-x: 6px;
     --tab-bar-padding-y: 5px;
   }
 
@@ -284,7 +227,7 @@
    ============================================================================ */
 
 @media print {
-  .tabs,
+  .nav-tabs,
   .sub-tabs-container {
     display: none;
   }
@@ -300,7 +243,6 @@
   --tab-bar-text-color: var(--text-secondary);
   --tab-bar-text-active: var(--link-color);
   --tab-bar-border-color: var(--border-color);
-  --tab-bar-hover-bg: var(--bg-card-hover);
 }
 
 /* ============================================================================
@@ -338,8 +280,7 @@
 }
 
 /* The scrollable content area */
-.tab-scroll-wrapper .sub-tabs-container,
-.tab-scroll-wrapper .tabs {
+.tab-scroll-wrapper .sub-tabs-container {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -431,48 +372,3 @@
   display: none;
 }
 
-/* For main tabs (header row) */
-.tabs-scroll-wrapper {
-  position: relative;
-  display: flex;
-  align-items: stretch;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.tabs-scroll-wrapper .tabs {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.tabs-scroll-wrapper::before,
-.tabs-scroll-wrapper::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 32px;
-  pointer-events: none;
-  z-index: 5;
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-.tabs-scroll-wrapper::before {
-  left: 0;
-  background: linear-gradient(to right, var(--tab-bar-bg-primary), transparent);
-}
-
-.tabs-scroll-wrapper::after {
-  right: 0;
-  background: linear-gradient(to left, var(--tab-bar-bg-primary), transparent);
-}
-
-.tabs-scroll-wrapper.can-scroll-left::before {
-  opacity: 1;
-}
-
-.tabs-scroll-wrapper.can-scroll-right::after {
-  opacity: 1;
-}

@@ -65,6 +65,7 @@
 }
 
 .nav-tabs {
+  position: relative;
   display: flex;
   align-items: stretch;
   width: max-content;
@@ -74,13 +75,63 @@
   gap: 6px;
 }
 
+/* One light that TRAVELS from the old tab to the new one, instead of a mark fading out
+   here and another fading in there. It is created by `core/header.js` (which measures
+   the active tab and drives `--nav-indicator-x`/`-w`); until it exists, `.nav-tabs` has
+   no `has-indicator` class and each tab lights its own `::after` — so navigation still
+   looks right if the script never runs. It lives inside `.nav-tabs`, the full-width flex
+   row, so it scrolls with the tabs for free.
+
+   This is a GLOW, not a drawn bar: a faint light lying along the bottom edge across the
+   tab's full width, fading upward over 4px and blurred so it has no drawable edge. A
+   crisp filled rectangle would read as a border the row wears, rather than the tab
+   emitting light. Kept deliberately dim — it marks the current tab, it does not announce
+   it, and the row is only 36px tall. */
+.nav-tabs-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--nav-indicator-w, 0);
+  height: 4px;
+  background: linear-gradient(to top, var(--primary-alpha-20), transparent);
+  mask: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  opacity: 0;
+  transform: translateX(var(--nav-indicator-x, 0));
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.nav-tabs-indicator.is-visible {
+  opacity: 0.9;
+}
+
+/* Only animate once it has been placed: transitioning the first measurement would slide
+   the bar in from the left edge of the row on every page load. */
+.nav-tabs-indicator.is-ready {
+  transition:
+    transform var(--transition-base) cubic-bezier(0.2, 0.8, 0.3, 1),
+    width var(--transition-base) cubic-bezier(0.2, 0.8, 0.3, 1),
+    opacity var(--transition-fast);
+}
+
+.nav-tabs.has-indicator a.active::after {
+  display: none;
+}
+
+/* The ONE source of truth for a main tab. `tab_bar.css` owns `.sub-tab`; a main tab
+   is `.nav-tabs a` and nothing else styles it (a duplicate `.tab` block used to sit in
+   tab_bar.css, fully shadowed by this higher-specificity rule — editing it did
+   nothing). Every state below changes only paint properties (colour, background,
+   opacity, transform), never geometry: the row is 36px and a tab that grows or
+   re-weights on hover would shove its neighbours sideways. */
 .nav-tabs a {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
   min-height: 36px;
   padding: 0 14px;
-  border-bottom: 3px solid transparent;
+  border-bottom: 0;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 650;
@@ -89,10 +140,39 @@
   text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
   transition:
     background-color var(--transition-fast),
-    border-color var(--transition-fast),
     color var(--transition-fast);
+}
+
+/* The icon is quieter than its label until the tab is hovered or current. */
+.nav-tabs a i {
+  font-size: 13px;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+/* Each tab's own light on the bottom edge — the hover warmth, and the fallback when the
+   travelling indicator has not been created. Same substance as the indicator: a faint
+   glow, never a filled line. It spans the tab's FULL width and fades out within 4px, so
+   only the sliver of row directly beneath the label is touched. Only opacity changes
+   between states — the light brightens and dims, it never grows or moves. */
+.nav-tabs a::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 4px;
+  background: linear-gradient(to top, var(--primary-alpha-20), transparent);
+
+  /* The ends fade out so the glow has no vertical edge where the tab stops. */
+  mask: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  opacity: 0;
+  filter: blur(1px);
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
 }
 
 .nav-tabs a:hover {
@@ -100,10 +180,29 @@
   color: var(--text-primary);
 }
 
+.nav-tabs a:hover i {
+  opacity: 0.95;
+}
+
+/* Hover barely warms the edge, so the current tab stays the brightest thing in the row
+   and hovering never looks like navigating. */
+.nav-tabs a:hover::after {
+  opacity: 0.25;
+}
+
 .nav-tabs a.active {
-  border-bottom-color: var(--primary-color);
-  background: var(--primary-alpha-10);
+  /* No wash across the tab and no glow on the label: the colour plus the light beneath it
+     is the whole state. Anything more turns a 36px row into a light show. */
   color: var(--primary-color);
+  background: var(--primary-alpha-5);
+}
+
+.nav-tabs a.active i {
+  opacity: 1;
+}
+
+.nav-tabs a.active::after {
+  opacity: 0.9;
 }
 
 /* The ticker scrolls by touch/trackpad when it cannot fit; the old dormant
@@ -190,7 +289,9 @@ button.ticker-segment:hover .ticker-icon {
   align-items: center;
   gap: 3px;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   line-height: 1;
 }
 
@@ -491,8 +592,18 @@ button.ticker-segment:hover .ticker-icon {
   .header-row-2-wrapper::before,
   .header-row-2-wrapper::after,
   .nav-tabs a,
+  .nav-tabs a i,
   button.ticker-segment,
   .modern-header .header-actions-items {
     transition: none;
+  }
+
+  /* The glow still appears, it just does not fade in or travel. */
+  .nav-tabs a::after {
+    transition: none;
+  }
+
+  .nav-tabs-indicator.is-ready {
+    transition: opacity var(--transition-fast);
   }
 }

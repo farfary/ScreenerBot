@@ -38,8 +38,7 @@ function applyStatus(newStatus) {
   if (!newStatus || typeof newStatus !== "object") {
     return;
   }
-  const enabled =
-    typeof newStatus.enabled === "boolean" ? newStatus.enabled : newStatus.running;
+  const enabled = typeof newStatus.enabled === "boolean" ? newStatus.enabled : newStatus.running;
   if (typeof enabled === "boolean") state.traderEnabled = enabled;
   state.available = true;
   updateConnectionStatus(true);
@@ -216,6 +215,10 @@ function initTraderControls() {
   // Initialize scroll navigation for main header tabs
   initHeaderTabsScroll();
 
+  // Travelling active-tab underline + arrow-key navigation
+  initNavTabsIndicator();
+  initNavTabsKeyboard();
+
   waitForReady()
     .then(async () => {
       try {
@@ -235,7 +238,7 @@ function initHeaderActionsToggle() {
   const toggle = document.getElementById("headerActionsToggle");
   if (!actions || !toggle) return;
   const drawerMode = window.matchMedia(
-    "(min-width: 800px) and (max-width: 1279px), (max-width: 500px)",
+    "(min-width: 800px) and (max-width: 1279px), (max-width: 500px)"
   );
 
   const open = () => {
@@ -327,7 +330,7 @@ function initCardHandlers() {
             mint: "So11111111111111111111111111111111111111112",
             symbol: "SOL",
           },
-        }),
+        })
       );
     };
     solPriceCard.addEventListener("click", openSolDetails);
@@ -405,7 +408,8 @@ function initHeaderTabsScroll() {
     // either boundary, let the page receive the wheel event normally.
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
       const maxScrollLeft = headerRow.scrollWidth - headerRow.clientWidth;
-      const canMove = event.deltaY < 0 ? headerRow.scrollLeft > 0 : headerRow.scrollLeft < maxScrollLeft;
+      const canMove =
+        event.deltaY < 0 ? headerRow.scrollLeft > 0 : headerRow.scrollLeft < maxScrollLeft;
       if (!canMove) return;
       event.preventDefault();
       headerRow.scrollLeft += event.deltaY;
@@ -428,10 +432,110 @@ function initHeaderTabsScroll() {
 
   // Initial update
   requestAnimationFrame(updateScrollIndicators);
-
 }
 
 // END HEADER TABS SCROLL NAVIGATION
+
+// ============================================================================
+// HEADER TABS ACTIVE INDICATOR + KEYBOARD NAVIGATION
+// ============================================================================
+
+/**
+ * Drive the single underline that travels between main tabs.
+ *
+ * The bar is one element, so switching pages MOVES it instead of fading one bar out
+ * and another in. Everything it needs is measured from the active tab and written to
+ * two custom properties, so the animation itself stays pure CSS (transform + width).
+ *
+ * It is a progressive enhancement: the `has-indicator` class is what tells the
+ * stylesheet to stop drawing the per-tab `::after` bars, and that class is only added
+ * once this runs. If the script never executes, each tab still marks itself.
+ *
+ * We observe `#navTabs` rather than hooking the router, because two unrelated things
+ * change the active tab: the router (toggling `.active`) and the settings dialog
+ * (rebuilding the whole nav's innerHTML, which would otherwise throw the bar away).
+ */
+function initNavTabsIndicator() {
+  const navTabs = document.getElementById("navTabs");
+  if (!navTabs) return;
+
+  let indicator = null;
+
+  const ensureIndicator = () => {
+    if (indicator?.isConnected) return indicator;
+    indicator = document.createElement("span");
+    indicator.className = "nav-tabs-indicator";
+    indicator.setAttribute("aria-hidden", "true");
+    navTabs.appendChild(indicator);
+    navTabs.classList.add("has-indicator");
+    return indicator;
+  };
+
+  const update = () => {
+    const bar = ensureIndicator();
+    const active = navTabs.querySelector("a.active");
+    if (!active) {
+      bar.classList.remove("is-visible");
+      return;
+    }
+
+    // The glow spans the tab's FULL width (its own ends are faded by a mask in CSS), so
+    // it is measured edge to edge — no inset.
+    navTabs.style.setProperty("--nav-indicator-x", `${active.offsetLeft}px`);
+    navTabs.style.setProperty("--nav-indicator-w", `${active.offsetWidth}px`);
+    bar.classList.add("is-visible");
+
+    // Placed first, animated after: otherwise the very first measurement slides the bar
+    // in from the row's left edge on every page load.
+    if (!bar.classList.contains("is-ready")) {
+      requestAnimationFrame(() => bar.classList.add("is-ready"));
+    }
+  };
+
+  // The router toggles `.active`; the settings dialog replaces the tabs wholesale.
+  // Mutations we caused ourselves (the bar's own classes, the bar being appended) are
+  // ignored, or `update()` would re-trigger the observer that called it.
+  const observer = new MutationObserver((records) => {
+    const ours = records.every((record) => record.target === indicator);
+    if (!ours) update();
+  });
+  observer.observe(navTabs, { childList: true, subtree: true, attributeFilter: ["class"] });
+
+  // Tab widths follow the font and the row width, so re-measure on both.
+  new ResizeObserver(() => update()).observe(navTabs);
+  document.fonts?.ready.then(() => update()).catch(() => {});
+
+  requestAnimationFrame(update);
+}
+
+/**
+ * Arrow-key navigation across the main tabs. Focus only moves — the tab is followed on
+ * Enter, like any link — so a keyboard user can survey the nav without triggering a
+ * page change on every keypress.
+ */
+function initNavTabsKeyboard() {
+  const navTabs = document.getElementById("navTabs");
+  if (!navTabs) return;
+
+  navTabs.addEventListener("keydown", (event) => {
+    const keys = ["ArrowRight", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+
+    const tabs = [...navTabs.querySelectorAll("a.tab")];
+    const current = tabs.indexOf(document.activeElement);
+    if (current === -1) return;
+
+    let next;
+    if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else if (event.key === "ArrowRight") next = (current + 1) % tabs.length;
+    else next = (current - 1 + tabs.length) % tabs.length;
+
+    event.preventDefault();
+    tabs[next].focus();
+    tabs[next].scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+}
 
 let notificationsInitialized = false;
 
@@ -508,7 +612,7 @@ function updateNotificationBadge(count) {
   badge.hidden = count <= 0;
   button?.setAttribute(
     "aria-label",
-    count > 0 ? `Actions and notifications, ${count} unread` : "Actions and notifications",
+    count > 0 ? `Actions and notifications, ${count} unread` : "Actions and notifications"
   );
 }
 
@@ -560,7 +664,7 @@ async function handleRestart() {
             }
           }
         },
-        { label: "RestartReconnect", getInterval: () => 1000 },
+        { label: "RestartReconnect", getInterval: () => 1000 }
       );
       reconnectPoller.start();
     }, 2000);
