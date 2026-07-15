@@ -1,6 +1,6 @@
 // Connectivity watcher — detects when the ScreenerBot backend becomes
 // unreachable (process crash, mid-session network loss, restart) and shows a
-// single non-blocking "Reconnecting…" overlay instead of letting individual
+// single non-blocking "Waiting for core…" overlay instead of letting individual
 // pages/pollers fail with bare errors. Auto-recovers: when the backend answers
 // again it dismisses the overlay, emits a `screenerbot:reconnected` event so
 // the router and pollers can refresh, and shows a brief toast.
@@ -38,8 +38,8 @@ function buildOverlay() {
     <div class="conn-overlay-card">
       <span class="conn-overlay-spinner" aria-hidden="true"></span>
       <div class="conn-overlay-text">
-        <span class="conn-overlay-title">Reconnecting to ScreenerBot…</span>
-        <span class="conn-overlay-sub">The backend is unreachable. Trading is paused; this will recover automatically.</span>
+        <span class="conn-overlay-title">Waiting for core…</span>
+        <span class="conn-overlay-sub">The core is unreachable. Trading is paused; this will recover automatically.</span>
       </div>
       <button type="button" class="conn-overlay-retry">Retry now</button>
     </div>`;
@@ -69,7 +69,7 @@ function setOnline(isOnline) {
     document.documentElement.removeAttribute("data-backend-offline");
     window.dispatchEvent(new CustomEvent("screenerbot:reconnected"));
     try {
-      if (window.showToast) window.showToast("Reconnected to ScreenerBot", "success");
+      if (window.showToast) window.showToast("Core connection restored", "success");
     } catch { /* toast optional */ }
   } else {
     document.documentElement.setAttribute("data-backend-offline", "true");
@@ -156,9 +156,9 @@ function instrumentFetch() {
         // heavy views (the token dialog fires ~10 parallel requests, incl. 7
         // OHLCV probes) can have an individual request time out while the server
         // is perfectly healthy. So instead of counting this toward the offline
-        // streak directly (which flipped the "Reconnecting" overlay on 2 such
+        // streak directly (which flipped the "Waiting for core" overlay on 2 such
         // blips), confirm authoritatively against /api/health. Only the probe
-        // decides offline — a genuinely dead backend fails it too, so detection
+        // decides offline — a genuinely dead core fails it too, so detection
         // stays fast.
         if (!state.probeInFlight) checkHealth(true);
       }

@@ -62,11 +62,11 @@ function updateConnectionStatus(isConnected) {
   if (isConnected) {
     elements.connectionStatus.classList.add("connected");
     elements.connectionIcon.className = "icon-circle-check";
-    elements.connectionStatus.title = "Backend Connected";
+    elements.connectionStatus.title = "Core Connected";
   } else {
     elements.connectionStatus.classList.add("disconnected");
     elements.connectionIcon.className = "icon-circle-x";
-    elements.connectionStatus.title = "Backend Disconnected";
+    elements.connectionStatus.title = "Waiting for core…";
   }
 }
 
@@ -191,7 +191,7 @@ function initTraderControls() {
   if (elements.connectionStatus && elements.connectionIcon) {
     elements.connectionStatus.classList.add("connecting");
     elements.connectionIcon.className = "icon-circle-dot";
-    elements.connectionStatus.title = "Connecting to Backend...";
+    elements.connectionStatus.title = "Waiting for core…";
   }
 
   // Initialize card click handlers

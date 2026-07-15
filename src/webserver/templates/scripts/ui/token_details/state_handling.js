@@ -15,8 +15,8 @@
 
 const CONNECTION_TEXT = {
   online: "",
-  reconnecting: "Reconnecting…",
-  offline: "Offline — retrying…",
+  reconnecting: "Waiting for core…",
+  offline: "Waiting for core…",
 };
 
 function backendLooksOffline() {

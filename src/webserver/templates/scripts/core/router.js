@@ -305,8 +305,8 @@ function renderOfflinePlaceholder(loadingEl, pageName) {
   loadingEl.innerHTML = `
     <div class="page-offline">
       <span class="page-offline-spinner" aria-hidden="true"></span>
-      <h2>Waiting for ScreenerBot…</h2>
-      <p>The backend is unreachable right now. This page will load automatically once the connection is back.</p>
+      <h2>Waiting for core…</h2>
+      <p>The core is unreachable right now. This page will load automatically once the connection is back.</p>
       <button type="button" class="page-load-retry">Retry now</button>
     </div>
   `;
