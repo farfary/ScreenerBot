@@ -166,7 +166,9 @@
 .conn-overlay {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+
+  /* Clear the fixed 26px status bar while preserving the 24px viewport gap. */
+  bottom: calc(26px + 24px);
   transform: translateX(-50%) translateY(16px);
   z-index: var(--z-toast, 10010);
   opacity: 0;
