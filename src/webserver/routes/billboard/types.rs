@@ -16,6 +16,10 @@ pub struct BillboardToken {
     pub discord: Option<String>,
     pub github: Option<String>,
     pub logo_url: Option<String>,
+    /// Owner-uploaded wide banner image (absolute URL), when the paid listing has
+    /// one. Most website tokens have none and this is `None`.
+    #[serde(default)]
+    pub banner_url: Option<String>,
     pub description: Option<String>,
     pub featured: bool,
     pub created_at: String,
@@ -111,7 +115,10 @@ impl From<BillboardToken> for BillboardCard {
             symbol: t.symbol,
             featured: t.featured,
             logo: t.logo_url,
-            banner: None,
+            // A paid listing's owner-uploaded banner (absolute URL from the website).
+            // The DB/DexScreener enrichment only fills this when it is `None`, so an
+            // uploaded banner always wins over the cold provider image.
+            banner: t.banner_url,
             website: t.website,
             twitter: t.twitter,
             telegram: t.telegram,
