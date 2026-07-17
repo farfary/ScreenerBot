@@ -81,9 +81,20 @@ async fn enrich_from_db(mint: String) -> Option<DbStats> {
 fn apply_stats(card: &mut BillboardCard, stats: DbStats) {
     card.is_in_database = true;
 
-    if card.logo.is_none() {
-        card.logo = stats.logo;
+    // The logo is token IDENTITY and must be the SAME image everywhere the token
+    // appears (token details, positions, billboard). It comes from token metadata
+    // (DexScreener/GeckoTerminal), never a listing upload, so our stored image is
+    // authoritative and OVERRIDES whatever icon a discovery provider happened to
+    // ship — otherwise the billboard shows Jupiter's icon while token details shows
+    // our DexScreener image for the same mint. A discovery provider's icon only
+    // survives as a fallback for tokens we do not track (apply_stats never runs for
+    // those; fill_missing_logos handles them).
+    if let Some(logo) = stats.logo.filter(|s| !s.trim().is_empty()) {
+        card.logo = Some(logo);
     }
+    // The banner is a promotional image the listing owner MAY customize, so an
+    // owner-uploaded banner (already on the card) wins; our DexScreener header image
+    // only fills in when the listing has none.
     if card.banner.is_none() {
         card.banner = stats.banner;
     }
