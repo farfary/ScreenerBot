@@ -617,6 +617,9 @@ These constants are used by:
 Rationale:
 
 - Inline CSS avoids "Flash of Unstyled Content" in WebView and makes page transitions deterministic.
+- Stacked dialog dismissal is an idempotent state transition. The top dialog becomes
+  non-interactive before focus restoration, poller disposal, or backend cleanup begins, and its
+  close activation cannot leak into an underlying view such as Billboard.
 
 ### 9.3 Login template
 

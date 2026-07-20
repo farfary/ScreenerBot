@@ -61,6 +61,7 @@ export class TokenDetailsDialog {
     this.advancedChart = null;
     this.chartDataLoaded = false; // Track whether OHLCV data has been loaded
     this._focusTrap = null;
+    this._isClosing = false;
     // Data source status tracking
     this._dataSourceStatus = {
       token: DATA_SOURCE_STATUS.PENDING,
@@ -105,6 +106,7 @@ export class TokenDetailsDialog {
     }
 
     this.isOpening = true;
+    this._isClosing = false;
 
     try {
       this.tokenData = tokenData;
@@ -708,7 +710,21 @@ export class TokenDetailsDialog {
   }
 
   close() {
-    if (!this.dialogEl) return;
+    if (!this.dialogEl || this._isClosing) return;
+    this._isClosing = true;
+
+    // Commit the visual close before running any cleanup. Focus restoration,
+    // poller disposal, and best-effort backend calls must never be able to leave
+    // the top dialog intercepting the first close activation.
+    this.dialogEl.classList.remove("active");
+    this.dialogEl.setAttribute("aria-hidden", "true");
+
+    // Hand Escape back to the overlay underneath immediately, not after the
+    // close animation, so it is responsive the moment this dialog starts closing.
+    if (this._releaseEscape) {
+      this._releaseEscape();
+      this._releaseEscape = null;
+    }
 
     // Deactivate focus trap
     if (this._focusTrap) {
@@ -727,15 +743,6 @@ export class TokenDetailsDialog {
 
     this._stopPolling();
     this._stopChartPolling();
-
-    this.dialogEl.classList.remove("active");
-
-    // Hand Escape back to the overlay underneath immediately, not after the
-    // close animation, so it is responsive the moment this dialog starts closing.
-    if (this._releaseEscape) {
-      this._releaseEscape();
-      this._releaseEscape = null;
-    }
 
     setTimeout(() => {
       if (this.dialogEl) {
@@ -834,6 +841,7 @@ export class TokenDetailsDialog {
       this.currentTimeframe = "5m";
       this.isRefreshing = false;
       this.isOpening = false;
+      this._isClosing = false;
       this.tabHandlers.clear();
 
       // Reset data source tracking
@@ -1303,7 +1311,11 @@ export class TokenDetailsDialog {
 
   _attachEventHandlers() {
     const closeBtn = this.dialogEl.querySelector(".dialog-close");
-    this._closeHandler = () => this.close();
+    this._closeHandler = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.close();
+    };
     closeBtn.addEventListener("click", this._closeHandler);
 
     const backdrop = this.dialogEl.querySelector(".dialog-backdrop");
