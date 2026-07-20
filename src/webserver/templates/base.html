@@ -184,18 +184,6 @@
 
     <!-- THREE-ROW HEADER: Main Control + Tabs + Live Ticker -->
     <header class="modern-header">
-      <!-- Preview-mode banner (shown when wallet + RPC setup was skipped) -->
-      <div class="preview-banner" id="previewBanner" hidden>
-        <i class="preview-banner-icon icon-info"></i>
-        <span class="preview-banner-text">
-          You're in preview mode. Add your wallet and RPC endpoint to enable trading, balances, and
-          live on-chain data.
-        </span>
-        <button type="button" class="preview-banner-btn" id="previewBannerSetupBtn">
-          Set up wallet &amp; RPC
-        </button>
-      </div>
-
       <!-- Row 1: Main Control Bar -->
       <div class="header-row header-row-1">
         <!-- Logo & Brand -->
@@ -233,6 +221,23 @@
               <span class="card-value" id="botPnL">—</span>
             </span>
           </span>
+        </button>
+
+        <button
+          type="button"
+          class="preview-setup-control"
+          id="previewSetupControl"
+          aria-label="Preview mode. Connect a wallet and RPC endpoint to enable all features"
+          title="Connect a wallet and RPC endpoint to enable trading, balances, and live on-chain data"
+          hidden
+        >
+          <i class="preview-setup-icon icon-info" aria-hidden="true"></i>
+          <span class="preview-setup-copy">
+            <strong class="preview-setup-title">Preview mode</strong>
+            <span class="preview-setup-detail">Wallet &amp; RPC not connected</span>
+          </span>
+          <span class="preview-setup-action">Complete setup</span>
+          <i class="preview-setup-arrow icon-chevron-right" aria-hidden="true"></i>
         </button>
 
         <!-- Status / metric cards (secondary; scrollable when space is tight) -->

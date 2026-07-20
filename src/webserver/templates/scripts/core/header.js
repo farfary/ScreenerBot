@@ -80,28 +80,26 @@ function openSetupWizard() {
   SetupDialog.show();
 }
 
-// Show/hide the preview-mode banner based on bootstrap status.
-function updatePreviewBanner(status) {
-  const banner = document.getElementById("previewBanner");
-  if (!banner) {
+// Keep the preview setup action synchronized with the process-wide boot mode.
+function updatePreviewSetupControl(status) {
+  const control = document.getElementById("previewSetupControl");
+  if (!control) {
     return;
   }
 
   const previewMode = Boolean(status?.preview_mode);
-  banner.hidden = !previewMode;
+  control.hidden = !previewMode;
+  control.closest(".modern-header")?.classList.toggle("has-preview-setup", previewMode);
 
-  if (previewMode) {
-    const btn = document.getElementById("previewBannerSetupBtn");
-    if (btn && !btn.dataset.bound) {
-      btn.dataset.bound = "true";
-      btn.addEventListener("click", () => openSetupWizard());
-    }
+  if (previewMode && !control.dataset.bound) {
+    control.dataset.bound = "true";
+    control.addEventListener("click", openSetupWizard);
   }
 }
 
 function applyBootstrapStatus(status) {
   state.bootstrapStatus = status;
-  updatePreviewBanner(status);
+  updatePreviewSetupControl(status);
   const initializationRequired = Boolean(status?.initialization_required);
   const uiReady = Boolean(status && (status.ui_ready || initializationRequired));
 
@@ -177,12 +175,6 @@ async function controlTrader(action) {
 function initTraderControls() {
   if (!bootstrapUnsubscribe) {
     bootstrapUnsubscribe = subscribeToBootstrap(applyBootstrapStatus);
-  }
-
-  // Allow other pages (e.g. the config tab) to request the setup wizard.
-  if (!window.__setupWizardListenerAdded) {
-    window.__setupWizardListenerAdded = true;
-    window.addEventListener("screenerbot:open-setup-wizard", () => openSetupWizard());
   }
 
   // Initialize connection status as connecting

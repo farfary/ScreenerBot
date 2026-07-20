@@ -41,54 +41,6 @@
   padding-top: 28px;
 }
 
-/* Preview setup banner */
-.preview-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px var(--header-inline-padding);
-  background: var(--warning-alpha-10);
-  border-bottom: 1px solid var(--warning-alpha-30);
-  color: var(--semantic-warning-text);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.preview-banner[hidden] {
-  display: none;
-}
-
-.preview-banner-icon {
-  flex-shrink: 0;
-  font-size: 1rem;
-}
-
-.preview-banner-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.preview-banner-btn {
-  flex-shrink: 0;
-  padding: 5px 14px;
-  border: 1px solid var(--semantic-warning-text);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--semantic-warning-text);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background-color var(--transition-base),
-    color var(--transition-base);
-}
-
-.preview-banner-btn:hover {
-  background: var(--semantic-warning-text);
-  color: var(--header-solid-bg, var(--bg-primary));
-}
-
 /* Main row */
 .header-row-1 {
   display: flex;
@@ -105,6 +57,84 @@
 
 .electron-macos .header-row-1 {
   padding-right: var(--header-inline-padding);
+}
+
+/* Preview is a persistent application state. Its setup action belongs beside
+   the global controls instead of creating another header above them. */
+.preview-setup-control {
+  display: flex;
+  align-items: center;
+  flex: 0 1 286px;
+  min-width: 190px;
+  max-width: 286px;
+  height: 44px;
+  gap: 9px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--warning-alpha-10);
+  color: var(--semantic-warning-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.preview-setup-control[hidden] {
+  display: none;
+}
+
+.preview-setup-control:hover {
+  background: var(--warning-alpha-20);
+  color: var(--text-primary);
+}
+
+.preview-setup-icon,
+.preview-setup-arrow {
+  flex-shrink: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.preview-setup-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1;
+}
+
+.preview-setup-title {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.preview-setup-detail {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-setup-action {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.preview-setup-arrow {
+  font-size: 13px;
 }
 
 /* Preserve the current heavy theme-tinted logo and wordmark treatment. */
@@ -488,7 +518,8 @@ html[data-input="keyboard"] .modern-header a:focus-visible {
   .modern-header .brand-text,
   .modern-header .header-card,
   .modern-header .header-action-btn,
-  .modern-header .header-actions-toggle {
+  .modern-header .header-actions-toggle,
+  .preview-setup-control {
     transition: none;
   }
 

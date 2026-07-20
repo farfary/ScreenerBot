@@ -395,6 +395,17 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Mid-width overflow drawer. It opens below the row instead of covering metrics. */
 @media (width >= 800px) and (width <= 1279px) {
+  .preview-setup-control {
+    flex-basis: auto;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .preview-setup-detail,
+  .preview-setup-arrow {
+    display: none;
+  }
+
   .modern-header .header-actions {
     position: relative;
     margin-left: 0;
@@ -498,20 +509,39 @@ button.ticker-segment:hover .ticker-icon {
     border-top: 1px solid var(--border-color);
   }
 
+  .preview-setup-control {
+    grid-area: preview;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: 36px;
+    padding-inline: 8px;
+  }
+
+  .modern-header.has-preview-setup .header-row-1 {
+    grid-template-areas:
+      "brand trader actions"
+      "preview preview preview"
+      "cards cards cards";
+  }
+
+  .preview-setup-copy {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 7px;
+  }
+
+  .preview-setup-detail,
+  .preview-setup-arrow {
+    display: inline;
+  }
+
   .modern-header .header-card {
     padding-inline: 7px;
   }
 
   .header-row-3 {
     display: none;
-  }
-
-  .preview-banner {
-    flex-wrap: wrap;
-  }
-
-  .preview-banner-btn {
-    margin-left: 26px;
   }
 }
 
@@ -582,9 +612,8 @@ button.ticker-segment:hover .ticker-icon {
     height: 40px;
   }
 
-  .preview-banner-btn {
-    width: 100%;
-    margin-left: 0;
+  .preview-setup-detail {
+    display: none;
   }
 }
 

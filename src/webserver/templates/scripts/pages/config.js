@@ -1234,39 +1234,8 @@ function activate() {
 
 function deactivate() {}
 
-// Show the "Complete setup" banner when running in preview mode and wire its
-// button to reopen the setup wizard (handled by the header via a window event).
-async function setupDiscoveryBanner(ctx) {
-  const banner = $("#configPreviewBanner");
-  if (!banner) {
-    return;
-  }
-
-  try {
-    const status = await requestManager.fetch("/api/initialization/status", {
-      method: "GET",
-    });
-    if (!status?.preview_mode) {
-      return;
-    }
-
-    banner.hidden = false;
-    const btn = $("#configCompleteSetupBtn");
-    if (btn) {
-      const handler = () => {
-        window.dispatchEvent(new CustomEvent("screenerbot:open-setup-wizard"));
-      };
-      on(btn, "click", handler);
-      ctx.onDispose(() => off(btn, "click", handler));
-    }
-  } catch (error) {
-    console.warn("[Config] Failed to check preview status", error);
-  }
-}
-
 async function init(ctx) {
   attachEventHandlers(ctx);
-  await setupDiscoveryBanner(ctx);
 
   if (!state.metadata) {
     try {
