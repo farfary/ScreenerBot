@@ -62,7 +62,7 @@ config_struct! {
             impact: "critical",
             category: "Core Trading",
         })]
-        enabled: bool = true,
+        enabled: bool = false,
 
         // Core trading parameters
         #[metadata(field_metadata! {
@@ -357,5 +357,15 @@ config_struct! {
             category: "Loss Limit",
         })]
         loss_limit_auto_resume: bool = true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TraderConfig;
+
+    #[test]
+    fn auto_trading_is_opt_in_by_default() {
+        assert!(!TraderConfig::default().enabled);
     }
 }

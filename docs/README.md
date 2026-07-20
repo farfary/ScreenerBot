@@ -42,7 +42,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Pools Module](architecture/pools.md) | 910 | Pool discovery, DEX decoders, price calculation, swap integration |
 | [Positions Module](architecture/positions.md) | 849 | Position lifecycle, state machine, verification, PnL tracking |
 | [OHLCV Module](architecture/ohlcvs.md) | 861 | Candle data fetching, aggregation, caching, strategy integration |
-| [Trader Engine](architecture/trader.md) | 534 | Dual monitors, entry pipeline, priority exits, safety system |
+| [Trader Engine](architecture/trader.md) | 538 | Dual monitors, entry pipeline, priority exits, safety system |
 | [Trading Strategies](architecture/strategies.md) | 407 | Condition-based strategy system, rule tree, evaluation engine |
 | [Filtering Pipeline](architecture/filtering.md) | 1043 | Token quality control — filter chain, sources, caching, query system |
 | **Execution** | | |
@@ -55,7 +55,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Webserver](architecture/webserver.md) | 1093 | Axum server lifecycle, middleware gates, embedded assets, headless auth, performance patterns |
 | [Telegram](architecture/telegram.md) | 364 | Telegram bot: discovery, notifications, commands, sessions/2FA |
 | **System** | | |
-| [Config](architecture/config.md) | 478 | TOML configuration, macro system, hot reload, metadata |
+| [Config](architecture/config.md) | 482 | TOML configuration, macro system, hot reload, metadata |
 | [Services](architecture/services.md) | 457 | Service manager, lifecycle, cached health/metrics, registered services |
 | [Wallets](architecture/wallets.md) | 670 | Multi-wallet key storage (wallets.db) + wallet monitoring (wallet.db) |
 | [Infrastructure](architecture/infrastructure.md) | 841 | SQLite tuning+maintenance, errors, events, logging, connectivity, actions |

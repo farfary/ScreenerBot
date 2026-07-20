@@ -156,6 +156,10 @@ Implements the `Service` trait:
 | Priority | `150` |
 | Dependencies | `positions`, `pool_*`, `tokens`, `filtering` |
 
+Fresh configurations default `trader.enabled` to `false`; starting in either preview or full mode
+never opts the user into automated execution. The dashboard must explicitly enable the master
+switch before either monitor can trade.
+
 ### Startup Sequence
 
 ```

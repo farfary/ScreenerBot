@@ -33,6 +33,10 @@ It provides:
 - A **metadata system** so the web dashboard can render config forms automatically
 - Hot reload helpers (reload + validate + atomic replace)
 
+Safety-sensitive execution remains opt-in: a newly generated `TraderConfig` sets the Auto Trader
+master switch (`trader.enabled`) to `false`. Entry and exit monitor preferences may be configured
+independently, but they cannot execute until the user explicitly enables the master switch.
+
 ### Design goals
 
 - **Zero repetition**: default values, serde defaults, and UI metadata are declared once in schema
