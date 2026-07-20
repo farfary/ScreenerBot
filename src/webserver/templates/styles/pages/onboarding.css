@@ -306,21 +306,71 @@
   background: rgb(13 17 23 / 0.3);
 }
 
-.onboarding-skip {
+.onboarding-setup-shortcut {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  gap: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-radius: var(--radius-lg);
   background: transparent;
-  border: none;
   color: #8b949e;
-  font-size: 0.875rem;
-  font-weight: 500;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  padding: 0.5rem 1rem;
-  transition: color var(--transition-base);
   justify-self: start;
+  transition:
+    background-color var(--transition-base),
+    color var(--transition-base);
 }
 
-.onboarding-skip:hover {
+.onboarding-setup-shortcut[hidden] {
+  display: none;
+}
+
+.onboarding-setup-shortcut:hover {
+  background: rgb(var(--accent-onboarding-rgb) / 0.07);
   color: #e6edf3;
-  text-decoration: underline;
+}
+
+.onboarding-setup-shortcut-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.onboarding-setup-shortcut-copy strong {
+  color: #e6edf3;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.onboarding-setup-shortcut-copy span {
+  overflow: hidden;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.onboarding-setup-shortcut-arrow {
+  flex-shrink: 0;
+  color: var(--accent-onboarding);
+  font-size: 0.875rem;
+  transition: transform var(--transition-base);
+}
+
+.onboarding-setup-shortcut:hover .onboarding-setup-shortcut-arrow {
+  transform: translateX(3px);
+}
+
+.onboarding-setup-shortcut:focus-visible {
+  outline: 2px solid var(--accent-onboarding);
+  outline-offset: 2px;
 }
 
 .onboarding-nav {
@@ -499,10 +549,12 @@
     gap: 0.5rem;
   }
 
-  .onboarding-skip {
+  .onboarding-setup-shortcut {
     order: 2;
-    justify-self: center;
-    font-size: 0.8125rem;
+    width: 100%;
+    justify-content: center;
+    justify-self: stretch;
+    text-align: center;
   }
 
   .onboarding-nav {

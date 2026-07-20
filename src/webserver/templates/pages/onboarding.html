@@ -228,8 +228,17 @@
 
   <!-- Footer navigation -->
   <footer class="onboarding-footer">
-    <button type="button" class="onboarding-skip" id="onboardingSkip">
-      Jump to setup <i class="icon-arrow-right"></i>
+    <button
+      type="button"
+      class="onboarding-setup-shortcut"
+      id="onboardingSetupShortcut"
+      aria-label="Go directly to wallet and RPC setup or choose Preview Mode"
+    >
+      <span class="onboarding-setup-shortcut-copy">
+        <strong>Go directly to setup</strong>
+        <span>Connect wallet &amp; RPC or choose Preview Mode</span>
+      </span>
+      <i class="onboarding-setup-shortcut-arrow icon-arrow-right" aria-hidden="true"></i>
     </button>
     <div class="onboarding-nav">
       <button

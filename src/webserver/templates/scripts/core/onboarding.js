@@ -16,7 +16,7 @@ class OnboardingControllerClass {
     this.dots = document.querySelectorAll(".progress-dot");
     this.prevBtn = document.getElementById("onboardingPrev");
     this.nextBtn = document.getElementById("onboardingNext");
-    this.skipBtn = document.getElementById("onboardingSkip");
+    this.setupShortcutBtn = document.getElementById("onboardingSetupShortcut");
 
     if (!this.slides.length) {
       console.warn("[Onboarding] Slides not found");
@@ -53,8 +53,8 @@ class OnboardingControllerClass {
     if (this.nextBtn) {
       this.nextBtn.addEventListener("click", () => this.next());
     }
-    if (this.skipBtn) {
-      this.skipBtn.addEventListener("click", () => this.complete());
+    if (this.setupShortcutBtn) {
+      this.setupShortcutBtn.addEventListener("click", () => this.complete());
     }
 
     // Dot navigation
@@ -153,10 +153,13 @@ class OnboardingControllerClass {
     }
     if (this.nextBtn) {
       if (this.currentSlide === this.totalSlides - 1) {
-        this.nextBtn.innerHTML = 'Get Started <i class="icon-arrow-right"></i>';
+        this.nextBtn.innerHTML = 'Continue to setup <i class="icon-arrow-right"></i>';
       } else {
         this.nextBtn.innerHTML = 'Next <i class="icon-chevron-right"></i>';
       }
+    }
+    if (this.setupShortcutBtn) {
+      this.setupShortcutBtn.hidden = this.currentSlide === this.totalSlides - 1;
     }
   }
 
