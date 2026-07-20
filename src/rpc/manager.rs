@@ -208,6 +208,65 @@ impl RpcManager {
         stats.start().await;
     }
 
+    /// Replace the active provider set with the URLs in the current config.
+    ///
+    /// Preview mode can initialize the global manager through token-decimal
+    /// lookups while it still uses the public fallback RPC. Completing setup
+    /// updates config in place, so the singleton must be reconfigured rather
+    /// than left on the preview provider until restart.
+    pub async fn reload_providers_from_config(&self) -> crate::Result<()> {
+        let urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
+        if urls.is_empty() {
+            return Err(crate::Error::configuration_error("No RPC URLs configured"));
+        }
+
+        let mut next_providers = Vec::with_capacity(urls.len());
+        let mut next_states = HashMap::with_capacity(urls.len());
+        for (index, url) in urls.iter().enumerate() {
+            let config = ProviderConfig::from_url_with_priority(url, (index * 10) as u8);
+            let state = ProviderState::new(config.id.clone(), url, config.kind, config.priority);
+            next_states.insert(config.id.clone(), state);
+            next_providers.push(config);
+        }
+
+        let old_provider_ids = self
+            .providers
+            .read()
+            .await
+            .iter()
+            .map(|provider| provider.id.clone())
+            .collect::<Vec<_>>();
+
+        for provider_id in old_provider_ids {
+            self.rate_limiters.remove_limiter(&provider_id).await;
+            self.circuit_breakers.remove_breaker(&provider_id).await;
+        }
+
+        {
+            let stats = self.stats.read().await;
+            for config in &next_providers {
+                stats.register_provider(
+                    &config.id,
+                    &mask_url(&config.url),
+                    config.kind,
+                    config.priority,
+                );
+            }
+        }
+
+        let mut providers = self.providers.write().await;
+        let mut states = self.provider_states.write().await;
+        *providers = next_providers;
+        *states = next_states;
+        self.round_robin_index.store(0, Ordering::Relaxed);
+        *self.selection_strategy.write().await =
+            SelectionStrategy::from_str(&crate::config::with_config(|cfg| {
+                cfg.rpc.selection_strategy.clone()
+            }));
+
+        Ok(())
+    }
+
     /// Stop background services
     pub async fn stop(&self) {
         self.shutdown.notify_waiters();
@@ -684,4 +743,14 @@ pub fn get_rpc_manager() -> Option<Arc<RpcManager>> {
 /// Get or initialize global RPC manager
 pub async fn get_or_init_rpc_manager() -> crate::Result<Arc<RpcManager>> {
     init_rpc_manager().await
+}
+
+/// Reload an already-created preview RPC manager from the current config.
+/// A manager that has not been used yet will read the new config when it is
+/// lazily initialized, so that case is intentionally a no-op.
+pub async fn reload_rpc_providers_if_initialized() -> crate::Result<()> {
+    if let Some(manager) = get_rpc_manager() {
+        manager.reload_providers_from_config().await?;
+    }
+    Ok(())
 }

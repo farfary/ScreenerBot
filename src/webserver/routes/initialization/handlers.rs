@@ -461,13 +461,45 @@ pub(super) async fn complete_initialization(
 
     logger::info(LogTag::Webserver, "Configuration saved successfully");
 
-    // Step 4: Set credential flags (but NOT initialization complete yet)
+    // Preview token metadata may have lazily initialized the RPC singleton with
+    // the public fallback URL. Apply the newly saved providers before any full
+    // service can observe the manager.
+    if let Err(e) = crate::rpc::reload_rpc_providers_if_initialized().await {
+        logger::error(
+            LogTag::System,
+            &format!("Failed to apply configured RPC providers: {e}"),
+        );
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "RPC_RECONFIGURATION_FAILED",
+            "Wallet and RPC were saved, but the RPC providers could not be activated",
+            Some(&e.to_string()),
+        );
+    }
+
+    // Step 4: Initialize the same wallet/strategy/AI prerequisites as a normal
+    // full-mode boot. Services must never observe INITIALIZATION_COMPLETE before
+    // their non-service dependencies exist.
+    if let Err(e) = crate::run::initialize_full_runtime().await {
+        logger::error(
+            LogTag::System,
+            &format!("Failed to initialize full runtime after setup: {e}"),
+        );
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "RUNTIME_INITIALIZATION_FAILED",
+            "Wallet and RPC were saved, but the full runtime could not be initialized",
+            Some(&e.summary()),
+        );
+    }
+
+    // Step 5: Set credential flags (but NOT initialization complete yet)
     global::CREDENTIALS_VALID.store(true, Ordering::SeqCst);
     global::RPC_VALID.store(true, Ordering::SeqCst);
 
     logger::info(LogTag::Webserver, "Credential validation flags set");
 
-    // Step 5: Set initialization complete flag BEFORE starting services
+    // Step 6: Set initialization complete flag BEFORE starting services
     // (services check this flag in their is_enabled() method). Clear preview
     // mode: full mode and preview mode are mutually exclusive.
     global::set_preview_mode(false);
@@ -477,7 +509,7 @@ pub(super) async fn complete_initialization(
         "Initialization complete flag set - services can now start",
     );
 
-    // Step 6: Start remaining services
+    // Step 7: Start remaining services
     logger::info(LogTag::Webserver, "Starting services...");
 
     let mut services_started = 0usize;
@@ -538,7 +570,7 @@ pub(super) async fn complete_initialization(
         }
     }
 
-    // Step 7: Build and return response
+    // Step 8: Build and return response
     let response = InitializationCompleteResponse {
         success: errors.is_empty(),
         wallet_address: wallet_address.to_string(),

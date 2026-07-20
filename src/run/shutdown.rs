@@ -68,8 +68,8 @@ pub(super) async fn wait_for_shutdown_signal() -> Result<(), String> {
     Ok(())
 }
 
-/// Wait for initialization to complete or shutdown signal during pre-init mode.
-pub(super) async fn wait_for_initialization_or_shutdown() -> Result<(), String> {
+/// Wait until setup enters either preview or full mode, or for shutdown.
+pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<(), String> {
     use tokio::time::{sleep, Duration, Instant};
 
     const MAX_WAIT_DURATION: Duration = Duration::from_secs(30 * 60); // 30 minutes
@@ -79,11 +79,12 @@ pub(super) async fn wait_for_initialization_or_shutdown() -> Result<(), String> 
     let mut last_warning = start;
 
     loop {
-        // Check if initialization is complete
-        if global::is_initialization_complete() {
+        // Skipping setup is also a completed transition: preview mode keeps the
+        // dashboard running without wallet/RPC-backed services.
+        if global::is_preview_or_full() {
             logger::info(
                 LogTag::System,
-                "Initialization complete - services started successfully",
+                "Dashboard mode selected - services started successfully",
             );
             return Ok(());
         }
@@ -94,12 +95,12 @@ pub(super) async fn wait_for_initialization_or_shutdown() -> Result<(), String> 
             logger::error(
                 LogTag::System,
                 &format!(
-                    "Initialization timeout after {} minutes - initialization never completed",
+                    "Setup timeout after {} minutes - no dashboard mode was selected",
                     MAX_WAIT_DURATION.as_secs() / 60
                 ),
             );
             return Err(format!(
-                "Initialization timeout after {} minutes",
+                "Setup timeout after {} minutes",
                 MAX_WAIT_DURATION.as_secs() / 60
             ));
         }

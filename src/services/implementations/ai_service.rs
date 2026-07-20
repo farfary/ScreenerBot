@@ -38,7 +38,8 @@ impl Service for AiService {
     }
 
     fn is_enabled(&self) -> bool {
-        with_config(|cfg| cfg.ai.enabled && cfg.ai.background_check_enabled)
+        crate::global::is_initialization_complete()
+            && with_config(|cfg| cfg.ai.enabled && cfg.ai.background_check_enabled)
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

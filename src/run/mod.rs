@@ -3,9 +3,12 @@
 //! Orchestrates bot lifecycle: process lock, configuration, wallet setup,
 //! service registration, and graceful shutdown handling.
 
+mod bootstrap;
 mod llm_init;
 mod services;
 mod shutdown;
+
+pub(crate) use bootstrap::{initialize_ai_runtime_if_enabled, initialize_full_runtime};
 
 use crate::{
     errors::StartupError,
@@ -15,7 +18,6 @@ use crate::{
     profiling,
     services::ServiceManager,
 };
-use solana_sdk::signature::Signer;
 
 /// Main bot execution function — handles the full bot lifecycle with ServiceManager.
 ///
@@ -121,6 +123,10 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
     let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
 
+    // Dashboard-owned persistence is independent of wallet/RPC setup. Routes
+    // for actions, AI instructions, and chat exist in every dashboard mode.
+    bootstrap::initialize_dashboard_persistence().await?;
+
     if !config_exists {
         logger::info(
             LogTag::System,
@@ -170,15 +176,19 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
             LogTag::System,
             "Webserver started - complete initialization at http://localhost:8080",
         );
-        logger::info(LogTag::System, "Waiting for initialization to complete...");
+        logger::info(LogTag::System, "Waiting for setup choice...");
 
-        // Wait for initialization to complete or shutdown signal
-        shutdown::wait_for_initialization_or_shutdown().await?;
+        // Wait until the user chooses preview or completes full setup.
+        shutdown::wait_for_operational_mode_or_shutdown().await?;
 
-        logger::info(
-            LogTag::System,
-            "Initialization complete - all services running",
-        );
+        if global::is_preview_mode() {
+            logger::info(LogTag::System, "Preview mode ready");
+        } else {
+            logger::info(
+                LogTag::System,
+                "Initialization complete - all services running",
+            );
+        }
     } else {
         logger::info(
             LogTag::System,
@@ -208,6 +218,10 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
             // services stay disabled and are filtered out of the startup order.
             global::set_preview_mode(true);
             global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
+
+            // AI chat/providers are wallet-independent. If the saved preview
+            // configuration enables AI, make the assistant usable here too.
+            initialize_ai_runtime_if_enabled().await?;
 
             let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
             logger::info(LogTag::System, "Service manager initialized (preview)");
@@ -239,112 +253,14 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
                 "preview mode active - complete wallet + RPC setup in the dashboard to enable trading",
             );
         } else {
-            // 5. Initialize wallets module (migrates from config.toml if needed)
-            crate::wallets::initialize()
-                .await
-                .map_err(|e| format!("Failed to initialize wallets: {e}"))?;
+            // Full mode has one initialization path whether entered at boot or
+            // live from preview mode.
+            initialize_full_runtime().await?;
 
-            logger::info(LogTag::System, "Wallets module initialized");
-
-            // 6. Validate wallet consistency
-            logger::info(LogTag::System, "Validating wallet consistency...");
-
-            match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {
-                crate::wallet_validation::WalletValidationResult::Valid => {
-                    logger::info(LogTag::System, "Wallet validation passed");
-                }
-                crate::wallet_validation::WalletValidationResult::FirstRun => {
-                    logger::info(LogTag::System, "First run - no existing data");
-                }
-                crate::wallet_validation::WalletValidationResult::Mismatch {
-                    current,
-                    stored,
-                    affected_systems,
-                } => {
-                    // Surfaced uniformly to terminal/log and the GUI via the
-                    // StartupError emitted at the process boundary (main.rs).
-                    // Remedy text is binary-user-appropriate (no `cargo`) and a
-                    // safe one-click recovery is attached for the GUI.
-                    return Err(StartupError::wallet_mismatch(
-                        &current,
-                        &stored,
-                        &affected_systems,
-                    ));
-                }
-            }
-
-            // Set initialization flag to true (all services enabled)
+            // Only expose wallet/RPC-backed services after every prerequisite
+            // above succeeded.
+            global::set_preview_mode(false);
             global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
-
-            // 7. Initialize strategy system
-            crate::strategies::init_strategy_system(
-                crate::strategies::engine::EngineConfig::default(),
-            )
-            .await
-            .map_err(|e| format!("Failed to initialize strategy system: {e}"))?;
-
-            logger::info(LogTag::System, "Strategy system initialized successfully");
-
-            // 8. Initialize actions database
-            crate::actions::init_database()
-                .await
-                .map_err(|e| format!("Failed to initialize actions database: {e}"))?;
-
-            logger::info(LogTag::System, "Actions database initialized successfully");
-
-            // Sync recent incomplete actions from database to memory
-            crate::actions::sync_from_db()
-                .await
-                .map_err(|e| format!("Failed to sync actions from database: {e}"))?;
-
-            // Start periodic cleanup of old completed actions (30-day retention)
-            crate::actions::spawn_cleanup_task();
-
-            // Start database maintenance (auto-vacuum migration + periodic incremental vacuum)
-            tokio::spawn(crate::database::start_db_maintenance_task());
-
-            // 8.5. Initialize AI database (always) and AI engine (if enabled)
-            // Database is always initialized so dashboard can view/edit instructions
-            if let Err(e) = crate::ai::init_ai_database() {
-                logger::warning(
-                LogTag::System,
-                &format!(
-                    "Failed to initialize AI database: {} - AI instructions and history will not be available",
-                    e
-                ),
-            );
-            }
-
-            // Initialize AI chat database (always, for chat history persistence)
-            if let Err(e) = crate::ai::init_chat_db() {
-                logger::warning(
-                LogTag::System,
-                &format!(
-                    "Failed to initialize AI chat database: {} - Chat history will not be available",
-                    e
-                ),
-            );
-            }
-
-            // Initialize AI engine only if enabled
-            let ai_enabled = crate::config::with_config(|cfg| cfg.ai.enabled);
-            if ai_enabled {
-                logger::info(LogTag::System, "Initializing AI engine...");
-
-                crate::ai::init_ai_engine()
-                    .await
-                    .map_err(|e| format!("Failed to initialize AI engine: {e}"))?;
-                logger::info(LogTag::System, "AI engine initialized successfully");
-
-                // Initialize AI chat engine
-                crate::ai::init_chat_engine()
-                    .await
-                    .map_err(|e| format!("Failed to initialize AI chat engine: {e}"))?;
-                logger::info(LogTag::System, "AI chat engine initialized successfully");
-
-                // Initialize LLM manager with configured providers
-                llm_init::initialize_llm_providers().await?;
-            }
 
             // 9. Create service manager
             let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;

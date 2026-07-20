@@ -42,7 +42,8 @@ impl Service for ScheduledAiTasksService {
     }
 
     fn is_enabled(&self) -> bool {
-        with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled)
+        crate::global::is_initialization_complete()
+            && with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled)
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
@@ -71,7 +72,9 @@ impl Service for ScheduledAiTasksService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if !with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled) {
+        if !crate::global::is_initialization_complete()
+            || !with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled)
+        {
             return ServiceHealth::Degraded("Disabled in config".to_owned());
         }
         ServiceHealth::Healthy

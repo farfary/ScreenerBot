@@ -806,18 +806,20 @@ This prevents the in-memory HashMap from growing unbounded over a long-running b
 The authoritative startup sequence is split between:
 
 - `src/main.rs` (CLI entrypoint: banner, `logger::init()`, `config::load_config()`, panic hook)
-- `src/run.rs` (service-based runtime orchestration)
+- `src/run/` (runtime phases and service orchestration)
 
 Key points relevant to infrastructure:
 
 - `logger::init()` is called in `src/main.rs` before `run_bot()` / `run.rs` executes.
-- `actions::init_database()` is called in normal mode startup (before services start).
+- `run/bootstrap.rs::initialize_dashboard_persistence()` initializes `actions.db`, `ai.db`, and
+  `ai_chat.db` before any service branch. These stores back global dashboard surfaces and require
+  neither a wallet nor Solana RPC, so they exist in initialization, preview, and full modes.
 - `actions::sync_from_db()` runs at startup to restore incomplete actions into memory (requires `init_database()` first).
 - `actions::spawn_cleanup_task()` runs regardless of whether actions are actively used.
 - `tokio::spawn(database::start_db_maintenance_task())` starts centralized SQLite maintenance.
-- `EventsService` will initialize `events::init()` (and start event DB maintenance) only when initialization is complete and `cfg.events.enabled == true`.
-- `ConnectivityService` is a ServiceManager service, but it will only start after initialization
-  completes and `cfg.connectivity.enabled == true`.
+- `EventsService` initializes `events::init()` in preview or full mode when `cfg.events.enabled == true`.
+- `ConnectivityService` starts in preview or full mode when `cfg.connectivity.enabled == true`;
+  its Solana RPC monitor remains disabled in preview because API-driven discovery does not require RPC.
 
 ---
 

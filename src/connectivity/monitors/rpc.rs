@@ -31,6 +31,13 @@ impl EndpointMonitor for RpcMonitor {
     }
 
     fn is_enabled(&self) -> bool {
+        // Preview mode intentionally has no configured Solana RPC dependency.
+        // Discovery uses HTTP data providers, so an RPC probe here would create
+        // a false critical outage on an otherwise healthy preview dashboard.
+        if crate::global::is_preview_mode() {
+            return false;
+        }
+
         let cfg = get_config_clone();
         cfg.connectivity.enabled && cfg.connectivity.endpoints.rpc.enabled
     }

@@ -136,6 +136,10 @@ pub(super) async fn collect_system_metrics_snapshot(
 }
 
 pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
+    if crate::global::is_preview_mode() {
+        return None;
+    }
+
     match get_current_wallet_status().await {
         Ok(Some(snapshot)) => {
             let mut token_balances = Vec::new();

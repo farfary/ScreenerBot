@@ -88,7 +88,7 @@ Services are thin wrappers (<120 lines) that delegate to domain modules:
 * `scheduled_ai_tasks_service.rs` delegates to `ai/scheduled_worker.rs`
 
 The single source of truth for **what is actually registered** is:
-* `src/run.rs` => `register_all_services(manager: &mut ServiceManager)`
+* `src/run/services.rs` => `register_all_services(manager: &mut ServiceManager)`
 
 ---
 
@@ -159,7 +159,7 @@ Important responsibilities:
 
 ## 5. Startup Flow (run.rs + ServiceManager::start_all)
 
-### 5.1 Three boot modes: initialization vs discovery-only vs normal
+### 5.1 Three boot modes: initialization vs preview vs full
 
 **File:** `src/run/mod.rs`
 
@@ -170,36 +170,48 @@ Startup branches based on whether `config.toml` exists and whether wallet + RPC 
   * all services are registered, but most `is_enabled()` return false
   * webserver is always enabled so the user can complete setup (or skip it)
 
-* **Config.toml exists, wallet skipped** => "discovery-only mode"
+* **Config.toml exists, wallet skipped** => "preview mode"
   * Detected when `gui.dashboard.startup.setup_skipped == true` **or** `wallet_encrypted` is empty.
-  * `global::DISCOVERY_ONLY_MODE = true`, `INITIALIZATION_COMPLETE = false`.
+  * `global::PREVIEW_MODE = true`, `INITIALIZATION_COMPLETE = false`.
   * Wallet init/validation is **skipped**.
   * Only the **discovery tier** runs: `connectivity`, `events`, `tokens`, `filtering`, `webserver`
-    (these gate on `global::is_discovery_or_full()`). Everything wallet/RPC-bound stays off.
+    (these gate on `global::is_preview_or_full()`). Everything wallet/RPC-bound stays off.
   * Token discovery is API-driven (DexScreener / GeckoTerminal / Rugcheck / Jupiter) so it needs
-    neither a wallet nor a custom RPC. The user completes setup later via the header banner /
+    neither a wallet nor a Solana RPC. The connectivity tier omits its RPC monitor in preview.
+    The user completes setup later via the header banner /
     config tab / setup wizard, which calls `POST /api/initialization/complete` and brings the full
     tier up live (no restart).
 
-* **Config.toml exists, wallet present** => "normal mode"
+* **Config.toml exists, wallet present** => "full mode"
   * config is loaded/validated
   * `global::INITIALIZATION_COMPLETE = true`
   * services can start normally
 
-**Two-tier gating:** discovery-tier services use `is_enabled() = global::is_discovery_or_full()`
-(`is_initialization_complete() || is_discovery_only_mode()`); all other services keep
-`is_enabled() = is_initialization_complete()`. `DISCOVERY_ONLY_MODE` and `INITIALIZATION_COMPLETE`
+**Two-tier gating:** discovery-tier services use `is_enabled() = global::is_preview_or_full()`
+(`is_initialization_complete() || is_preview_mode()`); all other services keep
+`is_enabled() = is_initialization_complete()`. `PREVIEW_MODE` and `INITIALIZATION_COMPLETE`
 are mutually exclusive — completing setup clears the former and sets the latter.
+
+`src/run/bootstrap.rs` owns the phases outside ServiceManager:
+
+* dashboard persistence (`actions.db`, `ai.db`, `ai_chat.db`) is initialized in every mode because
+  the dashboard routes that read it are mode-independent;
+* AI engines/providers may initialize in preview when AI is enabled because they do not require a
+  wallet or Solana RPC;
+* wallet manager, wallet consistency validation, and strategies initialize only for full mode;
+* live setup completion calls the same full-runtime initializer as a normal full boot before it
+  exposes `INITIALIZATION_COMPLETE` to services; if preview already lazily initialized the RPC
+  singleton for token decimals, completion reloads its provider set from the newly saved config.
 
 ### 5.2 register_all_services()
 
-**File:** `src/run.rs`
+**File:** `src/run/services.rs`
 
 All services (currently used) are registered here via `manager.register(...)`.
 
 ### 5.3 Global manager insertion (“take, mutate, put back”)
 
-**Files:** `src/services/mod.rs`, `src/run.rs`
+**Files:** `src/services/mod.rs`, `src/run/mod.rs`
 
 `init_global_service_manager(manager)` stores the ServiceManager in:
 
@@ -266,8 +278,8 @@ Implication:
 **Enabled filter (important):** the DFS pulls a service's declared dependencies into `ordered`
 *even if those dependencies are disabled*. So after `resolve_startup_order()` returns, both
 `start_all()` and `start_newly_enabled()` **retain only services whose `is_enabled()` is true**
-before the start loop. This is what lets discovery-only mode start `tokens`/`filtering` without
-dragging in their disabled `transactions`/`pools` dependencies. The filter is a no-op in normal
+before the start loop. This is what lets preview mode start `tokens`/`filtering` without
+dragging in their disabled `transactions`/`pools` dependencies. The filter is a no-op in full
 mode (everything enabled). Dependency declarations therefore remain pure ordering hints — never a
 hard requirement that a dep actually run.
 
@@ -388,7 +400,7 @@ This avoids blocking HTTP threads on async health checks or sysinfo refresh.
 
 ## 11. Registered Services (Current)
 
-**File:** `src/run.rs` => `register_all_services()`
+**File:** `src/run/services.rs` => `register_all_services()`
 
 Registered today (in registration order):
 
@@ -433,6 +445,8 @@ Registered today (in registration order):
 4) **Disabled dependencies must be filtered before start.**  
    `resolve_startup_order()` pulls declared deps into the order even when disabled. `start_all()` and `start_newly_enabled()` `retain(|s| s.is_enabled())` afterwards. If you add a new boot mode or partial-startup tier, keep that filter — otherwise a disabled RPC/wallet service can be started transitively via a discovery-tier service's declared deps.
 
-5) **Discovery-only mode gates on `is_discovery_or_full()`, not `is_initialization_complete()`.**  
-   The discovery tier (`connectivity`, `events`, `tokens`, `filtering`, `webserver`) uses `global::is_discovery_or_full()`. The `initialization_gate` middleware (`src/webserver/middleware.rs`) also treats `is_discovery_only_mode()` as allowed, so dashboard/token APIs work without a wallet. Wallet/RPC endpoints stay protected by their own `are_core_services_ready()` / FORCE_STOP guards. Don't gate a wallet-dependent service on `is_discovery_or_full()` — it must stay on `is_initialization_complete()`.
+5) **Preview mode gates on `is_preview_or_full()`, not `is_initialization_complete()`.**
+   The discovery tier (`connectivity`, `events`, `tokens`, `filtering`, `webserver`) uses `global::is_preview_or_full()`. The `initialization_gate` middleware (`src/webserver/middleware.rs`) also treats `is_preview_mode()` as allowed, so dashboard/token APIs work without a wallet. Wallet/RPC endpoints stay protected by their own `are_core_services_ready()` / FORCE_STOP guards. Do not gate a wallet-dependent service on `is_preview_or_full()` — it must stay on `is_initialization_complete()`. AI execution itself is wallet-independent, but `AiService` and `ScheduledAiTasksService` are full-mode services because their background work depends on positions/tools.
 
+6) **Skipping setup must release the initialization wait loop.**
+   A first-run process waits for `is_preview_or_full()`, not only `is_initialization_complete()`. Preview is an operational dashboard mode, not an incomplete setup that should time out later.

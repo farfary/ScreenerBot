@@ -337,7 +337,9 @@ Purpose:
 
 Rules:
 
-- If `global::is_initialization_complete() == true` → allow all requests.
+- If `global::is_initialization_complete() == true` or `global::is_preview_mode() == true` → allow
+  all requests. Preview is a usable dashboard mode; wallet/trading handlers retain their deeper
+  readiness and force-stop guards.
 - If not initialized:
   - allow:
     - `/api/initialization/*`
@@ -1042,7 +1044,7 @@ The webserver primarily orchestrates other modules:
 - `events`, `actions` — event log and action stream for UI
 - `tokens`, `filtering`, `pools`, `ohlcvs`, `positions`, `trader`, `transactions` — feature APIs
 - `rpc` — RPC stats snapshot (global counters)
-- `ai` — optional AI engine wired into `AppState`
+- `ai` — mode-independent instruction/chat persistence plus optional AI engines wired into `AppState`
 
 ### 13.2 Adding a new endpoint / feature router
 
@@ -1059,5 +1061,8 @@ Pattern:
 
 - Server bind/port issues: `src/webserver/server.rs` + `WebserverService::start` pre-flight logs
 - `403 missing/invalid token` (GUI): `middleware::security_gate` whitelist + frontend header injection
-- `503 initialization required`: `middleware::initialization_gate` + `global::is_initialization_complete()`
+- `503 initialization required`: `middleware::initialization_gate`; it blocks only when neither
+  `global::is_initialization_complete()` nor `global::is_preview_mode()` is true
+- chat session `503 CHAT_DB_NOT_INITIALIZED`: `run/bootstrap.rs` must initialize dashboard
+  persistence before the webserver starts in every boot mode
 - `302 to /login` or `401 auth required` (headless): `middleware::auth_gate` + `/api/auth/*`

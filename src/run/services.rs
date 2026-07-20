@@ -39,6 +39,7 @@ pub(super) fn register_all_services(manager: &mut ServiceManager) {
 
     // AI service (background auto-blacklisting)
     manager.register(Box::new(AiService::default()));
+    manager.register(Box::new(ScheduledAiTasksService::default()));
 
     // Telegram service (notifications + commands + discovery)
     manager.register(Box::new(TelegramService::new()));
@@ -46,9 +47,10 @@ pub(super) fn register_all_services(manager: &mut ServiceManager) {
     // Background utility services
     manager.register(Box::new(UpdateCheckService));
 
-    let service_count = 21; // connectivity, events, transactions, sol_price, pool_discovery, pool_fetcher,
+    let service_count = 22; // connectivity, events, transactions, sol_price, pool_discovery, pool_fetcher,
                             // pool_calculator, pool_analyzer, pools, tokens, filtering, ohlcv,
-                            // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, ai, telegram, update_check
+                            // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, ai,
+                            // scheduled_ai_tasks, telegram, update_check
     logger::info(
         LogTag::System,
         &format!("All services registered ({service_count} total)"),
