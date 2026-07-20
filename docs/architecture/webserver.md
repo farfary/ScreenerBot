@@ -40,7 +40,8 @@ The webserver supports two distinct security models depending on how the bot is 
 Preview mode keeps wallet-dependent execution unavailable without turning normal dashboard reads
 into failures. Strategy authoring APIs remain available, Auto Trader status returns
 `available=false` and reports stopped, and controls render disabled until wallet/RPC setup is
-complete.
+complete. Wallet-history reads such as a token's Transactions subtab return an empty collection in
+preview rather than treating the intentionally absent transaction service as an outage.
 
 ---
 

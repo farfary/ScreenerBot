@@ -25,6 +25,10 @@
 
 The Transactions module monitors wallet activity via WebSocket (`logsSubscribe`), fetches full transaction data, analyzes DEX swaps across 10+ protocols, tracks fees (including Jito MEV tips), and stores results in a multi-table SQLite database. It provides the data layer for position tracking, P&L calculations, and the dashboard transaction view.
 
+The module is full-mode-only because it follows the configured wallet. Preview-mode dashboard
+reads do not initialize it; token-detail transaction history therefore has a valid empty response
+contract until wallet/RPC setup is complete.
+
 **Key characteristics:**
 - WebSocket monitoring via `logsSubscribe` (mentions wallet address)
 - Multi-stage analyzer pipeline: classify → balance → DEX detect → P&L → ATA analysis

@@ -471,6 +471,12 @@ pub async fn get_token_transactions(
         &format!("Fetching transactions for token: {mint}"),
     );
 
+    // Preview intentionally has no wallet transaction service or database.
+    // This is a valid empty history, not a backend outage.
+    if crate::global::is_preview_mode() {
+        return Ok(Json(Vec::new()));
+    }
+
     // Get connection to transaction database
     let db = match crate::transactions::database::get_transaction_database().await {
         Some(db) => db,

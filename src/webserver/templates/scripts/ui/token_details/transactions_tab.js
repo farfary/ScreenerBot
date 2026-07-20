@@ -29,8 +29,20 @@ export function applyTransactionsTabMixin(DialogClass) {
         `/api/tokens/${this.tokenData.mint}/transactions?limit=1000`
       );
 
-      if (response && response.success) {
-        const transactions = response.data || [];
+      if (Array.isArray(response)) {
+        const transactions = response;
+
+        if (transactions.length === 0) {
+          content.innerHTML = `
+            <div class="empty-state">
+              <i class="icon-activity"></i>
+              <p>No wallet transaction history is available for this token.</p>
+            </div>
+          `;
+          content.dataset.loaded = "true";
+          return;
+        }
+
         content.innerHTML = this._buildTransactionsHTML();
 
         // Wait for DOM
