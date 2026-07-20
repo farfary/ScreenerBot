@@ -196,11 +196,12 @@ full-mode process sets `INITIALIZATION_COMPLETE` from the persisted configuratio
 
 `src/run/bootstrap.rs` owns the phases outside ServiceManager:
 
-* dashboard persistence (`actions.db`, `ai.db`, `ai_chat.db`) is initialized in every mode because
-  the dashboard routes that read it are mode-independent;
+* dashboard persistence (`actions.db`, `ai.db`, `ai_chat.db`, `strategies.db`) and the strategy
+  authoring engine are initialized in every mode because the dashboard routes that read them are
+  mode-independent; strategy evaluation is still consumed only by the full-mode trader;
 * AI engines/providers may initialize in preview when AI is enabled because they do not require a
   wallet or Solana RPC;
-* wallet manager, wallet consistency validation, and strategies initialize only for full mode;
+* wallet manager and wallet consistency validation initialize only for full mode;
 * setup completion never mutates preview's process-wide wallet, RPC, strategy, or service state
   into full mode in place. It stops the registered services, releases the process lock, and
   restarts; normal full boot then initializes every prerequisite from the saved configuration.

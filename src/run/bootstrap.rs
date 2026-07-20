@@ -46,6 +46,14 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
         );
     }
 
+    // Strategy authoring and persistence are dashboard features. Evaluation is
+    // consumed only by the full-mode trader, but the editor, templates, and
+    // configuration APIs must remain usable in preview mode.
+    crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
+        .await
+        .map_err(|e| format!("Failed to initialize strategy system: {e}"))?;
+    logger::info(LogTag::System, "Strategy system initialized successfully");
+
     Ok(())
 }
 
@@ -111,11 +119,6 @@ pub(crate) async fn initialize_full_runtime() -> Result<(), StartupError> {
             ));
         }
     }
-
-    crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
-        .await
-        .map_err(|e| format!("Failed to initialize strategy system: {e}"))?;
-    logger::info(LogTag::System, "Strategy system initialized successfully");
 
     initialize_ai_runtime_if_enabled().await
 }

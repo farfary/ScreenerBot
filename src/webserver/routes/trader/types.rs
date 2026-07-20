@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 pub struct TraderStatusResponse {
     pub enabled: bool,
     pub running: bool,
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason: Option<&'static str>,
 }
 
 #[derive(Debug, Serialize)]

@@ -29,6 +29,8 @@ export function createTraderControls({
   playError,
   eventCleanups,
 }) {
+  let traderAvailable = false;
+
   /**
    * Add tracked event listener for cleanup
    */
@@ -48,10 +50,11 @@ export function createTraderControls({
    */
   function updateAutoTraderStatusBars(status) {
     const isRunning = status?.running === true;
-    const isAvailable = status !== undefined && status !== null;
-    const statusText = isRunning ? "Running" : "Stopped";
+    const isAvailable = status?.available !== false && status !== undefined && status !== null;
+    traderAvailable = isAvailable;
+    const statusText = !isAvailable ? "Setup required" : isRunning ? "Running" : "Stopped";
     const statusAttr = isRunning ? "running" : "stopped";
-    const toggleLabel = isRunning ? "ON" : "OFF";
+    const toggleLabel = !isAvailable ? "UNAVAILABLE" : isRunning ? "ON" : "OFF";
 
     // Update stats tab status bar
     const statsBar = $("#trader-status-bar");
@@ -113,7 +116,7 @@ export function createTraderControls({
     } finally {
       // Re-enable all toggles
       allToggles.forEach((toggle) => {
-        if (toggle) toggle.disabled = false;
+        if (toggle) toggle.disabled = !traderAvailable;
       });
     }
   }
@@ -212,24 +215,26 @@ export function createTraderControls({
 
     if (!data) return;
 
+    const available = data.available !== false;
+
     if (entryToggle) {
       entryToggle.checked = data.entry_monitor?.enabled ?? false;
-      entryToggle.disabled = data.force_stopped ?? false;
+      entryToggle.disabled = !available || (data.force_stopped ?? false);
     }
     if (exitToggle) {
       exitToggle.checked = data.exit_monitor?.enabled ?? false;
-      exitToggle.disabled = data.force_stopped ?? false;
+      exitToggle.disabled = !available || (data.force_stopped ?? false);
     }
 
     if (entryStatus) {
       const running = data.entry_monitor?.running ?? false;
-      entryStatus.textContent = running ? "Running" : "Stopped";
+      entryStatus.textContent = !available ? "Setup required" : running ? "Running" : "Stopped";
       entryStatus.className = "control-status " + (running ? "status-running" : "status-stopped");
     }
 
     if (exitStatus) {
       const running = data.exit_monitor?.running ?? false;
-      exitStatus.textContent = running ? "Running" : "Stopped";
+      exitStatus.textContent = !available ? "Setup required" : running ? "Running" : "Stopped";
       exitStatus.className = "control-status " + (running ? "status-running" : "status-stopped");
     }
   }

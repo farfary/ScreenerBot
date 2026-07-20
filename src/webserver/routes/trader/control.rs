@@ -17,10 +17,18 @@ use super::types::*;
 
 /// GET /api/trader/status - Get current trader status
 pub async fn get_trader_status() -> Response {
-    let enabled = with_config(|cfg| cfg.trader.enabled);
-    let running = is_trader_running();
+    let available =
+        crate::global::is_initialization_complete() && !crate::global::is_preview_mode();
+    let enabled = available && with_config(|cfg| cfg.trader.enabled);
+    let running = available && is_trader_running();
 
-    let status = TraderStatusResponse { enabled, running };
+    let status = TraderStatusResponse {
+        enabled,
+        running,
+        available,
+        unavailable_reason: (!available)
+            .then_some("Complete wallet and RPC setup to use Auto Trader"),
+    };
 
     success_response(status)
 }
@@ -59,6 +67,8 @@ pub async fn start_trader_handler() -> Response {
             let status = TraderStatusResponse {
                 enabled: true,
                 running: is_trader_running(),
+                available: true,
+                unavailable_reason: None,
             };
 
             let response = TraderControlResponse {
@@ -99,6 +109,8 @@ pub async fn stop_trader_handler() -> Response {
             let status = TraderStatusResponse {
                 enabled: false,
                 running: is_trader_running(),
+                available: true,
+                unavailable_reason: None,
             };
 
             let response = TraderControlResponse {
@@ -190,17 +202,21 @@ pub async fn force_stop_status_handler(State(_state): State<Arc<AppState>>) -> R
 pub async fn monitors_status_handler(State(_state): State<Arc<AppState>>) -> Response {
     use crate::trader::config;
 
+    let available =
+        crate::global::is_initialization_complete() && !crate::global::is_preview_mode();
+
     success_response(serde_json::json!({
         "entry_monitor": {
             "enabled": config::is_entry_monitor_enabled_standalone(),
-            "running": config::is_entry_monitor_enabled(),
+            "running": available && config::is_entry_monitor_enabled(),
         },
         "exit_monitor": {
             "enabled": config::is_exit_monitor_enabled_standalone(),
-            "running": config::is_exit_monitor_enabled(),
+            "running": available && config::is_exit_monitor_enabled(),
         },
-        "master_enabled": config::is_trader_enabled(),
+        "master_enabled": available && config::is_trader_enabled(),
         "force_stopped": crate::global::is_force_stopped(),
+        "available": available,
     }))
 }
 

@@ -37,6 +37,11 @@ The webserver supports two distinct security models depending on how the bot is 
 - **GUI mode (Electron)**: local-only server on a random high port + per-request security token header (`X-ScreenerBot-Token`).
 - **Headless/CLI mode**: configurable bind host/port (default `127.0.0.1:8080`) + optional password/session authentication (and optional TOTP 2FA).
 
+Preview mode keeps wallet-dependent execution unavailable without turning normal dashboard reads
+into failures. Strategy authoring APIs remain available, Auto Trader status returns
+`available=false` and reports stopped, and controls render disabled until wallet/RPC setup is
+complete.
+
 ---
 
 ## 2. File Structure
