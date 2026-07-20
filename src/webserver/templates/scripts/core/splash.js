@@ -7,8 +7,8 @@ const SPLASH_MIN_DURATION = 3000; // Minimum splash display time in ms
 const SPLASH_PHASES = [
   { message: "Starting ScreenerBot...", duration: 600 },
   { message: "Loading configuration...", duration: 500 },
-  { message: "Connecting to Solana RPC...", duration: 700 },
-  { message: "Initializing services...", duration: 600 },
+  { message: "Opening the local core...", duration: 700 },
+  { message: "Checking dashboard mode...", duration: 600 },
   { message: "Preparing dashboard...", duration: 500 },
 ];
 
@@ -148,17 +148,10 @@ class SplashController {
       this.checkReadyToTransition();
     } catch (error) {
       console.error("[Splash] Failed to check initialization:", error);
-
-      // On error, proceed to dashboard
-      this.transitionTarget = "dashboard";
-
-      const elapsed = Date.now() - this.startTime;
-      const remainingTime = Math.max(0, SPLASH_MIN_DURATION - elapsed);
-      await new Promise((resolve) => setTimeout(resolve, remainingTime));
-
-      this.readyToTransition = true;
-      this.stopPhaseSequence();
-      this.checkReadyToTransition();
+      // Initialization state is authoritative. Never guess "dashboard" on a
+      // transient failure because that can bypass first-run onboarding.
+      if (this.statusEl) this.statusEl.textContent = "Waiting for local core...";
+      setTimeout(() => this.checkInitialization(), 1500);
     }
   }
 

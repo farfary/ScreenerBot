@@ -179,8 +179,9 @@ Startup branches based on whether `config.toml` exists and whether wallet + RPC 
   * Token discovery is API-driven (DexScreener / GeckoTerminal / Rugcheck / Jupiter) so it needs
     neither a wallet nor a Solana RPC. The connectivity tier omits its RPC monitor in preview.
     The user completes setup later via the header banner /
-    config tab / setup wizard, which calls `POST /api/initialization/complete` and brings the full
-    tier up live (no restart).
+    config tab / setup wizard. `POST /api/initialization/complete` validates and saves the merged
+    configuration, then requests a graceful process restart. Full mode is activated only by the
+    normal boot path from a clean process.
 
 * **Config.toml exists, wallet present** => "full mode"
   * config is loaded/validated
@@ -190,7 +191,8 @@ Startup branches based on whether `config.toml` exists and whether wallet + RPC 
 **Two-tier gating:** discovery-tier services use `is_enabled() = global::is_preview_or_full()`
 (`is_initialization_complete() || is_preview_mode()`); all other services keep
 `is_enabled() = is_initialization_complete()`. `PREVIEW_MODE` and `INITIALIZATION_COMPLETE`
-are mutually exclusive — completing setup clears the former and sets the latter.
+are mutually exclusive — preview remains active only until graceful shutdown, and the restarted
+full-mode process sets `INITIALIZATION_COMPLETE` from the persisted configuration.
 
 `src/run/bootstrap.rs` owns the phases outside ServiceManager:
 
@@ -199,9 +201,9 @@ are mutually exclusive — completing setup clears the former and sets the latte
 * AI engines/providers may initialize in preview when AI is enabled because they do not require a
   wallet or Solana RPC;
 * wallet manager, wallet consistency validation, and strategies initialize only for full mode;
-* live setup completion calls the same full-runtime initializer as a normal full boot before it
-  exposes `INITIALIZATION_COMPLETE` to services; if preview already lazily initialized the RPC
-  singleton for token decimals, completion reloads its provider set from the newly saved config.
+* setup completion never mutates preview's process-wide wallet, RPC, strategy, or service state
+  into full mode in place. It stops the registered services, releases the process lock, and
+  restarts; normal full boot then initializes every prerequisite from the saved configuration.
 
 ### 5.2 register_all_services()
 
@@ -303,6 +305,9 @@ Task waiting behavior:
 * Each handle is awaited with `tokio::time::timeout(Duration::from_secs(10), handle)`.
 * Panics are logged as warnings.
 * Timeouts are logged, but shutdown continues (no single service can block shutdown forever).
+* Dashboard restart requests wake the run loop through `global::request_restart()`. The same
+  `stop_all()` path runs before the process lock is dropped and the executable is replaced. GUI
+  mode exits with the intentional restart code so Electron can relaunch its owned backend child.
 
 ---
 

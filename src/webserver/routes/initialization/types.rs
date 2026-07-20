@@ -53,6 +53,11 @@ pub struct InitializationCompleteResponse {
     pub wallet_address: String,
     pub services_started: usize,
     pub errors: Vec<String>,
+    /// Full setup is activated by a clean process boot, not an in-process tier mutation.
+    pub restart_required: bool,
+    /// Identity of the process that accepted setup. Browser clients wait until
+    /// health reports a different instance before reloading.
+    pub instance_id: String,
 }
 
 #[derive(Debug, Serialize)]

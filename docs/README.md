@@ -36,7 +36,7 @@ Living documentation describing how each major system works. These docs are the 
 
 | Document | Lines | Description |
 |----------|-------|-------------|
-| [System Overview](architecture/overview.md) | 273 | High-level system map, reading order, module connections |
+| [System Overview](architecture/overview.md) | 287 | High-level system map, reading order, module connections |
 | **Core Trading** | | |
 | [Tokens Module](architecture/tokens.md) | 1936 | Token lifecycle, database schema, caching, market data, security |
 | [Pools Module](architecture/pools.md) | 910 | Pool discovery, DEX decoders, price calculation, swap integration |
@@ -49,14 +49,14 @@ Living documentation describing how each major system works. These docs are the 
 | [Swap Routing](architecture/swaps.md) | 494 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
 | [Transactions](architecture/transactions.md) | 416 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
-| [RPC Module](architecture/rpc.md) | 616 | Multi-provider Solana RPC, circuit breaker, rate limiting |
+| [RPC Module](architecture/rpc.md) | 610 | Multi-provider Solana RPC, circuit breaker, rate limiting |
 | [APIs Module](architecture/apis.md) | 412 | External HTTP clients + LLM providers + SOL price service |
 | **User Interface** | | |
-| [Webserver](architecture/webserver.md) | 1068 | Axum server lifecycle, middleware gates, embedded assets, headless auth, performance patterns |
+| [Webserver](architecture/webserver.md) | 1093 | Axum server lifecycle, middleware gates, embedded assets, headless auth, performance patterns |
 | [Telegram](architecture/telegram.md) | 364 | Telegram bot: discovery, notifications, commands, sessions/2FA |
 | **System** | | |
 | [Config](architecture/config.md) | 478 | TOML configuration, macro system, hot reload, metadata |
-| [Services](architecture/services.md) | 452 | Service manager, lifecycle, cached health/metrics, registered services |
+| [Services](architecture/services.md) | 457 | Service manager, lifecycle, cached health/metrics, registered services |
 | [Wallets](architecture/wallets.md) | 670 | Multi-wallet key storage (wallets.db) + wallet monitoring (wallet.db) |
 | [Infrastructure](architecture/infrastructure.md) | 841 | SQLite tuning+maintenance, errors, events, logging, connectivity, actions |
 

@@ -190,11 +190,15 @@ class SetupDialog {
         return;
       }
 
-      this.setStatus("success", '<i class="icon-circle-check"></i> Connected — starting services and loading your dashboard...');
-      this.close(true);
-      setTimeout(() => {
-        window.location.href = "/home";
-      }, 900);
+      this.setStatus("success", '<i class="icon-circle-check"></i> Setup saved — restarting ScreenerBot in full mode…');
+      this.submitBtn.innerHTML = '<i class="icon-loader"></i> Restarting…';
+
+      const waitForRestart = window.waitForScreenerBotRestart;
+      if (typeof waitForRestart !== "function") {
+        throw new Error("Automatic restart helper is unavailable. Reload the dashboard shortly.");
+      }
+
+      await waitForRestart(result.instance_id, { target: window.location.pathname || "/home" });
     } catch (err) {
       this.setStatus("error", `<i class="icon-circle-x"></i> ${err?.message || "Unexpected error."}`);
       this.setBusy(false);

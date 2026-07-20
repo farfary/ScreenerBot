@@ -83,9 +83,8 @@ pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupErro
 
 /// Initialize state required only by wallet/RPC-backed full mode.
 ///
-/// This is shared by normal boot and `POST /api/initialization/complete` so a
-/// live preview-to-full transition has exactly the same prerequisites as a
-/// restart into full mode.
+/// Setup completion always restarts the process, so this is the one canonical
+/// activation path for both first-time setup and every later full-mode boot.
 pub(crate) async fn initialize_full_runtime() -> Result<(), StartupError> {
     crate::wallets::initialize()
         .await

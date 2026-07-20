@@ -1,6 +1,5 @@
 // Header controls for global dashboard interactions (trader toggle + metrics)
 import { loadPage } from "./router.js";
-import { Poller } from "./poller.js";
 import * as Utils from "./utils.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
@@ -640,34 +639,14 @@ async function handleRestart() {
       throw new Error(`Restart failed: ${res.status}`);
     }
 
+    const result = await res.json();
     Utils.showToast("Bot restarting... Please wait.", "success");
 
-    // Poll for reconnection using Poller
-    setTimeout(() => {
-      let attempts = 0;
-      const reconnectPoller = new Poller(
-        async () => {
-          attempts++;
-          try {
-            const ping = await fetch("/api/trader/status", { cache: "no-store" });
-            if (ping.ok) {
-              reconnectPoller.stop();
-              reconnectPoller.cleanup();
-              Utils.showToast("Bot restarted successfully!", "success");
-              window.location.reload();
-            }
-          } catch {
-            if (attempts > 30) {
-              reconnectPoller.stop();
-              reconnectPoller.cleanup();
-              Utils.showToast("Restart taking longer than expected", "warning");
-            }
-          }
-        },
-        { label: "RestartReconnect", getInterval: () => 1000 }
-      );
-      reconnectPoller.start();
-    }, 2000);
+    const waitForRestart = window.waitForScreenerBotRestart;
+    if (typeof waitForRestart !== "function") {
+      throw new Error("Automatic restart helper is unavailable. Reload the dashboard shortly.");
+    }
+    await waitForRestart(result.instance_id, { target: window.location.pathname || "/home" });
   } catch (err) {
     console.error("[Header] Restart failed:", err);
     Utils.showToast(err.message, "error");

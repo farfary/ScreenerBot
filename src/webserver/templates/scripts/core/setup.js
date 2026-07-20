@@ -1,6 +1,41 @@
 // Setup Controller
 // Handles the full-screen initialization form
 
+/**
+ * Wait until health is served by a different backend process, then navigate.
+ * This works for normal browsers on the fixed headless port. Electron owns its
+ * backend and replaces this page with its native loading screen during restart.
+ */
+async function waitForScreenerBotRestart(previousInstanceId, options = {}) {
+  const target = options.target || "/home";
+  const timeoutMs = options.timeoutMs || 120000;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const response = await fetch(`/api/health?restart_check=${Date.now()}`, {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const health = await response.json();
+        if (health.instance_id && health.instance_id !== previousInstanceId) {
+          options.onReady?.();
+          window.location.replace(target);
+          return;
+        }
+      }
+    } catch {
+      // Expected while the old process releases the port and the new one boots.
+    }
+    options.onWaiting?.(Date.now() - startedAt);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  throw new Error("ScreenerBot saved your setup but did not come back online in time");
+}
+
+window.waitForScreenerBotRestart = waitForScreenerBotRestart;
+
 class SetupControllerClass {
   constructor() {
     this.currentStep = 1;
@@ -262,7 +297,7 @@ class SetupControllerClass {
       this.showError(error.message || "Failed to skip setup");
       if (this.skipBtn) {
         this.skipBtn.disabled = false;
-        this.skipBtn.textContent = "Skip for now — explore the app";
+        this.skipBtn.textContent = "Explore in Preview Mode";
       }
     }
   }
@@ -493,11 +528,11 @@ class SetupControllerClass {
         throw new Error(errorMsg);
       }
 
-      // Move to step 3
-      setTimeout(() => {
-        this.setStep(3);
-        this.startServicesProgress();
-      }, 1000);
+      // A clean process boot activates the wallet/RPC configuration. Showing
+      // restart progress here avoids pretending that preview services are the
+      // newly configured full service graph.
+      this.setStep(3);
+      this.startServicesProgress(completeResult.instance_id);
     } catch (error) {
       // Remove verifying states
       walletCard?.classList.remove("verifying");
@@ -562,11 +597,9 @@ class SetupControllerClass {
     return response.json();
   }
 
-  startServicesProgress() {
+  startServicesProgress(previousInstanceId) {
     const progressFill = document.getElementById("services-progress");
     const progressText = document.getElementById("services-status");
-
-    let totalServices = 20;
 
     // Clear existing poller
     if (this.servicesPoller) {
@@ -574,41 +607,29 @@ class SetupControllerClass {
       this.servicesPoller = null;
     }
 
-    this.servicesPoller = setInterval(async () => {
-      try {
-        const response = await fetch("/api/services");
-        const result = await response.json();
+    let visualProgress = 12;
+    if (progressFill) progressFill.style.width = `${visualProgress}%`;
+    if (progressText) progressText.textContent = "Restarting ScreenerBot with full access…";
 
-        if (result.services && Array.isArray(result.services)) {
-          totalServices = result.services.length;
-          const runningServices = result.services.filter(
-            (s) => s.health?.status === "healthy"
-          ).length;
+    this.servicesPoller = setInterval(() => {
+      visualProgress = Math.min(92, visualProgress + Math.max(1, (92 - visualProgress) * 0.08));
+      if (progressFill) progressFill.style.width = `${visualProgress}%`;
+    }, 500);
 
-          const progress = (runningServices / totalServices) * 100;
-          if (progressFill) {
-            progressFill.style.width = `${progress}%`;
-          }
-          if (progressText) {
-            progressText.textContent = `Initializing services (${runningServices}/${totalServices})...`;
-          }
-
-          // If all services are running, redirect to dashboard
-          if (runningServices >= totalServices - 1) {
-            clearInterval(this.servicesPoller);
-            this.servicesPoller = null;
-            if (progressText) {
-              progressText.textContent = "Complete! Redirecting to dashboard...";
-            }
-            setTimeout(() => {
-              window.location.href = "/home";
-            }, 1500);
-          }
-        }
-      } catch (error) {
-        console.error("[Setup] Error polling services:", error);
-      }
-    }, 1000);
+    waitForScreenerBotRestart(previousInstanceId, {
+      target: "/home",
+      onReady: () => {
+        if (this.servicesPoller) clearInterval(this.servicesPoller);
+        this.servicesPoller = null;
+        if (progressFill) progressFill.style.width = "100%";
+        if (progressText) progressText.textContent = "Full mode ready. Loading dashboard…";
+      },
+    }).catch((error) => {
+      if (this.servicesPoller) clearInterval(this.servicesPoller);
+      this.servicesPoller = null;
+      this.showError(error.message);
+      if (progressText) progressText.textContent = "Restart needs attention";
+    });
   }
 
   showError(message) {

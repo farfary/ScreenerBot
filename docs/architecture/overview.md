@@ -133,6 +133,20 @@ At a very high level, the system looks like this:
 “Infrastructure” services (events, logging, connectivity, DB maintenance, RPC stats)
 run alongside the trading services and are described in [`infrastructure.md`](infrastructure.md).
 
+### 4.1 First-run, preview, and full-mode boundary
+
+The existence and contents of `config.toml` select the boot mode:
+
+- no config: webserver-only initialization; onboarding and setup are visible;
+- skipped wallet/RPC: preview discovery services and the dashboard are usable;
+- configured wallet/RPC: the normal full runtime and all enabled services start.
+
+Preview-to-full setup always crosses a graceful process boundary. Credentials are validated and
+saved first, services stop in normal reverse order, the process lock is released, and the new
+process enters the existing full boot path. Electron owns/relaunches GUI backends; headless mode
+replaces or relaunches itself. Browser clients prove the new instance through `/api/health` before
+reloading.
+
 ---
 
 ## 5. Main Data Flows

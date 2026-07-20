@@ -10,6 +10,7 @@ use axum::{
 };
 use std::sync::Arc;
 
+pub(crate) use handlers::schedule_graceful_restart;
 pub use types::*;
 
 pub fn routes() -> Router<Arc<AppState>> {

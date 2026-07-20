@@ -441,6 +441,28 @@ The frontend uses this data to configure API calls.
 - Header name constant:
   - `SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token"`
 
+### 7.4 First-run and restart lifecycle
+
+An absent `config.toml` is the canonical first-run state. `/api/system/bootstrap` reports
+`initialization_required = true` and the router shows onboarding before the wallet/RPC wizard.
+Choosing "Skip for now" calls `POST /api/initialization/skip`, persists `setup_skipped = true`,
+starts the preview tier, and navigates to token discovery without restarting.
+
+Completing wallet/RPC setup is intentionally different: `POST /api/initialization/complete`
+validates credentials, merges them into the loaded config, persists `setup_skipped = false`, and
+schedules a graceful process restart. The run loop stops every service and releases the process
+lock before replacement. This prevents preview-owned wallet, RPC, and service singletons from being
+promoted in place.
+
+Restart ownership depends on the host:
+
+- headless Unix replaces the process after shutdown; Windows relaunches after shutdown;
+- GUI mode emits `SCREENERBOT_RESTART` and exits with code 75, then Electron starts a new owned
+  backend, reads its new dynamic port/security token, and loads the previous dashboard route;
+- ordinary browser clients poll `/api/health` and compare `instance_id`, reloading only after a
+  different backend process answers. A response from the old process is never accepted as proof of
+  restart.
+
 ---
 
 ## 8. Headless Authentication (Password, Sessions, TOTP)
@@ -627,6 +649,9 @@ Routes map requested filenames to embedded constants and return content with cor
 
 - `src/webserver/routes/status.rs`
 - `src/webserver/snapshot/*`
+
+`GET /api/health` is deliberately small but includes a stable per-process `instance_id` in addition
+to status, time, and version. Restarting clients use it as an identity handshake.
 
 High-level design:
 

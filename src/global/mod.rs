@@ -18,6 +18,15 @@ use std::sync::RwLock;
 /// Startup timestamp to track when the bot started for trading logic.
 pub static STARTUP_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(|| Utc::now());
 
+/// Stable identity for this backend process, used by browser clients to prove
+/// that a requested restart completed instead of observing the old process.
+static INSTANCE_ID: LazyLock<String> =
+    LazyLock::new(|| format!("{}-{}", std::process::id(), STARTUP_TIME.timestamp_millis()));
+
+pub fn instance_id() -> &'static str {
+    INSTANCE_ID.as_str()
+}
+
 // =============================================================================
 // FORCE STOP STATE
 // =============================================================================

@@ -35,16 +35,24 @@ const CONFIG = {
   minHeight: 700
 };
 
+// Rust uses this exit code only after a requested restart has completed its
+// graceful service shutdown. Electron must relaunch so it remains the owner of
+// the backend child (and can still stop it when the desktop app quits).
+const BACKEND_RESTART_EXIT_CODE = 75;
+
 let mainWindow = null;
 let backendProcess = null;
 let isQuitting = false;
 let tray = null;
 let isExitDialogOpen = false; // Guard flag to prevent multiple exit dialogs
 let backendReadyResolve = null; // Promise resolver for SCREENERBOT_READY signal
+let backendReadySignal = false; // Latches readiness if stdout wins the waitForBackend race
 let startupError = null; // Structured fatal startup error (SCREENERBOT_ERROR payload), if any
 let isRecovering = false; // True while a one-click recovery (e.g. wallet reset) is in progress
 let dashboardLoaded = false; // True once the dashboard URL has been loaded successfully
 let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in window-state.json
+let backendRestartRequested = false;
+let backendRestartTarget = '/home';
 
 function getBackendExtraArgs() {
   const raw = process.env.SCREENERBOT_EXTRA_ARGS || '';
@@ -286,22 +294,24 @@ async function waitForBackend() {
   
   console.log('[Electron] Waiting for backend to report ready (SCREENERBOT_READY signal)...');
   
-  // Phase 1: Wait for SCREENERBOT_READY signal with port and token
-  // This Promise is resolved by the stdout handler in startBackend()
-  const readyPromise = new Promise((resolve) => {
-    backendReadyResolve = resolve;
-    
-    // Timeout after maxWaitTime
-    setTimeout(() => {
-      if (backendReadyResolve) {
-        console.error('[Electron] Timeout waiting for SCREENERBOT_READY signal');
-        resolve(false);
-        backendReadyResolve = null;
-      }
-    }, CONFIG.maxWaitTime);
-  });
-  
-  const gotReadySignal = await readyPromise;
+  // Phase 1: Wait for SCREENERBOT_READY with port and token. The latch covers
+  // fast restarts where stdout reports ready before this function installs its
+  // resolver.
+  let gotReadySignal = backendReadySignal;
+  if (!gotReadySignal && startupError) return false;
+  if (!gotReadySignal) {
+    gotReadySignal = await new Promise((resolve) => {
+      backendReadyResolve = resolve;
+
+      setTimeout(() => {
+        if (backendReadyResolve) {
+          console.error('[Electron] Timeout waiting for SCREENERBOT_READY signal');
+          resolve(false);
+          backendReadyResolve = null;
+        }
+      }, CONFIG.maxWaitTime);
+    });
+  }
   
   if (!gotReadySignal || !CONFIG.port) {
     console.error('[Electron] Backend did not send SCREENERBOT_READY signal or port is missing');
@@ -351,6 +361,7 @@ function startBackend(extraArgs = []) {
 
   const args = ['--gui', ...extraArgs];
   console.log('[Electron] Starting backend:', binaryPath, args.join(' '));
+  backendReadySignal = false;
 
   try {
     // Spawn the backend process
@@ -389,6 +400,19 @@ function startBackend(extraArgs = []) {
             }
             return;
           }
+          if (line.trim() === 'SCREENERBOT_RESTART') {
+            backendRestartRequested = true;
+            try {
+              const currentPath = new URL(mainWindow?.webContents.getURL() || '').pathname;
+              backendRestartTarget = currentPath && currentPath !== '/initialization'
+                ? currentPath
+                : '/home';
+            } catch (_) {
+              backendRestartTarget = '/home';
+            }
+            console.log(`[Electron] Backend requested graceful restart; restore=${backendRestartTarget}`);
+            return;
+          }
           // Parse SCREENERBOT_READY message for port and token
           if (line.startsWith('SCREENERBOT_READY:')) {
             const parts = line.split(':');
@@ -398,6 +422,7 @@ function startBackend(extraArgs = []) {
               console.log(`[Electron] Backend ready on port ${port} with token ${token.substring(0, 8)}...`);
               CONFIG.port = port;
               global.SCREENERBOT_TOKEN = token;
+              backendReadySignal = true;
               
               // Resolve the waitForBackend() Promise
               if (backendReadyResolve) {
@@ -428,10 +453,19 @@ function startBackend(extraArgs = []) {
       console.log(`[Electron] Backend exited with code ${code}, signal ${signal}`);
       backendProcess = null;
 
-      // Ignore exits during shutdown or while a recovery relaunch is in flight.
-      if (isQuitting || isRecovering || !mainWindow) {
+      if (isQuitting || !mainWindow) {
         return;
       }
+
+      if (backendRestartRequested || code === BACKEND_RESTART_EXIT_CODE) {
+        const target = backendRestartTarget;
+        backendRestartRequested = false;
+        setImmediate(() => restartBackendFromDashboard(target));
+        return;
+      }
+
+      // Ignore exits while a separate recovery relaunch is in flight.
+      if (isRecovering) return;
 
       // If the backend reported a structured startup error, the boot sequence
       // renders the dedicated error screen — don't overwrite it here. Only
@@ -1073,17 +1107,61 @@ Other:
 /**
  * Load the main application URL
  */
-function loadMainApp() {
+function loadMainApp(route = '/') {
   // Add ?electron=1 to tell the dashboard to skip its splash screen, and pass the
   // last-run theme so the dashboard's pre-paint FOUC script renders the right
   // theme immediately. GUI mode uses a NEW dynamic port each launch, so the
   // dashboard's localStorage (origin-scoped, includes port) is empty on every
   // start — without this it falls back to dark and then flips to light once
   // theme.js fetches the server value (the visible dark→light flash).
-  const appUrl = `http://${CONFIG.host}:${CONFIG.port}?electron=1&theme=${currentTheme}`;
+  const safeRoute = typeof route === 'string' && route.startsWith('/') && !route.startsWith('//')
+    ? route
+    : '/';
+  const separator = safeRoute.includes('?') ? '&' : '?';
+  const appUrl = `http://${CONFIG.host}:${CONFIG.port}${safeRoute}${separator}electron=1&theme=${currentTheme}`;
   console.log('[Electron] Loading main app:', appUrl);
   dashboardLoaded = true;
   mainWindow.loadURL(appUrl);
+}
+
+/**
+ * Relaunch after a dashboard-requested graceful restart. The old backend has
+ * already stopped its services and released its process lock before this runs.
+ */
+async function restartBackendFromDashboard(targetRoute) {
+  if (isRecovering || isQuitting || !mainWindow) return;
+  isRecovering = true;
+  startupError = null;
+  dashboardLoaded = false;
+
+  loadLoadingPage();
+  if (mainWindow.webContents.isLoading()) {
+    await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
+  }
+  updateLoadingStatus('Restarting ScreenerBot...');
+
+  CONFIG.port = null;
+  global.SCREENERBOT_TOKEN = null;
+  backendReadyResolve = null;
+
+  const backend = startBackend(getBackendExtraArgs());
+  isRecovering = false;
+  if (!backend) {
+    showBootError(genericBootError('Could not relaunch the backend after setup.'));
+    return;
+  }
+
+  updateLoadingStatus('Waiting for backend...');
+  const isReady = await waitForBackend();
+  if (isReady) {
+    updateLoadingStatus('Loading dashboard...');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    loadMainApp(targetRoute || '/home');
+  } else if (startupError) {
+    showBootError(startupError);
+  } else {
+    showBootError(genericBootError('The backend did not come back online after restart.'));
+  }
 }
 
 /**

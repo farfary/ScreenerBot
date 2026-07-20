@@ -133,18 +133,13 @@ static RPC_MANAGER: OnceCell<Arc<RpcManager>> = OnceCell::const_new();
 - starts background services (`StatsManager::start()`)
 - returns `Arc<RpcManager>`
 
-### 3.4 Preview-to-full provider reload
+### 3.4 Preview-to-full process boundary
 
 Preview token metadata can initialize the singleton with the public fallback RPC before the user
-finishes setup. Because both `RPC_MANAGER` and `RPC_CLIENT` are process-lifetime singletons, saving
-new URLs alone would leave the running process on the fallback until restart.
-
-`reload_rpc_providers_if_initialized()` handles the live transition. If a manager exists, it calls
-`RpcManager::reload_providers_from_config()` to rebuild provider configs and health state from the
-newly saved `rpc.urls`, discard old provider rate-limit/circuit-breaker instances, register masked
-provider identities with stats, reset round-robin selection, and apply the configured selection
-strategy. If the singleton does not exist yet, it is a no-op because lazy initialization will read
-the new config. Setup completion performs this reload before exposing full-mode services.
+finishes setup. Both `RPC_MANAGER` and `RPC_CLIENT` are process-lifetime singletons, so setup does
+not attempt to rewrite them in place. `POST /api/initialization/complete` saves the working RPC URLs
+and requests a graceful process restart. The normal full boot creates the RPC state from the saved
+configuration before wallet/RPC-dependent services become available.
 
 ---
 
@@ -611,6 +606,5 @@ rpc/
   retention days, burst factor).
 - Provider selection consults `ProviderState::is_healthy`, but circuit breaker state is checked as
   a separate gate (`breaker.can_execute()`); keep that in mind when interpreting health telemetry.
-- A preview-to-full transition must call `reload_rpc_providers_if_initialized()` after persisting
-  the new config and before setting `INITIALIZATION_COMPLETE`; otherwise an existing singleton
-  retains the preview fallback provider.
+- A preview-to-full transition must cross a clean process boundary after persisting the new config;
+  otherwise process-lifetime RPC singletons can retain the preview fallback provider.

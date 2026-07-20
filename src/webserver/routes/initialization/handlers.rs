@@ -11,7 +11,6 @@ use crate::{
 };
 use axum::{extract::Json, http::StatusCode, response::Response};
 use solana_sdk::signature::Signer;
-use std::sync::atomic::Ordering;
 
 /// GET /api/initialization/status
 /// Check if initialization is required
@@ -337,7 +336,7 @@ pub(super) async fn validate_credentials(
 }
 
 /// POST /api/initialization/complete
-/// Complete initialization (validate + persist + start services)
+/// Complete initialization (validate + persist + schedule a clean full boot)
 pub(super) async fn complete_initialization(
     Json(request): Json<CompleteInitializationRequest>,
 ) -> Response {
@@ -461,121 +460,19 @@ pub(super) async fn complete_initialization(
 
     logger::info(LogTag::Webserver, "Configuration saved successfully");
 
-    // Preview token metadata may have lazily initialized the RPC singleton with
-    // the public fallback URL. Apply the newly saved providers before any full
-    // service can observe the manager.
-    if let Err(e) = crate::rpc::reload_rpc_providers_if_initialized().await {
-        logger::error(
-            LogTag::System,
-            &format!("Failed to apply configured RPC providers: {e}"),
-        );
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "RPC_RECONFIGURATION_FAILED",
-            "Wallet and RPC were saved, but the RPC providers could not be activated",
-            Some(&e.to_string()),
-        );
-    }
+    // A full restart is intentional here. Preview may already own process-wide
+    // wallet/RPC/service singletons; mutating that graph live made setup behave
+    // differently from every later boot. The normal boot path now activates the
+    // saved wallet and RPC from a clean state.
+    crate::webserver::routes::system::schedule_graceful_restart("setup completed");
 
-    // Step 4: Initialize the same wallet/strategy/AI prerequisites as a normal
-    // full-mode boot. Services must never observe INITIALIZATION_COMPLETE before
-    // their non-service dependencies exist.
-    if let Err(e) = crate::run::initialize_full_runtime().await {
-        logger::error(
-            LogTag::System,
-            &format!("Failed to initialize full runtime after setup: {e}"),
-        );
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "RUNTIME_INITIALIZATION_FAILED",
-            "Wallet and RPC were saved, but the full runtime could not be initialized",
-            Some(&e.summary()),
-        );
-    }
-
-    // Step 5: Set credential flags (but NOT initialization complete yet)
-    global::CREDENTIALS_VALID.store(true, Ordering::SeqCst);
-    global::RPC_VALID.store(true, Ordering::SeqCst);
-
-    logger::info(LogTag::Webserver, "Credential validation flags set");
-
-    // Step 6: Set initialization complete flag BEFORE starting services
-    // (services check this flag in their is_enabled() method). Clear preview
-    // mode: full mode and preview mode are mutually exclusive.
-    global::set_preview_mode(false);
-    global::INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
-    logger::info(
-        LogTag::Webserver,
-        "Initialization complete flag set - services can now start",
-    );
-
-    // Step 7: Start remaining services
-    logger::info(LogTag::Webserver, "Starting services...");
-
-    let mut services_started = 0usize;
-
-    match start_remaining_services().await {
-        Ok(report) => {
-            services_started = report.started.len();
-
-            logger::info(
-                LogTag::Webserver,
-                &format!(
-                    "Service startup summary: started={} already_running={} total_enabled={} duration_ms={}",
-                    report.started.len(),
-                    report.already_running,
-                    report.total_enabled,
-                    report.duration_ms
-                ),
-            );
-
-            if report.started.is_empty() {
-                logger::warning(
-                    LogTag::Webserver,
-                    "No new services were started during initialization completion",
-                );
-            }
-
-            if !report.failures.is_empty() {
-                let failure_names = report
-                    .failures
-                    .iter()
-                    .map(|failure| failure.name)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                errors.push(format!(
-                    "Failed to start {} service(s): {}",
-                    report.failures.len(),
-                    failure_names
-                ));
-
-                for failure in report.failures {
-                    logger::error(
-                        LogTag::Webserver,
-                        &format!(
-                            "Service startup failure: {} -> {}",
-                            failure.name, failure.error
-                        ),
-                    );
-                }
-            }
-        }
-        Err(e) => {
-            logger::error(
-                LogTag::Webserver,
-                &format!("Failed to start some services: {e}"),
-            );
-            errors.push(format!("Service startup incomplete: {e}"));
-        }
-    }
-
-    // Step 8: Build and return response
     let response = InitializationCompleteResponse {
-        success: errors.is_empty(),
+        success: true,
         wallet_address: wallet_address.to_string(),
-        services_started,
+        services_started: 0,
         errors,
+        restart_required: true,
+        instance_id: global::instance_id().to_owned(),
     };
 
     success_response(response)

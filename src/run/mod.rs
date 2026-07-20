@@ -8,7 +8,7 @@ mod llm_init;
 mod services;
 mod shutdown;
 
-pub(crate) use bootstrap::{initialize_ai_runtime_if_enabled, initialize_full_runtime};
+use bootstrap::{initialize_ai_runtime_if_enabled, initialize_full_runtime};
 
 use crate::{
     errors::StartupError,

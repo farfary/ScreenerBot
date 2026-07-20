@@ -82,10 +82,7 @@ pub use errors::RpcError;
 // Re-exports - Manager (main orchestrator)
 // ============================================================================
 
-pub use manager::{
-    get_or_init_rpc_manager, get_rpc_manager, init_rpc_manager,
-    reload_rpc_providers_if_initialized, RpcManager,
-};
+pub use manager::{get_or_init_rpc_manager, get_rpc_manager, init_rpc_manager, RpcManager};
 
 // ============================================================================
 // Re-exports - Provider

@@ -15,8 +15,6 @@ use crate::{
 };
 use axum::{extract::State, http::StatusCode, response::Response, Json};
 use chrono::Utc;
-use std::env;
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,101 +33,29 @@ pub fn is_client_ready() -> bool {
 pub(super) async fn reboot_system() -> Response {
     logger::debug(LogTag::Webserver, "System reboot requested via API");
 
-    // TODO: Re-enable critical operations check when trader module is integrated
-    // Wait for critical operations to complete (max 30 seconds)
-    // let timeout = Instant::now() + Duration::from_secs(30);
-    // while CRITICAL_OPERATIONS_IN_PROGRESS.load(Ordering::SeqCst) > 0 {
-    //     if Instant::now() > timeout {
-    //         logger::info(
-    //             LogTag::Webserver,
-    //             "WARN",
-    //             "Timeout waiting for critical operations during reboot",
-    //         );
-    //         break;
-    //     }
-    //     tokio::time::sleep(Duration::from_millis(500)).await;
-    // }
-
-    // Get current executable path and arguments
-    let current_exe = match env::current_exe() {
-        Ok(exe) => exe,
-        Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "System Error",
-                &format!("Failed to get current executable path: {e}"),
-                None,
-            );
-        }
-    };
-
-    let args: Vec<String> = env::args().skip(1).collect();
-
-    logger::info(
-        LogTag::Webserver,
-        &format!(
-            "Restarting process: {} with args: {:?}",
-            current_exe.display(),
-            args
-        ),
-    );
-
-    // Spawn async task to perform restart after response is sent
-    tokio::spawn(async move {
-        // Small delay to ensure response is sent
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        // Perform OS-specific restart
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            logger::info(
-                LogTag::Webserver,
-                "Executing Unix exec() for process replacement",
-            );
-
-            let error = Command::new(current_exe).args(&args).exec(); // This replaces the current process
-
-            // If exec returns, it failed
-            logger::error(
-                LogTag::Webserver,
-                &format!("Failed to exec new process: {error}"),
-            );
-            std::process::exit(1);
-        }
-
-        #[cfg(windows)]
-        {
-            logger::info(
-                LogTag::Webserver,
-                "Spawning new process on Windows and exiting current",
-            );
-
-            match Command::new(current_exe).args(&args).spawn() {
-                Ok(_) => {
-                    logger::info(
-                        LogTag::Webserver,
-                        "New process spawned successfully, exiting current process",
-                    );
-                    std::process::exit(0);
-                }
-                Err(e) => {
-                    logger::error(
-                        LogTag::Webserver,
-                        &format!("Failed to spawn new process: {e}"),
-                    );
-                    std::process::exit(1);
-                }
-            }
-        }
-    });
+    schedule_graceful_restart("manual dashboard request");
 
     let response = RebootResponse {
         success: true,
-        message: "System reboot initiated. Process will restart shortly.".to_owned(),
+        message: "Graceful restart scheduled. The dashboard will reconnect automatically."
+            .to_owned(),
+        instance_id: global::instance_id().to_owned(),
     };
 
     success_response(response)
+}
+
+/// Delay the signal long enough for Axum to flush the response, then let the
+/// run loop stop services and release the process lock in normal order.
+pub(crate) fn schedule_graceful_restart(reason: &'static str) {
+    task::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(350)).await;
+        logger::info(
+            LogTag::System,
+            &format!("Scheduling graceful process restart: {reason}"),
+        );
+        global::request_restart();
+    });
 }
 
 /// GET /api/system/bootstrap — Report real-time boot status for GUI/frontend gating

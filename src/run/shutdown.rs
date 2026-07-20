@@ -16,32 +16,17 @@ pub(super) async fn wait_for_shutdown_signal() -> Result<(), String> {
         "Waiting for shutdown signal (press Ctrl+C twice to force kill)",
     );
 
-    // Platform-specific signal handling
-    #[cfg(unix)]
-    let signal_name = {
-        use tokio::signal::unix::{signal, SignalKind};
+    if global::is_restart_requested() {
+        logger::info(LogTag::System, "Graceful restart requested");
+        return Ok(());
+    }
 
-        let mut sigint =
-            signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {e}"))?;
-        let mut sigterm =
-            signal(SignalKind::terminate()).map_err(|e| format!("Failed to bind SIGTERM: {e}"))?;
-        let mut sigquit =
-            signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {e}"))?;
-
-        tokio::select! {
-            _ = sigint.recv() => "SIGINT",
-            _ = sigterm.recv() => "SIGTERM",
-            _ = sigquit.recv() => "SIGQUIT",
+    let signal_name = tokio::select! {
+        _ = global::wait_for_restart_request() => {
+            logger::info(LogTag::System, "Graceful restart requested");
+            return Ok(());
         }
-    };
-
-    #[cfg(windows)]
-    let signal_name = {
-        // On Windows, ctrl_c() handles Ctrl+C and Ctrl+Break
-        tokio::signal::ctrl_c()
-            .await
-            .map_err(|e| format!("Failed to listen for shutdown signal: {e}"))?;
-        "CTRL_C"
+        result = wait_for_os_shutdown_signal() => result?,
     };
 
     logger::warning(
@@ -54,18 +39,46 @@ pub(super) async fn wait_for_shutdown_signal() -> Result<(), String> {
 
     // Spawn a background listener for a second Ctrl+C to exit immediately
     tokio::spawn(async move {
-        // If another Ctrl+C is received during graceful shutdown, exit immediately
         if tokio::signal::ctrl_c().await.is_ok() {
             logger::error(
                 LogTag::System,
                 "Second Ctrl+C detected — forcing immediate exit.",
             );
-            // 130 is the conventional exit code for SIGINT
             std::process::exit(130);
         }
     });
 
     Ok(())
+}
+
+/// Wait for a platform shutdown signal and return its display name.
+async fn wait_for_os_shutdown_signal() -> Result<&'static str, String> {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut sigint =
+            signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {e}"))?;
+        let mut sigterm =
+            signal(SignalKind::terminate()).map_err(|e| format!("Failed to bind SIGTERM: {e}"))?;
+        let mut sigquit =
+            signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {e}"))?;
+
+        Ok(tokio::select! {
+            _ = sigint.recv() => "SIGINT",
+            _ = sigterm.recv() => "SIGTERM",
+            _ = sigquit.recv() => "SIGQUIT",
+        })
+    }
+
+    #[cfg(windows)]
+    {
+        // On Windows, ctrl_c() handles Ctrl+C and Ctrl+Break
+        tokio::signal::ctrl_c()
+            .await
+            .map_err(|e| format!("Failed to listen for shutdown signal: {e}"))?;
+        Ok("CTRL_C")
+    }
 }
 
 /// Wait until setup enters either preview or full mode, or for shutdown.
@@ -79,6 +92,11 @@ pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<(), String
     let mut last_warning = start;
 
     loop {
+        if global::is_restart_requested() {
+            logger::info(LogTag::System, "Restart requested during initialization");
+            return Ok(());
+        }
+
         // Skipping setup is also a completed transition: preview mode keeps the
         // dashboard running without wallet/RPC-backed services.
         if global::is_preview_or_full() {

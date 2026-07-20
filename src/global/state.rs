@@ -1,7 +1,8 @@
 //! Initialization, services readiness, GUI mode, webserver config, tools, and dashboard state.
 
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32};
-use std::sync::RwLock;
+use std::sync::{LazyLock, RwLock};
+use tokio::sync::Notify;
 
 // =============================================================================
 // INITIALIZATION FLAGS
@@ -23,6 +24,13 @@ pub static RPC_VALID: AtomicBool = AtomicBool::new(false);
 /// setup, this is cleared and `INITIALIZATION_COMPLETE` is set instead.
 pub static PREVIEW_MODE: AtomicBool = AtomicBool::new(false);
 
+/// A process restart was requested through the dashboard.
+///
+/// Restart is coordinated by the main run loop so services shut down and the
+/// process lock is released before the executable is replaced or relaunched.
+static RESTART_REQUESTED: AtomicBool = AtomicBool::new(false);
+static RESTART_NOTIFY: LazyLock<Notify> = LazyLock::new(Notify::new);
+
 /// Check if initialization is complete and services can start.
 pub fn is_initialization_complete() -> bool {
     INITIALIZATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst)
@@ -42,6 +50,28 @@ pub fn set_preview_mode(enabled: bool) {
 /// preview mode. Used by the discovery-tier services' `is_enabled()`.
 pub fn is_preview_or_full() -> bool {
     is_initialization_complete() || is_preview_mode()
+}
+
+/// Request one graceful process restart. Repeated requests are harmless.
+pub fn request_restart() {
+    if !RESTART_REQUESTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        // notify_one stores a permit when the run loop is between checks, so the
+        // restart cannot be lost like an edge-triggered notify_waiters signal.
+        RESTART_NOTIFY.notify_one();
+    }
+}
+
+/// Check whether the process must restart after graceful shutdown.
+pub fn is_restart_requested() -> bool {
+    RESTART_REQUESTED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Wait for a dashboard-requested process restart.
+pub async fn wait_for_restart_request() {
+    if is_restart_requested() {
+        return;
+    }
+    RESTART_NOTIFY.notified().await;
 }
 
 // =============================================================================

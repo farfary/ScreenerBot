@@ -21,6 +21,7 @@ pub(super) async fn health_check() -> Response {
         status: "ok".to_owned(),
         timestamp: Utc::now(),
         version: env!("CARGO_PKG_VERSION").to_string(),
+        instance_id: crate::global::instance_id().to_owned(),
     };
 
     success_response(response)

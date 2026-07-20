@@ -7,6 +7,9 @@ use serde::Serialize;
 pub struct RebootResponse {
     pub success: bool,
     pub message: String,
+    /// Identity of the process accepting the restart request. Clients wait for
+    /// `/api/health` to report a different value before reloading.
+    pub instance_id: String,
 }
 
 #[derive(Debug, Serialize)]

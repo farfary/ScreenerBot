@@ -6,6 +6,7 @@ class OnboardingControllerClass {
     this.currentSlide = 0;
     this.totalSlides = 5;
     this.initialized = false;
+    this.completing = false;
   }
 
   init() {
@@ -159,17 +160,17 @@ class OnboardingControllerClass {
     }
   }
 
-  complete() {
+  async complete() {
+    if (this.completing) return;
+    this.completing = true;
+
     // Mark onboarding as complete in backend (in-memory only, not saved to disk)
-    fetch("/api/initialization/onboarding/complete", { method: "POST" })
-      .then((response) => {
-        if (!response.ok) {
-          console.error("[Onboarding] Failed to update completion state");
-        }
-      })
-      .catch((err) => {
-        console.error("[Onboarding] Error updating completion state:", err);
-      });
+    try {
+      const response = await fetch("/api/initialization/onboarding/complete", { method: "POST" });
+      if (!response.ok) console.error("[Onboarding] Failed to update completion state");
+    } catch (err) {
+      console.error("[Onboarding] Error updating completion state:", err);
+    }
 
     // Hide onboarding screen
     const onboardingScreen = document.getElementById("onboardingScreen");
@@ -191,6 +192,7 @@ class OnboardingControllerClass {
       }
     } else {
       console.error("[Onboarding] Setup screen wrapper not found!");
+      this.completing = false;
     }
   }
 }
