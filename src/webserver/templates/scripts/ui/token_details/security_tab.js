@@ -3,6 +3,7 @@
  * Extracted from token_details_dialog.js to reduce file size
  */
 import * as Utils from "../../core/utils.js";
+import { renderTabState } from "./state_handling.js";
 
 /**
  * Render the security tab content (with loading state)
@@ -17,7 +18,11 @@ export function renderSecurityTab(token, options = {}) {
   const hasSecurityData = token.safety_score !== undefined && token.safety_score !== null;
 
   if (!hasSecurityData) {
-    return buildSecurityLoadingContent(token, { renderHintTrigger, escapeHtml, formatShortAddress });
+    return buildSecurityLoadingContent(token, {
+      renderHintTrigger,
+      escapeHtml,
+      formatShortAddress,
+    });
   }
 
   return buildSecurityContent(token, { renderHintTrigger, escapeHtml, formatShortAddress });
@@ -63,9 +68,7 @@ function buildSecurityLoadingContent(token, options) {
         </div>
       </div>
       <div class="security-right-col">
-        <div class="security-card security-loading" style="height: 400px; --i:3">
-           <div class="loading-spinner" style="margin-top: 150px;"></div>
-        </div>
+        ${renderTabState({ kind: "loading", message: "Analyzing security…" })}
       </div>
     </div>
   `;
@@ -259,9 +262,7 @@ function buildAuthorityTile(label, icon, authority, safeWord, riskWord) {
 
 function buildHoldersCard(token) {
   const top10Pct =
-    token.top_10_holders_pct !== undefined
-      ? token.top_10_holders_pct
-      : token.top_10_concentration;
+    token.top_10_holders_pct !== undefined ? token.top_10_holders_pct : token.top_10_concentration;
   const creatorPct = token.creator_balance_pct;
 
   // Determine concentration risk level

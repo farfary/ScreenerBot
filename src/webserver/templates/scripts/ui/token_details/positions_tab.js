@@ -10,6 +10,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
+import { renderTabState } from "./state_handling.js";
 
 export function applyPositionsTabMixin(DialogClass) {
   const proto = DialogClass.prototype;
@@ -23,7 +24,15 @@ export function applyPositionsTabMixin(DialogClass) {
 
     const mint = this.tokenData?.mint;
     if (!mint) {
-      this._renderHtmlIfChanged(content, renderPositionsEmpty("No token selected."), "__posHtml");
+      this._renderHtmlIfChanged(
+        content,
+        renderTabState({
+          icon: "icon-chart-bar",
+          title: "No position",
+          message: "No token selected.",
+        }),
+        "__posHtml"
+      );
       content.dataset.loaded = "true";
       return;
     }
@@ -36,8 +45,11 @@ export function applyPositionsTabMixin(DialogClass) {
     // Show a spinner only on the very first paint (no cached markup yet), so
     // refreshes after a trade don't flash.
     if (!content.__posHtml) {
-      content.innerHTML =
-        '<div class="tdd-state tdd-state-loading"><div class="loading-spinner">Loading position…</div></div>';
+      this._renderHtmlIfChanged(
+        content,
+        renderTabState({ kind: "loading", message: "Loading position…" }),
+        "__posHtml"
+      );
     }
 
     let data = null;
@@ -57,7 +69,11 @@ export function applyPositionsTabMixin(DialogClass) {
     if (!position) {
       this._renderHtmlIfChanged(
         content,
-        renderPositionsEmpty("No position for this token yet. Use Buy to open one."),
+        renderTabState({
+          icon: "icon-chart-bar",
+          title: "No position",
+          message: "No position for this token yet. Use Buy to open one.",
+        }),
         "__posHtml"
       );
       content.dataset.loaded = "true";
@@ -85,16 +101,6 @@ export function applyPositionsTabMixin(DialogClass) {
   };
 }
 
-function renderPositionsEmpty(message) {
-  return `
-    <div class="tdd-state">
-      <i class="tdd-state-icon icon-chart-bar" aria-hidden="true"></i>
-      <div class="tdd-state-title">No position</div>
-      <div class="tdd-state-message">${message}</div>
-    </div>
-  `;
-}
-
 function renderPositionSummary(position) {
   const isClosed = !!position.exit_time;
   const stateLabel = position.archived ? "Archived" : isClosed ? "Closed" : "Open";
@@ -104,10 +110,16 @@ function renderPositionSummary(position) {
   const pnlSol = isClosed ? position.pnl : position.unrealized_pnl;
   const pnlPct = isClosed ? position.pnl_percent : position.unrealized_pnl_percent;
 
-  const entry = pickPrice(position.effective_entry_price, position.average_entry_price, position.entry_price);
+  const entry = pickPrice(
+    position.effective_entry_price,
+    position.average_entry_price,
+    position.entry_price
+  );
   const current = position.current_price;
   const sizeSol = position.total_size_sol ?? position.entry_size_sol;
-  const tokensHeld = isClosed ? position.token_amount : position.remaining_token_amount ?? position.token_amount;
+  const tokensHeld = isClosed
+    ? position.token_amount
+    : (position.remaining_token_amount ?? position.token_amount);
   const ageStr = position.entry_time
     ? Utils.formatTimeAgo(new Date(position.entry_time * 1000))
     : "—";
@@ -208,9 +220,7 @@ function renderPositionSummary(position) {
 
 function pnlColor(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "";
-  return Number(value) >= 0
-    ? "color: var(--success-color);"
-    : "color: var(--error-color);";
+  return Number(value) >= 0 ? "color: var(--success-color);" : "color: var(--error-color);";
 }
 
 function pickPrice(...candidates) {

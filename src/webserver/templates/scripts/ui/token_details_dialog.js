@@ -26,7 +26,7 @@ import { applyTradeActionsMixin } from "./token_details/trade_actions.js";
 import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
 import { applyChartTabMixin, CHART_CANDLE_LIMIT } from "./token_details/chart_tab.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
-import { applyStateHandlingMixin } from "./token_details/state_handling.js";
+import { applyStateHandlingMixin, renderTabState } from "./token_details/state_handling.js";
 import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
 
 // Data source status constants
@@ -440,8 +440,7 @@ export class TokenDetailsDialog {
 
     // "All failed" = no market, no security, no chart — the full blackout case.
     const allFailed = !marketOk && !isOk("rugcheck") && !isOk("ohlcv");
-    const icon = (state) =>
-      state === "unavailable" ? "icon-circle-alert" : "icon-circle-x";
+    const icon = (state) => (state === "unavailable" ? "icon-circle-alert" : "icon-circle-x");
 
     const chips = issues
       .map(
@@ -453,9 +452,7 @@ export class TokenDetailsDialog {
       )
       .join("");
 
-    const lead = allFailed
-      ? '<span class="source-issues-lead">No data available</span>'
-      : "";
+    const lead = allFailed ? '<span class="source-issues-lead">No data available</span>' : "";
 
     row.innerHTML = `${lead}${chips}`;
     row.hidden = false;
@@ -1004,22 +1001,22 @@ export class TokenDetailsDialog {
 
         <div class="dialog-body">
           <div class="tab-content active" data-tab-content="overview">
-            <div class="loading-spinner">Loading...</div>
+            ${renderTabState({ kind: "loading", message: "Loading overview…" })}
           </div>
           <div class="tab-content" data-tab-content="security">
-            <div class="loading-spinner">Loading...</div>
+            ${renderTabState({ kind: "loading", message: "Loading security…" })}
           </div>
           <div class="tab-content" data-tab-content="positions">
-            <div class="loading-spinner">Loading...</div>
+            ${renderTabState({ kind: "loading", message: "Loading position…" })}
           </div>
           <div class="tab-content" data-tab-content="pools">
-            <div class="loading-spinner">Loading...</div>
+            ${renderTabState({ kind: "loading", message: "Loading pools…" })}
           </div>
           <div class="tab-content" data-tab-content="links">
-            <div class="loading-spinner">Loading...</div>
+            ${renderTabState({ kind: "loading", message: "Loading links…" })}
           </div>
           <div class="tab-content" data-tab-content="transactions">
-            <div class="loading-spinner">Loading...</div>
+            ${renderTabState({ kind: "loading", message: "Loading transactions…" })}
           </div>
         </div>
       </div>
@@ -1207,25 +1204,19 @@ export class TokenDetailsDialog {
     if (!mint) return;
 
     const currentlyFavorite = btn.classList.contains("active");
-    const symbol =
-      this.fullTokenData?.symbol || this.tokenData?.symbol || "";
+    const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "";
     const name = this.fullTokenData?.name || this.tokenData?.name || null;
-    const logo_url =
-      this.fullTokenData?.logo_url || this.tokenData?.logo_url || null;
+    const logo_url = this.fullTokenData?.logo_url || this.tokenData?.logo_url || null;
 
     btn.disabled = true;
     try {
       if (currentlyFavorite) {
-        const response = await fetch(
-          `/api/tokens/favorites/${encodeURIComponent(mint)}`,
-          { method: "DELETE" }
-        );
+        const response = await fetch(`/api/tokens/favorites/${encodeURIComponent(mint)}`, {
+          method: "DELETE",
+        });
         if (!response.ok) throw new Error("Failed to remove favorite");
         this._updateFavoriteButton(false);
-        Utils.showToast(
-          `${symbol || "Token"} removed from favorites`,
-          "success"
-        );
+        Utils.showToast(`${symbol || "Token"} removed from favorites`, "success");
       } else {
         const response = await fetch("/api/tokens/favorites", {
           method: "POST",
@@ -1239,10 +1230,7 @@ export class TokenDetailsDialog {
         });
         if (!response.ok) throw new Error("Failed to add favorite");
         this._updateFavoriteButton(true);
-        Utils.showToast(
-          `${symbol || "Token"} added to favorites`,
-          "success"
-        );
+        Utils.showToast(`${symbol || "Token"} added to favorites`, "success");
       }
 
       // Emit event for other UI components (context menu, favorites tab, etc.)
@@ -1361,10 +1349,7 @@ export class TokenDetailsDialog {
         this._updateFavoriteButton(e.detail.isFavorite);
       }
     };
-    window.addEventListener(
-      "screenerbot:favorites-changed",
-      this._favoritesChangedHandler
-    );
+    window.addEventListener("screenerbot:favorites-changed", this._favoritesChangedHandler);
 
     // Delegated retry handler for the initial-load error state's Retry button.
     const body = this.dialogEl.querySelector(".dialog-body");
@@ -1399,7 +1384,7 @@ export class TokenDetailsDialog {
     const tokenToUse = this.fullTokenData || this.tokenData;
 
     if (!tokenToUse || !tokenToUse.mint) {
-      content.innerHTML = '<div class="loading-spinner">Waiting for token data...</div>';
+      this._renderTabWaiting(content, "Waiting for token data…");
       return;
     }
 
@@ -1461,7 +1446,7 @@ export class TokenDetailsDialog {
 
   _loadPoolsTab(content) {
     if (!this.fullTokenData) {
-      content.innerHTML = '<div class="loading-spinner">Waiting for token data...</div>';
+      this._renderTabWaiting(content, "Waiting for token data…");
       return;
     }
 
@@ -1480,7 +1465,7 @@ export class TokenDetailsDialog {
 
   _loadLinksTab(content) {
     if (!this.fullTokenData) {
-      content.innerHTML = '<div class="loading-spinner">Waiting for token data...</div>';
+      this._renderTabWaiting(content, "Waiting for token data…");
       return;
     }
 

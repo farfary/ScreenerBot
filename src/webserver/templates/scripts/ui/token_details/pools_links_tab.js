@@ -4,6 +4,7 @@
  * These tabs are grouped together as they both display external/reference data
  */
 import * as Utils from "../../core/utils.js";
+import { renderTabState } from "./state_handling.js";
 
 // =========================================================================
 // POOLS TAB
@@ -21,13 +22,11 @@ export function renderPoolsTab(token, options = {}) {
   const pools = token.pools || [];
 
   if (pools.length === 0) {
-    return `
-      <div class="empty-state">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
-        <h3>No pools found</h3>
-        <p>No liquidity pools have been detected for this token.</p>
-      </div>
-    `;
+    return renderTabState({
+      icon: "icon-droplet",
+      title: "No pools",
+      message: "No liquidity pools have been detected for this token.",
+    });
   }
 
   // Calculate summary stats
@@ -120,7 +119,9 @@ export function renderPoolsTab(token, options = {}) {
   `;
 
   // Build right column - Pool details
-  const poolCards = pools.map((pool) => buildPoolDetailCard(pool, { escapeHtml, formatShortAddress })).join("");
+  const poolCards = pools
+    .map((pool) => buildPoolDetailCard(pool, { escapeHtml, formatShortAddress }))
+    .join("");
   const rightCol = `
     <div class="pools-right-col">
       <div class="pools-list-header">

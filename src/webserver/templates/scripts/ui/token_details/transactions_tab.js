@@ -5,6 +5,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
+import { renderTabState } from "./state_handling.js";
 
 /**
  * Apply transactions tab mixin to TokenDetailsDialog class
@@ -21,7 +22,10 @@ export function applyTransactionsTabMixin(DialogClass) {
   proto._loadTransactionsTab = async function (content) {
     if (content.dataset.loaded === "true") return;
 
-    content.innerHTML = '<div class="loading-spinner">Loading transactions...</div>';
+    content.innerHTML = renderTabState({
+      kind: "loading",
+      message: "Loading transactions…",
+    });
 
     try {
       // Fetch 24h of transactions (limit 1000 usually enough for chart unless very high volume)
@@ -33,12 +37,11 @@ export function applyTransactionsTabMixin(DialogClass) {
         const transactions = response;
 
         if (transactions.length === 0) {
-          content.innerHTML = `
-            <div class="empty-state">
-              <i class="icon-activity"></i>
-              <p>No wallet transaction history is available for this token.</p>
-            </div>
-          `;
+          content.innerHTML = renderTabState({
+            icon: "icon-activity",
+            title: "No transactions",
+            message: "No wallet transaction history is available for this token.",
+          });
           content.dataset.loaded = "true";
           return;
         }
@@ -53,11 +56,19 @@ export function applyTransactionsTabMixin(DialogClass) {
 
         content.dataset.loaded = "true";
       } else {
-        content.innerHTML = '<div class="empty-state">No transaction data available</div>';
+        content.innerHTML = renderTabState({
+          icon: "icon-activity",
+          title: "No transactions",
+          message: "No transaction data is available for this token.",
+        });
+        content.dataset.loaded = "true";
       }
     } catch (err) {
       console.error("Failed to load transactions:", err);
-      content.innerHTML = '<div class="error-state">Failed to load transactions</div>';
+      this._renderTabError(content, {
+        title: "Couldn't load transactions",
+        message: "Transaction history is temporarily unavailable.",
+      });
     }
   };
 
@@ -183,7 +194,9 @@ export function applyTransactionsTabMixin(DialogClass) {
         const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
 
         // Price (if available) - generic transactions typically don't have price
-        const price = tx.price_sol ? Utils.formatPriceSubscript(tx.price_sol, { precision: 5 }) : "—";
+        const price = tx.price_sol
+          ? Utils.formatPriceSubscript(tx.price_sol, { precision: 5 })
+          : "—";
 
         // Total SOL (use sol_delta absolute value)
         const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);

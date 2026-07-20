@@ -29,6 +29,52 @@ function backendLooksOffline() {
   }
 }
 
+function escapeStateText(value) {
+  const node = document.createElement("div");
+  node.textContent = String(value ?? "");
+  return node.innerHTML;
+}
+
+/**
+ * Build the canonical full-tab state used by every Token Details subtab.
+ * Keeping this renderer outside the mixin lets pure tab renderers use the same
+ * DOM contract without duplicating markup.
+ */
+export function renderTabState({
+  kind = "empty",
+  icon = "icon-info",
+  title = "",
+  message = "",
+  retry = false,
+} = {}) {
+  const safeKind = ["loading", "empty", "error"].includes(kind) ? kind : "empty";
+  const safeIcon = /^icon-[a-z0-9-]+$/.test(icon) ? icon : "icon-info";
+  const role = safeKind === "error" ? 'role="alert"' : 'role="status" aria-live="polite"';
+
+  if (safeKind === "loading") {
+    return `
+      <div class="tdd-state tdd-state-loading" ${role}>
+        <div class="loading-spinner">${escapeStateText(message || "Loading…")}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="tdd-state tdd-state-${safeKind}" ${role}>
+      <i class="tdd-state-icon ${safeIcon}" aria-hidden="true"></i>
+      ${title ? `<div class="tdd-state-title">${escapeStateText(title)}</div>` : ""}
+      ${message ? `<div class="tdd-state-message">${escapeStateText(message)}</div>` : ""}
+      ${
+        retry
+          ? `<button type="button" class="tdd-state-retry" data-action="tdd-retry">
+              <i class="icon-refresh-cw" aria-hidden="true"></i> Retry
+            </button>`
+          : ""
+      }
+    </div>
+  `;
+}
+
 export function applyStateHandlingMixin(DialogClass) {
   const proto = DialogClass.prototype;
 
@@ -111,16 +157,13 @@ export function applyStateHandlingMixin(DialogClass) {
       (navigator.onLine === false
         ? "You appear to be offline."
         : "The request failed after several attempts.");
-    const html = `
-      <div class="tdd-state tdd-state-error" role="alert">
-        <i class="tdd-state-icon icon-triangle-alert" aria-hidden="true"></i>
-        <div class="tdd-state-title">${title}</div>
-        <div class="tdd-state-message">${message}</div>
-        <button type="button" class="tdd-state-retry" data-action="tdd-retry">
-          <i class="icon-refresh-cw" aria-hidden="true"></i> Retry
-        </button>
-      </div>
-    `;
+    const html = renderTabState({
+      kind: "error",
+      icon: "icon-triangle-alert",
+      title,
+      message,
+      retry: true,
+    });
     this._renderHtmlIfChanged(content, html, "__stateHtml");
     content.dataset.loaded = "false";
   };
@@ -133,7 +176,7 @@ export function applyStateHandlingMixin(DialogClass) {
    */
   proto._renderTabWaiting = function (content, label = "Waiting for data…") {
     if (!content) return;
-    const html = `<div class="tdd-state tdd-state-loading"><div class="loading-spinner">${label}</div></div>`;
+    const html = renderTabState({ kind: "loading", message: label });
     this._renderHtmlIfChanged(content, html, "__stateHtml");
   };
 
