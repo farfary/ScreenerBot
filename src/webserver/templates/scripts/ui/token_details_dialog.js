@@ -1730,9 +1730,19 @@ applyPositionsTabMixin(TokenDetailsDialog);
 // This listener allows any page to open the TokenDetailsDialog via custom event
 // dispatched from context_menu.js when user clicks "View Details"
 
-let globalDialogInstance = null;
+// This module can be reached through cache-busted and non-cache-busted import
+// graphs. ES modules treat those URLs as different modules, so module-local
+// state is not global enough: each copy used to install a window listener and
+// one billboard click could create two identical dialogs. Store the coordinator
+// on window so every module instance shares one listener and one dialog.
+const coordinatorKey = Symbol.for("screenerbot.token-details-dialog");
+const globalCoordinator = window[coordinatorKey] || {
+  dialogInstance: null,
+  listenerInstalled: false,
+};
+window[coordinatorKey] = globalCoordinator;
 
-window.addEventListener("screenerbot:open-token-details", async (event) => {
+async function handleOpenTokenDetails(event) {
   const { mint, symbol } = event.detail || {};
 
   if (!mint) {
@@ -1743,19 +1753,19 @@ window.addEventListener("screenerbot:open-token-details", async (event) => {
   console.log(`[TokenDetailsDialog] Opening details for ${symbol || mint}`);
 
   // Close existing dialog if open for a different token
-  if (globalDialogInstance && globalDialogInstance.dialogEl) {
-    if (globalDialogInstance.tokenData?.mint === mint) {
+  if (globalCoordinator.dialogInstance?.dialogEl) {
+    if (globalCoordinator.dialogInstance.tokenData?.mint === mint) {
       // Already open for this token, do nothing
       console.log("[TokenDetailsDialog] Dialog already open for this token");
       return;
     }
-    globalDialogInstance.close();
+    globalCoordinator.dialogInstance.close();
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
 
   // Create new dialog instance if needed
-  if (!globalDialogInstance) {
-    globalDialogInstance = new TokenDetailsDialog({
+  if (!globalCoordinator.dialogInstance) {
+    globalCoordinator.dialogInstance = new TokenDetailsDialog({
       onClose: () => {
         // Keep instance for reuse, just clean up state
       },
@@ -1763,5 +1773,10 @@ window.addEventListener("screenerbot:open-token-details", async (event) => {
   }
 
   // Open dialog with minimal token data (dialog will fetch full details)
-  await globalDialogInstance.show({ mint, symbol: symbol || "" });
-});
+  await globalCoordinator.dialogInstance.show({ mint, symbol: symbol || "" });
+}
+
+if (!globalCoordinator.listenerInstalled) {
+  globalCoordinator.listenerInstalled = true;
+  window.addEventListener("screenerbot:open-token-details", handleOpenTokenDetails);
+}
