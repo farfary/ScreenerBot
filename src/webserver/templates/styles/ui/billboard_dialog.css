@@ -344,8 +344,6 @@
 /* --- Head: avatar straddling the banner's lower edge ----------------------- */
 
 .bb-card-head {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: flex-end;
   padding: 0 12px;
