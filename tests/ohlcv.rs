@@ -1,39 +1,10 @@
-//! L0 (pure): SOL/lamports conversions and OHLCV timeframe math.
-//!
-//! No network, no DB, no wallet — runs on every commit and in CI. These are the
-//! deterministic money/time primitives the rest of the system is built on, so a
-//! regression here is a silent correctness bug everywhere.
+//! OHLCV chart data. Pure timeframe/candle math today; live candle fetch is the
+//! documented next addition (a `#[ignore]` test through the bot's real fetch path,
+//! asserting SOL-denominated candles with volume > 0 and canonical-bucket timestamps).
 
 mod common;
 
 use screenerbot::ohlcvs::Timeframe;
-use screenerbot::utils::{lamports_to_sol, sol_to_lamports};
-
-const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
-
-#[test]
-fn one_sol_is_a_billion_lamports() {
-    assert_eq!(sol_to_lamports(1.0), LAMPORTS_PER_SOL);
-    assert_eq!(lamports_to_sol(LAMPORTS_PER_SOL), 1.0);
-}
-
-#[test]
-fn zero_maps_to_zero_both_ways() {
-    assert_eq!(sol_to_lamports(0.0), 0);
-    assert_eq!(lamports_to_sol(0), 0.0);
-}
-
-#[test]
-fn lamports_sol_round_trip_is_stable() {
-    for sol in [0.000_000_001_f64, 0.5, 1.0, 12.345_678_9, 1000.0] {
-        let lamports = sol_to_lamports(sol);
-        let back = lamports_to_sol(lamports);
-        assert!(
-            (back - sol).abs() < 1e-9,
-            "round trip drift: {sol} -> {lamports} -> {back}"
-        );
-    }
-}
 
 #[test]
 fn timeframe_seconds_are_canonical() {

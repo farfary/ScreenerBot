@@ -1,19 +1,19 @@
 # Nextest configuration for ScreenerBot.
 #
-# One command runs the whole suite with PER-TEST PROCESS ISOLATION. This is not a
-# nicety: the app uses many global singletons (OnceLock config, ArcSwap live
-# snapshots, the service-manager global Option, r2d2 DB pools). Under plain
-# `cargo test` every test shares one process and that state collides; nextest runs
-# each test in its own process, so every test starts from a clean global world and
-# a `panic = "abort"` in one test is just that test failing, not the whole binary.
+# nextest gives PER-TEST PROCESS ISOLATION. This is not a nicety: the app uses many
+# global singletons (OnceLock config, ArcSwap live snapshots, the service-manager
+# global Option, r2d2 DB pools). Under plain `cargo test` every test shares one
+# process and that state collides; nextest runs each test in its own process, so every
+# test starts from a clean global world and a `panic = "abort"` is just that test
+# failing, not the whole binary.
 #
-# Tiers (defined in tests/common/mod.rs):
-#   L0  default tests                    — pure/deterministic, no network/DB/wallet
-#   L1  #[ignore] + read-only network    — APIs, RPC, screenerbot-data server
-#   L2  #[ignore] + real mainnet swap    — spends SOL, never runs by default
-#
-# Drive it with ../test.sh (from the wrapper root): `./test.sh`, `./test.sh live`,
-# `./test.sh mainnet`, or `./test.sh <name-filter>`.
+# Integration tests are organised by DOMAIN (tests/apis.rs, rpc.rs, ohlcv.rs, ...) and
+# the levels are the standard `#[ignore]` attribute — see tests/common/mod.rs. Run:
+#   pure     cargo nextest run
+#   live     cargo nextest run --run-ignored ignored-only -E 'kind(test)'
+#   mainnet  SB_TEST_MAINNET_SWAP=1 SB_TEST_WALLET=... (same live command)
+# `kind(test)` scopes the ignored run to integration tests, never the lib's own
+# ignored unit tests. ../test.sh wraps these exact commands (logging + confirmation).
 
 [profile.default]
 # Non-live suite. fail-fast off so one failure never hides the rest of the report.
@@ -40,19 +40,14 @@ path = "junit.xml"
 
 # Test groups bound concurrency for tests that must not run wide-open in parallel.
 [test-groups]
-# Anything touching shared DB/global state or spending money runs one-at-a-time.
-serial-state = { max-threads = 1 }
-# Live network tests share upstream rate limits — keep the fan-out modest.
-live-network = { max-threads = 4 }
+# Real mainnet swap tests must never run in parallel (money / one wallet nonce).
+# Convention: name a money test `mainnet_*` and it lands in this group automatically.
+serial-mainnet = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'binary(/^l2_/)'
-test-group = 'serial-state'
+filter = 'test(/mainnet/)'
+test-group = 'serial-mainnet'
 
 [[profile.live.overrides]]
-filter = 'binary(/^l1_/)'
-test-group = 'live-network'
-
-[[profile.live.overrides]]
-filter = 'binary(/^l2_/)'
-test-group = 'serial-state'
+filter = 'test(/mainnet/)'
+test-group = 'serial-mainnet'

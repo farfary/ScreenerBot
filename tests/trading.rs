@@ -1,16 +1,17 @@
-//! L2 (real mainnet swap — spends SOL): the full manual buy -> verify -> sell ->
-//! verify lifecycle against mainnet.
+//! Trading end-to-end. Contains the MAINNET swap lifecycle — it spends real SOL.
 //!
-//! NEVER runs by default. It is `#[ignore]`'d AND guarded by `require_mainnet()`, which
-//! returns `None` (clean skip, no spend, no failure) unless the owner explicitly opts
-//! in with `SB_TEST_MAINNET_SWAP=1` and a funded `SB_TEST_WALLET`. Drive it with
-//! `./test.sh mainnet`. Spend is capped by `SB_TEST_MAX_LAMPORTS`.
+//! `#[ignore]` AND gated by [`common::require_mainnet`], which returns `None` (clean
+//! skip, no spend, no failure) unless the owner opts in with `SB_TEST_MAINNET_SWAP=1`
+//! and a funded `SB_TEST_WALLET`. So the live command runs the read-only tests while
+//! this one self-skips; `./test.sh mainnet` sets the env so it executes. Spend is
+//! capped by `SB_TEST_MAX_LAMPORTS`. The `mainnet` in the test name puts it in the
+//! serial-mainnet nextest group (never run in parallel).
 
 mod common;
 
 #[tokio::test]
-#[ignore = "L2 mainnet swap (spends real SOL): run via `./test.sh mainnet`"]
-async fn manual_buy_then_sell_lifecycle() {
+#[ignore = "mainnet swap: spends real SOL"]
+async fn mainnet_manual_buy_then_sell_lifecycle() {
     let Some(ctx) = common::require_mainnet() else {
         return; // Not opted in — skip without spending or failing.
     };
@@ -32,7 +33,7 @@ async fn manual_buy_then_sell_lifecycle() {
     //   5. await ExitVerified                                -> assert closed, PnL recorded,
     //      slot released exactly once, exit record written
     eprintln!(
-        "L2 harness ready: mint={} cap={} lamports (swap execution not yet wired)",
+        "mainnet harness ready: mint={} cap={} lamports (swap execution not yet wired)",
         ctx.mint, ctx.max_lamports
     );
 }

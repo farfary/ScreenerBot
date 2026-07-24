@@ -1,12 +1,12 @@
-//! L0 (pure): config serialize -> toml file -> parse round-trip. No network/wallet.
+//! Pure: config serialize -> toml file -> parse round-trip. No network/wallet.
 //!
 //! Config is macro-driven (`config_struct!`, 20 sections), so a serde regression is
 //! otherwise silent — the app would start with defaults and quietly drop persisted
 //! settings. This asserts a non-default value survives a full save/load cycle.
 //!
-//! Kept in its own file (its own test binary → own process) because it initialises the
-//! global CONFIG via `load_config_from_path`, which uses `OnceLock::set` and would
-//! clash with any other config-initialising test sharing the process.
+//! Its own file (its own test binary → own process) because it initialises the global
+//! CONFIG via `load_config_from_path` (`OnceLock::set`), which would clash with any
+//! other config-initialising test sharing the process.
 
 mod common;
 

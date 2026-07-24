@@ -1,14 +1,30 @@
-//! Shared test harness for the ScreenerBot integration suite.
+//! Shared harness for the ScreenerBot integration suite (`tests/`).
 //!
-//! Provides the three things every non-pure test needs: an isolated data
-//! directory (so live tests never touch the owner's real config/DBs), in-memory
-//! config initialisation, and the tier gates that keep read-only and money-spending
-//! tests from running unless explicitly requested.
+//! # How the suite is organised
 //!
-//! This file lives at `tests/common/mod.rs`, so it is compiled into each test
-//! binary as a shared module (`mod common;`) rather than as its own test binary.
+//! Integration tests are split into one file **per domain** (`apis.rs`, `rpc.rs`,
+//! `ohlcv.rs`, `config.rs`, `conversions.rs`, `trading.rs`, … future: `pools.rs`,
+//! `positions.rs`, `transactions.rs`). Each `tests/*.rs` is its own crate/binary, so
+//! it can only see the library's `pub` API plus dev-dependencies. Internal / private
+//! pure logic is tested with co-located `#[cfg(test)] mod tests` in its own source
+//! file instead.
+//!
+//! # Test levels (expressed the standard Rust way, with `#[ignore]`)
+//!
+//! * **Pure** — no attribute. No network, DB, or wallet. Runs by default.
+//!     `cargo nextest run`            (or `cargo test`)
+//! * **Live** — `#[ignore]`. Real read-only network (APIs, RPC). No money.
+//!     `cargo nextest run --run-ignored ignored-only -E 'kind(test)'`
+//! * **Mainnet** — `#[ignore]` + [`require_mainnet`]. Spends real SOL. Self-skips
+//!   unless `SB_TEST_MAINNET_SWAP=1` and a funded `SB_TEST_WALLET` are set, so the
+//!   `--run-ignored` command above runs the live tests while mainnet ones skip.
+//!
+//! `kind(test)` scopes the ignored run to integration tests only, never the library's
+//! own `#[ignore]`'d unit tests. `../test.sh` (wrapper root) is a thin convenience
+//! around these exact commands (adds logging + a mainnet confirmation prompt); the
+//! suite does not depend on it.
 
-#![allow(dead_code)] // each test binary uses only the part of this module it needs.
+#![allow(dead_code)] // each test binary compiles only the part of this module it uses.
 
 use tempfile::TempDir;
 
@@ -16,9 +32,8 @@ use tempfile::TempDir;
 /// initialise config from defaults. Returns the `TempDir` guard — keep it bound for
 /// the test's lifetime; dropping it deletes the directory.
 ///
-/// nextest runs one test per process, so setting the env var and the config OnceLock
-/// here is hermetic. Under plain `cargo test` (shared process) the env is set once
-/// and config is `get_or_init`'d, which stays correct for the read-only tests.
+/// nextest runs one test per process, so setting the env var and the config `OnceLock`
+/// here is hermetic. Live tests never read or write the owner's real config/DBs.
 pub fn isolated_env() -> TempDir {
     let dir = tempfile::tempdir().expect("create temp data dir");
     // SAFETY: single-threaded test setup, before any path/config access.
@@ -27,23 +42,15 @@ pub fn isolated_env() -> TempDir {
     dir
 }
 
-/// Initialise the global config to defaults WITHOUT touching disk. Idempotent, so it
-/// is safe to call from many tests sharing one process.
+/// Initialise the global config to defaults WITHOUT touching disk. Idempotent.
 pub fn ensure_config() {
     use screenerbot::config::schemas::Config;
     use screenerbot::config::utils::CONFIG;
     let _ = CONFIG.get_or_init(|| std::sync::RwLock::new(Config::default()));
 }
 
-/// L1 gate: real read-only network. L1 tests are `#[ignore]`'d, so they only run when
-/// the harness lifts ignores (`test.sh live`). This flag is the harness's signal, and
-/// is also readable inside a test that wants to no-op when run in isolation.
-pub fn live_enabled() -> bool {
-    env_flag("SB_TEST_LIVE")
-}
-
-/// Context for an L2 (real mainnet swap) test. Carries the funded test wallet path,
-/// the mint to trade, and a hard lamports cap so a money test can never exceed it.
+/// Context for a mainnet test. Carries the funded test-wallet path, the mint to trade,
+/// and a hard lamports cap so a money test can never exceed it.
 pub struct MainnetCtx {
     /// Filesystem path to the funded test-wallet keypair JSON.
     pub wallet_path: String,
@@ -53,17 +60,17 @@ pub struct MainnetCtx {
     pub max_lamports: u64,
 }
 
-/// L2 gate: returns `Some(ctx)` only when the owner has explicitly opted into spending
-/// real SOL (`SB_TEST_MAINNET_SWAP=1`) AND provided a funded test wallet. Otherwise it
-/// prints a SKIP line and returns `None` so the test returns early WITHOUT failing and
-/// WITHOUT spending anything — even if someone lifts `#[ignore]` by hand.
+/// Mainnet gate: returns `Some(ctx)` only when the owner has explicitly opted into
+/// spending real SOL (`SB_TEST_MAINNET_SWAP=1`) AND provided a funded test wallet.
+/// Otherwise it prints a SKIP line and returns `None` so the test returns early WITHOUT
+/// failing and WITHOUT spending anything — even if `#[ignore]` is lifted by hand.
 pub fn require_mainnet() -> Option<MainnetCtx> {
     if !env_flag("SB_TEST_MAINNET_SWAP") {
-        eprintln!("SKIP mainnet swap: set SB_TEST_MAINNET_SWAP=1 (test.sh mainnet) to run");
+        eprintln!("SKIP mainnet: set SB_TEST_MAINNET_SWAP=1 (./test.sh mainnet) to run");
         return None;
     }
     let Ok(wallet_path) = std::env::var("SB_TEST_WALLET") else {
-        eprintln!("SKIP mainnet swap: SB_TEST_WALLET (funded keypair path) not set");
+        eprintln!("SKIP mainnet: SB_TEST_WALLET (funded keypair path) not set");
         return None;
     };
     let mint = std::env::var("SB_TEST_MINT")
