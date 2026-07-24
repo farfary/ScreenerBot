@@ -302,51 +302,6 @@ pub struct ConfirmToolExecutionRequest {
 }
 
 // ============================================================================
-// Assistant AUTH TYPES
-// ============================================================================
-
-#[derive(Debug, Serialize)]
-pub struct AssistantAuthStatusResponse {
-    pub authenticated: bool,
-    pub has_github_token: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AssistantAuthStartResponse {
-    pub user_code: String,
-    pub verification_uri: String,
-    pub device_code: String,
-    pub expires_in: u64,
-    pub interval: u64,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct AssistantAuthPollRequest {
-    pub device_code: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AssistantAuthPollResponse {
-    pub success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pending: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AssistantAuthLogoutResponse {
-    pub success: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AssistantAuthTestResponse {
-    pub success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-// ============================================================================
 // AUTOMATION TYPES
 // ============================================================================
 

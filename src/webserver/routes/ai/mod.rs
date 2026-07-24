@@ -7,14 +7,13 @@ use axum::{
     routing::{delete, get, patch, post},
     Router,
 };
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::webserver::state::AppState;
 
 // Module declarations
 mod automation;
 mod chat;
-mod Assistant_auth;
 mod instructions;
 mod providers;
 mod status;
@@ -32,10 +31,6 @@ use chat::{
     get_chat_session, get_permissions, list_chat_sessions, list_tools, send_chat_message,
     summarize_chat_session, update_permissions,
 };
-use Assistant_auth::{
-    Assistant_auth_logout, Assistant_auth_poll, Assistant_auth_start, Assistant_auth_status,
-    Assistant_auth_test,
-};
 use instructions::{
     create_instruction, delete_instruction, get_history_detail, get_instruction, list_history,
     list_instructions, list_templates, reorder_instructions, update_instruction,
@@ -45,15 +40,6 @@ use status::{
     clear_cache, get_ai_config, get_ai_stats, get_ai_status, get_cache_stats, test_evaluate,
     update_ai_config,
 };
-
-// ============================================================================
-// DEVICE CODE STORAGE
-// ============================================================================
-
-/// In-memory storage for device code during OAuth flow
-/// This is stored globally so the poll endpoint can access the device_code
-pub(crate) static DEVICE_CODE_STORAGE: std::sync::LazyLock<RwLock<Option<String>>> =
-    std::sync::LazyLock::new(|| RwLock::new(None));
 
 // ============================================================================
 // ROUTES
@@ -107,12 +93,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tools", get(list_tools))
         .route("/permissions", get(get_permissions))
         .route("/permissions", patch(update_permissions))
-        // Assistant Authentication
-        .route("/Assistant/auth/status", get(Assistant_auth_status))
-        .route("/Assistant/auth/start", post(Assistant_auth_start))
-        .route("/Assistant/auth/poll", post(Assistant_auth_poll))
-        .route("/Assistant/auth/logout", post(Assistant_auth_logout))
-        .route("/Assistant/auth/test", post(Assistant_auth_test))
         // Automation routes
         .route(
             "/automation",

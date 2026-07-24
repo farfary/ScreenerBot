@@ -64,16 +64,6 @@ pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
         rate_limit_per_minute: config.providers.ollama.rate_limit_per_minute,
     });
 
-    // Add Assistant (OAuth-based, no API key)
-    providers.push(ProviderStatus {
-        id: "Assistant".to_owned(),
-        name: "an LLM provider".to_owned(),
-        enabled: config.providers.Assistant.enabled,
-        has_api_key: crate::apis::llm::Assistant::is_authenticated(),
-        model: config.providers.Assistant.model.clone(),
-        rate_limit_per_minute: config.providers.Assistant.rate_limit_per_minute,
-    });
-
     let active_providers = providers
         .iter()
         .filter(|p| p.enabled && p.has_api_key)

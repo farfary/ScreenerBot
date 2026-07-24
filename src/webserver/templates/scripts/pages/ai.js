@@ -25,7 +25,6 @@ const PROVIDER_NAMES = {
   together: "Together AI",
   openrouter: "OpenRouter",
   mistral: "Mistral AI",
-  Assistant: "an LLM provider",
 };
 
 function createLifecycle() {
@@ -58,10 +57,6 @@ function createLifecycle() {
     automationTasks: [],
     automationRuns: [],
     automationStats: null,
-    AssistantAuth: {
-      authenticated: false,
-      hasGithubToken: false,
-    },
   };
 
   // Store API functions for external access
@@ -782,8 +777,6 @@ function createLifecycle() {
   api.setDefaultProvider = providersTab.setDefaultProvider;
   api.testProviderFromList = providersTab.testProviderFromList;
   api.configureProvider = providersTab.configureProvider;
-  api.checkAssistantAuthStatus = providersTab.checkAssistantAuthStatus;
-  api.disconnectAssistant = providersTab.disconnectAssistant;
 
   // Instructions Tab API
   api.createInstruction = instructionsTab.createInstruction;
@@ -828,9 +821,6 @@ function createLifecycle() {
      */
     async init(_ctx) {
       console.log("[AI] Initializing");
-
-      // Check Assistant auth status
-      await providersTab.checkAssistantAuthStatus();
 
       // Initialize sidebar navigation
       initSubTabs();

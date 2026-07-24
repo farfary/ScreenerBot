@@ -55,16 +55,6 @@ pub async fn list_providers(State(_state): State<Arc<AppState>>) -> Response {
         rate_limit_per_minute: config.providers.ollama.rate_limit_per_minute,
     });
 
-    // Assistant - OAuth based (no API key)
-    providers.push(ProviderStatus {
-        id: "Assistant".to_owned(),
-        name: "an LLM provider".to_owned(),
-        enabled: config.providers.Assistant.enabled,
-        has_api_key: crate::apis::llm::Assistant::is_authenticated(),
-        model: config.providers.Assistant.model.clone(),
-        rate_limit_per_minute: config.providers.Assistant.rate_limit_per_minute,
-    });
-
     success_response(ProvidersListResponse {
         providers,
         default_provider: config.default_provider,
@@ -126,7 +116,6 @@ pub async fn test_provider(
             Provider::Together => &cfg.ai.providers.together,
             Provider::OpenRouter => &cfg.ai.providers.openrouter,
             Provider::Mistral => &cfg.ai.providers.mistral,
-            Provider::Assistant => &cfg.ai.providers.Assistant,
             Provider::Ollama => {
                 return cfg.ai.providers.ollama.model.clone();
             }
@@ -145,7 +134,6 @@ pub async fn test_provider(
                 Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_owned(),
                 Provider::OpenRouter => "openai/gpt-4".to_owned(),
                 Provider::Mistral => "mistral-large-latest".to_owned(),
-                Provider::Assistant => "gpt-4o".to_owned(),
                 Provider::Ollama => "llama3.2".to_owned(),
             }
         }
@@ -358,18 +346,6 @@ pub async fn update_provider(
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
                         cfg.ai.providers.mistral.rate_limit_per_minute = rate_limit;
-                    }
-                }
-                Provider::Assistant => {
-                    // Assistant doesn't use API key - it uses OAuth
-                    if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.Assistant.enabled = enabled;
-                    }
-                    if let Some(ref model) = req.model {
-                        cfg.ai.providers.Assistant.model = model.clone();
-                    }
-                    if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.Assistant.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::Ollama => {

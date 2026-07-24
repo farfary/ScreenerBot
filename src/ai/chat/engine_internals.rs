@@ -278,7 +278,6 @@ impl ChatEngine {
                 Provider::Together => &cfg.ai.providers.together,
                 Provider::OpenRouter => &cfg.ai.providers.openrouter,
                 Provider::Mistral => &cfg.ai.providers.mistral,
-                Provider::Assistant => &cfg.ai.providers.Assistant,
                 Provider::Ollama => {
                     return cfg.ai.providers.ollama.model.clone();
                 }
@@ -298,7 +297,6 @@ impl ChatEngine {
                     Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_owned(),
                     Provider::OpenRouter => "openai/gpt-4".to_owned(),
                     Provider::Mistral => "mistral-large-latest".to_owned(),
-                    Provider::Assistant => "gpt-4o".to_owned(),
                 }
             }
         })

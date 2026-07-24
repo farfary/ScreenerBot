@@ -23,7 +23,7 @@ config_struct! {
         /// Default AI provider to use
         #[metadata(field_metadata! {
             label: "Default Provider",
-            hint: "Primary AI provider to use (openai, anthropic, groq, deepseek, gemini, ollama, together, openrouter, mistral, Assistant)",
+            hint: "Primary AI provider to use (openai, anthropic, groq, deepseek, gemini, ollama, together, openrouter, mistral)",
             placeholder: "openai",
             category: "Master Control",
         })]
@@ -393,14 +393,6 @@ config_struct! {
             category: "Providers",
         })]
         mistral: AiProviderConfig = AiProviderConfig::default(),
-
-        /// an LLM provider configuration (OAuth-based, no API key needed)
-        #[metadata(field_metadata! {
-            label: "Assistant",
-            hint: "an LLM provider API configuration (requires GitHub authentication, no API key needed)",
-            category: "Providers",
-        })]
-        Assistant: AiProviderConfig = AiProviderConfig::default(),
     }
 }
 

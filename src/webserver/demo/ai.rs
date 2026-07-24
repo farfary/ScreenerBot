@@ -35,7 +35,6 @@ const DEMO_PROVIDERS: &[(&str, &str, bool, bool, &str, u32)] = &[
         60,
     ),
     ("ollama", "Ollama (Local)", false, true, "llama3.1", 120),
-    ("Assistant", "an LLM provider", false, false, "gpt-4o", 60),
 ];
 
 /// (decision, context, token, minutes_ago, latency_ms, confidence)

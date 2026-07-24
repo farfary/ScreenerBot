@@ -343,7 +343,7 @@ pub async fn summarize_chat_session(
     };
 
     // Get the model for the configured provider
-    let model = super::Assistant_auth::get_model_for_provider(provider);
+    let model = get_model_for_provider(provider);
 
     let request = ChatRequest::new(
         model,
@@ -498,7 +498,7 @@ Rules:
     };
 
     // Get the model for the configured provider
-    let model = super::Assistant_auth::get_model_for_provider(provider);
+    let model = get_model_for_provider(provider);
 
     let request = ChatRequest::new(model, vec![ChatMessage::user(prompt)])
         .with_temperature(0.7)
@@ -668,4 +668,44 @@ pub async fn update_permissions(
             None,
         ),
     }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Get the appropriate model for a provider from config
+fn get_model_for_provider(provider: Provider) -> String {
+    with_config(|cfg| {
+        let provider_config = match provider {
+            Provider::OpenAi => &cfg.ai.providers.openai,
+            Provider::Anthropic => &cfg.ai.providers.anthropic,
+            Provider::Groq => &cfg.ai.providers.groq,
+            Provider::DeepSeek => &cfg.ai.providers.deepseek,
+            Provider::Gemini => &cfg.ai.providers.gemini,
+            Provider::Together => &cfg.ai.providers.together,
+            Provider::OpenRouter => &cfg.ai.providers.openrouter,
+            Provider::Mistral => &cfg.ai.providers.mistral,
+            Provider::Ollama => {
+                return cfg.ai.providers.ollama.model.clone();
+            }
+        };
+
+        if !provider_config.model.is_empty() {
+            provider_config.model.clone()
+        } else {
+            // Default models for each provider
+            match provider {
+                Provider::OpenAi => "gpt-4".to_owned(),
+                Provider::Anthropic => "claude-3-5-sonnet-20241022".to_owned(),
+                Provider::Groq => "llama-3.1-70b-versatile".to_owned(),
+                Provider::DeepSeek => "deepseek-chat".to_owned(),
+                Provider::Gemini => "gemini-pro".to_owned(),
+                Provider::Ollama => "llama3.2".to_owned(),
+                Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_owned(),
+                Provider::OpenRouter => "openai/gpt-4".to_owned(),
+                Provider::Mistral => "mistral-large-latest".to_owned(),
+            }
+        }
+    })
 }
