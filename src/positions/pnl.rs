@@ -349,12 +349,26 @@ pub async fn calculate_split_pnl(
         return (0.0, 0.0, 0.0, 0.0);
     }
 
+    // Tokens ever ACQUIRED: what is still held plus what has already been sold. This is
+    // the only correct denominator for "what share of the position is this leg".
+    //
+    // `token_amount` is the ENTRY buy alone — it does not grow on a DCA and does not
+    // shrink on a partial exit. Dividing by it made both shares of an averaged-in
+    // position exceed 1.0, so each leg was charged MORE basis than the whole position
+    // cost and the realized/unrealized split came out badly wrong in both halves.
+    let acquired_units =
+        position.remaining_token_amount.unwrap_or_default() + position.total_exited_amount;
+    let acquired = if acquired_units > 0 {
+        acquired_units as f64
+    } else {
+        position.token_amount.unwrap_or(1) as f64
+    };
+
     // Calculate realized P&L from partial exits
     let realized_pnl_sol = if position.total_exited_amount > 0 {
-        if let Some(avg_exit_price) = position.average_exit_price {
+        if position.average_exit_price.is_some() {
             let sol_received = position.sol_received.unwrap_or_default();
-            let exit_portion =
-                position.total_exited_amount as f64 / (position.token_amount.unwrap_or(1) as f64);
+            let exit_portion = position.total_exited_amount as f64 / acquired;
             let invested_in_exited = position.total_size_sol * exit_portion;
             let exit_fees = lamports_to_sol(position.exit_fee_lamports.unwrap_or_default());
             sol_received - invested_in_exited - exit_fees
@@ -371,8 +385,7 @@ pub async fn calculate_split_pnl(
             if let Some(decimals) = get_decimals(&position.mint).await {
                 let ui_remaining = (remaining as f64) / (10_f64).powi(decimals as i32);
                 let current_value = ui_remaining * current;
-                let remaining_portion =
-                    remaining as f64 / (position.token_amount.unwrap_or(1) as f64);
+                let remaining_portion = remaining as f64 / acquired;
                 let invested_in_remaining = position.total_size_sol * remaining_portion;
                 let entry_fees_portion =
                     lamports_to_sol(position.entry_fee_lamports.unwrap_or_default())

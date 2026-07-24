@@ -47,10 +47,21 @@ pub async fn check_trailing_stop(
         return Ok(None);
     }
 
-    let profit_pct = (current_price / entry_price - 1.0) * 100.0;
+    // ARM THE TRAIL OFF THE PEAK, NEVER OFF THE CURRENT PRICE.
+    //
+    // A trailing stop exists to protect a profit the position has ALREADY made, so what
+    // arms it is how far the price has run at its best (`price_highest`, a persisted
+    // running maximum seeded from the entry). Measuring activation against the CURRENT
+    // price instead makes the trail un-arm itself as the price falls — which is exactly
+    // when it is supposed to act. Concretely, with activation 20% and distance 10%: a
+    // position that peaked at +25% and is now retracing through +12% is below the stop
+    // (peak * 0.9 = +12.5%) but its CURRENT profit is under the 20% activation, so the
+    // trail stayed silent and the position rode all the way down to the stop loss. The
+    // gain it was meant to lock in was given back in full.
+    let peak_profit_pct = (position.price_highest / entry_price - 1.0) * 100.0;
 
-    // Check if profit exceeds activation threshold
-    if profit_pct >= activation_pct {
+    // Check if the peak profit reached the activation threshold
+    if peak_profit_pct >= activation_pct {
         // Calculate stop price based on highest recorded price
         let stop_price = position.price_highest * (1.0 - distance_pct / 100.0);
 
