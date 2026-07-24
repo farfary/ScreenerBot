@@ -46,6 +46,18 @@ static BASE_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
 fn resolve_base_directory() -> PathBuf {
     const APP_DIR: &str = "ScreenerBot";
 
+    // Test/dev override: pin ALL data (config.toml, *.db, logs, exports) to an
+    // arbitrary directory. The test harness sets this to an isolated tempdir so
+    // integration/live tests never read or write the owner's real data, and it is
+    // also handy for fresh-run testing. Empty/unset falls through to the platform
+    // default below, so normal runs are unaffected.
+    if let Ok(dir) = std::env::var("SCREENERBOT_DATA_DIR") {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
     if let Some(dir) = dirs::data_local_dir() {
         return dir.join(APP_DIR);
     }

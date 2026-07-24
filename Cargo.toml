@@ -4,12 +4,12 @@ version = "0.1.117"
 edition = "2021"
 license = "BUSL-1.1"
 default-run = "screenerbot"
-# Disable automatic binary discovery - only the main binary is bundled
-# Debug binaries are in src/debug_bins/ (kept separate from main binary)
+# Disable automatic binary discovery - only the main binary is bundled.
 autobins = false
 
 # Note: We do NOT use a [workspace] here to keep the build simple.
-# Debug binaries are in src/debug_bins/ or crates/debug-tools/
+# Verification lives in the standard test suite (tests/ + co-located #[cfg(test)]),
+# run via ../test.sh (cargo-nextest). The old debug_bins/debug-tools were removed.
 
 # Dev profile — fastest possible compile + good debugging
 [profile.dev]
@@ -47,9 +47,9 @@ name = "screenerbot"
 path = "src/main.rs"
 
 # =============================================================================
-# NOTE: Debug/test binaries are in src/debug_bins/ or crates/debug-tools/
-# To run a debug binary:
-#   cargo build --release -p screenerbot-debug-tools --bin <name>
+# Tests: standard cargo tests (tests/ integration + co-located #[cfg(test)]),
+# organized in tiers (L0 pure / L1 read-only live / L2 mainnet swap).
+# Run the whole suite via ../test.sh (cargo-nextest); see .config/nextest.toml.
 # =============================================================================
 
 [dependencies]
@@ -232,3 +232,7 @@ devtools = []
 
 [dev-dependencies]
 tempfile = "3"
+# Async runtime for #[tokio::test] in the L1/L2 integration suite (tests/). Integration
+# test crates only see dev-dependencies, not the lib's regular deps; features match the
+# main tokio dep so cargo compiles it once.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
