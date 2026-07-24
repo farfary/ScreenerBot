@@ -549,7 +549,13 @@ pub async fn compute_snapshot(
     Ok(snapshot)
 }
 
-async fn apply_all_filters(
+/// Run the full filter pipeline for ONE token, in the order the snapshot uses:
+/// meta -> on-chain -> DexScreener -> GeckoTerminal -> Rugcheck -> AI.
+///
+/// Pure with respect to the token: it reads config, the decimals cache and position
+/// cooldowns, and returns the FIRST rejection reason. Exposed so a single decision can be
+/// reproduced and explained outside a full snapshot run (see `tests/filtering_*`).
+pub async fn apply_all_filters(
     token: &Token,
     config: &FilteringConfig,
 ) -> Result<(), FilterRejectionReason> {

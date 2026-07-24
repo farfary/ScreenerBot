@@ -4,8 +4,11 @@ mod engine;
 pub mod sources;
 mod store;
 mod store_helpers;
+#[cfg(test)]
+mod store_helpers_tests;
 pub mod types;
 
+pub use engine::apply_all_filters as evaluate_token;
 pub use types::{
     BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
     FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection, TokenSortKey,

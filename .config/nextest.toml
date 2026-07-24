@@ -43,6 +43,10 @@ path = "junit.xml"
 # Real mainnet swap tests must never run in parallel (money / one wallet nonce).
 # Convention: name a money test `mainnet_*` and it lands in this group automatically.
 serial-mainnet = { max-threads = 1 }
+# Real-database tests each clone the owner's databases (hundreds of MB) and then walk
+# tens of thousands of tokens. Running them concurrently would multiply both costs.
+# Convention: name such a test `realdata_*` and it lands in this group automatically.
+serial-realdata = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'test(/mainnet/)'
@@ -51,3 +55,12 @@ test-group = 'serial-mainnet'
 [[profile.live.overrides]]
 filter = 'test(/mainnet/)'
 test-group = 'serial-mainnet'
+
+# The live profile's 30s slow-timeout suits a network call, not a full-corpus filtering
+# pass in a debug build. Give the real-database tier room, and let it be killed only if
+# it has genuinely hung.
+[[profile.live.overrides]]
+filter = 'test(/realdata/)'
+test-group = 'serial-realdata'
+slow-timeout = { period = "60s", terminate-after = 15 }
+retries = 0

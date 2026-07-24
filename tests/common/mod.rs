@@ -30,7 +30,10 @@ use chrono::{DateTime, Duration, Utc};
 use screenerbot::ohlcvs::{Candle, TimeframeBundle};
 use screenerbot::positions::Position;
 use screenerbot::strategies::types::{Condition, EvaluationContext, Parameter};
+use screenerbot::tokens::types::{DataSource, SecurityRisk, Token, TokenHolder, WebsiteLink};
+use screenerbot::tokens::Priority;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use tempfile::TempDir;
 
@@ -306,6 +309,277 @@ pub fn anchor_ts() -> i64 {
     DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
         .expect("valid anchor")
         .timestamp()
+}
+
+// ==================== FILTERING ====================
+
+/// A token that passes EVERY enabled filter in the default config **except** the
+/// GeckoTerminal source gate.
+///
+/// The engine demands `data_source == GeckoTerminal` when `geckoterminal.enabled` is on
+/// and `data_source == DexScreener` when `dexscreener.enabled` is on, and a token has
+/// exactly ONE `data_source` — so no token can satisfy both at once. This fixture is
+/// DexScreener-sourced (that is what ~all real market rows are); pipeline tests that
+/// want a full pass turn the GeckoTerminal source off, and
+/// `pipeline_default_config_rejects_every_token` pins the contradiction itself.
+///
+/// Every field that any filter reads is populated with a comfortably passing value, so a
+/// test can flip exactly ONE of them and know that field caused the rejection.
+pub fn filter_token(mint: &str) -> Token {
+    let now = Utc::now();
+    Token {
+        mint: mint.to_owned(),
+        symbol: "TEST".to_owned(),
+        name: "Test Token".to_owned(),
+        decimals: 9,
+        description: Some("A token fixture".to_owned()),
+        image_url: Some("https://example.invalid/logo.png".to_owned()),
+        header_image_url: None,
+        supply: Some("1000000000".to_owned()),
+        data_source: DataSource::DexScreener,
+        // Old enough for the default 60-minute age floor.
+        first_discovered_at: now - Duration::hours(6),
+        blockchain_created_at: Some(now - Duration::hours(8)),
+        metadata_last_fetched_at: now,
+        decimals_last_fetched_at: now,
+        market_data_last_fetched_at: now,
+        security_data_last_fetched_at: Some(now),
+        pool_price_last_calculated_at: now,
+        pool_price_last_used_pool: None,
+        price_usd: 0.05,
+        price_sol: 0.000_25,
+        price_native: "0.00025".to_owned(),
+        price_change_m5: Some(1.0),
+        price_change_h1: Some(2.0),
+        price_change_h6: Some(3.0),
+        price_change_h24: Some(4.0),
+        market_cap: Some(500_000.0),
+        fdv: Some(750_000.0),
+        liquidity_usd: Some(50_000.0),
+        volume_m5: Some(1_000.0),
+        volume_h1: Some(10_000.0),
+        volume_h6: Some(50_000.0),
+        volume_h24: Some(200_000.0),
+        pool_count: Some(3),
+        reserve_in_usd: Some(50_000.0),
+        txns_m5_buys: Some(5),
+        txns_m5_sells: Some(4),
+        txns_h1_buys: Some(60),
+        txns_h1_sells: Some(55),
+        txns_h6_buys: Some(300),
+        txns_h6_sells: Some(280),
+        txns_h24_buys: Some(1_200),
+        txns_h24_sells: Some(1_100),
+        websites: vec![WebsiteLink {
+            label: Some("Website".to_owned()),
+            url: "https://example.invalid".to_owned(),
+        }],
+        socials: Vec::new(),
+        mint_authority: None,
+        freeze_authority: None,
+        update_authority: Some("UpdateAuthority11111111111111111111111111111".to_owned()),
+        is_mutable: Some(true),
+        security_score: Some(1_000),
+        security_score_normalised: Some(10),
+        is_rugged: false,
+        token_type: Some("spl".to_owned()),
+        graph_insiders_detected: Some(0),
+        lp_provider_count: Some(8),
+        security_risks: Vec::new(),
+        total_holders: Some(500),
+        top_holders: vec![
+            holder("Holder1111111111111111111111111111111111111", 12.0, false),
+            holder("Holder2222222222222222222222222222222222222", 8.0, false),
+            holder("Holder3333333333333333333333333333333333333", 5.0, false),
+        ],
+        creator_balance_pct: Some(1.0),
+        top_10_holders_pct: Some(30.0),
+        // Present and zero: the default `max_transfer_fee_pct` (5.0) is below 100, which
+        // makes MISSING fee data a rejection (`rug_transfer_fee_missing`).
+        transfer_fee_pct: Some(0.0),
+        transfer_fee_max_amount: Some(0),
+        transfer_fee_authority: None,
+        is_blacklisted: false,
+        priority: Priority::Standard,
+        last_rejection_reason: None,
+        last_rejection_source: None,
+        last_rejection_at: None,
+    }
+}
+
+/// A top-holder entry holding `pct` percent of supply.
+pub fn holder(address: &str, pct: f64, insider: bool) -> TokenHolder {
+    TokenHolder {
+        address: address.to_owned(),
+        amount: "1000".to_owned(),
+        pct,
+        owner: None,
+        insider,
+    }
+}
+
+/// A Rugcheck risk row. `level` is matched case-insensitively against "danger".
+pub fn security_risk(name: &str, value: &str, description: &str, level: &str) -> SecurityRisk {
+    SecurityRisk {
+        name: name.to_owned(),
+        value: value.to_owned(),
+        description: description.to_owned(),
+        score: 0,
+        level: level.to_owned(),
+    }
+}
+
+/// A filtering config with every source switched OFF — the "no filtering" baseline that
+/// must let literally anything through.
+pub fn filters_all_disabled() -> screenerbot::config::FilteringConfig {
+    let mut config = screenerbot::config::FilteringConfig {
+        age_enabled: false,
+        cooldown_enabled: false,
+        check_cooldown: false,
+        ..Default::default()
+    };
+    config.onchain.enabled = false;
+    config.dexscreener.enabled = false;
+    config.geckoterminal.enabled = false;
+    config.rugcheck.enabled = false;
+    config
+}
+
+/// Default filters minus the GeckoTerminal source, i.e. the strictest config a
+/// DexScreener-sourced token can actually pass. See [`filter_token`].
+pub fn filters_default_dex_only() -> screenerbot::config::FilteringConfig {
+    let mut config = screenerbot::config::FilteringConfig::default();
+    config.geckoterminal.enabled = false;
+    config
+}
+
+// ==================== REAL DATABASE (ignored tier) ====================
+
+/// Where the owner's live databases live when `SCREENERBOT_DATA_DIR` is unset.
+///
+/// Resolved WITHOUT `screenerbot::paths`: that module memoises its base directory in a
+/// `LazyLock`, so asking it for the real location would pin the real location for the
+/// whole process and the `SCREENERBOT_DATA_DIR` set a moment later would be ignored —
+/// the test would then run against the owner's live database instead of the clone.
+/// Mirrors `paths::resolve_base_directory`'s platform defaults.
+fn real_data_dir() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("SB_TEST_REAL_DATA_DIR") {
+        let path = PathBuf::from(dir);
+        return path.is_dir().then_some(path);
+    }
+
+    let base = if cfg!(target_os = "macos") {
+        PathBuf::from(std::env::var_os("HOME")?)
+            .join("Library")
+            .join("Application Support")
+    } else if cfg!(target_os = "windows") {
+        PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
+    } else {
+        match std::env::var_os("XDG_DATA_HOME") {
+            Some(dir) => PathBuf::from(dir),
+            None => PathBuf::from(std::env::var_os("HOME")?)
+                .join(".local")
+                .join("share"),
+        }
+    };
+
+    let dir = base.join("ScreenerBot").join("data");
+    dir.is_dir().then_some(dir)
+}
+
+/// Clone the owner's REAL databases into a throwaway temp dir and point the process at
+/// it, so a test runs against production-scale data (~438k tokens) while being physically
+/// unable to modify, lock, or corrupt the originals.
+///
+/// Filtering is not read-only — a snapshot writes rejection status, priorities and stats
+/// back — so pointing the process straight at the live files would mutate the owner's
+/// database and contend with a running bot. Copying is what makes the real-data tier
+/// safe. macOS/APFS turns `fs::copy` into a copy-on-write clone, so half a gigabyte costs
+/// milliseconds and no extra disk.
+///
+/// Returns `None` (with a printed SKIP line) when no real database is present, so the
+/// test self-skips on a fresh machine instead of failing. `tokens.db` is required;
+/// `pools.db`/`ohlcvs.db` are copied when present and merely enrich the derived flags.
+pub fn real_db_env() -> Option<TempDir> {
+    let Some(source) = real_data_dir() else {
+        eprintln!("SKIP real-db: no ScreenerBot data directory found");
+        return None;
+    };
+    if !source.join("tokens.db").is_file() {
+        eprintln!("SKIP real-db: {} has no tokens.db", source.display());
+        return None;
+    }
+
+    let dir = tempfile::tempdir().expect("create temp data dir");
+    let target = dir.path().join("data");
+    std::fs::create_dir_all(&target).expect("create data subdir");
+
+    let started = std::time::Instant::now();
+    let mut copied = 0u64;
+    for name in ["tokens.db", "pools.db", "ohlcvs.db"] {
+        copied += copy_db(&source, &target, name);
+    }
+    eprintln!(
+        "real-db: cloned {:.1} MB from {} in {:?}",
+        copied as f64 / (1024.0 * 1024.0),
+        source.display(),
+        started.elapsed()
+    );
+
+    // SAFETY: single-threaded test setup, before any path/config access.
+    std::env::set_var("SCREENERBOT_DATA_DIR", dir.path());
+    ensure_config();
+    Some(dir)
+}
+
+/// Copy one database plus its WAL sidecars (a running bot keeps recent writes there;
+/// without them the clone reads back as of the last checkpoint). Returns bytes copied.
+fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
+    let mut total = 0;
+    for suffix in ["", "-wal", "-shm"] {
+        let from = source.join(format!("{name}{suffix}"));
+        if from.is_file() {
+            total += std::fs::copy(&from, target.join(format!("{name}{suffix}"))).unwrap_or(0);
+        }
+    }
+    total
+}
+
+/// Open the cloned tokens database and register it as the process-global one, then
+/// preload the decimals cache exactly as `tokens::service` does at startup.
+///
+/// The preload is not an optimisation here, it is what keeps the tier offline:
+/// `meta::evaluate` calls `get_decimals` for every candidate, and on a cache miss that
+/// falls through to the DB, then the data server, then RPC. Without the preload a
+/// full-corpus run would fire hundreds of thousands of network lookups.
+pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase> {
+    use screenerbot::tokens::{cache_decimals, init_global_database, TokenDatabase};
+
+    let path = screenerbot::paths::get_tokens_db_path();
+    let db = std::sync::Arc::new(
+        TokenDatabase::new(&path.to_string_lossy()).expect("open cloned tokens.db"),
+    );
+    init_global_database(db.clone()).expect("register global token database");
+
+    let started = std::time::Instant::now();
+    let decimals = db.get_all_tokens_with_decimals().expect("preload decimals");
+    let count = decimals.len();
+    for (mint, value) in decimals {
+        cache_decimals(&mint, value);
+    }
+    eprintln!(
+        "real-db: preloaded {count} decimals in {:?}",
+        started.elapsed()
+    );
+    db
+}
+
+/// Format a per-item cost for the timing lines the perf tiers print.
+pub fn per_item_micros(elapsed: std::time::Duration, items: usize) -> f64 {
+    if items == 0 {
+        return 0.0;
+    }
+    elapsed.as_secs_f64() * 1_000_000.0 / items as f64
 }
 
 fn env_flag(key: &str) -> bool {
