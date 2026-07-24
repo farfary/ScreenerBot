@@ -7,10 +7,11 @@
 
 mod common;
 
-use screenerbot::apis::DexScreenerClient;
+use screenerbot::apis::{DexScreenerClient, RugcheckClient};
 use screenerbot::sol_price::fetch_and_cache_sol_price;
 
 const WSOL: &str = "So11111111111111111111111111111111111111112";
+const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 #[tokio::test]
 #[ignore = "L1 live network: run via `./test.sh live`"]
@@ -35,6 +36,23 @@ async fn dexscreener_returns_pools_for_wsol() {
         .await
         .expect("live DexScreener fetch should succeed");
     assert!(!pools.is_empty(), "wSOL must have at least one live pool");
+}
+
+#[tokio::test]
+#[ignore = "L1 live network: run via `./test.sh live`"]
+async fn rugcheck_returns_a_report_for_usdc() {
+    let _guard = common::isolated_env();
+    let client = RugcheckClient::new(true, 30, 10).expect("construct Rugcheck client");
+    let report = client
+        .fetch_report(USDC)
+        .await
+        .expect("live Rugcheck fetch should succeed");
+    assert_eq!(
+        report.mint.as_str(),
+        USDC,
+        "report is for the requested mint"
+    );
+    assert!(!report.rugged, "USDC must not be flagged as rugged");
 }
 
 // Extension points — add next, each following the same pattern (isolated_env + a real

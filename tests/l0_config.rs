@@ -30,7 +30,10 @@ fn config_survives_toml_round_trip() {
     load_config_from_path(path_str).expect("load config into global");
 
     with_config(|c| {
-        assert_eq!(c.trader.max_open_positions, 7, "int field survived round-trip");
+        assert_eq!(
+            c.trader.max_open_positions, 7,
+            "int field survived round-trip"
+        );
         assert_eq!(
             c.swaps.slippage.quote_default_pct, 2.5,
             "float field survived round-trip"
