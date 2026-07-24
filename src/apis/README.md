@@ -32,7 +32,7 @@
 │         │                │                │                 │              │
 │  ┌──────┴────┐     ┌─────┴─────┐    ┌─────┴─────┐    ┌─────┴──────┐      │
 │  │ CoinGecko │     │ DefiLlama │    │    LLM    │    │   Stats    │      │
-│  │ 1 method  │     │ 2 methods │    │10 providers│    │  Tracker   │      │
+│  │ 1 method  │     │ 2 methods │    │9 providers │    │  Tracker   │      │
 │  └───────────┘     └───────────┘    └───────────┘    └────────────┘      │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
@@ -84,12 +84,7 @@ src/apis/
     ├── ollama/            Ollama local provider (llama3.2)
     ├── together/          Together AI provider (Meta-Llama-3.1-8B)
     ├── openrouter/        OpenRouter gateway (llama-3.1-8b-instruct:free)
-    ├── mistral/           Mistral provider (mistral-small-latest)
-    └── Assistant/
-        ├── mod.rs         Module root
-        ├── client.rs      Assistant client (gpt-4o, OAuth-based)
-        ├── auth.rs        OAuth device code flow (562 lines)
-        └── types.rs       Auth tokens, device code types
+    └── mistral/           Mistral provider (mistral-small-latest)
 ```
 
 ---
@@ -330,11 +325,11 @@ Intervals: `5m`, `1h`, `6h`, `24h`. Default limit: 100 tokens.
 │  │  flash   │  │ (local)  │  │ Llama    │  │ 8b:free      │    │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────────┘    │
 │                                                                  │
-│  ┌──────────┐  ┌──────────┐                                     │
-│  │ Mistral  │  │ Assistant  │ ← OAuth device flow                │
-│  │ mistral- │  │  gpt-4o  │   (no API key needed)              │
-│  │ small    │  │          │                                     │
-│  └──────────┘  └──────────┘                                     │
+│  ┌──────────┐                                                   │
+│  │ Mistral  │                                                   │
+│  │ mistral- │                                                   │
+│  │ small    │                                                   │
+│  └──────────┘                                                   │
 │                                                                  │
 │  All implement LlmClient trait:                                  │
 │  provider() | is_enabled() | call() | get_stats()               │
@@ -367,7 +362,6 @@ pub trait LlmClient: Send + Sync {
 | **Together** | `Meta-Llama-3.1-8B` | `api.together.xyz` | 60/min | API Key | $1 free credit |
 | **OpenRouter** | `llama-3.1-8b:free` | `openrouter.ai` | 60/min | API Key | 100+ model gateway |
 | **Mistral** | `mistral-small-latest` | `api.mistral.ai` | 60/min | API Key | Code models available |
-| **Assistant** | `gpt-4o` | Dynamic URL | 50/min | OAuth Device Flow | GitHub subscription required |
 
 ### Core Types
 
@@ -377,20 +371,7 @@ pub trait LlmClient: Send + Sync {
 | `ChatRequest` | Model + messages + temperature + max_tokens + response_format |
 | `ChatResponse` | Content + usage + latency + model + finish_reason |
 | `LlmError` | RateLimited, Timeout, AuthError, NetworkError, ProviderDisabled, etc. |
-| `Provider` | Enum of 10 providers with string conversion |
-
-### Assistant OAuth Flow
-
-The an LLM provider provider uses OAuth Device Code Flow (no API key needed):
-
-```text
-1. Request device code → github.com/login/device
-2. User enters code in browser
-3. Poll for access token (auto-refresh)
-4. Use token for /chat/completions endpoint
-```
-
-Managed by `auth.rs` (562 lines) with automatic token refresh.
+| `Provider` | Enum of 9 providers with string conversion |
 
 ---
 
@@ -406,9 +387,9 @@ Managed by `auth.rs` (562 lines) with automatic token refresh.
 | **Jupiter** | 4 | Unlimited | 15s | N/A | Token discovery, organic scores |
 | **CoinGecko** | 1 | N/A | 20s | Full list | Solana address extraction |
 | **DefiLlama** | 2 | N/A | 25s | N/A | Protocol data, prices |
-| **LLM (10)** | 1 each | 30-60/min | 30-120s | N/A | AI analysis, chat |
+| **LLM (9)** | 1 each | 30-60/min | 30-120s | N/A | AI analysis, chat |
 
-**Total: 6 market/data providers + 10 LLM providers = 16 external integrations**
+**Total: 6 market/data providers + 9 LLM providers = 15 external integrations**
 
 ---
 

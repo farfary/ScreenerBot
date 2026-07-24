@@ -10,19 +10,18 @@
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Built with Rust"></a>
   <a href="https://solana.com/"><img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Powered by Solana"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron Desktop"></a>
-  <a href="https://github.com/screenerbotio/ScreenerBot/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSL--1.1-blue?style=flat-square" alt="BSL 1.1 License"></a>
+  <a href="https://github.com/farfary/ScreenerBot/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSL--1.1-blue?style=flat-square" alt="BSL 1.1 License"></a>
   <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/Docs-screenerbot.io-blue?style=flat-square" alt="Documentation"></a>
   <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram Community"></a>
-  <a href="https://github.com/screenerbotio/ScreenerBot"><img src="https://img.shields.io/github/stars/screenerbotio/ScreenerBot?style=flat-square" alt="GitHub Stars"></a>
+  <a href="https://github.com/farfary/ScreenerBot"><img src="https://img.shields.io/github/stars/farfary/ScreenerBot?style=flat-square" alt="GitHub Stars"></a>
   <a href="https://screenerbot.io/download"><img src="https://img.shields.io/badge/Download-Latest-orange?style=flat-square" alt="Download"></a>
   <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=flat-square&logo=x&logoColor=white" alt="X Follow"></a>
 </p>
 
 <p align="center">
-  A high-performance, open source, local-first automated trading system for Solana DeFi.<br>
+  A high-performance, local-first automated trading system for Solana DeFi.<br>
   Built in Rust for native runtime performance and direct blockchain interaction.<br>
-  <strong> Your keys never leave your machine.</strong><br>
-  <sub>
+  <strong>Runs entirely on your own machine — your keys never leave your computer.</strong>
 </p>
 
 <p align="center">
@@ -66,26 +65,6 @@
 ---
 
 <p align="center">
-  <strong>💡 Support Development</strong>
-</p>
-
-<p align="center">
-  
-</p>
-
-<p align="center">
-  <a href="https://solscan.io/account/">
-    <img src="https://img.shields.io/badge/Donate-SOL-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Donate SOL">
-  </a>
-</p>
-
-<p align="center">
-  <code></code>
-</p>
-
----
-
-<p align="center">
   <strong>⚠️ Risk Disclaimer</strong>
 </p>
 
@@ -94,18 +73,6 @@
   This software may contain bugs or issues that could result in financial losses.<br>
   The developers are not responsible for any financial losses incurred through use of this software.<br>
   Trade at your own risk. Never invest more than you can afford to lose.
-</p>
-
----
-
-<p align="center">
-  <strong>💰 How We're Funded</strong>
-</p>
-
-<p align="center">
-  
-  
-  No subscriptions. No hidden costs.
 </p>
 
 ---
@@ -199,7 +166,7 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
 │   AI Assistant   │ │ Telegram Service │ │   SOL Price      │ │  Update Checker  │
 ├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
-│ • 10 LLM provid. │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
+│ • 9 LLM provid.  │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
 │ • Tool-calling   │ │ • Bot commands   │ │ • 30s refresh    │ │ • Auto-notify    │
 │ • Scheduled tasks│ │ • Inline actions │ │ • USD conversion │ │ • Release notes  │
 └──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
@@ -366,7 +333,7 @@ Multi-provider LLM integration for intelligent analysis and automated tasks. All
 
 ### Providers
 
-Supports 10 providers: OpenAI, Anthropic, Groq, DeepSeek, Gemini, Ollama, Together AI, OpenRouter, Mistral, an LLM provider.
+Supports 9 providers: OpenAI, Anthropic, Groq, DeepSeek, Gemini, Ollama, Together AI, OpenRouter, Mistral.
 
 ### Features
 
@@ -522,7 +489,7 @@ curl -fsSL https://screenerbot.io/install.sh | bash
 ### Build Options
 
 ```bash
-git clone https://github.com/screenerbotio/ScreenerBot.git
+git clone https://github.com/farfary/ScreenerBot.git
 cd ScreenerBot
 
 # Headless mode (server only)
@@ -560,7 +527,7 @@ After building with Electron:
 ```
 src/
 ├── actions/        # Operation progress tracking with SSE broadcasting
-├── ai/             # AI assistant (10 LLM providers, chat, automation)
+├── ai/             # AI assistant (9 LLM providers, chat, automation)
 ├── apis/           # External API clients (DexScreener, Jupiter, Rugcheck, LLM)
 ├── config/         # Macro-driven configuration system with hot-reload
 ├── connectivity/   # Endpoint health monitoring with fallback strategies
@@ -581,7 +548,6 @@ src/
 ├── wallets/        # Wallet management and balance monitoring
 └── webserver/      # Axum REST API + embedded web dashboard (20 pages)
 
-docs/               # Architecture documentation and guides
 electron/           # Electron desktop shell
 public/             # Static assets (CSS, JS, fonts, icons)
 ```
@@ -599,8 +565,6 @@ public/             # Static assets (CSS, JS, fonts, icons)
 | 📢 **Telegram Channel** | [t.me/screenerbotio](https://t.me/screenerbotio) |
 | 🆘 **Telegram Support** | [t.me/screenerbotio_support](https://t.me/screenerbotio_support) |
 | 𝕏 **X (Twitter)** | [x.com/screenerbotio](https://x.com/screenerbotio) |
-| 📖 **Architecture Docs** | [`docs/`](docs/) |
-| 🤖 **Agent Guide** | [`AGENTS.md`](AGENTS.md) |
 
 ---
 
@@ -611,7 +575,7 @@ We welcome contributions from the community! Whether you're fixing a bug, adding
 ### Getting Started
 
 1. **Join the community** — Start by joining our [Telegram Community](https://t.me/screenerbotio_talk) to discuss ideas, ask questions, and coordinate with other contributors
-2. **Read the docs** — Check the [`docs/`](docs/) folder and [`AGENTS.md`](AGENTS.md) for architecture details, coding patterns, and project structure
+2. **Read the docs** — Browse the [documentation](https://screenerbot.io/docs) for architecture details, coding patterns, and project structure
 3. **Fork & branch** — Fork the repository and create a feature branch from `main`
 4. **Follow patterns** — Match existing code style, naming conventions, and module structure
 5. **Validate** — Ensure `cargo check --lib` passes before submitting
@@ -623,7 +587,7 @@ We welcome contributions from the community! Whether you're fixing a bug, adding
 - **Strategy conditions** — Implement new technical indicators and conditions
 - **Dashboard improvements** — UI/UX enhancements, new visualizations
 - **Documentation** — Improve guides, add tutorials, translate docs
-- **Bug reports** — Found an issue? [Open a GitHub issue](https://github.com/screenerbotio/ScreenerBot/issues)
+- **Bug reports** — Found an issue? [Open a GitHub issue](https://github.com/farfary/ScreenerBot/issues)
 
 > 💬 **Not sure where to start?** Ask in our [Telegram Community](https://t.me/screenerbotio_talk) — we'll help you find something that matches your skills!
 
@@ -669,7 +633,7 @@ We welcome contributions from the community! Whether you're fixing a bug, adding
 ## Author
 
 **Farhad Arghavan**  
-Email: farhad.argn@gmail.com
+Contact: [info@screenerbot.io](mailto:info@screenerbot.io)
 
 ## License
 

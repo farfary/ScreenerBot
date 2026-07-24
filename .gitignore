@@ -42,7 +42,6 @@ logs/
 # IDE/Editor folders
 .vscode/
 .idea/
-.Assistant/
 
 # Development tools (keep local, not tracked)
 .playwright-mcp/
@@ -75,13 +74,15 @@ _public-legacy/
 Bot/
 _backup/
 
-# Assistant/agent instructions (private)
+# Agent instructions (private)
 .github/*
 !.github/workflows/
-Assistant-session-*.md
 .folderinfo
 # Agent instruction files — stay on disk but are not part of the public repo
 **/AGENTS.md
+
+# Architecture docs — kept on disk, not part of the public repo
+/docs/
 
 # Lint/format configs (development only)
 .htmlvalidate.json
