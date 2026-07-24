@@ -33,7 +33,7 @@
 
 ---
 
-## 🌟 Screenshots
+## Screenshots
 
 <table>
   <tr>
@@ -41,24 +41,24 @@
     <td align="center"><strong>Transaction Monitor</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/home.png"><img src="https://screenerbot.io/api/screenshots/home.webp" alt="Dashboard Overview" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/transactions.png"><img src="https://screenerbot.io/api/screenshots/transactions.webp" alt="Transaction Monitor" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/home.webp" alt="Dashboard Overview" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/transactions?full=1"><img src="https://screenerbot.io/api/screenshots/transactions.webp" alt="Transaction Monitor" width="400"></a></td>
   </tr>
   <tr>
     <td align="center"><strong>Open Positions</strong></td>
     <td align="center"><strong>Position History</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/positions-open.png"><img src="https://screenerbot.io/api/screenshots/positions-open.webp" alt="Open Positions" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/positions-closed.png"><img src="https://screenerbot.io/api/screenshots/positions-closed.webp" alt="Position History" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/positions-open.webp" alt="Open Positions" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/positions-closed?full=1"><img src="https://screenerbot.io/api/screenshots/positions-closed.webp" alt="Position History" width="400"></a></td>
   </tr>
   <tr>
     <td align="center"><strong>Trader Interface</strong></td>
     <td align="center"><strong>Token Details</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/trader.png"><img src="https://screenerbot.io/api/screenshots/trader.png" alt="Trader Interface" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/token-details.png"><img src="https://screenerbot.io/api/screenshots/token-details.png" alt="Token Details" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/trader.webp" alt="Trader Interface" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/token-details.webp" alt="Token Details" width="400"></a></td>
   </tr>
 </table>
 
@@ -93,7 +93,7 @@ Trading bots written in Python or JavaScript can't match the speed and reliabili
 ## Table of Contents
 
 - [Overview](#overview)
-- [Screenshots](#-screenshots)
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [Core Systems](#core-systems)
 - [Supported DEXs](#supported-dexs)

@@ -22,7 +22,7 @@ Thank you for your interest in contributing to ScreenerBot! This document provid
 
 ```bash
 # Clone the repository
-git clone https://github.com/screenerbotio/ScreenerBot.git
+git clone https://github.com/farfary/ScreenerBot.git
 cd ScreenerBot
 
 # Build (debug mode)
@@ -125,7 +125,7 @@ The bot is organized into independent services managed by `ServiceManager`:
 
 ## Questions?
 
-- Open a [GitHub Discussion](https://github.com/screenerbotio/ScreenerBot/discussions)
+- Open a [GitHub Discussion](https://github.com/farfary/ScreenerBot/discussions)
 - Join our [Telegram](https://t.me/screenerbotio)
 - Check existing issues and PRs
 

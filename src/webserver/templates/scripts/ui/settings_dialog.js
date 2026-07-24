@@ -1399,7 +1399,7 @@ export class SettingsDialog {
         </div>
 
         <div class="settings-about-links">
-          <button class="settings-about-link" data-external-url="https://github.com/screenerbotio/ScreenerBot">
+          <button class="settings-about-link" data-external-url="https://github.com/farfary/ScreenerBot">
             <i class="icon-github"></i>
             <span>GitHub</span>
           </button>
