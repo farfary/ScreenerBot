@@ -28,10 +28,36 @@ pub use crate::constants::{SOL_DECIMALS, SOL_MINT};
 
 use tokio::sync::Mutex as AsyncMutex;
 
-// In-memory decimals cache — bounded moka cache for fast synchronous lookups (max 100K entries).
+/// Largest decimals value any Solana mint can carry. Anything above this is junk from a
+/// bad data source (the production database holds values like 123 and 186).
+pub const MAX_DECIMALS: u8 = 18;
+
+/// Is this a decimals value we are willing to act on?
+///
+/// Zero is rejected deliberately. It is a legal on-chain value, but every persistence path
+/// here already treats a stored `0` as "never resolved" (`get_from_db` and the startup
+/// preload both require `> 0`), so honouring it as real would make the same mint resolve
+/// differently depending on which layer answered. A genuine 0-decimals mint still resolves
+/// correctly through the chain fallback.
+pub fn is_valid(decimals: u8) -> bool {
+    decimals > 0 && decimals <= MAX_DECIMALS
+}
+
+/// Entry ceiling of the in-memory decimals cache.
+pub const CACHE_CAPACITY: u64 = 100_000;
+
+/// How many rows the startup preload may load. Deliberately below `CACHE_CAPACITY` so the
+/// runtime inserts that follow (every token upsert calls `cache()`) have room to land
+/// without evicting a preloaded pool mint the synchronous decoders depend on.
+pub const PRELOAD_CAPACITY: usize = (CACHE_CAPACITY as usize) * 4 / 5;
+
+// In-memory decimals cache — bounded moka cache for fast synchronous lookups.
 // Populated at startup + updated on every DB write.
-static DECIMALS_CACHE: LazyLock<moka::sync::Cache<String, u8>> =
-    LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
+static DECIMALS_CACHE: LazyLock<moka::sync::Cache<String, u8>> = LazyLock::new(|| {
+    moka::sync::Cache::builder()
+        .max_capacity(CACHE_CAPACITY)
+        .build()
+});
 
 // Single-flight locks to prevent duplicate fetches
 static FETCH_LOCKS: LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
@@ -361,7 +387,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
 /// Manually cache a decimals value (used when fetched from other sources)
 pub fn cache(mint: &str, decimals: u8) {
     // Validate decimals is within reasonable bounds (SOL tokens use max 18 decimals)
-    if decimals > 18 {
+    if decimals > MAX_DECIMALS {
         // Warn once per mint — this is called on every token upsert, so a token
         // carrying a junk decimals value (from a bad data source) would otherwise
         // re-log on every market update and flood the log (observed 1800+ lines).

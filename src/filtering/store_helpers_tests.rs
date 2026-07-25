@@ -27,7 +27,7 @@ fn token(mint: &str) -> Token {
         mint: mint.to_owned(),
         symbol: "TEST".to_owned(),
         name: "Test Token".to_owned(),
-        decimals: 9,
+        decimals: Some(9),
         description: None,
         image_url: None,
         header_image_url: None,
@@ -866,46 +866,96 @@ fn a_snapshot_timestamped_in_the_future_is_not_stale() {
 // ============================================================================
 
 #[test]
-fn apply_filters_rebuilds_a_flag_map_over_the_whole_snapshot_every_call() {
-    // DEFECT PIN: `apply_filters` builds a HashMap over EVERY token in the snapshot
-    // before it looks at the query, even when no derived-flag filter is set and the view
-    // being paged holds a handful of rows. The dashboard polls this once a second, so the
-    // cost of showing 50 rows scales with the size of the whole corpus.
+fn apply_filters_costs_what_the_page_costs_not_what_the_snapshot_costs() {
+    // `apply_filters` used to build a `HashMap` over EVERY token in the snapshot before it
+    // looked at the query — even when the query asked for none of the derived flags, and
+    // even when the page being filtered held fifty rows. The dashboard polls this path, so
+    // the cost of showing one page scaled with the size of the whole corpus.
+    //
+    // Filtering a FIXED page against snapshots of very different sizes isolates exactly
+    // that: the query's own work is identical in both, so any growth is per-snapshot work.
+    const PAGE: usize = 50;
+
     fn measure(snapshot_size: usize) -> std::time::Duration {
         let entries: Vec<(String, TokenEntry)> = (0..snapshot_size)
             .map(|i| EntryBuilder::new(&format!("M{i:039}")).build())
             .collect();
         let snapshot = snapshot_of(entries);
 
-        // One row selected out of the whole snapshot — the work the query itself needs
-        // is constant.
-        let mut q = query();
-        q.search = Some(format!("M{:039}", 0));
+        // A page-sized slice, collected ONCE and outside the measurement.
+        let page: Vec<&Token> = token_refs(&snapshot, FilteringView::All)
+            .into_iter()
+            .take(PAGE)
+            .collect();
+        let q = query();
 
-        let started = std::time::Instant::now();
-        for _ in 0..20 {
-            let mut items = token_refs(&snapshot, FilteringView::All);
-            apply_filters(&mut items, &q, &snapshot);
-        }
-        started.elapsed()
+        // Best of three: this is a small measurement and the machine is shared.
+        (0..3)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                for _ in 0..200 {
+                    let mut items = page.clone();
+                    apply_filters(&mut items, &q, &snapshot);
+                }
+                started.elapsed()
+            })
+            .min()
+            .unwrap_or_default()
     }
 
     let small = measure(2_000);
-    let large = measure(20_000); // 10x
+    let large = measure(40_000); // 20x the snapshot, same page
     let growth = large.as_secs_f64() / small.as_secs_f64().max(f64::EPSILON);
     eprintln!(
-        "PERF apply_filters: 2k={small:?} 20k={large:?} growth={growth:.1}x for a 10x \
-         larger snapshot returning the same single row"
+        "PERF apply_filters: 2k={small:?} 40k={large:?} growth={growth:.1}x filtering the \
+         same {PAGE}-row page against a 20x larger snapshot"
     );
 
     assert!(
-        growth > 2.0,
-        "expected the per-query cost to track snapshot size (it builds a map of every \
-         token); if this now holds constant the optimisation landed and this pin can go"
+        growth < 4.0,
+        "filtering one page got {growth:.1}x more expensive for a 20x bigger snapshot — \
+         something is walking the whole snapshot per call again"
     );
+}
+
+#[test]
+fn apply_filters_still_reads_the_derived_flags_from_the_snapshot() {
+    // Dropping the parallel map must not have dropped the lookups it was serving.
+    let snapshot = snapshot_of(vec![
+        EntryBuilder::new("A").priced().build(),
+        EntryBuilder::new("B").in_position().build(),
+        EntryBuilder::new("C").with_ohlcv().build(),
+    ]);
+
+    for (flag, expected) in [
+        (
+            (|q: &mut FilteringQuery| q.has_pool_price = Some(true)) as fn(&mut FilteringQuery),
+            "A",
+        ),
+        (
+            |q: &mut FilteringQuery| q.has_open_position = Some(true),
+            "B",
+        ),
+        (|q: &mut FilteringQuery| q.has_ohlcv = Some(true), "C"),
+    ] {
+        let mut q = query();
+        flag(&mut q);
+        let mut items = token_refs(&snapshot, FilteringView::All);
+        apply_filters(&mut items, &q, &snapshot);
+
+        let mints: Vec<&str> = items.iter().map(|t| t.mint.as_str()).collect();
+        assert_eq!(mints, vec![expected]);
+    }
+
+    // A token that is not in the snapshot at all cannot satisfy a derived-flag filter.
+    let orphan = token("D");
+    let mut q = query();
+    q.has_pool_price = Some(false);
+    let mut items = vec![&orphan];
+    apply_filters(&mut items, &q, &snapshot);
     assert!(
-        growth < 40.0,
-        "per-query cost is growing faster than the snapshot itself ({growth:.1}x for 10x)"
+        items.is_empty(),
+        "a flag we have no entry for is unknown, not false"
     );
 }
 

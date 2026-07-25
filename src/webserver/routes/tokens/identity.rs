@@ -65,7 +65,7 @@ pub async fn get_token_identities(
                     symbol: non_empty(token.symbol),
                     name: non_empty(token.name),
                     logo_url: token.image_url.and_then(non_empty),
-                    decimals: Some(token.decimals),
+                    decimals: token.decimals,
                 },
             );
         }

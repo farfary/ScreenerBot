@@ -87,22 +87,12 @@ pub(super) fn apply_filters(
     query: &FilteringQuery,
     snapshot: &FilteringSnapshot,
 ) {
-    // quick maps for derived flags
-    let flags: HashMap<&str, (&TokenEntry, bool, bool, bool)> = snapshot
-        .tokens
-        .iter()
-        .map(|(mint, entry)| {
-            (
-                mint.as_str(),
-                (
-                    entry,
-                    entry.has_pool_price,
-                    entry.has_open_position,
-                    entry.has_ohlcv,
-                ),
-            )
-        })
-        .collect();
+    // The derived flags are read straight off the snapshot's own map. Building a parallel
+    // `HashMap` of every token here allocated and hashed the WHOLE snapshot on every call —
+    // including the calls that ask for none of these flags — to answer lookups the snapshot
+    // could already answer itself. The dashboard polls this path, so it was paying for a
+    // full-snapshot rebuild per poll to filter one page.
+    let flag_of = |mint: &str| snapshot.tokens.get(mint);
 
     if let Some(search) = query.search.as_ref().map(|s| s.trim().to_lowercase()) {
         if !search.is_empty() {
@@ -140,18 +130,16 @@ pub(super) fn apply_filters(
 
     if let Some(flag) = query.has_pool_price {
         items.retain(|t| {
-            flags
-                .get(t.mint.as_str())
-                .map(|(_, hp, _, _)| *hp == flag)
+            flag_of(&t.mint)
+                .map(|entry| entry.has_pool_price == flag)
                 .unwrap_or_default()
         });
     }
 
     if let Some(flag) = query.has_open_position {
         items.retain(|t| {
-            flags
-                .get(t.mint.as_str())
-                .map(|(_, _, op, _)| *op == flag)
+            flag_of(&t.mint)
+                .map(|entry| entry.has_open_position == flag)
                 .unwrap_or_default()
         });
     }
@@ -162,9 +150,8 @@ pub(super) fn apply_filters(
 
     if let Some(flag) = query.has_ohlcv {
         items.retain(|t| {
-            flags
-                .get(t.mint.as_str())
-                .map(|(_, _, _, oh)| *oh == flag)
+            flag_of(&t.mint)
+                .map(|entry| entry.has_ohlcv == flag)
                 .unwrap_or_default()
         });
     }

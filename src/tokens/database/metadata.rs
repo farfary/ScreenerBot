@@ -129,43 +129,52 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
     }
 
-    /// Get all tokens with valid decimals for cache preloading
-    /// Used at startup to populate in-memory decimals cache
-    pub fn get_all_tokens_with_decimals(&self) -> TokenResult<Vec<(String, u8)>> {
+    /// Get tokens with valid decimals for cache preloading, most important LAST.
+    ///
+    /// `limit` MUST be the decimals cache capacity (or less). The cache is a bounded LRU
+    /// and its consumers are the SYNCHRONOUS pool decoders, which have no fallback: a miss
+    /// makes the decoder skip the pool entirely, so the token loses its live price. Loading
+    /// more rows than the cache can hold therefore does not "warm" it, it evicts three out
+    /// of four pool mints at random and silently drops their prices.
+    ///
+    /// Ordering puts the mints that must be resident at the END of the result, so they are
+    /// the most recently used once the caller inserts in order: tokens with a pool first,
+    /// then the most recently refreshed. Junk decimals (`> MAX_DECIMALS`, seen in
+    /// production) and the `0` placeholder are excluded here rather than at every reader.
+    pub fn get_tokens_with_decimals_for_preload(
+        &self,
+        limit: usize,
+    ) -> TokenResult<Vec<(String, u8)>> {
         let conn = self
             .conn
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
-        // First check how many tokens exist
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM tokens WHERE decimals IS NOT NULL AND decimals > 0",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or_default();
-
-        crate::logger::debug(
-            crate::logger::LogTag::Tokens,
-            &format!(
-                "[PRELOAD] Database query found {} tokens with decimals",
-                count
-            ),
-        );
-
         let mut stmt = conn
             .prepare(
-                "SELECT mint, decimals FROM tokens WHERE decimals IS NOT NULL AND decimals > 0",
+                "SELECT mint, decimals FROM (
+                     SELECT t.mint AS mint,
+                            t.decimals AS decimals,
+                            EXISTS(SELECT 1 FROM token_pools p WHERE p.mint = t.mint) AS pooled,
+                            t.metadata_last_fetched_at AS refreshed
+                     FROM tokens t
+                     WHERE t.decimals IS NOT NULL AND t.decimals > 0 AND t.decimals <= ?1
+                     ORDER BY pooled DESC, refreshed DESC
+                     LIMIT ?2
+                 )
+                 ORDER BY pooled ASC, refreshed ASC",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let rows = stmt
-            .query_map([], |row| {
-                let mint: String = row.get(0)?;
-                let decimals: i64 = row.get(1)?;
-                Ok((mint, decimals as u8))
-            })
+            .query_map(
+                rusqlite::params![crate::tokens::MAX_DECIMALS as i64, limit as i64],
+                |row| {
+                    let mint: String = row.get(0)?;
+                    let decimals: i64 = row.get(1)?;
+                    Ok((mint, decimals as u8))
+                },
+            )
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         let result = rows

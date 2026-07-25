@@ -1,7 +1,7 @@
 //! GeckoTerminal filter source — validates market data from GeckoTerminal API.
 
 use crate::config::schemas::GeckoTerminalFilters;
-use crate::filtering::sources::FilterRejectionReason;
+use crate::filtering::sources::{bounds, FilterRejectionReason};
 use crate::tokens::types::{DataSource, Token};
 
 /// Evaluate a token against GeckoTerminal market data filter criteria.
@@ -42,20 +42,15 @@ fn check_liquidity(token: &Token, config: &GeckoTerminalFilters) -> Option<Filte
         return None;
     }
 
-    let liquidity = match token.liquidity_usd {
-        Some(value) => value,
-        None => return Some(FilterRejectionReason::GeckoTerminalLiquidityMissing),
-    };
-
-    if liquidity < config.min_liquidity_usd {
-        return Some(FilterRejectionReason::GeckoTerminalLiquidityTooLow);
+    match bounds::check_range(
+        token.liquidity_usd,
+        config.min_liquidity_usd,
+        bounds::optional_ceiling(config.max_liquidity_usd),
+    ) {
+        bounds::Range::TooLow => Some(FilterRejectionReason::GeckoTerminalLiquidityTooLow),
+        bounds::Range::TooHigh => Some(FilterRejectionReason::GeckoTerminalLiquidityTooHigh),
+        bounds::Range::Ok => None,
     }
-
-    if config.max_liquidity_usd > 0.0 && liquidity > config.max_liquidity_usd {
-        return Some(FilterRejectionReason::GeckoTerminalLiquidityTooHigh);
-    }
-
-    None
 }
 
 fn check_market_cap(token: &Token, config: &GeckoTerminalFilters) -> Option<FilterRejectionReason> {
@@ -63,20 +58,15 @@ fn check_market_cap(token: &Token, config: &GeckoTerminalFilters) -> Option<Filt
         return None;
     }
 
-    let market_cap = match token.market_cap {
-        Some(value) => value,
-        None => return Some(FilterRejectionReason::GeckoTerminalMarketCapMissing),
-    };
-
-    if market_cap < config.min_market_cap_usd {
-        return Some(FilterRejectionReason::GeckoTerminalMarketCapTooLow);
+    match bounds::check_range(
+        token.market_cap,
+        config.min_market_cap_usd,
+        bounds::optional_ceiling(config.max_market_cap_usd),
+    ) {
+        bounds::Range::TooLow => Some(FilterRejectionReason::GeckoTerminalMarketCapTooLow),
+        bounds::Range::TooHigh => Some(FilterRejectionReason::GeckoTerminalMarketCapTooHigh),
+        bounds::Range::Ok => None,
     }
-
-    if config.max_market_cap_usd > 0.0 && market_cap > config.max_market_cap_usd {
-        return Some(FilterRejectionReason::GeckoTerminalMarketCapTooHigh);
-    }
-
-    None
 }
 
 fn check_volume(token: &Token, config: &GeckoTerminalFilters) -> Option<FilterRejectionReason> {
@@ -84,7 +74,7 @@ fn check_volume(token: &Token, config: &GeckoTerminalFilters) -> Option<FilterRe
         return None;
     }
 
-    if let Some(reason) = enforce_volume_threshold(
+    if let Some(reason) = enforce_floor(
         token.volume_m5,
         config.min_volume_5m,
         FilterRejectionReason::GeckoTerminalVolume5mTooLow,
@@ -93,7 +83,7 @@ fn check_volume(token: &Token, config: &GeckoTerminalFilters) -> Option<FilterRe
         return Some(reason);
     }
 
-    if let Some(reason) = enforce_volume_threshold(
+    if let Some(reason) = enforce_floor(
         token.volume_h1,
         config.min_volume_1h,
         FilterRejectionReason::GeckoTerminalVolume1hTooLow,
@@ -102,7 +92,7 @@ fn check_volume(token: &Token, config: &GeckoTerminalFilters) -> Option<FilterRe
         return Some(reason);
     }
 
-    enforce_volume_threshold(
+    enforce_floor(
         token.volume_h24,
         config.min_volume_24h,
         FilterRejectionReason::GeckoTerminalVolume24hTooLow,
@@ -124,7 +114,6 @@ fn check_price_change(
         config.max_price_change_m5,
         FilterRejectionReason::GeckoTerminalPriceChange5mTooLow,
         FilterRejectionReason::GeckoTerminalPriceChange5mTooHigh,
-        FilterRejectionReason::GeckoTerminalPriceChange5mMissing,
     ) {
         return Some(reason);
     }
@@ -135,7 +124,6 @@ fn check_price_change(
         config.max_price_change_h1,
         FilterRejectionReason::GeckoTerminalPriceChange1hTooLow,
         FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh,
-        FilterRejectionReason::GeckoTerminalPriceChange1hMissing,
     ) {
         return Some(reason);
     }
@@ -146,7 +134,6 @@ fn check_price_change(
         config.max_price_change_h24,
         FilterRejectionReason::GeckoTerminalPriceChange24hTooLow,
         FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh,
-        FilterRejectionReason::GeckoTerminalPriceChange24hMissing,
     )
 }
 
@@ -177,7 +164,7 @@ fn check_pool_metrics(
         }
     }
 
-    enforce_reserve_threshold(
+    enforce_floor(
         token.reserve_in_usd,
         config.min_reserve_usd,
         FilterRejectionReason::GeckoTerminalReserveTooLow,
@@ -185,20 +172,17 @@ fn check_pool_metrics(
     )
 }
 
-fn enforce_volume_threshold(
+/// Both the volume windows and the pool reserve are floors, so they share one shape.
+fn enforce_floor(
     value: Option<f64>,
     threshold: f64,
     too_low_reason: FilterRejectionReason,
     missing_reason: FilterRejectionReason,
 ) -> Option<FilterRejectionReason> {
-    if threshold <= 0.0 {
-        return None;
-    }
-
-    match value {
-        Some(volume) if volume < threshold => Some(too_low_reason),
-        Some(_) => None,
-        None => Some(missing_reason),
+    match bounds::check_floor(value, threshold) {
+        bounds::Floor::TooLow => Some(too_low_reason),
+        bounds::Floor::Missing => Some(missing_reason),
+        bounds::Floor::Ok => None,
     }
 }
 
@@ -208,37 +192,10 @@ fn enforce_price_change(
     max_threshold: f64,
     too_low_reason: FilterRejectionReason,
     too_high_reason: FilterRejectionReason,
-    missing_reason: FilterRejectionReason,
 ) -> Option<FilterRejectionReason> {
-    let change = match value {
-        Some(value) => value,
-        None => return Some(missing_reason),
-    };
-
-    if change < min_threshold {
-        return Some(too_low_reason);
-    }
-
-    if change > max_threshold {
-        return Some(too_high_reason);
-    }
-
-    None
-}
-
-fn enforce_reserve_threshold(
-    value: Option<f64>,
-    min_threshold: f64,
-    too_low_reason: FilterRejectionReason,
-    missing_reason: FilterRejectionReason,
-) -> Option<FilterRejectionReason> {
-    if min_threshold <= 0.0 {
-        return None;
-    }
-
-    match value {
-        Some(reserve) if reserve < min_threshold => Some(too_low_reason),
-        Some(_) => None,
-        None => Some(missing_reason),
+    match bounds::check_range(value, min_threshold, Some(max_threshold)) {
+        bounds::Range::TooLow => Some(too_low_reason),
+        bounds::Range::TooHigh => Some(too_high_reason),
+        bounds::Range::Ok => None,
     }
 }

@@ -662,7 +662,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         verified,
         tags: combined_tags,
         pair_labels: Vec::new(), // Not available in unified Token
-        decimals: Some(token.decimals),
+        decimals: token.decimals,
         created_at: created_at_ts,
         market_data_last_fetched_at: market_data_last_fetched_at_ts,
         pool_price_last_calculated_at: pool_price_last_calculated_at_ts,

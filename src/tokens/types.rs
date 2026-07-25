@@ -76,7 +76,7 @@ pub struct Token {
     pub mint: String,
     pub symbol: String,
     pub name: String,
-    pub decimals: u8,
+    pub decimals: Option<u8>,
 
     // Optional metadata
     pub description: Option<String>,
@@ -250,44 +250,39 @@ pub struct Token {
 }
 
 impl Token {
-    /// Calculate total transactions (buys + sells) for 5 minute range
+    /// Total transactions (buys + sells) for the 5 minute window.
     pub fn txns_5m_total(&self) -> Option<i64> {
-        match (self.txns_m5_buys, self.txns_m5_sells) {
-            (Some(b), Some(s)) => Some(b + s),
-            (Some(b), None) => Some(b),
-            (None, Some(s)) => Some(s),
-            (None, None) => None,
-        }
+        txns_total(self.txns_m5_buys, self.txns_m5_sells)
     }
 
-    /// Calculate total transactions (buys + sells) for 1 hour range
+    /// Total transactions (buys + sells) for the 1 hour window.
     pub fn txns_1h_total(&self) -> Option<i64> {
-        match (self.txns_h1_buys, self.txns_h1_sells) {
-            (Some(b), Some(s)) => Some(b + s),
-            (Some(b), None) => Some(b),
-            (None, Some(s)) => Some(s),
-            (None, None) => None,
-        }
+        txns_total(self.txns_h1_buys, self.txns_h1_sells)
     }
 
-    /// Calculate total transactions (buys + sells) for 6 hour range
+    /// Total transactions (buys + sells) for the 6 hour window.
     pub fn txns_6h_total(&self) -> Option<i64> {
-        match (self.txns_h6_buys, self.txns_h6_sells) {
-            (Some(b), Some(s)) => Some(b + s),
-            (Some(b), None) => Some(b),
-            (None, Some(s)) => Some(s),
-            (None, None) => None,
-        }
+        txns_total(self.txns_h6_buys, self.txns_h6_sells)
     }
 
-    /// Calculate total transactions (buys + sells) for 24 hour range
+    /// Total transactions (buys + sells) for the 24 hour window.
     pub fn txns_24h_total(&self) -> Option<i64> {
-        match (self.txns_h24_buys, self.txns_h24_sells) {
-            (Some(b), Some(s)) => Some(b + s),
-            (Some(b), None) => Some(b),
-            (None, Some(s)) => Some(s),
-            (None, None) => None,
-        }
+        txns_total(self.txns_h24_buys, self.txns_h24_sells)
+    }
+}
+
+/// Combine one window's buy and sell counts into the total the whole bot sorts and filters
+/// on — ONE definition, because a filter and a sort that disagree about what "total" means
+/// will rank a token differently from how they judge it.
+///
+/// A one-sided reading counts as what it says. Providers report both sides or neither, so
+/// this only arises on partial data, and there the count we have is better evidence than no
+/// count at all. `saturating_add` because these are provider-supplied and unvalidated.
+fn txns_total(buys: Option<i64>, sells: Option<i64>) -> Option<i64> {
+    match (buys, sells) {
+        (Some(buys), Some(sells)) => Some(buys.saturating_add(sells)),
+        (Some(count), None) | (None, Some(count)) => Some(count),
+        (None, None) => None,
     }
 }
 

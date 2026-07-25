@@ -2,9 +2,13 @@
 //! disabled path, and what it does with missing or corrupted values.
 //!
 //! Pure tier: the four source evaluators are synchronous and read nothing but the token
-//! and the config passed in. Where a rule's behaviour looks wrong, the test asserts what
-//! the code ACTUALLY does and says so in a comment — a test that encodes the intended
-//! behaviour would just fail, and a test that stays silent hides the defect.
+//! and the config passed in.
+//!
+//! Where a rule was once wrong, the test that now asserts the correct behaviour says in a
+//! comment what the old behaviour was and what it cost — a regression here is a repeat of a
+//! bug that reached production, and the next reader should not have to rediscover why the
+//! rule is written the way it is. Rules whose behaviour is deliberately surprising (single
+//! ASCII letters surviving the "single character" filter) say so too.
 
 mod common;
 
@@ -90,7 +94,13 @@ fn onchain_rejects_empty_and_null_padded_symbols() {
     let config = OnChainFilters::default();
     let mut token = dex_token();
 
-    for symbol in ["", "   ", "\0\0\0", "\0", "\t\n"] {
+    // Every arrangement of the padding an on-chain metadata field gets packed with —
+    // including NULs SURROUNDED by whitespace, which used to slip through: `trim` does not
+    // treat NUL as whitespace, and trimming NUL from the ends could not reach a NUL the
+    // spaces were shielding, so `" \0 "` passed both tests and counted as a real symbol.
+    for symbol in [
+        "", "   ", "\0\0\0", "\0", "\t\n", " \0 ", "\0 \0", " \u{1} ", "\r\0\t",
+    ] {
         token.symbol = symbol.to_owned();
         assert_eq!(
             rejection(onchain::evaluate(&token, &config)),
@@ -98,28 +108,36 @@ fn onchain_rejects_empty_and_null_padded_symbols() {
             "symbol {symbol:?} must be treated as empty"
         );
     }
+
+    // A real symbol wearing the same padding is still a real symbol.
+    token.symbol = " \0BONK\0 ".to_owned();
+    assert!(onchain::evaluate(&token, &config).is_ok());
 }
 
 #[test]
-fn onchain_misses_a_null_symbol_padded_with_whitespace() {
-    // DEFECT PIN: `is_empty_or_whitespace` tries three tests in sequence — `is_empty`,
-    // `trim().is_empty()`, and `trim_matches('\0').trim().is_empty()` — but never trims
-    // BOTH kinds of padding in the right order. Rust's `trim` does not treat NUL as
-    // whitespace, and `trim_matches('\0')` only strips NULs at the very ends, so a symbol
-    // whose NULs sit INSIDE the whitespace survives every check and is treated as a real
-    // symbol. One `trim_matches(|c: char| c.is_whitespace() || c == '\0')` would cover
-    // all of it.
+fn onchain_sees_through_padding_on_every_symbol_rule() {
+    // The three symbol rules must agree on what the symbol IS, or padding turns one rule
+    // off while leaving the others on.
     let config = OnChainFilters {
-        // Isolate the empty-symbol rule from the combined score, which would also fire.
+        reject_single_char_symbols: true,
         combined_risk_enabled: false,
         ..Default::default()
     };
     let mut token = dex_token();
-    token.symbol = " \0 ".to_owned();
 
-    assert!(
-        onchain::evaluate(&token, &config).is_ok(),
-        "a NUL padded with spaces is currently accepted as a valid symbol"
+    // `\u{0}` rather than `\0` so the digits that follow cannot read as an octal escape.
+    token.symbol = " \u{0}123\0 ".to_owned();
+    assert_eq!(
+        rejection(onchain::evaluate(&token, &config)),
+        FilterRejectionReason::OnChainNumericSymbol,
+        "padding must not hide a numeric symbol"
+    );
+
+    token.symbol = "\0$\0".to_owned();
+    assert_eq!(
+        rejection(onchain::evaluate(&token, &config)),
+        FilterRejectionReason::OnChainSuspiciousSymbol,
+        "padding must not hide a single-character symbol"
     );
 }
 
@@ -208,11 +226,12 @@ fn onchain_combined_risk_rejects_exactly_at_the_threshold() {
 }
 
 #[test]
-fn onchain_immutable_bonus_depends_on_signal_order() {
-    // DEFECT PIN: `compute_risk_score` adds the +10 immutable bonus only when the score
-    // is already non-zero AT THAT POINT, and the +15 "name == symbol" signal is added
-    // AFTERWARDS. So an immutable token whose only other signal is name == symbol scores
-    // 15, not 25 — the bonus silently depends on the order the signals are written in.
+fn onchain_immutable_bonus_amplifies_any_signal_regardless_of_order() {
+    // The +10 immutable bonus fires when ANY other signal fired, not only the signals that
+    // happen to be written above it. It used to be evaluated mid-sum, so a token whose only
+    // other signal was "name == symbol" (added afterwards) scored 15 instead of 25 while
+    // the identical token with a freeze authority (added before) scored 20 — the same
+    // evidence weighted differently by source position alone.
     let config = OnChainFilters {
         reject_numeric_symbols: false,
         reject_empty_symbols: false,
@@ -220,15 +239,28 @@ fn onchain_immutable_bonus_depends_on_signal_order() {
         max_combined_risk_score: 20,
         ..Default::default()
     };
+
     let mut token = dex_token();
     token.symbol = "SAME".to_owned();
     token.name = "same".to_owned(); // case-insensitive match, +15
-    token.is_mutable = Some(false); // +10 ONLY if score > 0 already — it is not yet
+    token.is_mutable = Some(false); // +10 amplifier => 25
     token.freeze_authority = None;
 
+    assert_eq!(
+        rejection(onchain::evaluate(&token, &config)),
+        FilterRejectionReason::OnChainHighRiskScore,
+        "15 + the 10 amplifier is 25, over the threshold of 20"
+    );
+
+    // Immutability ALONE is not a scam signal — most honest projects lock their metadata.
+    let mut innocent = dex_token();
+    innocent.symbol = "GOOD".to_owned();
+    innocent.name = "A Perfectly Fine Token".to_owned();
+    innocent.is_mutable = Some(false);
+    innocent.freeze_authority = None;
     assert!(
-        onchain::evaluate(&token, &config).is_ok(),
-        "scores 15 (not 25) because the immutable bonus is evaluated before name==symbol"
+        onchain::evaluate(&innocent, &config).is_ok(),
+        "the amplifier must have something to amplify"
     );
 }
 
@@ -333,10 +365,10 @@ fn dexscreener_transaction_minimums() {
 }
 
 #[test]
-fn dexscreener_missing_5m_transactions_skips_the_1h_minimum_too() {
-    // DEFECT PIN: `check_transaction_activity` returns None (= pass) as soon as either
-    // 5m counter is absent, so it never reaches the 1h check. A token with no 5m data
-    // and ZERO hourly trades satisfies the activity filter.
+fn dexscreener_judges_each_transaction_window_on_its_own() {
+    // An absent 5m reading used to `return` out of the whole check, so a token with no 5m
+    // data and ZERO hourly trades satisfied the activity filter — the one rule that gates
+    // dead markets, waived by the absence of an unrelated window.
     let config = DexScreenerFilters {
         min_transactions_5min: 10,
         min_transactions_1h: 500,
@@ -348,9 +380,66 @@ fn dexscreener_missing_5m_transactions_skips_the_1h_minimum_too() {
     token.txns_h1_buys = Some(0);
     token.txns_h1_sells = Some(0);
 
-    assert!(
-        dexscreener::evaluate(&token, &config).is_ok(),
-        "missing 5m counters must not silently waive the 1h activity minimum"
+    // The 5m minimum is itself unsatisfiable without a reading, so it fires first.
+    assert_eq!(
+        rejection(dexscreener::evaluate(&token, &config)),
+        FilterRejectionReason::DexScreenerInsufficientTransactions5Min
+    );
+
+    // With the 5m minimum switched off, the 1h minimum is still reached and still enforced.
+    let hourly_only = DexScreenerFilters {
+        min_transactions_5min: 0,
+        ..config.clone()
+    };
+    assert_eq!(
+        rejection(dexscreener::evaluate(&token, &hourly_only)),
+        FilterRejectionReason::DexScreenerInsufficientTransactions1H
+    );
+
+    // A floor of zero constrains nothing, so absent counts are fine when nothing is asked.
+    let unconstrained = DexScreenerFilters {
+        min_transactions_5min: 0,
+        min_transactions_1h: 0,
+        ..Default::default()
+    };
+    token.txns_h1_buys = None;
+    token.txns_h1_sells = None;
+    assert!(dexscreener::evaluate(&token, &unconstrained).is_ok());
+}
+
+#[test]
+fn dexscreener_counts_a_one_sided_transaction_reading_as_the_total() {
+    // The filter and the dashboard sort share ONE definition of "total" (`txns_*_total`),
+    // so a window the provider reported one-sided is judged as what it reported rather
+    // than being discarded. A filter and a sort that disagree here would rank a token
+    // differently from how they judge it.
+    let config = DexScreenerFilters {
+        min_transactions_1h: 100,
+        ..Default::default()
+    };
+    let mut token = dex_token();
+    token.txns_h1_buys = Some(150);
+    token.txns_h1_sells = None;
+    assert!(dexscreener::evaluate(&token, &config).is_ok());
+    assert_eq!(token.txns_1h_total(), Some(150));
+
+    token.txns_h1_buys = Some(99);
+    assert_eq!(
+        rejection(dexscreener::evaluate(&token, &config)),
+        FilterRejectionReason::DexScreenerInsufficientTransactions1H
+    );
+}
+
+#[test]
+fn dexscreener_transaction_totals_saturate_instead_of_overflowing() {
+    let mut token = dex_token();
+    token.txns_h24_buys = Some(i64::MAX);
+    token.txns_h24_sells = Some(i64::MAX);
+
+    assert_eq!(
+        token.txns_24h_total(),
+        Some(i64::MAX),
+        "a provider reporting nonsense must not panic or wrap the total negative"
     );
 }
 
@@ -417,20 +506,24 @@ fn dexscreener_missing_liquidity_and_market_cap_pass_but_missing_fdv_rejects() {
         ..Default::default()
     };
 
-    let mut token = dex_token();
-    token.liquidity_usd = None;
-    token.market_cap = None;
-    assert!(
-        dexscreener::evaluate(&token, &config).is_ok(),
-        "absent liquidity/market cap currently waive their own checks"
-    );
-
-    let mut token = dex_token();
-    token.fdv = None;
-    assert_eq!(
-        rejection(dexscreener::evaluate(&token, &config)),
-        FilterRejectionReason::DexScreenerFdvMissing
-    );
+    // One rule for every RANGE check: a value we do not have cannot be shown to fall
+    // outside the band, so it passes. This used to differ per field — absent liquidity and
+    // market cap passed while an absent FDV rejected.
+    for (name, break_it) in [
+        (
+            "liquidity",
+            (|t: &mut Token| t.liquidity_usd = None) as fn(&mut Token),
+        ),
+        ("market cap", |t: &mut Token| t.market_cap = None),
+        ("fdv", |t: &mut Token| t.fdv = None),
+    ] {
+        let mut token = dex_token();
+        break_it(&mut token);
+        assert!(
+            dexscreener::evaluate(&token, &config).is_ok(),
+            "an absent {name} must not reject: a range cannot be violated by a value we do not have"
+        );
+    }
 }
 
 #[test]
@@ -551,21 +644,35 @@ fn dexscreener_volume_windows_reject_low_and_missing_values() {
 }
 
 #[test]
-fn dexscreener_price_change_rejects_missing_data_even_with_an_open_range() {
-    // DEFECT PIN: the volume helper skips a window whose threshold is 0, but the price
-    // change helper has no such escape — enabling price-change checks with the DEFAULT
-    // (-100%, +10000%) range still rejects every token missing any one window.
+fn dexscreener_price_change_ignores_windows_it_has_no_reading_for() {
+    // A price change is a range check, so an absent window passes — enabling the checks
+    // must not throw out every token whose provider omitted one window. This used to
+    // reject even under the DEFAULT (-100%, +10000%) band, which accepts every value that
+    // can physically occur.
     let config = DexScreenerFilters {
         price_change_enabled: true,
         ..Default::default()
     };
+
+    for break_it in [
+        (|t: &mut Token| t.price_change_m5 = None) as fn(&mut Token),
+        |t: &mut Token| t.price_change_h1 = None,
+        |t: &mut Token| t.price_change_h6 = None,
+        |t: &mut Token| t.price_change_h24 = None,
+    ] {
+        let mut token = dex_token();
+        break_it(&mut token);
+        assert!(dexscreener::evaluate(&token, &config).is_ok());
+    }
+
+    // …but a window it DOES have is still judged.
     let mut token = dex_token();
     token.price_change_m5 = None;
-
+    token.price_change_h1 = Some(-100.5);
     assert_eq!(
         rejection(dexscreener::evaluate(&token, &config)),
-        FilterRejectionReason::DexScreenerPriceChange5mMissing,
-        "an unbounded range still demands the value"
+        FilterRejectionReason::DexScreenerPriceChangeTooLow,
+        "an absent window must not excuse the windows that are present"
     );
 }
 
@@ -626,48 +733,176 @@ fn dexscreener_price_change_bounds_per_window() {
     }
 }
 
-#[test]
-fn dexscreener_nan_values_slip_through_every_numeric_bound() {
-    // DEFECT PIN: NaN compares false against `<`, `>` and `<=` alike, so a corrupted feed
-    // value satisfies min AND max at once. Only an explicit `is_finite` guard would catch
-    // it, and no source has one.
-    let config = DexScreenerFilters {
+/// A config where every numeric market rule is switched on and genuinely constraining.
+fn every_bound_enabled() -> DexScreenerFilters {
+    DexScreenerFilters {
         min_liquidity_usd: 1_000.0,
         max_liquidity_usd: 10_000.0,
         min_market_cap_usd: 1_000.0,
         max_market_cap_usd: 10_000.0,
+        fdv_enabled: true,
+        min_fdv_usd: 1_000.0,
+        max_fdv_usd: 10_000.0,
         volume_enabled: true,
         min_volume_24h: 5_000.0,
         price_change_enabled: true,
         min_price_change_h24: -50.0,
         max_price_change_h24: 50.0,
         ..Default::default()
-    };
-    let mut token = dex_token();
-    token.liquidity_usd = Some(f64::NAN);
-    token.market_cap = Some(f64::NAN);
-    token.volume_h24 = Some(f64::NAN);
-    token.price_change_h24 = Some(f64::NAN);
+    }
+}
 
-    assert!(
-        dexscreener::evaluate(&token, &config).is_ok(),
-        "NaN market data currently passes bounds it should fail"
+/// A token sitting comfortably inside every bound of [`every_bound_enabled`], so a test can
+/// corrupt exactly ONE field and know the verdict is about that field.
+fn in_band_token() -> Token {
+    let mut token = dex_token();
+    token.liquidity_usd = Some(5_000.0);
+    token.market_cap = Some(5_000.0);
+    token.fdv = Some(5_000.0);
+    token.volume_h24 = Some(6_000.0);
+    token.price_change_h24 = Some(0.0);
+    token
+}
+
+#[test]
+fn dexscreener_treats_a_non_finite_reading_as_no_reading_at_all() {
+    // NaN compares false against `<`, `>` and `<=` alike, so before the guard a single
+    // corrupted feed value satisfied a minimum and a maximum SIMULTANEOUSLY — the one input
+    // that passed every check it was measured against. An infinity is a parse artefact, not
+    // a measurement. The property asserted here is exact: a non-finite reading produces the
+    // SAME verdict as no reading, so it can never be mistaken for evidence of compliance.
+    let config = every_bound_enabled();
+
+    for (name, set) in [
+        (
+            "liquidity",
+            (|t: &mut Token, v: Option<f64>| t.liquidity_usd = v) as fn(&mut Token, Option<f64>),
+        ),
+        ("market cap", |t: &mut Token, v| t.market_cap = v),
+        ("fdv", |t: &mut Token, v| t.fdv = v),
+        ("volume", |t: &mut Token, v| t.volume_h24 = v),
+        ("price change", |t: &mut Token, v| t.price_change_h24 = v),
+    ] {
+        let mut absent = in_band_token();
+        set(&mut absent, None);
+        let expected = dexscreener::evaluate(&absent, &config);
+
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let mut token = in_band_token();
+            set(&mut token, Some(value));
+            assert_eq!(
+                dexscreener::evaluate(&token, &config),
+                expected,
+                "{name} = {value} must be judged exactly as an absent {name} is"
+            );
+        }
+    }
+
+    // And for a floor, "no reading" is itself a rejection — it cannot clear the bar.
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let mut token = in_band_token();
+        token.volume_h24 = Some(value);
+        assert_eq!(
+            rejection(dexscreener::evaluate(&token, &config)),
+            FilterRejectionReason::DexScreenerVolumeMissing,
+            "a {value} volume must not satisfy a $5000 minimum"
+        );
+    }
+}
+
+#[test]
+fn rugcheck_non_finite_percentages_cannot_pass_a_ceiling() {
+    // Same class of defect on the security side, where the stakes are higher: a NaN holder
+    // percentage used to clear "top holder under 40%" and, summed, turned the insider total
+    // into NaN — which cleared its own ceiling too.
+    let config = RugCheckFilters::default();
+
+    let mut token = dex_token();
+    token.creator_balance_pct = Some(f64::NAN);
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckCreatorBalanceTooHigh
+    );
+
+    let mut token = dex_token();
+    token.transfer_fee_pct = Some(f64::NAN);
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckTransferFeeTooHigh
+    );
+
+    // A junk percentage must not be able to occupy a top-holder slot and hide a real whale.
+    let mut token = dex_token();
+    token.top_holders = vec![
+        holder(
+            "Junk11111111111111111111111111111111111111",
+            f64::NAN,
+            false,
+        ),
+        holder("Whale11111111111111111111111111111111111111", 91.0, false),
+    ];
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckTopHolderTooHigh
+    );
+
+    // Nor may it poison the insider total into NaN, which compares false against its cap.
+    let mut token = dex_token();
+    token.top_holders = vec![
+        holder("Junk11111111111111111111111111111111111111", f64::NAN, true),
+        holder("Insider111111111111111111111111111111111111", 25.0, true),
+    ];
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckInsiderTotalPct
     );
 }
 
 #[test]
-fn dexscreener_infinite_values_are_caught_by_the_upper_bounds() {
-    let config = DexScreenerFilters {
-        max_liquidity_usd: 10_000.0,
-        ..Default::default()
-    };
-    let mut token = dex_token();
-    token.liquidity_usd = Some(f64::INFINITY);
+fn dexscreener_finite_values_still_reach_every_bound() {
+    // The guard must not have turned the numeric rules off along with the corrupt values.
+    let config = every_bound_enabled();
 
-    assert_eq!(
-        rejection(dexscreener::evaluate(&token, &config)),
-        FilterRejectionReason::DexScreenerLiquidityTooHigh
-    );
+    let cases: [Case; 8] = [
+        (
+            |t| t.liquidity_usd = Some(999.0),
+            FilterRejectionReason::DexScreenerInsufficientLiquidity,
+        ),
+        (
+            |t| t.liquidity_usd = Some(10_001.0),
+            FilterRejectionReason::DexScreenerLiquidityTooHigh,
+        ),
+        (
+            |t| t.market_cap = Some(999.0),
+            FilterRejectionReason::DexScreenerMarketCapTooLow,
+        ),
+        (
+            |t| t.market_cap = Some(10_001.0),
+            FilterRejectionReason::DexScreenerMarketCapTooHigh,
+        ),
+        (
+            |t| t.fdv = Some(999.0),
+            FilterRejectionReason::DexScreenerFdvTooLow,
+        ),
+        (
+            |t| t.fdv = Some(10_001.0),
+            FilterRejectionReason::DexScreenerFdvTooHigh,
+        ),
+        (
+            |t| t.volume_h24 = Some(4_999.0),
+            FilterRejectionReason::DexScreenerVolumeTooLow,
+        ),
+        (
+            |t| t.price_change_h24 = Some(50.1),
+            FilterRejectionReason::DexScreenerPriceChange24hTooHigh,
+        ),
+    ];
+
+    for (mutate, expected) in cases {
+        let mut token = in_band_token();
+        mutate(&mut token);
+        assert_eq!(rejection(dexscreener::evaluate(&token, &config)), expected);
+    }
 }
 
 // ============================================================================
@@ -702,26 +937,28 @@ fn geckoterminal_ignores_tokens_from_another_source() {
 }
 
 #[test]
-fn geckoterminal_missing_liquidity_and_market_cap_reject() {
+fn geckoterminal_answers_missing_data_the_same_way_dexscreener_does() {
+    // The two sources measure the same quantities, so they must not disagree about what an
+    // absent reading means. GeckoTerminal used to reject an absent liquidity or market cap
+    // that DexScreener let through, which made a token's fate depend on which provider
+    // happened to answer first during discovery.
     let config = GeckoTerminalFilters {
         market_cap_enabled: true,
         ..Default::default()
     };
 
-    let mut token = gecko_token();
-    token.liquidity_usd = None;
-    assert_eq!(
-        rejection(geckoterminal::evaluate(&token, &config)),
-        FilterRejectionReason::GeckoTerminalLiquidityMissing,
-        "opposite of DexScreener, which lets absent liquidity through"
-    );
+    for break_it in [
+        (|t: &mut Token| t.liquidity_usd = None) as fn(&mut Token),
+        |t: &mut Token| t.market_cap = None,
+    ] {
+        let mut gecko = gecko_token();
+        break_it(&mut gecko);
+        assert!(geckoterminal::evaluate(&gecko, &config).is_ok());
 
-    let mut token = gecko_token();
-    token.market_cap = None;
-    assert_eq!(
-        rejection(geckoterminal::evaluate(&token, &config)),
-        FilterRejectionReason::GeckoTerminalMarketCapMissing
-    );
+        let mut dex = dex_token();
+        break_it(&mut dex);
+        assert!(dexscreener::evaluate(&dex, &DexScreenerFilters::default()).is_ok());
+    }
 }
 
 #[test]
@@ -795,7 +1032,7 @@ fn geckoterminal_volume_and_price_change_windows() {
         ..Default::default()
     };
 
-    let cases: [Case; 7] = [
+    let cases: [Case; 6] = [
         (
             |t| t.volume_m5 = Some(99.0),
             FilterRejectionReason::GeckoTerminalVolume5mTooLow,
@@ -819,10 +1056,6 @@ fn geckoterminal_volume_and_price_change_windows() {
         (
             |t| t.price_change_h24 = Some(25.1),
             FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh,
-        ),
-        (
-            |t| t.price_change_h24 = None,
-            FilterRejectionReason::GeckoTerminalPriceChange24hMissing,
         ),
     ];
 
@@ -1062,6 +1295,80 @@ fn rugcheck_holder_distribution_rules() {
 }
 
 #[test]
+fn rugcheck_finds_the_three_largest_holders_in_any_order() {
+    // The rule reads only the three largest stakes, and it now selects them in one pass
+    // rather than cloning and sorting the whole list per token (which was the single most
+    // expensive rule in the pipeline, and grew with a list Rugcheck can return thousands of
+    // entries long). The selection must be exactly as correct as the sort it replaced, for
+    // any input order, any list length, and any number of ties.
+    let config = RugCheckFilters {
+        min_unique_holders: 0,
+        max_top_holder_pct: 40.0,
+        max_top_3_holders_pct: 60.0,
+        ..Default::default()
+    };
+
+    let addr = |i: usize| format!("H{i:043}");
+
+    // The same three big stakes hidden at different positions in a long tail of dust.
+    for position in [0usize, 1, 7, 49] {
+        let mut pcts = vec![0.1_f64; 50];
+        pcts[position] = 25.0;
+        pcts[(position + 17) % 50] = 20.0;
+        pcts[(position + 31) % 50] = 16.0; // 61% across the top three
+
+        let mut token = dex_token();
+        token.top_holders = pcts
+            .iter()
+            .enumerate()
+            .map(|(i, pct)| holder(&addr(i), *pct, false))
+            .collect();
+
+        assert_eq!(
+            rejection(rugcheck::evaluate(&token, &config)),
+            FilterRejectionReason::RugcheckTop3HoldersTooHigh,
+            "the three largest must be found wherever they sit (offset {position})"
+        );
+    }
+
+    // Ties must not collapse into one slot: three holders at 20.1% each is 60.3%.
+    let mut token = dex_token();
+    token.top_holders = (0..3)
+        .map(|i| holder(&addr(i), 20.1, false))
+        .chain(std::iter::once(holder(&addr(9), 0.5, false)))
+        .collect();
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckTop3HoldersTooHigh
+    );
+
+    // Fewer than three holders sums only what exists — no phantom zero-or-worse entries.
+    let mut token = dex_token();
+    token.top_holders = vec![holder(&addr(0), 39.0, false), holder(&addr(1), 20.0, false)];
+    assert!(
+        rugcheck::evaluate(&token, &config).is_ok(),
+        "59% across two holders is under the 60% ceiling"
+    );
+
+    // An empty list is not a concentration problem.
+    let mut token = dex_token();
+    token.top_holders = Vec::new();
+    assert!(rugcheck::evaluate(&token, &config).is_ok());
+
+    // The top-holder ceiling still triggers off the true maximum, not the first entry.
+    let mut token = dex_token();
+    token.top_holders = vec![
+        holder(&addr(0), 1.0, false),
+        holder(&addr(1), 2.0, false),
+        holder(&addr(2), 41.0, false),
+    ];
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckTopHolderTooHigh
+    );
+}
+
+#[test]
 fn rugcheck_finds_the_largest_holder_regardless_of_input_order() {
     let config = RugCheckFilters {
         max_top_holder_pct: 40.0,
@@ -1162,27 +1469,33 @@ fn rugcheck_graph_insider_and_creator_balance_bounds() {
 }
 
 #[test]
-fn rugcheck_missing_transfer_fee_data_rejects_under_the_default_config() {
-    // DEFECT PIN: the code comment says missing transfer-fee data is acceptable, but any
-    // `max_transfer_fee_pct` below 100 turns absence into a rejection — and the default
-    // is 5. Most SPL tokens have no transfer-fee extension at all, so this rule rejects
-    // them on a technicality unless the field is explicitly populated with 0.
+fn rugcheck_absent_transfer_fee_means_the_mint_cannot_charge_one() {
+    // A Rugcheck report carries a transfer fee only when the mint has the Token-2022
+    // transfer-fee extension, so absence is positive information, not missing data. The old
+    // code read "a ceiling below 100% means the data is required" and rejected — which is
+    // how a column the batch load was not fetching turned into 46% of the corpus being
+    // thrown out for failing to prove a fee it structurally cannot have.
     let config = RugCheckFilters::default();
     let mut token = dex_token();
     token.transfer_fee_pct = None;
 
-    assert_eq!(
-        rejection(rugcheck::evaluate(&token, &config)),
-        FilterRejectionReason::RugcheckTransferFeeMissing
+    assert!(
+        rugcheck::evaluate(&token, &config).is_ok(),
+        "an ordinary SPL token has no fee extension and must not be rejected for it"
     );
 
-    let opt_out = RugCheckFilters {
-        max_transfer_fee_pct: 100.0,
+    // Absence is treated as 0%, so even "block any transfer fee" leaves it alone.
+    let block_any = RugCheckFilters {
+        block_transfer_fee_tokens: true,
         ..Default::default()
     };
-    assert!(
-        rugcheck::evaluate(&token, &opt_out).is_ok(),
-        "only a 100% ceiling waives the requirement"
+    assert!(rugcheck::evaluate(&token, &block_any).is_ok());
+
+    // A reported fee is still judged.
+    token.transfer_fee_pct = Some(5.1);
+    assert_eq!(
+        rejection(rugcheck::evaluate(&token, &config)),
+        FilterRejectionReason::RugcheckTransferFeeTooHigh
     );
 }
 
@@ -1344,7 +1657,7 @@ fn reason_source_pairs() -> Vec<(FilterRejectionReason, FilterSource)> {
             FilterSource::DexScreener,
         ),
         (
-            FilterRejectionReason::DexScreenerFdvMissing,
+            FilterRejectionReason::DexScreenerFdvTooHigh,
             FilterSource::DexScreener,
         ),
         (

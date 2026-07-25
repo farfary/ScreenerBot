@@ -79,31 +79,34 @@ impl Service for TokensServiceNew {
 
         self.db = Some(db_arc.clone());
 
-        // Preload all known decimals into memory cache for synchronous pool decoder access
-        // This is CRITICAL: pool decoders run synchronously and need decimals available in cache
+        // Preload known decimals into memory cache for synchronous pool decoder access.
+        // This is CRITICAL: pool decoders run synchronously and need decimals available in
+        // cache — a miss makes them skip the pool, so the token has no live price. The query
+        // is capped at the cache capacity and ordered so pool-backed mints are inserted last;
+        // loading the whole table (405k rows against a 100k cache) evicted most of them.
         let preload_start = std::time::Instant::now();
-        let all_decimals =
-            tokio::task::spawn_blocking(move || db_arc.get_all_tokens_with_decimals())
-                .await
-                .map_err(|e| {
-                    crate::Error::Service(crate::errors::ServiceError::Initialize {
-                        service: "tokens_new".to_owned(),
-                        message: format!("Failed to spawn decimals preload task: {e}"),
-                    })
-                })?
-                .map_err(|e| {
-                    crate::Error::Service(crate::errors::ServiceError::Initialize {
-                        service: "tokens_new".to_owned(),
-                        message: format!("Failed to fetch decimals from database: {e}"),
-                    })
-                })?;
+        let all_decimals = tokio::task::spawn_blocking(move || {
+            db_arc.get_tokens_with_decimals_for_preload(crate::tokens::decimals::PRELOAD_CAPACITY)
+        })
+        .await
+        .map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Initialize {
+                service: "tokens_new".to_owned(),
+                message: format!("Failed to spawn decimals preload task: {e}"),
+            })
+        })?
+        .map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Initialize {
+                service: "tokens_new".to_owned(),
+                message: format!("Failed to fetch decimals from database: {e}"),
+            })
+        })?;
 
-        let mut preloaded_count = 0;
+        // The query already excluded invalid values, and its order is load-bearing —
+        // insert as returned so pool-backed mints end up most recently used.
+        let preloaded_count = all_decimals.len();
         for (mint, decimals) in all_decimals {
-            if decimals > 0 {
-                crate::tokens::decimals::cache(&mint, decimals);
-                preloaded_count += 1;
-            }
+            crate::tokens::decimals::cache(&mint, decimals);
         }
 
         logger::info(

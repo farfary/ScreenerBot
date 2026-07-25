@@ -2,6 +2,7 @@
 use std::fmt;
 
 pub mod ai;
+pub(super) mod bounds;
 pub mod dexscreener;
 pub mod geckoterminal;
 pub mod meta;
@@ -74,7 +75,6 @@ pub enum FilterRejectionReason {
     DexScreenerVolumeMissing,
     DexScreenerFdvTooLow,
     DexScreenerFdvTooHigh,
-    DexScreenerFdvMissing,
     DexScreenerVolume5mTooLow,
     DexScreenerVolume5mMissing,
     DexScreenerVolume1hTooLow,
@@ -83,22 +83,16 @@ pub enum FilterRejectionReason {
     DexScreenerVolume6hMissing,
     DexScreenerPriceChange5mTooLow,
     DexScreenerPriceChange5mTooHigh,
-    DexScreenerPriceChange5mMissing,
     DexScreenerPriceChangeTooLow,
     DexScreenerPriceChangeTooHigh,
-    DexScreenerPriceChangeMissing,
     DexScreenerPriceChange6hTooLow,
     DexScreenerPriceChange6hTooHigh,
-    DexScreenerPriceChange6hMissing,
     DexScreenerPriceChange24hTooLow,
     DexScreenerPriceChange24hTooHigh,
-    DexScreenerPriceChange24hMissing,
 
     // GeckoTerminal
-    GeckoTerminalLiquidityMissing,
     GeckoTerminalLiquidityTooLow,
     GeckoTerminalLiquidityTooHigh,
-    GeckoTerminalMarketCapMissing,
     GeckoTerminalMarketCapTooLow,
     GeckoTerminalMarketCapTooHigh,
     GeckoTerminalVolume5mTooLow,
@@ -109,13 +103,10 @@ pub enum FilterRejectionReason {
     GeckoTerminalVolume24hMissing,
     GeckoTerminalPriceChange5mTooLow,
     GeckoTerminalPriceChange5mTooHigh,
-    GeckoTerminalPriceChange5mMissing,
     GeckoTerminalPriceChange1hTooLow,
     GeckoTerminalPriceChange1hTooHigh,
-    GeckoTerminalPriceChange1hMissing,
     GeckoTerminalPriceChange24hTooLow,
     GeckoTerminalPriceChange24hTooHigh,
-    GeckoTerminalPriceChange24hMissing,
     GeckoTerminalPoolCountTooLow,
     GeckoTerminalPoolCountTooHigh,
     GeckoTerminalPoolCountMissing,
@@ -136,7 +127,6 @@ pub enum FilterRejectionReason {
     RugcheckCreatorBalanceTooHigh,
     RugcheckTransferFeePresent,
     RugcheckTransferFeeTooHigh,
-    RugcheckTransferFeeMissing,
     RugcheckGraphInsidersTooHigh,
     RugcheckLpProvidersTooLow,
     RugcheckLpProvidersMissing,
@@ -184,7 +174,6 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerVolumeMissing => "dex_vol_missing".to_owned(),
             FilterRejectionReason::DexScreenerFdvTooLow => "dex_fdv_low".to_owned(),
             FilterRejectionReason::DexScreenerFdvTooHigh => "dex_fdv_high".to_owned(),
-            FilterRejectionReason::DexScreenerFdvMissing => "dex_fdv_missing".to_owned(),
             FilterRejectionReason::DexScreenerVolume5mTooLow => "dex_vol5m_low".to_owned(),
             FilterRejectionReason::DexScreenerVolume5mMissing => "dex_vol5m_missing".to_owned(),
             FilterRejectionReason::DexScreenerVolume1hTooLow => "dex_vol1h_low".to_owned(),
@@ -197,17 +186,11 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerPriceChange5mTooHigh => {
                 "dex_price_change_5m_high".to_owned()
             }
-            FilterRejectionReason::DexScreenerPriceChange5mMissing => {
-                "dex_price_change_5m_missing".to_owned()
-            }
             FilterRejectionReason::DexScreenerPriceChangeTooLow => {
                 "dex_price_change_low".to_owned()
             }
             FilterRejectionReason::DexScreenerPriceChangeTooHigh => {
                 "dex_price_change_high".to_owned()
-            }
-            FilterRejectionReason::DexScreenerPriceChangeMissing => {
-                "dex_price_change_missing".to_owned()
             }
             FilterRejectionReason::DexScreenerPriceChange6hTooLow => {
                 "dex_price_change_6h_low".to_owned()
@@ -215,22 +198,14 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerPriceChange6hTooHigh => {
                 "dex_price_change_6h_high".to_owned()
             }
-            FilterRejectionReason::DexScreenerPriceChange6hMissing => {
-                "dex_price_change_6h_missing".to_owned()
-            }
             FilterRejectionReason::DexScreenerPriceChange24hTooLow => {
                 "dex_price_change_24h_low".to_owned()
             }
             FilterRejectionReason::DexScreenerPriceChange24hTooHigh => {
                 "dex_price_change_24h_high".to_owned()
             }
-            FilterRejectionReason::DexScreenerPriceChange24hMissing => {
-                "dex_price_change_24h_missing".to_owned()
-            }
-            FilterRejectionReason::GeckoTerminalLiquidityMissing => "gecko_liq_missing".to_owned(),
             FilterRejectionReason::GeckoTerminalLiquidityTooLow => "gecko_liq_low".to_owned(),
             FilterRejectionReason::GeckoTerminalLiquidityTooHigh => "gecko_liq_high".to_owned(),
-            FilterRejectionReason::GeckoTerminalMarketCapMissing => "gecko_mcap_missing".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooLow => "gecko_mcap_low".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooHigh => "gecko_mcap_high".to_owned(),
             FilterRejectionReason::GeckoTerminalVolume5mTooLow => "gecko_vol5m_low".to_owned(),
@@ -247,26 +222,17 @@ impl FilterRejectionReason {
             FilterRejectionReason::GeckoTerminalPriceChange5mTooHigh => {
                 "gecko_price_change_5m_high".to_owned()
             }
-            FilterRejectionReason::GeckoTerminalPriceChange5mMissing => {
-                "gecko_price_change_5m_missing".to_owned()
-            }
             FilterRejectionReason::GeckoTerminalPriceChange1hTooLow => {
                 "gecko_price_change_1h_low".to_owned()
             }
             FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh => {
                 "gecko_price_change_1h_high".to_owned()
             }
-            FilterRejectionReason::GeckoTerminalPriceChange1hMissing => {
-                "gecko_price_change_1h_missing".to_owned()
-            }
             FilterRejectionReason::GeckoTerminalPriceChange24hTooLow => {
                 "gecko_price_change_24h_low".to_owned()
             }
             FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh => {
                 "gecko_price_change_24h_high".to_owned()
-            }
-            FilterRejectionReason::GeckoTerminalPriceChange24hMissing => {
-                "gecko_price_change_24h_missing".to_owned()
             }
             FilterRejectionReason::GeckoTerminalPoolCountTooLow => {
                 "gecko_pool_count_low".to_owned()
@@ -298,9 +264,6 @@ impl FilterRejectionReason {
                 "rug_transfer_fee_present".to_owned()
             }
             FilterRejectionReason::RugcheckTransferFeeTooHigh => "rug_transfer_fee_high".to_owned(),
-            FilterRejectionReason::RugcheckTransferFeeMissing => {
-                "rug_transfer_fee_missing".to_owned()
-            }
             FilterRejectionReason::RugcheckGraphInsidersTooHigh => "rug_graph_insiders".to_owned(),
             FilterRejectionReason::RugcheckLpProvidersTooLow => "rug_lp_providers_low".to_owned(),
             FilterRejectionReason::RugcheckLpProvidersMissing => {
@@ -361,7 +324,6 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerVolumeMissing => "Volume missing".to_owned(),
             FilterRejectionReason::DexScreenerFdvTooLow => "FDV too low".to_owned(),
             FilterRejectionReason::DexScreenerFdvTooHigh => "FDV too high".to_owned(),
-            FilterRejectionReason::DexScreenerFdvMissing => "FDV missing".to_owned(),
             FilterRejectionReason::DexScreenerVolume5mTooLow => "5m volume too low".to_owned(),
             FilterRejectionReason::DexScreenerVolume5mMissing => "5m volume missing".to_owned(),
             FilterRejectionReason::DexScreenerVolume1hTooLow => "1h volume too low".to_owned(),
@@ -374,17 +336,11 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerPriceChange5mTooHigh => {
                 "5m price change too high".to_owned()
             }
-            FilterRejectionReason::DexScreenerPriceChange5mMissing => {
-                "5m price change missing".to_owned()
-            }
             FilterRejectionReason::DexScreenerPriceChangeTooLow => {
                 "Price change too low".to_owned()
             }
             FilterRejectionReason::DexScreenerPriceChangeTooHigh => {
                 "Price change too high".to_owned()
-            }
-            FilterRejectionReason::DexScreenerPriceChangeMissing => {
-                "Price change missing".to_owned()
             }
             FilterRejectionReason::DexScreenerPriceChange6hTooLow => {
                 "6h price change too low".to_owned()
@@ -392,22 +348,14 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerPriceChange6hTooHigh => {
                 "6h price change too high".to_owned()
             }
-            FilterRejectionReason::DexScreenerPriceChange6hMissing => {
-                "6h price change missing".to_owned()
-            }
             FilterRejectionReason::DexScreenerPriceChange24hTooLow => {
                 "24h price change too low".to_owned()
             }
             FilterRejectionReason::DexScreenerPriceChange24hTooHigh => {
                 "24h price change too high".to_owned()
             }
-            FilterRejectionReason::DexScreenerPriceChange24hMissing => {
-                "24h price change missing".to_owned()
-            }
-            FilterRejectionReason::GeckoTerminalLiquidityMissing => "Liquidity missing".to_owned(),
             FilterRejectionReason::GeckoTerminalLiquidityTooLow => "Liquidity too low".to_owned(),
             FilterRejectionReason::GeckoTerminalLiquidityTooHigh => "Liquidity too high".to_owned(),
-            FilterRejectionReason::GeckoTerminalMarketCapMissing => "Market cap missing".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooLow => "Market cap too low".to_owned(),
             FilterRejectionReason::GeckoTerminalMarketCapTooHigh => {
                 "Market cap too high".to_owned()
@@ -424,26 +372,17 @@ impl FilterRejectionReason {
             FilterRejectionReason::GeckoTerminalPriceChange5mTooHigh => {
                 "5m price change too high".to_owned()
             }
-            FilterRejectionReason::GeckoTerminalPriceChange5mMissing => {
-                "5m price change missing".to_owned()
-            }
             FilterRejectionReason::GeckoTerminalPriceChange1hTooLow => {
                 "1h price change too low".to_owned()
             }
             FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh => {
                 "1h price change too high".to_owned()
             }
-            FilterRejectionReason::GeckoTerminalPriceChange1hMissing => {
-                "1h price change missing".to_owned()
-            }
             FilterRejectionReason::GeckoTerminalPriceChange24hTooLow => {
                 "24h price change too low".to_owned()
             }
             FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh => {
                 "24h price change too high".to_owned()
-            }
-            FilterRejectionReason::GeckoTerminalPriceChange24hMissing => {
-                "24h price change missing".to_owned()
             }
             FilterRejectionReason::GeckoTerminalPoolCountTooLow => "Pool count too low".to_owned(),
             FilterRejectionReason::GeckoTerminalPoolCountTooHigh => {
@@ -475,9 +414,6 @@ impl FilterRejectionReason {
             }
             FilterRejectionReason::RugcheckTransferFeePresent => "Transfer fee present".to_owned(),
             FilterRejectionReason::RugcheckTransferFeeTooHigh => "Transfer fee too high".to_owned(),
-            FilterRejectionReason::RugcheckTransferFeeMissing => {
-                "Transfer fee data missing".to_owned()
-            }
             FilterRejectionReason::RugcheckGraphInsidersTooHigh => {
                 "Graph insiders too high".to_owned()
             }
@@ -517,7 +453,6 @@ impl FilterRejectionReason {
             | FilterRejectionReason::DexScreenerMarketCapTooHigh
             | FilterRejectionReason::DexScreenerFdvTooLow
             | FilterRejectionReason::DexScreenerFdvTooHigh
-            | FilterRejectionReason::DexScreenerFdvMissing
             | FilterRejectionReason::DexScreenerVolumeTooLow
             | FilterRejectionReason::DexScreenerVolumeMissing
             | FilterRejectionReason::DexScreenerVolume5mTooLow
@@ -528,20 +463,14 @@ impl FilterRejectionReason {
             | FilterRejectionReason::DexScreenerVolume6hMissing
             | FilterRejectionReason::DexScreenerPriceChangeTooLow
             | FilterRejectionReason::DexScreenerPriceChangeTooHigh
-            | FilterRejectionReason::DexScreenerPriceChangeMissing
             | FilterRejectionReason::DexScreenerPriceChange5mTooLow
             | FilterRejectionReason::DexScreenerPriceChange5mTooHigh
-            | FilterRejectionReason::DexScreenerPriceChange5mMissing
             | FilterRejectionReason::DexScreenerPriceChange6hTooLow
             | FilterRejectionReason::DexScreenerPriceChange6hTooHigh
-            | FilterRejectionReason::DexScreenerPriceChange6hMissing
             | FilterRejectionReason::DexScreenerPriceChange24hTooLow
-            | FilterRejectionReason::DexScreenerPriceChange24hTooHigh
-            | FilterRejectionReason::DexScreenerPriceChange24hMissing => FilterSource::DexScreener,
-            FilterRejectionReason::GeckoTerminalLiquidityMissing
-            | FilterRejectionReason::GeckoTerminalLiquidityTooLow
+            | FilterRejectionReason::DexScreenerPriceChange24hTooHigh => FilterSource::DexScreener,
+            FilterRejectionReason::GeckoTerminalLiquidityTooLow
             | FilterRejectionReason::GeckoTerminalLiquidityTooHigh
-            | FilterRejectionReason::GeckoTerminalMarketCapMissing
             | FilterRejectionReason::GeckoTerminalMarketCapTooLow
             | FilterRejectionReason::GeckoTerminalMarketCapTooHigh
             | FilterRejectionReason::GeckoTerminalVolume5mTooLow
@@ -552,13 +481,10 @@ impl FilterRejectionReason {
             | FilterRejectionReason::GeckoTerminalVolume24hMissing
             | FilterRejectionReason::GeckoTerminalPriceChange5mTooLow
             | FilterRejectionReason::GeckoTerminalPriceChange5mTooHigh
-            | FilterRejectionReason::GeckoTerminalPriceChange5mMissing
             | FilterRejectionReason::GeckoTerminalPriceChange1hTooLow
             | FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh
-            | FilterRejectionReason::GeckoTerminalPriceChange1hMissing
             | FilterRejectionReason::GeckoTerminalPriceChange24hTooLow
             | FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh
-            | FilterRejectionReason::GeckoTerminalPriceChange24hMissing
             | FilterRejectionReason::GeckoTerminalPoolCountTooLow
             | FilterRejectionReason::GeckoTerminalPoolCountTooHigh
             | FilterRejectionReason::GeckoTerminalPoolCountMissing
@@ -577,7 +503,6 @@ impl FilterRejectionReason {
             | FilterRejectionReason::RugcheckCreatorBalanceTooHigh
             | FilterRejectionReason::RugcheckTransferFeePresent
             | FilterRejectionReason::RugcheckTransferFeeTooHigh
-            | FilterRejectionReason::RugcheckTransferFeeMissing
             | FilterRejectionReason::RugcheckGraphInsidersTooHigh
             | FilterRejectionReason::RugcheckLpProvidersTooLow
             | FilterRejectionReason::RugcheckLpProvidersMissing

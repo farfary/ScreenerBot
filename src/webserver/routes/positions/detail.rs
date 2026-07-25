@@ -45,7 +45,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                     .map(|s| s.url.clone());
 
                 PositionTokenInfo {
-                    decimals: Some(token.decimals),
+                    decimals: token.decimals,
                     description: token.description.clone(),
                     image_url: token.image_url.clone(),
                     website,

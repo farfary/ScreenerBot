@@ -57,11 +57,14 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
             return Err(FilterRejectionReason::RugcheckInsiderHolderCount);
         }
 
+        // Non-finite stakes are excluded from the sum: one NaN would turn the whole total
+        // into NaN, which compares false against the ceiling and passes the token.
         let insider_total_pct: f64 = token
             .top_holders
             .iter()
             .filter(|holder| holder.insider)
             .map(|holder| holder.pct)
+            .filter(|pct| pct.is_finite())
             .sum();
         if insider_total_pct > config.max_insider_total_pct {
             return Err(FilterRejectionReason::RugcheckInsiderTotalPct);
@@ -78,31 +81,33 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
 
     if config.creator_balance_enabled {
         if let Some(creator_pct) = token.creator_balance_pct {
-            if creator_pct > config.max_creator_balance_pct {
+            if !creator_pct.is_finite() || creator_pct > config.max_creator_balance_pct {
                 return Err(FilterRejectionReason::RugcheckCreatorBalanceTooHigh);
             }
         }
     }
 
     if config.transfer_fee_enabled {
-        match token.transfer_fee_pct {
-            Some(fee_pct) => {
-                if config.block_transfer_fee_tokens && fee_pct > 0.0 {
-                    return Err(FilterRejectionReason::RugcheckTransferFeePresent);
-                }
+        // A Rugcheck report only carries a transfer fee when the mint has the Token-2022
+        // transfer-fee EXTENSION, and this branch is reached only for tokens that already
+        // have a report (see the caller's gate). Absence is therefore positive information
+        // — the mint cannot charge a transfer fee — not missing data.
+        //
+        // The old `None` arm rejected instead, on the reasoning that a ceiling below 100%
+        // "requires the data". That turned any gap in the field into a rejection, and when
+        // the filtering batch load was not fetching this column at all it rejected 46% of
+        // the corpus. The column is loaded now, but the rule should not have been able to
+        // convert absent data into a verdict in the first place.
+        let fee_pct = token.transfer_fee_pct.unwrap_or(0.0);
 
-                if fee_pct > config.max_transfer_fee_pct {
-                    return Err(FilterRejectionReason::RugcheckTransferFeeTooHigh);
-                }
-            }
-            None => {
-                // Missing transfer fee data is acceptable - most tokens don't have transfer fees
-                // Only reject if max_transfer_fee_pct threshold requires the data
-                if config.max_transfer_fee_pct < 100.0 {
-                    // Threshold is set, but we have no data to verify - skip this token
-                    return Err(FilterRejectionReason::RugcheckTransferFeeMissing);
-                }
-            }
+        if config.block_transfer_fee_tokens && fee_pct > 0.0 {
+            return Err(FilterRejectionReason::RugcheckTransferFeePresent);
+        }
+
+        // `!is_finite()` first: a NaN fee compares false against every bound, so without
+        // this an unusable reading would sail past the ceiling it cannot be checked against.
+        if !fee_pct.is_finite() || fee_pct > config.max_transfer_fee_pct {
+            return Err(FilterRejectionReason::RugcheckTransferFeeTooHigh);
         }
     }
 
@@ -140,26 +145,61 @@ fn check_holder_distribution(
         }
     }
 
-    let mut holders = token.top_holders.clone();
-    // Sort descending by percentage (highest first)
-    holders.sort_by(|a, b| {
-        b.pct
-            .partial_cmp(&a.pct)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    // Only the three largest stakes matter, so select them in one pass instead of cloning
+    // the whole list and sorting the copy — which is what made this the most expensive rule
+    // in the pipeline. Reports carry ~20 holders each and the provider happens to send them
+    // largest-first, but nothing here depends on that: an unsorted list gives the same
+    // answer.
+    let [first, second, third] = three_largest_pcts(token);
 
-    if let Some(first) = holders.first() {
-        if first.pct > config.max_top_holder_pct {
+    if let Some(top) = first {
+        if top > config.max_top_holder_pct {
             return Some(FilterRejectionReason::RugcheckTopHolderTooHigh);
         }
     }
 
-    let top_three_sum: f64 = holders.iter().take(3).map(|holder| holder.pct).sum();
+    let top_three_sum: f64 = [first, second, third].into_iter().flatten().sum();
     if top_three_sum > config.max_top_3_holders_pct {
         return Some(FilterRejectionReason::RugcheckTop3HoldersTooHigh);
     }
 
     None
+}
+
+/// The three largest holder percentages, descending, `None` where there is no such holder.
+///
+/// Non-finite percentages are dropped rather than ranked: NaN loses every comparison, so
+/// leaving it in would let a junk reading occupy a top slot and hide a real whale behind it.
+/// Ties are kept as separate holders — three wallets at 20.1% each is 60.3% of supply, not
+/// 20.1%.
+fn three_largest_pcts(token: &Token) -> [Option<f64>; 3] {
+    let mut top = [f64::NEG_INFINITY; 3];
+    let mut seen = 0usize;
+
+    for pct in token
+        .top_holders
+        .iter()
+        .map(|holder| holder.pct)
+        .filter(|pct| pct.is_finite())
+    {
+        if pct > top[0] {
+            top[2] = top[1];
+            top[1] = top[0];
+            top[0] = pct;
+        } else if pct > top[1] {
+            top[2] = top[1];
+            top[1] = pct;
+        } else if pct > top[2] {
+            top[2] = pct;
+        }
+        seen += 1;
+    }
+
+    let mut largest = [None; 3];
+    for (slot, value) in largest.iter_mut().zip(top).take(seen.min(3)) {
+        *slot = Some(value);
+    }
+    largest
 }
 
 fn check_lp_lock(token: &Token, config: &RugCheckFilters) -> Option<FilterRejectionReason> {

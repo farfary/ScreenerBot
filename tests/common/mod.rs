@@ -331,7 +331,7 @@ pub fn filter_token(mint: &str) -> Token {
         mint: mint.to_owned(),
         symbol: "TEST".to_owned(),
         name: "Test Token".to_owned(),
-        decimals: 9,
+        decimals: Some(9),
         description: Some("A token fixture".to_owned()),
         image_url: Some("https://example.invalid/logo.png".to_owned()),
         header_image_url: None,
@@ -445,8 +445,12 @@ pub fn filters_all_disabled() -> screenerbot::config::FilteringConfig {
     config
 }
 
-/// Default filters minus the GeckoTerminal source, i.e. the strictest config a
-/// DexScreener-sourced token can actually pass. See [`filter_token`].
+/// Default filters with GeckoTerminal switched off, so a DexScreener-sourced token is
+/// judged by the DexScreener rules and nothing else can account for the verdict.
+///
+/// This is for ISOLATING one market source, not for making the defaults satisfiable — the
+/// shipped defaults enable both sources and a token from either one passes them. See
+/// [`filter_token`].
 pub fn filters_default_dex_only() -> screenerbot::config::FilteringConfig {
     let mut config = screenerbot::config::FilteringConfig::default();
     config.geckoterminal.enabled = false;
@@ -548,10 +552,10 @@ fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
 /// Open the cloned tokens database and register it as the process-global one, then
 /// preload the decimals cache exactly as `tokens::service` does at startup.
 ///
-/// The preload is not an optimisation here, it is what keeps the tier offline:
-/// `meta::evaluate` calls `get_decimals` for every candidate, and on a cache miss that
-/// falls through to the DB, then the data server, then RPC. Without the preload a
-/// full-corpus run would fire hundreds of thousands of network lookups.
+/// The preload is not an optimisation here, it is what keeps the tier offline: any lookup
+/// that misses the cache falls through to the DB, then the data server, then RPC. Loading
+/// it the same way the service does also means the tests measure the cache the running bot
+/// actually has, including its capacity limit.
 pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase> {
     use screenerbot::tokens::{cache_decimals, init_global_database, TokenDatabase};
 
@@ -562,7 +566,9 @@ pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase
     init_global_database(db.clone()).expect("register global token database");
 
     let started = std::time::Instant::now();
-    let decimals = db.get_all_tokens_with_decimals().expect("preload decimals");
+    let decimals = db
+        .get_tokens_with_decimals_for_preload(screenerbot::tokens::decimals::PRELOAD_CAPACITY)
+        .expect("preload decimals");
     let count = decimals.len();
     for (mint, value) in decimals {
         cache_decimals(&mint, value);

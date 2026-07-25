@@ -565,55 +565,36 @@ pub async fn apply_all_filters(
     // before we waste API calls on external sources
     sources::onchain::evaluate(token, &config.onchain)?;
 
-    // PERF: The batch load already fetches preferred source + fallback.
-    // If data_source is DexScreener or GeckoTerminal, that data is already loaded.
-    // If data_source is Unknown, neither source has data - no point in extra DB queries.
-    // Only fetch individual source if explicitly needed AND data comes from OTHER source.
+    // DexScreener and GeckoTerminal are two PROVIDERS OF THE SAME market data, and the
+    // batch load resolves exactly one of them per token (`data_source`). So each enabled
+    // source is applied only to the tokens it actually covers, and a token is rejected for
+    // missing market data only when NONE of the enabled sources covers it.
+    //
+    // Demanding both — which is what running the two checks independently amounted to —
+    // is unsatisfiable: with both enabled (the shipped default) every token failed
+    // whichever gate did not match its single `data_source`, so the pipeline passed
+    // literally nothing. Measured against the production database: 100% rejected.
+    let mut market_data_seen = false;
 
-    let dex_token_ref = if config.dexscreener.enabled {
-        if token.data_source == DataSource::DexScreener {
-            // Already have dexscreener data
-            Some(token)
-        } else if token.data_source == DataSource::Unknown {
-            // No market data at all - batch load already tried both sources
-            None
-        } else {
-            // Has gecko data but not dex - would need individual fetch
-            // PERF: Skip this fetch for now - if dex filtering is required and data is missing,
-            // the token will be rejected anyway. This avoids N+1 queries.
-            None
-        }
-    } else {
-        None
-    };
-
-    if config.dexscreener.enabled {
-        if let Some(dex_token) = dex_token_ref {
-            sources::dexscreener::evaluate(dex_token, &config.dexscreener)?;
-        } else {
-            return Err(FilterRejectionReason::DexScreenerDataMissing);
-        }
+    if config.dexscreener.enabled && token.data_source == DataSource::DexScreener {
+        sources::dexscreener::evaluate(token, &config.dexscreener)?;
+        market_data_seen = true;
     }
 
-    let gecko_token_ref = if config.geckoterminal.enabled {
-        if token.data_source == DataSource::GeckoTerminal {
-            // Already have gecko data
-            Some(token)
-        } else if token.data_source == DataSource::Unknown {
-            // No market data at all
-            None
-        } else {
-            // Has dex data but not gecko - skip fetch
-            None
-        }
-    } else {
-        None
-    };
+    if config.geckoterminal.enabled && token.data_source == DataSource::GeckoTerminal {
+        sources::geckoterminal::evaluate(token, &config.geckoterminal)?;
+        market_data_seen = true;
+    }
 
-    if config.geckoterminal.enabled {
-        if let Some(gecko_token) = gecko_token_ref {
-            sources::geckoterminal::evaluate(gecko_token, &config.geckoterminal)?;
-        } else {
+    if !market_data_seen {
+        // Attribute the rejection to an enabled source the token is genuinely missing.
+        // With only one source enabled this is precise ("you asked for DexScreener rules
+        // and this token has GeckoTerminal data"); with both enabled the token has no
+        // market data at all and DexScreener is the primary source.
+        if config.dexscreener.enabled {
+            return Err(FilterRejectionReason::DexScreenerDataMissing);
+        }
+        if config.geckoterminal.enabled {
             return Err(FilterRejectionReason::GeckoTerminalDataMissing);
         }
     }

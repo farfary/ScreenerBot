@@ -114,13 +114,18 @@ pub async fn add_to_position(
         .await
         .map_err(|e| format!("Failed to get DCA quote: {e}"))?;
 
+    // Only scale into a UI amount when the decimals are actually known; printing raw
+    // units against an assumed 9 decimals misreports the quote by orders of magnitude.
+    let quoted_tokens = match api_token.decimals {
+        Some(decimals) => format!(
+            "{}",
+            quote.output_amount as f64 / 10_f64.powi(decimals as i32)
+        ),
+        None => format!("{} raw", quote.output_amount),
+    };
     logger::info(
         LogTag::Positions,
-        &format!(
-            "DCA quote: {} SOL → {} tokens",
-            dca_amount_sol,
-            quote.output_amount as f64 / 10_f64.powi(api_token.decimals as i32)
-        ),
+        &format!("DCA quote: {dca_amount_sol} SOL → {quoted_tokens} tokens"),
     );
 
     // Execute swap

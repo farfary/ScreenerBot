@@ -157,12 +157,84 @@ fn source_name(source: FilterSource) -> &'static str {
 }
 
 // ============================================================================
+// WHAT THE FILTER ACTUALLY GETS TO SEE
+// ============================================================================
+
+#[tokio::test]
+#[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
+async fn realdata_batch_load_carries_the_fields_the_rules_read() {
+    // A rule that is switched on in config must be evaluated against real data, or the
+    // configuration is a lie. The batch query the snapshot uses fetched only `score`,
+    // `rugged` and the two authorities from the Rugcheck table and hardcoded the REST to
+    // `None`/empty — so holder concentration, insiders, creator balance, transfer fee, LP
+    // providers, LP lock and the risk-level check were evaluated against absence.
+    //
+    // That is how `rug_transfer_fee_missing` and then `rug_lp_providers_missing` each came
+    // to reject 46% of the corpus: not because the tokens lacked the data, but because the
+    // query never asked for it.
+    let Some(_dir) = common::real_db_env() else {
+        return;
+    };
+    let _db = common::init_real_token_db();
+    let _cfg = config_guard();
+
+    let tokens = load_candidates().await;
+
+    // A token has a Rugcheck report if the query returned the fields it always fills.
+    let reported: Vec<&Token> = tokens
+        .iter()
+        .filter(|t| t.security_score.is_some())
+        .collect();
+    assert!(
+        !reported.is_empty(),
+        "no candidate carries a Rugcheck score — the security join is broken outright"
+    );
+
+    let with = |predicate: fn(&&Token) -> bool| reported.iter().filter(|t| predicate(t)).count();
+
+    let holders = with(|t| !t.top_holders.is_empty());
+    let risks = with(|t| !t.security_risks.is_empty());
+    let lp = with(|t| t.lp_provider_count.is_some());
+    let fee = with(|t| t.transfer_fee_pct.is_some());
+    let total_holders = with(|t| t.total_holders.is_some());
+    let creator = with(|t| t.creator_balance_pct.is_some());
+
+    eprintln!(
+        "REALDATA of {} reported tokens: top_holders {holders}, risks {risks}, \
+         lp_providers {lp}, transfer_fee {fee}, total_holders {total_holders}, \
+         creator_balance {creator}",
+        reported.len()
+    );
+
+    // Every one of these drives a rule that is ON by default. None may be universally
+    // absent — that is the signature of a column the query forgot.
+    for (name, populated) in [
+        ("top_holders", holders),
+        ("security_risks", risks),
+        ("lp_provider_count", lp),
+        ("transfer_fee_pct", fee),
+        ("total_holders", total_holders),
+    ] {
+        assert!(
+            populated > 0,
+            "not one reported token carries {name} — the filtering batch load is dropping \
+             the column the rule reads"
+        );
+    }
+}
+
+// ============================================================================
 // WHAT THE SHIPPED CONFIGURATION DOES TO REAL TOKENS
 // ============================================================================
 
 #[tokio::test]
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
-async fn realdata_default_config_rejects_the_entire_corpus() {
+async fn realdata_default_config_passes_real_tokens() {
+    // The end-to-end proof that the shipped configuration works on the owner's real data.
+    // It used to pass 0 of 40,000: both market sources are enabled by default and each was
+    // gated on the token's single `data_source`, so every token failed whichever gate did
+    // not match. On top of that the Rugcheck stage rejected the whole corpus on its own,
+    // 46% of it for not proving the absence of a transfer fee.
     let Some(_dir) = common::real_db_env() else {
         return;
     };
@@ -175,18 +247,51 @@ async fn realdata_default_config_rejects_the_entire_corpus() {
     let outcome = evaluate_all(&tokens, &FilteringConfig::default()).await;
     outcome.report("default config");
 
-    // CHARACTERISATION: the shipped defaults enable BOTH market sources, and the engine
-    // gates each on `token.data_source`. A token has one source, so every token fails one
-    // of the two gates and nothing can ever pass. `filtering_pipeline::
-    // pipeline_default_config_rejects_every_token` pins the mechanism; this measures the
-    // consequence on live data. When the gate is fixed, BOTH tests must be updated.
-    assert_eq!(
-        outcome.passed, 0,
-        "the default configuration unexpectedly passed {} tokens — the source-gate \
-         contradiction may have been fixed; update this test and its pipeline counterpart",
-        outcome.passed
+    let pass_rate = outcome.passed as f64 / outcome.total() as f64;
+    eprintln!(
+        "REALDATA default-config pass rate: {:.3}% ({} of {})",
+        pass_rate * 100.0,
+        outcome.passed,
+        outcome.total()
     );
 
+    // The defaults are deliberately strict, so the raw pass COUNT is a poor regression
+    // signal — it is a handful of tokens and moves with the corpus. What must hold is that
+    // no single rule is acting as a WALL. A rule that alone accounts for nearly the whole
+    // corpus is not filtering, it is a contradiction (which is exactly what the source gate
+    // and the transfer-fee rule each were).
+    let (worst_reason, worst_count) = outcome
+        .top_reasons(1)
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    let worst_share = worst_count as f64 / outcome.total().max(1) as f64;
+    eprintln!(
+        "REALDATA largest single rejection: {worst_reason} at {:.1}%",
+        worst_share * 100.0
+    );
+    assert!(
+        worst_share < 0.95,
+        "{worst_reason} alone rejects {:.1}% of the corpus — that is a wall, not a filter",
+        worst_share * 100.0
+    );
+
+    // And every stage must be reachable: tokens have to survive meta, on-chain and the
+    // market rules in order to be judged on safety at all.
+    let reached_rugcheck = outcome.passed
+        + outcome.by_source.get("rugcheck").copied().unwrap_or(0)
+        + outcome
+            .by_reason
+            .get(&FilterRejectionReason::RugcheckDataMissing.label())
+            .copied()
+            .unwrap_or(0);
+    assert!(
+        reached_rugcheck > 0,
+        "no token reached the Rugcheck stage — an earlier stage is rejecting everything"
+    );
+
+    // The source gate must no longer be a mass rejector; it now only catches tokens whose
+    // market data really is absent.
     let gate_rejections: usize = outcome
         .by_reason
         .get(&FilterRejectionReason::GeckoTerminalDataMissing.label())
@@ -197,27 +302,30 @@ async fn realdata_default_config_rejects_the_entire_corpus() {
             .get(&FilterRejectionReason::DexScreenerDataMissing.label())
             .copied()
             .unwrap_or(0);
+    let gate_rate = gate_rejections as f64 / outcome.total().max(1) as f64;
     eprintln!(
         "REALDATA source-gate rejections: {gate_rejections} of {} ({:.1}%)",
         outcome.total(),
-        gate_rejections as f64 * 100.0 / outcome.total().max(1) as f64
+        gate_rate * 100.0
+    );
+    assert!(
+        gate_rate < 0.50,
+        "{:.1}% of the corpus is still rejected for missing market data — the two sources \
+         are being demanded together again",
+        gate_rate * 100.0
     );
 }
 
 #[tokio::test]
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
-async fn realdata_rugcheck_stage_alone_rejects_the_entire_corpus() {
-    // CHARACTERISATION: removing the source-gate conflict is not enough — the Rugcheck
-    // stage rejects EVERY real token on its own, for three separate reasons:
+async fn realdata_rugcheck_stage_is_selective_not_absolute() {
+    // The Rugcheck stage used to reject EVERY real token by itself, 46% of them with
+    // `rug_transfer_fee_missing` — the default 5% ceiling read absent fee data as a failure
+    // to prove compliance, and an ordinary SPL token has no Token-2022 fee extension to
+    // report. Absence now means "no fee", which is what it actually means.
     //
-    //   * `rug_transfer_fee_missing` — the default 5% ceiling turns ABSENT transfer-fee
-    //     data into a rejection, and most SPL tokens have no fee extension to report.
-    //   * `rug_data_missing`         — the engine demands a Rugcheck report before the
-    //     stage runs, and only a fraction of the corpus has one.
-    //   * `rug_score`                — the remainder score above the 10000 ceiling.
-    //
-    // So the shipped configuration cannot pass a token even with both market sources
-    // agreeing. Update this test when the defaults change.
+    // `rug_data_missing` remains, and remains correct: the engine will not judge a token's
+    // safety from a report it does not have. It is a coverage limit, not a rule defect.
     let Some(_dir) = common::real_db_env() else {
         return;
     };
@@ -229,22 +337,29 @@ async fn realdata_rugcheck_stage_alone_rejects_the_entire_corpus() {
     outcome.report("default minus GeckoTerminal source");
 
     assert_eq!(outcome.total(), tokens.len(), "a token got no decision");
-    assert_eq!(
-        outcome.passed, 0,
-        "{} tokens now pass the default rules — the Rugcheck defaults may have been \
-         loosened; update this test",
-        outcome.passed
+    assert!(
+        outcome.passed > 0,
+        "the Rugcheck stage is still rejecting the entire corpus"
     );
 
-    let rugcheck_stage = outcome.by_source.get("rugcheck").copied().unwrap_or(0)
-        + outcome
-            .by_reason
-            .get(&FilterRejectionReason::RugcheckDataMissing.label())
-            .copied()
-            .unwrap_or(0);
+    // Of the tokens that HAVE a Rugcheck report, the transfer-fee rule must be a rarity.
+    let with_report = tokens
+        .iter()
+        .filter(|t| t.security_score.is_some() || !t.security_risks.is_empty())
+        .count();
+    let fee_rejections = outcome
+        .by_reason
+        .get(&FilterRejectionReason::RugcheckTransferFeeTooHigh.label())
+        .copied()
+        .unwrap_or(0);
+    eprintln!(
+        "REALDATA transfer-fee rejections: {fee_rejections} of {with_report} tokens with a \
+         Rugcheck report"
+    );
     assert!(
-        rugcheck_stage > 0,
-        "expected the Rugcheck stage to be the wall; it rejected nothing"
+        fee_rejections * 10 < with_report.max(1),
+        "{fee_rejections} of {with_report} reported tokens rejected on transfer fee — real \
+         fee-bearing mints are rare, so absence is being treated as a failure again"
     );
 }
 
@@ -284,47 +399,78 @@ async fn realdata_market_rules_alone_yield_a_plausible_pass_rate() {
 
 #[tokio::test]
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
-async fn realdata_cold_decimals_lookups_dominate_a_filtering_pass() {
-    // The cost of the decimals-cache eviction measured directly: the same tokens,
-    // evaluated twice. The first pass pays a database lookup for every mint the 100k
-    // cache could not hold; the second finds them all cached.
+async fn realdata_the_meta_stage_never_pays_for_a_decimals_lookup() {
+    // This measured the single most expensive thing filtering did. `meta::evaluate` used
+    // to resolve decimals through the cache for every candidate; the cache holds far fewer
+    // entries than the corpus has tokens, so the majority missed and fell through to a
+    // per-token SQLite lookup — 216.8 us/token cold against 4.3 us warm, about 95 SECONDS
+    // of lookups per 30-second refresh interval. And the cache could never stay warm,
+    // because each pass re-evicted what the last one pulled in.
     //
-    // In production the cache never gets to stay warm — the corpus is four times the cap,
-    // so each 30-second refresh re-evicts what the last one just pulled in.
+    // The batch load already carries each token's decimals, from the same row the resolver
+    // would have read, so a token whose decimals are KNOWN must now cost nothing on the
+    // very first pass — no warm-up, no cache to miss.
+    //
+    // The measurement is split by that property on purpose. A token whose decimals we have
+    // never resolved still goes to the resolver, and should: that is a one-time, self-
+    // healing cost (the resolver persists what it finds), not a per-refresh tax. Averaging
+    // the two groups together hides the fix behind the warm-up of the other group.
     let Some(_dir) = common::real_db_env() else {
         return;
     };
     let _db = common::init_real_token_db();
     let _cfg = config_guard();
 
-    let tokens = load_candidates().await;
-    // Only the age rule, so the measurement is dominated by the decimals resolution in
-    // `meta::evaluate` rather than by the rules themselves.
+    let all = load_candidates().await;
+    let (known, unknown): (Vec<Token>, Vec<Token>) = all.into_iter().partition(|t| {
+        t.decimals
+            .is_some_and(screenerbot::tokens::decimals_are_valid)
+    });
+    eprintln!(
+        "REALDATA candidates: {} with stored decimals, {} without ({:.2}% unresolved)",
+        known.len(),
+        unknown.len(),
+        unknown.len() as f64 * 100.0 / (known.len() + unknown.len()).max(1) as f64
+    );
+    assert!(!known.is_empty(), "no candidate carries stored decimals");
+
+    // Only the age rule, so the measurement is dominated by the meta stage rather than by
+    // the rules themselves.
     let mut config = filters_all_disabled();
     config.age_enabled = true;
 
-    let cold = evaluate_all(&tokens, &config).await;
-    let warm = evaluate_all(&tokens, &config).await;
+    let first = evaluate_all(&known, &config).await;
+    let second = evaluate_all(&known, &config).await;
 
-    let cold_us = per_item_micros(cold.elapsed, cold.total());
-    let warm_us = per_item_micros(warm.elapsed, warm.total());
+    let first_us = per_item_micros(first.elapsed, first.total());
+    let second_us = per_item_micros(second.elapsed, second.total());
+    let ratio = first_us / second_us.max(f64::EPSILON);
     eprintln!(
-        "REALDATA decimals: first pass {cold_us:.1} us/token, second pass {warm_us:.1} \
-         us/token ({:.1}x)",
-        cold_us / warm_us.max(f64::EPSILON)
+        "REALDATA meta stage, decimals known: first pass {first_us:.1} us/token, second \
+         pass {second_us:.1} us/token ({ratio:.1}x)"
     );
 
     let corpus = screenerbot::tokens::count_tokens_async().await.unwrap_or(0);
     eprintln!(
-        "REALDATA at the cold rate, resolving decimals for {corpus} tokens costs {:.1}s \
-         per refresh",
-        cold_us * corpus as f64 / 1_000_000.0
+        "REALDATA meta stage over {corpus} tokens at the first-pass rate: {:.2}s",
+        first_us * corpus as f64 / 1_000_000.0
     );
 
+    // A first pass that costs the same as a warmed one is the whole point: nothing was
+    // consulted, so there was nothing to warm. It used to be 50x.
     assert!(
-        warm_us <= cold_us,
-        "a warm decimals cache ({warm_us:.1} us/token) is not faster than a cold one \
-         ({cold_us:.1} us/token)"
+        ratio < 3.0,
+        "the first pass cost {ratio:.1}x the second — the meta stage is resolving decimals \
+         again instead of reading what the batch load already carries"
+    );
+
+    // And in absolute terms it must be cheap enough to disappear into the refresh interval.
+    let budget = screenerbot::filtering::background::refresh_interval_secs() as f64;
+    let projected = first_us * corpus as f64 / 1_000_000.0;
+    assert!(
+        projected < budget,
+        "resolving decimals for the corpus projects to {projected:.1}s against a \
+         {budget:.0}s refresh interval"
     );
 }
 
@@ -450,54 +596,60 @@ async fn realdata_evaluation_fits_the_refresh_interval() {
 
 #[tokio::test]
 #[ignore = "reads the owner's real database (cloned); run with ./test.sh live"]
-async fn realdata_decimals_cache_is_too_small_for_the_corpus() {
-    // DEFECT PIN: `DECIMALS_CACHE` is a moka cache capped at 100_000 entries, and the
-    // startup preload pushes EVERY token's decimals through it. On a corpus larger than
-    // the cap the surplus is evicted immediately, and `meta::evaluate` — the first stage
-    // of filtering, run for every candidate — then misses the cache and falls through to
-    // a per-token SQLite lookup (and, for anything not in the DB, to the data server and
-    // then RPC). This is invisible in a snapshot's own timing because it looks like
-    // "filtering is just slow".
+async fn realdata_decimals_preload_survives_its_own_cache() {
+    // The decimals cache is a bounded LRU whose consumers — the SYNCHRONOUS pool decoders —
+    // have no fallback: a miss makes the decoder skip the pool, so the token loses its live
+    // price. The preload used to push EVERY token's decimals through it (405k rows into a
+    // 100k cache), which evicted three quarters of what it had just loaded, including most
+    // pool-backed mints. Loading no more than the cache can hold is what makes the preload
+    // mean anything.
     let Some(_dir) = common::real_db_env() else {
         return;
     };
     let db = common::init_real_token_db();
 
-    let stored = db
-        .get_all_tokens_with_decimals()
+    let preloaded = db
+        .get_tokens_with_decimals_for_preload(screenerbot::tokens::decimals::PRELOAD_CAPACITY)
         .expect("read stored decimals");
-    let total = stored.len();
+    let total = preloaded.len();
     assert!(total > 0, "the real database has no decimals recorded");
 
-    let hits = stored
+    let evicted = preloaded
         .iter()
-        .filter(|(mint, _)| screenerbot::tokens::get_cached_decimals(mint).is_some())
+        .filter(|(mint, _)| screenerbot::tokens::get_cached_decimals(mint).is_none())
         .count();
-    let misses = total - hits;
 
     eprintln!(
-        "REALDATA decimals cache: {total} mints preloaded, {hits} still cached, {misses} \
-         evicted ({:.1}% miss rate on the very next read)",
-        misses as f64 * 100.0 / total as f64
+        "REALDATA decimals cache: {total} mints preloaded (cap {}), {evicted} evicted",
+        screenerbot::tokens::decimals::PRELOAD_CAPACITY
     );
 
-    if total <= 100_000 {
-        assert_eq!(
-            misses, 0,
-            "the corpus fits the cache, so nothing should have been evicted"
-        );
-        return;
-    }
-
-    assert!(
-        misses > 0,
-        "a corpus of {total} mints exceeds the 100k cache cap yet nothing was evicted — \
-         the cap may have been raised; update this test"
+    assert_eq!(
+        evicted, 0,
+        "the preload must not exceed the cache it is filling"
     );
+
+    // The ordering is load-bearing, not cosmetic: pool-backed mints come LAST so that once
+    // runtime upserts start pushing the cache over its capacity, the entries with no
+    // fallback are the most recently used and the last to be evicted. Sample the tail and
+    // confirm those really are the pooled ones.
+    let sample = 100.min(preloaded.len());
+    let tail_pooled = preloaded[preloaded.len() - sample..]
+        .iter()
+        .filter(|(mint, _)| {
+            db.get_token_pools(mint)
+                .ok()
+                .flatten()
+                .is_some_and(|snapshot| !snapshot.pools.is_empty())
+        })
+        .count();
+
     eprintln!(
-        "REALDATA every filtering pass therefore performs ~{misses} uncached decimals \
-         lookups, every {}s",
-        screenerbot::filtering::background::refresh_interval_secs()
+        "REALDATA preload tail: {tail_pooled}/{sample} of the last-inserted mints have pools"
+    );
+    assert_eq!(
+        tail_pooled, sample,
+        "pool-backed mints must be inserted last, where eviction reaches them last"
     );
 }
 

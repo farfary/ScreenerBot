@@ -1,7 +1,7 @@
 //! DexScreener filter source — validates market data from DexScreener API.
 
 use crate::config::schemas::DexScreenerFilters;
-use crate::filtering::sources::FilterRejectionReason;
+use crate::filtering::sources::{bounds, FilterRejectionReason};
 use crate::tokens::types::{DataSource, Token};
 
 /// Evaluate a token against DexScreener market data filter criteria.
@@ -91,25 +91,41 @@ fn check_transaction_activity(
         return None;
     }
 
-    let m5_totals = match (token.txns_m5_buys, token.txns_m5_sells) {
-        (Some(buys), Some(sells)) => buys.saturating_add(sells),
-        _ => return None,
-    };
-
-    if m5_totals < config.min_transactions_5min {
-        return Some(FilterRejectionReason::DexScreenerInsufficientTransactions5Min);
+    // `txns_*_total` is the shared definition also used for sorting, so a window the
+    // provider reported one-sided counts as what it reported instead of being discarded.
+    // Each window is judged on its own: an early `return` for an absent 5m reading used to
+    // waive the 1h minimum entirely, which is the check that actually gates dead tokens.
+    if let Some(reason) = enforce_transaction_floor(
+        token.txns_5m_total(),
+        config.min_transactions_5min,
+        FilterRejectionReason::DexScreenerInsufficientTransactions5Min,
+    ) {
+        return Some(reason);
     }
 
-    let h1_totals = match (token.txns_h1_buys, token.txns_h1_sells) {
-        (Some(buys), Some(sells)) => buys.saturating_add(sells),
-        _ => return None,
-    };
+    enforce_transaction_floor(
+        token.txns_1h_total(),
+        config.min_transactions_1h,
+        FilterRejectionReason::DexScreenerInsufficientTransactions1H,
+    )
+}
 
-    if h1_totals < config.min_transactions_1h {
-        return Some(FilterRejectionReason::DexScreenerInsufficientTransactions1H);
+/// A transaction floor of zero constrains nothing, so an absent count is only a rejection
+/// when the configuration actually demands activity in that window.
+fn enforce_transaction_floor(
+    total: Option<i64>,
+    minimum: i64,
+    too_low_reason: FilterRejectionReason,
+) -> Option<FilterRejectionReason> {
+    if minimum <= 0 {
+        return None;
     }
 
-    None
+    match total {
+        Some(count) if count < minimum => Some(too_low_reason),
+        Some(_) => None,
+        None => Some(too_low_reason),
+    }
 }
 
 fn check_liquidity(token: &Token, config: &DexScreenerFilters) -> Option<FilterRejectionReason> {
@@ -117,20 +133,23 @@ fn check_liquidity(token: &Token, config: &DexScreenerFilters) -> Option<FilterR
         return None;
     }
 
-    let liquidity = token.liquidity_usd?;
-    if liquidity <= 0.0 {
-        return Some(FilterRejectionReason::DexScreenerZeroLiquidity);
+    // A reported zero is its own rejection: unlike an absent reading it is a measurement,
+    // and it says the pool cannot be traded at all.
+    if let Some(liquidity) = bounds::reading(token.liquidity_usd) {
+        if liquidity <= 0.0 {
+            return Some(FilterRejectionReason::DexScreenerZeroLiquidity);
+        }
     }
 
-    if liquidity < config.min_liquidity_usd {
-        return Some(FilterRejectionReason::DexScreenerInsufficientLiquidity);
+    match bounds::check_range(
+        token.liquidity_usd,
+        config.min_liquidity_usd,
+        Some(config.max_liquidity_usd),
+    ) {
+        bounds::Range::TooLow => Some(FilterRejectionReason::DexScreenerInsufficientLiquidity),
+        bounds::Range::TooHigh => Some(FilterRejectionReason::DexScreenerLiquidityTooHigh),
+        bounds::Range::Ok => None,
     }
-
-    if liquidity > config.max_liquidity_usd {
-        return Some(FilterRejectionReason::DexScreenerLiquidityTooHigh);
-    }
-
-    None
 }
 
 fn check_market_cap(token: &Token, config: &DexScreenerFilters) -> Option<FilterRejectionReason> {
@@ -138,17 +157,15 @@ fn check_market_cap(token: &Token, config: &DexScreenerFilters) -> Option<Filter
         return None;
     }
 
-    let market_cap = token.market_cap?;
-
-    if market_cap < config.min_market_cap_usd {
-        return Some(FilterRejectionReason::DexScreenerMarketCapTooLow);
+    match bounds::check_range(
+        token.market_cap,
+        config.min_market_cap_usd,
+        Some(config.max_market_cap_usd),
+    ) {
+        bounds::Range::TooLow => Some(FilterRejectionReason::DexScreenerMarketCapTooLow),
+        bounds::Range::TooHigh => Some(FilterRejectionReason::DexScreenerMarketCapTooHigh),
+        bounds::Range::Ok => None,
     }
-
-    if market_cap > config.max_market_cap_usd {
-        return Some(FilterRejectionReason::DexScreenerMarketCapTooHigh);
-    }
-
-    None
 }
 
 fn check_fdv(token: &Token, config: &DexScreenerFilters) -> Option<FilterRejectionReason> {
@@ -156,20 +173,11 @@ fn check_fdv(token: &Token, config: &DexScreenerFilters) -> Option<FilterRejecti
         return None;
     }
 
-    let fdv = match token.fdv {
-        Some(value) => value,
-        None => return Some(FilterRejectionReason::DexScreenerFdvMissing),
-    };
-
-    if fdv < config.min_fdv_usd {
-        return Some(FilterRejectionReason::DexScreenerFdvTooLow);
+    match bounds::check_range(token.fdv, config.min_fdv_usd, Some(config.max_fdv_usd)) {
+        bounds::Range::TooLow => Some(FilterRejectionReason::DexScreenerFdvTooLow),
+        bounds::Range::TooHigh => Some(FilterRejectionReason::DexScreenerFdvTooHigh),
+        bounds::Range::Ok => None,
     }
-
-    if fdv > config.max_fdv_usd {
-        return Some(FilterRejectionReason::DexScreenerFdvTooHigh);
-    }
-
-    None
 }
 
 fn check_volume(token: &Token, config: &DexScreenerFilters) -> Option<FilterRejectionReason> {
@@ -223,7 +231,6 @@ fn check_price_change(token: &Token, config: &DexScreenerFilters) -> Option<Filt
         config.max_price_change_m5,
         FilterRejectionReason::DexScreenerPriceChange5mTooLow,
         FilterRejectionReason::DexScreenerPriceChange5mTooHigh,
-        FilterRejectionReason::DexScreenerPriceChange5mMissing,
     ) {
         return Some(reason);
     }
@@ -234,7 +241,6 @@ fn check_price_change(token: &Token, config: &DexScreenerFilters) -> Option<Filt
         config.max_price_change_h1,
         FilterRejectionReason::DexScreenerPriceChangeTooLow,
         FilterRejectionReason::DexScreenerPriceChangeTooHigh,
-        FilterRejectionReason::DexScreenerPriceChangeMissing,
     ) {
         return Some(reason);
     }
@@ -245,7 +251,6 @@ fn check_price_change(token: &Token, config: &DexScreenerFilters) -> Option<Filt
         config.max_price_change_h6,
         FilterRejectionReason::DexScreenerPriceChange6hTooLow,
         FilterRejectionReason::DexScreenerPriceChange6hTooHigh,
-        FilterRejectionReason::DexScreenerPriceChange6hMissing,
     ) {
         return Some(reason);
     }
@@ -256,7 +261,6 @@ fn check_price_change(token: &Token, config: &DexScreenerFilters) -> Option<Filt
         config.max_price_change_h24,
         FilterRejectionReason::DexScreenerPriceChange24hTooLow,
         FilterRejectionReason::DexScreenerPriceChange24hTooHigh,
-        FilterRejectionReason::DexScreenerPriceChange24hMissing,
     )
 }
 
@@ -266,14 +270,10 @@ fn enforce_volume_threshold(
     too_low_reason: FilterRejectionReason,
     missing_reason: FilterRejectionReason,
 ) -> Option<FilterRejectionReason> {
-    if threshold <= 0.0 {
-        return None;
-    }
-
-    match value {
-        Some(volume) if volume < threshold => Some(too_low_reason),
-        Some(_) => None,
-        None => Some(missing_reason),
+    match bounds::check_floor(value, threshold) {
+        bounds::Floor::TooLow => Some(too_low_reason),
+        bounds::Floor::Missing => Some(missing_reason),
+        bounds::Floor::Ok => None,
     }
 }
 
@@ -283,20 +283,10 @@ fn enforce_price_change(
     max_threshold: f64,
     too_low_reason: FilterRejectionReason,
     too_high_reason: FilterRejectionReason,
-    missing_reason: FilterRejectionReason,
 ) -> Option<FilterRejectionReason> {
-    let change = match value {
-        Some(value) => value,
-        None => return Some(missing_reason),
-    };
-
-    if change < min_threshold {
-        return Some(too_low_reason);
+    match bounds::check_range(value, min_threshold, Some(max_threshold)) {
+        bounds::Range::TooLow => Some(too_low_reason),
+        bounds::Range::TooHigh => Some(too_high_reason),
+        bounds::Range::Ok => None,
     }
-
-    if change > max_threshold {
-        return Some(too_high_reason);
-    }
-
-    None
 }

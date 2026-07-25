@@ -31,34 +31,111 @@ fn rejection(result: Result<(), FilterRejectionReason>) -> FilterRejectionReason
 // ============================================================================
 
 #[tokio::test]
-async fn pipeline_default_config_rejects_every_token() {
-    // DEFECT PIN: with the shipped defaults BOTH market sources are enabled, and the
-    // engine gates each one on `token.data_source` — DexScreener demands
-    // `data_source == DexScreener`, GeckoTerminal demands `data_source ==
-    // GeckoTerminal`. A token has exactly one `data_source`, so no token on earth can
-    // satisfy both and the default configuration passes NOTHING. Whichever source is
-    // second in the pipeline reports the "data missing".
+async fn pipeline_default_config_accepts_a_healthy_token_from_either_source() {
+    // THE headline regression. DexScreener and GeckoTerminal are two providers of the same
+    // market data and a token carries exactly one `data_source`, so gating each source on
+    // its own `data_source` made the shipped defaults — both sources enabled —
+    // unsatisfiable: whichever gate did not match reported "data missing" and the pipeline
+    // passed NOTHING. Measured against the production database at the time: 0 of 40,000.
     let _cfg = config_guard();
     let config = FilteringConfig::default();
 
-    let mut token = seeded_token();
-    token.data_source = DataSource::DexScreener;
+    for source in [DataSource::DexScreener, DataSource::GeckoTerminal] {
+        let mut token = seeded_token();
+        token.data_source = source;
+        assert!(
+            evaluate_token(&token, &config).await.is_ok(),
+            "a healthy {source:?} token must pass the shipped defaults"
+        );
+    }
+}
+
+#[tokio::test]
+async fn pipeline_still_applies_the_source_that_matches_the_token() {
+    // Accepting both sources must not mean skipping both. Each enabled source is applied
+    // to the tokens it actually covers, and only those.
+    let _cfg = config_guard();
+    let mut config = FilteringConfig::default();
+    config.dexscreener.min_liquidity_usd = 10_000_000.0;
+    config.geckoterminal.min_liquidity_usd = 10_000_000.0;
+
+    let mut dex = seeded_token();
+    dex.data_source = DataSource::DexScreener;
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
-        FilterRejectionReason::GeckoTerminalDataMissing,
-        "a perfectly healthy DexScreener token is rejected for not also being a Gecko token"
+        rejection(evaluate_token(&dex, &config).await),
+        FilterRejectionReason::DexScreenerInsufficientLiquidity,
+        "a DexScreener token is judged by the DexScreener rules"
     );
 
-    token.data_source = DataSource::GeckoTerminal;
+    let mut gecko = seeded_token();
+    gecko.data_source = DataSource::GeckoTerminal;
     assert_eq!(
-        rejection(evaluate_token(&token, &config).await),
-        FilterRejectionReason::DexScreenerDataMissing,
-        "and the mirror image is rejected the other way round"
+        rejection(evaluate_token(&gecko, &config).await),
+        FilterRejectionReason::GeckoTerminalLiquidityTooLow,
+        "and a GeckoTerminal token by the GeckoTerminal rules"
     );
 }
 
 #[tokio::test]
-async fn pipeline_passes_a_healthy_token_once_the_source_conflict_is_removed() {
+async fn pipeline_market_gate_matrix() {
+    // Every combination of (which sources are enabled) x (which source the token carries).
+    // `None` means the token must pass; `Some(reason)` names the rejection.
+    let _cfg = config_guard();
+
+    let cases: [(bool, bool, DataSource, Option<FilterRejectionReason>); 9] = [
+        (true, true, DataSource::DexScreener, None),
+        (true, true, DataSource::GeckoTerminal, None),
+        (
+            true,
+            true,
+            DataSource::Unknown,
+            Some(FilterRejectionReason::DexScreenerDataMissing),
+        ),
+        (true, false, DataSource::DexScreener, None),
+        (
+            true,
+            false,
+            DataSource::GeckoTerminal,
+            // The user asked for DexScreener rules and this token has no DexScreener data.
+            Some(FilterRejectionReason::DexScreenerDataMissing),
+        ),
+        (
+            false,
+            true,
+            DataSource::DexScreener,
+            Some(FilterRejectionReason::GeckoTerminalDataMissing),
+        ),
+        (false, true, DataSource::GeckoTerminal, None),
+        // With no market source enabled, market data is not required at all.
+        (false, false, DataSource::Unknown, None),
+        (false, false, DataSource::DexScreener, None),
+    ];
+
+    for (dex_on, gecko_on, source, expected) in cases {
+        let mut config = FilteringConfig::default();
+        config.dexscreener.enabled = dex_on;
+        config.geckoterminal.enabled = gecko_on;
+
+        let mut token = seeded_token();
+        token.data_source = source;
+
+        let verdict = evaluate_token(&token, &config).await;
+        match expected {
+            None => assert!(
+                verdict.is_ok(),
+                "dex={dex_on} gecko={gecko_on} source={source:?} should pass, got {verdict:?}"
+            ),
+            Some(reason) => assert_eq!(
+                rejection(verdict),
+                reason,
+                "dex={dex_on} gecko={gecko_on} source={source:?}"
+            ),
+        }
+    }
+}
+
+#[tokio::test]
+async fn pipeline_passes_a_healthy_token_with_a_single_market_source() {
     let _cfg = config_guard();
     let token = seeded_token();
 
@@ -66,7 +143,7 @@ async fn pipeline_passes_a_healthy_token_once_the_source_conflict_is_removed() {
         evaluate_token(&token, &filters_default_dex_only())
             .await
             .is_ok(),
-        "default rules minus the GeckoTerminal source must accept the baseline token"
+        "default rules with only DexScreener enabled must accept the baseline token"
     );
 }
 
@@ -99,6 +176,74 @@ async fn pipeline_with_no_filters_enabled_accepts_a_hostile_token() {
         evaluate_token(&token, &config).await.is_ok(),
         "with every switch off the pipeline must be a pass-through — no hidden mandatory rule"
     );
+}
+
+// ============================================================================
+// DECIMALS — the first thing every candidate is checked for
+// ============================================================================
+
+#[tokio::test]
+async fn pipeline_uses_the_decimals_the_token_already_carries() {
+    // The batch load reads `decimals` from the same row the resolver would consult, so a
+    // token that carries them must never pay for a lookup. This is the whole cost of the
+    // filtering pass: the snapshot evaluates every token with market data (328k on a
+    // mature database) while the decimals cache holds far fewer, so routing every token
+    // through the resolver meant a DB round-trip for the majority of them, every refresh.
+    //
+    // A mint that is in NO cache and NO database proves it: if the pipeline consulted the
+    // resolver at all, this would fall through to the network. It returns immediately.
+    let _cfg = config_guard();
+    let config = filters_default_dex_only();
+
+    let mut token = filter_token("UncachedMint111111111111111111111111111111");
+    token.decimals = Some(6);
+
+    let started = std::time::Instant::now();
+    let verdict = evaluate_token(&token, &config).await;
+    let elapsed = started.elapsed();
+
+    assert!(verdict.is_ok(), "got {verdict:?}");
+    assert!(
+        elapsed < std::time::Duration::from_millis(500),
+        "resolving decimals the token already carries took {elapsed:?} — the fast path is gone"
+    );
+}
+
+#[tokio::test]
+async fn pipeline_rejects_decimals_it_cannot_trust() {
+    // Zero and out-of-range values both live in the production database (2,881 rows at 0,
+    // hundreds above 18). `0` is the placeholder every persistence path here writes for
+    // "never resolved", and >18 is impossible for a Solana mint, so neither may be taken at
+    // face value — treating a junk value as known decimals is how token math goes wrong by
+    // orders of magnitude.
+    let _cfg = config_guard();
+    let config = filters_default_dex_only();
+
+    // Keeping this tier PURE takes two things, because an unresolved token is exactly the
+    // case that falls through to the resolver: switch off the shared data server, and use a
+    // mint that is not valid base58 ('0' is not in the alphabet) so the chain fallback fails
+    // at parse time instead of opening a socket. There is no global database in this tier,
+    // so the DB and Rugcheck fallbacks miss without any I/O either.
+    common::set_config(|cfg| cfg.tokens.sources.screenerbot_server.enabled = false);
+    const UNRESOLVED: &str = "0nresolvedMint111111111111111111111111111";
+
+    for junk in [Some(0), Some(19), Some(123), None] {
+        let mut token = filter_token(UNRESOLVED);
+        token.decimals = junk;
+
+        assert_eq!(
+            rejection(evaluate_token(&token, &config).await),
+            FilterRejectionReason::NoDecimalsInDatabase,
+            "decimals {junk:?} must not count as resolved"
+        );
+    }
+
+    // Every legal value is accepted.
+    for good in 1..=18u8 {
+        let mut token = seeded_token();
+        token.decimals = Some(good);
+        assert!(evaluate_token(&token, &config).await.is_ok());
+    }
 }
 
 // ============================================================================

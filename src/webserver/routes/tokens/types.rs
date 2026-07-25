@@ -272,7 +272,7 @@ pub struct TokenOverview {
     pub name: Option<String>,
     pub description: Option<String>,
     pub logo_url: Option<String>,
-    pub decimals: u8,
+    pub decimals: Option<u8>,
     pub supply: Option<String>,
     pub price_sol: Option<f64>,
     pub price_usd: Option<f64>,

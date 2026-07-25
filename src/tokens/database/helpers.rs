@@ -149,10 +149,12 @@ pub(super) fn assemble_token(
     let graph_insiders_detected = security_ref.and_then(|sec| sec.graph_insiders_detected);
     let lp_provider_count = security_ref.and_then(|sec| sec.total_lp_providers);
 
+    // Stays `None` when neither source knows: `Token::decimals` means "the decimals we
+    // have", and inventing 9 here made every consumer — including the filtering hot path —
+    // unable to tell a real 9-decimal token from one we have never resolved.
     let resolved_decimals = metadata
         .decimals
-        .or_else(|| security_ref.and_then(|data| data.token_decimals))
-        .unwrap_or(9);
+        .or_else(|| security_ref.and_then(|data| data.token_decimals));
 
     // For now, only use primary source-provided images. Fallbacks can be added upstream where DB is available.
     let resolved_image_url = primary_image_url.or(fallback_image_url);
@@ -335,17 +337,17 @@ pub(super) fn assemble_token_without_market_data(
     // Security timestamp (if available)
     let security_data_last_fetched_dt = security_ref.map(|sec| sec.security_data_last_fetched_at);
 
+    // See the note on the other assembly path: unknown decimals stay `None`.
     let resolved_decimals = metadata
         .decimals
-        .or_else(|| security_ref.and_then(|data| data.token_decimals))
-        .unwrap_or(9);
+        .or_else(|| security_ref.and_then(|data| data.token_decimals));
 
     Token {
         // Core Identity & Metadata
         mint: metadata.mint.clone(),
         symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_owned()),
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_owned()),
-        decimals: resolved_decimals, // Default to 9 if unknown
+        decimals: resolved_decimals,
         description: None,
         image_url: None,
         header_image_url: None,

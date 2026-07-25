@@ -16,6 +16,61 @@ use crate::tokens::types::{
 use super::helpers::{assemble_token, MarketDataType};
 use super::TokenDatabase;
 
+/// The Rugcheck columns the FILTERING rules read, loaded with the batch token query.
+///
+/// These used to be hardcoded to `None`/empty in the batch path, which meant the whole
+/// security half of the filter pipeline ran against data that was never fetched: holder
+/// concentration, insider counts, creator balance, transfer fee, LP providers, LP lock and
+/// the risk-level check were all silently inert or — worse — rejecting every token for
+/// "missing" data the query simply had not asked for. Only `score`, `rugged` and the two
+/// authorities were real.
+struct SecurityColumns {
+    token_type: Option<String>,
+    score_normalised: Option<i32>,
+    top_10_holders_pct: Option<f64>,
+    total_holders: Option<i64>,
+    lp_provider_count: Option<i64>,
+    graph_insiders_detected: Option<i64>,
+    creator_balance_pct: Option<f64>,
+    transfer_fee_pct: Option<f64>,
+    transfer_fee_max_amount: Option<i64>,
+    transfer_fee_authority: Option<String>,
+    security_risks: Vec<SecurityRisk>,
+    top_holders: Vec<TokenHolder>,
+}
+
+impl SecurityColumns {
+    /// Read columns 66..=77 of the batch query.
+    ///
+    /// The two JSON columns are decoded leniently: a token whose stored risk or holder blob
+    /// is malformed loses that one list rather than failing the entire batch load, which
+    /// would take the whole filtering snapshot down with it.
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        let risks_json: Option<String> = row.get(76)?;
+        let holders_json: Option<String> = row.get(77)?;
+
+        Ok(Self {
+            token_type: row.get(66)?,
+            score_normalised: row.get(67)?,
+            top_10_holders_pct: row.get(68)?,
+            total_holders: row.get(69)?,
+            lp_provider_count: row.get(70)?,
+            graph_insiders_detected: row.get(71)?,
+            creator_balance_pct: row.get(72)?,
+            transfer_fee_pct: row.get(73)?,
+            transfer_fee_max_amount: row.get(74)?,
+            transfer_fee_authority: row.get(75)?,
+            security_risks: parse_json_list(risks_json.as_deref()),
+            top_holders: parse_json_list(holders_json.as_deref()),
+        })
+    }
+}
+
+fn parse_json_list<T: serde::de::DeserializeOwned>(raw: Option<&str>) -> Vec<T> {
+    raw.and_then(|json| serde_json::from_str(json).ok())
+        .unwrap_or_default()
+}
+
 impl TokenDatabase {
     /// Assemble a complete token record with market data from the specified source
     pub fn get_full_token_for_source(
@@ -201,7 +256,11 @@ impl TokenDatabase {
                 g.market_data_last_fetched_at as g_market_data_last_fetched_at,
                 g.image_url as g_image_url,
                 ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at,
-                sr.update_authority, sr.is_mutable
+                sr.update_authority, sr.is_mutable,
+                sr.token_type, sr.score_normalised, sr.top_10_holders_pct,
+                sr.total_holders, sr.total_lp_providers, sr.graph_insiders_detected,
+                sr.creator_balance_pct, sr.transfer_fee_pct, sr.transfer_fee_max_amount,
+                sr.transfer_fee_authority, sr.risks, sr.top_holders
             FROM tokens t
             LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
             LEFT JOIN blacklist bl ON t.mint = bl.mint
@@ -343,6 +402,10 @@ impl TokenDatabase {
                 let update_authority: Option<String> = row.get(64)?;
                 let is_mutable: Option<bool> = row.get::<_, Option<i64>>(65)?.map(|v| v != 0);
 
+                // Remaining Rugcheck columns 66..=77, carried as one value so the row tuple
+                // does not grow another dozen slots.
+                let security = SecurityColumns::from_row(row)?;
+
                 Ok((
                     mint,
                     symbol,
@@ -413,6 +476,7 @@ impl TokenDatabase {
                     last_rejection_at,
                     update_authority,
                     is_mutable,
+                    security,
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
@@ -489,6 +553,7 @@ impl TokenDatabase {
                 last_rejection_at,
                 update_authority,
                 is_mutable,
+                security,
             ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
 
             // Parse all timestamps
@@ -762,7 +827,7 @@ impl TokenDatabase {
                 mint: mint.clone(),
                 symbol: symbol.unwrap_or_else(|| "UNKNOWN".to_owned()),
                 name: name.unwrap_or_else(|| "Unknown Token".to_owned()),
-                decimals: decimals.unwrap_or(9),
+                decimals,
                 description: None,
                 image_url: resolved_image_url,
                 header_image_url: resolved_header_image_url,
@@ -834,19 +899,19 @@ impl TokenDatabase {
                 update_authority,
                 is_mutable,
                 security_score,
-                security_score_normalised: None, // Not loaded in this query
+                security_score_normalised: security.score_normalised,
                 is_rugged,
-                token_type: None,
-                graph_insiders_detected: None,
-                lp_provider_count: None,
-                security_risks: vec![],
-                total_holders: None,
-                top_10_holders_pct: None,
-                top_holders: vec![],
-                creator_balance_pct: None,
-                transfer_fee_pct: None,
-                transfer_fee_max_amount: None,
-                transfer_fee_authority: None,
+                token_type: security.token_type,
+                graph_insiders_detected: security.graph_insiders_detected,
+                lp_provider_count: security.lp_provider_count,
+                security_risks: security.security_risks,
+                total_holders: security.total_holders,
+                top_10_holders_pct: security.top_10_holders_pct,
+                top_holders: security.top_holders,
+                creator_balance_pct: security.creator_balance_pct,
+                transfer_fee_pct: security.transfer_fee_pct,
+                transfer_fee_max_amount: security.transfer_fee_max_amount,
+                transfer_fee_authority: security.transfer_fee_authority,
 
                 // Bot-Specific State
                 is_blacklisted,

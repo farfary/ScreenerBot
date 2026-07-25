@@ -31,7 +31,7 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
 
     // H3: Suspicious single-char symbols (often spam)
     if config.reject_single_char_symbols {
-        let trimmed = token.symbol.trim();
+        let trimmed = meaningful_symbol(&token.symbol);
         if trimmed.chars().count() == 1
             && !trimmed
                 .chars()
@@ -81,21 +81,38 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
     Ok(())
 }
 
+/// A symbol with the padding a scam mint uses removed: ASCII whitespace plus the control
+/// characters (NUL above all) that fixed-width on-chain metadata fields are packed with.
+///
+/// `str::trim` only strips Unicode whitespace, and NUL is not whitespace, so trimming alone
+/// left `"\0"` looking like a real symbol. Trimming NUL from the ends first is not enough
+/// either — `" \0 "` survived both passes, because the spaces protected the NUL from
+/// `trim_matches` and the NUL kept the string non-empty for `trim`.
+fn meaningful_symbol(symbol: &str) -> &str {
+    symbol.trim_matches(|c: char| c.is_whitespace() || c.is_control())
+}
+
 /// Check if symbol contains only ASCII digits (e.g. "00", "123", "0000")
 fn is_numeric_only_symbol(symbol: &str) -> bool {
-    let trimmed = symbol.trim();
+    let trimmed = meaningful_symbol(symbol);
     !trimmed.is_empty() && trimmed.chars().all(|c| c.is_ascii_digit())
 }
 
 /// Check if symbol is empty or whitespace/null-padded
 fn is_empty_or_whitespace(symbol: &str) -> bool {
-    symbol.is_empty() || symbol.trim().is_empty() || symbol.trim_matches('\0').trim().is_empty()
+    meaningful_symbol(symbol).is_empty()
 }
 
 /// Compute a combined risk score from multiple weak signals.
 /// Each signal contributes points; the total determines rejection.
 /// Score range: 0–100 (capped).
 fn compute_risk_score(token: &Token) -> u32 {
+    // Independent signals are summed first, so that the one CONDITIONAL signal below can
+    // ask "did anything else fire?" and get the same answer no matter what order the
+    // signals happen to be written in. Scoring immutability inline against a running total
+    // made it depend on which signals had been added ABOVE it: the name-matches-symbol
+    // signal, evaluated afterwards, could not trigger the bonus while the freeze-authority
+    // signal could, purely because of source position.
     let mut score: u32 = 0;
 
     // Numeric symbol (+30)
@@ -113,19 +130,17 @@ fn compute_risk_score(token: &Token) -> u32 {
         score += 10;
     }
 
-    // Immutable metadata with other signals (+10)
-    if let Some(false) = token.is_mutable {
-        if score > 0 {
-            score += 10;
-        }
+    // Name matches symbol exactly (lazy scam pattern) (+15)
+    let name = meaningful_symbol(&token.name);
+    let symbol = meaningful_symbol(&token.symbol);
+    if !name.is_empty() && !symbol.is_empty() && name.eq_ignore_ascii_case(symbol) {
+        score += 15;
     }
 
-    // Name matches symbol exactly (lazy scam pattern) (+15)
-    if !token.name.is_empty()
-        && !token.symbol.is_empty()
-        && token.name.trim().eq_ignore_ascii_case(token.symbol.trim())
-    {
-        score += 15;
+    // Immutable metadata AMPLIFIES any other signal, but is not a scam signal on its own —
+    // most legitimate tokens make their metadata immutable on purpose (+10)
+    if token.is_mutable == Some(false) && score > 0 {
+        score += 10;
     }
 
     score.min(100)
