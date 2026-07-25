@@ -80,8 +80,12 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         positions::get_db_open_positions(),
         // System metrics (cached)
         get_cached_system_metrics(),
-        // Filtering stats
-        crate::filtering::fetch_stats(),
+        // Filtering stats — the NON-BLOCKING read on purpose. This one fetch is what
+        // clears the dashboard's first-paint skeleton, and the blocking variant waits up
+        // to 30 seconds for the first snapshot to be built, so a freshly-launched app sat
+        // in its loading state for that entire timeout on every launch. Counts that are
+        // briefly absent cost nothing; a dashboard that will not paint costs everything.
+        crate::filtering::try_fetch_stats(),
     );
 
     // Convert from database PeriodTradingStats to dashboard TradingPeriodStats
@@ -326,8 +330,9 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         .and_then(|d| d.count_tokens().ok())
         .unwrap_or_default() as usize;
 
-    // Get filtering stats from the already fetched result
-    let filtering_stats = filtering_stats_result.ok();
+    // Get filtering stats from the already fetched result (absent until the first
+    // snapshot finishes building in the background)
+    let filtering_stats = filtering_stats_result;
 
     let passed_filters = filtering_stats
         .as_ref()

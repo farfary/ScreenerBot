@@ -47,21 +47,20 @@ impl FilteringStore {
         }
     }
 
-    /// Non-blocking snapshot access - returns cached snapshot immediately if available,
-    /// or triggers background refresh if stale. Never blocks waiting for refresh.
+    /// Snapshot access for callers that need an answer: returns the cached snapshot
+    /// immediately when one exists (refreshing in the background if stale), and otherwise
+    /// WAITS for the first build.
+    ///
+    /// That wait is the right trade for a surface that is nothing but filtering results —
+    /// the tokens tab has nothing to show without it. It is the wrong trade for a caller
+    /// that only wants counts; use [`Self::snapshot_if_ready`] there.
     async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>, String> {
         let stale_snapshot = self.snapshot.read().await.clone();
 
         // If we have any snapshot (even stale), return it immediately
         if let Some(existing) = stale_snapshot.as_ref() {
-            let is_stale = is_snapshot_stale(existing);
-
-            // Trigger background refresh if stale and not already refreshing
-            if is_stale && !self.refresh_in_progress.load(AtomicOrdering::Relaxed) {
-                let store = global_store();
-                tokio::spawn(async move {
-                    let _ = store.try_refresh_background().await;
-                });
+            if is_snapshot_stale(existing) {
+                self.spawn_background_refresh();
             }
 
             return Ok(existing.clone());
@@ -74,6 +73,46 @@ impl FilteringStore {
             Ok(Err(err)) => Err(err),
             Err(_) => Err("Snapshot refresh timed out after 30 seconds".to_owned()),
         }
+    }
+
+    /// The snapshot only if one ALREADY exists — never builds one, never waits.
+    ///
+    /// Building the first snapshot loads every token in the database and runs the whole
+    /// pipeline over it, which on a mature database is tens of seconds. `ensure_snapshot`
+    /// blocks for up to 30s on that build, and the home dashboard's single fetch is what
+    /// clears the first-paint skeleton — so routing a mere COUNT through it left a
+    /// freshly-launched app sitting in its loading state for the entire timeout, every
+    /// launch. A count that is briefly absent is worth far less than a dashboard that
+    /// paints; the background build fills it in on the next poll.
+    async fn snapshot_if_ready(&self) -> Option<Arc<FilteringSnapshot>> {
+        let existing = self.snapshot.read().await.clone();
+
+        match existing {
+            Some(snapshot) => {
+                if is_snapshot_stale(&snapshot) {
+                    self.spawn_background_refresh();
+                }
+                Some(snapshot)
+            }
+            None => {
+                // Nothing to serve yet. Kick the build off so the next caller has one,
+                // and answer now rather than holding the caller for it.
+                self.spawn_background_refresh();
+                None
+            }
+        }
+    }
+
+    /// Start a refresh off to the side, unless one is already running.
+    fn spawn_background_refresh(&self) {
+        if self.refresh_in_progress.load(AtomicOrdering::Relaxed) {
+            return;
+        }
+
+        let store = global_store();
+        tokio::spawn(async move {
+            let _ = store.try_refresh_background().await;
+        });
     }
 
     /// Background refresh - doesn't block, logs errors instead of returning them
@@ -578,6 +617,11 @@ impl FilteringStore {
         Ok(build_stats(snapshot.as_ref()).await)
     }
 
+    pub async fn stats_if_ready(&self) -> Option<FilteringStatsSnapshot> {
+        let snapshot = self.snapshot_if_ready().await?;
+        Some(build_stats(snapshot.as_ref()).await)
+    }
+
     pub async fn snapshot_age(&self) -> Option<Duration> {
         let snapshot = self.snapshot.read().await.clone()?;
         let age = Utc::now()
@@ -621,4 +665,9 @@ pub async fn execute_query(query: FilteringQuery) -> Result<FilteringQueryResult
 /// Get aggregated filtering statistics.
 pub async fn get_stats() -> Result<FilteringStatsSnapshot, String> {
     global_store().get_stats().await
+}
+
+/// Aggregated filtering statistics, but only if a snapshot already exists.
+pub async fn stats_if_ready() -> Option<FilteringStatsSnapshot> {
+    global_store().stats_if_ready().await
 }

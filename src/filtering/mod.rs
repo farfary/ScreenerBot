@@ -34,9 +34,17 @@ pub async fn query_tokens(query: FilteringQuery) -> Result<FilteringQueryResult,
     store::execute_query(query).await
 }
 
-/// Snapshot statistics for dashboard metrics
+/// Snapshot statistics for dashboard metrics.
+///
+/// Waits for the first snapshot if none exists yet. Callers on a first-paint path want
+/// [`try_fetch_stats`] instead.
 pub async fn fetch_stats() -> Result<FilteringStatsSnapshot, String> {
     store::get_stats().await
+}
+
+/// Snapshot statistics if a snapshot already exists, `None` while the first one is building.
+pub async fn try_fetch_stats() -> Option<FilteringStatsSnapshot> {
+    store::stats_if_ready().await
 }
 
 /// Access to the global filtering store (primarily for services)
