@@ -513,21 +513,6 @@
     font-size: 0.8rem;
   }
 
-  .dialog-tabs {
-    padding: var(--spacing-xs) var(--spacing-sm);
-    gap: 0;
-  }
-
-  .tab-button {
-    inline-size: 120px;
-    padding: 8px 12px;
-    font-size: 0.8rem;
-  }
-
-  .tab-button svg {
-    display: none;
-  }
-
   .token-details-dialog .tab-content {
     padding: var(--spacing-md);
   }

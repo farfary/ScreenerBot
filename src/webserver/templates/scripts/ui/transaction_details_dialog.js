@@ -5,6 +5,7 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { requestManager } from "../core/request_manager.js";
+import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import {
   getIdentity,
   isSolMint,
@@ -26,6 +27,7 @@ export class TransactionDetailsDialog {
     this.isLoading = false;
     this.logSearchQuery = "";
     this._focusTrap = null;
+    this._dialogTabBar = null;
   }
 
   /**
@@ -143,11 +145,9 @@ export class TransactionDetailsDialog {
           this._backdropHandler = null;
         }
 
-        if (this._tabHandlers) {
-          this._tabHandlers.forEach(({ element, handler }) => {
-            element.removeEventListener("click", handler);
-          });
-          this._tabHandlers = null;
+        if (this._dialogTabBar) {
+          this._dialogTabBar.destroy();
+          this._dialogTabBar = null;
         }
 
         this.dialogEl.remove();
@@ -175,6 +175,7 @@ export class TransactionDetailsDialog {
     const tx = this.transactionData;
     const typeLabel = this._getTypeLabel(tx.transaction_type);
     const statusBadge = this._getStatusBadge(tx.status, tx.success);
+    const tabs = this._getDialogTabs(tx);
 
     return `
       <div class="dialog-backdrop"></div>
@@ -221,34 +222,12 @@ export class TransactionDetailsDialog {
           </div>
         </div>
 
-        <div class="dialog-tabs">
-          <button class="tab-button active" data-tab="overview">
-            <i class="icon-info"></i>
-            Overview
-          </button>
-          <button class="tab-button" data-tab="balances">
-            <i class="icon-wallet"></i>
-            Balances
-          </button>
-          <button class="tab-button" data-tab="instructions">
-            <i class="icon-code"></i>
-            Instructions
-            <span class="tab-badge" id="instructionsBadge">${tx.instructions_count || 0}</span>
-          </button>
-          <button class="tab-button" data-tab="logs">
-            <i class="icon-file-text"></i>
-            Logs
-            <span class="tab-badge" id="logsBadge">0</span>
-          </button>
-          <button class="tab-button" data-tab="ata">
-            <i class="icon-layers"></i>
-            ATA
-          </button>
-          <button class="tab-button" data-tab="raw">
-            <i class="icon-braces"></i>
-            Raw
-          </button>
-        </div>
+        ${renderDialogTabRow({
+          tabs,
+          activeTab: this.currentTab,
+          idPrefix: "transaction-details",
+          ariaLabel: "Transaction details sections",
+        })}
 
         <div class="dialog-body">
           <div class="tab-content active" data-tab-content="overview">
@@ -272,6 +251,29 @@ export class TransactionDetailsDialog {
         </div>
       </div>
     `;
+  }
+
+  _getDialogTabs(tx) {
+    return [
+      { id: "overview", label: "Overview", icon: "icon-info" },
+      { id: "balances", label: "Balances", icon: "icon-wallet" },
+      {
+        id: "instructions",
+        label: "Instructions",
+        icon: "icon-code",
+        badge: tx.instructions_count || 0,
+        badgeId: "instructionsBadge",
+      },
+      {
+        id: "logs",
+        label: "Logs",
+        icon: "icon-file-text",
+        badge: 0,
+        badgeId: "logsBadge",
+      },
+      { id: "ata", label: "ATA", icon: "icon-layers" },
+      { id: "raw", label: "Raw", icon: "icon-braces" },
+    ];
   }
 
   /**
@@ -425,34 +427,15 @@ export class TransactionDetailsDialog {
       });
     }
 
-    // Tab buttons
-    const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
-    this._tabHandlers = [];
-    tabButtons.forEach((btn) => {
-      const handler = () => {
-        const tabId = btn.dataset.tab;
-        this._switchTab(tabId);
-      };
-      btn.addEventListener("click", handler);
-      this._tabHandlers.push({ element: btn, handler });
+    this._dialogTabBar = new DialogTabBar({
+      root: this.dialogEl,
+      tabs: this._getDialogTabs(this.transactionData),
+      activeTab: this.currentTab,
+      onChange: (tabId) => {
+        this.currentTab = tabId;
+        this._loadTabContent(tabId);
+      },
     });
-  }
-
-  _switchTab(tabId) {
-    if (tabId === this.currentTab) return;
-
-    const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
-    tabButtons.forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === tabId);
-    });
-
-    const tabContents = this.dialogEl.querySelectorAll(".tab-content");
-    tabContents.forEach((content) => {
-      content.classList.toggle("active", content.dataset.tabContent === tabId);
-    });
-
-    this.currentTab = tabId;
-    this._loadTabContent(tabId);
   }
 
   _loadTabContent(tabId) {

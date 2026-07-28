@@ -8,6 +8,7 @@ import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import { notificationManager } from "../core/notifications.js";
 import * as Hints from "../core/hints.js";
+import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { HintTrigger } from "./hint_popover.js";
 import { applyOverviewTabMixin } from "./position_details/overview_tab.js";
 import { applyChartTabMixin } from "./position_details/chart_tab.js";
@@ -26,7 +27,7 @@ export class PositionDetailsDialog {
     this.isOpening = false;
     this.refreshPoller = null;
     this.tradeDialog = null;
-    this._tabHandlers = null;
+    this._dialogTabBar = null;
     this._chartTimeframe = "5m";
     this._chartData = null;
     this._tfButtonHandlers = null;
@@ -316,11 +317,9 @@ export class PositionDetailsDialog {
           this._backdropHandler = null;
         }
 
-        if (this._tabHandlers) {
-          this._tabHandlers.forEach(({ element, handler }) => {
-            element.removeEventListener("click", handler);
-          });
-          this._tabHandlers = null;
+        if (this._dialogTabBar) {
+          this._dialogTabBar.destroy();
+          this._dialogTabBar = null;
         }
 
         if (this._manualToggleHandler) {
@@ -378,6 +377,8 @@ export class PositionDetailsDialog {
   destroy() {
     this._stopPolling();
     this._destroyPositionChart?.();
+    this._dialogTabBar?.destroy();
+    this._dialogTabBar = null;
 
     // Remove event handlers
     if (this._escapeHandler) {
@@ -398,7 +399,6 @@ export class PositionDetailsDialog {
     this._backdropHandler = null;
     this._copyMintHandler = null;
     this._favoriteHandler = null;
-    this._tabHandlers = null;
     this._resetActivityState();
     this.positionData = null;
     this.fullDetails = null;
@@ -423,6 +423,23 @@ export class PositionDetailsDialog {
     const name = pos.name || "Unknown Token";
     const logoUrl = pos.logo_url || "";
     const isOpen = pos.position_type !== "closed";
+    const tabs = this._getDialogTabs();
+    const tabActions = `
+      <div class="pdd-trade-actions">
+        <span class="pdd-trade-actions-label">${isOpen ? "Manage position" : "Position"}</span>
+        ${
+          isOpen
+            ? `
+          <button class="pdd-trade-btn pdd-trade-add" id="pddAddBtn"><i class="icon-circle-plus"></i> Add</button>
+          <button class="pdd-trade-btn pdd-trade-partial" id="pddPartialBtn"><i class="icon-scissors"></i> Partial</button>
+          <button class="pdd-trade-btn pdd-trade-close" id="pddCloseBtn"><i class="icon-circle-x"></i> Close</button>
+        `
+            : `
+          <button class="pdd-trade-btn pdd-trade-view" id="pddViewTokenBtn"><i class="icon-external-link"></i> Token Details</button>
+        `
+        }
+      </div>
+    `;
     const statusBadge = isOpen
       ? '<span class="pdd-badge pdd-position-status pdd-badge-success">Open</span>'
       : '<span class="pdd-badge pdd-position-status pdd-badge-secondary">Closed</span>';
@@ -494,34 +511,13 @@ export class PositionDetailsDialog {
             </div>
           </div>
         </div>
-        <div class="dialog-tabs">
-          <button class="tab-button active" data-tab="overview">
-            <i class="icon-info"></i>
-            Overview
-          </button>
-          <button class="tab-button" data-tab="chart">
-            <i class="icon-chart-bar"></i>
-            Chart
-          </button>
-          <button class="tab-button" data-tab="activity">
-            <i class="icon-activity"></i>
-            Activity
-          </button>
-          <div class="pdd-trade-actions">
-            <span class="pdd-trade-actions-label">${isOpen ? "Manage position" : "Position"}</span>
-            ${
-              isOpen
-                ? `
-              <button class="pdd-trade-btn pdd-trade-add" id="pddAddBtn"><i class="icon-circle-plus"></i> Add</button>
-              <button class="pdd-trade-btn pdd-trade-partial" id="pddPartialBtn"><i class="icon-scissors"></i> Partial</button>
-              <button class="pdd-trade-btn pdd-trade-close" id="pddCloseBtn"><i class="icon-circle-x"></i> Close</button>
-            `
-                : `
-              <button class="pdd-trade-btn pdd-trade-view" id="pddViewTokenBtn"><i class="icon-external-link"></i> Token Details</button>
-            `
-            }
-          </div>
-        </div>
+        ${renderDialogTabRow({
+          tabs,
+          activeTab: this.currentTab,
+          idPrefix: "position-details",
+          ariaLabel: "Position details sections",
+          actionsHtml: tabActions,
+        })}
 
         <div class="dialog-body">
           <div class="tab-content active" data-tab-content="overview">
@@ -536,6 +532,14 @@ export class PositionDetailsDialog {
         </div>
       </div>
     `;
+  }
+
+  _getDialogTabs() {
+    return [
+      { id: "overview", label: "Overview", icon: "icon-info" },
+      { id: "chart", label: "Chart", icon: "icon-chart-bar" },
+      { id: "activity", label: "Activity", icon: "icon-activity" },
+    ];
   }
 
   /**
@@ -758,16 +762,20 @@ export class PositionDetailsDialog {
     // fresh at click time so it always reflects the latest details.
     this._attachTradeButtons();
 
-    // Tab buttons
-    const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
-    this._tabHandlers = [];
-    tabButtons.forEach((btn) => {
-      const handler = () => {
-        const tabId = btn.dataset.tab;
-        this._switchTab(tabId);
-      };
-      btn.addEventListener("click", handler);
-      this._tabHandlers.push({ element: btn, handler });
+    this._dialogTabBar = new DialogTabBar({
+      root: this.dialogEl,
+      tabs: this._getDialogTabs(),
+      activeTab: this.currentTab,
+      beforeChange: (tabId, previousTab) => {
+        if (previousTab === "chart" && tabId !== "chart") {
+          this._destroyPositionChart?.();
+        }
+        return true;
+      },
+      onChange: (tabId) => {
+        this.currentTab = tabId;
+        this._loadTabContent(tabId);
+      },
     });
 
     // Manual-management toggle (open positions). Dispatches the shared toggle event;
@@ -823,31 +831,6 @@ export class PositionDetailsDialog {
       ? "Manual management ON — auto-trader will not sell this position. Click to hand it back to the auto-trader."
       : "Manual management OFF — auto-trader manages this position. Click to take manual control.";
     btn.innerHTML = `<i class="icon-shield"></i> ${on ? "Manual" : "Auto-managed"}`;
-  }
-
-  /**
-   * Switch to a different tab
-   */
-  _switchTab(tabId) {
-    if (tabId === this.currentTab) return;
-
-    // Leaving the chart tab — release the chart, poller and observers.
-    if (this.currentTab === "chart" && tabId !== "chart") {
-      this._destroyPositionChart?.();
-    }
-
-    const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
-    tabButtons.forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === tabId);
-    });
-
-    const tabContents = this.dialogEl.querySelectorAll(".tab-content");
-    tabContents.forEach((content) => {
-      content.classList.toggle("active", content.dataset.tabContent === tabId);
-    });
-
-    this.currentTab = tabId;
-    this._loadTabContent(tabId);
   }
 
   /**

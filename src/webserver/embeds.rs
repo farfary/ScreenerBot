@@ -124,6 +124,8 @@ pub(super) const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/
 pub(super) const TRADE_ACTION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/trade_action_dialog.css");
 pub(super) const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
+pub(super) const DIALOG_TAB_BAR_STYLES: &str =
+    include_str!("templates/styles/ui/dialog_tab_bar.css");
 pub(super) const ACTION_BAR_STYLES: &str = include_str!("templates/styles/ui/action_bar.css");
 pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
@@ -310,6 +312,7 @@ pub const TRADE_ACTION_QUICK_TRADE_JS: &str =
 pub const TRADE_ACTION_QUOTE_MANAGER_JS: &str =
     include_str!("templates/scripts/ui/trade_action/quote_manager.js");
 pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
+pub const DIALOG_TAB_BAR_UI: &str = include_str!("templates/scripts/ui/dialog_tab_bar.js");
 pub const ACTION_BAR_UI: &str = include_str!("templates/scripts/ui/action_bar.js");
 pub const TABLE_SETTINGS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/table_settings_dialog.js");

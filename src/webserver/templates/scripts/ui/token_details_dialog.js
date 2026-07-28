@@ -8,6 +8,7 @@ import { Poller } from "../core/poller.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Hints from "../core/hints.js";
+import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { HintTrigger } from "./hint_popover.js";
 import { showImageLightbox } from "./image_lightbox.js";
 import {
@@ -49,7 +50,7 @@ export class TokenDetailsDialog {
     this.dialogEl = null;
     this.currentTab = "overview";
     this.tokenData = null;
-    this.tabHandlers = new Map();
+    this._dialogTabBar = null;
     this.refreshPoller = null;
     this.chartPoller = null;
     this.dataStatusPoller = null;
@@ -759,11 +760,9 @@ export class TokenDetailsDialog {
           this._backdropHandler = null;
         }
 
-        if (this._tabHandlers) {
-          this._tabHandlers.forEach(({ element, handler }) => {
-            element.removeEventListener("click", handler);
-          });
-          this._tabHandlers = null;
+        if (this._dialogTabBar) {
+          this._dialogTabBar.destroy();
+          this._dialogTabBar = null;
         }
 
         if (this._retryHandler) {
@@ -849,7 +848,6 @@ export class TokenDetailsDialog {
       this.isRefreshing = false;
       this.isOpening = false;
       this._isClosing = false;
-      this.tabHandlers.clear();
 
       // Reset data source tracking
       this._dataSourceStatus = {
@@ -891,6 +889,7 @@ export class TokenDetailsDialog {
     // trade buttons, the per-token actions (favorite/copy/Solscan), and every tab
     // except Overview — only its price + SOL/USD chart are meaningful here.
     const isSol = this.tokenData.mint === "So11111111111111111111111111111111111111112";
+    const tabs = this._getDialogTabs(isSol);
 
     return `
       <div class="dialog-backdrop"></div>
@@ -978,36 +977,12 @@ export class TokenDetailsDialog {
 
         <div class="source-issues-row" id="sourceIssuesRow" role="status" hidden></div>
 
-        <div class="dialog-tabs">
-          <button class="tab-button active" data-tab="overview">
-            <i class="icon-info"></i>
-            Overview
-          </button>
-          ${
-            isSol
-              ? ""
-              : `<button class="tab-button" data-tab="security">
-            <i class="icon-shield"></i>
-            Security
-          </button>
-          <button class="tab-button" data-tab="positions">
-            <i class="icon-chart-bar"></i>
-            Positions
-          </button>
-          <button class="tab-button" data-tab="pools">
-            <i class="icon-droplet"></i>
-            Pools
-          </button>
-          <button class="tab-button" data-tab="links">
-            <i class="icon-link"></i>
-            Links
-          </button>
-          <button class="tab-button" data-tab="transactions">
-            <i class="icon-activity"></i>
-            Txns
-          </button>`
-          }
-        </div>
+        ${renderDialogTabRow({
+          tabs,
+          activeTab: this.currentTab,
+          idPrefix: "token-details",
+          ariaLabel: "Token details sections",
+        })}
 
         <div class="dialog-body">
           <div class="tab-content active" data-tab-content="overview">
@@ -1031,6 +1006,18 @@ export class TokenDetailsDialog {
         </div>
       </div>
     `;
+  }
+
+  _getDialogTabs(isSol = false) {
+    const tabs = [
+      { id: "overview", label: "Overview", icon: "icon-info" },
+      { id: "security", label: "Security", icon: "icon-shield" },
+      { id: "positions", label: "Positions", icon: "icon-chart-bar" },
+      { id: "pools", label: "Pools", icon: "icon-droplet" },
+      { id: "links", label: "Links", icon: "icon-link" },
+      { id: "transactions", label: "Txns", icon: "icon-activity" },
+    ];
+    return isSol ? tabs.slice(0, 1) : tabs;
   }
 
   _updateHeader(token) {
@@ -1406,15 +1393,24 @@ export class TokenDetailsDialog {
       body.addEventListener("click", this._retryHandler);
     }
 
-    const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
-    this._tabHandlers = [];
-    tabButtons.forEach((btn) => {
-      const handler = () => {
-        const tabId = btn.dataset.tab;
-        this._switchTab(tabId);
-      };
-      btn.addEventListener("click", handler);
-      this._tabHandlers.push({ element: btn, handler });
+    const isSol = this.tokenData.mint === "So11111111111111111111111111111111111111112";
+    this._dialogTabBar = new DialogTabBar({
+      root: this.dialogEl,
+      tabs: this._getDialogTabs(isSol),
+      activeTab: this.currentTab,
+      beforeChange: (tabId, previousTab) => {
+        if (previousTab === "overview" && tabId !== "overview") {
+          this._stopChartPolling();
+        }
+        return true;
+      },
+      onChange: (tabId) => {
+        if (tabId === "overview" && this.advancedChart) {
+          this._startChartPolling();
+        }
+        this.currentTab = tabId;
+        this._loadTabContent(tabId);
+      },
     });
   }
 

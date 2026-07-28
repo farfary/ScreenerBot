@@ -95,6 +95,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         EVENTS_DIALOG_STYLES,
         TRADE_ACTION_DIALOG_STYLES,
         TAB_BAR_STYLES,
+        DIALOG_TAB_BAR_STYLES,
         ACTION_BAR_STYLES,
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,

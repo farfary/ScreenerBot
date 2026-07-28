@@ -96,29 +96,11 @@
   }
 }
 
-/* =============================================================================
-   TAB BAR
-   ============================================================================= */
-
-.position-details-dialog .dialog-tabs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 16px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  overflow-x: auto;
-}
-
 /* Trade actions live on the right of the tab bar (top of the dialog). */
 .position-details-dialog .pdd-trade-actions {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
-  padding-left: 16px;
-  border-left: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
@@ -192,73 +174,6 @@
 
 .position-details-dialog .pdd-trade-view:hover:not(:disabled) {
   border-color: var(--link-color);
-}
-
-.position-details-dialog .tab-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  box-sizing: border-box;
-  min-inline-size: 112px;
-  padding: 6px 14px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
-  white-space: nowrap;
-  flex-shrink: 0;
-  position: relative;
-}
-
-.position-details-dialog .tab-button i {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  inline-size: 18px;
-  block-size: 18px;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.6;
-  transition: opacity var(--transition-fast);
-}
-
-.position-details-dialog .tab-button:hover {
-  color: var(--text-primary);
-  background: var(--bg-card-hover);
-}
-
-.position-details-dialog .tab-button:hover i {
-  opacity: 0.9;
-}
-
-.position-details-dialog .tab-button.active {
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
-  font-weight: 600;
-}
-
-.position-details-dialog .tab-button.active i {
-  opacity: 1;
-}
-
-/* Active indicator line */
-.position-details-dialog .tab-button.active::after {
-  content: "";
-  position: absolute;
-  bottom: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 2px;
-  background: var(--primary-color);
-  border-radius: var(--radius-xs);
 }
 
 /* =============================================================================
@@ -395,20 +310,6 @@
 }
 
 @media (width <= 500px) {
-  .position-details-dialog .dialog-tabs {
-    padding: 6px 12px;
-  }
-
-  .position-details-dialog .tab-button {
-    min-inline-size: 96px;
-    padding: 6px 10px;
-    font-size: 0.7rem;
-  }
-
-  .position-details-dialog .tab-button i {
-    display: none;
-  }
-
   .position-details-dialog .pdd-trade-actions-label {
     display: none;
   }

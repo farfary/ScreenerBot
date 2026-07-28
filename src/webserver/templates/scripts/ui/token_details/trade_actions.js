@@ -80,44 +80,6 @@ export function applyTradeActionsMixin(DialogClass) {
   };
 
   /**
-   * Switch to a different tab
-   * @private
-   * @param {string} tabId - Tab identifier
-   */
-  proto._switchTab = function (tabId) {
-    if (tabId === this.currentTab) return;
-
-    const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
-    tabButtons.forEach((btn) => {
-      if (btn.dataset.tab === tabId) {
-        btn.classList.add("active");
-      } else {
-        btn.classList.remove("active");
-      }
-    });
-
-    const tabContents = this.dialogEl.querySelectorAll(".tab-content");
-    tabContents.forEach((content) => {
-      if (content.dataset.tabContent === tabId) {
-        content.classList.add("active");
-      } else {
-        content.classList.remove("active");
-      }
-    });
-
-    if (this.currentTab === "overview" && tabId !== "overview") {
-      this._stopChartPolling();
-    }
-
-    if (tabId === "overview" && this.advancedChart) {
-      this._startChartPolling();
-    }
-
-    this.currentTab = tabId;
-    this._loadTabContent(tabId);
-  };
-
-  /**
    * Load tab content on demand
    * @private
    * @param {string} tabId - Tab identifier
