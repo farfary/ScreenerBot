@@ -17,12 +17,29 @@
 
 /* Token name cell with logo */
 .token-cell {
+  --token-cell-actions-width: 68px;
+
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  width: 100%;
   padding-left: 4px;
   max-height: 100%;
   overflow: hidden;
+}
+
+.token-cell--actions-3 {
+  --token-cell-actions-width: 102px;
+}
+
+.token-cell__identity {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-right: 0;
+  transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .token-cell .token-logo {
@@ -43,7 +60,7 @@
 }
 
 /* Token text container - constrain overflow */
-.token-cell > div {
+.token-cell__meta {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -62,6 +79,58 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.token-cell__actions {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: inline-flex;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(3px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.token-cell__actions .btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.data-table tbody tr:hover .token-cell__identity,
+.data-table tbody tr:focus-within .token-cell__identity {
+  padding-right: var(--token-cell-actions-width);
+}
+
+.data-table tbody tr:hover .token-cell__actions,
+.data-table tbody tr:focus-within .token-cell__actions,
+.token-cell__actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .token-cell__identity {
+    padding-right: var(--token-cell-actions-width);
+  }
+
+  .token-cell__actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(0, -50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .token-cell__identity,
+  .token-cell__actions {
+    transition: none;
+  }
 }
 
 .value-positive {
@@ -228,6 +297,15 @@
   font-size: 0.85em;
 }
 
+.token-cell__actions .btn,
+.token-cell__actions .btn:hover,
+.token-cell__actions .btn:active,
+.token-cell__actions .btn.active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    OHLCV TAB STYLES
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -241,9 +319,67 @@
 
 /* Mint cell in OHLCV table */
 .mint-cell {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
   font-family: var(--font-data);
   font-size: 0.85rem;
   color: var(--text-secondary);
+  text-overflow: ellipsis;
+}
+
+.ohlcv-token-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding-right: 0;
+  transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ohlcv-token-actions {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(3px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.data-table tbody tr:hover .ohlcv-token-cell,
+.data-table tbody tr:focus-within .ohlcv-token-cell {
+  padding-right: 34px;
+}
+
+.data-table tbody tr:hover .ohlcv-token-actions,
+.data-table tbody tr:focus-within .ohlcv-token-actions,
+.ohlcv-token-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .ohlcv-token-cell {
+    padding-right: 34px;
+  }
+
+  .ohlcv-token-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(0, -50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ohlcv-token-cell,
+  .ohlcv-token-actions {
+    transition: none;
+  }
 }
 
 /* Status badge */
@@ -388,12 +524,20 @@
 
 /* Delete button in OHLCV table */
 .ohlcv-delete-btn {
-  padding: 4px 8px !important;
-  font-size: 0.75rem !important;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--badge-error);
+  font-size: 0.75rem;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .ohlcv-delete-btn:hover {
-  background: rgb(239, 68, 68, 0.2) !important;
+  color: var(--text-primary);
+  background: transparent;
+  border-color: transparent;
 }
 
 /* =============================================================================

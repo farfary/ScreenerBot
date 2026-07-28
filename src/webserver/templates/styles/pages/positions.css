@@ -14,12 +14,33 @@
 }
 
 .position-token {
+  --position-token-actions-width: 34px;
+
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  width: 100%;
   max-height: 100%;
   overflow: hidden;
   padding-left: 9px; /* reserve the manual-tag gap plus logo breathing room */
+}
+
+.position-token--actions-2 {
+  --position-token-actions-width: 68px;
+}
+
+.position-token--actions-3 {
+  --position-token-actions-width: 102px;
+}
+
+.position-token__identity {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-right: 0;
+  transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .position-token .token-logo {
@@ -40,7 +61,7 @@
 }
 
 /* Token text container - constrain overflow */
-.position-token > div {
+.position-token-meta {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -59,6 +80,58 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.position-token__actions {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: inline-flex;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(3px, -50%);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.position-token__actions .btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+}
+
+.data-table tbody tr:hover .position-token__identity,
+.data-table tbody tr:focus-within .position-token__identity {
+  padding-right: var(--position-token-actions-width);
+}
+
+.data-table tbody tr:hover .position-token__actions,
+.data-table tbody tr:focus-within .position-token__actions,
+.position-token__actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .position-token__identity {
+    padding-right: var(--position-token-actions-width);
+  }
+
+  .position-token__actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(0, -50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .position-token__identity,
+  .position-token__actions {
+    transition: none;
+  }
 }
 
 /* Row actions buttons */
@@ -203,6 +276,14 @@
   font-size: 0.85em;
 }
 
+.position-token__actions .btn,
+.position-token__actions .btn:hover,
+.position-token__actions .btn:active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
 /* ===========================================================================
    Live row state — left status bar + tint + caption
    Open-list rows carry a left status bar encoding their lifecycle:
@@ -210,11 +291,6 @@
    The bar + tint are layered with background-image so they survive zebra
    striping regardless of selector specificity.
    =========================================================================== */
-
-.position-token-meta {
-  min-width: 0;
-  overflow: hidden;
-}
 
 /* Compact state caption under the token symbol (active states only) */
 .pos-state-caption {

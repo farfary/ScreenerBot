@@ -43,12 +43,6 @@ import {
 import { createOhlcvModule } from "./tokens/ohlcv.js";
 import { createFavoritesModule } from "./tokens/favorites.js";
 
-// Minimum width for an actions column at its collapsed (icon-only) size so every
-// button is fully visible — never clipped. Mirrors the CSS geometry in
-// column_types.css (`--dt-action-btn` 32px squares, `--dt-action-gap` 6px) plus
-// the cell's horizontal padding (~24px) and a small safety margin.
-const actionsMinWidth = (n) => n * 32 + (n - 1) * 6 + 30;
-
 function createLifecycle() {
   let table = null;
   let ohlcvTable = null; // Separate table for OHLCV data view
@@ -427,7 +421,10 @@ function createLifecycle() {
       table.getServerPaginationMode() === "pages"
     ) {
       // Allow poll every 5s in pages mode (vs 1s in scroll mode)
-      if (!shouldSkipPollReload._lastPagesPoll || Date.now() - shouldSkipPollReload._lastPagesPoll >= 5000) {
+      if (
+        !shouldSkipPollReload._lastPagesPoll ||
+        Date.now() - shouldSkipPollReload._lastPagesPoll >= 5000
+      ) {
         shouldSkipPollReload._lastPagesPoll = Date.now();
         return false;
       }
@@ -449,11 +446,7 @@ function createLifecycle() {
     // leave the loaded rows stable; live top-of-list refresh resumes at the top.
     const sc = table?.elements?.scrollContainer;
     const loadedCount = table.getData?.().length ?? 0;
-    if (
-      sc &&
-      loadedCount > PAGE_LIMIT &&
-      sc.scrollTop > sc.clientHeight
-    ) {
+    if (sc && loadedCount > PAGE_LIMIT && sc.scrollTop > sc.clientHeight) {
       return true;
     }
 
@@ -929,76 +922,14 @@ function createLifecycle() {
    */
   const buildColumns = () => {
     return [
-      // Actions column (Buy / Add + Sell) on every token-list view, pinned/floating
-      // leftmost. Manual buys work for any token even if it isn't pool-tracked or
-      // failed filtering; rows with an open position get Add + Sell instead of Buy.
-      {
-        id: "actions",
-        label: "Actions",
-        sortable: false,
-        floating: true,
-        minWidth: actionsMinWidth(2),
-        width: actionsMinWidth(2),
-        wrap: false,
-        render: (_v, row) => {
-          const mint = row?.mint || "";
-          const isBlacklisted = Boolean(row?.blacklisted);
-          const hasOpen = Boolean(row?.has_open_position);
-          const disabledAttr = isBlacklisted ? ' disabled aria-disabled="true"' : "";
-
-          if (!mint) return "—";
-
-          if (hasOpen) {
-            return `
-              <div class="row-actions dt-actions-flex">
-                <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
-                  mint
-                )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-circle-plus"></i><span class="row-action-label">Add</span></button>
-                <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
-                  mint
-                )}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i><span class="row-action-label">Sell</span></button>
-              </div>
-            `;
-          }
-
-          return `
-            <div class="row-actions dt-actions-flex">
-              <button class="btn row-action" data-action="buy" data-mint="${Utils.escapeHtml(
-                mint
-              )}" title="Buy position"${disabledAttr}><i class="icon-shopping-cart"></i><span class="row-action-label">Buy</span></button>
-            </div>
-          `;
-        },
-      },
       {
         id: "token",
         label: "Token",
         sortable: true,
         floating: true,
-        minWidth: 220,
+        minWidth: 260,
         wrap: false,
         render: (_v, row) => tokenCell(row),
-      },
-      {
-        id: "links",
-        label: "Links",
-        sortable: false,
-        minWidth: 70,
-        wrap: false,
-        render: (_v, row) => {
-          const mint = row?.mint || "";
-          if (!mint) return "—";
-          return `
-            <button 
-              class="btn btn-sm links-dropdown-trigger" 
-              data-mint="${Utils.escapeHtml(mint)}"
-              title="External links"
-              type="button"
-            >
-              <i class="icon-external-link"></i>
-            </button>
-          `;
-        },
       },
       {
         id: "price_sol",
@@ -1256,7 +1187,6 @@ function createLifecycle() {
       },
     ];
   };
-
 
   // ═══════════════════════════════════════════════════════════════════════════
   // VIEW SWITCHING
@@ -1947,7 +1877,7 @@ function createLifecycle() {
             // without hammering. The in-flight guard in shouldSkipPollReload still
             // skips ticks while a fetch is running.
             getInterval: () => Math.max(4000, getGlobalPollInterval() || 4000),
-          }),
+          })
         );
       }
       poller.start();

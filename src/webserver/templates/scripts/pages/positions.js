@@ -57,15 +57,6 @@ const parseTs = (v) => {
   return Number.isFinite(t) ? t : NaN;
 };
 
-// Minimum width for an actions column at its icon-only (collapsed) size, so the
-// buttons can never clip: n square 32px buttons + (n-1) 6px gaps + 16px cell
-// padding. The comfortable `width` (where labels show) is set separately.
-// Minimum width for an actions column at its collapsed (icon-only) size so every
-// button is fully visible — never clipped. Mirrors the CSS geometry in
-// column_types.css (`--dt-action-btn` 32px squares, `--dt-action-gap` 6px) plus
-// the cell's horizontal padding (~24px) and a small safety margin.
-const actionsMinWidth = (n) => n * 32 + (n - 1) * 6 + 30;
-
 const getPositionsTableStateKey = (view) => `positions-table.${view}`;
 const normalizeSortDirection = (direction) => (direction === "desc" ? "desc" : "asc");
 
@@ -168,7 +159,7 @@ function createLifecycle() {
     return primary ? `pos-ind pos-ind-${primary.id}` : "";
   };
 
-  const tokenCell = (row) => {
+  const tokenCell = (row, actionsHtml = "", actionCount = 0) => {
     const logo = row.logo_url || row.image_url || "";
     const symbol = row.symbol || "?";
     const name = row.name || "";
@@ -177,11 +168,17 @@ function createLifecycle() {
           symbol
         )}"/>`
       : '<i class="token-logo icon-coins"></i>';
-    return `<div class="position-token">${logoHtml}<div class="position-token-meta">
-      <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
-      <div class="token-name">${Utils.escapeHtml(name)}</div>
-      ${stateCaption(row)}
-    </div></div>`;
+    return `<div class="position-token position-token--actions-${actionCount}">
+      <div class="position-token__identity">
+        ${logoHtml}
+        <div class="position-token-meta">
+          <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
+          <div class="token-name">${Utils.escapeHtml(name)}</div>
+          ${stateCaption(row)}
+        </div>
+      </div>
+      ${actionsHtml}
+    </div>`;
   };
 
   const priceCell = (value) => Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
@@ -218,47 +215,59 @@ function createLifecycle() {
   // Compact "Remove" (archive/delete) button for closed rows.
   const removeActionCell = (row) => {
     const id = row?.id;
-    if (id == null) return "—";
-    return `<div class="row-actions dt-actions-flex">
+    if (id == null) return "";
+    return `<div class="row-actions position-token__actions">
       <button class="btn row-action row-action--icon" data-action="remove" data-id="${Utils.escapeHtml(
         String(id)
       )}" data-mint="${Utils.escapeHtml(
         row?.mint || ""
-      )}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i><span class="row-action-label">Remove</span></button>
+      )}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
     </div>`;
   };
 
   // Restore + permanent-delete buttons for archived rows.
   const archivedActionCell = (row) => {
     const id = row?.id;
-    if (id == null) return "—";
+    if (id == null) return "";
     const idAttr = Utils.escapeHtml(String(id));
     const mintAttr = Utils.escapeHtml(row?.mint || "");
-    return `<div class="row-actions dt-actions-flex">
-      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" title="Restore to Open/Closed"><i class="icon-rotate-ccw"></i><span class="row-action-label">Restore</span></button>
-      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" title="Delete permanently" aria-label="Delete permanently"><i class="icon-trash-2"></i><span class="row-action-label">Delete</span></button>
+    return `<div class="row-actions position-token__actions">
+      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" title="Restore to Open/Closed" aria-label="Restore position"><i class="icon-rotate-ccw"></i></button>
+      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" title="Delete permanently" aria-label="Delete permanently"><i class="icon-trash-2"></i></button>
     </div>`;
   };
 
+  const openActionCell = (row) => {
+    const mint = row?.mint || "";
+    const isOpen = !row?.transaction_exit_verified;
+    if (!mint || !isOpen) return "";
+
+    if (row?._pending) {
+      return '<div class="position-token__actions"><span class="row-actions-busy">In progress…</span></div>';
+    }
+
+    const busy = row?._state === "selling" || row?._state === "closing";
+    const dis = busy ? " disabled" : "";
+    const mintAttr = Utils.escapeHtml(mint);
+    const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
+    return `
+      <div class="row-actions position-token__actions">
+        <button class="btn row-action" data-action="add" data-mint="${mintAttr}" title="Add to position (DCA)" aria-label="Add to position"${dis}><i class="icon-circle-plus"></i></button>
+        <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="Sell (full or % partial)" aria-label="Sell position"${dis}><i class="icon-trending-down"></i></button>
+        <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
+      </div>
+    `;
+  };
+
   const buildArchivedColumns = () => [
-    {
-      id: "actions",
-      label: "Actions",
-      sortable: false,
-      floating: true,
-      minWidth: actionsMinWidth(2),
-      width: actionsMinWidth(2),
-      wrap: false,
-      render: (_v, row) => archivedActionCell(row),
-    },
     {
       id: "token",
       label: "Token",
       sortable: true,
       floating: true,
-      minWidth: 220,
+      minWidth: 260,
       wrap: false,
-      render: (_v, r) => tokenCell(r),
+      render: (_v, r) => tokenCell(r, archivedActionCell(r), 2),
     },
     {
       id: "archived_at",
@@ -313,47 +322,13 @@ function createLifecycle() {
     if (state.view === "open") {
       return [
         {
-          id: "actions",
-          label: "Actions",
-          sortable: false,
-          floating: true,
-          minWidth: actionsMinWidth(3),
-          width: actionsMinWidth(3),
-          wrap: false,
-          render: (_v, row) => {
-            const mint = row?.mint || "";
-            const isOpen = !row?.transaction_exit_verified;
-
-            if (!mint || !isOpen) return "—";
-
-            // Pending (in-flight buy) rows have no on-chain position yet.
-            if (row?._pending) {
-              return '<span class="row-actions-busy">In progress…</span>';
-            }
-
-            // Disable Add/Sell while a trade is in-flight ("selling") or the exit tx
-            // is pending verification ("closing") to prevent double-firing.
-            const busy = row?._state === "selling" || row?._state === "closing";
-            const dis = busy ? " disabled" : "";
-            const mintAttr = Utils.escapeHtml(mint);
-            const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
-            return `
-              <div class="row-actions dt-actions-flex">
-                <button class="btn row-action" data-action="add" data-mint="${mintAttr}" title="Add to position (DCA)"${dis}><i class="icon-circle-plus"></i><span class="row-action-label">Add</span></button>
-                <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="Sell (full or % partial)"${dis}><i class="icon-trending-down"></i><span class="row-action-label">Sell</span></button>
-                <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i><span class="row-action-label">Remove</span></button>
-              </div>
-            `;
-          },
-        },
-        {
           id: "token",
           label: "Token",
           sortable: true,
           floating: true,
-          minWidth: 220,
+          minWidth: 260,
           wrap: false,
-          render: (_v, r) => tokenCell(r),
+          render: (_v, r) => tokenCell(r, openActionCell(r), 3),
         },
         {
           id: "entry_time",
@@ -425,23 +400,13 @@ function createLifecycle() {
       // closed view
       return [
         {
-          id: "actions",
-          label: "Actions",
-          sortable: false,
-          floating: true,
-          minWidth: actionsMinWidth(1),
-          width: actionsMinWidth(1),
-          wrap: false,
-          render: (_v, row) => removeActionCell(row),
-        },
-        {
           id: "token",
           label: "Token",
           sortable: true,
           floating: true,
-          minWidth: 220,
+          minWidth: 260,
           wrap: false,
-          render: (_v, r) => tokenCell(r),
+          render: (_v, r) => tokenCell(r, removeActionCell(r), 1),
         },
         {
           id: "exit_time",
@@ -516,7 +481,6 @@ function createLifecycle() {
         value: Utils.formatNumber(state.total, 0),
       },
     ]);
-
   };
 
   // Pull in-flight buy/sell actions from the live notification stream and index
@@ -736,7 +700,10 @@ function createLifecycle() {
 
         if (btn) btn.disabled = true;
         if (choice.mode === "delete") {
-          await requestManager.fetch(`/api/positions/${id}`, { method: "DELETE", priority: "high" });
+          await requestManager.fetch(`/api/positions/${id}`, {
+            method: "DELETE",
+            priority: "high",
+          });
           Utils.showToast("Position deleted", "success");
         } else {
           await requestManager.fetch(`/api/positions/${id}/archive`, {

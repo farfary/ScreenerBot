@@ -87,7 +87,25 @@ export function tokenCell(row) {
     : '<span class="token-logo">N/A</span>';
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
-  return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
+  const mint = Utils.escapeHtml(row.mint || "");
+  const disabledAttr = row.blacklisted ? ' disabled aria-disabled="true"' : "";
+  const tradeActions = row.has_open_position
+    ? `
+      <button class="btn row-action" data-action="add" data-mint="${mint}" title="Add to position (DCA)" aria-label="Add to position"${disabledAttr}><i class="icon-circle-plus"></i></button>
+      <button class="btn row-action" data-action="sell" data-mint="${mint}" title="Sell (full or % partial)" aria-label="Sell token"${disabledAttr}><i class="icon-trending-down"></i></button>`
+    : `<button class="btn row-action" data-action="buy" data-mint="${mint}" title="Buy position" aria-label="Buy token"${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
+  const actionCount = row.has_open_position ? 3 : 2;
+
+  return `<div class="token-cell token-cell--actions-${actionCount}">
+    <div class="token-cell__identity">
+      ${logo}
+      <div class="token-cell__meta"><div class="token-symbol">${sym}</div>${name}</div>
+    </div>
+    <div class="row-actions token-cell__actions">
+      ${tradeActions}
+      <button class="btn links-dropdown-trigger" data-mint="${mint}" title="External links" aria-label="External links" type="button"><i class="icon-external-link"></i></button>
+    </div>
+  </div>`;
 }
 
 export function normalizeBlacklistReasons(mint, sourcesMap) {

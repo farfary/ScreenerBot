@@ -21,12 +21,19 @@ export function createOhlcvModule(deps) {
         id: "mint",
         label: "Token",
         sortable: true,
-        minWidth: 120,
+        minWidth: 180,
         maxWidth: 200,
         wrap: false,
-        render: (value) => {
+        render: (value, row) => {
           const short = value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "—";
-          return `<span class="mint-cell" title="${Utils.escapeHtml(value)}">${short}</span>`;
+          return `<span class="ohlcv-token-cell">
+            <span class="mint-cell" title="${Utils.escapeHtml(value)}">${short}</span>
+            <span class="ohlcv-token-actions">
+              <button class="btn btn-small btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="Delete OHLCV data" aria-label="Delete OHLCV data">
+                <i class="icon-trash-2"></i>
+              </button>
+            </span>
+          </span>`;
         },
       },
       {
@@ -152,19 +159,6 @@ export function createOhlcvModule(deps) {
           return timeAgoCell(timestamp);
         },
       },
-      {
-        id: "actions",
-        label: "",
-        sortable: false,
-        minWidth: 80,
-        maxWidth: 80,
-        wrap: false,
-        render: (_value, row) => {
-          return `<button class="btn btn-small btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="Delete OHLCV data">
-            <i class="icon-trash-2"></i>
-          </button>`;
-        },
-      },
     ];
   };
 
@@ -239,7 +233,7 @@ export function createOhlcvModule(deps) {
       if (response) {
         Utils.showToast(
           `Deleted: ${response.candles_deleted} candles, ${response.pools_deleted} pools`,
-          "success",
+          "success"
         );
         await fetchOhlcvData();
         updateOhlcvTable();
@@ -377,7 +371,7 @@ export function createOhlcvModule(deps) {
           label: "OHLCV",
           getInterval: () => 30000,
           pauseWhenHidden: true,
-        },
+        }
       );
     }
     deps.ohlcvPoller.start();
