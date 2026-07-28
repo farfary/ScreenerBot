@@ -367,8 +367,8 @@ export class TradeActionDialog {
                 <span>Fetching token info...</span>
               </div>
               <div class="quick-trade-token-info">
-                <div class="quick-trade-token-symbol"></div>
-                <div class="quick-trade-token-name"></div>
+                <div class="quick-trade-token-symbol token-symbol-type"></div>
+                <div class="quick-trade-token-name token-name-type"></div>
                 <div class="quick-trade-token-price"></div>
               </div>
             </div>
@@ -902,8 +902,8 @@ export class TradeActionDialog {
       <div class="trade-action-token">
         <div class="trade-action-token-logo">${logoHtml}</div>
         <div class="trade-action-token-meta">
-          <span class="trade-action-token-symbol">${Utils.escapeHtml(displaySymbol)}</span>
-          ${name ? `<span class="trade-action-token-name">${Utils.escapeHtml(name)}</span>` : ""}
+          <span class="trade-action-token-symbol token-symbol-type">${Utils.escapeHtml(displaySymbol)}</span>
+          ${name ? `<span class="trade-action-token-name token-name-type">${Utils.escapeHtml(name)}</span>` : ""}
         </div>
         ${
           context.hasPosition

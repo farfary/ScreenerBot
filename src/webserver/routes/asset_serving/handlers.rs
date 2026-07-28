@@ -293,7 +293,7 @@ pub async fn get_provider_logo(Path(file): Path<String>) -> Response {
     }
 }
 
-/// Serve fonts (Lucide icons, JetBrains Mono, Orbitron)
+/// Serve fonts (Lucide icons, Inter, JetBrains Mono, Orbitron)
 pub async fn get_font(Path(file): Path<String>) -> Response {
     match file.as_str() {
         // Lucide icon font
@@ -325,6 +325,19 @@ pub async fn get_font(Path(file): Path<String>) -> Response {
             StatusCode::OK,
             [(http_header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
             embeds::LUCIDE_FONT_SVG,
+        )
+            .into_response(),
+        // Inter - human-readable interface text
+        "Inter-Variable.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            embeds::INTER_VARIABLE,
+        )
+            .into_response(),
+        "Inter-VariableItalic.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            embeds::INTER_VARIABLE_ITALIC,
         )
             .into_response(),
         // JetBrains Mono - tabular numbers for trading data

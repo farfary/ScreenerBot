@@ -180,7 +180,7 @@
 .search-result-logo-placeholder {
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   flex-shrink: 0;
   object-fit: cover;
 }
@@ -388,5 +388,4 @@
 [data-theme="light"] .search-tip {
   color: var(--text-secondary);
 }
-
 

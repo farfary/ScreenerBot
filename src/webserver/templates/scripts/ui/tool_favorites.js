@@ -137,7 +137,7 @@ export class ToolFavorites {
         <div class="favorite-info" data-action="select">
           <div class="favorite-token">
             ${fav.logo_url ? `<img src="${fav.logo_url}" class="favorite-logo" alt="">` : '<i class="icon-circle"></i>'}
-            <span class="favorite-symbol">${fav.symbol || fav.mint.slice(0, 6)}</span>
+            <span class="favorite-symbol token-symbol-type">${fav.symbol || fav.mint.slice(0, 6)}</span>
           </div>
           <div class="favorite-label">${fav.label || "No label"}</div>
           ${fav.use_count > 0 ? `<span class="favorite-uses">${fav.use_count}x</span>` : ""}

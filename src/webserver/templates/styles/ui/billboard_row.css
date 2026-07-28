@@ -188,7 +188,7 @@
 .billboard-row-card-logo {
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   object-fit: cover;
   background: var(--bg-secondary);
   flex-shrink: 0;
@@ -202,7 +202,7 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   flex-shrink: 0;

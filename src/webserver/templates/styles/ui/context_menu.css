@@ -291,7 +291,7 @@
 .context-menu-token-icon {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   background: var(--bg-card-hover);
   display: flex;
   align-items: center;

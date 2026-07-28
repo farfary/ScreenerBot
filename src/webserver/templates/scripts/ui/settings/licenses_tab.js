@@ -177,6 +177,12 @@ export function buildLicensesTab() {
           desc: "Icon font library",
         },
         {
+          name: "Inter",
+          license: "OFL-1.1",
+          url: "https://rsms.me/inter/",
+          desc: "Interface font",
+        },
+        {
           name: "JetBrains Mono",
           license: "OFL-1.1",
           url: "https://www.jetbrains.com/lp/mono/",

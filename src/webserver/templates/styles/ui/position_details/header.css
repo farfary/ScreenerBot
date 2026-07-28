@@ -128,7 +128,7 @@
 .position-details-dialog .header-logo {
   width: 52px;
   height: 52px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   overflow: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);

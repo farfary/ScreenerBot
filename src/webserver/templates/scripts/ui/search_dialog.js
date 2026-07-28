@@ -252,8 +252,8 @@ function renderResults() {
           <i class="icon-coins"></i>
         </div>
         <div class="search-result-info">
-          <div class="search-result-name">${escapeHTML(token.name || "Unknown")}</div>
-          <div class="search-result-symbol">${escapeHTML(token.symbol || "???")}</div>
+          <div class="search-result-name token-name-type">${escapeHTML(token.name || "Unknown")}</div>
+          <div class="search-result-symbol token-symbol-type">${escapeHTML(token.symbol || "???")}</div>
         </div>
       </div>
       <div class="search-result-data">

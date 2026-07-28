@@ -181,8 +181,8 @@ export function applyQuickTradeMixin(TradeActionDialog) {
         const mintShort = token.mint ? `${token.mint.slice(0, 4)}...${token.mint.slice(-4)}` : "";
         return `
           <div class="search-result-item" data-index="${index}" data-mint="${Utils.escapeHtml(token.mint)}">
-            <span class="search-result-symbol">${Utils.escapeHtml(token.symbol || "???")} </span>
-            <span class="search-result-name">${Utils.escapeHtml(token.name || "Unknown")}</span>
+            <span class="search-result-symbol token-symbol-type">${Utils.escapeHtml(token.symbol || "???")} </span>
+            <span class="search-result-name token-name-type">${Utils.escapeHtml(token.name || "Unknown")}</span>
             <span class="search-result-mint">${mintShort}</span>
           </div>
         `;

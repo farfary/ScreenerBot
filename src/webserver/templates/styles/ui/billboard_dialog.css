@@ -361,7 +361,7 @@
   width: 52px;
   height: 52px;
   flex-shrink: 0;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
 
   /* Ring in the CARD's background, not a colour, so the avatar reads as cut out
      of the banner in either theme. */

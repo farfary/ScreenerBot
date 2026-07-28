@@ -242,7 +242,9 @@ pub const LUCIDE_FONT_TTF: &[u8] = include_bytes!("assets/lucide-font/lucide.ttf
 pub const LUCIDE_FONT_EOT: &[u8] = include_bytes!("assets/lucide-font/lucide.eot");
 pub const LUCIDE_FONT_SVG: &str = include_str!("assets/lucide-font/lucide.svg");
 
-// Trading terminal fonts - Public for asset_serving.rs
+// Interface and trading-data fonts - Public for asset_serving.rs
+pub const INTER_VARIABLE: &[u8] = include_bytes!("assets/fonts/Inter-Variable.woff2");
+pub const INTER_VARIABLE_ITALIC: &[u8] = include_bytes!("assets/fonts/Inter-VariableItalic.woff2");
 pub const JETBRAINS_MONO_REGULAR: &[u8] =
     include_bytes!("assets/fonts/JetBrainsMono-Regular.woff2");
 pub const JETBRAINS_MONO_MEDIUM: &[u8] = include_bytes!("assets/fonts/JetBrainsMono-Medium.woff2");

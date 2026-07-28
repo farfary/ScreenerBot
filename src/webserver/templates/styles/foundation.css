@@ -4,6 +4,24 @@
    @font-face - Trading Terminal Fonts (embedded at compile time)
    ============================================================================= */
 
+/* Inter - Human-readable interface text. Both faces are compiled into the
+   binary, so typography never depends on an installed font or the network. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/fonts/Inter-Variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Inter";
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/assets/fonts/Inter-VariableItalic.woff2") format("woff2");
+}
+
 /* JetBrains Mono - Monospace font with tabular figures for trading data */
 @font-face {
   font-family: "JetBrains Mono";
@@ -180,6 +198,8 @@
   --radius-xl: 12px;
   --radius-2xl: 16px;
   --radius-full: 9999px;
+  /* Token artwork matches the website terminal: square with tight corners. */
+  --token-logo-radius: 3px;
 
   /* Transition Timing */
   --transition-fast: 150ms ease;
@@ -218,7 +238,7 @@
   --z-select-portal: 100000; /* Custom select portal mode */
 
   /* Typography System */
-  --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
+  --font-sans: "Inter", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", monaco, "Cascadia Code", "Roboto Mono", monospace;
   --font-data: "JetBrains Mono", "SF Mono", monaco, monospace;
 
@@ -369,6 +389,7 @@
   --radius-xl: 12px;
   --radius-2xl: 16px;
   --radius-full: 9999px;
+  --token-logo-radius: 3px;
 
   /* Transition Timing */
   --transition-fast: 150ms ease;

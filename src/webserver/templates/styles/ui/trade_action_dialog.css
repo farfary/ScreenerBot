@@ -178,7 +178,7 @@ body.trade-action-dialog-open {
   width: 36px;
   height: 36px;
   flex-shrink: 0;
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--token-logo-radius, 3px);
   border: 1px solid var(--border-color, #30363d);
   background: var(--bg-card-hover);
   overflow: hidden;

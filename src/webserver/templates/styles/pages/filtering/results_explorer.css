@@ -471,7 +471,7 @@
 .overview-token-avatar {
   width: 26px;
   height: 26px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   overflow: hidden;
   flex-shrink: 0;
   display: flex;
@@ -563,7 +563,7 @@
 .token-logo {
   width: 100%;
   height: 100%;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   object-fit: cover;
   background: var(--bg-tertiary);
 }

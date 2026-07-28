@@ -456,7 +456,7 @@ export class PositionDetailsDialog {
                 <div class="header-title-row">
                   <div class="header-title">
                     <span class="title-main" id="pdd-dialog-title">${Utils.escapeHtml(name)}</span>
-                    <span class="title-symbol">$${Utils.escapeHtml(symbol.toUpperCase())}</span>
+                    <span class="title-symbol token-symbol-type">$${Utils.escapeHtml(symbol.toUpperCase())}</span>
                   </div>
                   <div class="header-security" id="pddHeaderSecurity"></div>
                 </div>

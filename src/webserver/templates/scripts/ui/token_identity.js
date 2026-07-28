@@ -167,8 +167,8 @@ export function renderTokenChip(mintOrIdentity, options = {}) {
     <span class="ti-chip ti-chip-${size}" data-mint="${Utils.escapeHtml(identity.mint || "")}">
       ${renderTokenLogo(identity, { size })}
       <span class="ti-chip-text">
-        <span class="ti-chip-symbol">${Utils.escapeHtml(symbol)}</span>
-        ${name ? `<span class="ti-chip-name">${Utils.escapeHtml(name)}</span>` : ""}
+        <span class="ti-chip-symbol token-symbol-type">${Utils.escapeHtml(symbol)}</span>
+        ${name ? `<span class="ti-chip-name token-name-type">${Utils.escapeHtml(name)}</span>` : ""}
         ${showMint && identity.mint ? renderAddress(identity.mint) : ""}
       </span>
     </span>
@@ -207,7 +207,7 @@ export function renderAssetInline(mintOrIdentity, options = {}) {
   return `
     <span class="ti-inline">
       ${renderTokenLogo(identity, { size })}
-      <span class="ti-inline-symbol">${Utils.escapeHtml(identity.symbol || "Unknown")}</span>
+      <span class="ti-inline-symbol token-symbol-type">${Utils.escapeHtml(identity.symbol || "Unknown")}</span>
     </span>
   `;
 }

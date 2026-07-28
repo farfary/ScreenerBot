@@ -654,7 +654,7 @@
 .favorite-logo {
   width: 20px;
   height: 20px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
 }
 
 .favorite-symbol {

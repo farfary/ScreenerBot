@@ -4,6 +4,20 @@
    asset, so every surface shows the same logo, symbol, name and FULL mint.
    ============================================================================= */
 
+/* Canonical identity type roles. Symbols stay readable in the interface sans;
+   names read as compact metadata in the data face. Surfaces own size/colour. */
+.token-symbol-type {
+  font-family: var(--font-sans) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.token-name-type {
+  font-family: var(--font-mono) !important;
+  font-weight: 400 !important;
+  letter-spacing: -0.03em !important;
+}
+
 /* --- Logo ---------------------------------------------------------------- */
 
 .ti-logo {
@@ -13,7 +27,7 @@
   overflow: hidden;
   flex-shrink: 0;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   background: var(--bg-primary);
 }
 

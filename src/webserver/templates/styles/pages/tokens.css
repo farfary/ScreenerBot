@@ -29,7 +29,7 @@
   height: 28px;
   min-width: 28px;
   min-height: 28px;
-  border-radius: var(--radius-full);
+  border-radius: var(--token-logo-radius, 3px);
   object-fit: cover;
   background: var(--bg-secondary);
   flex-shrink: 0;
