@@ -799,6 +799,16 @@ export class TokenDetailsDialog {
           this._logoZoomHandler = null;
         }
 
+        if (this._bannerZoomHandler) {
+          const body = this.dialogEl.querySelector(".dialog-body");
+          if (body) {
+            body.removeEventListener("click", this._bannerZoomHandler);
+            body.removeEventListener("keydown", this._bannerZoomKeyHandler);
+          }
+          this._bannerZoomHandler = null;
+          this._bannerZoomKeyHandler = null;
+        }
+
         // Clean up favorites-changed listener
         if (this._favoritesChangedHandler) {
           window.removeEventListener(
@@ -1337,10 +1347,44 @@ export class TokenDetailsDialog {
           imageUrl: url,
           symbol: this.tokenData?.symbol || "",
           name: this.tokenData?.name || "",
+          mediaType: "logo",
         });
       };
       logoEl.addEventListener("click", this._logoZoomHandler);
       logoEl.classList.add("clickable-logo");
+    }
+
+    // The banner can arrive or change after the dialog opens, so delegate from
+    // the stable dialog body instead of binding to the current image element.
+    const body = this.dialogEl.querySelector(".dialog-body");
+    if (body) {
+      const openBanner = (banner) => {
+        const url = banner.querySelector("img")?.getAttribute("src");
+        if (!url) return;
+        showImageLightbox({
+          imageUrl: url,
+          symbol: this.tokenData?.symbol || "",
+          name: this.tokenData?.name || "",
+          mediaType: "banner",
+        });
+      };
+      this._bannerZoomHandler = (event) => {
+        const banner = event.target.closest(".token-banner");
+        if (!banner) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openBanner(banner);
+      };
+      this._bannerZoomKeyHandler = (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        const banner = event.target.closest(".token-banner");
+        if (!banner) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openBanner(banner);
+      };
+      body.addEventListener("click", this._bannerZoomHandler);
+      body.addEventListener("keydown", this._bannerZoomKeyHandler);
     }
 
     // Listen for favorite changes from other UI components (context menu, etc.)
@@ -1352,7 +1396,6 @@ export class TokenDetailsDialog {
     window.addEventListener("screenerbot:favorites-changed", this._favoritesChangedHandler);
 
     // Delegated retry handler for the initial-load error state's Retry button.
-    const body = this.dialogEl.querySelector(".dialog-body");
     if (body) {
       this._retryHandler = (e) => {
         const btn = e.target.closest('[data-action="tdd-retry"]');

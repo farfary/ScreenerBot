@@ -1,5 +1,5 @@
 /**
- * Image Lightbox — zoom a token logo (or any image) into a centered overlay.
+ * Image Lightbox — zoom a token logo or banner into a centered overlay.
  *
  * Shared by the tokens data table (row logo click) and the token details dialog
  * (header logo click). Styles live in the global components.css (.image-lightbox
@@ -15,13 +15,22 @@ import * as Utils from "../core/utils.js";
  * @param {string} [opts.symbol] - Token symbol shown in the header.
  * @param {string} [opts.name] - Token name shown in the header.
  * @param {Array<{label:string,value:string}>} [opts.stats] - Optional footer stats.
+ * @param {"logo"|"banner"} [opts.mediaType] - Controls the image frame geometry.
  * @returns {(() => void)|undefined}
  */
-export function showImageLightbox({ imageUrl, symbol = "", name = "", stats = [] } = {}) {
+export function showImageLightbox({
+  imageUrl,
+  symbol = "",
+  name = "",
+  stats = [],
+  mediaType = "logo",
+} = {}) {
   if (!imageUrl) return undefined;
 
   const lightbox = document.createElement("div");
   lightbox.className = "image-lightbox";
+  lightbox.dataset.state = "opening";
+  const normalizedMediaType = mediaType === "banner" ? "banner" : "logo";
 
   // Minimal, image-focused: floating save/close controls, one subtle caption
   // line (symbol · name · optional stats) — no heavy header or footer.
@@ -59,16 +68,99 @@ export function showImageLightbox({ imageUrl, symbol = "", name = "", stats = []
         </svg>
       </button>
     </div>
-    <div class="lightbox-stage">
+    <div class="lightbox-stage" data-media-type="${normalizedMediaType}">
       <div class="lightbox-image-wrapper">
-        <img src="${Utils.escapeHtml(imageUrl)}" alt="${Utils.escapeHtml(symbol || name || "Image")}" class="lightbox-image" />
+        <img src="${Utils.escapeHtml(imageUrl)}" alt="${Utils.escapeHtml(symbol || name || "Image")}" class="lightbox-image" draggable="false" />
       </div>
       ${captionHtml}
     </div>
   `;
 
   document.body.appendChild(lightbox);
-  requestAnimationFrame(() => lightbox.classList.add("active"));
+  const previousBodyOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  requestAnimationFrame(() => {
+    if (closed) return;
+    lightbox.classList.add("active");
+    lightbox.dataset.state = "open";
+  });
+
+  const image = lightbox.querySelector(".lightbox-image");
+  const view = { scale: 1, x: 0, y: 0 };
+  const drag = {
+    active: false,
+    moved: false,
+    pointerId: 0,
+    startX: 0,
+    startY: 0,
+    originX: 0,
+    originY: 0,
+  };
+  let closed = false;
+
+  const renderView = () => {
+    image.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`;
+  };
+
+  const wheelHandler = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    if (delta === 0) return;
+
+    const nextScale = Math.min(5, Math.max(1, view.scale * Math.exp(-delta * 0.002)));
+    if (nextScale <= 1.001) {
+      view.scale = 1;
+      view.x = 0;
+      view.y = 0;
+      renderView();
+      return;
+    }
+
+    const pointerX = event.clientX - window.innerWidth / 2;
+    const pointerY = event.clientY - window.innerHeight / 2;
+    const ratio = nextScale / view.scale;
+    view.x = pointerX - (pointerX - view.x) * ratio;
+    view.y = pointerY - (pointerY - view.y) * ratio;
+    view.scale = nextScale;
+    renderView();
+  };
+
+  const pointerDownHandler = (event) => {
+    if (view.scale <= 1) return;
+    event.stopPropagation();
+    image.setPointerCapture(event.pointerId);
+    Object.assign(drag, {
+      active: true,
+      moved: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: view.x,
+      originY: view.y,
+    });
+    image.dataset.dragging = "true";
+  };
+
+  const pointerMoveHandler = (event) => {
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (Math.hypot(deltaX, deltaY) > 3) drag.moved = true;
+    view.x = drag.originX + deltaX;
+    view.y = drag.originY + deltaY;
+    renderView();
+  };
+
+  const endDrag = (event) => {
+    if (!drag.active || (event && drag.pointerId !== event.pointerId)) return;
+    drag.active = false;
+    if (event && image.hasPointerCapture(event.pointerId)) {
+      image.releasePointerCapture(event.pointerId);
+    }
+    image.dataset.dragging = "false";
+  };
 
   const escapeHandler = (e) => {
     if (e.key === "Escape") close();
@@ -76,11 +168,36 @@ export function showImageLightbox({ imageUrl, symbol = "", name = "", stats = []
   document.addEventListener("keydown", escapeHandler);
 
   const close = () => {
+    if (closed) return;
+    closed = true;
     lightbox.classList.remove("active");
+    lightbox.dataset.state = "closing";
     document.removeEventListener("keydown", escapeHandler);
-    setTimeout(() => lightbox.remove(), 300);
+    lightbox.removeEventListener("wheel", wheelHandler);
+    image.removeEventListener("pointerdown", pointerDownHandler);
+    image.removeEventListener("pointermove", pointerMoveHandler);
+    image.removeEventListener("pointerup", endDrag);
+    image.removeEventListener("pointercancel", endDrag);
+    document.body.style.overflow = previousBodyOverflow;
+    setTimeout(
+      () => lightbox.remove(),
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 140
+    );
   };
 
+  lightbox.addEventListener("wheel", wheelHandler, { passive: false });
+  image.addEventListener("pointerdown", pointerDownHandler);
+  image.addEventListener("pointermove", pointerMoveHandler);
+  image.addEventListener("pointerup", endDrag);
+  image.addEventListener("pointercancel", endDrag);
+  image.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (drag.moved) {
+      drag.moved = false;
+      return;
+    }
+    close();
+  });
   lightbox.querySelector(".lightbox-close").addEventListener("click", close);
   lightbox.querySelector(".lightbox-backdrop").addEventListener("click", close);
   lightbox.querySelector(".lightbox-save").addEventListener("click", (e) => {
@@ -97,7 +214,9 @@ export function showImageLightbox({ imageUrl, symbol = "", name = "", stats = []
  */
 async function saveImage(url, label) {
   const base = (label || "image").replace(/[^\w.-]+/g, "_") || "image";
-  const ext = (url.split(/[?#]/)[0].match(/\.(png|jpe?g|gif|webp|svg)$/i)?.[1] || "png").toLowerCase();
+  const ext = (
+    url.split(/[?#]/)[0].match(/\.(png|jpe?g|gif|webp|svg)$/i)?.[1] || "png"
+  ).toLowerCase();
   const filename = `${base}.${ext}`;
   try {
     const res = await fetch(url, { mode: "cors" });

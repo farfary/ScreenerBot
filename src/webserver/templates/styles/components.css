@@ -802,15 +802,19 @@
 /* Image Lightbox -------------------------------------------------- */
 
 .clickable-logo {
-  cursor: pointer;
+  cursor: zoom-in;
   transition:
-    transform 0.2s ease,
-    opacity 0.2s ease;
+    filter 160ms ease,
+    transform 160ms ease;
 }
 
 .clickable-logo:hover {
-  transform: scale(1.15);
-  opacity: 0.85;
+  filter: brightness(1.08);
+  transform: scale(1.12);
+}
+
+.clickable-logo:active {
+  transform: scale(0.94);
 }
 
 /* Generic stat label/value utilities (used by various stat blocks, e.g. the AI
@@ -846,7 +850,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity var(--transition-normal);
+  transition: opacity 180ms ease-out;
   pointer-events: none;
 }
 
@@ -855,11 +859,19 @@
   pointer-events: auto;
 }
 
+.image-lightbox[data-state="closing"] {
+  transition-duration: 140ms;
+}
+
+.image-lightbox[data-state="closing"] .lightbox-backdrop {
+  backdrop-filter: none;
+}
+
 .lightbox-backdrop {
   position: absolute;
   inset: 0;
   background: rgb(0, 0, 0, 0.9);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(12px) saturate(0.7);
   cursor: zoom-out;
 }
 
@@ -870,19 +882,37 @@
   flex-direction: column;
   align-items: center;
   gap: 18px;
-  max-width: min(90vw, 520px);
-  animation: lightboxSlideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  filter: drop-shadow(0 1.6rem 2.5rem rgb(0, 0, 0, 0.62));
+  transform: perspective(900px) rotateX(1.5deg) translateY(-0.35rem);
+  animation: lightbox-image-in 260ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  will-change: transform, opacity;
 }
 
-@keyframes lightboxSlideUp {
-  0% {
-    transform: scale(0.92);
+.image-lightbox[data-state="closing"] .lightbox-stage {
+  animation: lightbox-image-out 140ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes lightbox-image-in {
+  from {
+    transform: perspective(900px) rotateX(4deg) translateY(0.8rem) scale(0.94);
     opacity: 0;
   }
 
-  100% {
-    transform: scale(1);
+  to {
+    transform: perspective(900px) rotateX(1.5deg) translateY(-0.35rem) scale(1);
     opacity: 1;
+  }
+}
+
+@keyframes lightbox-image-out {
+  from {
+    transform: perspective(900px) rotateX(1.5deg) translateY(-0.35rem) scale(1);
+    opacity: 1;
+  }
+
+  to {
+    transform: perspective(900px) rotateX(3deg) translateY(0.3rem) scale(0.96);
+    opacity: 0;
   }
 }
 
@@ -934,25 +964,47 @@
   height: 20px;
 }
 
-/* Image surface: subtle rounded panel so transparent images stay legible */
+/* The media itself is the frame: logos keep their configured shape and banners
+   retain their native 3:1 geometry instead of being letterboxed in a square. */
 .lightbox-image-wrapper {
-  width: min(80vw, 420px);
-  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 28px;
-  background: var(--bg-card);
-  border: 1px solid rgb(255, 255, 255, 0.08);
-  border-radius: var(--radius-2xl);
-  box-shadow: 0 30px 90px rgb(0, 0, 0, 0.6);
+  max-width: min(88vw, 72rem);
+  max-height: calc(100vh - 11rem);
 }
 
 .lightbox-image {
-  max-width: 100%;
-  max-height: 100%;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(88vw, 72rem);
+  max-height: calc(100vh - 11rem);
+  border-radius: var(--radius-xl);
   object-fit: contain;
-  filter: drop-shadow(0 8px 24px rgb(0, 0, 0, 0.35));
+  cursor: zoom-out;
+  transition: transform 70ms ease-out;
+  touch-action: none;
+  user-select: none;
+}
+
+.lightbox-stage[data-media-type="logo"] .lightbox-image-wrapper,
+.lightbox-stage[data-media-type="logo"] .lightbox-image {
+  max-width: min(72vw, 36rem);
+  max-height: min(calc(100vh - 11rem), 36rem);
+}
+
+.lightbox-stage[data-media-type="logo"] .lightbox-image {
+  border-radius: var(--token-logo-radius);
+}
+
+.lightbox-stage[data-media-type="banner"] .lightbox-image {
+  aspect-ratio: 3 / 1;
+}
+
+.lightbox-image[data-dragging="true"] {
+  cursor: grabbing;
+  transition: none;
 }
 
 /* Minimal single-line caption on the dark backdrop → fixed light colors */
@@ -988,11 +1040,6 @@
 
 /* Responsive adjustments */
 @media (width <= 768px) {
-  .lightbox-image-wrapper {
-    width: 82vw;
-    padding: 20px;
-  }
-
   .lightbox-btn {
     width: 36px;
     height: 36px;
@@ -1001,5 +1048,19 @@
   .lightbox-btn svg {
     width: 18px;
     height: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-lightbox,
+  .image-lightbox[data-state="closing"],
+  .lightbox-stage,
+  .image-lightbox[data-state="closing"] .lightbox-stage {
+    animation-duration: 1ms;
+    transition-duration: 1ms;
+  }
+
+  .clickable-logo {
+    transition: none;
   }
 }

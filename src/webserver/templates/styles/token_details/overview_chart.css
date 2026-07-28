@@ -35,6 +35,7 @@
   overflow: hidden;
   background: var(--bg-primary);
   line-height: 0;
+  cursor: zoom-in;
 }
 
 .token-banner-img {
@@ -45,6 +46,25 @@
      decodes and the stats below never shift once it lands. */
   aspect-ratio: 3 / 1;
   object-fit: cover;
+  transition:
+    filter 160ms ease,
+    transform 160ms ease;
+}
+
+.token-banner:hover .token-banner-img,
+.token-banner:focus-visible .token-banner-img {
+  filter: brightness(1.08);
+  transform: scale(1.015);
+}
+
+.token-banner:active .token-banner-img {
+  transform: scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .token-banner-img {
+    transition: none;
+  }
 }
 
 /* Quick Stats Bar */

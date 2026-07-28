@@ -105,7 +105,12 @@ export function renderOverviewBanner(token) {
   // A dead banner URL removes the element entirely rather than leaving a broken
   // image frame -- the banner is strictly optional chrome.
   return `
-    <div class="token-banner">
+    <div
+      class="token-banner"
+      role="button"
+      tabindex="0"
+      aria-label="Open token banner"
+    >
       <img
         src="${Utils.escapeHtml(url)}"
         alt=""
