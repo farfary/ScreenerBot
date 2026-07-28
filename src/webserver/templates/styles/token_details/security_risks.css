@@ -1,65 +1,86 @@
 /* =============================================================================
-   SECURITY TAB — LOADING STATE & STATUS BAR
-   -----------------------------------------------------------------------------
-   Risk-list, podium and holders styling now live solely in
-   security_holders.css (this file used to carry a stale duplicate). What
-   remains here is unique: the Rugcheck loading placeholder and the
-   responsive data-sources status bar.
+   SECURITY TAB — RISK SIGNALS
    ============================================================================= */
 
-.security-loading-notice {
+.security-risk-list {
   display: flex;
+  flex-direction: column;
+}
+
+.security-risk-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  margin-bottom: 16px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
+  gap: 9px;
+  min-height: 46px;
+  padding: 7px 12px;
+  transition: background var(--transition-fast);
 }
 
-.loading-spinner-small {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--border-color);
-  border-top-color: var(--primary-color);
-  border-radius: var(--radius-full);
-  animation: spin 0.8s linear infinite;
+.security-risk-row + .security-risk-row {
+  border-top: 1px solid var(--border-subtle, var(--border-color));
 }
 
-.security-placeholder {
-  padding: 24px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+.security-risk-row:hover {
+  background: var(--bg-card-hover);
+}
+
+.security-risk-icon {
+  color: var(--text-muted);
+  font-size: 0.9rem;
   text-align: center;
 }
 
-.security-placeholder p {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  margin: 0;
+.security-risk-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
-/* Responsive adjustments for status bar */
-@media (width <= 600px) {
-  .data-sources-status {
-    gap: 8px;
-    padding: 4px 12px;
-    font-size: 0.6rem;
+.security-risk-name {
+  color: var(--text-primary);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.security-risk-description {
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.security-risk-level {
+  color: var(--text-muted);
+  font-size: 0.57rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.security-risk-row.risk-danger .security-risk-icon,
+.security-risk-row.risk-danger .security-risk-level {
+  color: var(--danger);
+}
+
+.security-risk-row.risk-warn .security-risk-icon,
+.security-risk-row.risk-warn .security-risk-level {
+  color: var(--warning-color);
+}
+
+.security-risk-row.risk-info .security-risk-icon,
+.security-risk-row.risk-info .security-risk-level {
+  color: var(--primary-color);
+}
+
+@container (width <= 420px) {
+  .security-risk-row {
+    grid-template-columns: 18px minmax(0, 1fr);
   }
 
-  .status-label {
-    display: none;
-  }
-
-  .source-status {
-    gap: 0;
-  }
-
-  .source-status[title]::after {
-    content: none;
+  .security-risk-level {
+    grid-column: 2;
+    justify-self: start;
   }
 }

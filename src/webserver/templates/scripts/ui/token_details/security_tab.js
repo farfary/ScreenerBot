@@ -12,20 +12,14 @@ import { renderTabState } from "./state_handling.js";
  * @returns {string} HTML string for security tab
  */
 export function renderSecurityTab(token, options = {}) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
-
-  // Check if we have security data
+  const { renderHintTrigger, escapeHtml } = options;
   const hasSecurityData = token.safety_score !== undefined && token.safety_score !== null;
 
   if (!hasSecurityData) {
-    return buildSecurityLoadingContent(token, {
-      renderHintTrigger,
-      escapeHtml,
-      formatShortAddress,
-    });
+    return buildSecurityLoadingContent(token, { renderHintTrigger });
   }
 
-  return buildSecurityContent(token, { renderHintTrigger, escapeHtml, formatShortAddress });
+  return buildSecurityContent(token, { renderHintTrigger, escapeHtml });
 }
 
 function buildSecurityLoadingContent(token, options) {
@@ -38,34 +32,22 @@ function buildSecurityLoadingContent(token, options) {
           <div class="loading-spinner-small"></div>
           <span>Rugcheck analysis in progress...</span>
         </div>
-        <div class="security-card security-summary" style="--i:0">
-          <div class="card-header">
-            <span class="section-title"><i class="icon-shield-check"></i> Security Pulse ${renderHintTrigger("tokenDetails.security")}</span>
-          </div>
-          <div class="card-body security-summary__body">
-            <div class="security-summary__score">
-              <div class="security-score-circle">
-                <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
-                  <circle class="score-bg" cx="60" cy="60" r="46"></circle>
-                </svg>
-                <div class="score-content">
-                  <span class="score-value" style="opacity: 0.3;">—</span>
-                  <span class="score-max">SCORE</span>
-                </div>
-              </div>
-              <div class="safety-badge" style="background: var(--bg-secondary); color: var(--text-muted);">
-                Analyzing...
-              </div>
-            </div>
-            <div class="security-summary__section">
-              <div class="sec-section-head">
-                <span>Token Control</span>
-                <span class="sec-section-sub">Authority status</span>
-              </div>
-              ${buildAuthorityGrid(token)}
+        <section class="security-summary">
+          ${buildSectionHeader(
+            `<span class="security-section-title"><i class="icon-shield-check"></i> Security Pulse ${renderHintTrigger("tokenDetails.security")}</span>`
+          )}
+          <div class="security-score-overview">
+            ${buildScoreRing(null, "")}
+            <div class="security-score-copy">
+              <span class="security-grade is-pending">Analyzing</span>
+              <span class="security-score-caption">Risk signals are still being collected.</span>
             </div>
           </div>
-        </div>
+          <div class="security-summary-section">
+            ${buildSubsectionHeader("Token Control", "Authority status")}
+            ${buildAuthorityList(token)}
+          </div>
+        </section>
       </div>
       <div class="security-right-col">
         ${renderTabState({ kind: "loading", message: "Analyzing security…" })}
@@ -75,9 +57,7 @@ function buildSecurityLoadingContent(token, options) {
 }
 
 function buildSecurityContent(token, options) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
-
-  // Use safety_score (0-100, higher = safer) for display
+  const { renderHintTrigger, escapeHtml } = options;
   const safetyScore = token.safety_score;
   const scoreClass = getSafetyScoreClass(safetyScore);
   const scoreLabel = getSafetyScoreLabel(safetyScore);
@@ -85,139 +65,153 @@ function buildSecurityContent(token, options) {
   return `
     <div class="security-container">
       <div class="security-left-col">
-        ${buildSecuritySummaryCard(token, safetyScore, scoreClass, scoreLabel, { renderHintTrigger })}
+        ${buildSecuritySummary(token, safetyScore, scoreClass, scoreLabel, {
+          renderHintTrigger,
+          escapeHtml,
+        })}
       </div>
       <div class="security-right-col">
-        ${buildHoldersCard(token)}
-        ${buildTransferFeeCard(token)}
+        ${buildHolderHealthSection(token)}
+        ${buildTransferFeeSection(token)}
         ${buildRisksSection(token.security_risks, { escapeHtml })}
-        ${buildTopHoldersSection(token, { escapeHtml, formatShortAddress })}
+        ${buildTopHoldersSection(token, { escapeHtml })}
       </div>
     </div>
   `;
 }
 
-/**
- * Single unified left-column card: score hero + key stats + token control.
- * Replaces the three separate cards (header / bento grid / authorities) with
- * one cohesive panel divided into sections.
- */
-function buildSecuritySummaryCard(token, safetyScore, scoreClass, scoreLabel, options) {
-  const { renderHintTrigger } = options;
-
+function buildSecuritySummary(token, safetyScore, scoreClass, scoreLabel, options) {
+  const { renderHintTrigger, escapeHtml } = options;
   const lastUpdated = token.security_last_updated
     ? Utils.formatTimestamp(token.security_last_updated)
     : null;
-
-  // Safety score is 0-100 (higher = safer)
-  const score = safetyScore ?? 0;
-  const scorePercent = Math.min(100, Math.max(0, score));
-  const circumference = 2 * Math.PI * 46; // radius = 46 for 120px ring
-  const offset = circumference - (scorePercent / 100) * circumference;
-
-  // Badge colour follows the score class (good/warn/critical). Keys must match
-  // getSafetyScoreClass() output — previously they didn't, so a "Safe" token
-  // was rendered with the amber fallback instead of green.
-  const badgeClassMap = {
-    "score-safe": "good",
-    "score-caution": "warning",
-    "score-vulnerable": "critical",
+  const gradeClassMap = {
+    "score-safe": "is-good",
+    "score-caution": "is-warning",
+    "score-vulnerable": "is-critical",
   };
-  const badge = { label: scoreLabel, class: badgeClassMap[scoreClass] || "warning" };
-
-  const statsHtml = buildSummaryStats(token);
+  const gradeClass = gradeClassMap[scoreClass] || "is-warning";
+  const meta = lastUpdated && !token.rugged ? `Updated ${lastUpdated}` : "";
 
   return `
-    <div class="security-card security-summary" style="--i:0">
-      <div class="card-header">
-        <span class="section-title"><i class="icon-shield-check"></i> Security Pulse ${renderHintTrigger("tokenDetails.security")}</span>
-        ${lastUpdated && !token.rugged ? `<span class="card-subtitle">Updated ${lastUpdated}</span>` : ""}
-      </div>
-      <div class="card-body security-summary__body">
-        <div class="security-summary__score">
-          <div class="security-score-circle">
-            <div class="score-glow ${scoreClass}"></div>
-            <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
-              <circle class="score-bg" cx="60" cy="60" r="46"></circle>
-              <circle class="score-ring ${scoreClass}" cx="60" cy="60" r="46"
-                style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset};"></circle>
-            </svg>
-            <div class="score-content">
-              <span class="score-value">${score}</span>
-              <span class="score-max">SCORE</span>
-            </div>
-          </div>
-          <div class="safety-badge ${badge.class}">${badge.label}</div>
+    <section class="security-summary">
+      ${buildSectionHeader(
+        `<span class="security-section-title"><i class="icon-shield-check"></i> Security Pulse ${renderHintTrigger("tokenDetails.security")}</span>`,
+        meta
+      )}
+      <div class="security-score-overview">
+        ${buildScoreRing(safetyScore, scoreClass)}
+        <div class="security-score-copy">
+          <span class="security-grade ${gradeClass}">${scoreLabel}</span>
+          <span class="security-score-caption">Normalized token risk score out of 100.</span>
           ${
             token.rugged
-              ? `<div class="rugged-warning" style="margin-top: 4px; border-radius: 10px;">
-                  <i class="icon-skull" style="font-size: 20px;"></i>
-                  <span style="font-size: 1rem; letter-spacing: 0.1em; font-weight: 800;">RUGGED</span>
-                </div>`
+              ? "<span class='security-rugged'><i class='icon-skull'></i> Rugged</span>"
               : ""
           }
         </div>
-        ${statsHtml}
-        <div class="security-summary__section">
-          <div class="sec-section-head">
-            <span>Token Control</span>
-            <span class="sec-section-sub">Authority status</span>
-          </div>
-          ${buildAuthorityGrid(token)}
-        </div>
+      </div>
+      ${buildSummaryMetrics(token, { escapeHtml })}
+      <div class="security-summary-section">
+        ${buildSubsectionHeader("Token Control", "Authority status")}
+        ${buildAuthorityList(token)}
+      </div>
+    </section>
+  `;
+}
+
+function buildSectionHeader(titleHtml, meta = "") {
+  return `
+    <header class="security-section-header">
+      ${titleHtml}
+      ${meta ? `<span class="security-section-meta">${meta}</span>` : ""}
+    </header>
+  `;
+}
+
+function buildSubsectionHeader(title, meta = "") {
+  return `
+    <div class="security-subsection-header">
+      <span>${title}</span>
+      ${meta ? `<span class="security-section-meta">${meta}</span>` : ""}
+    </div>
+  `;
+}
+
+function buildScoreRing(score, scoreClass) {
+  const isPending = score === null || score === undefined;
+  const normalizedScore = isPending ? 0 : Math.min(100, Math.max(0, Number(score)));
+  const circumference = 2 * Math.PI * 46;
+  const offset = circumference - (normalizedScore / 100) * circumference;
+
+  return `
+    <div class="security-score-ring ${isPending ? "is-pending" : ""}">
+      <svg class="security-score-progress" width="108" height="108" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="security-score-track" cx="60" cy="60" r="46"></circle>
+        ${
+          isPending
+            ? ""
+            : `<circle class="security-score-value-ring ${scoreClass}" cx="60" cy="60" r="46"
+                style="stroke-dasharray:${circumference};stroke-dashoffset:${offset}"></circle>`
+        }
+      </svg>
+      <div class="security-score-readout">
+        <span class="security-score-value">${isPending ? "—" : normalizedScore}</span>
+        <span class="security-score-max">Score</span>
       </div>
     </div>
   `;
 }
 
-/** Compact inline stat strip (holders / LP providers / graph insiders / type). */
-function buildSummaryStats(token) {
-  const items = [];
+function buildSummaryMetrics(token, options = {}) {
+  const { escapeHtml } = options;
+  const safe = escapeHtml || Utils.escapeHtml;
+  const metrics = [];
 
   if (token.token_type) {
-    items.push({
+    metrics.push({
       label: "Token Type",
-      value: token.token_type,
-      icon: '<i class="icon-box"></i>',
+      value: safe(String(token.token_type)),
+      icon: "icon-box",
     });
   }
 
   if (token.total_holders !== null && token.total_holders !== undefined) {
-    items.push({
+    metrics.push({
       label: "Total Holders",
       value: Utils.formatCompactNumber(token.total_holders),
-      icon: '<i class="icon-users"></i>',
+      icon: "icon-users",
     });
   }
 
   if (token.lp_provider_count !== null && token.lp_provider_count !== undefined) {
-    items.push({
+    metrics.push({
       label: "LP Providers",
       value: Utils.formatNumber(token.lp_provider_count, { decimals: 0 }),
-      icon: '<i class="icon-droplet"></i>',
+      icon: "icon-droplet",
     });
   }
 
   if (token.graph_insiders_detected !== null && token.graph_insiders_detected !== undefined) {
-    const isDangerous = token.graph_insiders_detected > 0;
-    items.push({
+    const hasInsiders = token.graph_insiders_detected > 0;
+    metrics.push({
       label: "Graph Insiders",
-      value: `${isDangerous ? "Detected" : "Clean"} ${token.graph_insiders_detected > 0 ? `(${token.graph_insiders_detected})` : ""}`,
-      icon: isDangerous ? '<i class="icon-triangle-alert"></i>' : '<i class="icon-search"></i>',
-      class: isDangerous ? "warning" : "good",
+      value: hasInsiders ? `Detected (${token.graph_insiders_detected})` : "Clean",
+      icon: hasInsiders ? "icon-triangle-alert" : "icon-search",
+      state: hasInsiders ? "is-warning" : "is-good",
     });
   }
 
-  if (items.length === 0) return "";
+  if (metrics.length === 0) return "";
 
   return `
-    <div class="security-summary__stats">
-      ${items
+    <div class="security-metric-grid">
+      ${metrics
         .map(
-          (item) => `
-        <div class="sec-stat ${item.class || ""}">
-          <span class="sec-stat__label">${item.icon} ${item.label}</span>
-          <span class="sec-stat__value">${item.value}</span>
+          (metric) => `
+        <div class="security-metric ${metric.state || ""}">
+          <span class="security-metric-label"><i class="${metric.icon}"></i>${metric.label}</span>
+          <span class="security-metric-value">${metric.value}</span>
         </div>
       `
         )
@@ -226,165 +220,139 @@ function buildSummaryStats(token) {
   `;
 }
 
-/** Token-control authority grid (mint + freeze), shared by summary + loading. */
-function buildAuthorityGrid(token) {
+function buildAuthorityList(token) {
   return `
-        <div class="authority-grid">
-          ${buildAuthorityTile("Mint", "icon-wrench", token.mint_authority, "Immutable", "Mutable")}
-          ${buildAuthorityTile("Freeze", "icon-snowflake", token.freeze_authority, "Revoked", "Active")}
-        </div>
+    <div class="security-authority-list">
+      ${buildAuthorityRow("Mint", "icon-wrench", token.mint_authority, "Immutable", "Mutable")}
+      ${buildAuthorityRow("Freeze", "icon-snowflake", token.freeze_authority, "Revoked", "Active")}
+    </div>
   `;
 }
 
-/**
- * One authority tile. Minimal: an icon chip + label, a soft status pill, and
- * the address chip only when the authority is still live (a risk).
- */
-function buildAuthorityTile(label, icon, authority, safeWord, riskWord) {
-  const isRisk = !!authority;
-  const state = isRisk ? "risk" : "ok";
-  const pillIcon = isRisk ? "icon-triangle-alert" : "icon-circle-check";
+function buildAuthorityRow(label, icon, authority, safeWord, riskWord) {
+  const hasAuthority = Boolean(authority);
+  const state = hasAuthority ? "is-risk" : "is-safe";
+  const stateIcon = hasAuthority ? "icon-triangle-alert" : "icon-circle-check";
+
   return `
-    <div class="authority-item ${state}">
-      <div class="authority-top">
-        <span class="authority-icon"><i class="${icon}"></i></span>
-        <span class="authority-label">${label}</span>
-      </div>
-      <span class="auth-pill ${state}"><i class="${pillIcon}"></i>${isRisk ? riskWord : safeWord}</span>
+    <div class="security-authority-row ${state}">
+      <span class="security-authority-label"><i class="${icon}"></i>${label}</span>
+      <span class="security-authority-state"><i class="${stateIcon}"></i>${hasAuthority ? riskWord : safeWord}</span>
       ${
-        isRisk
-          ? `<div class="authority-address">${Utils.renderAddressChip(authority, { full: true })}</div>`
+        hasAuthority
+          ? `<div class="security-authority-address">${Utils.renderAddressChip(authority, { full: true })}</div>`
           : ""
       }
     </div>
   `;
 }
 
-function buildHoldersCard(token) {
+function buildHolderHealthSection(token) {
   const top10Pct =
-    token.top_10_holders_pct !== undefined ? token.top_10_holders_pct : token.top_10_concentration;
+    token.top_10_holders_pct !== undefined && token.top_10_holders_pct !== null
+      ? token.top_10_holders_pct
+      : token.top_10_concentration;
   const creatorPct = token.creator_balance_pct;
-
-  // Determine concentration risk level
-  let concentrationClass = "good";
-  let concentrationLabel = "Healthy";
-  if (top10Pct !== null && top10Pct !== undefined) {
-    if (top10Pct > 80) {
-      concentrationClass = "danger";
-      concentrationLabel = "Critical";
-    } else if (top10Pct > 60) {
-      concentrationClass = "warning";
-      concentrationLabel = "High";
-    } else if (top10Pct > 40) {
-      concentrationClass = "moderate";
-      concentrationLabel = "Moderate";
-    }
-  }
-
-  const gaugeHtml = buildHolderGauge(top10Pct, concentrationClass);
+  const concentration = getConcentrationState(top10Pct);
+  const totalHolders =
+    token.total_holders !== null && token.total_holders !== undefined
+      ? Utils.formatNumber(token.total_holders, { decimals: 0 })
+      : "—";
 
   return `
-    <div class="security-card" style="--i:2">
-      <div class="card-header">
-        <span>Holder Health</span>
-        ${concentrationLabel ? `<span class="concentration-badge ${concentrationClass}" style="margin-left:auto">${concentrationLabel}</span>` : ""}
+    <section class="security-detail-section">
+      ${buildSectionHeader(
+        '<span class="security-section-title">Holder Health</span>',
+        `<span class="security-status-text ${concentration.className}">${concentration.label}</span>`
+      )}
+      <div class="security-holder-health-body">
+        ${buildHolderGauge(top10Pct, concentration.className)}
+        <div class="security-holder-metrics">
+          <div class="security-holder-metric">
+            <span class="security-detail-label">Total Holders</span>
+            <span class="security-detail-value">${totalHolders}<small>unique</small></span>
+          </div>
+          <div class="security-holder-metric">
+            <span class="security-detail-label">Creator Share</span>
+            <span class="security-detail-value ${
+              creatorPct === null || creatorPct === undefined
+                ? ""
+                : creatorPct > 10
+                  ? "is-critical"
+                  : "is-good"
+            }">${formatPercent(creatorPct)}</span>
+          </div>
+        </div>
       </div>
-      <div class="card-body" style="padding: 16px;">
-         <div style="display: flex; align-items: center; justify-content: space-around; gap: 20px;">
-           <div style="text-align: center;">
-              ${gaugeHtml}
-              <div style="margin-top: 8px; font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Top 10 Supply</div>
-           </div>
-           
-           <div style="display: flex; flex-direction: column; gap: 14px; flex: 1;">
-              <div class="holder-stat-item">
-                 <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Total Holders</div>
-                 <div style="font-weight: 700; font-size: 16px; color: var(--text-primary); display: flex; align-items: baseline; gap: 4px;">
-                    ${token.total_holders ? Utils.formatNumber(token.total_holders, { decimals: 0 }) : "—"}
-                    <span style="font-size: 10px; font-weight: 400; color: var(--text-muted);">unique</span>
-                 </div>
-              </div>
-              
-              ${
-                creatorPct !== null && creatorPct !== undefined
-                  ? `
-              <div class="holder-stat-item">
-                 <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Creator Share</div>
-                 <div style="font-weight: 700; font-size: 16px; color: ${creatorPct > 10 ? "var(--error-color)" : "var(--success-color)"};">
-                    ${creatorPct.toFixed(2)}%
-                 </div>
-              </div>
-              `
-                  : ""
-              }
-           </div>
-         </div>
+    </section>
+  `;
+}
+
+function getConcentrationState(percent) {
+  if (percent === null || percent === undefined) {
+    return { className: "is-muted", label: "Unknown" };
+  }
+  if (percent > 80) return { className: "is-critical", label: "Critical" };
+  if (percent > 60) return { className: "is-warning", label: "High" };
+  if (percent > 40) return { className: "is-moderate", label: "Moderate" };
+  return { className: "is-good", label: "Healthy" };
+}
+
+function buildHolderGauge(percent, stateClass) {
+  if (percent === null || percent === undefined) {
+    return `
+      <div class="security-holder-gauge is-empty">
+        <span class="security-holder-gauge-value">—</span>
+        <span class="security-holder-gauge-label">Top 10</span>
       </div>
+    `;
+  }
+
+  const normalizedPercent = Math.min(100, Math.max(0, Number(percent)));
+  const circumference = 2 * Math.PI * 34;
+  const offset = circumference - (normalizedPercent / 100) * circumference;
+
+  return `
+    <div class="security-holder-gauge ${stateClass}">
+      <svg width="82" height="82" viewBox="0 0 82 82" aria-hidden="true">
+        <circle class="security-holder-gauge-track" cx="41" cy="41" r="34"></circle>
+        <circle class="security-holder-gauge-ring" cx="41" cy="41" r="34"
+          style="stroke-dasharray:${circumference};stroke-dashoffset:${offset}"></circle>
+      </svg>
+      <span class="security-holder-gauge-value">${normalizedPercent.toFixed(0)}%</span>
+      <span class="security-holder-gauge-label">Top 10</span>
     </div>
   `;
 }
 
-function buildHolderGauge(percent, colorClass) {
-  if (percent === null || percent === undefined)
-    return `
-      <div class="gauge-placeholder" style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);background:var(--bg-secondary);border-radius:50%;border:1px dashed var(--border-color);">
-          <span style="font-size: 20px; opacity: 0.5;">?</span>
-      </div>`;
-
-  const p = Math.min(100, Math.max(0, percent));
-  const r = 38;
-  const c = 2 * Math.PI * r;
-  const off = c - (p / 100) * c;
-
-  // Color mapping
-  let strokeColor = "var(--success-color)";
-  if (colorClass === "danger") strokeColor = "var(--error-color)";
-  if (colorClass === "warning") strokeColor = "#d29922";
-  if (colorClass === "moderate") strokeColor = "#db6d28";
-
-  return `
-      <div class="gauge-wrapper" style="position:relative; width:90px; height:90px;">
-           <svg width="90" height="90" viewBox="0 0 90 90" style="transform: rotate(-90deg);">
-            <circle cx="45" cy="45" r="${r}" fill="none" stroke="var(--bg-secondary)" stroke-width="8"></circle>
-            <circle cx="45" cy="45" r="${r}" fill="none" stroke="${strokeColor}" stroke-width="8"
-              style="stroke-dasharray: ${c}; stroke-dashoffset: ${off}; transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1); stroke-linecap: round; filter: drop-shadow(0 0 3px ${strokeColor}44);"></circle>
-          </svg>
-          <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); text-align:center;">
-             <div style="font-size:16px; font-weight:800; color:var(--text-primary); font-family:var(--font-mono);">${p.toFixed(0)}<span style="font-size: 10px; margin-left: 1px;">%</span></div>
-          </div>
-      </div>
-   `;
-}
-
-function buildTransferFeeCard(token) {
-  // Only show if token has transfer fee data
-  if (token.transfer_fee_pct === null && token.transfer_fee_pct === undefined) {
+function buildTransferFeeSection(token) {
+  if (token.transfer_fee_pct === null || token.transfer_fee_pct === undefined) {
     return "";
   }
 
-  const hasFee = token.transfer_fee_pct > 0;
+  const hasFee = Number(token.transfer_fee_pct) > 0;
+  const feePercent = formatPercent(token.transfer_fee_pct);
+  const status = hasFee
+    ? `<span class="security-status-text is-warning"><i class="icon-triangle-alert"></i>${feePercent}</span>`
+    : '<span class="security-status-text is-good"><i class="icon-circle-check"></i>No Fee</span>';
 
   return `
-    <div class="security-card ${hasFee ? "has-fee" : ""}" style="--i:2.5">
-      <div class="card-header">
-        <span>Transfer Tax</span>
-        ${hasFee ? `<span class="fee-badge"><i class="icon-triangle-alert"></i> ${token.transfer_fee_pct}%</span>` : '<span class="no-fee-badge"><i class="icon-check"></i> No Fee</span>'}
-      </div>
-      <div class="card-body" style="padding: 0;">
-        ${
-          hasFee
-            ? `
-        <div class="fee-details">
-          <div class="fee-row">
-            <span class="fee-label">Fee Percentage</span>
-            <span class="fee-value">${token.transfer_fee_pct}%</span>
+    <section class="security-detail-section">
+      ${buildSectionHeader('<span class="security-section-title">Transfer Tax</span>', status)}
+      ${
+        hasFee
+          ? `
+        <div class="security-fact-list">
+          <div class="security-fact-row">
+            <span class="security-detail-label">Fee Percentage</span>
+            <span class="security-detail-value">${feePercent}</span>
           </div>
           ${
-            token.transfer_fee_max_amount
+            token.transfer_fee_max_amount !== null && token.transfer_fee_max_amount !== undefined
               ? `
-          <div class="fee-row">
-            <span class="fee-label">Max Fee Amount</span>
-            <span class="fee-value">${Utils.formatNumber(token.transfer_fee_max_amount)}</span>
+          <div class="security-fact-row">
+            <span class="security-detail-label">Max Fee Amount</span>
+            <span class="security-detail-value">${Utils.formatNumber(token.transfer_fee_max_amount)}</span>
           </div>
           `
               : ""
@@ -392,165 +360,64 @@ function buildTransferFeeCard(token) {
           ${
             token.transfer_fee_authority
               ? `
-          <div class="fee-row">
-            <span class="fee-label">Fee Authority</span>
-            <span class="fee-value">${Utils.renderAddressChip(token.transfer_fee_authority)}</span>
+          <div class="security-fact-row">
+            <span class="security-detail-label">Fee Authority</span>
+            <span class="security-detail-value">${Utils.renderAddressChip(token.transfer_fee_authority)}</span>
           </div>
           `
               : ""
           }
         </div>
-        <div style="padding: 10px 16px; border-top: 1px solid var(--border-color); font-size: 0.65rem; color: var(--warning-color); background: var(--warning-alpha-10); display: flex; align-items: center; gap: 8px;">
-          <i class="icon-circle-alert" style="font-size: 14px;"></i>
-          <span>A ${token.transfer_fee_pct}% fee is charged on every transfer</span>
+        <div class="security-inline-note is-warning">
+          <i class="icon-circle-alert"></i>
+          <span>A ${feePercent} fee is charged on every transfer.</span>
         </div>
         `
-            : `
-        <div style="padding: 16px; color: var(--success-color); font-size: 0.75rem; font-weight: 600;">
-           <i class="icon-shield"></i> No transfer fees detected.
+          : `
+        <div class="security-empty-line is-good">
+          <i class="icon-shield"></i>
+          <span>No transfer fees detected.</span>
         </div>
         `
-        }
-      </div>
-    </div>
-  `;
-}
-
-function buildTopHoldersSection(token, options = {}) {
-  const { escapeHtml, formatShortAddress } = options;
-
-  const topHolders = token.top_holders;
-  if (!topHolders || topHolders.length === 0) {
-    return "";
-  }
-
-  // Calculate concentration (use backend value or fallback sum)
-  let concentration = token.top_10_concentration;
-  if (concentration === undefined || concentration === null) {
-    const limit = Math.min(topHolders.length, 10);
-    concentration = topHolders.slice(0, limit).reduce((sum, h) => sum + (h.percentage || 0), 0);
-  }
-
-  // Top 3 Podium
-  const top3 = topHolders.slice(0, 3);
-  const podiumHtml = `
-    <div class="holders-podium">
-      ${[1, 0, 2]
-        .map((idx) => {
-          const h = top3[idx];
-          if (!h) return '<div class="podium-spot empty"></div>';
-          const rank = idx + 1;
-          const name =
-            h.owner_type && h.owner_type.length < 15
-              ? h.owner_type
-              : formatShortAddress
-                ? formatShortAddress(h.address)
-                : h.address;
-          const solscanUrl = Utils.solscanAccountUrl(h.address);
-          return `
-          <a class="podium-spot rank-${rank}" href="${solscanUrl}" target="_blank" rel="noopener noreferrer" title="${escapeHtml ? escapeHtml(h.address) : h.address} — open in Solscan">
-            <div class="podium-avatar">${rank === 1 ? '<i class="icon-crown"></i>' : rank}</div>
-            <div class="podium-pedestal">
-              <span class="podium-value">${h.percentage.toFixed(1)}%</span>
-            </div>
-            <div class="podium-name">${escapeHtml ? escapeHtml(name) : name}</div>
-          </a>
-        `;
-        })
-        .join("")}
-    </div>
-  `;
-
-  const holderRows = topHolders
-    .slice(3, 10)
-    .map((holder, idx) => {
-      const insiderClass = holder.is_insider ? "insider" : "";
-      const ownerLabel = holder.owner_type || "";
-      const badges = [];
-      if (holder.is_insider) badges.push('<span class="insider-badge">Insider</span>');
-
-      if (ownerLabel) {
-        const isAddress = ownerLabel.length > 30 && !ownerLabel.includes(" ");
-        const displayLabel = isAddress
-          ? formatShortAddress
-            ? formatShortAddress(ownerLabel)
-            : ownerLabel
-          : ownerLabel;
-        const cssClass = isAddress ? "owner-badge address-badge" : "owner-badge";
-        badges.push(
-          `<span class="${cssClass}" title="${escapeHtml ? escapeHtml(ownerLabel) : ownerLabel}">${escapeHtml ? escapeHtml(displayLabel) : displayLabel}</span>`
-        );
       }
-
-      return `
-        <div class="holder-row ${insiderClass}" style="--i: ${idx + 4}">
-          <div class="holder-rank">#${idx + 4}</div>
-          <div class="holder-address-container">
-            ${Utils.renderAddressChip(holder.address, { full: true })}
-            <div class="holder-badges">${badges.join("")}</div>
-          </div>
-          <div class="holder-share">${holder.percentage.toFixed(2)}%</div>
-        </div>
-      `;
-    })
-    .join("");
-
-  return `
-    <div class="security-card main-holders-card" style="--i:3.5">
-      <div class="card-header">
-        <span>Top 10 Holders Concentration</span>
-        <span class="concentration-value">${concentration.toFixed(2)}%</span>
-      </div>
-      <div class="card-body" style="padding: 26px 16px 12px;">
-        ${podiumHtml}
-        <div class="holders-list-small">
-          ${holderRows}
-        </div>
-      </div>
-    </div>
+    </section>
   `;
 }
 
 function buildRisksSection(risks, options = {}) {
   const { escapeHtml } = options;
+  const safe = escapeHtml || Utils.escapeHtml;
 
   if (!risks || risks.length === 0) {
     return `
-      <div class="security-card" style="--i:3">
-        <div class="card-header">
-          <span>Security Risks</span>
+      <section class="security-detail-section">
+        ${buildSectionHeader('<span class="security-section-title">Security Risks</span>')}
+        <div class="security-empty-line is-good">
+          <i class="icon-sparkles"></i>
+          <span>No security risks detected.</span>
         </div>
-        <div class="card-body">
-          <div class="no-data-message" style="color: var(--success-color); font-weight: 700; display: flex; align-items: center; gap: 8px;">
-             <i class="icon-sparkles"></i> No security risks detected.
-          </div>
-        </div>
-      </div>
+      </section>
     `;
   }
 
-  // Severity metadata: deterministic icon (verified against the Lucide font),
-  // colour class, weight for ordering, and a human label for the badge.
-  const SEVERITY = {
-    danger: { cls: "danger", label: "Critical", icon: "icon-octagon-alert", weight: 0 },
-    warn: { cls: "warn", label: "Warning", icon: "icon-triangle-alert", weight: 1 },
-    info: { cls: "info", label: "Info", icon: "icon-info", weight: 2 },
+  const severity = {
+    danger: { className: "danger", label: "Critical", icon: "icon-octagon-alert", weight: 0 },
+    warn: { className: "warn", label: "Warning", icon: "icon-triangle-alert", weight: 1 },
+    info: { className: "info", label: "Info", icon: "icon-info", weight: 2 },
   };
-  const sevOf = (risk) => {
+  const severityFor = (risk) => {
     const level = risk.level?.toLowerCase();
-    if (level === "danger") return SEVERITY.danger;
-    if (level === "warn" || level === "warning") return SEVERITY.warn;
-    return SEVERITY.info;
+    if (level === "danger") return severity.danger;
+    if (level === "warn" || level === "warning") return severity.warn;
+    return severity.info;
   };
-
-  // Most severe first so the worst risks are read first.
-  const sorted = [...risks].sort((a, b) => sevOf(a).weight - sevOf(b).weight);
-
-  // Header breakdown ("2 critical · 1 warning") instead of a flat count.
-  const counts = sorted.reduce((acc, r) => {
-    const cls = sevOf(r).cls;
-    acc[cls] = (acc[cls] || 0) + 1;
-    return acc;
+  const sorted = [...risks].sort(
+    (first, second) => severityFor(first).weight - severityFor(second).weight
+  );
+  const counts = sorted.reduce((totals, risk) => {
+    const className = severityFor(risk).className;
+    totals[className] = (totals[className] || 0) + 1;
+    return totals;
   }, {});
   const breakdown =
     [
@@ -561,41 +428,103 @@ function buildRisksSection(risks, options = {}) {
       .filter(Boolean)
       .join(" · ") || `${sorted.length} incidents found`;
 
-  const riskItems = sorted
-    .map((risk, idx) => {
-      const sev = sevOf(risk);
-      const name = escapeHtml ? escapeHtml(risk.name) : risk.name;
-      const description = escapeHtml ? escapeHtml(risk.description) : risk.description;
-
-      return `
-      <div class="risk-row risk-${sev.cls}" style="--i:${idx}">
-        <div class="risk-icon"><i class="${sev.icon}"></i></div>
-        <div class="risk-details">
-          <div class="risk-name">${name}</div>
-          ${description ? `<div class="risk-description">${description}</div>` : ""}
-        </div>
-        <span class="risk-sev-badge sev-${sev.cls}">${sev.label}</span>
-      </div>
-    `;
-    })
-    .join("");
-
   return `
-    <div class="security-card" style="--i:3">
-      <div class="card-header">
-        <span><i class="icon-shield-alert"></i> Security Risks</span>
-        <span class="card-subtitle">${breakdown}</span>
+    <section class="security-detail-section">
+      ${buildSectionHeader(
+        '<span class="security-section-title"><i class="icon-shield-alert"></i> Security Risks</span>',
+        breakdown
+      )}
+      <div class="security-risk-list">
+        ${sorted
+          .map((risk) => {
+            const riskSeverity = severityFor(risk);
+            const name = safe(String(risk.name || "Security signal"));
+            const description = risk.description ? safe(String(risk.description)) : "";
+
+            return `
+          <div class="security-risk-row risk-${riskSeverity.className}">
+            <i class="security-risk-icon ${riskSeverity.icon}"></i>
+            <div class="security-risk-details">
+              <span class="security-risk-name">${name}</span>
+              ${description ? `<span class="security-risk-description">${description}</span>` : ""}
+            </div>
+            <span class="security-risk-level">${riskSeverity.label}</span>
+          </div>
+        `;
+          })
+          .join("")}
       </div>
-      <div class="card-body" style="padding: 0;">
-        <div class="risks-list">
-          ${riskItems}
-        </div>
-      </div>
-    </div>
+    </section>
   `;
 }
 
-// Helper functions
+function buildTopHoldersSection(token, options = {}) {
+  const { escapeHtml } = options;
+  const safe = escapeHtml || Utils.escapeHtml;
+  const topHolders = token.top_holders;
+
+  if (!topHolders || topHolders.length === 0) {
+    return "";
+  }
+
+  let concentration = token.top_10_concentration;
+  if (concentration === undefined || concentration === null) {
+    concentration = topHolders
+      .slice(0, 10)
+      .reduce((sum, holder) => sum + (Number(holder.percentage) || 0), 0);
+  }
+
+  return `
+    <section class="security-detail-section">
+      ${buildSectionHeader(
+        '<span class="security-section-title">Top Holders</span>',
+        `${formatPercent(concentration)} concentration`
+      )}
+      <div class="security-holder-list">
+        ${topHolders
+          .slice(0, 10)
+          .map((holder, index) => {
+            const rank = index + 1;
+            const ownerLabel = holder.owner_type ? String(holder.owner_type) : "";
+            const ownerIsAddress = ownerLabel.length > 30 && !ownerLabel.includes(" ");
+            const ownerDisplay = ownerIsAddress
+              ? Utils.formatAddressCompact(ownerLabel, { start: 6, end: 6 })
+              : ownerLabel;
+
+            return `
+          <div class="security-holder-row ${holder.is_insider ? "is-insider" : ""}">
+            <span class="security-holder-rank ${rank <= 3 ? "is-leading" : ""}">${String(rank).padStart(2, "0")}</span>
+            <div class="security-holder-identity">
+              ${Utils.renderAddressChip(holder.address)}
+              <div class="security-holder-tags">
+                ${
+                  holder.is_insider
+                    ? '<span class="security-holder-tag is-insider"><i class="icon-triangle-alert"></i>Insider</span>'
+                    : ""
+                }
+                ${
+                  ownerLabel
+                    ? `<span class="security-holder-tag ${ownerIsAddress ? "is-address" : ""}" title="${safe(ownerLabel)}">${safe(ownerDisplay)}</span>`
+                    : ""
+                }
+              </div>
+            </div>
+            <span class="security-holder-share">${formatPercent(holder.percentage)}</span>
+          </div>
+        `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function formatPercent(value, decimals = 2) {
+  if (value === null || value === undefined) return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return `${Utils.formatNumber(number, { decimals })}%`;
+}
 
 function getSafetyScoreClass(score) {
   if (score === null || score === undefined) return "";

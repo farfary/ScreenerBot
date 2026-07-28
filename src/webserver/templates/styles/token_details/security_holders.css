@@ -1,512 +1,277 @@
-/* Risk Detection List ------------------------------------------------
-   Each row: severity icon + title/description + severity badge. A left
-   accent bar colour-codes severity for fast scanning. Rows are sorted
-   most-severe-first by the renderer. */
-.risks-list {
-  display: flex;
-  flex-direction: column;
-}
+/* =============================================================================
+   SECURITY TAB — HOLDER HEALTH & TOP HOLDERS
+   ============================================================================= */
 
-.risk-row {
+.security-holder-health-body {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 82px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  padding: 13px 16px;
-  border-bottom: 1px solid var(--border-color);
-  border-left: 3px solid transparent;
-  transition:
-    background var(--transition-base),
-    border-color var(--transition-base);
-  animation: slide-in-row 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  animation-delay: calc(var(--i, 0) * 0.05s);
-  opacity: 0;
+  gap: 14px;
+  padding: 10px 12px;
 }
 
-.risk-row:last-child {
-  border-bottom: none;
+.security-holder-gauge {
+  position: relative;
+  width: 82px;
+  height: 82px;
+  flex: 0 0 auto;
 }
 
-.risk-row:hover {
-  background: var(--bg-secondary);
+.security-holder-gauge svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
 }
 
-.risk-row.risk-danger {
-  border-left-color: #f85149;
+.security-holder-gauge-track,
+.security-holder-gauge-ring {
+  fill: none;
+  stroke-width: 6;
 }
 
-.risk-row.risk-warn {
-  border-left-color: #d29922;
+.security-holder-gauge-track {
+  stroke: var(--bg-card-hover);
 }
 
-.risk-row.risk-info {
-  border-left-color: var(--primary-color);
+.security-holder-gauge-ring {
+  stroke: var(--text-muted);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 700ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.risk-icon {
-  font-size: 1.05rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.1);
+.security-holder-gauge.is-good .security-holder-gauge-ring {
+  stroke: var(--success-color);
 }
 
-.risk-danger .risk-icon {
-  border-color: rgb(248, 81, 73, 0.35);
-  color: #f85149;
-  background: rgb(248, 81, 73, 0.12);
+.security-holder-gauge.is-moderate .security-holder-gauge-ring {
+  stroke: var(--primary-color);
 }
 
-.risk-warn .risk-icon {
-  border-color: rgb(210, 153, 34, 0.35);
-  color: #d29922;
-  background: rgb(210, 153, 34, 0.12);
+.security-holder-gauge.is-warning .security-holder-gauge-ring {
+  stroke: var(--warning-color);
 }
 
-.risk-info .risk-icon {
-  border-color: var(--primary-alpha-30);
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
+.security-holder-gauge.is-critical .security-holder-gauge-ring {
+  stroke: var(--danger);
 }
 
-.risk-details {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.security-holder-gauge.is-empty {
+  border: 6px solid var(--bg-card-hover);
+  border-radius: var(--radius-full);
+}
+
+.security-holder-gauge-value,
+.security-holder-gauge-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.security-holder-gauge-value {
+  top: 27px;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: 0.9rem;
+  font-weight: 800;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.security-holder-gauge-label {
+  top: 47px;
+  color: var(--text-muted);
+  font-size: 0.52rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.security-holder-gauge.is-empty .security-holder-gauge-value {
+  top: 23px;
+}
+
+.security-holder-gauge.is-empty .security-holder-gauge-label {
+  top: 43px;
+}
+
+.security-holder-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
 }
 
-.risk-name {
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
+.security-holder-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 5px 12px;
 }
 
-.risk-description {
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
+.security-holder-metric + .security-holder-metric {
+  border-left: 1px solid var(--border-subtle, var(--border-color));
 }
 
-/* Severity badge on the right of each risk row */
-.risk-sev-badge {
-  flex-shrink: 0;
-  align-self: center;
-  font-size: 0.58rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 3px 8px;
-  border-radius: var(--radius-xl);
+.security-holder-metric .security-detail-value {
+  overflow: hidden;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid transparent;
 }
 
-.risk-sev-badge.sev-danger {
-  color: #f85149;
-  background: rgb(248, 81, 73, 0.12);
-  border-color: rgb(248, 81, 73, 0.3);
+.security-holder-list {
+  display: flex;
+  flex-direction: column;
 }
 
-.risk-sev-badge.sev-warn {
-  color: #d29922;
-  background: rgb(210, 153, 34, 0.12);
-  border-color: rgb(210, 153, 34, 0.3);
+.security-holder-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 12px;
+  transition: background var(--transition-fast);
 }
 
-.risk-sev-badge.sev-info {
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
-  border-color: var(--primary-alpha-30);
+.security-holder-row + .security-holder-row {
+  border-top: 1px solid var(--border-subtle, var(--border-color));
 }
 
-.concentration-badge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--radius-lg);
+.security-holder-row:hover {
+  background: var(--bg-card-hover);
 }
 
-.concentration-badge.danger {
-  color: var(--danger);
-  background: var(--danger-alpha-10);
-}
-
-.concentration-badge.warning {
-  color: var(--warning-color);
+.security-holder-row.is-insider {
   background: var(--warning-alpha-10);
 }
 
-.concentration-badge.moderate {
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
+.security-holder-row.is-insider:hover {
+  background: var(--warning-alpha-20);
 }
 
-.concentration-badge.good {
-  color: var(--success-color);
-  background: var(--success-alpha-10);
-}
-
-/* Transfer Fee */
-.fee-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--warning-color);
-}
-
-.no-fee-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--success-color);
-}
-
-.fee-details {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  margin-bottom: var(--spacing-md);
-}
-
-.fee-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-}
-
-.fee-row:not(:last-child) {
-  border-bottom: 1px solid var(--border-color);
-}
-
-.fee-label {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.fee-value {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-}
-
-/* Holder row entrance animation (layout is set by .holders-list-small below) */
-.holder-row {
-  transition:
-    background 0.15s ease,
-    transform 0.15s ease;
-  animation: slide-in-row 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
-  animation-delay: calc(var(--i) * 0.04s);
-}
-
-/* Podium — top 3 holders */
-.holders-podium {
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  gap: 12px;
-  margin: 0 0 16px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.podium-spot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  width: 104px;
-  min-width: 0;
-  text-decoration: none;
-  color: inherit;
-  transition: transform var(--transition-base);
-}
-
-a.podium-spot:hover {
-  text-decoration: none;
-}
-
-.podium-spot:hover .podium-name {
-  color: var(--text-primary);
-  border-color: var(--border-color);
-  background: var(--bg-tertiary);
-}
-
-.podium-spot:hover {
-  transform: translateY(-3px);
-}
-
-.podium-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-full);
-  background: var(--bg-tertiary);
-  border: 2px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.95rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.25);
-  z-index: 2;
-  flex-shrink: 0;
-}
-
-.rank-1 .podium-avatar {
-  width: 46px;
-  height: 46px;
-  border-color: #d29922;
-  background: radial-gradient(circle at 30% 30%, #f0b745, #b07808);
-  color: #fff;
-  font-size: 1.25rem;
-  box-shadow:
-    0 0 0 4px rgb(210, 153, 34, 0.12),
-    0 6px 16px rgb(210, 153, 34, 0.28);
-}
-
-.rank-2 .podium-avatar {
-  border-color: #a8aeb8;
-  background: radial-gradient(circle at 30% 30%, #d0d7de, #8c959f);
-  color: #24292f;
-}
-
-.rank-3 .podium-avatar {
-  border-color: #dba683;
-  background: radial-gradient(circle at 30% 30%, #f5d0b5, #ad7852);
-  color: #4a3018;
-}
-
-.podium-pedestal {
-  width: 100%;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 10px;
-  background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
-  border: 1px solid var(--border-color);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  position: relative;
-  overflow: hidden;
-}
-
-/* Rank-colored top accent strip on each pedestal */
-.podium-pedestal::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--border-color);
-}
-
-.rank-1 .podium-pedestal {
-  height: 84px;
-  background: linear-gradient(180deg, rgb(210, 153, 34, 0.16) 0%, rgb(210, 153, 34, 0.03) 100%);
-  border-color: rgb(210, 153, 34, 0.3);
-}
-
-.rank-1 .podium-pedestal::before {
-  background: #d29922;
-}
-
-.rank-2 .podium-pedestal {
-  height: 62px;
-  background: linear-gradient(180deg, rgb(168, 174, 184, 0.12) 0%, rgb(168, 174, 184, 0.02) 100%);
-  border-color: rgb(168, 174, 184, 0.25);
-}
-
-.rank-2 .podium-pedestal::before {
-  background: #a8aeb8;
-}
-
-.rank-3 .podium-pedestal {
-  height: 46px;
-  background: linear-gradient(180deg, rgb(219, 166, 131, 0.12) 0%, rgb(219, 166, 131, 0.02) 100%);
-  border-color: rgb(219, 166, 131, 0.25);
-}
-
-.rank-3 .podium-pedestal::before {
-  background: #dba683;
-}
-
-.podium-value {
-  font-weight: 800;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings: "tnum" 1;
-  line-height: 1;
-}
-
-.rank-1 .podium-value {
-  color: #f0b745;
-  font-size: 1rem;
-}
-
-.podium-name {
-  font-size: 0.62rem;
-  color: var(--text-secondary);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 8px;
-  font-family: var(--font-mono);
-  background: var(--bg-secondary);
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-  text-align: center;
-}
-
-/* Small List Styles (New) */
-.holders-list-small {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.holders-list-small .holder-row {
-  display: grid;
-  grid-template-columns: 30px 1fr auto;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  font-size: 0.8rem;
-  background: transparent;
-}
-
-.holders-list-small .holder-row:last-child {
-  border-bottom: none;
-}
-
-.holders-list-small .holder-rank {
+.security-holder-rank {
   color: var(--text-muted);
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-family: var(--font-data);
+  font-size: 0.62rem;
+  font-weight: 650;
+  font-feature-settings: "tnum" 1;
 }
 
-.holders-list-small .holder-address-container {
+.security-holder-rank.is-leading {
+  color: var(--link-color);
+  font-weight: 800;
+}
+
+.security-holder-identity {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  flex-wrap: wrap;
 }
 
-.holders-list-small .holder-share {
-  font-weight: 600;
-  font-family: var(--font-data);
-  color: var(--text-primary);
+.security-holder-identity > .addr-chip {
+  flex: 0 1 auto;
 }
 
-@keyframes slide-in-row {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.holder-row:hover {
-  background: var(--bg-secondary);
-  border-color: transparent;
-  transform: translateX(2px);
-  border-radius: var(--radius-sm);
-}
-
-/* Insider Style - Left Banner */
-.holder-row.insider {
-  background: linear-gradient(90deg, var(--warning-alpha-05), transparent);
-  border: none;
-  border-bottom: 1px solid var(--border-subtle, var(--border-color));
-  border-left: 3px solid var(--warning-color);
-  padding-left: 9px; /* Compensate for border */
-}
-
-.holder-row.insider:hover {
-  background: var(--warning-alpha-10);
-  border-left-width: 4px;
-  padding-left: 8px;
-}
-
-.holder-rank {
-  display: flex;
+.security-holder-tags {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  font-size: 0.7rem;
-  font-weight: 700;
+  gap: 6px;
+  min-width: 0;
+}
+
+.security-holder-tag {
+  overflow: hidden;
   color: var(--text-muted);
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-full);
-  font-feature-settings: "tnum";
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* (Removed the nth-child medal coloring: the top 3 holders now live in the
-   podium, so this list only holds #4+ — coloring rows 2/3/4 gold/silver/bronze
-   was painting #5/#6/#7 as medalists, which was wrong and confusing.) */
-
-.holder-badges {
-  display: flex;
-  gap: 4px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.insider-badge {
+.security-holder-tag.is-insider {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 0.6rem;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
   color: var(--warning-color);
-  background: var(--warning-alpha-10);
-  border: 1px solid var(--warning-alpha-30);
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.security-holder-tag.is-insider i {
+  font-size: 0.66rem;
+}
+
+.security-holder-tag.is-address {
+  font-family: var(--font-data);
+}
+
+.security-holder-share {
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  text-align: right;
   white-space: nowrap;
-  letter-spacing: 0.02em;
 }
 
-.insider-badge::before {
-  content: "⚠";
-  font-size: 0.6rem;
-  font-weight: 400;
+@container (width <= 520px) {
+  .security-holder-identity {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
 }
 
-.owner-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.6rem;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle, var(--border-color));
-  white-space: nowrap;
+@container (width <= 400px) {
+  .security-holder-health-body {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 8px;
+    padding-inline: 10px;
+  }
+
+  .security-holder-gauge {
+    width: 72px;
+    height: 72px;
+  }
+
+  .security-holder-gauge-value {
+    top: 22px;
+  }
+
+  .security-holder-gauge-label {
+    top: 42px;
+  }
+
+  .security-holder-gauge.is-empty .security-holder-gauge-value {
+    top: 18px;
+  }
+
+  .security-holder-gauge.is-empty .security-holder-gauge-label {
+    top: 38px;
+  }
+
+  .security-holder-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .security-holder-metric + .security-holder-metric {
+    border-top: 1px solid var(--border-subtle, var(--border-color));
+    border-left: 0;
+  }
 }
 
-.address-badge {
-  font-family: var(--font-mono);
-  letter-spacing: -0.02em;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text-muted);
+@media (prefers-reduced-motion: reduce) {
+  .security-holder-gauge-ring {
+    transition: none;
+  }
 }
