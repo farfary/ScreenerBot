@@ -1,413 +1,199 @@
-/* =============================================================================
-   TRANSACTION PAIR - Entry/Exit symmetric display for position cards
-   ============================================================================= */
+/* Token details — transactions */
 
-.tx-pair-section {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color);
-}
-
-.tx-pair-title {
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-
-.tx-pair-grid {
+.transactions-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.tx-pair-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.tx-pair-item:hover:not(.empty) {
-  background: var(--bg-card-hover);
-}
-
-.tx-pair-item.empty {
-  justify-content: center;
-  opacity: 0.5;
-}
-
-.tx-pair-empty {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-}
-
-/* Entry (buy) styling */
-.tx-pair-item.entry {
-  border-left: 3px solid var(--success-color);
-}
-
-.tx-pair-item.entry .tx-pair-icon {
-  color: var(--success-color);
-  background: var(--success-alpha-15);
-}
-
-.tx-pair-item.entry .tx-pair-label {
-  color: var(--success-color);
-}
-
-/* Exit (sell) styling - symmetric with entry */
-.tx-pair-item.exit {
-  border-left: 3px solid var(--danger);
-}
-
-.tx-pair-item.exit .tx-pair-icon {
-  color: var(--danger);
-  background: var(--danger-alpha-15);
-}
-
-.tx-pair-item.exit .tx-pair-label {
-  color: var(--danger);
-}
-
-.tx-pair-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-}
-
-.tx-pair-icon svg {
-  width: 12px;
-  height: 12px;
-}
-
-.tx-pair-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.tx-pair-label {
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.tx-pair-signature {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--link-color);
-  text-decoration: none;
+  grid-template-columns: minmax(280px, 34%) minmax(0, 1fr);
+  height: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tx-pair-signature:hover {
-  text-decoration: underline;
-}
-
-.tx-pair-item .btn-copy-mini {
-  flex-shrink: 0;
-  opacity: 0.4;
-}
-
-.tx-pair-item:hover .btn-copy-mini {
-  opacity: 0.8;
-}
-
-/* =============================================================================
-   TRANSACTION HISTORY - Entries & Exits with symmetric layout
-   ============================================================================= */
-
-.transaction-history {
-  margin-top: 12px;
-  border-top: 1px solid var(--border-color);
-  padding-top: 12px;
-}
-
-.transaction-history-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-  margin-bottom: 10px;
-}
-
-.transaction-history-title svg {
-  width: 14px;
-  height: 14px;
-  opacity: 0.6;
-}
-
-.transaction-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Transaction row - symmetric entry/exit design */
-.transaction-row {
-  display: grid;
-  grid-template-columns: 24px 70px 1fr 100px 100px 40px;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
   background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.15s ease;
 }
 
-.transaction-row:hover {
-  background: var(--bg-card-hover);
-  transform: translateX(2px);
+.transactions-overview,
+.transactions-list-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
-/* Entry (buy) styling */
-.transaction-row.entry {
-  border-left: 3px solid var(--success-color);
+.transactions-overview {
+  padding: 16px 18px;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
-.transaction-row.entry .transaction-icon {
-  color: var(--success-color);
-  background: var(--success-alpha-15);
+.transactions-list-section {
+  padding: 0 20px 16px;
 }
 
-/* Exit (sell) styling - symmetric with entry */
-.transaction-row.exit {
-  border-left: 3px solid var(--danger);
-}
-
-.transaction-row.exit .transaction-icon {
-  color: var(--danger);
-  background: var(--danger-alpha-15);
-}
-
-/* DCA entry styling */
-.transaction-row.dca {
-  border-left: 3px solid var(--primary-color);
-}
-
-.transaction-row.dca .transaction-icon {
-  color: var(--primary-color);
-  background: var(--primary-alpha-15);
-}
-
-.transaction-icon {
+.transactions-section-heading {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: var(--radius-full);
+  min-height: 44px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.transaction-icon svg {
-  width: 12px;
-  height: 12px;
-}
-
-.transaction-type {
+.transactions-section-heading > div {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  gap: 8px;
 }
 
-.transaction-type-label {
-  font-size: 0.7rem;
+.transactions-section-heading strong {
+  color: var(--text-primary);
+  font-size: 0.78rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
 }
 
-.transaction-row.entry .transaction-type-label {
-  color: var(--success-color);
-}
-
-.transaction-row.exit .transaction-type-label {
-  color: var(--danger);
-}
-
-.transaction-row.dca .transaction-type-label {
-  color: var(--primary-color);
-}
-
-.transaction-type-time {
-  font-size: 0.6rem;
+.transactions-section-heading span {
   color: var(--text-muted);
+  font-size: 0.63rem;
 }
 
-.transaction-price {
+.transactions-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border-color);
+}
+
+.transactions-metrics > div {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
+  min-width: 0;
+  padding: 12px 0;
 }
 
-.transaction-price-label {
-  font-size: 0.55rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.transactions-metrics > div + div {
+  padding-left: 12px;
+  border-left: 1px solid var(--border-color);
+}
+
+.transactions-metrics span {
   color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.transaction-price-value {
-  font-size: 0.75rem;
-  font-weight: 600;
+.transactions-metrics strong {
   color: var(--text-primary);
   font-family: var(--font-data);
+  font-size: 1rem;
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
 }
 
-.transaction-amount {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  text-align: right;
-}
-
-.transaction-amount-label {
-  font-size: 0.55rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-
-.transaction-amount-value {
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.transaction-row.entry .transaction-amount-value {
-  color: var(--danger); /* Spent SOL */
-}
-
-.transaction-row.exit .transaction-amount-value {
-  color: var(--success-color); /* Received SOL */
-}
-
-.transaction-row.dca .transaction-amount-value {
-  color: var(--danger); /* Spent SOL */
-}
-
-.transaction-sol {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  text-align: right;
-}
-
-.transaction-sol-label {
-  font-size: 0.55rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-
-.transaction-sol-value {
-  font-size: 0.75rem;
-  font-weight: 700;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.transaction-row.entry .transaction-sol-value,
-.transaction-row.dca .transaction-sol-value {
-  color: var(--danger);
-}
-
-.transaction-row.exit .transaction-sol-value {
+.transactions-metrics strong.positive {
   color: var(--success-color);
 }
 
-.transaction-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.transactions-metrics strong.negative {
+  color: var(--error-color);
 }
 
-.transaction-link a {
+.transactions-chart {
+  flex: 1;
+  width: 100%;
+  min-height: 180px;
+  margin-top: 12px;
+}
+
+.transactions-table-shell {
   display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.transactions-table-header,
+.token-transaction-row {
+  display: grid;
+  grid-template-columns: 84px 80px minmax(105px, 1fr) 90px 18px;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
+  gap: 10px;
+}
+
+.transactions-table-header {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-muted);
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
 }
 
-.transaction-link a:hover {
-  background: var(--bg-secondary);
-  color: var(--link-color);
+.transactions-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
-.transaction-link svg {
-  width: 14px;
-  height: 14px;
+.token-transaction-row {
+  min-height: 40px;
+  border-bottom: 1px solid var(--border-color);
+  color: inherit;
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  text-decoration: none;
 }
 
-/* Empty transaction state */
-.transaction-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
+.token-transaction-row:hover {
+  background: var(--bg-card-hover);
+}
+
+.transaction-time {
+  color: var(--text-secondary);
+}
+
+.transaction-kind {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-kind.buy {
+  color: var(--success-color);
+}
+
+.transaction-kind.sell {
+  color: var(--error-color);
+}
+
+.transaction-price-cell,
+.transaction-total {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-external {
   color: var(--text-muted);
-  font-size: 0.8rem;
-  background: var(--bg-primary);
-  border-radius: var(--radius-sm);
-  border: 1px dashed var(--border-color);
+  font-size: 0.68rem;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
 }
 
-/* =============================================================================
-   SCROLLBAR
-   ============================================================================= */
+.token-transaction-row:hover .transaction-external {
+  opacity: 1;
+}
 
-/* Token details dialog uses global scrollbar-dialog pattern */
-
-/* Note: Inherits from global scrollbar system in scrollbar.css */
-
-/* =============================================================================
-   RESPONSIVE
-   ============================================================================= */
+/* Shared token-dialog responsive framing */
 
 @media (width <= 1200px) {
-  .dialog-container {
+  .token-details-dialog .dialog-container {
     width: 95vw;
     height: 90vh;
   }
@@ -416,16 +202,8 @@
     grid-template-columns: 45% 55%;
   }
 
-  .header-center {
+  .token-details-dialog .header-center {
     display: none;
-  }
-
-  .dialog-header {
-    justify-content: space-between;
-  }
-
-  .header-right {
-    flex-shrink: 0;
   }
 }
 
@@ -436,109 +214,84 @@
   }
 
   .overview-left {
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
     max-height: 40vh;
-  }
-
-  .pools-container {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-
-  .pools-left-col {
-    border-right: none;
+    border-right: 0;
     border-bottom: 1px solid var(--border-color);
-    max-height: 35vh;
   }
 
-  .links-container {
+  .transactions-container {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: minmax(210px, 42%) minmax(0, 1fr);
   }
 
-  .links-left-col {
-    border-right: none;
+  .transactions-overview {
+    border-right: 0;
     border-bottom: 1px solid var(--border-color);
-    max-height: 35vh;
-  }
-
-  .links-grid-compact {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
   }
 }
 
 @media (width <= 768px) {
-  .dialog-container {
+  .token-details-dialog .dialog-container {
     width: 100vw;
-    height: 100vh;
-    border-radius: 0;
     max-width: none;
+    height: 100vh;
     max-height: none;
+    border-radius: 0;
   }
 
-  .dialog-header {
+  .token-details-dialog .dialog-header {
     padding: var(--spacing-sm) var(--spacing-md);
-    flex-wrap: wrap;
     gap: var(--spacing-sm);
   }
 
-  .header-left {
-    gap: var(--spacing-sm);
+  .token-details-dialog .header-left {
     min-width: auto;
+    gap: var(--spacing-sm);
   }
 
-  .header-right {
-    order: 3;
-    width: 100%;
-    justify-content: flex-end;
+  .token-details-dialog .header-right {
+    flex-shrink: 0;
   }
 
-  .header-trade-actions {
+  .token-details-dialog .header-trade-actions {
     margin-right: 0;
     padding-right: 0;
-    border-right: none;
+    border-right: 0;
   }
 
-  .header-logo {
+  .token-details-dialog .header-logo {
     width: 40px;
     height: 40px;
   }
 
-  .title-main {
+  .token-details-dialog .title-main {
     font-size: 1.1rem;
   }
 
-  .title-sub {
+  .token-details-dialog .title-sub {
     font-size: 0.8rem;
-  }
-
-  .token-details-dialog .tab-content {
-    padding: var(--spacing-md);
-  }
-
-  .token-details-dialog .tab-content[data-tab-content="overview"] {
-    padding: 0;
-  }
-
-  .price-metrics {
-    flex-wrap: wrap;
-    gap: var(--spacing-sm);
-  }
-
-  .positions-grid,
-  .pools-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .links-grid {
-    grid-template-columns: repeat(3, 1fr);
   }
 }
 
-/* =============================================================================
-   DATA SOURCES STATUS BAR - Shows loading status of each data source
-   ============================================================================= */
+@media (width <= 600px) {
+  .transactions-table-header,
+  .token-transaction-row {
+    grid-template-columns: 72px 68px minmax(80px, 1fr) 18px;
+    gap: 8px;
+  }
+
+  .transaction-price-cell {
+    display: none;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .transaction-external {
+    opacity: 1;
+  }
+}
+
+/* Data-source status bar */
 
 .token-details-dialog .data-sources-status {
   display: inline-flex;
@@ -546,20 +299,20 @@
   min-height: 22px;
   gap: 12px;
   padding: 0 10px;
-  background: var(--bg-surface);
+  overflow: hidden;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
+  background: var(--bg-surface);
   font-size: 0.58rem;
   line-height: 1;
   transition: opacity var(--transition-normal);
-  overflow: hidden;
 }
 
 .token-details-dialog .data-sources-status.all-loaded {
-  opacity: 0.7;
+  padding: 0;
   border-color: transparent;
   background: transparent;
-  padding: 0;
+  opacity: 0.7;
 }
 
 .token-details-dialog .source-status {
@@ -572,34 +325,43 @@
 
 .token-details-dialog .source-status .status-icon {
   display: block;
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
   border-radius: var(--radius-full);
-  flex-shrink: 0;
-  transition: background-color var(--transition-base);
   opacity: 1;
   transform: translateY(0);
+  transition: background-color var(--transition-base);
 }
 
 .token-details-dialog .source-status .status-icon.pending {
-  background-color: var(--text-muted, #484f58);
+  background-color: var(--text-muted);
 }
 
 .token-details-dialog .source-status .status-icon.loading {
-  background-color: var(--warning-color, #d29922);
+  background-color: var(--warning-color);
   animation: status-pulse 1s ease-in-out infinite;
 }
 
 .token-details-dialog .source-status .status-icon.success {
-  background-color: var(--success-color, #3fb950);
+  background-color: var(--success-color);
 }
 
 .token-details-dialog .source-status .status-icon.error {
-  background-color: var(--danger, #f85149);
+  background-color: var(--danger);
 }
 
 .token-details-dialog .source-status .status-icon.cached {
-  background-color: var(--primary-color, #58a6ff);
+  background-color: var(--primary-color);
+}
+
+.token-details-dialog .source-status .status-label {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 @keyframes status-pulse {
@@ -613,25 +375,8 @@
   }
 }
 
-.token-details-dialog .source-status .status-label {
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
-  font-size: 0.58rem;
-  line-height: 1;
-}
-
-/* Clickable transaction rows (whole row links to Solscan tx) */
-.txn-row {
-  transition: background var(--transition-fast);
-}
-
-.txn-row:hover {
-  background: var(--bg-secondary);
-  text-decoration: none;
-}
-
-.txn-row:hover .icon-external-link {
-  color: var(--link-color, var(--primary-color));
+@media (prefers-reduced-motion: reduce) {
+  .token-details-dialog .source-status .status-icon.loading {
+    animation: none;
+  }
 }

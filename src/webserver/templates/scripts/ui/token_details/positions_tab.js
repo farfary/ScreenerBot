@@ -106,10 +106,8 @@ function renderPositionSummary(position) {
   const stateLabel = position.archived ? "Archived" : isClosed ? "Closed" : "Open";
   const stateClass = position.archived ? "muted" : isClosed ? "warning" : "good";
 
-  // PnL: open positions track unrealized, closed positions track realized.
   const pnlSol = isClosed ? position.pnl : position.unrealized_pnl;
   const pnlPct = isClosed ? position.pnl_percent : position.unrealized_pnl_percent;
-
   const entry = pickPrice(
     position.effective_entry_price,
     position.average_entry_price,
@@ -124,103 +122,103 @@ function renderPositionSummary(position) {
     ? Utils.formatTimeAgo(new Date(position.entry_time * 1000))
     : "—";
 
-  const badges = [];
+  const metadata = [];
   if (position.manual_management) {
-    badges.push('<span class="badge badge-warning">Manual</span>');
+    metadata.push('<span class="position-meta-item">Manual</span>');
   }
   if (position.dca_count > 0) {
-    badges.push(`<span class="badge badge-secondary">DCA ${position.dca_count}</span>`);
+    metadata.push(`<span class="position-meta-item">DCA ${position.dca_count}</span>`);
   }
   if (position.partial_exit_count > 0) {
-    badges.push(`<span class="badge badge-secondary">Exits ${position.partial_exit_count}</span>`);
+    metadata.push(`<span class="position-meta-item">Exits ${position.partial_exit_count}</span>`);
   }
 
-  const closedRows = isClosed
-    ? `
-      <div class="info-cell">
-        <span class="cell-label">Exit Price</span>
-        <span class="cell-value">${fmtPrice(position.effective_exit_price ?? position.exit_price)}</span>
-      </div>
-      <div class="info-cell">
-        <span class="cell-label">SOL Received</span>
-        <span class="cell-value">${fmtSol(position.sol_received)}</span>
-      </div>
-      ${
-        position.closed_reason
-          ? `<div class="info-cell full-width"><span class="cell-label">Closed Reason</span><span class="cell-value">${escapeText(position.closed_reason)}</span></div>`
-          : ""
-      }
-    `
-    : "";
+  const marketFacts = [
+    ["Avg Entry", fmtPrice(entry)],
+    ["Current", fmtPrice(current)],
+    ["Tokens", tokensHeld != null ? Utils.formatCompactNumber(tokensHeld) : "—"],
+    ["Opened", ageStr],
+  ];
+  if (isClosed) {
+    marketFacts.push(
+      ["Exit Price", fmtPrice(position.effective_exit_price ?? position.exit_price)],
+      ["SOL Received", fmtSol(position.sol_received)]
+    );
+    if (position.closed_reason) {
+      marketFacts.push(["Closed Reason", escapeText(position.closed_reason), "wide"]);
+    }
+  }
 
   const hasTargets = position.profit_target_min != null || position.profit_target_max != null;
   const hasExtremes = position.price_highest != null || position.price_lowest != null;
-  const targets =
+  const rangeSection =
     hasTargets || hasExtremes
       ? `
-      <div class="info-card compact">
-        <div class="card-header"><span>Targets &amp; Range</span></div>
-        <div class="card-body">
-          <div class="info-grid-2col">
-            <div class="info-cell"><span class="cell-label">Profit Target Min</span><span class="cell-value">${fmtPct(position.profit_target_min)}</span></div>
-            <div class="info-cell"><span class="cell-label">Profit Target Max</span><span class="cell-value">${fmtPct(position.profit_target_max)}</span></div>
-            <div class="info-cell"><span class="cell-label">Highest Price</span><span class="cell-value">${fmtPrice(position.price_highest)}</span></div>
-            <div class="info-cell"><span class="cell-label">Lowest Price</span><span class="cell-value">${fmtPrice(position.price_lowest)}</span></div>
-          </div>
+      <section class="position-section">
+        <div class="position-section-heading">Targets &amp; range</div>
+        <div class="position-facts">
+          ${renderPositionFact("Profit Target Min", fmtPct(position.profit_target_min))}
+          ${renderPositionFact("Profit Target Max", fmtPct(position.profit_target_max))}
+          ${renderPositionFact("Highest Price", fmtPrice(position.price_highest))}
+          ${renderPositionFact("Lowest Price", fmtPrice(position.price_lowest))}
         </div>
-      </div>`
+      </section>`
       : "";
 
   return `
-    <div class="positions-tab-content" style="padding: 16px; overflow-y: auto; height: 100%;">
-      <div class="info-card compact">
-        <div class="card-header">
-          <span>Position — ${escapeText(position.symbol || "")}</span>
-          <div class="card-header-actions">
-            ${badges.join("")}
-            <span class="status-badge ${stateClass}">${stateLabel}</span>
+    <div class="positions-tab-content">
+      <div class="position-sheet">
+        <header class="position-sheet-header">
+          <div class="position-heading">
+            <span class="position-kicker">Position</span>
+            <strong>${escapeText(position.symbol || "Token")}</strong>
+          </div>
+          <div class="position-meta">
+            ${metadata.join("")}
+            <span class="position-state ${stateClass}">${stateLabel}</span>
+          </div>
+        </header>
+
+        <div class="position-headline">
+          <div class="position-headline-item">
+            <span>${isClosed ? "Realized PnL" : "Unrealized PnL"}</span>
+            <strong class="${toneClass(pnlPct ?? pnlSol)}">${fmtPnl(pnlSol, pnlPct)}</strong>
+          </div>
+          <div class="position-headline-item">
+            <span>Size</span>
+            <strong>${fmtSol(sizeSol)}</strong>
           </div>
         </div>
-        <div class="card-body">
-          <div class="info-grid-2col">
-            <div class="info-cell highlight">
-              <span class="cell-label">${isClosed ? "Realized PnL" : "Unrealized PnL"}</span>
-              <span class="cell-value large" style="${pnlColor(pnlPct)}">${fmtPnl(pnlSol, pnlPct)}</span>
-            </div>
-            <div class="info-cell highlight">
-              <span class="cell-label">Size</span>
-              <span class="cell-value large">${fmtSol(sizeSol)}</span>
-            </div>
-            <div class="info-cell">
-              <span class="cell-label">Avg Entry</span>
-              <span class="cell-value">${fmtPrice(entry)}</span>
-            </div>
-            <div class="info-cell">
-              <span class="cell-label">Current</span>
-              <span class="cell-value">${fmtPrice(current)}</span>
-            </div>
-            <div class="info-cell">
-              <span class="cell-label">Tokens</span>
-              <span class="cell-value">${tokensHeld != null ? Utils.formatCompactNumber(tokensHeld) : "—"}</span>
-            </div>
-            <div class="info-cell">
-              <span class="cell-label">Opened</span>
-              <span class="cell-value">${ageStr}</span>
-            </div>
-            ${closedRows}
+
+        <section class="position-section">
+          <div class="position-section-heading">Market &amp; holdings</div>
+          <div class="position-facts">
+            ${marketFacts
+              .map(([label, value, modifier]) => renderPositionFact(label, value, modifier))
+              .join("")}
           </div>
-        </div>
+        </section>
+
+        ${rangeSection}
       </div>
-      ${targets}
     </div>
   `;
 }
 
 // ---- formatting helpers -----------------------------------------------------
 
-function pnlColor(value) {
+function renderPositionFact(label, value, modifier = "") {
+  return `
+    <div class="position-fact ${modifier}">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `;
+}
+
+function toneClass(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "";
-  return Number(value) >= 0 ? "color: var(--success-color);" : "color: var(--error-color);";
+  return Number(value) >= 0 ? "positive" : "negative";
 }
 
 function pickPrice(...candidates) {

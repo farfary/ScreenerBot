@@ -649,11 +649,12 @@
   display: block;
 }
 
-/* These tabs scroll as a whole */
+/* These tabs own their internal scrolling so headers/columns stay stable. */
 .token-details-dialog .tab-content[data-tab-content="positions"],
 .token-details-dialog .tab-content[data-tab-content="pools"],
-.token-details-dialog .tab-content[data-tab-content="links"] {
-  overflow-y: auto;
+.token-details-dialog .tab-content[data-tab-content="links"],
+.token-details-dialog .tab-content[data-tab-content="transactions"] {
+  overflow: hidden;
   padding: 0;
 }
 

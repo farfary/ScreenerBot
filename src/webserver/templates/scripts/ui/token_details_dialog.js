@@ -17,12 +17,7 @@ import {
   renderOverviewBanner,
 } from "./token_details/overview_tab.js";
 import { renderSecurityTab } from "./token_details/security_tab.js";
-import {
-  renderPoolsTab,
-  initPoolsTabEvents,
-  renderLinksTab,
-  initLinksTabEvents,
-} from "./token_details/pools_links_tab.js";
+import { renderPoolsTab, renderLinksTab } from "./token_details/pools_links_tab.js";
 import { applyTradeActionsMixin } from "./token_details/trade_actions.js";
 import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
 import { applyChartTabMixin, CHART_CANDLE_LIMIT } from "./token_details/chart_tab.js";
@@ -60,6 +55,8 @@ export class TokenDetailsDialog {
     this.tradeDialog = null;
     this.positionsData = null;
     this.advancedChart = null;
+    this.txChart = null;
+    this.txChartResizeObserver = null;
     this.chartDataLoaded = false; // Track whether OHLCV data has been loaded
     this._focusTrap = null;
     this._isClosing = false;
@@ -834,6 +831,7 @@ export class TokenDetailsDialog {
         this.advancedChart.destroy();
         this.advancedChart = null;
       }
+      this._disposeTransactionsChart();
       this.chart = null;
 
       if (this.dialogEl) {
@@ -1495,7 +1493,6 @@ export class TokenDetailsDialog {
       formatShortAddress: this._formatShortAddress.bind(this),
     });
     content.dataset.loaded = "true";
-    initPoolsTabEvents(content);
   }
 
   // =========================================================================
@@ -1510,233 +1507,8 @@ export class TokenDetailsDialog {
 
     content.innerHTML = renderLinksTab(this.fullTokenData, {
       escapeHtml: this._escapeHtml.bind(this),
-      formatShortAddress: this._formatShortAddress.bind(this),
     });
     content.dataset.loaded = "true";
-    initLinksTabEvents(content);
-  }
-
-  _buildLinksContent(token) {
-    const mint = token.mint;
-    const hasWebsites = token.websites && token.websites.length > 0;
-    const hasSocials = token.socials && token.socials.length > 0;
-    const hasLogo = !!token.logo_url;
-    const hasHeader = !!token.header_image_url;
-    const hasDescription = !!token.description;
-
-    // Build left column - Media & Info
-    const leftCol = this._buildLinksLeftColumn(token, hasLogo, hasHeader, hasDescription);
-
-    // Build right column - All links organized
-    const rightCol = this._buildLinksRightColumn(token, mint, hasWebsites, hasSocials);
-
-    return `<div class="links-container">${leftCol}${rightCol}</div>`;
-  }
-
-  _buildLinksLeftColumn(token, hasLogo, hasHeader, hasDescription) {
-    const mint = token.mint;
-
-    // Token info section
-    const tokenInfoSection = `
-      <div class="links-info-card">
-        <div class="links-info-title">
-          <i class="icon-info"></i>
-          Token Info
-        </div>
-        <div class="links-info-content">
-          <div class="links-info-row">
-            <span class="links-info-label">Mint Address</span>
-            <div class="links-info-value-group">
-              <span class="links-info-value mono" title="${this._escapeHtml(mint)}">${this._formatShortAddress(mint)}</span>
-              <button class="copy-btn-mini" data-copy="${this._escapeHtml(mint)}" title="Copy mint address">
-                <i class="icon-copy"></i>
-              </button>
-            </div>
-          </div>
-          ${
-            token.data_source
-              ? `
-          <div class="links-info-row">
-            <span class="links-info-label">Data Source</span>
-            <span class="links-info-value badge">${this._escapeHtml(token.data_source)}</span>
-          </div>
-          `
-              : ""
-          }
-          ${
-            token.verified
-              ? `
-          <div class="links-info-row">
-            <span class="links-info-label">Status</span>
-            <span class="links-info-value badge success"><i class="icon-shield-check"></i> Verified</span>
-          </div>
-          `
-              : ""
-          }
-        </div>
-      </div>
-    `;
-
-    // Media section - logo and header
-    let mediaSection = "";
-    if (hasLogo || hasHeader) {
-      const logoHtml = hasLogo
-        ? `
-        <div class="links-media-item">
-          <div class="links-media-label">Logo</div>
-          <div class="links-media-preview logo">
-            <img src="${this._escapeHtml(token.logo_url)}" alt="Token Logo" onerror="this.parentElement.innerHTML='<i class=\\'icon-image-off\\'></i>'" />
-          </div>
-          <a href="${this._escapeHtml(token.logo_url)}" target="_blank" class="links-media-link">
-            <i class="icon-external-link"></i> Open Image
-          </a>
-        </div>
-      `
-        : "";
-
-      const headerHtml = hasHeader
-        ? `
-        <div class="links-media-item">
-          <div class="links-media-label">Header Image</div>
-          <div class="links-media-preview header">
-            <img src="${this._escapeHtml(token.header_image_url)}" alt="Header Image" onerror="this.parentElement.innerHTML='<i class=\\'icon-image-off\\'></i>'" />
-          </div>
-          <a href="${this._escapeHtml(token.header_image_url)}" target="_blank" class="links-media-link">
-            <i class="icon-external-link"></i> Open Image
-          </a>
-        </div>
-      `
-        : "";
-
-      mediaSection = `
-        <div class="links-info-card">
-          <div class="links-info-title">
-            <i class="icon-image"></i>
-            Media Assets
-          </div>
-          <div class="links-media-grid">
-            ${logoHtml}
-            ${headerHtml}
-          </div>
-        </div>
-      `;
-    }
-
-    // Description section
-    let descriptionSection = "";
-    if (hasDescription) {
-      descriptionSection = `
-        <div class="links-info-card">
-          <div class="links-info-title">
-            <i class="icon-file-text"></i>
-            Description
-          </div>
-          <div class="links-description">
-            ${this._escapeHtml(token.description)}
-          </div>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="links-left-col">
-        ${tokenInfoSection}
-        ${mediaSection}
-        ${descriptionSection}
-      </div>
-    `;
-  }
-
-  _buildLinksRightColumn(token, mint, hasWebsites, hasSocials) {
-    // Explorers section - comprehensive list
-    const explorersSection = `
-      <div class="links-section-card">
-        <div class="links-section-title">
-          <i class="icon-search"></i>
-          Explorers & Analytics
-        </div>
-        <div class="links-grid-compact">
-          ${this._buildExplorerLink("https://solscan.io/token/" + mint, "Solscan")}
-          ${this._buildExplorerLink("https://explorer.solana.com/address/" + mint, "Solana Explorer")}
-          ${this._buildExplorerLink("https://birdeye.so/token/" + mint + "?chain=solana", "Birdeye")}
-          ${this._buildExplorerLink("https://dexscreener.com/solana/" + mint, "DEX Screener")}
-          ${this._buildExplorerLink("https://www.geckoterminal.com/solana/tokens/" + mint, "GeckoTerminal")}
-          ${this._buildExplorerLink("https://www.dextools.io/app/en/solana/pair-explorer/" + mint, "DexTools")}
-          ${this._buildExplorerLink("https://gmgn.ai/sol/token/" + mint, "GMGN")}
-          ${this._buildExplorerLink("https://photon-sol.tinyastro.io/en/lp/" + mint, "Photon")}
-          ${this._buildExplorerLink("https://rugcheck.xyz/tokens/" + mint, "RugCheck")}
-          ${this._buildExplorerLink("https://app.bubblemaps.io/sol/token/" + mint, "Bubblemaps")}
-          ${this._buildExplorerLink("https://www.coingecko.com/en/coins/" + mint, "CoinGecko")}
-          ${this._buildExplorerLink("https://jup.ag/swap/SOL-" + mint, "Jupiter Swap")}
-        </div>
-      </div>
-    `;
-
-    // Official websites section
-    let websitesSection = "";
-    if (hasWebsites) {
-      const websiteLinks = token.websites
-        .map((site) => {
-          const label = site.label || this._extractDomainName(site.url) || "Website";
-          return this._buildOfficialLink(site.url, label);
-        })
-        .join("");
-
-      websitesSection = `
-        <div class="links-section-card">
-          <div class="links-section-title">
-            <i class="icon-globe"></i>
-            Official Websites
-          </div>
-          <div class="links-list">
-            ${websiteLinks}
-          </div>
-        </div>
-      `;
-    }
-
-    // Social links section
-    let socialsSection = "";
-    if (hasSocials) {
-      const socialLinks = token.socials
-        .map((social) => {
-          const { label } = this._getSocialMeta(social.platform);
-          return this._buildSocialLink(social.url, label);
-        })
-        .join("");
-
-      socialsSection = `
-        <div class="links-section-card">
-          <div class="links-section-title">
-            <i class="icon-share-2"></i>
-            Social Media
-          </div>
-          <div class="links-list">
-            ${socialLinks}
-          </div>
-        </div>
-      `;
-    }
-
-    // No links message
-    let noLinksMessage = "";
-    if (!hasWebsites && !hasSocials) {
-      noLinksMessage = `
-        <div class="links-empty-notice">
-          <i class="icon-link-2-off"></i>
-          <span>No official website or social links available for this token.</span>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="links-right-col">
-        ${explorersSection}
-        ${websitesSection}
-        ${socialsSection}
-        ${noLinksMessage}
-      </div>
-    `;
   }
 }
 

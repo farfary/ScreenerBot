@@ -46,7 +46,7 @@ export function applyTransactionsTabMixin(DialogClass) {
           return;
         }
 
-        content.innerHTML = this._buildTransactionsHTML();
+        content.innerHTML = this._buildTransactionsHTML(transactions);
 
         // Wait for DOM
         setTimeout(() => {
@@ -77,20 +77,43 @@ export function applyTransactionsTabMixin(DialogClass) {
    * @private
    * @returns {string} HTML string
    */
-  proto._buildTransactionsHTML = function () {
+  proto._buildTransactionsHTML = function (transactions) {
+    const stats = summarizeTransactions(transactions);
     return `
-      <div class="transactions-container" style="display: flex; flex-direction: column; gap: 16px; padding: 16px; height: 100%; overflow: auto;">
-        <div class="transactions-chart-section" style="background: var(--bg-surface); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
-          <div class="section-header" style="margin-bottom: 8px; font-size: 14px; color: var(--text-secondary);">
-             <span style="font-weight: 600; color: var(--text-primary);">24h Transaction Activity</span>
-             <span style="font-size: 12px; opacity: 0.7;">(Hourly Count)</span>
+      <div class="transactions-container">
+        <section class="transactions-overview">
+          <div class="transactions-section-heading">
+            <div>
+              <strong>24h activity</strong>
+              <span>Hourly wallet transactions</span>
+            </div>
           </div>
-          <div id="txns-chart" style="width: 100%; height: 200px;"></div>
-        </div>
-        <div class="transactions-list-section" style="background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-color); flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="section-header" style="padding: 12px; border-bottom: 1px solid var(--border-color); font-weight: 600; color: var(--text-primary);">Last 100 Transactions</div>
-          <div id="txns-list" class="simple-table-container" style="overflow-y: auto; flex: 1;"></div>
-        </div>
+          <div class="transactions-metrics">
+            <div><span>Total</span><strong>${stats.total}</strong></div>
+            <div><span>Buys</span><strong class="positive">${stats.buys}</strong></div>
+            <div><span>Sells</span><strong class="negative">${stats.sells}</strong></div>
+          </div>
+          <div id="txns-chart" class="transactions-chart"></div>
+        </section>
+
+        <section class="transactions-list-section">
+          <div class="transactions-section-heading">
+            <div>
+              <strong>Recent transactions</strong>
+              <span>${Math.min(transactions.length, 100)} shown</span>
+            </div>
+          </div>
+          <div class="transactions-table-shell">
+            <div class="transactions-table-header" aria-hidden="true">
+              <span>Time</span>
+              <span>Type</span>
+              <span class="transaction-price-cell">Price</span>
+              <span>Total</span>
+              <span></span>
+            </div>
+            <div id="txns-list" class="transactions-list"></div>
+          </div>
+        </section>
       </div>
     `;
   };
@@ -101,8 +124,9 @@ export function applyTransactionsTabMixin(DialogClass) {
    * @param {Array} transactions - Transaction data
    */
   proto._renderTransactionsChart = function (transactions) {
-    const chartContainer = this.dialogEl.querySelector("#txns-chart");
+    const chartContainer = this.dialogEl?.querySelector("#txns-chart");
     if (!chartContainer) return;
+    this._disposeTransactionsChart();
 
     // Aggregate by hour buckets
     const buckets = {};
@@ -136,28 +160,47 @@ export function applyTransactionsTabMixin(DialogClass) {
       return;
     }
 
+    const styles = window.getComputedStyle(this.dialogEl);
     const chart = window.LightweightCharts.createChart(chartContainer, {
-      layout: { background: { type: "solid", color: "transparent" }, textColor: "#8b949e" },
-      grid: { vertLines: { visible: false }, horzLines: { color: "#30363d" } },
+      layout: {
+        background: { type: "solid", color: "transparent" },
+        textColor: styles.getPropertyValue("--text-muted").trim(),
+      },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: styles.getPropertyValue("--border-color").trim() },
+      },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.1, bottom: 0 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
-      crosshair: { vertLine: { labelVisible: false }, horzLine: { labelVisible: false } }, // minimal
+      crosshair: { vertLine: { labelVisible: false }, horzLine: { labelVisible: false } },
     });
 
-    const series = chart.addHistogramSeries({ color: "#238636" });
+    const series = chart.addHistogramSeries({
+      color: styles.getPropertyValue("--success-color").trim(),
+    });
     series.setData(data);
     chart.timeScale().fitContent();
 
     // Auto-resize
-    const resizeObserver = new ResizeObserver((entries) => {
+    this.txChartResizeObserver = new ResizeObserver((entries) => {
       if (entries.length === 0 || !entries[0].contentRect) return;
       const { width, height } = entries[0].contentRect;
       chart.applyOptions({ width, height });
     });
-    resizeObserver.observe(chartContainer);
+    this.txChartResizeObserver.observe(chartContainer);
 
-    // Save reference for cleanup if needed
     this.txChart = chart;
+  };
+
+  proto._disposeTransactionsChart = function () {
+    if (this.txChartResizeObserver) {
+      this.txChartResizeObserver.disconnect();
+      this.txChartResizeObserver = null;
+    }
+    if (this.txChart) {
+      this.txChart.remove();
+      this.txChart = null;
+    }
   };
 
   /**
@@ -166,7 +209,7 @@ export function applyTransactionsTabMixin(DialogClass) {
    * @param {Array} transactions - Transaction data
    */
   proto._renderTransactionsList = function (transactions) {
-    const container = this.dialogEl.querySelector("#txns-list");
+    const container = this.dialogEl?.querySelector("#txns-list");
     if (!container) return;
 
     const recent = transactions.slice(0, 100);
@@ -174,219 +217,62 @@ export function applyTransactionsTabMixin(DialogClass) {
     // Simple HTML table for speed
     const rows = recent
       .map((tx) => {
-        // Use safe field access (backend returns transaction_type, sol_delta)
         const txType = (tx.transaction_type || tx.type || "UNKNOWN").toLowerCase();
-        const isBuy =
-          txType.includes("buy") ||
-          (txType === "swap" && (tx.direction || "").toLowerCase() === "incoming");
-
         const typeLabel = txType.toUpperCase();
-
-        // Style based on type
-        let typeStyle = "color: var(--text-secondary);";
-        if (isBuy) typeStyle = "color: var(--success-color, #3fb950);";
-        else if (
-          txType.includes("sell") ||
-          (txType === "swap" && (tx.direction || "").toLowerCase() === "outgoing")
-        )
-          typeStyle = "color: var(--error-color, #f85149);";
-
+        const kind = transactionKind(tx);
         const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
-
-        // Price (if available) - generic transactions typically don't have price
         const price = tx.price_sol
           ? Utils.formatPriceSubscript(tx.price_sol, { precision: 5 })
           : "—";
-
-        // Total SOL (use sol_delta absolute value)
         const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);
         const total = Utils.formatNumber(amount, { decimals: 2 });
 
         const rowInner = `
-           <span style="color: var(--text-secondary);">${timeDisplay}</span>
-           <span style="font-weight: 600; ${typeStyle}">${typeLabel}</span>
-           <span style="font-family: monospace;">${price}</span>
-           <span>${total} SOL</span>
-           <span style="color: var(--text-muted); text-align: right;"><i class="icon-external-link"></i></span>`;
+          <span class="transaction-time">${this._escapeHtml(timeDisplay)}</span>
+          <strong class="transaction-kind ${kind}">${this._escapeHtml(typeLabel)}</strong>
+          <span class="transaction-price-cell">${price}</span>
+          <span class="transaction-total">${total} SOL</span>
+          <i class="icon-external-link transaction-external" aria-hidden="true"></i>
+        `;
 
-        // Whole row links to the transaction on Solscan (clearer than a tiny icon).
         return tx.signature
           ? `
-         <a class="txn-row" href="${Utils.solscanTxUrl(tx.signature)}" target="_blank" rel="noopener noreferrer" title="View transaction on Solscan" style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 13px; color: inherit; text-decoration: none;">
-           ${rowInner}
-         </a>
-       `
+            <a class="token-transaction-row" href="${Utils.solscanTxUrl(tx.signature)}" target="_blank" rel="noopener noreferrer" title="View transaction on Solscan">
+              ${rowInner}
+            </a>
+          `
           : `
-         <div style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 13px;">
-           ${rowInner}
-         </div>
-       `;
+            <div class="token-transaction-row">
+              ${rowInner}
+            </div>
+          `;
       })
       .join("");
 
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column;">
-         <div style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; background: var(--bg-input, #0d1117); font-size: 12px; color: var(--text-secondary); font-weight: 600; position: sticky; top: 0;">
-           <span>Time</span>
-           <span>Type</span>
-           <span>Price</span>
-           <span>Total</span>
-           <span>Link</span>
-         </div>
-         <div style="flex: 1;">
-           ${rows}
-         </div>
-      </div>
-    `;
+    container.innerHTML = rows;
   };
+}
 
-  /**
-   * Build explorer link HTML
-   * @private
-   * @param {string} url - Explorer URL
-   * @param {string} name - Display name
-   * @returns {string} HTML string
-   */
-  proto._buildExplorerLink = function (url, name) {
-    return `
-      <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-explorer-item">
-        <span>${this._escapeHtml(name)}</span>
-        <i class="icon-external-link link-external-icon"></i>
-      </a>
-    `;
-  };
+function transactionKind(transaction) {
+  const type = (transaction.transaction_type || transaction.type || "").toLowerCase();
+  const direction = (transaction.direction || "").toLowerCase();
+  if (type.includes("buy") || (type === "swap" && direction === "incoming")) return "buy";
+  if (type.includes("sell") || (type === "swap" && direction === "outgoing")) return "sell";
+  return "other";
+}
 
-  /**
-   * Build official link HTML
-   * @private
-   * @param {string} url - Link URL
-   * @param {string} label - Display label
-   * @returns {string} HTML string
-   */
-  proto._buildOfficialLink = function (url, label) {
-    return `
-      <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-official-item">
-        <div class="links-official-content">
-          <span class="links-official-label">${this._escapeHtml(label)}</span>
-          <span class="links-official-url">${this._escapeHtml(this._formatUrl(url))}</span>
-        </div>
-        <i class="icon-external-link link-external-icon"></i>
-      </a>
-    `;
-  };
-
-  /**
-   * Build social link HTML
-   * @private
-   * @param {string} url - Social link URL
-   * @param {string} label - Platform label
-   * @returns {string} HTML string
-   */
-  proto._buildSocialLink = function (url, label) {
-    const username = this._extractSocialUsername(url);
-    return `
-      <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-social-item">
-        <div class="links-social-content">
-          <span class="links-social-platform">${this._escapeHtml(label)}</span>
-          ${username ? `<span class="links-social-handle">${this._escapeHtml(username)}</span>` : ""}
-        </div>
-        <i class="icon-external-link link-external-icon"></i>
-      </a>
-    `;
-  };
-
-  /**
-   * Get social platform metadata
-   * @private
-   * @param {string} platform - Platform name
-   * @returns {Object} Icon and label
-   */
-  proto._getSocialMeta = function (platform) {
-    const platformLower = platform?.toLowerCase() || "";
-    const socialMap = {
-      twitter: { icon: "icon-twitter", label: "Twitter / X" },
-      x: { icon: "icon-twitter", label: "X (Twitter)" },
-      telegram: { icon: "icon-send", label: "Telegram" },
-      discord: { icon: "icon-message-circle", label: "Discord" },
-      medium: { icon: "icon-book-open", label: "Medium" },
-      github: { icon: "icon-github", label: "GitHub" },
-      youtube: { icon: "icon-youtube", label: "YouTube" },
-      reddit: { icon: "icon-message-square", label: "Reddit" },
-      facebook: { icon: "icon-facebook", label: "Facebook" },
-      instagram: { icon: "icon-instagram", label: "Instagram" },
-      linkedin: { icon: "icon-linkedin", label: "LinkedIn" },
-      tiktok: { icon: "icon-music", label: "TikTok" },
-    };
-    return socialMap[platformLower] || { icon: "icon-link", label: platform || "Link" };
-  };
-
-  /**
-   * Get social platform color class
-   * @private
-   * @param {string} platform - Platform name
-   * @returns {string} CSS class
-   */
-  proto._getSocialColorClass = function (platform) {
-    const platformLower = platform?.toLowerCase() || "";
-    const colorMap = {
-      "twitter / x": "social-twitter",
-      "x (twitter)": "social-twitter",
-      telegram: "social-telegram",
-      discord: "social-discord",
-      youtube: "social-youtube",
-      github: "social-github",
-      medium: "social-medium",
-      reddit: "social-reddit",
-    };
-    return colorMap[platformLower] || "social-default";
-  };
-
-  /**
-   * Extract domain name from URL
-   * @private
-   * @param {string} url - URL to parse
-   * @returns {string|null} Domain name
-   */
-  proto._extractDomainName = function (url) {
-    try {
-      const domain = new URL(url).hostname;
-      return domain.replace(/^www\./, "");
-    } catch {
-      return null;
-    }
-  };
-
-  /**
-   * Format URL for display
-   * @private
-   * @param {string} url - URL to format
-   * @returns {string} Formatted URL
-   */
-  proto._formatUrl = function (url) {
-    try {
-      const parsed = new URL(url);
-      return parsed.hostname + (parsed.pathname !== "/" ? parsed.pathname : "");
-    } catch {
-      return url;
-    }
-  };
-
-  /**
-   * Extract username from social URL
-   * @private
-   * @param {string} url - Social URL
-   * @returns {string|null} Username with @ prefix
-   */
-  proto._extractSocialUsername = function (url) {
-    try {
-      const parsed = new URL(url);
-      const path = parsed.pathname.replace(/^\/+|\/+$/g, "");
-      if (path && !path.includes("/")) {
-        return "@" + path;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  };
+function summarizeTransactions(transactions) {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  return transactions.reduce(
+    (summary, transaction) => {
+      const timestamp = new Date(transaction.timestamp).getTime();
+      if (!Number.isFinite(timestamp) || timestamp < cutoff) return summary;
+      summary.total += 1;
+      const kind = transactionKind(transaction);
+      if (kind === "buy") summary.buys += 1;
+      if (kind === "sell") summary.sells += 1;
+      return summary;
+    },
+    { total: 0, buys: 0, sells: 0 }
+  );
 }

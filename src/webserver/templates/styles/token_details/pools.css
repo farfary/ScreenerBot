@@ -1,429 +1,302 @@
-/* =============================================================================
-   POOLS TAB
-   ============================================================================= */
+/* Token details — liquidity pools */
 
-/* Two-column layout for pools */
 .pools-container {
   display: grid;
-  grid-template-columns: minmax(260px, 28%) 1fr;
-  gap: 0;
-  min-height: 100%;
+  grid-template-columns: minmax(250px, 30%) minmax(0, 1fr);
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
 }
 
-/* Left column - Summary */
-.pools-left-col {
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
-  padding: 16px;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* Right column - Pool list */
+.pools-left-col,
 .pools-right-col {
-  background: var(--bg-primary);
-  padding: 16px;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
+}
+
+.pools-left-col {
+  padding: 16px 18px;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.pools-right-col {
+  padding: 0 20px 18px;
+}
+
+.pools-section {
+  padding: 14px 0;
+}
+
+.pools-section + .pools-section {
+  border-top: 1px solid var(--border-color);
+}
+
+.pools-section:first-child {
+  padding-top: 0;
+}
+
+.pools-section-title,
+.pools-column-heading {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* Summary cards */
-.pools-summary-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 12px;
-  transition: border-color var(--transition-fast);
-}
-
-.pools-summary-card:hover {
-  border-color: var(--text-muted);
-}
-
-.pools-summary-card.canonical-highlight {
-  border-color: var(--primary-alpha-30);
-  background: var(--primary-alpha-5);
-}
-
-.pools-summary-card.canonical-highlight:hover {
-  border-color: var(--primary-color);
-}
-
-.pools-summary-title {
-  font-size: 0.7rem;
-  font-weight: 700;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
   color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
+}
+
+.pools-section-title > span {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.pools-summary-title svg {
+.pools-section-title i {
   color: var(--primary-color);
 }
 
-.pools-summary-stats {
+.pools-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
+.pools-summary-fact {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.pools-stat {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.pools-summary-fact:nth-child(even) {
+  padding-left: 14px;
+  border-left: 1px solid var(--border-color);
 }
 
-.pools-stat-label {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
+.pools-summary-fact > span,
+.pools-summary-row > span,
+.pool-detail-metric > span,
+.pool-address-row > span,
+.pool-reserves-heading {
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
 }
 
-.pools-stat-value {
-  font-size: 0.8rem;
-  font-weight: 600;
+.pools-summary-fact strong,
+.pools-summary-row strong,
+.pool-detail-metric strong {
+  overflow: hidden;
   color: var(--text-primary);
   font-family: var(--font-data);
+  font-size: 0.76rem;
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pools-canonical-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.pools-summary-rows {
+  margin-top: 8px;
 }
 
-/* DEX breakdown */
-.pools-dex-list {
+.pools-summary-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pools-dex-row {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
   border-bottom: 1px solid var(--border-color);
 }
 
-.pools-dex-row:last-child {
-  border-bottom: none;
+.pools-column-heading {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  min-height: 45px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
 }
 
-.pools-dex-name {
-  font-size: 0.75rem;
-  color: var(--text-primary);
-}
-
-.pools-dex-count {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
+.pools-column-heading strong {
+  color: var(--text-muted);
   font-family: var(--font-data);
-  background: var(--bg-secondary);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
 }
 
-/* Pool list header */
-.pools-list-header {
-  padding-bottom: 8px;
+.pool-detail {
+  padding: 14px 0 16px;
   border-bottom: 1px solid var(--border-color);
 }
 
-.pools-list-title {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-/* Pool list */
-.pools-list {
+.pool-detail-header,
+.pool-detail-identity,
+.pool-canonical-label {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Pool detail card */
-.pool-detail-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: border-color var(--transition-fast);
-}
-
-.pool-detail-card:hover {
-  border-color: var(--text-muted);
-}
-
-.pool-detail-card.canonical {
-  border-color: var(--primary-alpha-40);
-}
-
-.pool-detail-card.canonical:hover {
-  border-color: var(--primary-color);
+  align-items: center;
 }
 
 .pool-detail-header {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 8px 10px;
-  background: var(--bg-card-hover);
-  border-bottom: 1px solid var(--border-color);
+  gap: 14px;
+  margin-bottom: 12px;
 }
 
-.pool-detail-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.pool-detail-identity {
+  gap: 10px;
+  min-width: 0;
 }
 
-.pool-detail-program {
-  font-size: 0.8rem;
-  font-weight: 600;
+.pool-detail-identity > strong {
+  overflow: hidden;
   color: var(--text-primary);
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pool-canonical-badge {
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+.pool-canonical-label {
+  gap: 4px;
   color: var(--primary-color);
-  background: var(--primary-alpha-10);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
 }
 
 .pool-detail-role {
-  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.62rem;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
+  text-transform: uppercase;
 }
 
 .pool-detail-role.base {
   color: var(--success-color);
-  background: var(--success-alpha-10);
 }
 
 .pool-detail-role.quote {
   color: var(--primary-color);
-  background: var(--primary-alpha-10);
 }
 
-.pool-detail-body {
-  padding: 10px;
+.pool-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid var(--border-color);
 }
 
-.pool-detail-section {
+.pool-detail-metric {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 0;
 }
 
-.pool-detail-divider {
-  height: 1px;
-  background: var(--border-color);
-  margin: 8px 0;
+.pool-detail-metric + .pool-detail-metric {
+  padding-left: 14px;
+  border-left: 1px solid var(--border-color);
 }
 
-.pool-detail-row {
+.pool-detail-addresses {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+  padding-top: 8px;
+}
+
+.pool-address-row {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 32px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pool-address-value {
+  display: flex;
   align-items: center;
-  min-height: 24px;
+  gap: 4px;
+  min-width: 0;
 }
 
-.pool-detail-row.reserves-row {
-  margin-bottom: 4px;
-}
-
-.pool-detail-label {
-  font-size: 0.7rem;
+.pool-address-value code {
+  overflow: hidden;
   color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.pool-detail-value-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pool-detail-value {
-  font-size: 0.75rem;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.pool-detail-value.mono {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pool-detail-value.highlight {
-  font-weight: 600;
-  color: var(--text-primary);
+.pool-reserves {
+  padding-top: 12px;
 }
 
-.pool-detail-value.muted {
-  color: var(--text-muted);
-  font-size: 0.65rem;
+.pool-reserves-heading {
+  margin-bottom: 3px;
 }
 
-/* Reserve accounts list */
-.pool-reserves-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-left: 8px;
-}
-
-.pool-reserve-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pool-reserve-addr {
-  font-size: 0.65rem;
-  font-family: var(--font-mono);
+.pool-reserves-heading span {
   color: var(--text-secondary);
+}
+
+.pool-reserves > .pool-address-row {
+  justify-content: flex-end;
 }
 
 .pool-no-data {
-  font-size: 0.65rem;
+  display: block;
+  padding-top: 8px;
   color: var(--text-muted);
-  font-style: italic;
+  font-size: 0.7rem;
 }
 
-/* Copy button mini */
 .copy-btn-mini {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  border: none;
+  border: 0;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
 }
 
 .copy-btn-mini:hover {
   color: var(--text-primary);
-  background: var(--bg-card-hover);
 }
 
-.copy-btn-mini svg {
-  width: 10px;
-  height: 10px;
+@media (width <= 900px) {
+  .pools-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(180px, 36%) minmax(0, 1fr);
+  }
+
+  .pools-left-col {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
 }
 
-/* Legacy styles for backward compatibility */
-.pools-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 16px;
-}
-
-.pool-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.pool-card.canonical {
-  border-color: var(--primary-alpha-30);
-}
-
-.pool-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--bg-card-hover);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.pool-program {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.canonical-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 8px;
-  border-radius: var(--radius-xl);
-  color: var(--primary-color);
-  background: var(--primary-alpha-10);
-}
-
-.pool-body {
-  padding: 12px;
-}
-
-.pool-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-}
-
-.pool-row:not(:last-child) {
-  border-bottom: 1px solid var(--border-color);
-}
-
-.pool-label {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.pool-value {
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  font-weight: 500;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.pool-value.mono {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
+@media (width <= 600px) {
+  .pool-detail-addresses {
+    grid-template-columns: 1fr;
+  }
 }

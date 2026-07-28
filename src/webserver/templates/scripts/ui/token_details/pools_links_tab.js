@@ -1,24 +1,15 @@
 /**
- * Token Details Dialog - Pools & Links Tabs
- * Extracted from token_details_dialog.js to reduce file size
- * These tabs are grouped together as they both display external/reference data
+ * Token Details Dialog - Pools & Links tabs
+ *
+ * Both tabs use continuous, independently scrolling information sheets. Their
+ * renderers stay together because they present the same external/reference
+ * metadata from the token detail response.
  */
 import * as Utils from "../../core/utils.js";
 import { renderTabState } from "./state_handling.js";
 
-// =========================================================================
-// POOLS TAB
-// =========================================================================
-
-/**
- * Render the pools tab content
- * @param {Object} token - Token data object
- * @param {Object} options - Rendering options
- * @returns {string} HTML string for pools tab
- */
 export function renderPoolsTab(token, options = {}) {
   const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
-
   const pools = token.pools || [];
 
   if (pools.length === 0) {
@@ -29,560 +20,366 @@ export function renderPoolsTab(token, options = {}) {
     });
   }
 
-  // Calculate summary stats
-  const totalLiquidity = pools.reduce((sum, p) => sum + (p.liquidity_usd || 0), 0);
-  const totalVolume24h = pools.reduce((sum, p) => sum + (p.volume_h24_usd || 0), 0);
-  const canonicalPool = pools.find((p) => p.is_canonical);
-  const programCounts = pools.reduce((acc, p) => {
-    acc[p.program] = (acc[p.program] || 0) + 1;
-    return acc;
+  const totalLiquidity = pools.reduce((sum, pool) => sum + (pool.liquidity_usd || 0), 0);
+  const totalVolume24h = pools.reduce((sum, pool) => sum + (pool.volume_h24_usd || 0), 0);
+  const canonicalPool = pools.find((pool) => pool.is_canonical);
+  const programCounts = pools.reduce((counts, pool) => {
+    const program = pool.program || "Unknown";
+    counts[program] = (counts[program] || 0) + 1;
+    return counts;
   }, {});
-  const baseRoleCount = pools.filter((p) => p.token_role === "base").length;
-  const quoteRoleCount = pools.filter((p) => p.token_role === "quote").length;
+  const summaryFacts = [
+    ["Total Pools", pools.length],
+    ["Liquidity", Utils.formatCurrencyUSD(totalLiquidity)],
+    ["24h Volume", Utils.formatCurrencyUSD(totalVolume24h)],
+    ["Base Role", pools.filter((pool) => pool.token_role === "base").length],
+    ["Quote Role", pools.filter((pool) => pool.token_role === "quote").length],
+  ];
 
-  // Build left column - Summary stats
-  const leftCol = `
-    <div class="pools-left-col">
-      <div class="pools-summary-card">
-        <div class="pools-summary-title">
-          <span>Pool Summary</span>
-          ${renderHintTrigger("tokenDetails.pools")}
+  const canonicalSection = canonicalPool
+    ? `
+      <section class="pools-section">
+        <div class="pools-section-title">
+          <span><i class="icon-star" aria-hidden="true"></i>Canonical pool</span>
         </div>
-        <div class="pools-summary-stats">
-          <div class="pools-stat">
-            <span class="pools-stat-label">Total Pools</span>
-            <span class="pools-stat-value">${pools.length}</span>
-          </div>
-          <div class="pools-stat">
-            <span class="pools-stat-label">Total Liquidity</span>
-            <span class="pools-stat-value">${Utils.formatCurrencyUSD(totalLiquidity)}</span>
-          </div>
-          <div class="pools-stat">
-            <span class="pools-stat-label">Total 24h Volume</span>
-            <span class="pools-stat-value">${Utils.formatCurrencyUSD(totalVolume24h)}</span>
-          </div>
-          <div class="pools-stat">
-            <span class="pools-stat-label">Base Role</span>
-            <span class="pools-stat-value">${baseRoleCount}</span>
-          </div>
-          <div class="pools-stat">
-            <span class="pools-stat-label">Quote Role</span>
-            <span class="pools-stat-value">${quoteRoleCount}</span>
-          </div>
+        <div class="pools-summary-rows">
+          ${renderPoolFact("DEX", escapeHtml(canonicalPool.program || "Unknown"))}
+          ${renderPoolFact("Liquidity", formatCurrency(canonicalPool.liquidity_usd))}
+          ${renderPoolFact("24h Volume", formatCurrency(canonicalPool.volume_h24_usd))}
         </div>
+      </section>
+    `
+    : "";
+
+  return `
+    <div class="pools-container">
+      <div class="pools-left-col">
+        <section class="pools-section">
+          <div class="pools-section-title">
+            <span>Pool summary</span>
+            ${renderHintTrigger("tokenDetails.pools")}
+          </div>
+          <div class="pools-summary-grid">
+            ${summaryFacts
+              .map(
+                ([label, value]) => `
+                  <div class="pools-summary-fact">
+                    <span>${label}</span>
+                    <strong>${value}</strong>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+        </section>
+
+        <section class="pools-section">
+          <div class="pools-section-title"><span>DEX breakdown</span></div>
+          <div class="pools-summary-rows">
+            ${Object.entries(programCounts)
+              .sort((a, b) => b[1] - a[1])
+              .map(([program, count]) => renderPoolFact(escapeHtml(program), count))
+              .join("")}
+          </div>
+        </section>
+
+        ${canonicalSection}
       </div>
 
-      <div class="pools-summary-card">
-        <div class="pools-summary-title">DEX Breakdown</div>
-        <div class="pools-dex-list">
-          ${Object.entries(programCounts)
-            .sort((a, b) => b[1] - a[1])
-            .map(
-              ([program, count]) => `
-              <div class="pools-dex-row">
-                <span class="pools-dex-name">${escapeHtml(program)}</span>
-                <span class="pools-dex-count">${count}</span>
-              </div>
-            `
-            )
-            .join("")}
+      <div class="pools-right-col">
+        <div class="pools-column-heading">
+          <span>All pools</span>
+          <strong>${pools.length}</strong>
         </div>
-      </div>
-
-      ${
-        canonicalPool
-          ? `
-      <div class="pools-summary-card canonical-highlight">
-        <div class="pools-summary-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
-          Canonical Pool
+        <div>
+          ${pools.map((pool) => buildPoolDetail(pool, { escapeHtml, formatShortAddress })).join("")}
         </div>
-        <div class="pools-canonical-info">
-          <div class="pools-stat">
-            <span class="pools-stat-label">DEX</span>
-            <span class="pools-stat-value">${escapeHtml(canonicalPool.program)}</span>
-          </div>
-          <div class="pools-stat">
-            <span class="pools-stat-label">Liquidity</span>
-            <span class="pools-stat-value">${canonicalPool.liquidity_usd ? Utils.formatCurrencyUSD(canonicalPool.liquidity_usd) : "—"}</span>
-          </div>
-          <div class="pools-stat">
-            <span class="pools-stat-label">Volume 24h</span>
-            <span class="pools-stat-value">${canonicalPool.volume_h24_usd ? Utils.formatCurrencyUSD(canonicalPool.volume_h24_usd) : "—"}</span>
-          </div>
-        </div>
-      </div>
-      `
-          : ""
-      }
-    </div>
-  `;
-
-  // Build right column - Pool details
-  const poolCards = pools
-    .map((pool) => buildPoolDetailCard(pool, { escapeHtml, formatShortAddress }))
-    .join("");
-  const rightCol = `
-    <div class="pools-right-col">
-      <div class="pools-list-header">
-        <span class="pools-list-title">All Pools (${pools.length})</span>
-      </div>
-      <div class="pools-list">
-        ${poolCards}
       </div>
     </div>
   `;
-
-  return `<div class="pools-container">${leftCol}${rightCol}</div>`;
 }
 
-function buildPoolDetailCard(pool, options = {}) {
+function buildPoolDetail(pool, options = {}) {
   const { escapeHtml, formatShortAddress } = options;
-
+  const reserveAccounts = Array.isArray(pool.reserve_accounts) ? pool.reserve_accounts : [];
+  const roleClass = pool.token_role === "base" || pool.token_role === "quote" ? pool.token_role : "";
   const lastUpdated = pool.last_updated_unix
     ? Utils.formatTimestamp(pool.last_updated_unix * 1000)
     : "—";
 
-  const reserveAccountsHtml =
-    pool.reserve_accounts && pool.reserve_accounts.length > 0
-      ? pool.reserve_accounts
-          .map(
-            (addr) => `
-          <div class="pool-reserve-item">
-            <span class="pool-reserve-addr" title="${escapeHtml(addr)}">${formatShortAddress(addr)}</span>
-            <button class="copy-btn-mini" data-copy="${escapeHtml(addr)}" title="Copy address">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-            </button>
-          </div>
-        `
-          )
-          .join("")
-      : '<span class="pool-no-data">No reserve accounts</span>';
-
   return `
-    <div class="pool-detail-card ${pool.is_canonical ? "canonical" : ""}">
-      <div class="pool-detail-header">
-        <div class="pool-detail-left">
-          <span class="pool-detail-program">${escapeHtml(pool.program)}</span>
-          ${pool.is_canonical ? '<span class="pool-canonical-badge">★ Canonical</span>' : ""}
+    <article class="pool-detail">
+      <header class="pool-detail-header">
+        <div class="pool-detail-identity">
+          <strong>${escapeHtml(pool.program || "Unknown DEX")}</strong>
+          ${pool.is_canonical ? '<span class="pool-canonical-label"><i class="icon-star" aria-hidden="true"></i>Canonical</span>' : ""}
         </div>
-        <div class="pool-detail-role ${pool.token_role}">${escapeHtml(pool.token_role)}</div>
+        <span class="pool-detail-role ${roleClass}">
+          ${escapeHtml(pool.token_role || "unknown")}
+        </span>
+      </header>
+
+      <div class="pool-detail-metrics">
+        ${renderPoolMetric("Liquidity", formatCurrency(pool.liquidity_usd))}
+        ${renderPoolMetric("24h Volume", formatCurrency(pool.volume_h24_usd))}
+        ${renderPoolMetric("Updated", lastUpdated)}
       </div>
 
-      <div class="pool-detail-body">
-        <div class="pool-detail-section">
-          <div class="pool-detail-row">
-            <span class="pool-detail-label">Pool Address</span>
-            <div class="pool-detail-value-group">
-              <span class="pool-detail-value mono" title="${escapeHtml(pool.pool_id)}">${formatShortAddress(pool.pool_id)}</span>
-              <button class="copy-btn-mini" data-copy="${escapeHtml(pool.pool_id)}" title="Copy pool address">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              </button>
-            </div>
-          </div>
+      <div class="pool-detail-addresses">
+        ${renderAddressRow("Pool", pool.pool_id, { escapeHtml, formatShortAddress })}
+        ${renderAddressRow("Base mint", pool.base_mint, { escapeHtml, formatShortAddress })}
+        ${renderAddressRow("Quote mint", pool.quote_mint, { escapeHtml, formatShortAddress })}
+        ${renderAddressRow("Paired mint", pool.paired_mint, { escapeHtml, formatShortAddress })}
+      </div>
 
-          <div class="pool-detail-row">
-            <span class="pool-detail-label">Base Mint</span>
-            <div class="pool-detail-value-group">
-              <span class="pool-detail-value mono" title="${escapeHtml(pool.base_mint)}">${formatShortAddress(pool.base_mint)}</span>
-              <button class="copy-btn-mini" data-copy="${escapeHtml(pool.base_mint)}" title="Copy base mint">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              </button>
-            </div>
-          </div>
+      <div class="pool-reserves">
+        <div class="pool-reserves-heading">Reserve accounts <span>${reserveAccounts.length}</span></div>
+        ${
+          reserveAccounts.length
+            ? reserveAccounts
+                .map((address) => renderAddressRow("", address, { escapeHtml, formatShortAddress }))
+                .join("")
+            : '<span class="pool-no-data">No reserve accounts</span>'
+        }
+      </div>
+    </article>
+  `;
+}
 
-          <div class="pool-detail-row">
-            <span class="pool-detail-label">Quote Mint</span>
-            <div class="pool-detail-value-group">
-              <span class="pool-detail-value mono" title="${escapeHtml(pool.quote_mint)}">${formatShortAddress(pool.quote_mint)}</span>
-              <button class="copy-btn-mini" data-copy="${escapeHtml(pool.quote_mint)}" title="Copy quote mint">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              </button>
-            </div>
-          </div>
+function renderPoolFact(label, value) {
+  return `
+    <div class="pools-summary-row">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `;
+}
 
-          <div class="pool-detail-row">
-            <span class="pool-detail-label">Paired Mint</span>
-            <div class="pool-detail-value-group">
-              <span class="pool-detail-value mono" title="${escapeHtml(pool.paired_mint)}">${formatShortAddress(pool.paired_mint)}</span>
-              <button class="copy-btn-mini" data-copy="${escapeHtml(pool.paired_mint)}" title="Copy paired mint">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-              </button>
-            </div>
-          </div>
-        </div>
+function renderPoolMetric(label, value) {
+  return `
+    <div class="pool-detail-metric">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `;
+}
 
-        <div class="pool-detail-divider"></div>
-
-        <div class="pool-detail-section">
-          <div class="pool-detail-row">
-            <span class="pool-detail-label">Liquidity</span>
-            <span class="pool-detail-value highlight">${pool.liquidity_usd ? Utils.formatCurrencyUSD(pool.liquidity_usd) : "—"}</span>
-          </div>
-
-          <div class="pool-detail-row">
-            <span class="pool-detail-label">Volume 24h</span>
-            <span class="pool-detail-value highlight">${pool.volume_h24_usd ? Utils.formatCurrencyUSD(pool.volume_h24_usd) : "—"}</span>
-          </div>
-
-          <div class="pool-detail-row">
-            <span class="pool-detail-label">Last Updated</span>
-            <span class="pool-detail-value muted">${lastUpdated}</span>
-          </div>
-        </div>
-
-        <div class="pool-detail-divider"></div>
-
-        <div class="pool-detail-section">
-          <div class="pool-detail-row reserves-row">
-            <span class="pool-detail-label">Reserve Accounts (${pool.reserve_accounts?.length || 0})</span>
-          </div>
-          <div class="pool-reserves-list">
-            ${reserveAccountsHtml}
-          </div>
-        </div>
+function renderAddressRow(label, address, options = {}) {
+  const { escapeHtml, formatShortAddress } = options;
+  if (!address) return "";
+  const safeAddress = escapeHtml(address);
+  return `
+    <div class="pool-address-row">
+      ${label ? `<span>${label}</span>` : ""}
+      <div class="pool-address-value">
+        <code title="${safeAddress}">${formatShortAddress(address)}</code>
+        <button class="copy-btn-mini" type="button" data-copy="${safeAddress}" title="Copy ${label ? label.toLowerCase() : "address"}">
+          <i class="icon-copy" aria-hidden="true"></i>
+        </button>
       </div>
     </div>
   `;
 }
 
-/**
- * Initialize event handlers for pools tab (copy buttons)
- */
-export function initPoolsTabEvents(container) {
-  container.querySelectorAll(".copy-btn-mini[data-copy]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const text = btn.dataset.copy;
-      if (text) {
-        Utils.copyToClipboard(text);
-      }
-    });
-  });
+function formatCurrency(value) {
+  return value === null || value === undefined ? "—" : Utils.formatCurrencyUSD(value);
 }
 
-// =========================================================================
-// LINKS TAB
-// =========================================================================
-
-/**
- * Render the links tab content
- * @param {Object} token - Token data object
- * @param {Object} options - Rendering options
- * @returns {string} HTML string for links tab
- */
 export function renderLinksTab(token, options = {}) {
   const { escapeHtml } = options;
-
   const mint = token.mint;
-  const hasWebsites = token.websites && token.websites.length > 0;
-  const hasSocials = token.socials && token.socials.length > 0;
-  const hasLogo = !!token.logo_url;
-  const hasHeader = !!token.header_image_url;
-  const hasDescription = !!token.description;
+  const websites = Array.isArray(token.websites) ? token.websites : [];
+  const socials = Array.isArray(token.socials) ? token.socials : [];
+  const logoUrl = Utils.resolveTokenLogoUrl(token);
+  const bannerUrl = Utils.resolveTokenBannerUrl(token);
 
-  // Build left column - Media & Info
-  const leftCol = buildLinksLeftColumn(token, hasLogo, hasHeader, hasDescription, { escapeHtml });
-
-  // Build right column - All links organized
-  const rightCol = buildLinksRightColumn(token, mint, hasWebsites, hasSocials, { escapeHtml });
-
-  return `<div class="links-container">${leftCol}${rightCol}</div>`;
+  return `
+    <div class="links-container">
+      <div class="links-left-col">
+        ${buildTokenReferenceSection(token, mint, { escapeHtml })}
+        ${buildMediaSection(token, logoUrl, bannerUrl, { escapeHtml })}
+        ${buildDescriptionSection(token.description, { escapeHtml })}
+      </div>
+      <div class="links-right-col">
+        ${buildExplorerSection(mint, { escapeHtml })}
+        ${buildOfficialSection(websites, { escapeHtml })}
+        ${buildSocialSection(socials, { escapeHtml })}
+        ${
+          websites.length === 0 && socials.length === 0
+            ? `
+              <div class="links-empty-notice">
+                <i class="icon-link-2-off" aria-hidden="true"></i>
+                <span>No official website or social links are available for this token.</span>
+              </div>
+            `
+            : ""
+        }
+      </div>
+    </div>
+  `;
 }
 
-function buildLinksLeftColumn(token, hasLogo, hasHeader, hasDescription, options = {}) {
+function buildTokenReferenceSection(token, mint, options = {}) {
   const { escapeHtml } = options;
-  const mint = token.mint;
-
-  // Token info section
-  const tokenInfoSection = `
-    <div class="links-info-card">
-      <div class="links-info-title">
-        <i class="icon-info"></i>
-        Token Info
-      </div>
-      <div class="links-info-content">
+  const safeMint = escapeHtml(mint);
+  return `
+    <section class="links-sheet-section">
+      <div class="links-section-title"><i class="icon-info" aria-hidden="true"></i>Token info</div>
+      <div>
         <div class="links-info-row">
-          <span class="links-info-label">Mint Address</span>
-          <div class="links-info-value-group">
-            <span class="links-info-value mono" title="${escapeHtml(mint)}">${formatShortAddress(mint)}</span>
-            <button class="copy-btn-mini" data-copy="${escapeHtml(mint)}" title="Copy mint address">
-              <i class="icon-copy"></i>
+          <span>Mint address</span>
+          <div class="links-info-value">
+            <code title="${safeMint}">${formatShortAddress(mint)}</code>
+            <button class="copy-btn-mini" type="button" data-copy="${safeMint}" title="Copy mint address">
+              <i class="icon-copy" aria-hidden="true"></i>
             </button>
           </div>
         </div>
-        ${
-          token.data_source
-            ? `
-        <div class="links-info-row">
-          <span class="links-info-label">Data Source</span>
-          <span class="links-info-value badge">${escapeHtml(token.data_source)}</span>
-        </div>
-        `
-            : ""
-        }
-        ${
-          token.verified
-            ? `
-        <div class="links-info-row">
-          <span class="links-info-label">Status</span>
-          <span class="links-info-value badge success"><i class="icon-shield-check"></i> Verified</span>
-        </div>
-        `
-            : ""
-        }
+        ${token.data_source ? renderLinkFact("Data source", escapeHtml(token.data_source)) : ""}
+        ${token.verified ? renderLinkFact("Status", "Verified", "verified") : ""}
       </div>
-    </div>
+    </section>
   `;
+}
 
-  // Media section - logo and header
-  let mediaSection = "";
-  if (hasLogo || hasHeader) {
-    const logoHtml = hasLogo
-      ? `
-      <div class="links-media-item">
-        <div class="links-media-label">Logo</div>
-        <div class="links-media-preview logo">
-          <img src="${escapeHtml(token.logo_url)}" alt="Token Logo" onerror="this.parentElement.innerHTML='<i class=\\'icon-image-off\\'></i>'" />
-        </div>
-        <a href="${escapeHtml(token.logo_url)}" target="_blank" class="links-media-link">
-          <i class="icon-external-link"></i> Open Image
-        </a>
-      </div>
-    `
-      : "";
-
-    const headerHtml = hasHeader
-      ? `
-      <div class="links-media-item">
-        <div class="links-media-label">Header Image</div>
-        <div class="links-media-preview header">
-          <img src="${escapeHtml(token.header_image_url)}" alt="Header Image" onerror="this.parentElement.innerHTML='<i class=\\'icon-image-off\\'></i>'" />
-        </div>
-        <a href="${escapeHtml(token.header_image_url)}" target="_blank" class="links-media-link">
-          <i class="icon-external-link"></i> Open Image
-        </a>
-      </div>
-    `
-      : "";
-
-    mediaSection = `
-      <div class="links-info-card">
-        <div class="links-info-title">
-          <i class="icon-image"></i>
-          Media Assets
-        </div>
-        <div class="links-media-grid">
-          ${logoHtml}
-          ${headerHtml}
-        </div>
-      </div>
-    `;
-  }
-
-  // Description section
-  let descriptionSection = "";
-  if (hasDescription) {
-    descriptionSection = `
-      <div class="links-info-card">
-        <div class="links-info-title">
-          <i class="icon-file-text"></i>
-          Description
-        </div>
-        <div class="links-description">
-          ${escapeHtml(token.description)}
-        </div>
-      </div>
-    `;
-  }
-
+function buildMediaSection(token, logoUrl, bannerUrl, options = {}) {
+  const { escapeHtml } = options;
+  if (!logoUrl && !bannerUrl) return "";
+  const symbol = escapeHtml(token.symbol || "Token");
   return `
-    <div class="links-left-col">
-      ${tokenInfoSection}
-      ${mediaSection}
-      ${descriptionSection}
+    <section class="links-sheet-section">
+      <div class="links-section-title"><i class="icon-image" aria-hidden="true"></i>Media assets</div>
+      <div class="links-media-grid">
+        ${logoUrl ? renderMediaItem("Logo", logoUrl, symbol, "logo", { escapeHtml }) : ""}
+        ${bannerUrl ? renderMediaItem("Banner", bannerUrl, `${symbol} banner`, "banner", { escapeHtml }) : ""}
+      </div>
+    </section>
+  `;
+}
+
+function renderMediaItem(label, url, alt, type, options = {}) {
+  const { escapeHtml } = options;
+  const safeUrl = escapeHtml(url);
+  return `
+    <div class="links-media-item">
+      <div class="links-media-label">${label}</div>
+      <div class="links-media-preview ${type}">
+        <img src="${safeUrl}" alt="${alt}" />
+      </div>
+      <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="links-media-link">
+        Open image <i class="icon-external-link" aria-hidden="true"></i>
+      </a>
     </div>
   `;
 }
 
-function buildLinksRightColumn(token, mint, hasWebsites, hasSocials, options = {}) {
+function buildDescriptionSection(description, options = {}) {
   const { escapeHtml } = options;
-
-  // Explorers section - comprehensive list
-  const explorersSection = `
-    <div class="links-section-card">
-      <div class="links-section-title">
-        <i class="icon-search"></i>
-        Explorers & Analytics
-      </div>
-      <div class="links-grid-compact">
-        ${buildExplorerLink("https://solscan.io/token/" + mint, "Solscan", { escapeHtml })}
-        ${buildExplorerLink("https://explorer.solana.com/address/" + mint, "Solana Explorer", { escapeHtml })}
-        ${buildExplorerLink("https://birdeye.so/token/" + mint + "?chain=solana", "Birdeye", { escapeHtml })}
-        ${buildExplorerLink("https://dexscreener.com/solana/" + mint, "DEX Screener", { escapeHtml })}
-        ${buildExplorerLink("https://www.geckoterminal.com/solana/tokens/" + mint, "GeckoTerminal", { escapeHtml })}
-        ${buildExplorerLink("https://www.dextools.io/app/en/solana/pair-explorer/" + mint, "DexTools", { escapeHtml })}
-        ${buildExplorerLink("https://gmgn.ai/sol/token/" + mint, "GMGN", { escapeHtml })}
-        ${buildExplorerLink("https://photon-sol.tinyastro.io/en/lp/" + mint, "Photon", { escapeHtml })}
-        ${buildExplorerLink("https://rugcheck.xyz/tokens/" + mint, "RugCheck", { escapeHtml })}
-        ${buildExplorerLink("https://app.bubblemaps.io/sol/token/" + mint, "Bubblemaps", { escapeHtml })}
-        ${buildExplorerLink("https://www.coingecko.com/en/coins/" + mint, "CoinGecko", { escapeHtml })}
-        ${buildExplorerLink("https://jup.ag/swap/SOL-" + mint, "Jupiter Swap", { escapeHtml })}
-      </div>
-    </div>
-  `;
-
-  // Official websites section
-  let websitesSection = "";
-  if (hasWebsites) {
-    const websiteLinks = token.websites
-      .map((site) => {
-        const label = site.label || extractDomainName(site.url) || "Website";
-        return buildOfficialLink(site.url, label, { escapeHtml });
-      })
-      .join("");
-
-    websitesSection = `
-      <div class="links-section-card">
-        <div class="links-section-title">
-          <i class="icon-globe"></i>
-          Official Websites
-        </div>
-        <div class="links-list">
-          ${websiteLinks}
-        </div>
-      </div>
-    `;
-  }
-
-  // Social links section
-  let socialsSection = "";
-  if (hasSocials) {
-    const socialLinks = token.socials
-      .map((social) => {
-        const { label } = getSocialMeta(social.platform);
-        return buildSocialLink(social.url, label, { escapeHtml });
-      })
-      .join("");
-
-    socialsSection = `
-      <div class="links-section-card">
-        <div class="links-section-title">
-          <i class="icon-share-2"></i>
-          Social Media
-        </div>
-        <div class="links-list">
-          ${socialLinks}
-        </div>
-      </div>
-    `;
-  }
-
-  // No links message
-  let noLinksMessage = "";
-  if (!hasWebsites && !hasSocials) {
-    noLinksMessage = `
-      <div class="links-empty-notice">
-        <i class="icon-link-2-off"></i>
-        <span>No official website or social links available for this token.</span>
-      </div>
-    `;
-  }
-
+  if (!description) return "";
   return `
-    <div class="links-right-col">
-      ${explorersSection}
-      ${websitesSection}
-      ${socialsSection}
-      ${noLinksMessage}
-    </div>
+    <section class="links-sheet-section">
+      <div class="links-section-title"><i class="icon-file-text" aria-hidden="true"></i>Description</div>
+      <p class="links-description">${escapeHtml(description)}</p>
+    </section>
   `;
 }
 
-function buildExplorerLink(url, name, options = {}) {
+function buildExplorerSection(mint, options = {}) {
+  const { escapeHtml } = options;
+  const explorers = [
+    ["Solscan", `https://solscan.io/token/${mint}`],
+    ["Solana Explorer", `https://explorer.solana.com/address/${mint}`],
+    ["Birdeye", `https://birdeye.so/token/${mint}?chain=solana`],
+    ["DEX Screener", `https://dexscreener.com/solana/${mint}`],
+    ["GeckoTerminal", `https://www.geckoterminal.com/solana/tokens/${mint}`],
+    ["DexTools", `https://www.dextools.io/app/en/solana/pair-explorer/${mint}`],
+    ["GMGN", `https://gmgn.ai/sol/token/${mint}`],
+    ["Photon", `https://photon-sol.tinyastro.io/en/lp/${mint}`],
+    ["RugCheck", `https://rugcheck.xyz/tokens/${mint}`],
+    ["Bubblemaps", `https://app.bubblemaps.io/sol/token/${mint}`],
+    ["CoinGecko", `https://www.coingecko.com/en/coins/${mint}`],
+    ["Jupiter Swap", `https://jup.ag/swap/SOL-${mint}`],
+  ];
+  return `
+    <section class="links-sheet-section">
+      <div class="links-section-title"><i class="icon-search" aria-hidden="true"></i>Explorers &amp; analytics</div>
+      <div class="links-explorer-grid">
+        ${explorers
+          .map(([label, url]) => renderExternalRow(label, url, "", { escapeHtml }))
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function buildOfficialSection(websites, options = {}) {
+  const { escapeHtml } = options;
+  if (websites.length === 0) return "";
+  return `
+    <section class="links-sheet-section">
+      <div class="links-section-title"><i class="icon-globe" aria-hidden="true"></i>Official websites</div>
+      <div class="links-list">
+        ${websites
+          .map((site) => {
+            const label = site.label || extractDomainName(site.url) || "Website";
+            return renderExternalRow(label, site.url, formatUrl(site.url), { escapeHtml });
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function buildSocialSection(socials, options = {}) {
+  const { escapeHtml } = options;
+  if (socials.length === 0) return "";
+  return `
+    <section class="links-sheet-section">
+      <div class="links-section-title"><i class="icon-share-2" aria-hidden="true"></i>Social media</div>
+      <div class="links-list">
+        ${socials
+          .map((social) => {
+            const label = socialLabel(social.platform);
+            return renderExternalRow(label, social.url, extractSocialUsername(social.url), {
+              escapeHtml,
+            });
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderExternalRow(label, url, detail, options = {}) {
   const { escapeHtml } = options;
   return `
-    <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-explorer-item">
-      <span>${escapeHtml(name)}</span>
-      <i class="icon-external-link link-external-icon"></i>
+    <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-external-row">
+      <span class="links-external-copy">
+        <strong>${escapeHtml(label)}</strong>
+        ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+      </span>
+      <i class="icon-external-link" aria-hidden="true"></i>
     </a>
   `;
 }
 
-function buildOfficialLink(url, label, options = {}) {
-  const { escapeHtml } = options;
+function renderLinkFact(label, value, modifier = "") {
   return `
-    <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-official-item">
-      <div class="links-official-content">
-        <span class="links-official-label">${escapeHtml(label)}</span>
-        <span class="links-official-url">${escapeHtml(formatUrl(url))}</span>
-      </div>
-      <i class="icon-external-link link-external-icon"></i>
-    </a>
+    <div class="links-info-row">
+      <span>${label}</span>
+      <strong class="${modifier}">${value}</strong>
+    </div>
   `;
 }
-
-function buildSocialLink(url, label, options = {}) {
-  const { escapeHtml } = options;
-  const username = extractSocialUsername(url);
-  return `
-    <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-social-item">
-      <div class="links-social-content">
-        <span class="links-social-platform">${escapeHtml(label)}</span>
-        ${username ? `<span class="links-social-handle">${escapeHtml(username)}</span>` : ""}
-      </div>
-      <i class="icon-external-link link-external-icon"></i>
-    </a>
-  `;
-}
-
-/**
- * Initialize event handlers for links tab (copy buttons)
- */
-export function initLinksTabEvents(container) {
-  container.querySelectorAll(".copy-btn-mini[data-copy]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const text = btn.dataset.copy;
-      if (text) {
-        Utils.copyToClipboard(text);
-      }
-    });
-  });
-}
-
-// Helper functions
 
 function formatShortAddress(address) {
   if (!address || address.length < 12) return address;
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function getSocialMeta(platform) {
-  const platformLower = platform?.toLowerCase() || "";
-  const socialMap = {
-    twitter: { icon: "icon-twitter", label: "Twitter / X" },
-    x: { icon: "icon-twitter", label: "X (Twitter)" },
-    telegram: { icon: "icon-send", label: "Telegram" },
-    discord: { icon: "icon-message-circle", label: "Discord" },
-    medium: { icon: "icon-book-open", label: "Medium" },
-    github: { icon: "icon-github", label: "GitHub" },
-    youtube: { icon: "icon-youtube", label: "YouTube" },
-    reddit: { icon: "icon-message-square", label: "Reddit" },
-    facebook: { icon: "icon-facebook", label: "Facebook" },
-    instagram: { icon: "icon-instagram", label: "Instagram" },
-    linkedin: { icon: "icon-linkedin", label: "LinkedIn" },
-    tiktok: { icon: "icon-music", label: "TikTok" },
-  };
-  return socialMap[platformLower] || { icon: "icon-link", label: platform || "Link" };
-}
-
 function extractDomainName(url) {
   try {
-    const domain = new URL(url).hostname;
-    return domain.replace(/^www\./, "");
+    return new URL(url).hostname.replace(/^www\./, "");
   } catch {
     return null;
   }
@@ -599,13 +396,27 @@ function formatUrl(url) {
 
 function extractSocialUsername(url) {
   try {
-    const parsed = new URL(url);
-    const path = parsed.pathname.replace(/^\/+|\/+$/g, "");
-    if (path && !path.includes("/")) {
-      return "@" + path;
-    }
-    return null;
+    const path = new URL(url).pathname.replace(/^\/+|\/+$/g, "");
+    return path && !path.includes("/") ? `@${path}` : "";
   } catch {
-    return null;
+    return "";
   }
+}
+
+function socialLabel(platform) {
+  const labels = {
+    twitter: "Twitter / X",
+    x: "X (Twitter)",
+    telegram: "Telegram",
+    discord: "Discord",
+    medium: "Medium",
+    github: "GitHub",
+    youtube: "YouTube",
+    reddit: "Reddit",
+    facebook: "Facebook",
+    instagram: "Instagram",
+    linkedin: "LinkedIn",
+    tiktok: "TikTok",
+  };
+  return labels[platform?.toLowerCase()] || platform || "Social";
 }
