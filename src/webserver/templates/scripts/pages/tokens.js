@@ -975,7 +975,7 @@ function createLifecycle() {
         label: "Token",
         sortable: true,
         floating: true,
-        minWidth: 180,
+        minWidth: 220,
         wrap: false,
         render: (_v, row) => tokenCell(row),
       },
