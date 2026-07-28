@@ -970,27 +970,18 @@ In DeFi, tokens trade across **multiple pools** (Raydium, Orca, Meteora). Each p
     Data is refreshed periodically from DexScreener/GeckoTerminal plus on-chain pool reads.`,
     },
 
-    priceChanges: {
-      id: "token_details.price_changes",
-      title: "Price Changes",
-      content: `Price movement over timeframes (aggregator-derived, not the live pool price).
-
-    • **5M / 1H / 6H / 24H** — % change from market sources
-
-    May differ from on-chain pool prices because of averaging across pools, refresh cadence, and calculation methods. Use alongside the live pool price for execution decisions.`,
-    },
-
-    volume: {
-      id: "token_details.volume",
-      title: "Trading Volume",
-      content: `USD trading volume from market aggregators over each timeframe.
+    marketPulse: {
+      id: "token_details.market_pulse",
+      title: "Market Pulse",
+      content: `Price movement and USD trading volume share the same **5M / 1H / 6H / 24H** timeline so momentum and participation can be compared directly.
 
 **Interpretation:**
-• **High Volume:** Strong interest, efficient price discovery, easier exits.
-• **Low Volume:** Risk of slippage, wider spreads, and difficulty exiting large positions.
-• **Volume/Liquidity Ratio:** High volume with low liquidity = enormous volatility.
+• **Price** — aggregator-derived percentage change, not the live pool execution price.
+• **High Volume** — stronger interest, more efficient price discovery, and easier exits.
+• **Low Volume** — greater slippage, wider spreads, and harder large exits.
+• **High Volume + Low Liquidity** — elevated volatility and execution risk.
 
-**Data Source:** Aggregated from major DEXs (Raydium, Orca, etc.) via DexScreener/GeckoTerminal.`,
+Market data is aggregated across major DEXs via DexScreener/GeckoTerminal, so price change can differ from the current on-chain pool price.`,
     },
 
     activity: {
@@ -1004,7 +995,7 @@ In DeFi, tokens trade across **multiple pools** (Raydium, Orca, Meteora). Each p
 • **Rate:** Trades per minute (e.g., "12.5/m"). Higher rates = viral activity.
 • **Counts:** Exact number of buys/sells and their percentage share.
 
-**Insights Panel:**
+**Summary metrics:**
 • **24H Buy %:** >50% is bullish (more buyers), <50% is bearish (more sellers).
 • **Net Flow:** Total buys minus sells. Positive = Accumulation.
 • **5M Spike:** How much faster trading is *right now* vs. the 1H average.

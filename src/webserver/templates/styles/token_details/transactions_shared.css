@@ -536,8 +536,8 @@
     padding: var(--spacing-md);
   }
 
-  .change-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .token-details-dialog .tab-content[data-tab-content="overview"] {
+    padding: 0;
   }
 
   .price-metrics {

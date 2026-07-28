@@ -21,7 +21,7 @@ export function renderOverviewTab(token, options = {}) {
     <div class="overview-split-layout">
       <div class="overview-left">
         <div class="overview-banner-slot" id="overviewBannerSlot">${renderOverviewBanner(token)}</div>
-        <div class="overview-live" id="overviewLive">${renderOverviewLeft(token, options)}</div>
+        <div id="overviewLive">${renderOverviewLeft(token, options)}</div>
       </div>
       <div class="overview-right">
         <div class="chart-container">
@@ -79,12 +79,17 @@ export function renderOverviewTab(token, options = {}) {
  */
 export function renderOverviewLeft(token, options = {}) {
   const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
-  return `${buildQuickStats(token)}${buildOverviewContent(token, {
-    renderHintTrigger,
-    escapeHtml,
-    formatShortAddress,
-    getRejectionDisplayLabel,
-  })}`;
+  return `
+    <div class="overview-sheet">
+      ${buildHeadlineMetrics(token)}
+      ${buildOverviewContent(token, {
+        renderHintTrigger,
+        escapeHtml,
+        formatShortAddress,
+        getRejectionDisplayLabel,
+      })}
+    </div>
+  `;
 }
 
 /**
@@ -122,28 +127,31 @@ export function renderOverviewBanner(token) {
   `;
 }
 
-function buildQuickStats(token) {
+function buildHeadlineMetrics(token) {
   const change24h = token.price_change_periods?.h24;
-  const changeClass = change24h >= 0 ? "positive" : "negative";
+  const hasChange24h = typeof change24h === "number";
+  const changeClass = getChangeClass(change24h);
 
   return `
-    <div class="quick-stats">
-      <div class="quick-stat">
-        <span class="stat-label">Price</span>
-        <span class="stat-value">${token.price_sol ? Utils.formatPriceSubscript(token.price_sol, { precision: 5 }) + " SOL" : "—"}</span>
-        ${change24h !== undefined ? `<span class="stat-change ${changeClass}">${formatChange(change24h)}</span>` : ""}
+    <div class="overview-headline" aria-label="Headline market metrics">
+      <div class="overview-headline-item">
+        <span class="overview-headline-label">Price</span>
+        <span class="overview-headline-readout">
+          <span class="overview-headline-value">${token.price_sol ? Utils.formatPriceSubscript(token.price_sol, { precision: 5 }) + " SOL" : "—"}</span>
+          ${hasChange24h ? `<span class="overview-headline-change ${changeClass}">${formatChange(change24h)}</span>` : ""}
+        </span>
       </div>
-      <div class="quick-stat">
-        <span class="stat-label">Market Cap</span>
-        <span class="stat-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { prefix: "$" }) : token.fdv ? Utils.formatCompactNumber(token.fdv, { prefix: "$" }) : "—"}</span>
+      <div class="overview-headline-item">
+        <span class="overview-headline-label">Market Cap</span>
+        <span class="overview-headline-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { prefix: "$" }) : token.fdv ? Utils.formatCompactNumber(token.fdv, { prefix: "$" }) : "—"}</span>
       </div>
-      <div class="quick-stat">
-        <span class="stat-label">Liquidity</span>
-        <span class="stat-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { prefix: "$" }) : token.pool_reserves_sol ? Utils.formatSol(token.pool_reserves_sol, { decimals: 2 }) : "—"}</span>
+      <div class="overview-headline-item">
+        <span class="overview-headline-label">Liquidity</span>
+        <span class="overview-headline-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { prefix: "$" }) : token.pool_reserves_sol ? Utils.formatSol(token.pool_reserves_sol, { decimals: 2 }) : "—"}</span>
       </div>
-      <div class="quick-stat">
-        <span class="stat-label">Vol 24H</span>
-        <span class="stat-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { prefix: "$" }) : "—"}</span>
+      <div class="overview-headline-item">
+        <span class="overview-headline-label">Vol 24H</span>
+        <span class="overview-headline-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { prefix: "$" }) : "—"}</span>
       </div>
     </div>
   `;
@@ -153,17 +161,16 @@ function buildOverviewContent(token, options) {
   const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
 
   return `
-    <div class="overview-grid">
-      ${buildTokenInfoCard(token, { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel })}
-      ${buildLiquidityCard(token, { renderHintTrigger, escapeHtml, formatShortAddress })}
-      ${buildPriceChangesCard(token, { renderHintTrigger })}
-      ${buildVolumeCard(token, { renderHintTrigger })}
-      ${buildActivityCard(token, { renderHintTrigger })}
+    <div class="overview-sections">
+      ${buildTokenInfoSection(token, { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel })}
+      ${buildLiquiditySection(token, { renderHintTrigger, formatShortAddress })}
+      ${buildMarketPulseSection(token, { renderHintTrigger })}
+      ${buildActivitySection(token, { renderHintTrigger })}
     </div>
   `;
 }
 
-function buildTokenInfoCard(token, options) {
+function buildTokenInfoSection(token, options) {
   const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
 
   const age = token.pair_created_at
@@ -172,62 +179,65 @@ function buildTokenInfoCard(token, options) {
       ? Utils.formatTimeAgo(new Date(token.created_at * 1000))
       : "—";
 
-  // Build tags display with wrapper to prevent height jump
   const tagsContent =
     token.tags && token.tags.length > 0
-      ? `<div class="token-tags">${token.tags.map((t) => `<span class="token-tag">${escapeHtml(t)}</span>`).join("")}</div>`
-      : '<div class="token-tags-placeholder">No tags</div>';
-  const tagsHtml = `<div class="token-tags-wrapper">${tagsContent}</div>`;
+      ? `<div class="overview-tags">${token.tags.map((tag) => `<span class="overview-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
+      : '<span class="overview-tags-empty">No tags</span>';
 
-  // Build filtering status display
   let filteringStatusHtml = "";
   if (token.last_rejection_reason) {
     const displayLabel = getRejectionDisplayLabel(token.last_rejection_reason);
     filteringStatusHtml = `
-      <div class="info-cell full-width">
-        <span class="cell-label">Filter Status</span>
-        <span class="cell-value">
-          <span class="status-badge rejected" title="${escapeHtml(token.last_rejection_reason)}">
-            Rejected: ${escapeHtml(displayLabel)}
-          </span>
+      <div class="overview-fact overview-fact-wide">
+        <span class="overview-fact-label">Filter Status</span>
+        <span
+          class="overview-fact-value overview-filter-status"
+          title="${escapeHtml(token.last_rejection_reason)}"
+        >
+          Rejected · ${escapeHtml(displayLabel)}
         </span>
       </div>
     `;
   }
 
   return `
-    <div class="info-card compact">
-      <div class="card-header">
-        <span>Token Info</span>
-        <div class="card-header-actions">
-          ${token.verified ? '<span class="verified-badge"><i class="icon-check"></i> Verified</span>' : ""}
+    <section class="overview-section">
+      <div class="overview-section-header">
+        <span class="overview-section-title">Token Info</span>
+        <div class="overview-section-actions">
+          ${token.verified ? '<span class="overview-verified"><i class="icon-check"></i> Verified</span>' : ""}
           ${renderHintTrigger("tokenDetails.tokenInfo")}
         </div>
       </div>
-      <div class="card-body">
-        <div class="info-grid-2col">
-          <div class="info-cell">
-            <span class="cell-label">Mint</span>
-            <span class="cell-value mono clickable" onclick="Utils.copyToClipboard('${token.mint}')" title="Click to copy">${formatShortAddress(token.mint)}</span>
+      <div class="overview-facts">
+          <div class="overview-fact">
+            <span class="overview-fact-label">Mint</span>
+            <button
+              type="button"
+              class="overview-copy-value"
+              data-copy="${escapeHtml(token.mint)}"
+              title="Copy mint address"
+              aria-label="Copy mint address"
+            >${formatShortAddress(token.mint)}</button>
           </div>
-          <div class="info-cell">
-            <span class="cell-label">Decimals</span>
-            <span class="cell-value">${token.decimals ?? "—"}</span>
+          <div class="overview-fact">
+            <span class="overview-fact-label">Decimals</span>
+            <span class="overview-fact-value">${token.decimals ?? "—"}</span>
           </div>
-          <div class="info-cell">
-            <span class="cell-label">Age</span>
-            <span class="cell-value">${age}</span>
+          <div class="overview-fact">
+            <span class="overview-fact-label">Age</span>
+            <span class="overview-fact-value">${age}</span>
           </div>
-          <div class="info-cell">
-            <span class="cell-label">DEX</span>
-            <span class="cell-value">${token.pool_dex ? escapeHtml(token.pool_dex) : "—"}</span>
+          <div class="overview-fact">
+            <span class="overview-fact-label">DEX</span>
+            <span class="overview-fact-value">${token.pool_dex ? escapeHtml(token.pool_dex) : "—"}</span>
           </div>
           ${
             token.total_holders
               ? `
-          <div class="info-cell">
-            <span class="cell-label">Holders</span>
-            <span class="cell-value">${Utils.formatNumber(token.total_holders, { decimals: 0 })}</span>
+          <div class="overview-fact">
+            <span class="overview-fact-label">Holders</span>
+            <span class="overview-fact-value">${Utils.formatNumber(token.total_holders, { decimals: 0 })}</span>
           </div>
           `
               : ""
@@ -235,134 +245,106 @@ function buildTokenInfoCard(token, options) {
           ${
             token.top_10_concentration
               ? `
-          <div class="info-cell">
-            <span class="cell-label">Top 10 Hold</span>
-            <span class="cell-value">${token.top_10_concentration.toFixed(1)}%</span>
+          <div class="overview-fact">
+            <span class="overview-fact-label">Top 10 Hold</span>
+            <span class="overview-fact-value">${token.top_10_concentration.toFixed(1)}%</span>
           </div>
           `
               : ""
           }
           ${filteringStatusHtml}
-        </div>
-        ${tagsHtml}
-        ${token.description ? `<div class="info-description">${escapeHtml(token.description)}</div>` : ""}
       </div>
-    </div>
+      <div class="overview-tags-row">
+        <span class="overview-inline-label">Tags</span>
+        ${tagsContent}
+      </div>
+      ${token.description ? `<p class="overview-description">${escapeHtml(token.description)}</p>` : ""}
+    </section>
   `;
 }
 
-function buildLiquidityCard(token, options) {
+function buildLiquiditySection(token, options) {
   const { renderHintTrigger, formatShortAddress } = options;
 
   return `
-    <div class="info-card compact">
-      <div class="card-header">
-        <span>Liquidity & Market</span>
+    <section class="overview-section">
+      <div class="overview-section-header">
+        <span class="overview-section-title">Liquidity & Market</span>
         ${renderHintTrigger("tokenDetails.liquidity")}
       </div>
-      <div class="card-body">
-        <div class="info-grid-2col">
-          <div class="info-cell highlight">
-            <span class="cell-label">FDV</span>
-            <span class="cell-value large">${token.fdv ? Utils.formatCurrencyUSD(token.fdv) : "—"}</span>
+      <div class="overview-facts overview-market-facts">
+          <div class="overview-fact overview-fact-emphasis">
+            <span class="overview-fact-label">FDV</span>
+            <span class="overview-fact-value">${token.fdv ? Utils.formatCurrencyUSD(token.fdv) : "—"}</span>
           </div>
-          <div class="info-cell highlight">
-            <span class="cell-label">Liquidity</span>
-            <span class="cell-value large">${token.liquidity_usd ? Utils.formatCurrencyUSD(token.liquidity_usd) : "—"}</span>
+          <div class="overview-fact overview-fact-emphasis">
+            <span class="overview-fact-label">Liquidity</span>
+            <span class="overview-fact-value">${token.liquidity_usd ? Utils.formatCurrencyUSD(token.liquidity_usd) : "—"}</span>
           </div>
-          <div class="info-cell">
-            <span class="cell-label">Pool SOL</span>
-            <span class="cell-value">${token.pool_reserves_sol ? Utils.formatNumber(token.pool_reserves_sol, { decimals: 2 }) + " SOL" : "—"}</span>
+          <div class="overview-fact">
+            <span class="overview-fact-label">Pool SOL</span>
+            <span class="overview-fact-value">${token.pool_reserves_sol ? Utils.formatNumber(token.pool_reserves_sol, { decimals: 2 }) + " SOL" : "—"}</span>
           </div>
-          <div class="info-cell">
-            <span class="cell-label">Pool Token</span>
-            <span class="cell-value">${token.pool_reserves_token ? Utils.formatCompactNumber(token.pool_reserves_token) : "—"}</span>
+          <div class="overview-fact">
+            <span class="overview-fact-label">Pool Token</span>
+            <span class="overview-fact-value">${token.pool_reserves_token ? Utils.formatCompactNumber(token.pool_reserves_token) : "—"}</span>
           </div>
-        </div>
+      </div>
         ${
           token.pool_address
             ? `
-        <div class="pool-address">
-          <span class="cell-label">Pool</span>
-          <a href="https://solscan.io/account/${token.pool_address}" target="_blank" rel="noopener" class="pool-link">${formatShortAddress(token.pool_address)}</a>
+        <div class="overview-pool-row">
+          <span class="overview-inline-label">Pool</span>
+          <a href="https://solscan.io/account/${token.pool_address}" target="_blank" rel="noopener" class="overview-pool-link">${formatShortAddress(token.pool_address)}</a>
         </div>
         `
             : ""
         }
-      </div>
-    </div>
+    </section>
   `;
 }
 
-function buildPriceChangesCard(token, options) {
+function buildMarketPulseSection(token, options) {
   const { renderHintTrigger } = options;
   const changes = token.price_change_periods || {};
-
-  return `
-    <div class="info-card compact">
-      <div class="card-header">
-        <span>Price Changes</span>
-        ${renderHintTrigger("tokenDetails.priceChanges")}
-      </div>
-      <div class="card-body">
-        <div class="change-grid">
-          <div class="change-item">
-            <span class="change-label">5M</span>
-            <span class="change-value ${getChangeClass(changes.m5)}">${formatChange(changes.m5)}</span>
-          </div>
-          <div class="change-item">
-            <span class="change-label">1H</span>
-            <span class="change-value ${getChangeClass(changes.h1)}">${formatChange(changes.h1)}</span>
-          </div>
-          <div class="change-item">
-            <span class="change-label">6H</span>
-            <span class="change-value ${getChangeClass(changes.h6)}">${formatChange(changes.h6)}</span>
-          </div>
-          <div class="change-item">
-            <span class="change-label">24H</span>
-            <span class="change-value ${getChangeClass(changes.h24)}">${formatChange(changes.h24)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function buildVolumeCard(token, options) {
-  const { renderHintTrigger } = options;
   const volumes = token.volume_periods || {};
 
   return `
-    <div class="info-card compact">
-      <div class="card-header">
-        <span>Trading Volume</span>
-        ${renderHintTrigger("tokenDetails.volume")}
+    <section class="overview-section">
+      <div class="overview-section-header">
+        <span class="overview-section-title">Market Pulse</span>
+        ${renderHintTrigger("tokenDetails.marketPulse")}
       </div>
-      <div class="card-body">
-        <div class="volume-grid-4">
-          <div class="volume-item">
-            <span class="volume-label">5M</span>
-            <span class="volume-value">${volumes.m5 ? Utils.formatCompactNumber(volumes.m5, { prefix: "$" }) : "—"}</span>
-          </div>
-          <div class="volume-item">
-            <span class="volume-label">1H</span>
-            <span class="volume-value">${volumes.h1 ? Utils.formatCompactNumber(volumes.h1, { prefix: "$" }) : "—"}</span>
-          </div>
-          <div class="volume-item">
-            <span class="volume-label">6H</span>
-            <span class="volume-value">${volumes.h6 ? Utils.formatCompactNumber(volumes.h6, { prefix: "$" }) : "—"}</span>
-          </div>
-          <div class="volume-item">
-            <span class="volume-label">24H</span>
-            <span class="volume-value">${volumes.h24 ? Utils.formatCompactNumber(volumes.h24, { prefix: "$" }) : "—"}</span>
-          </div>
-        </div>
+      <div class="overview-pulse-matrix">
+        <span aria-hidden="true"></span>
+        <span class="overview-pulse-time">5M</span>
+        <span class="overview-pulse-time">1H</span>
+        <span class="overview-pulse-time">6H</span>
+        <span class="overview-pulse-time">24H</span>
+        <span class="overview-pulse-label">Price</span>
+        ${buildPulseChange(changes.m5)}
+        ${buildPulseChange(changes.h1)}
+        ${buildPulseChange(changes.h6)}
+        ${buildPulseChange(changes.h24)}
+        <span class="overview-pulse-label">Volume</span>
+        ${buildPulseVolume(volumes.m5)}
+        ${buildPulseVolume(volumes.h1)}
+        ${buildPulseVolume(volumes.h6)}
+        ${buildPulseVolume(volumes.h24)}
       </div>
-    </div>
+    </section>
   `;
 }
 
-function buildActivityCard(token, options) {
+function buildPulseChange(value) {
+  return `<span class="overview-pulse-value ${getChangeClass(value)}">${formatChange(value)}</span>`;
+}
+
+function buildPulseVolume(value) {
+  return `<span class="overview-pulse-volume">${value ? Utils.formatCompactNumber(value, { prefix: "$" }) : "—"}</span>`;
+}
+
+function buildActivitySection(token, options) {
   const { renderHintTrigger } = options;
   const txns = token.txn_periods || {};
   const buySellRatio = token.buy_sell_ratio_24h;
@@ -402,82 +384,62 @@ function buildActivityCard(token, options) {
     typeof netFlow24h === "number" ? (netFlow24h >= 0 ? "positive" : "negative") : "";
 
   return `
-    <div class="info-card compact">
-      <div class="card-header">
-        <span>Transaction Activity</span>
-        <div class="card-header-actions">
+    <section class="overview-section">
+      <div class="overview-section-header">
+        <span class="overview-section-title">Transaction Activity</span>
+        <div class="overview-section-actions">
           ${
             typeof buyPct24 === "number"
-              ? `<span class="ratio-badge ${buyPct24 >= 50 ? "bullish" : "bearish"}">${buyPct24.toFixed(0)}% Buy</span>`
+              ? `<span class="overview-ratio ${buyPct24 >= 50 ? "bullish" : "bearish"}">${buyPct24.toFixed(0)}% Buy</span>`
               : ""
           }
-          ${buySellRatio ? `<span class="ratio-badge ${ratioClass}">${buySellRatio.toFixed(2)} B/S</span>` : ""}
+          ${buySellRatio ? `<span class="overview-ratio ${ratioClass}">${buySellRatio.toFixed(2)} B/S</span>` : ""}
           ${renderHintTrigger("tokenDetails.activity")}
         </div>
       </div>
-      <div class="card-body">
-        <div class="txn-grid">
-          ${buildTxnRow("5M", txns.m5, { minutes: 5 })}
-          ${buildTxnRow("1H", txns.h1, { minutes: 60 })}
-          ${buildTxnRow("6H", txns.h6, { minutes: 360 })}
-          ${buildTxnRow("24H", txns.h24, { minutes: 1440 })}
+      <div class="overview-flow">
+        ${buildFlowRow("5M", txns.m5, { minutes: 5 })}
+        ${buildFlowRow("1H", txns.h1, { minutes: 60 })}
+        ${buildFlowRow("6H", txns.h6, { minutes: 360 })}
+        ${buildFlowRow("24H", txns.h24, { minutes: 1440 })}
+      </div>
+      <div class="overview-flow-summary">
+        <div class="overview-flow-stat buys">
+          <span class="overview-flow-stat-label">Buys 24H</span>
+          <span class="overview-flow-stat-value">${typeof buys24 === "number" ? Utils.formatNumber(buys24, { decimals: 0 }) : "—"}</span>
         </div>
-        ${
-          typeof token.buys_24h === "number" || typeof token.sells_24h === "number"
-            ? `
-        <div class="txn-summary">
-          <div class="txn-summary-item buys">
-            <span class="summary-icon">↗</span>
-            <span class="summary-value">${typeof token.buys_24h === "number" ? Utils.formatNumber(token.buys_24h, { decimals: 0 }) : "—"}</span>
-            <span class="summary-label">Buys</span>
-          </div>
-          <div class="txn-summary-item sells">
-            <span class="summary-icon">↘</span>
-            <span class="summary-value">${typeof token.sells_24h === "number" ? Utils.formatNumber(token.sells_24h, { decimals: 0 }) : "—"}</span>
-            <span class="summary-label">Sells</span>
-          </div>
-          ${
-            typeof token.net_flow_24h === "number"
-              ? `
-          <div class="txn-summary-item flow ${netFlowClass}">
-            <span class="summary-icon">${netFlow24h >= 0 ? "+" : "−"}</span>
-            <span class="summary-value">${netFlowLabel}</span>
-            <span class="summary-label">Net</span>
-          </div>
-          `
-              : ""
-          }
+        <div class="overview-flow-stat sells">
+          <span class="overview-flow-stat-label">Sells 24H</span>
+          <span class="overview-flow-stat-value">${typeof sells24 === "number" ? Utils.formatNumber(sells24, { decimals: 0 }) : "—"}</span>
         </div>
-        `
-            : ""
-        }
-
-        <div class="txn-insights">
-          <div class="txn-insight">
-            <div class="insight-label">24H Total</div>
-            <div class="insight-value mono">${total24 > 0 ? Utils.formatNumber(total24, { decimals: 0 }) : "—"}</div>
-          </div>
-          <div class="txn-insight">
-            <div class="insight-label">24H Avg</div>
-            <div class="insight-value mono">${
-              total24 > 0 ? `${Utils.formatNumber(total24 / 24, { decimals: 1 })}/h` : "—"
-            }</div>
-          </div>
-          <div class="txn-insight">
-            <div class="insight-label">5M Spike</div>
-            <div class="insight-value mono">${
-              typeof spikeFactor === "number" && Number.isFinite(spikeFactor)
-                ? `${Utils.formatNumber(spikeFactor, { decimals: 2 })}×`
-                : "—"
-            }</div>
-          </div>
+        <div class="overview-flow-stat ${netFlowClass}">
+          <span class="overview-flow-stat-label">Net Flow</span>
+          <span class="overview-flow-stat-value">${netFlowLabel}</span>
+        </div>
+        <div class="overview-flow-stat">
+          <span class="overview-flow-stat-label">24H Total</span>
+          <span class="overview-flow-stat-value">${total24 > 0 ? Utils.formatNumber(total24, { decimals: 0 }) : "—"}</span>
+        </div>
+        <div class="overview-flow-stat">
+          <span class="overview-flow-stat-label">24H Avg</span>
+          <span class="overview-flow-stat-value">${
+            total24 > 0 ? `${Utils.formatNumber(total24 / 24, { decimals: 1 })}/h` : "—"
+          }</span>
+        </div>
+        <div class="overview-flow-stat">
+          <span class="overview-flow-stat-label">5M Spike</span>
+          <span class="overview-flow-stat-value">${
+            typeof spikeFactor === "number" && Number.isFinite(spikeFactor)
+              ? `${Utils.formatNumber(spikeFactor, { decimals: 2 })}×`
+              : "—"
+          }</span>
         </div>
       </div>
-    </div>
+    </section>
   `;
 }
 
-function buildTxnRow(label, data, { minutes }) {
+function buildFlowRow(label, data, { minutes }) {
   const buysRaw = data?.buys;
   const sellsRaw = data?.sells;
 
@@ -504,22 +466,22 @@ function buildTxnRow(label, data, { minutes }) {
     total > 0 ? `${buyPct.toFixed(0)}% / ${sellPct.toFixed(0)}%` : hasAny ? "0% / 0%" : "—";
 
   return `
-    <div class="txn-row" title="${countsTitle}">
-      <div class="txn-time">
-        <div class="txn-label">${label}</div>
-        <div class="txn-rate">${rateText}</div>
+    <div class="overview-flow-row" title="${countsTitle}">
+      <div class="overview-flow-time">
+        <span class="overview-flow-period">${label}</span>
+        <span class="overview-flow-rate">${rateText}</span>
       </div>
-      <div class="txn-bar-container ${hasAny ? "" : "is-empty"}" aria-label="${countsTitle}">
-        <div class="txn-bar buy-bar" style="width: ${buyPct}%"></div>
-        <div class="txn-bar sell-bar" style="width: ${sellPct}%"></div>
+      <div class="overview-flow-bar ${hasAny ? "" : "is-empty"}" aria-label="${countsTitle}">
+        <span class="overview-flow-bar-buy" style="width: ${buyPct}%"></span>
+        <span class="overview-flow-bar-sell" style="width: ${sellPct}%"></span>
       </div>
-      <div class="txn-counts">
-        <div class="txn-counts-main">
-          <span class="buy-count">${buyText}</span>
-          <span class="separator">/</span>
-          <span class="sell-count">${sellText}</span>
+      <div class="overview-flow-counts">
+        <div class="overview-flow-counts-main">
+          <span class="overview-flow-buy-count">${buyText}</span>
+          <span class="overview-flow-separator">/</span>
+          <span class="overview-flow-sell-count">${sellText}</span>
         </div>
-        <div class="txn-counts-sub">${pctText}</div>
+        <span class="overview-flow-counts-sub">${pctText}</span>
       </div>
     </div>
   `;
