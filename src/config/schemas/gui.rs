@@ -62,6 +62,9 @@ config_struct! {
         /// Theme preference (dark, light, system)
         theme: String = "dark".to_owned(),
 
+        /// Token logo shape ("circle" or "rounded-square")
+        token_logo_shape: String = "circle".to_owned(),
+
         /// Default polling interval in milliseconds (minimum 1000)
         polling_interval_ms: u64 = 5000,
 

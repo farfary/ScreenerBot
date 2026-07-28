@@ -123,8 +123,8 @@
 }
 
 .wt-token-cell .token-logo {
-  width: 22px;
-  height: 22px;
+  width: var(--token-table-logo-size-compact);
+  height: var(--token-table-logo-size-compact);
   border-radius: var(--token-logo-radius, 3px);
   flex-shrink: 0;
   object-fit: cover;

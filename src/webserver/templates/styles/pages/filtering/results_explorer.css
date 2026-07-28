@@ -555,8 +555,8 @@
 
 .token-logo-wrapper {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: var(--token-table-logo-size);
+  height: var(--token-table-logo-size);
   flex-shrink: 0;
 }
 

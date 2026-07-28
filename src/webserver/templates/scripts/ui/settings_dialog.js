@@ -317,6 +317,7 @@ export class SettingsDialog {
       dashboard: {
         interface: {
           theme: "dark",
+          token_logo_shape: "circle",
           polling_interval_ms: 5000,
           show_ticker_bar: true,
           enable_animations: true,
@@ -438,7 +439,7 @@ export class SettingsDialog {
     if (iface.theme) {
       document.documentElement.setAttribute("data-theme", iface.theme);
       // Keep localStorage in sync for FOUC prevention
-      try { localStorage.setItem("theme", iface.theme); } catch (e) { /* storage unavailable */ }
+      try { localStorage.setItem("theme", iface.theme); } catch { /* storage unavailable */ }
       // Save theme to server
       fetch("/api/ui-state/save", {
         method: "POST",
@@ -456,6 +457,10 @@ export class SettingsDialog {
     if (typeof iface.enable_animations === "boolean") {
       document.documentElement.classList.toggle("no-animations", !iface.enable_animations);
     }
+
+    const tokenLogoShape =
+      iface.token_logo_shape === "rounded-square" ? "rounded-square" : "circle";
+    document.documentElement.setAttribute("data-token-logo-shape", tokenLogoShape);
 
     // Apply compact mode
     if (typeof iface.compact_mode === "boolean") {
@@ -1297,7 +1302,6 @@ export class SettingsDialog {
     }
   }
 
-
   /**
    * Attach handlers for About tab
    */
@@ -1378,6 +1382,7 @@ export class SettingsDialog {
       });
     }
   }
+
 
   /**
    * Build About tab content

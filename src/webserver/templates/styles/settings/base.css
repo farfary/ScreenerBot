@@ -426,6 +426,55 @@
   flex-shrink: 0;
 }
 
+.settings-field--logo-shape {
+  align-items: flex-start;
+}
+
+.logo-shape-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(118px, 1fr));
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.logo-shape-option {
+  display: grid;
+  grid-template-columns: auto 34px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.logo-shape-option:hover {
+  color: var(--text-primary);
+}
+
+.logo-shape-option:has(input:checked) {
+  color: var(--primary-color);
+}
+
+.logo-shape-option__preview {
+  display: block;
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+}
+
+.logo-shape-option__preview--circle {
+  border-radius: var(--radius-full);
+}
+
+.logo-shape-option__preview--rounded-square {
+  border-radius: 3px;
+}
+
 /* =============================================================================
    FORM CONTROLS - Modern & Refined
    ============================================================================= */
@@ -434,6 +483,7 @@
 .settings-select {
   min-width: 160px;
   padding: 7px 32px 7px 10px;
+
   /* background-color (not the `background` shorthand) so the global select arrow survives. */
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -442,6 +492,7 @@
   font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
+
   /* Arrow inherited from global `select {}` (form_controls.css). */
   transition: all var(--transition-fast);
 }

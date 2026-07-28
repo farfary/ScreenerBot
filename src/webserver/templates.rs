@@ -34,6 +34,19 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("{{IS_GUI_MODE}}", if is_gui { "true" } else { "false" });
     html = html.replace("{{ASSET_VERSION}}", asset_version.as_str());
 
+    let token_logo_shape = if crate::config::is_config_initialized() {
+        crate::config::with_config(|cfg| {
+            if cfg.gui.dashboard.interface.token_logo_shape == "rounded-square" {
+                "rounded-square"
+            } else {
+                "circle"
+            }
+        })
+    } else {
+        "circle"
+    };
+    html = html.replace("{{TOKEN_LOGO_SHAPE}}", token_logo_shape);
+
     // Inject initialization state for early DOM setup (prevents dashboard flash).
     // preview mode shows the dashboard immediately, so it does not "need init".
     let needs_initialization = !global::is_initialization_complete() && !global::is_preview_mode();

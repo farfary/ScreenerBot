@@ -198,8 +198,9 @@
   --radius-xl: 12px;
   --radius-2xl: 16px;
   --radius-full: 9999px;
-  /* Token artwork matches the website terminal: square with tight corners. */
-  --token-logo-radius: 3px;
+  --token-logo-radius: var(--radius-full);
+  --token-table-logo-size: 30.8px;
+  --token-table-logo-size-compact: 24.2px;
 
   /* Transition Timing */
   --transition-fast: 150ms ease;
@@ -389,7 +390,7 @@
   --radius-xl: 12px;
   --radius-2xl: 16px;
   --radius-full: 9999px;
-  --token-logo-radius: 3px;
+  --token-logo-radius: var(--radius-full);
 
   /* Transition Timing */
   --transition-fast: 150ms ease;
@@ -414,6 +415,10 @@
   --color-danger: var(--error-color);
   --color-error: var(--error-color);
   --color-info: var(--link-color);
+}
+
+:root[data-token-logo-shape="rounded-square"] {
+  --token-logo-radius: 3px;
 }
 
 * {

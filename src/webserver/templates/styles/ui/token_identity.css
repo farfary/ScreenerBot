@@ -39,7 +39,7 @@
 
 /* Brand glyph (the Solana logomark) — 101x88 on a transparent canvas, so cropping it
    edge to edge like a square provider avatar cuts the mark off. Inset it and letterbox
-   it inside the circle so the WHOLE mark is visible.
+   it inside the selected logo frame so the WHOLE mark is visible.
 
    The inset MUST be em-based, never a percentage: percentage padding resolves against
    the CONTAINING BLOCK's width, not the element's own, so on a wide row a `padding: 22%`

@@ -13,6 +13,11 @@ export function buildInterfaceTab(settings) {
   // Use the live DOM value as source of truth — the header toggle may have changed theme
   // without the gui config being updated (they're separate stores)
   const activeTheme = document.documentElement.getAttribute("data-theme") || iface.theme || "dark";
+  const activeLogoShape =
+    document.documentElement.getAttribute("data-token-logo-shape") === "rounded-square" ||
+    iface.token_logo_shape === "rounded-square"
+      ? "rounded-square"
+      : "circle";
 
   return `
     <div class="settings-section">
@@ -29,6 +34,25 @@ export function buildInterfaceTab(settings) {
               <option value="light" ${activeTheme === "light" ? "selected" : ""}>Light</option>
             </select>
           </div>
+        </div>
+
+        <div class="settings-field settings-field--logo-shape">
+          <div class="settings-field-info">
+            <label id="tokenLogoShapeLabel">Token Logo Shape</label>
+            <span class="settings-field-hint">Choose how token artwork appears throughout the app</span>
+          </div>
+          <fieldset class="logo-shape-options" aria-labelledby="tokenLogoShapeLabel">
+            <label class="logo-shape-option">
+              <input type="radio" name="tokenLogoShape" value="circle" ${activeLogoShape === "circle" ? "checked" : ""}>
+              <img class="logo-shape-option__preview logo-shape-option__preview--circle" src="/assets/logo.png" alt="">
+              <span>Circle</span>
+            </label>
+            <label class="logo-shape-option">
+              <input type="radio" name="tokenLogoShape" value="rounded-square" ${activeLogoShape === "rounded-square" ? "checked" : ""}>
+              <img class="logo-shape-option__preview logo-shape-option__preview--rounded-square" src="/assets/logo.png" alt="">
+              <span>Square Rounded</span>
+            </label>
+          </fieldset>
         </div>
 
         <div class="settings-field">
@@ -174,6 +198,7 @@ export function buildInterfaceTab(settings) {
 export function attachInterfaceHandlers(dialog, content) {
   const fields = {
     theme: content.querySelector("#settingTheme"),
+    logoShapes: content.querySelectorAll('input[name="tokenLogoShape"]'),
     animations: content.querySelector("#settingAnimations"),
     compact: content.querySelector("#settingCompact"),
     polling: content.querySelector("#settingPolling"),
@@ -195,6 +220,11 @@ export function attachInterfaceHandlers(dialog, content) {
   if (fields.theme) {
     fields.theme.addEventListener("change", (e) => updateSetting("theme", e.target.value));
   }
+  fields.logoShapes.forEach((field) => {
+    field.addEventListener("change", (e) => {
+      if (e.target.checked) updateSetting("token_logo_shape", e.target.value);
+    });
+  });
   if (fields.animations) {
     fields.animations.addEventListener("change", (e) =>
       updateSetting("enable_animations", e.target.checked)
