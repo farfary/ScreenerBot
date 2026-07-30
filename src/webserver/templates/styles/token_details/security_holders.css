@@ -174,22 +174,12 @@
 }
 
 .security-holder-identity > .addr-chip {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  width: calc(44ch + 24px);
 }
 
-.security-holder-tags {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.security-holder-tag {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 0.58rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
+.security-holder-identity > .addr-chip .addr-chip-link {
+  width: 44ch;
   white-space: nowrap;
 }
 
@@ -208,11 +198,30 @@
   font-size: 0.66rem;
 }
 
-.security-holder-tag.is-address {
-  font-family: var(--font-data);
+.security-holder-share {
+  display: grid;
+  grid-template-columns: 52px 6.5ch;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
-.security-holder-share {
+.security-holder-share-track {
+  overflow: hidden;
+  width: 52px;
+  height: 3px;
+  background: var(--bg-card-hover);
+  border-radius: var(--radius-full);
+}
+
+.security-holder-share-fill {
+  display: block;
+  height: 100%;
+  background: var(--link-color);
+  border-radius: inherit;
+}
+
+.security-holder-share-value {
   color: var(--text-primary);
   font-family: var(--font-data);
   font-size: 0.72rem;
@@ -225,10 +234,22 @@
 }
 
 @container (width <= 520px) {
-  .security-holder-identity {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
+  .security-holder-identity > .addr-chip {
+    width: min(100%, calc(44ch + 24px));
+  }
+
+  .security-holder-identity > .addr-chip .addr-chip-link {
+    width: min(44ch, calc(100% - 24px));
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .security-holder-share {
+    grid-template-columns: 6.5ch;
+  }
+
+  .security-holder-share-track {
+    display: none;
   }
 }
 

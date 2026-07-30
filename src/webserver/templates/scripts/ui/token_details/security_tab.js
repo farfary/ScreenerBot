@@ -74,7 +74,7 @@ function buildSecurityContent(token, options) {
         ${buildHolderHealthSection(token)}
         ${buildTransferFeeSection(token)}
         ${buildRisksSection(token.security_risks, { escapeHtml })}
-        ${buildTopHoldersSection(token, { escapeHtml })}
+        ${buildTopHoldersSection(token)}
       </div>
     </div>
   `;
@@ -458,9 +458,7 @@ function buildRisksSection(risks, options = {}) {
   `;
 }
 
-function buildTopHoldersSection(token, options = {}) {
-  const { escapeHtml } = options;
-  const safe = escapeHtml || Utils.escapeHtml;
+function buildTopHoldersSection(token) {
   const topHolders = token.top_holders;
 
   if (!topHolders || topHolders.length === 0) {
@@ -485,31 +483,27 @@ function buildTopHoldersSection(token, options = {}) {
           .slice(0, 10)
           .map((holder, index) => {
             const rank = index + 1;
-            const ownerLabel = holder.owner_type ? String(holder.owner_type) : "";
-            const ownerIsAddress = ownerLabel.length > 30 && !ownerLabel.includes(" ");
-            const ownerDisplay = ownerIsAddress
-              ? Utils.formatAddressCompact(ownerLabel, { start: 6, end: 6 })
-              : ownerLabel;
+            const walletAddress = holder.owner_type ? String(holder.owner_type) : "";
+            const share = Number(holder.percentage);
+            const shareWidth = Number.isFinite(share) ? Math.min(100, Math.max(0, share)) : 0;
 
             return `
           <div class="security-holder-row ${holder.is_insider ? "is-insider" : ""}">
             <span class="security-holder-rank ${rank <= 3 ? "is-leading" : ""}">${String(rank).padStart(2, "0")}</span>
             <div class="security-holder-identity">
-              ${Utils.renderAddressChip(holder.address)}
-              <div class="security-holder-tags">
-                ${
-                  holder.is_insider
-                    ? '<span class="security-holder-tag is-insider"><i class="icon-triangle-alert"></i>Insider</span>'
-                    : ""
-                }
-                ${
-                  ownerLabel
-                    ? `<span class="security-holder-tag ${ownerIsAddress ? "is-address" : ""}" title="${safe(ownerLabel)}">${safe(ownerDisplay)}</span>`
-                    : ""
-                }
-              </div>
+              ${Utils.renderAddressChip(walletAddress, { full: true })}
+              ${
+                holder.is_insider
+                  ? '<span class="security-holder-tag is-insider"><i class="icon-triangle-alert"></i>Insider</span>'
+                  : ""
+              }
             </div>
-            <span class="security-holder-share">${formatPercent(holder.percentage)}</span>
+            <div class="security-holder-share">
+              <span class="security-holder-share-track" aria-hidden="true">
+                <span class="security-holder-share-fill" style="width: ${shareWidth}%"></span>
+              </span>
+              <span class="security-holder-share-value">${formatPercent(holder.percentage)}</span>
+            </div>
           </div>
         `;
           })
