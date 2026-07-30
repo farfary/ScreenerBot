@@ -24,22 +24,22 @@
   pointer-events: auto;
 }
 
-/* Title bar area - hidden by default (browser/Windows/Linux) */
+/* The dialog header paints the Electron title-bar pixels too. This pseudo
+   element is only the transparent drag target over those pixels. */
 .token-details-dialog::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  inset: 0 0 auto;
   height: 0;
-  background: var(--bg-secondary);
-  z-index: 1;
-  transition: height 0.15s ease;
+  background: transparent;
+  pointer-events: none;
+  z-index: 3;
 }
 
-/* macOS Electron: Show title bar background for traffic lights */
 .electron-macos .token-details-dialog::before {
   height: 28px;
+  -webkit-app-region: drag;
+  pointer-events: auto;
 }
 
 /* Backdrop - full coverage by default */
@@ -48,11 +48,6 @@
   inset: 0 0 24px;
   background: transparent;
   cursor: default;
-}
-
-/* macOS Electron: Backdrop starts below title bar */
-.electron-macos .dialog-backdrop {
-  inset: 28px 0 24px;
 }
 
 /* Dialog container - full height by default */
@@ -71,16 +66,11 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: dialogFadeIn 0.25s ease-out;
+  animation: dialog-fade-in 0.25s ease-out;
   z-index: 2;
 }
 
-/* macOS Electron: Content starts below traffic light area */
-.electron-macos .token-details-dialog .dialog-container {
-  margin-top: 28px;
-}
-
-@keyframes dialogFadeIn {
+@keyframes dialog-fade-in {
   0% {
     opacity: 0;
   }
@@ -91,10 +81,10 @@
 }
 
 /* =============================================================================
-   HEADER - Desktop App Style with Two Rows
+   HEADER - Data-first desktop layout
    ============================================================================= */
 
-.dialog-header {
+.token-details-dialog .dialog-header {
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
@@ -102,434 +92,488 @@
   flex-shrink: 0;
 }
 
-/* Top row: Token info, Price, Actions */
-.header-top-row {
-  display: flex;
+/* Identity, market data and controls remain distinct regions. */
+.token-details-dialog .header-top-row {
+  display: grid;
+  grid-template-areas: "identity market actions";
+  grid-template-columns: minmax(160px, 0.68fr) minmax(460px, 1.55fr) max-content;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px 12px;
-  gap: 20px;
-  min-height: 68px;
+  gap: clamp(12px, 1.35vw, 26px);
+  min-height: 76px;
+  padding: 10px clamp(16px, 1.4vw, 24px) 8px;
+  -webkit-app-region: no-drag;
+}
+
+.electron-macos .token-details-dialog .header-top-row {
+  padding-top: 38px;
 }
 
 /* Left section - Token identity */
-.header-left {
+.token-details-dialog .header-left {
+  grid-area: identity;
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex: 0 0 auto;
-  min-width: 200px;
+  gap: 14px;
+  min-width: 0;
 }
 
-.header-logo {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--token-logo-radius, 3px);
-  overflow: hidden;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+.token-details-dialog .header-logo {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  box-shadow: 0 2px 4px var(--shadow-sm);
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: var(--token-logo-radius, 3px);
+  background: var(--bg-card-hover);
 }
 
-.header-logo img {
+.token-details-dialog .header-logo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* Logo is clickable to zoom (only when it actually holds an image). */
-.header-logo.clickable-logo:has(img) {
+.token-details-dialog .header-logo.clickable-logo:has(img) {
   cursor: zoom-in;
-  transition: transform var(--transition-fast);
+  transition: opacity var(--transition-fast);
 }
 
-.header-logo.clickable-logo:has(img):hover {
-  transform: scale(1.05);
+.token-details-dialog .header-logo.clickable-logo:has(img):hover {
+  opacity: 0.82;
 }
 
-.logo-placeholder {
+.token-details-dialog .logo-placeholder {
   font-size: 18px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
 }
 
-.header-title {
+.token-details-dialog .header-title {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 2px;
 }
 
-.title-row {
+.token-details-dialog .title-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.title-main {
-  font-size: 1.25rem;
-  font-weight: 800;
+.token-details-dialog .title-main {
+  overflow: hidden;
   color: var(--text-primary);
+  font-size: clamp(1.12rem, 1.15vw, 1.28rem);
+  font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.2;
-}
-
-.title-sub {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-  max-width: 200px;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Badges row - separate from title */
-.header-badges-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 20px 10px;
-  border-bottom: 1px solid var(--border-subtle, var(--border-color));
-}
-
-.title-badges {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.header-status-area {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 22px;
-}
-
-.last-updated {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  font-size: 0.68rem;
-  line-height: 1;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
+.token-details-dialog .title-sub {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Supporting facts and source health sit on one quiet secondary line. */
+.token-details-dialog .header-badges-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  min-height: 30px;
+  padding: 0 clamp(16px, 1.4vw, 24px) 7px;
+}
+
+.token-details-dialog .header-badge-group,
+.token-details-dialog .header-status-area {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.token-details-dialog .header-badge-group {
+  gap: 10px;
+  flex: 1 1 auto;
+}
+
+.token-details-dialog .title-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
+}
+
+.token-details-dialog .title-badges::-webkit-scrollbar {
+  display: none;
+}
+
+.token-details-dialog .header-status-area {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.token-details-dialog .header-meta-label,
+.token-details-dialog .last-updated-label,
+.token-details-dialog .market-value-label {
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.token-details-dialog .last-updated {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.token-details-dialog .last-updated-value {
+  color: var(--text-secondary);
+}
+
 .token-details-dialog .badge {
-  padding: 4px 10px;
+  padding: 4px 8px;
+  border: 0;
   border-radius: var(--radius-md);
   font-size: 0.65rem;
+  font-weight: 650;
   letter-spacing: 0.04em;
-  transition: opacity var(--transition-fast);
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.token-details-dialog .badge:hover {
-  opacity: 0.9;
-}
-
-.badge-success {
+.token-details-dialog .badge-success {
   background: var(--success-alpha-20);
-  color: var(--success-color);
+  color: var(--semantic-success-text);
 }
 
-.badge-info {
+.token-details-dialog .badge-info {
   background: var(--primary-alpha-20);
-  color: var(--primary-color);
+  color: var(--semantic-info-text);
 }
 
-.badge-danger {
+.token-details-dialog .badge-danger {
   background: var(--danger-alpha-20);
-  color: var(--danger);
+  color: var(--semantic-error-text);
 }
 
-.badge-warning {
+.token-details-dialog .badge-warning {
   background: var(--warning-alpha-20);
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
 }
 
-.badge-secondary {
-  background: var(--bg-secondary);
+.token-details-dialog .badge-secondary {
+  background: var(--bg-card-hover);
   color: var(--text-secondary);
-  border: 1px solid var(--border-color);
 }
 
-/* Center section - Price & metrics */
-.header-center {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
+/* Center section - quote first, then comparable market metrics. */
+.token-details-dialog .header-center {
+  grid-area: market;
+  min-width: 0;
 }
 
-#headerPrice {
-  display: flex;
+.token-details-dialog .header-price {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(300px, 1fr);
   align-items: center;
-  /* Tight row-gap so that when a long price forces the metrics onto a second
-     line the two tiers stay visually grouped (a uniform 24px gap left the price
-     floating high above the metrics — the "corrupt" tall header). */
-  gap: 8px 24px;
-  flex-wrap: wrap;
-  align-content: center;
-  justify-content: center;
+  gap: clamp(12px, 1.35vw, 24px);
+  min-width: 0;
 }
 
-/* Price skeleton — mirrors the real price block shape (SOL value, USD sub,
-   change badge) with the shared .shimmer sweep instead of bare "Loading" text. */
-.price-skeleton {
+.token-details-dialog .price-skeleton {
   display: flex;
   align-items: center;
+  grid-column: 1 / -1;
   gap: 14px;
 }
 
-.price-skel {
+.token-details-dialog .price-skel {
   display: inline-block;
   background: var(--bg-card-hover);
   border-radius: var(--radius-md);
 }
 
-.price-skel-main {
+.token-details-dialog .price-skel-main {
   width: 104px;
   height: 22px;
 }
 
-.price-skel-sub {
+.token-details-dialog .price-skel-sub {
   width: 58px;
   height: 14px;
 }
 
-.price-skel-badge {
+.token-details-dialog .price-skel-badge {
   width: 62px;
   height: 26px;
   border-radius: var(--radius-lg);
 }
 
-/* Price block - stacked layout */
-.price-block {
+.token-details-dialog .price-quote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.token-details-dialog .price-block {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
 }
 
-.price-sol-row {
+.token-details-dialog .price-sol-row {
   display: flex;
   align-items: baseline;
   gap: 6px;
 }
 
-.price-sol {
-  font-size: 1.25rem;
-  font-weight: 700;
+.token-details-dialog .price-sol {
   color: var(--text-primary);
   font-family: var(--font-data);
+  font-size: clamp(1.08rem, 1.25vw, 1.38rem);
+  font-weight: 700;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+}
+
+.token-details-dialog .price-sol-unit {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.token-details-dialog .price-usd {
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  font-weight: 500;
+  font-feature-settings: "tnum" 1;
+}
+
+.token-details-dialog .price-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.token-details-dialog .price-change[hidden] {
+  display: none;
+}
+
+.token-details-dialog .price-change-period {
+  font-family: var(--font-sans);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.token-details-dialog .price-change-value {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+}
+
+.token-details-dialog .price-change.positive {
+  color: var(--semantic-success-text);
+  background: var(--success-alpha-15);
+}
+
+.token-details-dialog .price-change.negative {
+  color: var(--semantic-error-text);
+  background: var(--danger-alpha-15);
+}
+
+.token-details-dialog .price-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(10px, 1.15vw, 22px);
+  min-width: 0;
+}
+
+.token-details-dialog .metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.token-details-dialog .metric-label {
+  color: var(--text-muted);
+  font-size: 0.59rem;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.token-details-dialog .metric-value {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: clamp(0.78rem, 0.78vw, 1rem);
+  font-weight: 650;
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
   letter-spacing: -0.02em;
-}
-
-.price-sol-unit {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.price-usd {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-  font-weight: 500;
-}
-
-/* Price change badge */
-.price-change {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.85rem;
-  font-weight: 700;
-  font-family: var(--font-data);
-  padding: 4px 10px;
-  border-radius: var(--radius-lg);
-  letter-spacing: -0.01em;
-}
-
-.price-change.positive {
-  color: var(--success-color);
-  background: var(--success-alpha-15, rgb(63, 185, 80, 0.15));
-}
-
-.price-change.negative {
-  color: var(--danger);
-  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
-}
-
-/* Metrics row. No left border/padding divider: it reads as a stray left accent
-   bar when the metrics wrap onto their own line (and left accents are banned).
-   The column-gap in #headerPrice already separates it from the price inline. */
-.price-metrics {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.metric-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  min-width: 64px;
-}
-
-.metric-label {
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 500;
-}
-
-.metric-value {
-  font-size: 0.8rem;
-  color: var(--text-primary);
-  font-weight: 600;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Right section - Trade actions & controls */
 .token-details-dialog .header-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.header-trade-actions {
+  grid-area: actions;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-right: 10px;
-  border-right: 1px solid var(--border-color);
+  justify-self: end;
 }
 
-.trade-btn {
+.token-details-dialog .header-trade-actions {
   display: flex;
   align-items: center;
+  gap: 6px;
+}
+
+.token-details-dialog .trade-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--radius-md);
   font-size: 0.8rem;
   font-weight: 700;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
-  box-shadow: 0 1px 2px var(--shadow-sm);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
-.trade-btn:disabled {
-  opacity: 0.5;
+.token-details-dialog .trade-btn:disabled {
   cursor: not-allowed;
-  box-shadow: none;
+  opacity: 0.46;
 }
 
-.trade-btn.buy-btn {
+.token-details-dialog .trade-btn.buy-btn {
   color: var(--header-text);
   background: var(--success-color);
-  border-color: var(--success-color);
 }
 
-.trade-btn.buy-btn:hover:not(:disabled) {
+.token-details-dialog .trade-btn.buy-btn:hover:not(:disabled) {
   background: var(--success-hover);
-  border-color: var(--success-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px var(--shadow-md);
 }
 
-.trade-btn.sell-btn {
+.token-details-dialog .trade-btn.sell-btn {
   color: var(--header-text);
   background: var(--danger);
-  border-color: var(--danger);
 }
 
-.trade-btn.sell-btn:hover:not(:disabled) {
+.token-details-dialog .trade-btn.sell-btn:hover:not(:disabled) {
   background: var(--danger-hover);
-  border-color: var(--danger-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px var(--shadow-md);
 }
 
-.trade-btn svg {
-  width: 14px;
-  height: 14px;
+.token-details-dialog .trade-btn i {
+  font-size: 15px;
+  line-height: 1;
 }
 
 .token-details-dialog .header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .token-details-dialog .action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
   padding: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: 0;
+  background: transparent;
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
   text-decoration: none;
-  flex-shrink: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .token-details-dialog .action-btn:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--text-muted);
   color: var(--text-primary);
 }
 
 .token-details-dialog .action-btn.favorite-btn:hover {
-  border-color: var(--warning-color);
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
 }
 
 .token-details-dialog .action-btn.favorite-btn.active {
-  background: var(--warning-alpha-20);
-  border-color: var(--warning-color);
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
 }
 
 .token-details-dialog .action-btn.favorite-btn.active:hover {
-  filter: brightness(1.15);
+  opacity: 0.78;
 }
 
-.token-details-dialog .action-btn svg,
 .token-details-dialog .action-btn i {
-  width: 14px;
-  height: 14px;
-  font-size: 14px;
+  font-size: 17px;
   line-height: 1;
 }
 
@@ -537,33 +581,279 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
   padding: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: 0;
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  margin-left: 4px;
+  touch-action: manipulation;
+  transition:
+    color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .token-details-dialog .dialog-close:hover {
-  background: var(--danger-alpha-15);
-  border-color: var(--danger);
-  color: var(--danger);
+  color: var(--semantic-error-text);
 }
 
-.token-details-dialog .dialog-close svg,
 .token-details-dialog .dialog-close i {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
+}
+
+/* Static, semantic source health. Labels lead; bare glyphs communicate state
+   without blinking dots, decorative borders or a redundant LIVE badge. */
+.token-details-dialog .data-sources-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  overflow: hidden;
+}
+
+.token-details-dialog .source-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  white-space: nowrap;
+}
+
+.token-details-dialog .source-status .status-label {
+  color: var(--text-muted);
+  font-size: 0.59rem;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.token-details-dialog .source-status .status-icon {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.token-details-dialog .source-status .status-icon.loading {
+  color: var(--semantic-warning-text);
+}
+
+.token-details-dialog .source-status .status-icon.success {
+  color: var(--semantic-success-text);
+}
+
+.token-details-dialog .source-status .status-icon.error {
+  color: var(--semantic-error-text);
+}
+
+.token-details-dialog .source-status .status-icon.cached {
+  color: var(--semantic-info-text);
+}
+
+/* Changed-character movement mirrors the Terminal: stable characters retain
+   their nodes while only the digits that moved roll and briefly take direction
+   colour. No whole-number flash or shine effect. */
+.token-details-dialog .live-number {
+  white-space: nowrap;
+}
+
+.token-details-dialog .live-number-char {
+  display: inline-block;
+  transform: translateZ(0);
+}
+
+.token-details-dialog .live-number-char--up {
+  animation: token-number-up 1200ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+.token-details-dialog .live-number-char--down {
+  animation: token-number-down 1200ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+
+@keyframes token-number-up {
+  0% {
+    color: var(--semantic-success-text);
+    opacity: 0;
+    transform: translateY(0.55em) translateZ(0);
+  }
+
+  14% {
+    color: var(--semantic-success-text);
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
+    animation-timing-function: linear;
+  }
+
+  72% {
+    color: var(--semantic-success-text);
+    transform: translateY(0) translateZ(0);
+    animation-timing-function: ease-in;
+  }
+
+  100% {
+    color: inherit;
+    transform: translateY(0) translateZ(0);
+  }
+}
+
+@keyframes token-number-down {
+  0% {
+    color: var(--semantic-error-text);
+    opacity: 0;
+    transform: translateY(-0.55em) translateZ(0);
+  }
+
+  14% {
+    color: var(--semantic-error-text);
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
+    animation-timing-function: linear;
+  }
+
+  72% {
+    color: var(--semantic-error-text);
+    transform: translateY(0) translateZ(0);
+    animation-timing-function: ease-in;
+  }
+
+  100% {
+    color: inherit;
+    transform: translateY(0) translateZ(0);
+  }
+}
+
+@media (width <= 1280px) {
+  .token-details-dialog .header-top-row {
+    grid-template-columns: minmax(145px, 0.55fr) minmax(430px, 1.55fr) max-content;
+    gap: 10px;
+    padding-inline: 16px;
+  }
+
+  .token-details-dialog .header-left {
+    gap: 10px;
+  }
+
+  .token-details-dialog .header-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .token-details-dialog .header-price {
+    grid-template-columns: minmax(140px, 0.52fr) minmax(0, 1.48fr);
+    gap: 12px;
+  }
+
+  .token-details-dialog .trade-btn {
+    padding-inline: 10px;
+  }
+}
+
+@media (width <= 1040px) {
+  .token-details-dialog .header-top-row {
+    grid-template-areas:
+      "identity actions"
+      "market market";
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 20px;
+    min-height: 0;
+    padding: 8px 16px 7px;
+  }
+
+  .electron-macos .token-details-dialog .header-top-row {
+    padding-top: 36px;
+  }
+
+  .token-details-dialog .header-price {
+    grid-template-columns: minmax(160px, 0.55fr) minmax(0, 1.45fr);
+  }
+}
+
+@media (width <= 680px) {
+  .token-details-dialog .header-badges-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    padding: 0 16px 7px;
+  }
+
+  .token-details-dialog .header-status-area {
+    justify-content: flex-start;
+    gap: 8px 10px;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .token-details-dialog .header-status-area::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (width <= 600px) {
+  .token-details-dialog .header-top-row {
+    grid-template-areas:
+      "identity"
+      "market"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px 16px 7px;
+  }
+
+  .electron-macos .token-details-dialog .header-top-row {
+    padding-top: 36px;
+  }
+
+  .token-details-dialog .header-right {
+    width: 100%;
+    justify-content: flex-start;
+    justify-self: stretch;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .token-details-dialog .header-right::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (width <= 480px) {
+  .token-details-dialog .price-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 20px;
+  }
+
+  .token-details-dialog .last-updated {
+    width: 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .token-details-dialog .trade-btn,
+  .token-details-dialog .action-btn,
+  .token-details-dialog .dialog-close {
+    min-height: 48px;
+  }
+
+  .token-details-dialog .action-btn,
+  .token-details-dialog .dialog-close {
+    width: 48px;
+    min-width: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .token-details-dialog .live-number-char--up,
+  .token-details-dialog .live-number-char--down {
+    animation-duration: 1ms;
+  }
 }
 
 /* =============================================================================
@@ -731,58 +1021,33 @@
   border-color: var(--primary-alpha-30);
 }
 
-/* Connection chip in the header status area */
-.tdd-connection-chip {
+/* Connection warning in the header status area. It is static and text-led,
+   using a bare glyph rather than a pulsing dot or a decorated chip. */
+.token-details-dialog .tdd-connection-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 9px;
-  border-radius: var(--radius-full);
+  min-height: 24px;
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  border: 1px solid transparent;
   white-space: nowrap;
 }
 
-.tdd-connection-chip[hidden] {
+.token-details-dialog .tdd-connection-chip[hidden] {
   display: none;
 }
 
-.tdd-connection-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full);
-  background: currentcolor;
-  animation: tdd-connection-pulse 1.2s ease-in-out infinite;
+.token-details-dialog .tdd-connection-icon {
+  font-size: 12px;
+  line-height: 1;
 }
 
-.tdd-connection-chip[data-state="reconnecting"] {
-  color: var(--warning-color);
-  background: var(--warning-alpha-10);
-  border-color: var(--warning-alpha-20);
+.token-details-dialog .tdd-connection-chip[data-state="reconnecting"] {
+  color: var(--semantic-warning-text);
 }
 
-.tdd-connection-chip[data-state="offline"] {
-  color: var(--error-color);
-  background: rgb(248, 81, 73, 0.1);
-  border-color: rgb(248, 81, 73, 0.2);
-}
-
-@keyframes tdd-connection-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.3;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tdd-connection-dot {
-    animation: none;
-  }
+.token-details-dialog .tdd-connection-chip[data-state="offline"] {
+  color: var(--semantic-error-text);
 }

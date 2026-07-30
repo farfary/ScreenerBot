@@ -193,17 +193,8 @@
 /* Shared token-dialog responsive framing */
 
 @media (width <= 1200px) {
-  .token-details-dialog .dialog-container {
-    width: 95vw;
-    height: 90vh;
-  }
-
   .overview-split-layout {
     grid-template-columns: 45% 55%;
-  }
-
-  .token-details-dialog .header-center {
-    display: none;
   }
 }
 
@@ -230,49 +221,6 @@
   }
 }
 
-@media (width <= 768px) {
-  .token-details-dialog .dialog-container {
-    width: 100vw;
-    max-width: none;
-    height: 100vh;
-    max-height: none;
-    border-radius: 0;
-  }
-
-  .token-details-dialog .dialog-header {
-    padding: var(--spacing-sm) var(--spacing-md);
-    gap: var(--spacing-sm);
-  }
-
-  .token-details-dialog .header-left {
-    min-width: auto;
-    gap: var(--spacing-sm);
-  }
-
-  .token-details-dialog .header-right {
-    flex-shrink: 0;
-  }
-
-  .token-details-dialog .header-trade-actions {
-    margin-right: 0;
-    padding-right: 0;
-    border-right: 0;
-  }
-
-  .token-details-dialog .header-logo {
-    width: 40px;
-    height: 40px;
-  }
-
-  .token-details-dialog .title-main {
-    font-size: 1.1rem;
-  }
-
-  .token-details-dialog .title-sub {
-    font-size: 0.8rem;
-  }
-}
-
 @media (width <= 600px) {
   .transactions-table-header,
   .token-transaction-row {
@@ -288,95 +236,5 @@
 @media (hover: none), (pointer: coarse) {
   .transaction-external {
     opacity: 1;
-  }
-}
-
-/* Data-source status bar */
-
-.token-details-dialog .data-sources-status {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  gap: 12px;
-  padding: 0 10px;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  background: var(--bg-surface);
-  font-size: 0.58rem;
-  line-height: 1;
-  transition: opacity var(--transition-normal);
-}
-
-.token-details-dialog .data-sources-status.all-loaded {
-  padding: 0;
-  border-color: transparent;
-  background: transparent;
-  opacity: 0.7;
-}
-
-.token-details-dialog .source-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 22px;
-  white-space: nowrap;
-}
-
-.token-details-dialog .source-status .status-icon {
-  display: block;
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: var(--radius-full);
-  opacity: 1;
-  transform: translateY(0);
-  transition: background-color var(--transition-base);
-}
-
-.token-details-dialog .source-status .status-icon.pending {
-  background-color: var(--text-muted);
-}
-
-.token-details-dialog .source-status .status-icon.loading {
-  background-color: var(--warning-color);
-  animation: status-pulse 1s ease-in-out infinite;
-}
-
-.token-details-dialog .source-status .status-icon.success {
-  background-color: var(--success-color);
-}
-
-.token-details-dialog .source-status .status-icon.error {
-  background-color: var(--danger);
-}
-
-.token-details-dialog .source-status .status-icon.cached {
-  background-color: var(--primary-color);
-}
-
-.token-details-dialog .source-status .status-label {
-  color: var(--text-muted);
-  font-size: 0.58rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-@keyframes status-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.4;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .token-details-dialog .source-status .status-icon.loading {
-    animation: none;
   }
 }

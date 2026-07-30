@@ -1,6 +1,4 @@
 (function () {
-  const global = window;
-
   // Import toast manager for new toast system
   let toastManager = null;
   import("./toast.js").then((module) => {
@@ -68,6 +66,108 @@
     }).format(num);
 
     return prefix + formatted;
+  }
+
+  /**
+   * Update a live numeric label without repainting the stable characters.
+   *
+   * The element keeps one span per character. Characters that are unchanged
+   * retain their DOM nodes; only changed characters are replaced, which lets
+   * CSS animate the exact digits that moved without flashing or shifting the
+   * rest of a large number.
+   *
+   * @param {HTMLElement} element
+   * @param {string} text - Already-formatted display value
+   * @param {number|null|undefined} numericValue - Raw value used for direction
+   * @param {Object} options
+   * @param {boolean} options.animate
+   * @returns {boolean} Whether the displayed text changed
+   */
+  function updateLiveNumber(element, text, numericValue, { animate = true } = {}) {
+    if (!element) return false;
+
+    const nextText = String(text ?? "—");
+    const nextChars = Array.from(nextText);
+    const previous = element.__liveNumberState;
+
+    element.classList.add("live-number");
+    if (previous?.text === nextText) return false;
+
+    const previousText = previous?.text || "";
+    const previousChars = Array.from(previousText);
+    const previousNodes = Array.from(element.children);
+    const previousValue = previous?.value;
+    const nextValue =
+      numericValue === null || numericValue === undefined || numericValue === ""
+        ? Number.NaN
+        : Number(numericValue);
+    const hasDirection =
+      Number.isFinite(previousValue) && Number.isFinite(nextValue) && previousValue !== nextValue;
+    const direction = hasDirection ? (nextValue > previousValue ? "up" : "down") : null;
+    const shouldAnimate = Boolean(animate && previousText && direction);
+
+    let sharedPrefix = 0;
+    while (
+      sharedPrefix < previousChars.length &&
+      sharedPrefix < nextChars.length &&
+      previousChars[sharedPrefix] === nextChars[sharedPrefix]
+    ) {
+      sharedPrefix += 1;
+    }
+
+    let sharedSuffix = 0;
+    while (
+      sharedSuffix < previousChars.length - sharedPrefix &&
+      sharedSuffix < nextChars.length - sharedPrefix &&
+      previousChars[previousChars.length - 1 - sharedSuffix] ===
+        nextChars[nextChars.length - 1 - sharedSuffix]
+    ) {
+      sharedSuffix += 1;
+    }
+
+    const createCharacter = (char) => {
+      const character = document.createElement("span");
+      character.className = "live-number-char";
+      character.textContent = char;
+      if (shouldAnimate) {
+        character.classList.add(`live-number-char--${direction}`);
+      }
+      return character;
+    };
+
+    const hasStableCharacterNodes =
+      previousText &&
+      previousNodes.length === previousChars.length &&
+      previousNodes.every((node, index) => node.textContent === previousChars[index]);
+
+    if (!hasStableCharacterNodes) {
+      const fragment = document.createDocumentFragment();
+      nextChars.forEach((char) => fragment.appendChild(createCharacter(char)));
+      element.replaceChildren(fragment);
+    } else if (previousChars.length === nextChars.length) {
+      nextChars.forEach((char, index) => {
+        if (previousChars[index] !== char) {
+          previousNodes[index].replaceWith(createCharacter(char));
+        }
+      });
+    } else {
+      const previousMiddleEnd = previousChars.length - sharedSuffix;
+      const nextMiddleEnd = nextChars.length - sharedSuffix;
+      const suffixAnchor = previousNodes[previousMiddleEnd] || null;
+
+      for (let index = sharedPrefix; index < previousMiddleEnd; index += 1) {
+        previousNodes[index].remove();
+      }
+      for (let index = sharedPrefix; index < nextMiddleEnd; index += 1) {
+        element.insertBefore(createCharacter(nextChars[index]), suffixAnchor);
+      }
+    }
+
+    element.__liveNumberState = {
+      text: nextText,
+      value: Number.isFinite(nextValue) ? nextValue : null,
+    };
+    return true;
   }
 
   function formatBooleanFlag(value, unknownLabel = "Unknown") {
@@ -1166,9 +1266,7 @@
     const { full = false, kind = "account" } = opts;
     const raw = String(address);
     const safe = escapeHtml(raw);
-    const display = full
-      ? safe
-      : escapeHtml(formatAddressCompact(raw, { start: 6, end: 6 }));
+    const display = full ? safe : escapeHtml(formatAddressCompact(raw, { start: 6, end: 6 }));
     const url =
       kind === "tx"
         ? solscanTxUrl(raw)
@@ -1376,6 +1474,7 @@
   const Utils = {
     formatNumber,
     formatCompactNumber,
+    updateLiveNumber,
     formatBooleanFlag,
     formatCurrencyUSD,
     formatPriceSubscript,
@@ -1442,6 +1541,7 @@
 export const {
   formatNumber,
   formatCompactNumber,
+  updateLiveNumber,
   formatBooleanFlag,
   formatCurrencyUSD,
   formatPriceSubscript,

@@ -129,6 +129,7 @@ export function applyStateHandlingMixin(DialogClass) {
     const chip = this.dialogEl?.querySelector(".tdd-connection-chip");
     if (!chip) return;
     chip.dataset.state = state;
+    const icon = chip.querySelector(".tdd-connection-icon");
     if (state === "online") {
       chip.hidden = true;
       const text = chip.querySelector(".tdd-connection-text");
@@ -136,6 +137,11 @@ export function applyStateHandlingMixin(DialogClass) {
       return;
     }
     chip.hidden = false;
+    if (icon) {
+      icon.className = `tdd-connection-icon ${
+        state === "offline" ? "icon-cloud-off" : "icon-refresh-cw"
+      }`;
+    }
     const text = chip.querySelector(".tdd-connection-text");
     if (text) {
       text.textContent = CONNECTION_TEXT[state] || CONNECTION_TEXT.reconnecting;

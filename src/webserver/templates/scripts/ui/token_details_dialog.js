@@ -465,29 +465,27 @@ export class TokenDetailsDialog {
   _updateDataSourceStatus(source, status) {
     this._dataSourceStatus[source] = status;
 
-    // Update UI indicator
+    const statusDisplay = {
+      [DATA_SOURCE_STATUS.PENDING]: { icon: "icon-clock-3", label: "Waiting" },
+      [DATA_SOURCE_STATUS.LOADING]: { icon: "icon-refresh-cw", label: "Loading" },
+      [DATA_SOURCE_STATUS.SUCCESS]: { icon: "icon-circle-check", label: "Ready" },
+      [DATA_SOURCE_STATUS.ERROR]: { icon: "icon-circle-alert", label: "Unavailable" },
+      [DATA_SOURCE_STATUS.CACHED]: { icon: "icon-database", label: "Cached" },
+    };
+
+    // Source health uses a static semantic glyph. It remains readable without
+    // relying on pulse/blink animation or colour alone.
     const indicator = this.dialogEl?.querySelector(`.source-status[data-source="${source}"]`);
     if (indicator) {
       const icon = indicator.querySelector(".status-icon");
+      const sourceLabel = indicator.querySelector(".status-label")?.textContent || source;
+      const display = statusDisplay[status] || statusDisplay[DATA_SOURCE_STATUS.PENDING];
       if (icon) {
-        icon.className = `status-icon ${status}`;
+        icon.className = `status-icon ${display.icon} ${status}`;
       }
-    }
-
-    // Check if all sources are done loading
-    const allDone = Object.values(this._dataSourceStatus).every(
-      (s) =>
-        s === DATA_SOURCE_STATUS.SUCCESS ||
-        s === DATA_SOURCE_STATUS.ERROR ||
-        s === DATA_SOURCE_STATUS.CACHED
-    );
-
-    // Hide status bar when all sources are loaded successfully
-    if (allDone) {
-      const statusBar = this.dialogEl?.querySelector(".data-sources-status");
-      if (statusBar) {
-        statusBar.classList.add("all-loaded");
-      }
+      indicator.dataset.status = status;
+      indicator.setAttribute("aria-label", `${sourceLabel} data: ${display.label}`);
+      indicator.title = `${sourceLabel} data: ${display.label}`;
     }
   }
 
@@ -904,11 +902,11 @@ export class TokenDetailsDialog {
               </div>
             </div>
             <div class="header-center">
-              <div class="header-price" id="headerPrice">
+              <div class="header-price" id="headerPrice" aria-label="Market summary">
                 <div class="price-skeleton" role="status" aria-label="Loading price">
-                  <span class="price-skel price-skel-main shimmer"></span>
-                  <span class="price-skel price-skel-sub shimmer"></span>
-                  <span class="price-skel price-skel-badge shimmer"></span>
+                  <span class="price-skel price-skel-main"></span>
+                  <span class="price-skel price-skel-sub"></span>
+                  <span class="price-skel price-skel-badge"></span>
                 </div>
               </div>
             </div>
@@ -917,58 +915,65 @@ export class TokenDetailsDialog {
                 isSol
                   ? ""
                   : `<div class="header-trade-actions">
-                <button class="trade-btn buy-btn" id="headerBuyBtn" title="Buy this token">
+                <button class="trade-btn buy-btn" id="headerBuyBtn" title="Buy this token" type="button">
                   <i class="icon-shopping-cart"></i>
                   Buy
                 </button>
-                <button class="trade-btn sell-btn" id="headerSellBtn" title="Sell position" disabled>
+                <button class="trade-btn sell-btn" id="headerSellBtn" title="No open position to sell" type="button" disabled>
                   <i class="icon-dollar-sign"></i>
                   Sell
                 </button>
               </div>
               <div class="header-actions">
-                <button class="action-btn favorite-btn" id="favoriteBtn" title="Add to Favorites" type="button">
+                <button class="action-btn favorite-btn" id="favoriteBtn" title="Add to Favorites" aria-label="Add to Favorites" type="button">
                   <i class="icon-star"></i>
                 </button>
-                <button class="action-btn" id="copyMintBtn" title="Copy Mint Address">
+                <button class="action-btn" id="copyMintBtn" title="Copy Mint Address" aria-label="Copy Mint Address" type="button">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" class="action-btn" title="View on Solscan">
+                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="action-btn" title="View on Solscan" aria-label="View on Solscan">
                   <i class="icon-external-link"></i>
                 </a>
               </div>`
               }
-              <button class="dialog-close" type="button" title="Close (ESC)">
+              <button class="dialog-close" type="button" title="Close (ESC)" aria-label="Close token details">
                 <i class="icon-x"></i>
               </button>
             </div>
           </div>
           <div class="header-badges-row" id="headerBadgesRow">
-            <div class="title-badges" id="headerBadges"></div>
+            <div class="header-badge-group">
+              <span class="header-meta-label">Details</span>
+              <div class="title-badges" id="headerBadges"></div>
+            </div>
             <div class="header-status-area">
-              <div class="data-sources-status" role="status" aria-label="Data loading status">
-                <span class="source-status" data-source="token" title="Token info">
-                  <span class="status-icon pending" aria-hidden="true"></span>
+              <span class="header-meta-label">Sources</span>
+              <div class="data-sources-status" role="status" aria-label="Data source status">
+                <span class="source-status" data-source="token" data-status="pending" aria-label="Token data: Waiting">
                   <span class="status-label">Token</span>
+                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
                 </span>
-                <span class="source-status" data-source="dexscreener" title="Market data">
-                  <span class="status-icon pending" aria-hidden="true"></span>
+                <span class="source-status" data-source="dexscreener" data-status="pending" aria-label="Market data: Waiting">
                   <span class="status-label">Market</span>
+                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
                 </span>
-                <span class="source-status" data-source="rugcheck" title="Security analysis">
-                  <span class="status-icon pending" aria-hidden="true"></span>
+                <span class="source-status" data-source="rugcheck" data-status="pending" aria-label="Security data: Waiting">
                   <span class="status-label">Security</span>
+                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
                 </span>
-                <span class="source-status" data-source="ohlcv" title="Chart data">
-                  <span class="status-icon pending" aria-hidden="true"></span>
+                <span class="source-status" data-source="ohlcv" data-status="pending" aria-label="Chart data: Waiting">
                   <span class="status-label">Chart</span>
+                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
                 </span>
               </div>
               <div class="tdd-connection-chip" data-state="online" role="status" hidden>
-                <span class="tdd-connection-dot" aria-hidden="true"></span>
+                <i class="tdd-connection-icon icon-refresh-cw" aria-hidden="true"></i>
                 <span class="tdd-connection-text"></span>
               </div>
-              <div class="last-updated" id="lastUpdatedTime"></div>
+              <div class="last-updated" id="lastUpdatedTime">
+                <span class="last-updated-label">Updated</span>
+                <span class="last-updated-value">—</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1055,7 +1060,7 @@ export class TokenDetailsDialog {
         badges.push(
           `<span class="badge ${isPool ? "badge-success" : "badge-secondary"}" title="${
             isPool ? "Price from real-time on-chain pool" : "Price from cached market-data (API)"
-          }">Price ${isPool ? "Pool" : "API"}</span>`
+          }">${isPool ? "Pool price" : "API price"}</span>`
         );
       }
 
@@ -1073,13 +1078,12 @@ export class TokenDetailsDialog {
         const auth = token.update_authority;
         const trunc = auth.slice(0, 4) + "..." + auth.slice(-4);
         badges.push(
-          `<span class="badge badge-secondary" title="Update Authority: ${auth}">Auth: ${trunc}</span>`
+          `<span class="badge badge-secondary" title="Update Authority: ${this._escapeHtml(auth)}">Auth: ${this._escapeHtml(trunc)}</span>`
         );
       }
 
       if (token.has_open_position) badges.push('<span class="badge badge-info">Position</span>');
       if (token.blacklisted) badges.push('<span class="badge badge-danger">Blacklisted</span>');
-      if (token.has_ohlcv) badges.push('<span class="badge badge-secondary">OHLCV</span>');
 
       // Only repaint when the badge set changed. _updateHeader runs on every 5s
       // poll, and an unconditional innerHTML write would drop any text selection
@@ -1091,7 +1095,8 @@ export class TokenDetailsDialog {
 
     // Update Last Updated time
     const lastUpdatedEl = this.dialogEl.querySelector("#lastUpdatedTime");
-    if (lastUpdatedEl) {
+    const lastUpdatedValue = lastUpdatedEl?.querySelector(".last-updated-value");
+    if (lastUpdatedEl && lastUpdatedValue) {
       const marketFetchedAt = token.market_data_last_fetched_at;
       const poolFetchedAt = token.pool_price_last_calculated_at;
 
@@ -1119,23 +1124,23 @@ export class TokenDetailsDialog {
           timeStr = new Date(tsMs).toLocaleTimeString();
         }
 
-        lastUpdatedEl.textContent = `Updated: ${timeStr}`;
+        lastUpdatedValue.textContent = timeStr;
+        lastUpdatedEl.setAttribute("aria-label", `Updated ${timeStr}`);
       } else {
-        lastUpdatedEl.textContent = "";
+        lastUpdatedValue.textContent = "—";
+        lastUpdatedEl.setAttribute("aria-label", "Update time unavailable");
       }
     }
 
-    // Update price section (idempotent: only repaints when the price/metrics
-    // markup actually changes, avoiding per-poll churn and selection loss).
-    const priceContainer = this.dialogEl.querySelector("#headerPrice");
-    if (priceContainer) {
-      this._renderHtmlIfChanged(priceContainer, this._buildHeaderPrice(token), "__priceHtml");
-    }
+    // The market frame is mounted once. Later polls update only the character
+    // nodes that changed, keeping large values steady and readable.
+    this._updateHeaderMarketData(token);
 
     // Update sell button state based on open positions
     const sellBtn = this.dialogEl.querySelector("#headerSellBtn");
     if (sellBtn) {
       sellBtn.disabled = !token.has_open_position;
+      sellBtn.title = token.has_open_position ? "Sell position" : "No open position to sell";
     }
 
     // Setup copy mint button
@@ -1186,6 +1191,7 @@ export class TokenDetailsDialog {
     if (!btn) return;
     btn.classList.toggle("active", isFavorite);
     btn.title = isFavorite ? "Remove from Favorites" : "Add to Favorites";
+    btn.setAttribute("aria-label", btn.title);
   }
 
   /**
@@ -1241,55 +1247,103 @@ export class TokenDetailsDialog {
     }
   }
 
-  _buildHeaderPrice(token) {
-    const priceSol =
-      token.price_sol !== null && token.price_sol !== undefined
-        ? Utils.formatPriceSubscript(token.price_sol, { precision: 5 })
-        : "—";
-    const priceUsd =
-      token.price_usd !== null && token.price_usd !== undefined
-        ? Utils.formatCurrencyUSD(token.price_usd)
-        : "";
-
-    // Price change badge
-    let changeHtml = "";
-    if (token.price_change_periods) {
-      const change24h = token.price_change_periods.h24;
-      if (change24h !== null && change24h !== undefined) {
-        const changeClass = change24h >= 0 ? "positive" : "negative";
-        const sign = change24h >= 0 ? "+" : "";
-        changeHtml = `<span class="price-change ${changeClass}">${sign}${change24h.toFixed(2)}%</span>`;
-      }
-    }
-
+  _buildHeaderPriceFrame() {
     return `
-      <div class="price-block">
-        <div class="price-sol-row">
-          <span class="price-sol">${priceSol}</span>
-          <span class="price-sol-unit">SOL</span>
+      <div class="price-quote">
+        <div class="price-block">
+          <span class="market-value-label">Price</span>
+          <div class="price-sol-row">
+            <span class="price-sol" data-live-value="price-sol">—</span>
+            <span class="price-sol-unit">SOL</span>
+          </div>
+          <span class="price-usd" data-live-value="price-usd">—</span>
         </div>
-        ${priceUsd ? `<span class="price-usd">${priceUsd}</span>` : ""}
+        <div class="price-change" data-live-change hidden>
+          <span class="price-change-period">24H</span>
+          <span class="price-change-value" data-live-value="change-24h">—</span>
+        </div>
       </div>
-      ${changeHtml}
-      <div class="price-metrics">
-        <div class="metric-item">
-          <span class="metric-label">MCap</span>
-          <span class="metric-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { prefix: "$" }) : "—"}</span>
+      <div class="price-metrics" role="list" aria-label="Market metrics">
+        <div class="metric-item" role="listitem">
+          <span class="metric-label">Market cap</span>
+          <span class="metric-value" data-live-value="market-cap">—</span>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">Liq</span>
-          <span class="metric-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { prefix: "$" }) : "—"}</span>
+        <div class="metric-item" role="listitem">
+          <span class="metric-label">Liquidity</span>
+          <span class="metric-value" data-live-value="liquidity">—</span>
         </div>
-        <div class="metric-item">
-          <span class="metric-label">Vol 24H</span>
-          <span class="metric-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { prefix: "$" }) : "—"}</span>
+        <div class="metric-item" role="listitem">
+          <span class="metric-label">24h volume</span>
+          <span class="metric-value" data-live-value="volume-24h">—</span>
         </div>
-        <div class="metric-item">
+        <div class="metric-item" role="listitem">
           <span class="metric-label">Holders</span>
-          <span class="metric-value">${token.total_holders ? Utils.formatCompactNumber(token.total_holders) : "—"}</span>
+          <span class="metric-value" data-live-value="holders">—</span>
         </div>
       </div>
     `;
+  }
+
+  _updateHeaderMarketData(token) {
+    const container = this.dialogEl?.querySelector("#headerPrice");
+    if (!container) return;
+
+    if (!container.querySelector("[data-live-value]")) {
+      container.innerHTML = this._buildHeaderPriceFrame();
+    }
+
+    const value = (raw) => {
+      if (raw === null || raw === undefined || raw === "") return null;
+      const number = Number(raw);
+      return Number.isFinite(number) ? number : null;
+    };
+    const update = (key, text, raw) => {
+      const element = container.querySelector(`[data-live-value="${key}"]`);
+      Utils.updateLiveNumber(element, text, value(raw));
+    };
+
+    const priceSol = value(token.price_sol);
+    const priceUsd = value(token.price_usd);
+    const marketCap = value(token.market_cap);
+    const liquidity = value(token.liquidity_usd);
+    const volume24h = value(token.volume_24h);
+    const holders = value(token.total_holders);
+
+    update(
+      "price-sol",
+      priceSol === null ? "—" : Utils.formatPriceSubscript(priceSol, { precision: 5 }),
+      priceSol
+    );
+    update("price-usd", priceUsd === null ? "—" : Utils.formatCurrencyUSD(priceUsd), priceUsd);
+    update(
+      "market-cap",
+      marketCap === null ? "—" : Utils.formatCompactNumber(marketCap, { prefix: "$" }),
+      marketCap
+    );
+    update(
+      "liquidity",
+      liquidity === null ? "—" : Utils.formatCompactNumber(liquidity, { prefix: "$" }),
+      liquidity
+    );
+    update(
+      "volume-24h",
+      volume24h === null ? "—" : Utils.formatCompactNumber(volume24h, { prefix: "$" }),
+      volume24h
+    );
+    update("holders", holders === null ? "—" : Utils.formatCompactNumber(holders), holders);
+
+    const changeEl = container.querySelector("[data-live-change]");
+    const change24h = value(token.price_change_periods?.h24);
+    if (changeEl) {
+      changeEl.hidden = change24h === null;
+      changeEl.classList.toggle("positive", change24h !== null && change24h >= 0);
+      changeEl.classList.toggle("negative", change24h !== null && change24h < 0);
+      if (change24h !== null) {
+        const sign = change24h >= 0 ? "+" : "";
+        update("change-24h", `${sign}${change24h.toFixed(2)}%`, change24h);
+        changeEl.setAttribute("aria-label", `24 hour change ${sign}${change24h.toFixed(2)}%`);
+      }
+    }
   }
 
   _attachEventHandlers() {
