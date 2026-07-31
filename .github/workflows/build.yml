@@ -442,7 +442,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.version }}
-          name: ScreenerBot ${{ needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.version }}
           draft: true
           generate_release_notes: true
           files: release/*
