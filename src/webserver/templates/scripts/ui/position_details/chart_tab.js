@@ -23,6 +23,12 @@ import {
   triggerRefresh,
 } from "../chart_data.js";
 
+// Candles are refetched on the dialog's own refresh tick, but they move far slower than
+// the position figures do: the finest timeframe is 1m and every read pulls the FULL
+// stored history. Throttling here decouples the two, so tightening the dialog's cadence
+// (which it does while a swap is confirming) cannot turn into a candle refetch per tick.
+const CHART_REFRESH_MS = 10000;
+
 export function applyChartTabMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
 
@@ -39,18 +45,26 @@ export function applyChartTabMixin(PositionDetailsDialog) {
       return;
     }
 
-    // The dialog's 5s refresh poller re-invokes this on every tick. If the chart
-    // is already built and still bound to the LIVE container, refresh data,
-    // markers and stats in place instead of tearing it down and redrawing — that
-    // flicker + view reset was the "keeps refreshing every few seconds" bug.
-    // Checking the bound node (not just the id) matters: a re-render swaps the
-    // container out and leaves the chart drawing into a detached node.
+    // The dialog's refresh poller re-invokes this on every tick. If the chart is
+    // already built and still bound to the LIVE container, refresh data, markers
+    // and stats in place instead of tearing it down and redrawing — that flicker +
+    // view reset was the "keeps refreshing every few seconds" bug. Checking the
+    // bound node (not just the id) matters: a re-render swaps the container out and
+    // leaves the chart drawing into a detached node.
     const liveContainer = this.dialogEl?.querySelector("#pddChart");
     if (this._pddChart && liveContainer && this._pddChart.container === liveContainer) {
-      await this._loadPositionChartData(mint, this._chartTimeframe, false);
-      // The status chip changes far slower than the 5s poll; refreshing it on
-      // every tick would spend a request per tick to redraw the same chip.
-      if (Date.now() - (this._pddIndicatorAt || 0) > 30000) {
+      const now = Date.now();
+      if (now - (this._pddDataAt || 0) > CHART_REFRESH_MS) {
+        await this._loadPositionChartData(mint, this._chartTimeframe, false);
+      } else {
+        // Markers still track the position, which CAN change on any tick (a verified
+        // DCA adds an entry) even when the candles are not refetched.
+        this._updatePositionChartMarkers();
+        this._renderPositionChartStats();
+      }
+      // The status chip changes far slower still; refreshing it on every tick would
+      // spend a request per tick to redraw the same chip.
+      if (now - (this._pddIndicatorAt || 0) > 30000) {
         this._updatePositionDataIndicator(mint);
       }
       return;
@@ -250,6 +264,9 @@ export function applyChartTabMixin(PositionDetailsDialog) {
     // switched timeframe, which painted the previous timeframe's candles over
     // the current chart.
     const seq = (this._pddLoadSeq = (this._pddLoadSeq || 0) + 1);
+    // Stamped here, not at the call site, so every entry point (first build, timeframe
+    // switch, empty-timeframe fallback) feeds the poll-path throttle.
+    this._pddDataAt = Date.now();
 
     try {
       const chartData = await fetchCandles(mint, timeframe, {
@@ -595,5 +612,6 @@ export function applyChartTabMixin(PositionDetailsDialog) {
     this._pddMarkerSignature = null;
     this._pddFallbackTried = false;
     this._pddIndicatorAt = 0;
+    this._pddDataAt = 0;
   };
 }

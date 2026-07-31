@@ -78,10 +78,25 @@ export function removeListener(callback) {
 
 // Poller class - per-page polling lifecycle
 export class Poller {
+  /**
+   * @param {Function} onPoll
+   * @param {Object} [options]
+   * @param {string} [options.label]
+   * @param {number} [options.intervalMs] - fixed cadence in ms. Without it the poller
+   *   follows the user's global dashboard interval (1s by default), which is almost never
+   *   what a heavy or slow-moving endpoint wants. This option used to be ignored: every
+   *   call site that passed one (`intervalMs`, and a misspelt `interval`) silently ran at
+   *   the global rate instead — the token-details chart's careful 3s/10s/15s backoff was
+   *   really refetching candles every second, and the position dialog refetched its whole
+   *   detail payload plus full candle history on every 1s tick.
+   * @param {Function} [options.getInterval] - dynamic cadence; wins over `intervalMs`.
+   *   Only re-read when the poller is (re)started.
+   */
   constructor(onPoll, options = {}) {
     this.label = options.label || "Poller";
     this.onPoll = onPoll;
     this.getInterval = options.getInterval;
+    this.intervalMs = options.intervalMs;
     this.pauseWhenHidden = options.pauseWhenHidden !== false; // Default true
     this.adaptive = options.adaptive || false;
 
@@ -111,6 +126,10 @@ export class Poller {
       } catch (err) {
         console.warn(`${this._logPrefix()} getInterval failed, falling back`, err);
       }
+    }
+
+    if (Number.isFinite(this.intervalMs) && this.intervalMs > 0) {
+      return this.intervalMs;
     }
 
     try {
@@ -192,7 +211,9 @@ export class Poller {
   }
 
   _ensureListener() {
-    if (this.listener) {
+    // A fixed-cadence poller does not follow the global interval, so it must not be
+    // restarted (and re-logged) every time the user changes that setting.
+    if (this.listener || (Number.isFinite(this.intervalMs) && this.intervalMs > 0)) {
       return;
     }
 

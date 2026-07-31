@@ -11,12 +11,11 @@ const RECONNECT_DELAY_MS = 3000;
 // Action types that represent an in-flight trade for a token. Used by the
 // positions list and the position-details dialog to disable Add/Sell/Close
 // while a buy or sell is processing in the background.
-const TRADE_BUY_ACTION_TYPES = new Set(["swap_buy", "position_open"]);
-const TRADE_SELL_ACTION_TYPES = new Set([
-  "swap_sell",
-  "position_close",
-  "position_partial_exit",
-]);
+// `position_dca` belongs here: an "Add to position" is a buy. Leaving it out meant the
+// Add/Partial/Close buttons stayed enabled for the whole of a DCA, so the user could fire
+// a second add on top of one that was still confirming.
+const TRADE_BUY_ACTION_TYPES = new Set(["swap_buy", "position_open", "position_dca"]);
+const TRADE_SELL_ACTION_TYPES = new Set(["swap_sell", "position_close", "position_partial_exit"]);
 const actionEntityMint = (n) => n?.entity_id || n?.metadata?.mint || "";
 
 class NotificationManager {
@@ -306,7 +305,9 @@ class NotificationManager {
     const notification = this.notifications.get(actionId);
     if (!notification) return;
 
-    const result = await this.postActionMutation(`/api/actions/${encodeURIComponent(actionId)}/dismiss`);
+    const result = await this.postActionMutation(
+      `/api/actions/${encodeURIComponent(actionId)}/dismiss`
+    );
     this.serverUnread = Number(result?.unread) || 0;
     notification.dismissed = true;
     notification.read = true;

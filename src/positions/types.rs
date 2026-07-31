@@ -72,6 +72,12 @@ pub struct PendingDcaSwap {
     pub position_id: i64,
     pub expiry_height: Option<u64>,
     pub created_at: DateTime<Utc>,
+    /// SOL committed by this add. The position does not book it until `DcaVerified`
+    /// lands, so this is the only place the amount exists while the swap confirms —
+    /// it is what the dashboard shows as "still confirming". Defaulted so an entry
+    /// persisted before this field existed still rehydrates after a restart.
+    #[serde(default)]
+    pub size_sol: f64,
 }
 
 // ==================== POSITION STRUCTURES ====================

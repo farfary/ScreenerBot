@@ -457,6 +457,22 @@
   color: var(--warning-color);
 }
 
+/* Submitted-but-unverified swap. The spinner is the state, not decoration: it marks the
+   window where the position's figures are still the pre-trade ones. */
+.position-details-dialog .pdd-pending-swaps {
+  display: contents;
+}
+
+.position-details-dialog .pdd-badge-pending {
+  background: var(--primary-alpha-20);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.position-details-dialog .pdd-badge-pending i {
+  font-size: 0.85em;
+}
+
 /* Manual management: position opened by a manual/force buy; auto-trader skips it. */
 .position-details-dialog .pdd-badge-manual {
   background: var(--warning-alpha-20);

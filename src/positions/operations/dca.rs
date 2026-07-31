@@ -149,6 +149,7 @@ pub async fn add_to_position(
         position_id,
         expiry_height,
         created_at: Utc::now(),
+        size_sol: dca_amount_sol,
     };
 
     register_pending_dca_swap(pending_dca.clone())

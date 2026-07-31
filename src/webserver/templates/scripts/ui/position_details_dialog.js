@@ -14,6 +14,16 @@ import { applyOverviewTabMixin } from "./position_details/overview_tab.js";
 import { applyChartTabMixin } from "./position_details/chart_tab.js";
 import { applyActivityTabMixin } from "./position_details/activity_tab.js";
 import { applyUtilitiesMixin } from "./position_details/utilities.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
+
+// Refresh cadence. `/details` is a heavy endpoint (full token assembly, decimals batch,
+// pool lookup, two history queries, SOL price) and the chart tab refetches candles off the
+// same tick, so it does not belong on the global 1s dashboard interval.
+const POLL_IDLE_MS = 2000;
+// While a swap is submitted but unverified the position's numbers are ABOUT to change and
+// nothing else will announce it — verification emits no action event — so poll tighter to
+// catch the moment it lands.
+const POLL_PENDING_MS = 1000;
 
 export class PositionDetailsDialog {
   constructor(options = {}) {
@@ -31,7 +41,7 @@ export class PositionDetailsDialog {
     // Chosen from the position's own duration on first render (see chart_tab.js),
     // so a week-old position does not open on a timeframe that shows ten hours.
     this._chartTimeframe = null;
-    this._escapeHandler = null;
+    this._releaseEscape = null;
     this._closeHandler = null;
     this._backdropHandler = null;
     this._copyMintHandler = null;
@@ -40,7 +50,10 @@ export class PositionDetailsDialog {
     this._manualToggleHandler = null;
     this._managementChangedHandler = null;
     this._focusTrap = null;
-    this._lastRenderedFp = null;
+    // Cadence the refresh poller is currently running at, so it is only rescheduled when
+    // the pending/idle state actually flips.
+    this._pollMs = null;
+    this._fetchFailures = 0;
     // The token's all-time activity: its own payload (own endpoint, fetched lazily) plus
     // the view state, kept on the dialog so a poll's re-render restores the filter, the
     // filter and every card the user had expanded.
@@ -81,7 +94,6 @@ export class PositionDetailsDialog {
       this.positionData = positionData;
       this.fullDetails = null;
       this.currentTab = "overview";
-      this._lastRenderedFp = null;
       this._resetActivityState();
 
       this._createDialog();
@@ -128,10 +140,19 @@ export class PositionDetailsDialog {
       });
 
       this.fullDetails = data;
+      this._fetchFailures = 0;
+      this._syncPollCadence();
       this._updateDialogContent();
     } catch (error) {
       console.error("Error loading position details:", error);
-      this._showError("Failed to load position details");
+      // A poll that fails once must not wipe a working view: this used to replace the
+      // whole active tab with an error state on any dropped request, so a single blip
+      // destroyed the rendered position until the next tick rebuilt it. A view that is
+      // stale for good is worse than an error, though, so keep counting.
+      this._fetchFailures = (this._fetchFailures || 0) + 1;
+      if (!this.fullDetails || this._fetchFailures >= 3) {
+        this._showError("Failed to load position details");
+      }
     } finally {
       this.isLoading = false;
     }
@@ -181,19 +202,44 @@ export class PositionDetailsDialog {
       return;
     }
 
+    this._pollMs = this._desiredPollMs();
     this.refreshPoller = new Poller(
       () => {
         this._fetchDetails();
       },
-      { label: "PositionDetails", interval: 5000 }
+      { label: "PositionDetails", intervalMs: this._pollMs }
     );
     this.refreshPoller.start();
 
-    // React immediately to live buy/sell action events (SSE) so the trade
-    // buttons disable/enable without waiting for the 5s poll tick.
-    this._liveTradeUnsub = notificationManager.subscribe(() => {
+    // React immediately to live buy/sell action events (SSE) so the trade buttons
+    // disable/enable, and pull fresh details: a manual trade's action reaches
+    // "completed" when the swap is SUBMITTED, which is exactly when the pending swap
+    // appears on the position and the dialog should start showing it.
+    this._liveTradeUnsub = notificationManager.subscribe((event) => {
       this._updateTradeButtonsState();
+      const mint = this.fullDetails?.position?.mint || this.positionData?.mint;
+      const eventMint = event?.notification?.entity_id || event?.notification?.metadata?.mint;
+      if (mint && eventMint && eventMint !== mint) return;
+      this._fetchDetails();
     });
+  }
+
+  /** Cadence this position warrants right now. */
+  _desiredPollMs() {
+    return this.fullDetails?.pending_swaps?.length ? POLL_PENDING_MS : POLL_IDLE_MS;
+  }
+
+  /**
+   * Reschedule the poller when the position moves between "settled" and "a swap is
+   * confirming". `Poller` reads its interval when it starts, so a change needs a restart.
+   */
+  _syncPollCadence() {
+    if (!this.refreshPoller) return;
+    const next = this._desiredPollMs();
+    if (next === this._pollMs) return;
+    this._pollMs = next;
+    this.refreshPoller.intervalMs = next;
+    this.refreshPoller.start({ silent: true });
   }
 
   /**
@@ -205,6 +251,7 @@ export class PositionDetailsDialog {
       this.refreshPoller.cleanup();
       this.refreshPoller = null;
     }
+    this._pollMs = null;
     if (this._liveTradeUnsub) {
       this._liveTradeUnsub();
       this._liveTradeUnsub = null;
@@ -249,7 +296,18 @@ export class PositionDetailsDialog {
     if (pos.exit_transaction_signature && !pos.transaction_exit_verified) {
       return "closing";
     }
-    return notificationManager.getInFlightTradeForMint(pos.mint);
+
+    const live = notificationManager.getInFlightTradeForMint(pos.mint);
+    if (live) return live;
+
+    // An action reports "completed" the moment its swap is SUBMITTED, so it stops
+    // covering the position well before the position changes. A pending swap keeps the
+    // buttons locked for the rest of that window, which is exactly when a second add
+    // would be fired on top of one still confirming.
+    const pending = this.fullDetails?.pending_swaps?.[0];
+    if (pending) return pending.kind === "dca" ? "buying" : "selling";
+
+    return null;
   }
 
   /**
@@ -297,14 +355,13 @@ export class PositionDetailsDialog {
     // leave all three alive — one leaked set per open/close, each still
     // re-theming a chart whose DOM was already gone.
     this._destroyPositionChart?.();
+    // Released before the exit animation, not after: a second Escape during those 300ms
+    // would otherwise re-enter close() on a dialog that is already going away.
+    this._releaseEscape?.();
+    this._releaseEscape = null;
     this.dialogEl.classList.remove("active");
 
     setTimeout(() => {
-      if (this._escapeHandler) {
-        document.removeEventListener("keydown", this._escapeHandler);
-        this._escapeHandler = null;
-      }
-
       if (this.dialogEl) {
         if (this._closeHandler) {
           const closeBtn = this.dialogEl.querySelector(".dialog-close");
@@ -364,6 +421,7 @@ export class PositionDetailsDialog {
       // go back to "derive it from the next position" rather than carrying one
       // position's choice onto another.
       this._chartTimeframe = null;
+      this._fetchFailures = 0;
       this.isLoading = false;
       this.isOpening = false;
 
@@ -380,11 +438,8 @@ export class PositionDetailsDialog {
     this._dialogTabBar?.destroy();
     this._dialogTabBar = null;
 
-    // Remove event handlers
-    if (this._escapeHandler) {
-      document.removeEventListener("keydown", this._escapeHandler);
-      this._escapeHandler = null;
-    }
+    this._releaseEscape?.();
+    this._releaseEscape = null;
 
     if (this.dialogEl) {
       this.dialogEl.remove();
@@ -506,6 +561,7 @@ export class PositionDetailsDialog {
               <div class="header-badges">
                 ${statusBadge}
                 ${manualBadge}
+                <span class="pdd-pending-swaps" id="pddPendingSwaps"></span>
               </div>
               <div class="header-shortcuts" id="pddHeaderShortcuts"></div>
             </div>
@@ -562,6 +618,41 @@ export class PositionDetailsDialog {
 
     const shortcutsContainer = this.dialogEl?.querySelector("#pddHeaderShortcuts");
     if (shortcutsContainer) shortcutsContainer.innerHTML = this._buildHeaderShortcuts();
+
+    const pendingContainer = this.dialogEl?.querySelector("#pddPendingSwaps");
+    if (pendingContainer) pendingContainer.innerHTML = this._buildPendingSwaps();
+  }
+
+  /**
+   * Swaps this position has submitted but not booked yet.
+   *
+   * A manual add returns success as soon as the swap is SUBMITTED; the position's invested
+   * total, average entry and DCA count only move when the verifier applies it — seconds
+   * later, with no event of its own. Without this the dialog read as broken: the toast
+   * said "Added to position!" and every figure still showed the pre-trade state. The
+   * amounts here are what was SENT, never what the position has booked.
+   */
+  _buildPendingSwaps() {
+    const pending = this.fullDetails?.pending_swaps || [];
+    if (!pending.length) return "";
+
+    return pending
+      .map((swap) => {
+        let label;
+        if (swap.kind === "dca") {
+          const size =
+            swap.size_sol != null
+              ? ` ${Utils.formatSol(swap.size_sol, { decimals: 4, suffix: "" })} SOL`
+              : "";
+          label = `Adding${size}`;
+        } else {
+          const pct =
+            swap.exit_percentage != null ? ` ${Utils.formatNumber(swap.exit_percentage, 0)}%` : "";
+          label = `Selling${pct}`;
+        }
+        return `<span class="pdd-badge pdd-badge-pending" title="Submitted — waiting for on-chain confirmation. The position's figures update once it is verified."><i class="icon-loader spin"></i> ${Utils.escapeHtml(label)} · confirming</span>`;
+      })
+      .join("");
   }
 
   _buildHeaderSecurity() {
@@ -751,12 +842,10 @@ export class PositionDetailsDialog {
     this._favoriteHandler = () => this._toggleFavorite();
     favoriteButton.addEventListener("click", this._favoriteHandler);
 
-    this._escapeHandler = (e) => {
-      if (e.key === "Escape") {
-        this.close();
-      }
-    };
-    document.addEventListener("keydown", this._escapeHandler);
+    // Escape goes through the shared stack, so the topmost overlay wins. Bound directly
+    // on `document`, this dialog closed underneath the trade dialog opened from its own
+    // Add/Partial/Close buttons on a single Escape.
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Trade action buttons (now in the top tab bar). Bound once; pos is resolved
     // fresh at click time so it always reflects the latest details.

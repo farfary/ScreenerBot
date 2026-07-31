@@ -481,7 +481,7 @@ export class TokenDetailsDialog {
       () => {
         this._fetchTokenData();
       },
-      { label: "TokenRefresh", interval: 5000 }
+      { label: "TokenRefresh", intervalMs: 5000 }
     );
     this.refreshPoller.start();
   }
@@ -509,7 +509,7 @@ export class TokenDetailsDialog {
       () => {
         this._refreshChartData();
       },
-      { label: "ChartRefresh", interval }
+      { label: "ChartRefresh", intervalMs: interval }
     );
     this.chartPoller.start();
 
@@ -527,7 +527,7 @@ export class TokenDetailsDialog {
           this._updateDataIndicator(this.tokenData.mint);
         }
       },
-      { label: "DataStatus", interval: 5000 }
+      { label: "DataStatus", intervalMs: 5000 }
     );
     this.dataStatusPoller.start();
   }

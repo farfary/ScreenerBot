@@ -178,7 +178,29 @@ pub struct PositionDetailResponse {
     pub external_links: ExternalLinks,
     pub position_age_seconds: Option<i64>,
     pub sol_price_usd: Option<f64>,
+    /// Swaps submitted for this position that the verifier has not applied yet.
+    ///
+    /// A manual add returns success the moment the swap is SUBMITTED, but the position's
+    /// numbers (`total_size_sol`, `average_entry_price`, `dca_count`) only move when
+    /// `DcaVerified` lands seconds later. Without this the dialog looked frozen for the
+    /// whole confirmation window: the toast said "Added to position!" while every figure
+    /// still showed the pre-trade state and nothing said why.
+    pub pending_swaps: Vec<PendingSwapResponse>,
     pub fetched_at: String,
+}
+
+/// A submitted-but-unverified swap. Amounts here are what was SENT, never what the
+/// position has booked — the position is the only source for booked figures.
+#[derive(Debug, Serialize)]
+pub struct PendingSwapResponse {
+    /// `dca` (add) or `partial_exit`.
+    pub kind: String,
+    pub signature: String,
+    pub submitted_at: i64,
+    /// Set for adds only.
+    pub size_sol: Option<f64>,
+    /// Set for partial exits only.
+    pub exit_percentage: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]

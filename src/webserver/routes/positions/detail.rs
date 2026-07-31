@@ -19,9 +19,10 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             let mint = &position.mint;
 
             // Fetch all data concurrently for better performance
-            let (detail, (entries, exits)) = tokio::join!(
+            let (detail, (entries, exits), pending_swaps) = tokio::join!(
                 map_position_to_detail(&position),
-                load_entry_exit_history(&position)
+                load_entry_exit_history(&position),
+                load_pending_swaps(&position)
             );
 
             // Fetch token data from database
@@ -129,6 +130,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 external_links,
                 position_age_seconds,
                 sol_price_usd,
+                pending_swaps,
                 fetched_at: Utc::now().to_rfc3339(),
             })
         }
@@ -183,6 +185,48 @@ async fn map_position_to_detail(position: &positions::Position) -> PositionDetai
         phantom_remove: position.phantom_remove,
         phantom_first_seen: position.phantom_first_seen.map(|dt| dt.timestamp()),
     }
+}
+
+/// Swaps this position has submitted but not booked yet.
+///
+/// Filtered by position id, not just mint: the registries are per-mint, and handing one
+/// position the other's in-flight add would misreport both. A position with no id cannot
+/// own a pending swap.
+async fn load_pending_swaps(position: &positions::Position) -> Vec<PendingSwapResponse> {
+    let Some(id) = position.id else {
+        return Vec::new();
+    };
+
+    let mut pending: Vec<PendingSwapResponse> =
+        positions::get_pending_dca_swaps_for_mint(&position.mint)
+            .await
+            .into_iter()
+            .filter(|entry| entry.position_id == id)
+            .map(|entry| PendingSwapResponse {
+                kind: "dca".to_owned(),
+                signature: entry.signature,
+                submitted_at: entry.created_at.timestamp(),
+                size_sol: (entry.size_sol > 0.0).then_some(entry.size_sol),
+                exit_percentage: None,
+            })
+            .collect();
+
+    pending.extend(
+        positions::get_pending_partial_exits_for_mint(&position.mint)
+            .await
+            .into_iter()
+            .filter(|entry| entry.position_id == id)
+            .map(|entry| PendingSwapResponse {
+                kind: "partial_exit".to_owned(),
+                signature: entry.signature,
+                submitted_at: entry.created_at.timestamp(),
+                size_sol: None,
+                exit_percentage: Some(entry.requested_exit_percentage),
+            }),
+    );
+
+    pending.sort_by_key(|entry| entry.submitted_at);
+    pending
 }
 
 /// Load entry and exit history for a position
