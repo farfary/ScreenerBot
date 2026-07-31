@@ -137,6 +137,7 @@ pub(super) const SETUP_DIALOG_STYLES: &str = include_str!("templates/styles/ui/s
 pub(super) const CONTEXT_MENU_STYLES: &str = include_str!("templates/styles/ui/context_menu.css");
 pub(super) const ADVANCED_CHART_STYLES: &str =
     include_str!("templates/styles/ui/advanced_chart.css");
+pub(super) const CHART_SHELL_STYLES: &str = include_str!("templates/styles/ui/chart_shell.css");
 
 // CSS Styles - Token Details
 pub(super) const TOKEN_DETAILS_BASE_STYLES: &str =
@@ -363,6 +364,7 @@ pub const ADVANCED_CHART_INDICATORS_JS: &str =
     include_str!("templates/scripts/ui/advanced_chart/indicators.js");
 pub const ADVANCED_CHART_THEMES_JS: &str =
     include_str!("templates/scripts/ui/advanced_chart/themes.js");
+pub const CHART_DATA_JS: &str = include_str!("templates/scripts/ui/chart_data.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const SETTINGS_SECURITY_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/security_tab.js");

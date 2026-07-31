@@ -4,23 +4,16 @@
  * Handles price chart rendering with lightweight-charts
  */
 import * as Utils from "../../core/utils.js";
-import { requestManager } from "../../core/request_manager.js";
 import * as AppState from "../../core/app_state.js";
+import {
+  fetchCandles,
+  fetchOhlcvStatus,
+  findTimeframeWithData,
+  renderOhlcvStatus,
+} from "../chart_data.js";
 
 // Persisted across dialog opens so the user's last chart timeframe is restored.
 const TIMEFRAME_STATE_KEY = "tokenChartTimeframe";
-
-// Candle count requested for the chart. 0 = the FULL stored history for the
-// selected timeframe (no cap) — the chart shows every candle we have, like a
-// normal price chart, and lightweight-charts virtualizes rendering so large
-// sets stay smooth. This MUST be identical on the initial load and on every
-// poll refresh: a mismatch (the initial load used to omit the param → backend
-// default 100, while the poll asked for 200) made the chart visibly jump to
-// "different data" a few seconds after opening. Requesting the full set also
-// avoids the cache-vs-DB flip, where a capped read returned the newest N from
-// the warm cache but the OLDEST N from a cold-cache SQL read. Single source of
-// truth for both fetch sites.
-export const CHART_CANDLE_LIMIT = 0;
 
 /**
  * Apply chart tab mixin to TokenDetailsDialog class
@@ -85,7 +78,6 @@ export function applyChartTabMixin(DialogClass) {
       showVolume: true,
       showGrid: true,
       showCrosshair: true,
-      showLegend: false, // We have our own OHLCV display in header
       showTooltip: true,
       barSpacing: 12,
       minBarSpacing: 4,
@@ -180,54 +172,51 @@ export function applyChartTabMixin(DialogClass) {
   proto._updateChartPositions = function () {
     if (!this.advancedChart || !this.positionsData) return;
 
-    this.advancedChart.clearPositionMarkers();
+    const markers = [];
 
-    // Add entry markers for each position entry
-    if (this.positionsData.entries && this.positionsData.entries.length > 0) {
-      this.positionsData.entries.forEach((entry, idx) => {
-        if (entry.price_sol && entry.timestamp) {
-          this.advancedChart.addPositionMarker({
-            type: idx === 0 ? "entry" : "dca",
-            price: entry.price_sol,
-            timestamp: Math.floor(new Date(entry.timestamp).getTime() / 1000),
-            label: idx === 0 ? "Entry" : `DCA ${idx}`,
-          });
-        }
+    // Entry / DCA markers
+    (this.positionsData.entries || []).forEach((entry, idx) => {
+      if (!entry.price_sol || !entry.timestamp) return;
+      markers.push({
+        type: idx === 0 ? "entry" : "dca",
+        price: entry.price_sol,
+        timestamp: Math.floor(new Date(entry.timestamp).getTime() / 1000),
+        label: idx === 0 ? "Entry" : `DCA ${idx}`,
       });
-    }
+    });
 
-    // Add exit markers for closed positions
-    if (this.positionsData.exits && this.positionsData.exits.length > 0) {
-      this.positionsData.exits.forEach((exit, idx) => {
-        if (exit.price_sol && exit.timestamp) {
-          this.advancedChart.addPositionMarker({
-            type: "exit",
-            price: exit.price_sol,
-            timestamp: Math.floor(new Date(exit.timestamp).getTime() / 1000),
-            label: `Exit ${idx + 1}`,
-          });
-        }
+    // Exit markers for closed positions
+    (this.positionsData.exits || []).forEach((exit, idx) => {
+      if (!exit.price_sol || !exit.timestamp) return;
+      markers.push({
+        type: "exit",
+        price: exit.price_sol,
+        timestamp: Math.floor(new Date(exit.timestamp).getTime() / 1000),
+        label: `Exit ${idx + 1}`,
       });
-    }
+    });
 
-    // Add stop loss / take profit lines from current position
+    this.advancedChart.setPositionMarkers(markers);
+
+    // Stop loss / take profit levels from the current position
+    const lines = [];
     if (this.positionsData.stop_loss_price) {
-      this.advancedChart.addHorizontalLine({
+      lines.push({
         price: this.positionsData.stop_loss_price,
         color: "#ef4444",
         label: "Stop Loss",
         style: 2,
       });
     }
-
     if (this.positionsData.take_profit_price) {
-      this.advancedChart.addHorizontalLine({
+      lines.push({
         price: this.positionsData.take_profit_price,
         color: "#10b981",
         label: "Take Profit",
         style: 2,
       });
     }
+    this.advancedChart.setOverlayLines(lines);
   };
 
   /**
@@ -242,13 +231,11 @@ export function applyChartTabMixin(DialogClass) {
     const loadingText = loadingOverlay?.querySelector(".chart-loading-text");
 
     try {
-      // Use requestManager with high priority for initial chart data load.
-      // limit MUST match the poll refresh (CHART_CANDLE_LIMIT) so the dataset
-      // doesn't change the moment the first poll lands.
-      const data = await requestManager.fetch(
-        `/api/tokens/${mint}/ohlcv?timeframe=${timeframe}&limit=${CHART_CANDLE_LIMIT}`,
-        { priority: isInitialLoad ? "high" : "normal" }
-      );
+      // The shared helper fixes the candle limit, so this load and the poll
+      // refresh can never disagree about the dataset.
+      const chartData = await fetchCandles(mint, timeframe, {
+        priority: isInitialLoad ? "high" : "normal",
+      });
 
       // Stale-response guard: OHLCV fetches are slow enough that this promise can
       // resolve AFTER the user switched tokens (close+reopen) or timeframes. If
@@ -260,7 +247,7 @@ export function applyChartTabMixin(DialogClass) {
         return;
       }
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!chartData.length) {
         // The selected timeframe has no candles. The token can still have OHLCV
         // at a different timeframe (e.g. only daily candles fetched so far) — the
         // has_ohlcv badge is true while this specific timeframe is empty. On the
@@ -269,7 +256,7 @@ export function applyChartTabMixin(DialogClass) {
         // per open and never overrides a manual timeframe selection.
         if (isInitialLoad && this._chartInitialLoadPending) {
           this._chartInitialLoadPending = false;
-          const altTf = await this._findTimeframeWithData(mint, timeframe);
+          const altTf = await findTimeframeWithData(mint, timeframe);
           if (altTf && altTf !== timeframe) {
             this.currentTimeframe = altTf;
             this._syncTimeframeButtons(altTf);
@@ -291,15 +278,6 @@ export function applyChartTabMixin(DialogClass) {
       this._chartInitialLoadPending = false;
 
       if (!this.advancedChart) return;
-
-      const chartData = data.map((candle) => ({
-        time: candle.timestamp,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume || 0,
-      }));
 
       // setData now respects user interactions - only fits on first load
       this.advancedChart.setData(chartData);
@@ -343,34 +321,6 @@ export function applyChartTabMixin(DialogClass) {
   };
 
   /**
-   * Find the finest timeframe that currently has candles for this token, probing
-   * cheaply (limit=1). Returns null if none have data. Order is finest→coarsest
-   * so the chart lands on the most granular timeframe available.
-   * @private
-   * @param {string} mint
-   * @param {string} exclude - timeframe already known to be empty (skipped)
-   * @returns {Promise<string|null>}
-   */
-  proto._findTimeframeWithData = async function (mint, exclude) {
-    const order = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
-    const checks = await Promise.all(
-      order.map(async (tf) => {
-        if (tf === exclude) return null;
-        try {
-          const d = await requestManager.fetch(
-            `/api/tokens/${mint}/ohlcv?timeframe=${tf}&limit=1`,
-            { priority: "low" }
-          );
-          return Array.isArray(d) && d.length > 0 ? tf : null;
-        } catch {
-          return null;
-        }
-      })
-    );
-    return checks.find((tf) => tf) || null;
-  };
-
-  /**
    * Highlight the given timeframe button (used when an automatic fallback
    * switches the chart to a timeframe the user didn't click).
    * @private
@@ -386,89 +336,21 @@ export function applyChartTabMixin(DialogClass) {
 
   /**
    * Fetch and render the chart data-status indicator (the small "Data" chip that
-   * replaced the "Price Chart" label). Shows an at-a-glance state — ready /
-   * collecting / no data — with a hover tooltip breaking down candle counts and
-   * backfill completion per timeframe. Cheap single endpoint; safe to call on
+   * replaced the "Price Chart" label). Cheap single endpoint; safe to call on
    * each chart poll. Never throws.
    * @private
    * @param {string} mint
    */
   proto._updateDataIndicator = async function (mint) {
     const indicator = this.dialogEl?.querySelector("#chartDataIndicator");
-    const tip = this.dialogEl?.querySelector("#chartDataTip");
     if (!indicator) return;
-
-    let status;
-    try {
-      status = await requestManager.fetch(`/api/tokens/${mint}/ohlcv/status`, {
-        priority: "low",
-      });
-    } catch {
-      return; // transient — keep the last rendered state
-    }
-    if (!status || typeof status !== "object") return;
-
-    // Overall state: ready (any data + backfill done) / collecting (monitored or
-    // partial data) / none (nothing yet).
-    let state = "none";
-    let summary = "No chart data yet";
-    if (status.has_data && status.backfill_complete) {
-      state = "ready";
-      summary = "Data ready";
-    } else if (status.has_data) {
-      state = "partial";
-      summary = "Collecting history…";
-    } else if (status.monitored) {
-      state = "collecting";
-      summary = "Fetching data…";
-    }
-    indicator.dataset.state = state;
-    indicator.setAttribute("aria-label", `Chart data: ${summary}`);
-
-    if (tip) {
-      const ago = (ts) => (ts ? Utils.formatTimeAgo(ts) : "—");
-      const rows = (status.timeframes || [])
-        .map((tf) => {
-          const has = tf.candles > 0;
-          const dot = has ? (tf.backfill_complete ? "ready" : "partial") : "none";
-          const count = has ? Number(tf.candles).toLocaleString() : "—";
-          const fresh = has ? ago(tf.last_new_data_at) : "—";
-          return `
-            <div class="chart-data-tip-row">
-              <span class="chart-data-tip-dot" data-state="${dot}"></span>
-              <span class="chart-data-tip-tf">${tf.timeframe.toUpperCase()}</span>
-              <span class="chart-data-tip-count">${count}</span>
-              <span class="chart-data-tip-fresh" title="Last new candle">${fresh}</span>
-            </div>`;
-        })
-        .join("");
-      const checked = status.last_checked_at
-        ? `checked ${ago(status.last_checked_at)}`
-        : status.monitored
-          ? "checking…"
-          : "not checked";
-      const updated = status.last_new_data_at
-        ? `updated ${ago(status.last_new_data_at)}`
-        : "no candles yet";
-      tip.innerHTML = `
-        <div class="chart-data-tip-head">
-          <span class="chart-data-tip-title">${summary}</span>
-          <span class="chart-data-tip-checked">${checked}</span>
-        </div>
-        <div class="chart-data-tip-cols">
-          <span></span>
-          <span>TF</span>
-          <span class="chart-data-tip-count">Candles</span>
-          <span class="chart-data-tip-fresh">New</span>
-        </div>
-        <div class="chart-data-tip-list">${rows}</div>
-        <div class="chart-data-tip-foot">
-          <span>${Number(status.total_candles || 0).toLocaleString()} candles · ${
-            status.monitored ? "monitoring" : "idle"
-          }</span>
-          <span class="chart-data-tip-foot-time">${updated}</span>
-        </div>`;
-    }
+    const status = await fetchOhlcvStatus(mint);
+    if (!status || !this.dialogEl?.contains(indicator)) return;
+    renderOhlcvStatus(
+      { indicator, tip: this.dialogEl.querySelector("#chartDataTip") },
+      status,
+      Utils.formatTimeAgo
+    );
   };
 
   /**

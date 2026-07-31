@@ -28,9 +28,9 @@ export class PositionDetailsDialog {
     this.refreshPoller = null;
     this.tradeDialog = null;
     this._dialogTabBar = null;
-    this._chartTimeframe = "5m";
-    this._chartData = null;
-    this._tfButtonHandlers = null;
+    // Chosen from the position's own duration on first render (see chart_tab.js),
+    // so a week-old position does not open on a timeframe that shows ten hours.
+    this._chartTimeframe = null;
     this._escapeHandler = null;
     this._closeHandler = null;
     this._backdropHandler = null;
@@ -292,6 +292,11 @@ export class PositionDetailsDialog {
     }
 
     this._stopPolling();
+    // The chart owns a lightweight-charts instance, a ResizeObserver and a
+    // MutationObserver on <html>. Closing the dialog from the Chart tab used to
+    // leave all three alive — one leaked set per open/close, each still
+    // re-theming a chart whose DOM was already gone.
+    this._destroyPositionChart?.();
     this.dialogEl.classList.remove("active");
 
     setTimeout(() => {
@@ -338,15 +343,6 @@ export class PositionDetailsDialog {
           this._managementChangedHandler = null;
         }
 
-        // Clean up chart timeframe handlers
-        if (this._tfButtonHandlers) {
-          this._tfButtonHandlers.forEach(({ element, handler }) => {
-            element.removeEventListener("click", handler);
-          });
-          this._tfButtonHandlers = null;
-        }
-        this._chartData = null;
-
         // Clean up action button handlers
         if (this._actionHandlers) {
           this._actionHandlers.forEach(({ element, handler }) => {
@@ -364,6 +360,10 @@ export class PositionDetailsDialog {
       this.positionData = null;
       this.fullDetails = null;
       this.currentTab = "overview";
+      // The dialog instance is reused for every position, so the timeframe must
+      // go back to "derive it from the next position" rather than carrying one
+      // position's choice onto another.
+      this._chartTimeframe = null;
       this.isLoading = false;
       this.isOpening = false;
 

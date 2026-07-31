@@ -1,0 +1,340 @@
+/* =============================================================================
+   CHART SHELL
+   The header/controls/loading chrome wrapped around the AdvancedChart canvas.
+   Shared by the Token Details overview chart and the Position Details chart
+   tab: these selectors are unscoped on purpose, so they belong to neither
+   dialog's stylesheet. `.timeframe-btn` in particular used to be defined twice
+   (here and in advanced_chart.css) with different padding and colours, and
+   load order decided what a dialog looked like.
+   ============================================================================= */
+
+.chart-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+
+  /* Positioning context for the absolutely-positioned #chartLoadingOverlay
+     (inset:0). Without this the overlay escapes to the nearest positioned
+     ancestor and spans the WHOLE overview body, covering the left info column
+     with its solid background — so a token with no chart data showed a blank
+     overview. Containing it keeps the "no chart data" state inside the chart. */
+  position: relative;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.chart-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Chart data-status indicator (replaces the old "Price Chart" label). A small
+   chip whose dot color reflects OHLCV data state; hovering/focusing reveals a
+   per-timeframe breakdown tooltip. */
+.chart-data-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  cursor: default;
+  outline: none;
+}
+
+.chart-data-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.chart-data-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chart-data-indicator[data-state="ready"] .chart-data-dot {
+  background: var(--success-color);
+  box-shadow: 0 0 6px var(--success-color);
+}
+
+.chart-data-indicator[data-state="partial"] .chart-data-dot,
+.chart-data-indicator[data-state="collecting"] .chart-data-dot {
+  background: var(--warning-color);
+  box-shadow: 0 0 6px var(--warning-color);
+}
+
+.chart-data-indicator[data-state="none"] .chart-data-dot {
+  background: var(--text-tertiary);
+}
+
+/* Hover/focus tooltip with the per-timeframe breakdown. */
+.chart-data-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-dropdown);
+  min-width: 244px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgb(0, 0, 0, 0.4));
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.chart-data-indicator:hover .chart-data-tip,
+.chart-data-indicator:focus-visible .chart-data-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.chart-data-tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.chart-data-tip-checked {
+  font-weight: 500;
+  font-size: 0.64rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-data);
+}
+
+/* Column header + each row share the same grid so values line up. */
+.chart-data-tip-cols,
+.chart-data-tip-row {
+  display: grid;
+  grid-template-columns: 10px 34px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-data-tip-cols {
+  padding: 0 0 4px;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.chart-data-tip-row {
+  padding: 2px 0;
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+}
+
+.chart-data-tip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.chart-data-tip-dot[data-state="ready"] {
+  background: var(--success-color);
+}
+
+.chart-data-tip-dot[data-state="partial"] {
+  background: var(--warning-color);
+}
+
+.chart-data-tip-tf {
+  color: var(--text-secondary);
+}
+
+.chart-data-tip-count {
+  text-align: right;
+  color: var(--text-primary);
+}
+
+.chart-data-tip-fresh {
+  text-align: right;
+  color: var(--text-tertiary);
+  min-width: 56px;
+}
+
+.chart-data-tip-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.66rem;
+  color: var(--text-tertiary);
+}
+
+.chart-data-tip-foot-time {
+  font-family: var(--font-data);
+  white-space: nowrap;
+}
+
+.chart-data-tip-empty {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+}
+
+/* OHLCV Display in chart header */
+.chart-ohlcv-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+}
+
+.ohlcv-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ohlcv-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.ohlcv-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.ohlcv-change {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.ohlcv-change.positive {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.ohlcv-change.negative {
+  color: var(--danger);
+  background: var(--danger-alpha-10);
+}
+
+.chart-controls {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+/* Timeframe button row */
+.timeframe-buttons {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-primary);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.timeframe-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-transform: uppercase;
+}
+
+.timeframe-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.timeframe-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.tradingview-chart {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Chart loading overlay */
+.chart-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  z-index: 10;
+  transition: opacity var(--transition-normal);
+}
+
+.chart-loading-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chart-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.chart-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: var(--radius-full);
+  animation: chart-spinner 1s linear infinite;
+}
+
+@keyframes chart-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chart-loading-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}

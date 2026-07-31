@@ -103,6 +103,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         SETUP_DIALOG_STYLES,
         CONTEXT_MENU_STYLES,
         ADVANCED_CHART_STYLES,
+        CHART_SHELL_STYLES,
         TOKEN_DETAILS_BASE_STYLES,
         TOKEN_DETAILS_OVERVIEW_STYLES,
         TOKEN_DETAILS_SECURITY_STYLES,

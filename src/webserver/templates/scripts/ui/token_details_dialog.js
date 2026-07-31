@@ -20,7 +20,8 @@ import { renderSecurityTab } from "./token_details/security_tab.js";
 import { renderPoolsTab, renderLinksTab } from "./token_details/pools_links_tab.js";
 import { applyTradeActionsMixin } from "./token_details/trade_actions.js";
 import { applyTransactionsTabMixin } from "./token_details/transactions_tab.js";
-import { applyChartTabMixin, CHART_CANDLE_LIMIT } from "./token_details/chart_tab.js";
+import { applyChartTabMixin } from "./token_details/chart_tab.js";
+import { fetchCandles, triggerRefresh } from "./chart_data.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin, renderTabState } from "./token_details/state_handling.js";
 import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
@@ -201,23 +202,7 @@ export class TokenDetailsDialog {
   }
 
   async _triggerOhlcvRefresh() {
-    try {
-      // Use requestManager with high priority for immediate OHLCV refresh
-      const response = await requestManager.fetch(
-        `/api/tokens/${this.tokenData.mint}/ohlcv/refresh`,
-        {
-          method: "POST",
-          priority: "high",
-        }
-      );
-      if (response.success !== false) {
-        console.log("OHLCV data refresh triggered:", response);
-        return response;
-      }
-    } catch {
-      // Silently ignore - OHLCV may not be available for new tokens
-    }
-    return null;
+    await triggerRefresh(this.tokenData.mint);
   }
 
   /**
@@ -582,11 +567,9 @@ export class TokenDetailsDialog {
     }
 
     try {
-      // Use requestManager with normal priority for periodic chart refresh
-      const data = await requestManager.fetch(
-        `/api/tokens/${pollMint}/ohlcv?timeframe=${pollTimeframe}&limit=${CHART_CANDLE_LIMIT}`,
-        { priority: "normal" }
-      );
+      // Normal priority for the periodic chart refresh; the limit is fixed by
+      // the shared helper so this poll and the initial load never disagree.
+      const chartData = await fetchCandles(pollMint, pollTimeframe, { priority: "normal" });
 
       // Drop a response that arrived after the user moved to another token or
       // timeframe (see _loadChartData) — otherwise it overwrites the live chart
@@ -595,7 +578,7 @@ export class TokenDetailsDialog {
         return;
       }
 
-      if (!Array.isArray(data) || data.length === 0) {
+      if (!chartData.length) {
         // No data yet. After a streak of empty responses, switch to a clearer
         // message (an unchanging "Waiting…" spinner reads as "broken") and back
         // off the 3s poll so a token that simply has no OHLCV stops hammering the
@@ -617,15 +600,6 @@ export class TokenDetailsDialog {
         }
         return;
       }
-
-      const chartData = data.map((candle) => ({
-        time: candle.timestamp,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume || 0,
-      }));
 
       this.advancedChart.setData(chartData);
 

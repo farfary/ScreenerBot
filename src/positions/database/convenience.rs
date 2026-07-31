@@ -453,6 +453,9 @@ pub async fn exit_record_exists(position_id: i64, transaction_signature: &str) -
     .is_ok()
 }
 
+/// Exits in CHRONOLOGICAL order, matching `get_entry_history`. Callers number
+/// them by index ("Exit 1", "Exit 2"), so a DESC order silently labelled the
+/// newest partial exit as the first one on the position chart.
 pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     let db = db_guard
@@ -470,7 +473,7 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
         .prepare(
             "SELECT id, position_id, timestamp, amount, price, sol_received, 
        transaction_signature, is_partial, percentage, fees_lamports 
-       FROM position_exits WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp DESC",
+       FROM position_exits WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
         )
         .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 

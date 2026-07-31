@@ -89,7 +89,7 @@
   color: #fff;
 }
 
-.pdd-ema-toggle {
+.pdd-chart-toggle {
   height: 26px;
   padding: 0 10px;
   font-size: 0.65rem;
@@ -105,33 +105,41 @@
     color 0.15s ease;
 }
 
-.pdd-ema-toggle:hover {
+.pdd-chart-toggle:hover {
   color: var(--text-primary);
 }
 
-.pdd-ema-toggle.active {
+.pdd-chart-toggle.active {
   background: var(--link-color);
   color: #fff;
   border-color: var(--link-color);
 }
 
-/* Marker legend (bottom-left of the chart) */
+/* Marker legend — a real row under the canvas. Floating it over the chart's
+   bottom-left corner hid the leftmost time-axis labels. */
 .pdd-chart-legend {
-  position: absolute;
-  left: 12px;
-  bottom: 10px;
-  z-index: 3;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 5px 10px;
-  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
+  padding: 6px 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
   font-size: 0.65rem;
   color: var(--text-secondary);
-  pointer-events: none;
-  backdrop-filter: blur(4px);
+}
+
+/* Events that fall outside the loaded candle window are counted here rather
+   than clamped onto an edge bar, which would claim they happened in a candle
+   they did not. */
+.pdd-legend-note {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.pdd-legend-note:empty {
+  display: none;
 }
 
 .pdd-legend-item {
@@ -239,6 +247,10 @@
   }
 
   .pdd-chart-legend {
+    display: none;
+  }
+
+  .pdd-chart-header .chart-ohlcv-display {
     display: none;
   }
 }
