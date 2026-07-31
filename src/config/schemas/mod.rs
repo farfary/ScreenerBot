@@ -16,6 +16,7 @@ mod ohlcv;
 mod performance;
 mod pools;
 mod positions;
+mod referral;
 mod rpc;
 mod services;
 mod sol_price;
@@ -40,6 +41,7 @@ pub use ohlcv::*;
 pub use performance::*;
 pub use pools::*;
 pub use positions::*;
+pub use referral::*;
 pub use rpc::*;
 pub use services::*;
 pub use sol_price::*;
@@ -132,5 +134,8 @@ config_struct! {
 
         /// Network proxy configuration
         network: NetworkConfig = NetworkConfig::default(),
+
+        /// Referral attribution (opt-in; inert until a code is set)
+        referral: ReferralConfig = ReferralConfig::default(),
     }
 }

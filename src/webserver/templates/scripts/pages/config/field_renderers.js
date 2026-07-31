@@ -76,6 +76,10 @@ export const SECTION_ICONS = {
   holder_watch: "icon-eye",
   performance: "icon-gauge",
   network: "icon-globe",
+  // Verified against src/webserver/assets/lucide-font/lucide.css — a name that
+  // is not in the font renders a silent blank box. Same mark as the website
+  // admin's referral surfaces, so the two read as one feature.
+  referral: "icon-hand-coins",
 };
 
 /**

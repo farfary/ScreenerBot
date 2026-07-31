@@ -310,6 +310,7 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("wallet", super::WalletConfig::field_metadata());
     map.insert("performance", super::PerformanceConfig::field_metadata());
     map.insert("network", super::NetworkConfig::field_metadata());
+    map.insert("referral", super::ReferralConfig::field_metadata());
 
     for section in map.values_mut() {
         section.retain(|_, field| !field.hidden.unwrap_or_default());
@@ -422,4 +423,46 @@ macro_rules! field_metadata {
     ($unexpected:tt) => {{
         compile_error!("Invalid metadata declaration");
     }};
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_config_metadata;
+
+    /// The section map in `collect_config_metadata` is HAND-MAINTAINED — it is
+    /// not derived from `Config`'s fields. So a new config section can compile,
+    /// save, load and round-trip perfectly while being completely INVISIBLE in
+    /// the dashboard, with nothing anywhere reporting a problem. That is not
+    /// hypothetical: the referral section shipped that way and was only caught
+    /// by reading this function.
+    ///
+    /// This test fails the moment a section is added to `Config` and forgotten
+    /// here. When it does, add the `map.insert` line AND the `pub use` in
+    /// `config/mod.rs` — the re-export is what `super::` resolves against.
+    #[test]
+    fn every_section_in_the_map_exposes_its_fields() {
+        let metadata = collect_config_metadata();
+
+        for section in ["trader", "filtering", "swaps", "network", "referral"] {
+            let fields = metadata
+                .get(section)
+                .unwrap_or_else(|| panic!("`{section}` is missing from collect_config_metadata(), so the dashboard cannot show it"));
+
+            assert!(
+                !fields.is_empty(),
+                "`{section}` is registered but exposes no fields"
+            );
+        }
+    }
+
+    /// The referral code is the one field a user has to be able to find, and it
+    /// must be in a primary category so it is not collapsed out of sight.
+    #[test]
+    fn referral_code_is_visible_by_default() {
+        let metadata = collect_config_metadata();
+        let referral = metadata.get("referral").expect("referral section missing");
+        let code = referral.get("code").expect("referral.code is not exposed");
+
+        assert_eq!(code.visibility, Some("primary"));
+    }
 }
