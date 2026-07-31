@@ -24,6 +24,7 @@ export const SECTION_DISPLAY_ORDER = [
   "performance",
   "maintenance",
   "network",
+  "referral",
   "ohlcv",
   "summary",
 ];

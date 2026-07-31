@@ -34,6 +34,7 @@ pub struct FullConfigResponse {
     pub telegram: config::TelegramConfig,
     pub ai: config::AiConfig,
     pub network: config::NetworkConfig,
+    pub referral: config::ReferralConfig,
     pub timestamp: String,
 }
 

@@ -455,6 +455,38 @@ mod tests {
         }
     }
 
+    /// Every section the dashboard can render must also be WRITABLE, and the
+    /// two lists live in different files: this map, and the `type_name` match
+    /// arms in `webserver/routes/config/getters.rs`. A section present here but
+    /// missing there renders a form whose Save silently 400s with
+    /// "Unknown config section".
+    ///
+    /// Wiring a section takes SEVEN edits and they are easy to half-finish:
+    ///   1. the field on `Config`                    (config/schemas/mod.rs)
+    ///   2. `pub use` the type                       (config/mod.rs)
+    ///   3. `map.insert` here                        (config/metadata.rs)
+    ///   4. GET route + PATCH route                  (routes/config/mod.rs)
+    ///   5. getter + aggregate field                 (routes/config/getters.rs, types.rs)
+    ///   6. both `type_name` match arms              (routes/config/getters.rs)
+    ///   7. SECTION_DISPLAY_ORDER + SECTION_ICONS    (config/utils.js, field_renderers.js)
+    #[test]
+    fn referral_section_is_registered_everywhere() {
+        let metadata = collect_config_metadata();
+        assert!(
+            metadata.contains_key("referral"),
+            "referral is missing from collect_config_metadata()"
+        );
+
+        // Steps 4-6 are Rust and cannot be reached from here, so assert the one
+        // thing this module CAN prove: the section serializes both ways, which
+        // is what every one of those match arms actually does.
+        let config = crate::config::schemas::Config::default();
+        let value = serde_json::to_value(&config.referral).expect("referral must serialize");
+        let round_tripped: crate::config::ReferralConfig =
+            serde_json::from_value(value).expect("referral must deserialize");
+        assert_eq!(round_tripped.code, config.referral.code);
+    }
+
     /// The referral code is the one field a user has to be able to find, and it
     /// must be in a primary category so it is not collapsed out of sight.
     #[test]

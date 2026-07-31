@@ -33,6 +33,7 @@ pub async fn get_full_config() -> Response {
         telegram: cfg.telegram.clone(),
         ai: cfg.ai.clone(),
         network: cfg.network.clone(),
+        referral: cfg.referral.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -133,6 +134,16 @@ pub async fn get_sol_price_config() -> Response {
 pub async fn get_network_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.network.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/referral - Get referral attribution configuration
+pub async fn get_referral_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.referral.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -319,6 +330,7 @@ where
             "WalletConfig" => serde_json::to_value(&cfg.wallet).ok(),
             "PerformanceConfig" => serde_json::to_value(&cfg.performance).ok(),
             "NetworkConfig" => serde_json::to_value(&cfg.network).ok(),
+            "ReferralConfig" => serde_json::to_value(&cfg.referral).ok(),
             _ => None,
         });
 
@@ -545,6 +557,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.network = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "ReferralConfig" => {
+                let new_config: config::ReferralConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid ReferralConfig: {e}"))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.referral = new_config;
                     },
                     true,
                 )?;
