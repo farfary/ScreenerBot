@@ -115,16 +115,22 @@ export function applyChartTabMixin(PositionDetailsDialog) {
       showCrosshair: true,
       showLegend: false,
       showTooltip: true,
-      priceFormat: "auto",
-      pricePrecision: 12,
       barSpacing: 10,
       minBarSpacing: 3,
+      // This chart belongs to a position, so the hovered bar answers the only
+      // question that matters here: what the position was worth at that price.
+      tooltipExtraRows: (bar) => this._positionTooltipRows(bar),
       watermark: {
         text: pos.symbol || "",
         fontSize: 34,
         color: isDark ? "rgba(128,128,128,0.10)" : "rgba(128,128,128,0.08)",
       },
     });
+
+    // Header O/H/L/C follows the crosshair, falling back to the newest candle.
+    this._pddChart.onCrosshairMove = (_param, bar) => {
+      this._updatePddOhlc(bar || this._pddLatestCandle);
+    };
 
     await this._loadPositionChartData(mint, this._chartTimeframe, true);
 
@@ -221,7 +227,8 @@ export function applyChartTabMixin(PositionDetailsDialog) {
       this._pddChartData = chartData;
       overlay?.classList.add("hidden");
 
-      this._updatePddOhlc(chartData);
+      this._pddLatestCandle = chartData[chartData.length - 1];
+      this._updatePddOhlc(this._pddLatestCandle);
       this._updatePositionChartMarkers();
       this._renderPositionChartStats(chartData[chartData.length - 1]?.close);
 
@@ -310,10 +317,30 @@ export function applyChartTabMixin(PositionDetailsDialog) {
     }
   };
 
-  /** Update the O/H/L/C header from the latest candle. */
-  proto._updatePddOhlc = function (chartData) {
-    if (!chartData?.length) return;
-    const last = chartData[chartData.length - 1];
+  /**
+   * Extra tooltip rows: what this position looked like at the hovered bar.
+   * Returns nothing when there is no average entry to compare against — an
+   * unanswerable row is worse than no row.
+   */
+  proto._positionTooltipRows = function (bar) {
+    const pos = this.fullDetails?.position || this.positionData || {};
+    const avgEntry = pos.average_entry_price || pos.entry_price;
+    if (!avgEntry || !bar?.close) return [];
+
+    const pnlPct = ((bar.close - avgEntry) / avgEntry) * 100;
+    return [
+      { label: "Avg Entry", value: this._formatPrice(avgEntry) },
+      {
+        label: "P&L @ Bar",
+        value: `${pnlPct >= 0 ? "+" : "-"}${Math.abs(pnlPct).toFixed(2)}%`,
+        cls: pnlPct >= 0 ? "positive" : "negative",
+      },
+    ];
+  };
+
+  /** Update the O/H/L/C header from one candle (hovered bar, or the latest). */
+  proto._updatePddOhlc = function (last) {
+    if (!last) return;
     const set = (id, v) => {
       const el = this.dialogEl?.querySelector(id);
       // Subscript notation (0.0₅1311), consistent with the chart axis/tooltip.

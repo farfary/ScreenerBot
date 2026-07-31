@@ -642,7 +642,8 @@ export class TokenDetailsDialog {
       this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.SUCCESS);
 
       // Update OHLCV display
-      this._updateOhlcvDisplay(chartData);
+      this._latestCandle = chartData[chartData.length - 1];
+      this._updateOhlcvDisplay(this._latestCandle);
 
       // If data just loaded (was not loaded before), restart polling with slower interval
       if (!wasDataLoaded && this.chartDataLoaded) {

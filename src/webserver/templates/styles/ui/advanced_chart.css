@@ -138,10 +138,13 @@
 
 .advanced-chart-tooltip {
   position: absolute;
-  z-index: var(--z-header);
-  min-width: 140px;
-  max-width: 200px;
-  padding: var(--spacing-sm);
+  top: 0;
+  left: 0;
+  z-index: var(--z-tooltip);
+  width: max-content;
+  min-width: 168px;
+  max-width: 264px;
+  padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -152,21 +155,76 @@
     "tnum" 1,
     "zero" 1;
   pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.08s ease-out;
+  will-change: transform;
 }
 
-.tooltip-time {
+.advanced-chart-tooltip.visible {
+  visibility: visible;
+  opacity: 1;
+}
+
+.tooltip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.tooltip-date {
   color: var(--text-secondary);
   font-size: 0.6875rem;
-  margin-bottom: var(--spacing-xs);
+  white-space: nowrap;
+}
+
+.tooltip-interval {
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.tooltip-headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  margin: 2px 0 var(--spacing-xs);
   padding-bottom: var(--spacing-xs);
   border-bottom: 1px solid var(--border-color);
 }
 
-.tooltip-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 2px 0;
+.tooltip-price {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tooltip-change {
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Two fixed columns keep every value on the same right edge, so the card never
+   resizes or re-aligns as the crosshair sweeps across bars. */
+.tooltip-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 2px var(--spacing-md);
+}
+
+.tooltip-section {
+  margin-top: var(--spacing-xs);
+  padding-top: var(--spacing-xs);
+  border-top: 1px solid var(--border-color);
+}
+
+.tooltip-section.is-empty {
+  display: none;
 }
 
 .tooltip-label {
@@ -174,19 +232,32 @@
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .tooltip-value {
   color: var(--text-primary);
   font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
 }
 
+.tooltip-price.positive,
+.tooltip-change.positive,
 .tooltip-value.positive {
   color: var(--success-color);
 }
 
+.tooltip-price.negative,
+.tooltip-change.negative,
 .tooltip-value.negative {
   color: var(--error-color);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .advanced-chart-tooltip {
+    transition: none;
+  }
 }
 
 /* =============================================================================
@@ -347,6 +418,7 @@
 }
 
 .indicator-dropdown {
+  animation: chart-fade-in 0.15s ease-out;
   position: absolute;
   top: 100%;
   right: 0;
@@ -644,8 +716,10 @@
   }
 
   .advanced-chart-tooltip {
+    padding: var(--spacing-xs) var(--spacing-sm);
     font-size: 0.6875rem;
-    min-width: 120px;
+    min-width: 148px;
+    max-width: 220px;
   }
 }
 
@@ -670,11 +744,6 @@
   --chart-border: #30363d;
 }
 
-[data-theme="dark"] .advanced-chart-tooltip {
-  background: #161b22;
-  border-color: #30363d;
-}
-
 /* =============================================================================
    LIGHT THEME SPECIFIC OVERRIDES
    ============================================================================= */
@@ -684,11 +753,6 @@
   --chart-grid: #e5e7eb;
   --chart-text: #374151;
   --chart-border: #d1d5db;
-}
-
-[data-theme="light"] .advanced-chart-tooltip {
-  background: #fff;
-  border-color: #d1d5db;
 }
 
 /* =============================================================================
@@ -705,14 +769,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.advanced-chart-tooltip {
-  animation: chart-fade-in 0.15s ease-out;
-}
-
-.indicator-dropdown {
-  animation: chart-fade-in 0.15s ease-out;
 }
 
 /* =============================================================================

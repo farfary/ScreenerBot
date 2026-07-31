@@ -210,7 +210,7 @@
    * @param {number} price - The price to format
    * @param {Object} options - Formatting options
    * @param {string} options.fallback - Value to return if price is invalid
-   * @param {number} options.precision - Number of significant digits after zeros
+   * @param {number} options.precision - Number of significant digits
    * @returns {string} Formatted price string
    */
   function formatPriceSubscript(price, { fallback = "—", precision = 5 } = {}) {
@@ -223,10 +223,18 @@
     const absPrice = Math.abs(num);
     const sign = num < 0 ? "-" : "";
 
-    // Handle normal-sized numbers (>= 0.0001)
+    // Normal-sized numbers (>= 0.0001) get the SAME significant-digit budget as
+    // the subscript branch below: decimals are derived from the magnitude, never
+    // a flat toFixed(). A flat toFixed printed 0.000105191666 for a price whose
+    // meaningful part is 0.00010519, which overflowed every column and tooltip
+    // it landed in. Prices >= 1 keep at least 2 decimals so they still read as
+    // amounts rather than rounded integers.
     if (absPrice >= 0.0001) {
-      const formatted = absPrice.toFixed(Math.min(9, precision + 4));
-      return sign + formatted.replace(/\.?0+$/, "");
+      const magnitude = Math.floor(Math.log10(absPrice));
+      const minDecimals = absPrice >= 1 ? 2 : 0;
+      const decimals = Math.min(12, Math.max(minDecimals, precision - 1 - magnitude));
+      const formatted = absPrice.toFixed(decimals);
+      return sign + (formatted.includes(".") ? formatted.replace(/\.?0+$/, "") : formatted);
     }
 
     // Count leading zeros after decimal
@@ -236,9 +244,13 @@
 
     const leadingZeros = match[0].length - 2; // Subtract "0."
 
-    // Get significant digits after zeros
+    // Get significant digits after zeros. Trailing zeros are padding from the
+    // fixed-20 expansion, not precision — 0.0₇50000 is the same number as
+    // 0.0₇5 and only makes the column wider.
     const significantPart = str.substring(match[0].length);
-    const significant = significantPart.substring(0, Math.min(precision, significantPart.length));
+    const significant = significantPart
+      .substring(0, Math.min(precision, significantPart.length))
+      .replace(/0+$/, "");
 
     // Use subscript for zero count
     const subscriptDigits = "₀₁₂₃₄₅₆₇₈₉";
@@ -249,47 +261,6 @@
     }
 
     return `${sign}0.0${subscript}${significant}`;
-  }
-
-  /**
-   * Format price based on magnitude for display (auto-selects best format)
-   * @param {number} price - The price to format
-   * @param {Object} options - Formatting options
-   * @param {string} options.fallback - Value to return if price is invalid
-   * @param {number} options.precision - Maximum decimal places
-   * @returns {string} Formatted price string
-   */
-  function formatPriceAuto(price, { fallback = "—", precision = 9 } = {}) {
-    const num = coerceNumber(price);
-    if (!Number.isFinite(num)) {
-      return fallback;
-    }
-    if (num === 0) return "0";
-
-    const absPrice = Math.abs(num);
-
-    // Tiny prices (more than 3 leading zeros after the decimal, i.e. < 0.0001):
-    // subscript notation, never scientific — "0.0₅36" not "3.6000e-6". Keeps
-    // every price display in the app consistent with the token-details header.
-    if (absPrice < 0.0001) {
-      return formatPriceSubscript(price, { fallback, precision: 5 });
-    }
-
-    // Normal small prices
-    if (absPrice < 1) {
-      const formatted = num.toFixed(precision);
-      return formatted.replace(/\.?0+$/, "");
-    }
-
-    // Larger prices
-    if (absPrice < 1000) {
-      return num.toFixed(Math.min(4, precision));
-    }
-
-    // Very large prices
-    return num.toLocaleString("en-US", {
-      maximumFractionDigits: 2,
-    });
   }
 
   function formatPriceSol(price, { fallback = "N/A", decimals = 12 } = {}) {
@@ -1478,7 +1449,6 @@
     formatBooleanFlag,
     formatCurrencyUSD,
     formatPriceSubscript,
-    formatPriceAuto,
     formatPriceSol,
     formatPercentValue,
     formatPercent,
@@ -1545,7 +1515,6 @@ export const {
   formatBooleanFlag,
   formatCurrencyUSD,
   formatPriceSubscript,
-  formatPriceAuto,
   formatPriceSol,
   formatPercentValue,
   formatPercent,

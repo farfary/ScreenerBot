@@ -361,8 +361,8 @@ pub const CONTEXT_MENU_BUILDERS_JS: &str =
 pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_chart.js");
 pub const ADVANCED_CHART_INDICATORS_JS: &str =
     include_str!("templates/scripts/ui/advanced_chart/indicators.js");
-pub const ADVANCED_CHART_FORMATTERS_JS: &str =
-    include_str!("templates/scripts/ui/advanced_chart/formatters.js");
+pub const ADVANCED_CHART_THEMES_JS: &str =
+    include_str!("templates/scripts/ui/advanced_chart/themes.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const SETTINGS_SECURITY_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/security_tab.js");

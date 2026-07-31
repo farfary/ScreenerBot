@@ -16,8 +16,9 @@
  *
  * Dependencies:
  * - lightweight-charts (TradingView)
- * - advanced_chart/formatters.js (CHART_THEMES, TIMEFRAMES, price formatting)
+ * - advanced_chart/themes.js (CHART_THEMES)
  * - advanced_chart/indicators.js (technical indicator calculations)
+ * - core/utils.js (Utils.formatPriceSubscript — the one price format policy)
  */
 
 (function () {
@@ -28,14 +29,13 @@
   // ==========================================================================
 
   // These are loaded from separate script files and exposed on window
-  const { CHART_THEMES, TIMEFRAMES, formatPriceSubscript, formatPriceAuto } =
-    window.ChartFormatters || {};
+  const { CHART_THEMES } = window.ChartThemes || {};
   const Indicators = window.ChartIndicators || {};
 
   // Validate dependencies are loaded
   if (!CHART_THEMES || !Indicators) {
     console.error(
-      "AdvancedChart: Missing dependencies. Ensure formatters.js and indicators.js are loaded first."
+      "AdvancedChart: Missing dependencies. Ensure themes.js and indicators.js are loaded first."
     );
   }
 
@@ -62,11 +62,14 @@
     overlays: [], // Array of { type, value, label, color, style }
     positions: [], // Array of { type, price, timestamp, label }
     comparisonData: [], // Array of { symbol, data, color }
-    timeframe: "5m",
     locale: "en-US",
-    priceFormat: "auto", // auto, fixed, scientific, subscript
-    pricePrecision: 9,
+    // Significant digits for every price this chart prints (axis, tooltip,
+    // legend). Not decimal places — see Utils.formatPriceSubscript.
+    pricePrecision: 5,
     volumePrecision: 2,
+    // Optional (bar) => [{ label, value, cls }] hook: extra tooltip rows for the
+    // surface that owns the chart (e.g. a position's entry and P&L at that bar).
+    tooltipExtraRows: null,
     animateData: true,
     watermark: null, // { text, fontSize, color }
     height: null, // null for auto
@@ -105,9 +108,16 @@
       this.comparisonSeries = [];
       this.data = [];
       this.volumeData = [];
+      // Time -> bar index for O(1) crosshair lookups, and the detected bar
+      // interval (seconds) used to label the hovered bar.
+      this._barByTime = new Map();
+      this._barSeconds = null;
 
       // UI elements
       this.tooltipEl = null;
+      this.tooltipRefs = null;
+      this._tooltipFrame = null;
+      this._tooltipParam = null;
       this.legendEl = null;
       this.controlsEl = null;
 
@@ -360,10 +370,57 @@
     }
 
     _createTooltip() {
+      // The skeleton is built ONCE and the crosshair handler only writes
+      // textContent into it. Rebuilding innerHTML per pointer sample re-parsed
+      // the whole card and forced a synchronous layout on every mouse move.
       this.tooltipEl = document.createElement("div");
       this.tooltipEl.className = "advanced-chart-tooltip";
-      this.tooltipEl.style.display = "none";
-      this.wrapper.appendChild(this.tooltipEl);
+      this.tooltipEl.innerHTML = `
+        <div class="tooltip-head">
+          <span class="tooltip-date"></span>
+          <span class="tooltip-interval"></span>
+        </div>
+        <div class="tooltip-headline">
+          <span class="tooltip-price"></span>
+          <span class="tooltip-change"></span>
+        </div>
+        <div class="tooltip-grid"></div>
+        <div class="tooltip-grid tooltip-section tooltip-indicators is-empty"></div>
+        <div class="tooltip-grid tooltip-section tooltip-extra is-empty"></div>
+      `;
+      // Anchored to the chart AREA (not the wrapper): crosshair points are
+      // canvas-relative, so a legend or any other wrapper row would otherwise
+      // offset the whole card.
+      this.chartArea.appendChild(this.tooltipEl);
+
+      const grid = this.tooltipEl.querySelector(".tooltip-grid");
+      this.tooltipRefs = {
+        date: this.tooltipEl.querySelector(".tooltip-date"),
+        interval: this.tooltipEl.querySelector(".tooltip-interval"),
+        price: this.tooltipEl.querySelector(".tooltip-price"),
+        change: this.tooltipEl.querySelector(".tooltip-change"),
+        open: this._appendTooltipRow(grid, "Open"),
+        high: this._appendTooltipRow(grid, "High"),
+        low: this._appendTooltipRow(grid, "Low"),
+        delta: this._appendTooltipRow(grid, "Chg"),
+        range: this._appendTooltipRow(grid, "Range"),
+        volume: this._appendTooltipRow(grid, "Vol"),
+        indicators: this.tooltipEl.querySelector(".tooltip-indicators"),
+        extra: this.tooltipEl.querySelector(".tooltip-extra"),
+      };
+      this._indicatorRowCache = { signature: null, values: [] };
+      this._extraRowCache = { signature: null, values: [] };
+    }
+
+    /** Append a label/value pair to a tooltip grid and return the value node. */
+    _appendTooltipRow(grid, label) {
+      const labelEl = document.createElement("span");
+      labelEl.className = "tooltip-label";
+      labelEl.textContent = label;
+      const valueEl = document.createElement("span");
+      valueEl.className = "tooltip-value";
+      grid.append(labelEl, valueEl);
+      return valueEl;
     }
 
     // ========================================================================
@@ -391,6 +448,26 @@
           volume: d.volume || 0,
         }))
         .sort((a, b) => a.time - b.time);
+
+      // Crosshair lookup index + detected bar interval. The interval is the
+      // smallest gap between consecutive bars, so missing bars (no-trade candles
+      // are never stored) cannot inflate it.
+      this._barByTime = new Map(this.data.map((d) => [d.time, d]));
+      this._barSeconds = this.data.reduce((smallest, bar, idx) => {
+        if (idx === 0) return smallest;
+        const gap = bar.time - this.data[idx - 1].time;
+        return gap > 0 && (smallest === null || gap < smallest) ? gap : smallest;
+      }, null);
+      // The bars this card was describing have just been replaced. Re-render it
+      // against the new set instead of hiding: the chart data poller calls
+      // setData every few seconds, and blanking the tooltip on each tick would
+      // make it flicker under a resting cursor. A hovered bar that no longer
+      // exists (timeframe switch) makes the re-render hide it anyway.
+      if (this.tooltipEl?.classList.contains("visible")) {
+        this._renderTooltip(this._tooltipParam);
+      } else {
+        this._hideTooltip();
+      }
 
       // Set main series data
       if (this.options.chartType === "line" || this.options.chartType === "area") {
@@ -436,6 +513,15 @@
     }
 
     /**
+     * The loaded bar at a given bar time, or null.
+     * @param {number} time - Bar time in seconds
+     * @returns {Object|null}
+     */
+    barAt(time) {
+      return this._barByTime.get(time) || null;
+    }
+
+    /**
      * Update with new data point (for live updates)
      * @param {Object} point - OHLCV data point
      */
@@ -459,6 +545,9 @@
         this.data.push(normalizedPoint);
         this.data.sort((a, b) => a.time - b.time);
       }
+      // Keep the crosshair index in step, or the tooltip would keep serving the
+      // pre-update bar for the candle that is still forming.
+      this._barByTime.set(normalizedPoint.time, normalizedPoint);
 
       // Update main series
       if (this.options.chartType === "line" || this.options.chartType === "area") {
@@ -979,7 +1068,31 @@
       this.legendEl.innerHTML = html;
     }
 
-    _updateTooltip(param) {
+    /**
+     * Crosshair moves fire far faster than the screen repaints, so renders are
+     * coalesced into one animation frame. Each frame does exactly one DOM write
+     * pass and one measurement, never a re-parse.
+     */
+    _scheduleTooltip(param) {
+      if (!this.tooltipEl) return;
+      this._tooltipParam = param;
+      if (this._tooltipFrame) return;
+      this._tooltipFrame = requestAnimationFrame(() => {
+        this._tooltipFrame = null;
+        this._renderTooltip(this._tooltipParam);
+      });
+    }
+
+    _hideTooltip() {
+      if (this._tooltipFrame) {
+        cancelAnimationFrame(this._tooltipFrame);
+        this._tooltipFrame = null;
+      }
+      this._tooltipParam = null;
+      if (this.tooltipEl) this.tooltipEl.classList.remove("visible");
+    }
+
+    _renderTooltip(param) {
       if (!this.tooltipEl) return;
 
       if (
@@ -989,79 +1102,133 @@
         param.point.x < 0 ||
         param.point.y < 0
       ) {
-        this.tooltipEl.style.display = "none";
+        this._hideTooltip();
         return;
       }
 
-      const dataPoint = this.data.find((d) => d.time === param.time);
-      if (!dataPoint) {
-        this.tooltipEl.style.display = "none";
+      // O(1) — a linear scan over every candle ran on each pointer sample before.
+      const bar = this._barByTime.get(param.time);
+      if (!bar) {
+        this._hideTooltip();
         return;
       }
 
-      const date = new Date(dataPoint.time * 1000);
-      const dateStr = date.toLocaleDateString(this.options.locale, {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+      const refs = this.tooltipRefs;
+      const delta = bar.close - bar.open;
+      const changeClass = delta >= 0 ? "positive" : "negative";
+      const changePercent = bar.open ? (delta / bar.open) * 100 : null;
+      const rangePercent = bar.low ? ((bar.high - bar.low) / bar.low) * 100 : null;
+
+      refs.date.textContent = this._formatBarTime(bar.time);
+      refs.interval.textContent = this._formatBarInterval();
+      refs.price.textContent = this._formatPrice(bar.close);
+      refs.price.className = `tooltip-price ${changeClass}`;
+      refs.change.textContent = this._formatSignedPercent(changePercent);
+      refs.change.className = `tooltip-change ${changeClass}`;
+
+      refs.open.textContent = this._formatPrice(bar.open);
+      refs.high.textContent = this._formatPrice(bar.high);
+      refs.low.textContent = this._formatPrice(bar.low);
+      refs.delta.textContent = `${delta >= 0 ? "+" : "-"}${this._formatPrice(Math.abs(delta))}`;
+      refs.delta.className = `tooltip-value ${changeClass}`;
+      refs.range.textContent = rangePercent === null ? "—" : `${rangePercent.toFixed(2)}%`;
+      // Always rendered, including 0: a row that appears and disappears between
+      // candles made the card change height under the cursor.
+      refs.volume.textContent = this._formatVolume(bar.volume || 0);
+
+      this._syncTooltipRows(refs.indicators, this._indicatorRowCache, this._indicatorRows(param));
+      this._syncTooltipRows(
+        refs.extra,
+        this._extraRowCache,
+        typeof this.options.tooltipExtraRows === "function"
+          ? this.options.tooltipExtraRows(bar) || []
+          : []
+      );
+
+      this._positionTooltip(param.point);
+      this.tooltipEl.classList.add("visible");
+    }
+
+    /** Values of every active indicator at the hovered bar, in series colour. */
+    _indicatorRows(param) {
+      if (!param.seriesData) return [];
+
+      const rows = [];
+      const labels = {
+        macd: ["MACD", "Signal", "Hist"],
+        bollinger: ["BB Up", "BB Mid", "BB Low"],
+      };
+
+      this.options.indicators.forEach((name) => {
+        const entry = this.indicatorSeries[name];
+        if (!entry) return;
+
+        const seriesList = Array.isArray(entry) ? entry : [entry];
+        seriesList.forEach((series, idx) => {
+          const point = param.seriesData.get(series);
+          const value = point?.value;
+          if (!Number.isFinite(value)) return;
+
+          // MACD and RSI are oscillators, not prices — printing them through the
+          // price formatter would imply a precision they do not have.
+          const isOscillator = name === "macd" || name === "rsi";
+          rows.push({
+            label: labels[name]?.[idx] || name.toUpperCase(),
+            value: isOscillator ? value.toFixed(2) : this._formatPrice(value),
+            color: series.options?.().color || "",
+          });
+        });
       });
 
-      const change = dataPoint.close - dataPoint.open;
-      const changePercent = (change / dataPoint.open) * 100;
-      const changeClass = change >= 0 ? "positive" : "negative";
+      return rows;
+    }
 
-      this.tooltipEl.innerHTML = `
-        <div class="tooltip-time">${dateStr}</div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">Open</span>
-          <span class="tooltip-value">${this._formatPrice(dataPoint.open)}</span>
-        </div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">High</span>
-          <span class="tooltip-value">${this._formatPrice(dataPoint.high)}</span>
-        </div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">Low</span>
-          <span class="tooltip-value">${this._formatPrice(dataPoint.low)}</span>
-        </div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">Close</span>
-          <span class="tooltip-value ${changeClass}">${this._formatPrice(dataPoint.close)}</span>
-        </div>
-        <div class="tooltip-row">
-          <span class="tooltip-label">Change</span>
-          <span class="tooltip-value ${changeClass}">${change >= 0 ? "+" : ""}${changePercent.toFixed(2)}%</span>
-        </div>
-        ${
-          dataPoint.volume
-            ? `
-        <div class="tooltip-row">
-          <span class="tooltip-label">Volume</span>
-          <span class="tooltip-value">${this._formatVolume(dataPoint.volume)}</span>
-        </div>
-        `
-            : ""
-        }
-      `;
+    /**
+     * Reconcile a dynamic row group. The DOM is rebuilt only when the row set
+     * itself changes; otherwise this is a textContent write per row.
+     */
+    _syncTooltipRows(container, cache, rows) {
+      const signature = rows.map((row) => row.label).join("|");
 
-      // Position tooltip
-      const containerRect = this.container.getBoundingClientRect();
-      let x = param.point.x + 20;
-      let y = param.point.y;
-
-      // Keep tooltip within bounds
-      const tooltipRect = this.tooltipEl.getBoundingClientRect();
-      if (x + tooltipRect.width > containerRect.width - 20) {
-        x = param.point.x - tooltipRect.width - 20;
-      }
-      if (y + tooltipRect.height > containerRect.height - 20) {
-        y = containerRect.height - tooltipRect.height - 20;
+      if (cache.signature !== signature) {
+        container.textContent = "";
+        cache.values = rows.map((row) => this._appendTooltipRow(container, row.label));
+        cache.signature = signature;
       }
 
-      this.tooltipEl.style.left = `${x}px`;
-      this.tooltipEl.style.top = `${y}px`;
-      this.tooltipEl.style.display = "block";
+      rows.forEach((row, idx) => {
+        const el = cache.values[idx];
+        el.textContent = row.value;
+        el.className = `tooltip-value${row.cls ? ` ${row.cls}` : ""}`;
+        el.style.color = row.color || "";
+      });
+
+      container.classList.toggle("is-empty", rows.length === 0);
+    }
+
+    /**
+     * Place the card beside the crosshair: flipped to the other side when it
+     * would cross the right edge, vertically centred on the cursor, and always
+     * clamped inside the chart area so no edge can clip it.
+     */
+    _positionTooltip(point) {
+      const gap = 16;
+      const inset = 8;
+      const areaWidth = this.chartArea.clientWidth;
+      const areaHeight = this.chartArea.clientHeight;
+      const width = this.tooltipEl.offsetWidth;
+      const height = this.tooltipEl.offsetHeight;
+
+      let x = point.x + gap;
+      if (x + width > areaWidth - inset) {
+        x = point.x - width - gap;
+      }
+      x = Math.max(inset, Math.min(x, Math.max(inset, areaWidth - width - inset)));
+
+      let y = point.y - height / 2;
+      y = Math.max(inset, Math.min(y, Math.max(inset, areaHeight - height - inset)));
+
+      this.tooltipEl.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
     }
 
     // ========================================================================
@@ -1069,11 +1236,13 @@
     // ========================================================================
 
     _setupEventHandlers() {
-      // Crosshair move
+      // Crosshair move. The hovered bar is resolved once and handed to the
+      // consumer so a surface that mirrors OHLC in its own header never has to
+      // scan the data again — or disagree with this tooltip about which bar it is.
       this.chart.subscribeCrosshairMove((param) => {
-        this._updateTooltip(param);
+        this._scheduleTooltip(param);
         if (this.onCrosshairMove) {
-          this.onCrosshairMove(param);
+          this.onCrosshairMove(param, param?.time === undefined ? null : this.barAt(param.time));
         }
       });
 
@@ -1097,12 +1266,12 @@
         this._markUserInteraction();
       });
 
-      // Mouse leave - hide tooltip
-      this.chartArea.addEventListener("mouseleave", () => {
-        if (this.tooltipEl) {
-          this.tooltipEl.style.display = "none";
-        }
-      });
+      // Pointer leaving the chart (mouse out, or a touch ending) hides the card.
+      // Touch never fires mouseleave, so the tooltip used to stay pinned over the
+      // candles after a tap-drag.
+      this.chartArea.addEventListener("mouseleave", () => this._hideTooltip());
+      this.chartArea.addEventListener("touchend", () => this._hideTooltip());
+      this.chartArea.addEventListener("touchcancel", () => this._hideTooltip());
     }
 
     /**
@@ -1154,20 +1323,43 @@
     // FORMATTING HELPERS
     // ========================================================================
 
+    /**
+     * ONE price policy for the whole chart — axis, tooltip and legend — and it is
+     * the same function every table and dialog in the dashboard uses, so the same
+     * number can never render two ways on one screen.
+     */
     _formatPrice(price) {
-      switch (this.options.priceFormat) {
-        case "subscript":
-          return formatPriceSubscript(price, this.options.pricePrecision);
-        case "scientific":
-          if (price === 0) return "0";
-          if (Math.abs(price) < 0.0001) return price.toExponential(4);
-          return price.toFixed(this.options.pricePrecision);
-        case "fixed":
-          return price.toFixed(this.options.pricePrecision);
-        case "auto":
-        default:
-          return formatPriceAuto(price, this.options.pricePrecision);
-      }
+      return window.Utils.formatPriceSubscript(price, {
+        precision: this.options.pricePrecision,
+      });
+    }
+
+    /** Bar open time; the clock is dropped once bars are a day or wider. */
+    _formatBarTime(time) {
+      const date = new Date(time * 1000);
+      const daily = (this._barSeconds || 0) >= 86400;
+      const now = new Date();
+
+      return date.toLocaleString(this.options.locale, {
+        month: "short",
+        day: "numeric",
+        ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+        ...(daily ? {} : { hour: "2-digit", minute: "2-digit" }),
+      });
+    }
+
+    /** Detected bar interval as a compact label (5m, 4h, 1d). */
+    _formatBarInterval() {
+      const seconds = this._barSeconds;
+      if (!seconds) return "";
+      if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+      if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+      return `${Math.round(seconds / 86400)}d`;
+    }
+
+    _formatSignedPercent(percent) {
+      if (percent === null || !Number.isFinite(percent)) return "—";
+      return `${percent >= 0 ? "+" : "-"}${Math.abs(percent).toFixed(2)}%`;
     }
 
     _formatVolume(volume) {
@@ -1404,6 +1596,11 @@
      * Destroy chart and cleanup
      */
     destroy() {
+      // Drop any pending tooltip frame before the chart goes away
+      this._hideTooltip();
+      this.tooltipEl = null;
+      this.tooltipRefs = null;
+
       // Stop observers
       if (this.resizeObserver) {
         this.resizeObserver.disconnect();
@@ -1436,6 +1633,8 @@
       this.volumeSeries = null;
       this.data = [];
       this.volumeData = [];
+      this._barByTime = new Map();
+      this._barSeconds = null;
     }
   }
 
@@ -1460,13 +1659,4 @@
   // Export to window for global access
   window.AdvancedChart = AdvancedChart;
   window.createAdvancedChart = createAdvancedChart;
-
-  // Also export formatting utilities
-  window.ChartUtils = {
-    formatPriceSubscript,
-    formatPriceAuto,
-    CHART_THEMES,
-    TIMEFRAMES,
-    Indicators,
-  };
 })();

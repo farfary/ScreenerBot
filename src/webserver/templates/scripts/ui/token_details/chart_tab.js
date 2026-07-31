@@ -87,8 +87,6 @@ export function applyChartTabMixin(DialogClass) {
       showCrosshair: true,
       showLegend: false, // We have our own OHLCV display in header
       showTooltip: true,
-      priceFormat: "auto",
-      pricePrecision: 12,
       barSpacing: 12,
       minBarSpacing: 4,
       indicators: [],
@@ -102,9 +100,18 @@ export function applyChartTabMixin(DialogClass) {
     // Store reference for cleanup
     this.chart = this.advancedChart;
 
+    // The header OHLCV row follows the crosshair and falls back to the latest
+    // candle when the pointer leaves, so the header and the chart tooltip always
+    // describe the same bar.
+    this.advancedChart.onCrosshairMove = (_param, bar) => {
+      this._updateOhlcvDisplay(bar || this._latestCandle);
+    };
+
     // Restore the user's last-used timeframe (falling back to the active button,
     // then 5m). Only honor a saved value that maps to a real button.
-    const buttons = timeframeButtons ? [...timeframeButtons.querySelectorAll(".timeframe-btn")] : [];
+    const buttons = timeframeButtons
+      ? [...timeframeButtons.querySelectorAll(".timeframe-btn")]
+      : [];
     const saved = AppState.load(TIMEFRAME_STATE_KEY, null);
     const activeBtn = timeframeButtons?.querySelector(".timeframe-btn.active");
     const savedValid = saved && buttons.some((b) => b.dataset.tf === saved);
@@ -308,7 +315,8 @@ export function applyChartTabMixin(DialogClass) {
       this._chartPollBackedOff = false;
 
       // Update OHLCV display with latest candle
-      this._updateOhlcvDisplay(chartData);
+      this._latestCandle = chartData[chartData.length - 1];
+      this._updateOhlcvDisplay(this._latestCandle);
 
       // Update position markers after loading data
       this._updateChartPositions();
@@ -464,14 +472,14 @@ export function applyChartTabMixin(DialogClass) {
   };
 
   /**
-   * Update OHLCV display with latest candle data
+   * Update the header OHLCV display from one candle (the hovered bar, or the
+   * latest one when nothing is hovered).
    * @private
-   * @param {Array} chartData - Chart data array
+   * @param {Object} latest - Candle { open, high, low, close }
    */
-  proto._updateOhlcvDisplay = function (chartData) {
-    if (!chartData || chartData.length === 0) return;
+  proto._updateOhlcvDisplay = function (latest) {
+    if (!latest) return;
 
-    const latest = chartData[chartData.length - 1];
     const ohlcvOpen = this.dialogEl?.querySelector("#ohlcvOpen");
     const ohlcvHigh = this.dialogEl?.querySelector("#ohlcvHigh");
     const ohlcvLow = this.dialogEl?.querySelector("#ohlcvLow");
@@ -480,8 +488,10 @@ export function applyChartTabMixin(DialogClass) {
 
     // Subscript notation (0.0₅1311) rather than a long zero-string — matches the
     // chart axis/tooltip and the dialog header, and stays compact for tiny prices.
-    if (ohlcvOpen) ohlcvOpen.textContent = Utils.formatPriceSubscript(latest.open, { precision: 5 });
-    if (ohlcvHigh) ohlcvHigh.textContent = Utils.formatPriceSubscript(latest.high, { precision: 5 });
+    if (ohlcvOpen)
+      ohlcvOpen.textContent = Utils.formatPriceSubscript(latest.open, { precision: 5 });
+    if (ohlcvHigh)
+      ohlcvHigh.textContent = Utils.formatPriceSubscript(latest.high, { precision: 5 });
     if (ohlcvLow) ohlcvLow.textContent = Utils.formatPriceSubscript(latest.low, { precision: 5 });
     if (ohlcvClose)
       ohlcvClose.textContent = Utils.formatPriceSubscript(latest.close, { precision: 5 });
