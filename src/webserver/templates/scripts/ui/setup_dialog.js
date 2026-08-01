@@ -27,6 +27,7 @@ class SetupDialog {
     this.backdrop = null;
     this.element = null;
     this.busy = false;
+    this.requestAbort = null;
     this.onKeyDown = this.onKeyDown.bind(this);
   }
 
@@ -66,8 +67,9 @@ class SetupDialog {
             <textarea id="setup-dialog-wallet" class="setup-dialog-input" rows="2"
               placeholder="Base58 string or JSON array [1,2,3,...]" spellcheck="false"
               autocomplete="off"></textarea>
-            <button type="button" class="setup-dialog-reveal" data-action="reveal" title="Show / hide">
-              <i class="icon-eye"></i>
+            <button type="button" class="setup-dialog-reveal" data-action="reveal"
+              title="Show private key" aria-label="Show private key" aria-pressed="false">
+              <i class="icon-eye" aria-hidden="true"></i>
             </button>
           </div>
           <span class="setup-dialog-hint" id="setup-dialog-wallet-hint"></span>
@@ -107,11 +109,16 @@ class SetupDialog {
         if (!this.busy) this.close(false);
       })
     );
-    this.element.querySelector('[data-action="submit"]').addEventListener("click", () => this.submit());
+    this.element
+      .querySelector('[data-action="submit"]')
+      .addEventListener("click", () => this.submit());
     this.element.querySelector('[data-action="reveal"]').addEventListener("click", (e) => {
       const masked = this.walletInput.style.webkitTextSecurity !== "none";
       this.walletInput.style.webkitTextSecurity = masked ? "none" : "disc";
       e.currentTarget.querySelector("i").className = masked ? "icon-eye-off" : "icon-eye";
+      e.currentTarget.setAttribute("aria-pressed", String(masked));
+      e.currentTarget.setAttribute("aria-label", masked ? "Hide private key" : "Show private key");
+      e.currentTarget.title = masked ? "Hide private key" : "Show private key";
     });
     this.walletInput.style.webkitTextSecurity = "disc";
 
@@ -132,20 +139,18 @@ class SetupDialog {
       .filter(Boolean);
   }
 
-  setStatus(kind, html) {
+  setStatus(kind, message) {
     if (!this.statusEl) return;
     this.statusEl.hidden = false;
     this.statusEl.className = `setup-dialog-status ${kind}`;
-    this.statusEl.innerHTML = html;
+    this.statusEl.textContent = message;
   }
 
   setBusy(busy, label) {
     this.busy = busy;
     if (this.submitBtn) {
       this.submitBtn.disabled = busy;
-      this.submitBtn.innerHTML = busy
-        ? `<i class="icon-loader"></i> ${label || "Working..."}`
-        : "Validate &amp; connect";
+      this.submitBtn.textContent = busy ? label || "Working…" : "Validate & connect";
     }
   }
 
@@ -154,44 +159,65 @@ class SetupDialog {
     const rpcUrls = this.parseRpcUrls();
 
     if (!walletPrivateKey || rpcUrls.length === 0) {
-      this.setStatus("error", '<i class="icon-circle-x"></i> Enter both a wallet private key and at least one RPC URL.');
+      this.setStatus("error", "Enter both a wallet private key and at least one RPC URL.");
       return;
     }
 
+    const snapshot = Object.freeze({
+      walletPrivateKey,
+      rpcUrls: Object.freeze([...rpcUrls]),
+    });
+    this.requestAbort?.abort();
+    this.requestAbort = new AbortController();
+
     try {
-      this.setBusy(true, "Validating...");
+      this.setBusy(true, "Validating…");
       const validateRes = await fetch("/api/initialization/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet_private_key: walletPrivateKey, rpc_urls: rpcUrls }),
+        body: JSON.stringify({
+          wallet_private_key: snapshot.walletPrivateKey,
+          rpc_urls: snapshot.rpcUrls,
+        }),
+        signal: this.requestAbort.signal,
       });
       const validation = await validateRes.json();
-      if (!validateRes.ok || !validation.valid) {
-        const msg = validation?.errors?.length ? validation.errors.join("; ") : "Validation failed.";
-        this.setStatus("error", `<i class="icon-circle-x"></i> ${msg}`);
+      if (!validateRes.ok || !validation.valid || !validation.validation_id) {
+        const msg =
+          validation?.error?.message ||
+          (validation?.errors?.length ? validation.errors.join(" ") : "Validation failed.");
+        this.setStatus("error", msg);
         this.setBusy(false);
         return;
       }
       if (validation.warnings?.length) {
-        this.setStatus("warning", `<i class="icon-triangle-alert"></i> ${validation.warnings.join("; ")}`);
+        this.setStatus("warning", validation.warnings.join(" "));
       }
 
-      this.setBusy(true, "Connecting...");
+      this.setBusy(true, "Saving…");
       const completeRes = await fetch("/api/initialization/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet_private_key: walletPrivateKey, rpc_urls: rpcUrls }),
+        body: JSON.stringify({
+          validation_id: validation.validation_id,
+          wallet_private_key: snapshot.walletPrivateKey,
+          rpc_urls: snapshot.rpcUrls,
+        }),
+        signal: this.requestAbort.signal,
       });
       const result = await completeRes.json();
       if (!completeRes.ok || !result.success) {
-        const msg = result?.errors?.length ? result.errors.join("; ") : "Setup could not be completed.";
-        this.setStatus("error", `<i class="icon-circle-x"></i> ${msg}`);
+        const msg =
+          result?.error?.message ||
+          (result?.errors?.length ? result.errors.join(" ") : "Setup could not be completed.");
+        this.setStatus("error", msg);
         this.setBusy(false);
         return;
       }
 
-      this.setStatus("success", '<i class="icon-circle-check"></i> Setup saved — restarting ScreenerBot in full mode…');
-      this.submitBtn.innerHTML = '<i class="icon-loader"></i> Restarting…';
+      this.walletInput.value = "";
+      this.setStatus("success", "Setup saved — restarting ScreenerBot in full mode…");
+      this.submitBtn.textContent = "Restarting…";
 
       const waitForRestart = window.waitForScreenerBotRestart;
       if (typeof waitForRestart !== "function") {
@@ -200,7 +226,8 @@ class SetupDialog {
 
       await waitForRestart(result.instance_id, { target: window.location.pathname || "/home" });
     } catch (err) {
-      this.setStatus("error", `<i class="icon-circle-x"></i> ${err?.message || "Unexpected error."}`);
+      if (err?.name === "AbortError") return;
+      this.setStatus("error", err?.message || "Unexpected error.");
       this.setBusy(false);
     }
   }
@@ -214,6 +241,8 @@ class SetupDialog {
   }
 
   destroy() {
+    this.requestAbort?.abort();
+    this.requestAbort = null;
     document.removeEventListener("keydown", this.onKeyDown);
     if (this.backdrop && this.backdrop.parentNode) {
       this.backdrop.parentNode.removeChild(this.backdrop);

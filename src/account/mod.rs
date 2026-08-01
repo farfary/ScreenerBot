@@ -73,6 +73,8 @@ pub struct AccountStatus {
     pub wallet_has_account: bool,
     /// Whether this build can reach the account service at all.
     pub online: bool,
+    /// The persisted preference shown by the setup screen's gateway checkbox.
+    pub use_gateway_rpc: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -129,6 +131,7 @@ pub fn status() -> AccountStatus {
         device_id: session.as_ref().map(|s| s.device_id.clone()),
         wallet_has_account: false,
         online: !crate::connectivity::is_network_offline(),
+        use_gateway_rpc: crate::config::with_config(|config| config.account.use_gateway_rpc),
     }
 }
 

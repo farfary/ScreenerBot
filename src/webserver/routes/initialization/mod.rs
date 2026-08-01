@@ -2,6 +2,7 @@
 
 mod handlers;
 pub mod types;
+mod validation;
 
 use crate::webserver::state::AppState;
 use axum::{

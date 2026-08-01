@@ -1,6 +1,9 @@
 //! Initialization route handlers — onboarding and setup endpoint implementations.
 
 use super::types::*;
+use super::validation::{
+    clear_setup_validation, consume_setup_validation, store_setup_validation, validate_rpc_url_list,
+};
 use crate::{
     arguments,
     config::{self, schemas::Config},
@@ -223,16 +226,11 @@ pub(super) async fn validate_credentials(
         ),
     );
 
-    let mut errors = Vec::new();
+    clear_setup_validation();
+
+    let mut errors = validate_rpc_url_list(&request.rpc_urls);
     let mut warnings = Vec::new();
     let mut wallet_address: Option<String> = None;
-
-    // Validate RPC URLs count
-    if request.rpc_urls.is_empty() {
-        errors.push("At least one RPC URL is required".to_owned());
-    } else if request.rpc_urls.len() > 10 {
-        errors.push("Maximum 10 RPC URLs allowed".to_owned());
-    }
 
     // Validate wallet private key
     let keypair_result = parse_wallet_private_key(&request.wallet_private_key);
@@ -249,25 +247,10 @@ pub(super) async fn validate_credentials(
         }
     }
 
-    // Test RPC endpoints concurrently
+    // Test RPC endpoints concurrently only after the request itself is valid.
     let rpc_test_results = if !request.rpc_urls.is_empty() && errors.is_empty() {
         logger::info(LogTag::Webserver, "Testing RPC endpoints...");
-        logger::info(
-            LogTag::Webserver,
-            &format!(
-                "BEFORE rpc::test_rpc_endpoints() call with {} URLs",
-                request.rpc_urls.len()
-            ),
-        );
-        let results = rpc::test_rpc_endpoints(&request.rpc_urls).await;
-        logger::info(
-            LogTag::Webserver,
-            &format!(
-                "AFTER rpc::test_rpc_endpoints() call, got {} results",
-                results.len()
-            ),
-        );
-        results
+        rpc::test_rpc_endpoints(&request.rpc_urls).await
     } else {
         vec![]
     };
@@ -289,7 +272,7 @@ pub(super) async fn validate_credentials(
             LogTag::Webserver,
             &format!(
                 "  - {}: success={}, error={:?}",
-                result.url, result.success, result.error
+                result.display_url, result.success, result.error
             ),
         );
     }
@@ -304,25 +287,34 @@ pub(super) async fn validate_credentials(
         ));
     }
 
-    // Check for non-mainnet endpoints
+    // Healthy non-mainnet endpoints are rejected by the tester. Premium detection
+    // remains guidance: a self-hosted mainnet RPC can still be perfectly valid.
     for result in &rpc_test_results {
-        if result.success {
-            if let Some(false) = result.is_mainnet {
-                warnings.push(format!(
-                    "RPC endpoint {} is not Solana mainnet-beta",
-                    result.url
-                ));
-            }
-            if !result.is_premium {
-                warnings.push(format!(
-                    "RPC endpoint {} does not appear to be a premium provider - may experience rate limiting",
-                    result.url
-                ));
-            }
+        if result.success && !result.is_premium {
+            warnings.push(format!(
+                "RPC endpoint {} does not appear to be a managed provider - monitor it for rate limiting",
+                result.display_url
+            ));
         }
     }
 
     let valid = errors.is_empty();
+    let validation_id = if valid {
+        let working_rpc_indices = rpc_test_results
+            .iter()
+            .enumerate()
+            .filter_map(|(index, result)| result.success.then_some(index))
+            .collect();
+
+        Some(store_setup_validation(
+            &request.wallet_private_key,
+            &request.rpc_urls,
+            wallet_address.clone().unwrap_or_default(),
+            working_rpc_indices,
+        ))
+    } else {
+        None
+    };
 
     let response = ValidationResult {
         valid,
@@ -330,6 +322,7 @@ pub(super) async fn validate_credentials(
         errors,
         warnings,
         rpc_test_results,
+        validation_id,
     };
 
     success_response(response)
@@ -347,67 +340,37 @@ pub(super) async fn complete_initialization(
 
     let mut errors = Vec::new();
 
-    // Step 1: Validate wallet private key
-    let keypair = match parse_wallet_private_key(&request.wallet_private_key) {
-        Ok(kp) => kp,
-        Err(e) => {
-            errors.push(format!("Invalid wallet private key: {e}"));
+    // Validation already performed the expensive network checks. Consume the
+    // one-time receipt only when it belongs to this exact immutable snapshot.
+    let validated = match consume_setup_validation(&request) {
+        Ok(validated) => validated,
+        Err(message) => {
             return error_response(
                 StatusCode::BAD_REQUEST,
-                "INVALID_CREDENTIALS",
-                &errors.join("; "),
+                "SETUP_VALIDATION_REQUIRED",
+                &message,
                 None,
             );
         }
     };
 
-    let wallet_address = keypair.pubkey();
-    logger::info(
-        LogTag::Webserver,
-        &format!("Wallet validated: {wallet_address}"),
-    );
-
-    // Step 2: Test RPC endpoints
-    if request.rpc_urls.is_empty() {
-        errors.push("At least one RPC URL is required".to_owned());
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CREDENTIALS",
-            &errors.join("; "),
-            None,
-        );
-    }
-
-    logger::info(LogTag::Webserver, "Testing RPC endpoints...");
-    let rpc_test_results = rpc::test_rpc_endpoints(&request.rpc_urls).await;
-
-    // Filter to only working endpoints
-    let working_rpc_urls: Vec<String> = rpc_test_results
-        .iter()
-        .filter(|r| r.success)
-        .map(|r| r.url.clone())
+    let wallet_address = validated.wallet_address;
+    let working_rpc_urls: Vec<String> = validated
+        .working_rpc_indices
+        .into_iter()
+        .filter_map(|index| request.rpc_urls.get(index).cloned())
         .collect();
-
-    if working_rpc_urls.is_empty() {
-        errors.push("No working RPC endpoints found".to_owned());
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CREDENTIALS",
-            &errors.join("; "),
-            None,
-        );
-    }
 
     logger::info(
         LogTag::Webserver,
         &format!(
-            "RPC validation complete: {} of {} endpoints working",
+            "Using validated setup snapshot: {} of {} endpoints working",
             working_rpc_urls.len(),
             request.rpc_urls.len()
         ),
     );
 
-    // Step 3: Encrypt the private key and create config
+    // Encrypt the private key and create config.
     logger::info(LogTag::Webserver, "Encrypting wallet private key...");
 
     let encrypted = match crate::secure_storage::encrypt_private_key(&request.wallet_private_key) {
@@ -468,7 +431,7 @@ pub(super) async fn complete_initialization(
 
     let response = InitializationCompleteResponse {
         success: true,
-        wallet_address: wallet_address.to_string(),
+        wallet_address,
         services_started: 0,
         errors,
         restart_required: true,

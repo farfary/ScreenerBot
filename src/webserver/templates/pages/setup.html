@@ -1,291 +1,305 @@
-<!-- Setup Screen - Compact Professional Layout -->
-<div id="setupScreen" class="setup-screen">
-  <!-- Window Title Bar (Drag Region) -->
-  <div class="window-titlebar"></div>
+<div id="setupScreen" class="setup-screen" data-step="1">
+  <div class="window-titlebar" aria-hidden="true"></div>
 
-  <!-- Compact Header with Progress -->
   <header class="setup-header">
     <div class="setup-header-left">
-      <img src="/assets/logo.svg" alt="ScreenerBot" class="setup-logo" />
+      <img src="/assets/logo.svg" alt="" class="setup-logo" />
       <span class="setup-brand">ScreenerBot</span>
       <span class="setup-version" id="setup-version"></span>
     </div>
 
-    <!-- Progress steps -->
-    <div class="setup-progress">
-      <div class="setup-step active" data-step="1">
-        <div class="setup-step-number"><span>1</span></div>
+    <ol class="setup-progress" aria-label="Setup progress">
+      <li class="setup-step active" data-step="1" aria-current="step">
+        <span class="setup-step-number" aria-hidden="true">1</span>
         <span class="setup-step-label">Credentials</span>
-      </div>
-      <div class="setup-step-connector"></div>
-      <div class="setup-step" data-step="2">
-        <div class="setup-step-number"><span>2</span></div>
+      </li>
+      <li class="setup-step" data-step="2">
+        <span class="setup-step-number" aria-hidden="true">2</span>
         <span class="setup-step-label">Verification</span>
-      </div>
-      <div class="setup-step-connector"></div>
-      <div class="setup-step" data-step="3">
-        <div class="setup-step-number"><span>3</span></div>
+      </li>
+      <li class="setup-step" data-step="3">
+        <span class="setup-step-number" aria-hidden="true">3</span>
         <span class="setup-step-label">Complete</span>
-      </div>
-    </div>
+      </li>
+    </ol>
   </header>
 
-  <!-- Main Content -->
   <main class="setup-content">
     <div class="setup-form-container">
-      <!-- Step 1: Credentials on the left, the optional account on the right.
-           Two different kinds of thing, kept visibly apart: the left column is
-           REQUIRED to trade, the right is optional and adds features. Merging
-           them into one list is what makes people think signing in is a step
-           they have to complete. -->
-      <div class="setup-step-content active" data-step="1">
+      <section class="setup-step-content active" data-step="1" aria-labelledby="credentials-title">
         <div class="setup-split">
-        <div class="setup-split-main">
-        <div class="setup-credentials-grid">
-          <!-- Header -->
-          <div class="setup-step-header">
-            <div>
-              <h2 class="setup-step-title">Configure Credentials</h2>
+          <div class="setup-split-main">
+            <header class="setup-step-header">
+              <h1 class="setup-step-title" id="credentials-title">Configure credentials</h1>
               <p class="setup-step-description">
-                Connect ScreenerBot to Solana network with your wallet and RPC endpoints.
+                Connect a local wallet and reliable Solana mainnet RPC endpoints.
               </p>
+            </header>
+
+            <div class="setup-credentials-grid">
+              <section class="setup-card">
+                <label class="setup-card-header" for="wallet-private-key">
+                  <i class="setup-card-icon icon-key" aria-hidden="true"></i>
+                  <span class="setup-card-title">Wallet private key</span>
+                  <span class="setup-card-required" aria-hidden="true">Required</span>
+                </label>
+
+                <div class="setup-field">
+                  <div class="setup-input-wrapper">
+                    <textarea
+                      class="setup-input"
+                      id="wallet-private-key"
+                      placeholder="Base58 string or JSON array [1,2,3,...]"
+                      spellcheck="false"
+                      autocomplete="off"
+                      autocapitalize="none"
+                      aria-required="true"
+                      aria-describedby="wallet-security-note wallet-validation"
+                      required
+                    ></textarea>
+                    <button
+                      class="setup-input-toggle"
+                      type="button"
+                      data-toggle="wallet-private-key"
+                      title="Show private key"
+                      aria-label="Show private key"
+                      aria-pressed="false"
+                    >
+                      <i class="toggle-icon icon-eye" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <p class="setup-security-note" id="wallet-security-note">
+                    Sent only to the local ScreenerBot process, then encrypted before storage.
+                  </p>
+                  <div
+                    class="setup-validation"
+                    id="wallet-validation"
+                    role="status"
+                    aria-live="polite"
+                  ></div>
+                  <div class="setup-wallet-preview" id="wallet-address-preview" hidden>
+                    <i class="icon-wallet" aria-hidden="true"></i>
+                    <span class="wallet-address-text" data-selectable="true"></span>
+                    <button
+                      type="button"
+                      class="wallet-copy-btn"
+                      title="Copy wallet address"
+                      aria-label="Copy wallet address"
+                    >
+                      <i class="icon-copy" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="setup-card">
+                <label class="setup-card-header" for="rpc-urls">
+                  <i class="setup-card-icon icon-globe" aria-hidden="true"></i>
+                  <span class="setup-card-title">RPC endpoints</span>
+                  <span class="setup-card-required" aria-hidden="true">Required</span>
+                </label>
+
+                <div class="setup-field">
+                  <div class="setup-input-wrapper">
+                    <textarea
+                      class="setup-input"
+                      id="rpc-urls"
+                      placeholder="One HTTPS URL per line"
+                      spellcheck="false"
+                      autocomplete="off"
+                      autocapitalize="none"
+                      aria-required="true"
+                      aria-describedby="rpc-guidance rpc-validation"
+                      required
+                    ></textarea>
+                  </div>
+                  <div class="setup-rpc-guidance" id="rpc-guidance">
+                    <span>Reliable mainnet RPC recommended for continuous polling.</span>
+                    <span class="setup-provider-links">
+                      <a
+                        href="https://www.helius.dev/solana-rpc-nodes"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        >Helius <strong>recommended</strong></a
+                      >
+                      <a href="https://www.quicknode.com" target="_blank" rel="noopener noreferrer"
+                        >QuickNode</a
+                      >
+                      <a href="https://www.alchemy.com" target="_blank" rel="noopener noreferrer"
+                        >Alchemy</a
+                      >
+                    </span>
+                  </div>
+                  <div
+                    class="setup-validation"
+                    id="rpc-validation"
+                    role="status"
+                    aria-live="polite"
+                  ></div>
+
+                  <label class="setup-gateway-option is-hidden" id="setup-gateway-option">
+                    <input type="checkbox" id="setup-use-gateway" />
+                    <span class="setup-gateway-copy">
+                      <span class="setup-gateway-title">Use ScreenerBot to send transactions</span>
+                      <span class="setup-gateway-hint">
+                        Free when signed in. Transactions stay locally signed; your RPC remains
+                        required for data and automatic fallback.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </section>
             </div>
           </div>
 
-          <!-- Wallet Card -->
-          <div class="setup-card">
-            <div class="setup-card-header">
-              <i class="setup-card-icon icon-key"></i>
-              <span class="setup-card-title">Wallet Private Key</span>
-              <span class="setup-card-required">*</span>
-            </div>
-            <div class="setup-field">
-              <div class="setup-input-wrapper">
-                <textarea
-                  class="setup-input"
-                  id="wallet-private-key"
-                  placeholder="Base58 or JSON array format"
-                  spellcheck="false"
-                  autocomplete="off"
-                ></textarea>
-                <button
-                  class="setup-input-toggle"
-                  type="button"
-                  data-toggle="wallet-private-key"
-                  title="Toggle visibility"
-                  aria-label="Toggle password visibility"
-                >
-                  <i class="toggle-icon icon-eye"></i>
-                  <span class="visually-hidden">Toggle visibility</span>
-                </button>
+          <aside class="setup-split-aside" aria-labelledby="account-panel-title">
+            <div class="account-panel">
+              <div class="account-panel-title" id="account-panel-title">
+                <i class="icon-circle-user" aria-hidden="true"></i>
+                <span>ScreenerBot account</span>
+                <span class="account-optional">Optional</span>
               </div>
-              <div class="setup-hint">5Jv8...xyz or [1,2,3,...]</div>
-              <div class="setup-validation" id="wallet-validation"></div>
-              <div class="setup-wallet-preview" id="wallet-address-preview" style="display: none">
-                <i class="icon-wallet"></i>
-                <span class="wallet-address-text">Loading address...</span>
-                <button type="button" class="wallet-copy-btn" title="Copy address">
-                  <i class="icon-copy"></i>
-                </button>
+              <div id="setupAccountPanel" aria-live="polite">
+                <p class="account-loading">Checking account status…</p>
               </div>
             </div>
-          </div>
-
-          <!-- RPC Card -->
-          <div class="setup-card">
-            <div class="setup-card-header">
-              <i class="setup-card-icon icon-globe"></i>
-              <span class="setup-card-title">RPC Endpoints</span>
-              <span class="setup-card-required">*</span>
-            </div>
-            <div class="setup-field">
-              <div class="setup-input-wrapper">
-                <textarea
-                  class="setup-input"
-                  id="rpc-urls"
-                  placeholder="One URL per line"
-                ></textarea>
-              </div>
-              <div class="setup-hint">
-                Helius is the most compatible and tested provider. Add multiple endpoints for
-                failover.
-              </div>
-              <div class="setup-validation" id="rpc-validation"></div>
-
-              <!-- Shown only once an account is signed in. It is an ADDITION to
-                   your own RPC, never a replacement: the gateway carries
-                   transaction submission and nothing else, because pool polling
-                   at ~500ms is almost all of the cost and no free tier survives
-                   it. Saying so here prevents the reasonable wrong conclusion
-                   that this box means an RPC URL is no longer needed. -->
-              <label class="setup-gateway-option" id="setup-gateway-option" style="display: none">
-                <input type="checkbox" id="setup-use-gateway" checked />
-                <span class="setup-gateway-copy">
-                  <span class="setup-gateway-title">Send transactions through ScreenerBot</span>
-                  <span class="setup-gateway-hint">
-                    Free for signed-in accounts. Your bot still signs every transaction locally —
-                    the server only broadcasts it, and cannot alter a signed transaction. Your own
-                    RPC above is still required for prices.
-                  </span>
-                </span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Warning Box -->
-          <div class="setup-warning">
-            <i class="setup-warning-icon icon-triangle-alert"></i>
-            <div class="setup-warning-content">
-              <div class="setup-warning-main">
-                <span class="setup-warning-title">Premium RPC Required</span>
-                <span class="setup-warning-divider">—</span>
-                <span class="setup-warning-text"
-                  >Default Solana RPC <strong>will not work</strong>.</span
-                >
-              </div>
-              <div class="setup-warning-providers">
-                <span class="setup-providers-label">Recommended:</span>
-                <a
-                  href="https://www.helius.dev/solana-rpc-nodes"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="setup-provider-chip setup-provider-chip--recommended"
-                >
-                  <span class="provider-name">Helius</span>
-                  <span class="provider-tag provider-tag--recommended">Recommended</span>
-                </a>
-                <a
-                  href="https://www.quicknode.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="setup-provider-chip"
-                >
-                  <span class="provider-name">QuickNode</span>
-                  <span class="provider-tag">Fast</span>
-                </a>
-                <a
-                  href="https://www.alchemy.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="setup-provider-chip"
-                >
-                  <span class="provider-name">Alchemy</span>
-                  <span class="provider-tag">Reliable</span>
-                </a>
-              </div>
-            </div>
-          </div>
+          </aside>
         </div>
-        </div>
+      </section>
 
-        <!-- The optional half. It carries its own heading rather than sharing
-             the credentials one, because it is not a credential and is not
-             required to continue. -->
-        <aside class="setup-split-aside">
-          <div class="account-panel">
-            <div class="account-panel-title">
-              <i class="icon-circle-user" aria-hidden="true"></i>
-              ScreenerBot account
-            </div>
-            <div id="setupAccountPanel"></div>
+      <section
+        class="setup-step-content"
+        data-step="2"
+        aria-labelledby="verification-title"
+        aria-hidden="true"
+      >
+        <header class="verification-header">
+          <i class="verification-header-icon icon-shield-check" aria-hidden="true"></i>
+          <div>
+            <h1 class="verification-title" id="verification-title">Verify and save</h1>
+            <p
+              class="verification-subtitle"
+              id="verification-summary"
+              role="status"
+              aria-live="polite"
+            >
+              Checking your wallet and Solana mainnet connections.
+            </p>
           </div>
-        </aside>
-        </div>
-      </div>
+        </header>
 
-      <!-- Error display - positioned outside grid -->
-      <div class="setup-error" id="setup-error">
-        <i class="setup-error-icon icon-circle-x"></i>
-        <h4 class="setup-error-title">Setup Failed</h4>
-        <div class="setup-error-messages" id="setup-error-messages"></div>
-        <button type="button" class="setup-btn setup-btn-secondary" id="setup-retry">
-          Try Again
-        </button>
-      </div>
-
-      <!-- Step 2: Verification -->
-      <div class="setup-step-content" data-step="2">
-        <!-- Centered verification visual -->
-        <div class="verification-hero">
-          <div class="verification-visual">
-            <div class="verification-rings">
-              <div class="verification-ring ring-outer"></div>
-              <div class="verification-ring ring-middle"></div>
-              <div class="verification-ring ring-inner"></div>
-            </div>
-            <div class="verification-icon-center">
-              <i class="icon-shield-check"></i>
-            </div>
-          </div>
-          <h2 class="verification-title">Verifying Configuration</h2>
-          <p class="verification-subtitle">
-            Connecting to Solana network and validating credentials...
-          </p>
-        </div>
-
-        <!-- Verification cards -->
-        <div class="setup-verification">
-          <div class="setup-verification-item" id="wallet-verification-card">
-            <div class="verification-card-glow"></div>
-            <div class="setup-verification-icon"><i class="icon-key"></i></div>
+        <div class="setup-verification" role="list" aria-label="Setup verification status">
+          <div
+            class="setup-verification-item"
+            id="wallet-verification-card"
+            data-state="pending"
+            role="listitem"
+          >
+            <i class="setup-verification-icon icon-key" aria-hidden="true"></i>
             <div class="setup-verification-content">
-              <h4>Wallet Validation</h4>
+              <h2>Wallet</h2>
               <div class="setup-verification-status" id="wallet-status">
-                <span class="setup-spinner"></span>
-                <span>Validating private key...</span>
+                <span class="setup-state-icon" aria-hidden="true"></span>
+                <span>Waiting to validate</span>
               </div>
               <div class="setup-verification-details" id="wallet-details"></div>
             </div>
-            <div class="verification-check-icon">
-              <i class="icon-circle-check"></i>
-            </div>
           </div>
 
-          <div class="setup-verification-item" id="rpc-verification-card">
-            <div class="verification-card-glow"></div>
-            <div class="setup-verification-icon"><i class="icon-globe"></i></div>
+          <div
+            class="setup-verification-item"
+            id="rpc-verification-card"
+            data-state="pending"
+            role="listitem"
+          >
+            <i class="setup-verification-icon icon-server" aria-hidden="true"></i>
             <div class="setup-verification-content">
-              <h4>RPC Connection</h4>
+              <h2>Solana RPC</h2>
               <div class="setup-verification-status" id="rpc-status">
-                <span class="setup-spinner"></span>
-                <span>Testing endpoints...</span>
+                <span class="setup-state-icon" aria-hidden="true"></span>
+                <span>Waiting to test endpoints</span>
               </div>
               <div class="setup-verification-details" id="rpc-details"></div>
             </div>
-            <div class="verification-check-icon">
-              <i class="icon-circle-check"></i>
-            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- Step 3: Complete -->
-      <div class="setup-step-content" data-step="3">
-        <div class="setup-complete">
-          <div class="setup-complete-icon"><i class="icon-circle-check"></i></div>
-          <h3 class="setup-complete-title">Configuration Saved</h3>
-          <p class="setup-complete-text">Restarting ScreenerBot in full mode...</p>
-          <div class="setup-complete-progress">
-            <div class="setup-progress-bar">
-              <div class="setup-progress-fill" id="services-progress"></div>
+          <div
+            class="setup-verification-item"
+            id="save-verification-card"
+            data-state="pending"
+            role="listitem"
+          >
+            <i class="setup-verification-icon icon-lock-keyhole" aria-hidden="true"></i>
+            <div class="setup-verification-content">
+              <h2>Secure configuration</h2>
+              <div class="setup-verification-status" id="save-status">
+                <span class="setup-state-icon" aria-hidden="true"></span>
+                <span>Waiting to save</span>
+              </div>
+              <div class="setup-verification-details" id="save-details"></div>
             </div>
-            <div class="setup-progress-text" id="services-status">Preparing clean restart...</div>
           </div>
         </div>
+      </section>
+
+      <section
+        class="setup-step-content"
+        data-step="3"
+        aria-labelledby="complete-title"
+        aria-hidden="true"
+      >
+        <div class="setup-complete" id="setup-complete-state" data-state="waiting">
+          <i class="setup-complete-icon icon-circle-check" aria-hidden="true"></i>
+          <h1 class="setup-complete-title" id="complete-title">Setup saved</h1>
+          <p class="setup-complete-text" id="setup-complete-text">
+            Restarting ScreenerBot with your verified configuration.
+          </p>
+          <div class="setup-restart-indicator" id="setup-restart-indicator" aria-hidden="true">
+            <span></span>
+          </div>
+          <p class="setup-progress-text" id="services-status" role="status" aria-live="polite">
+            Waiting for the new process…
+          </p>
+          <div class="setup-complete-actions" id="setup-complete-actions" hidden>
+            <button type="button" class="setup-btn setup-btn-secondary" id="setup-reconnect">
+              Retry connection
+            </button>
+            <button type="button" class="setup-btn setup-btn-primary" id="setup-reload">
+              Reload dashboard
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div
+        class="setup-error"
+        id="setup-error"
+        role="alert"
+        aria-live="assertive"
+        tabindex="-1"
+        hidden
+      >
+        <i class="setup-error-icon icon-circle-alert" aria-hidden="true"></i>
+        <div class="setup-error-copy">
+          <h2 class="setup-error-title" id="setup-error-title">Setup needs attention</h2>
+          <p class="setup-error-messages" id="setup-error-messages"></p>
+        </div>
+        <button type="button" class="setup-btn setup-btn-secondary" id="setup-retry">
+          Review credentials
+        </button>
       </div>
     </div>
   </main>
 
-  <!-- Compact Footer -->
   <footer class="setup-footer">
     <button type="button" class="setup-btn setup-btn-secondary" id="setup-back" disabled>
-      <i class="icon-chevron-left"></i> Back
+      <i class="icon-chevron-left" aria-hidden="true"></i> Back
     </button>
     <button type="button" class="setup-btn setup-btn-ghost" id="setup-skip">
-      Explore in Preview Mode
+      Preview without wallet or RPC
     </button>
     <button type="button" class="setup-btn setup-btn-primary" id="setup-next">
-      Continue <i class="icon-chevron-right"></i>
+      Continue <i class="icon-chevron-right" aria-hidden="true"></i>
     </button>
   </footer>
 </div>

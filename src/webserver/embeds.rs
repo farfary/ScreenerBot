@@ -277,6 +277,7 @@ pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/requ
 pub const CORE_CLIENT_READY: &str = include_str!("templates/scripts/core/client_ready.js");
 pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");
 pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboarding.js");
+pub const CORE_SETUP_RUNTIME: &str = include_str!("templates/scripts/core/setup_runtime.js");
 pub const CORE_SETUP: &str = include_str!("templates/scripts/core/setup.js");
 pub const CORE_STATUS_BAR: &str = include_str!("templates/scripts/core/status_bar.js");
 pub const CORE_HINTS: &str = include_str!("templates/scripts/core/hints.js");

@@ -39,10 +39,14 @@ pub struct ValidationResult {
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
     pub rpc_test_results: Vec<RpcEndpointTestResult>,
+    /// One-time receipt proving this exact wallet/RPC snapshot passed validation.
+    /// The receipt contains no credentials and expires after five minutes.
+    pub validation_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CompleteInitializationRequest {
+    pub validation_id: String,
     pub wallet_private_key: String,
     pub rpc_urls: Vec<String>,
 }

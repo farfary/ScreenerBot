@@ -1,748 +1,563 @@
-// Setup Controller
-// Handles the full-screen initialization form
+// Full-screen setup controller.
+//
+// The credentials page performs only quick local checks. The verification page
+// sends one immutable snapshot to the backend, receives a short-lived receipt,
+// and saves that exact snapshot without repeating the RPC network tests.
 
-/**
- * Wait until health is served by a different backend process, then navigate.
- * This works for normal browsers on the fixed headless port. Electron owns its
- * backend and replaces this page with its native loading screen during restart.
- */
-async function waitForScreenerBotRestart(previousInstanceId, options = {}) {
-  const target = options.target || "/home";
-  const timeoutMs = options.timeoutMs || 120000;
-  const startedAt = Date.now();
+(function () {
+  "use strict";
 
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const response = await fetch(`/api/health?restart_check=${Date.now()}`, {
-        cache: "no-store",
-      });
-      if (response.ok) {
-        const health = await response.json();
-        if (health.instance_id && health.instance_id !== previousInstanceId) {
-          options.onReady?.();
-          window.location.replace(target);
-          return;
-        }
-      }
-    } catch {
-      // Expected while the old process releases the port and the new one boots.
-    }
-    options.onWaiting?.(Date.now() - startedAt);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
+  const {
+    parseRpcUrls,
+    requestJson,
+    summarizeValidation,
+    validateRpcValue,
+    validateWalletValue,
+    waitForScreenerBotRestart,
+  } = window.SetupRuntime;
 
-  throw new Error("ScreenerBot saved your setup but did not come back online in time");
-}
-
-window.waitForScreenerBotRestart = waitForScreenerBotRestart;
-
-class SetupControllerClass {
-  constructor() {
-    this.currentStep = 1;
-    this.totalSteps = 3;
-    this.initialized = false;
-    this.servicesPoller = null;
-    this.walletValidationTimeout = null;
-    this.rpcValidationTimeout = null;
-  }
-
-  init() {
-    if (this.initialized) return;
-
-    // Cache DOM elements
-    this.stepContents = document.querySelectorAll(".setup-step-content");
-    this.stepIndicators = document.querySelectorAll(".setup-step[data-step]");
-    this.backBtn = document.getElementById("setup-back");
-    this.nextBtn = document.getElementById("setup-next");
-    this.skipBtn = document.getElementById("setup-skip");
-    this.retryBtn = document.getElementById("setup-retry");
-    this.errorEl = document.getElementById("setup-error");
-    this.accountPanelEl = document.getElementById("setupAccountPanel");
-    this.gatewayOptionEl = document.getElementById("setup-gateway-option");
-    this.gatewayCheckboxEl = document.getElementById("setup-use-gateway");
-    this.errorMessages = document.getElementById("setup-error-messages");
-
-    // Input fields
-    this.walletInput = document.getElementById("wallet-private-key");
-    this.rpcInput = document.getElementById("rpc-urls");
-
-    if (!this.stepContents.length) {
-      console.warn("[Setup] Step contents not found");
-      return;
+  class SetupControllerClass {
+    constructor() {
+      this.currentStep = 1;
+      this.initialized = false;
+      this.verificationBusy = false;
+      this.verificationRun = 0;
+      this.verificationAbort = null;
+      this.restartAbort = null;
+      this.snapshot = null;
+      this.previousInstanceId = null;
+      this.walletValidationTimeout = null;
+      this.rpcValidationTimeout = null;
+      this.accountPanel = null;
+      this.gatewayBusy = false;
     }
 
-    this.bindEvents();
-    this.setupInputMasking();
-    this.loadVersion();
-    this.mountAccountPanel();
-    this.attachGatewayHandler();
-    this.setStep(1);
-    this.initialized = true;
-  }
+    init() {
+      if (this.initialized) return;
 
-  async loadVersion() {
-    try {
-      const response = await fetch("/api/version");
-      if (response.ok) {
-        const data = await response.json();
-        const versionEl = document.getElementById("setup-version");
-        if (versionEl && data.version) {
-          versionEl.textContent = `v${data.version}`;
-        }
-      }
-    } catch {
-      console.warn("[Setup] Failed to load version");
-    }
-  }
+      this.screen = document.getElementById("setupScreen");
+      this.stepContents = document.querySelectorAll(".setup-step-content[data-step]");
+      this.stepIndicators = document.querySelectorAll(".setup-step[data-step]");
+      this.footer = document.querySelector(".setup-footer");
+      this.backBtn = document.getElementById("setup-back");
+      this.nextBtn = document.getElementById("setup-next");
+      this.skipBtn = document.getElementById("setup-skip");
+      this.retryBtn = document.getElementById("setup-retry");
+      this.reconnectBtn = document.getElementById("setup-reconnect");
+      this.reloadBtn = document.getElementById("setup-reload");
+      this.errorEl = document.getElementById("setup-error");
+      this.errorMessages = document.getElementById("setup-error-messages");
+      this.accountPanelEl = document.getElementById("setupAccountPanel");
+      this.gatewayOptionEl = document.getElementById("setup-gateway-option");
+      this.gatewayCheckboxEl = document.getElementById("setup-use-gateway");
+      this.walletInput = document.getElementById("wallet-private-key");
+      this.rpcInput = document.getElementById("rpc-urls");
+      this.verificationSummary = document.getElementById("verification-summary");
+      this.completeState = document.getElementById("setup-complete-state");
+      this.completeIcon = this.completeState?.querySelector(".setup-complete-icon");
+      this.completeText = document.getElementById("setup-complete-text");
+      this.restartIndicator = document.getElementById("setup-restart-indicator");
+      this.servicesStatus = document.getElementById("services-status");
+      this.completeActions = document.getElementById("setup-complete-actions");
 
-  bindEvents() {
-    // Navigation buttons
-    if (this.backBtn) {
-      this.backBtn.addEventListener("click", () => this.goBack());
-    }
-    if (this.nextBtn) {
-      this.nextBtn.addEventListener("click", () => this.goNext());
-    }
-    if (this.skipBtn) {
-      this.skipBtn.addEventListener("click", () => this.skipSetup());
-    }
-    if (this.retryBtn) {
-      this.retryBtn.addEventListener("click", () => this.retry());
-    }
-
-    // Input validation with debouncing
-    if (this.walletInput) {
-      this.walletInput.addEventListener("input", () => this.debouncedValidateWallet());
-    }
-    if (this.rpcInput) {
-      this.rpcInput.addEventListener("input", () => this.debouncedValidateRpc());
-    }
-
-    // Toggle password visibility
-    const toggleBtn = document.querySelector('[data-toggle="wallet-private-key"]');
-    if (toggleBtn) {
-      toggleBtn.addEventListener("click", () => this.toggleVisibility());
-    }
-
-    // Wallet address copy button
-    const copyBtn = document.querySelector(".wallet-copy-btn");
-    if (copyBtn) {
-      copyBtn.addEventListener("click", () => this.copyWalletAddress());
-    }
-
-    // Setup card hover spotlight effect
-    document.addEventListener("mousemove", (e) => {
-      const setupScreen = document.getElementById("setupScreen");
-      if (!setupScreen || setupScreen.style.display === "none") return;
-
-      const cards = document.querySelectorAll(".setup-step-content.active .setup-card");
-      cards.forEach((card) => {
-        const rect = card.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        card.style.setProperty("--x", `${x}px`);
-        card.style.setProperty("--y", `${y}px`);
-      });
-    });
-  }
-
-  debouncedValidateWallet() {
-    clearTimeout(this.walletValidationTimeout);
-    this.walletValidationTimeout = setTimeout(() => this.validateWallet(), 300);
-  }
-
-  debouncedValidateRpc() {
-    clearTimeout(this.rpcValidationTimeout);
-    this.rpcValidationTimeout = setTimeout(() => this.validateRpc(), 300);
-  }
-
-  copyWalletAddress() {
-    const addressEl = document.querySelector(".wallet-address-text");
-    if (addressEl && addressEl.textContent) {
-      navigator.clipboard.writeText(addressEl.textContent).then(() => {
-        const copyBtn = document.querySelector(".wallet-copy-btn");
-        if (copyBtn) {
-          copyBtn.innerHTML = '<i class="icon-check"></i>';
-          setTimeout(() => {
-            copyBtn.innerHTML = '<i class="icon-copy"></i>';
-          }, 1500);
-        }
-      });
-    }
-  }
-
-  setupInputMasking() {
-    // Initially mask wallet input
-    if (this.walletInput) {
-      this.walletInput.style.webkitTextSecurity = "disc";
-      this.walletInput.style.textSecurity = "disc";
-    }
-  }
-
-  toggleVisibility() {
-    if (!this.walletInput) return;
-
-    const toggleBtn = document.querySelector('[data-toggle="wallet-private-key"]');
-    const icon = toggleBtn?.querySelector(".toggle-icon");
-
-    if (
-      this.walletInput.style.webkitTextSecurity === "none" ||
-      this.walletInput.style.textSecurity === "none"
-    ) {
-      this.walletInput.style.webkitTextSecurity = "disc";
-      this.walletInput.style.textSecurity = "disc";
-      if (icon) icon.className = "toggle-icon icon-eye";
-    } else {
-      this.walletInput.style.webkitTextSecurity = "none";
-      this.walletInput.style.textSecurity = "none";
-      if (icon) icon.className = "toggle-icon icon-eye-off";
-    }
-  }
-
-  setStep(step) {
-    this.currentStep = step;
-
-    // Update step indicators
-    this.stepIndicators.forEach((el) => {
-      const stepNum = parseInt(el.dataset.step, 10);
-      el.classList.remove("active", "completed");
-      if (stepNum === step) {
-        el.classList.add("active");
-      } else if (stepNum < step) {
-        el.classList.add("completed");
-      }
-    });
-
-    // Update step content visibility
-    this.stepContents.forEach((el) => {
-      el.classList.remove("active");
-      if (parseInt(el.dataset.step, 10) === step) {
-        el.classList.add("active");
-      }
-    });
-
-    // Update button states
-    this.updateButtons();
-  }
-
-  updateButtons() {
-    if (this.backBtn) {
-      this.backBtn.disabled = this.currentStep === 1;
-      this.backBtn.style.visibility = this.currentStep === 3 ? "hidden" : "visible";
-    }
-
-    // Skip is only available on the credentials step (before any commitment).
-    if (this.skipBtn) {
-      this.skipBtn.style.display = this.currentStep === 1 ? "inline-flex" : "none";
-    }
-
-    if (this.nextBtn) {
-      if (this.currentStep === 3) {
-        this.nextBtn.style.display = "none";
-      } else if (this.currentStep === 2) {
-        this.nextBtn.style.display = "none"; // Hidden during verification
-      } else {
-        this.nextBtn.style.display = "inline-flex";
-        this.nextBtn.innerHTML = 'Continue <i class="icon-chevron-right"></i>';
-      }
-    }
-  }
-
-  goBack() {
-    if (this.currentStep > 1) {
-      this.hideError();
-      this.resetVerificationStates();
-      this.setStep(this.currentStep - 1);
-    }
-  }
-
-  async goNext() {
-    if (this.currentStep === 1) {
-      await this.validateAndProceed();
-    }
-  }
-
-  retry() {
-    this.hideError();
-    this.resetVerificationStates();
-    this.hideWalletPreview();
-    this.setStep(1);
-  }
-
-  /**
-   * Mount the optional account panel beside the credentials.
-   *
-   * The session it creates lives in the BACKEND, not in this page, so it
-   * survives everything that happens next: continuing to full setup, choosing
-   * Preview Mode, and the process restart that either one triggers. Nothing has
-   * to be carried across.
-   */
-  mountAccountPanel() {
-    if (!this.accountPanelEl || !window.AccountPanel) return;
-
-    this.accountPanel = window.AccountPanel.mount(this.accountPanelEl, {
-      onChange: (status) => this.onAccountChanged(status),
-    });
-  }
-
-  /**
-   * Signing in reveals the free-submission option on the LEFT, next to the RPC
-   * field it modifies. It is an addition to the user's own RPC, never a
-   * replacement, so it belongs beside that field rather than in the account
-   * panel where it would read as something the account provides instead.
-   */
-  onAccountChanged(status) {
-    if (!this.gatewayOptionEl) return;
-    this.gatewayOptionEl.style.display = status?.signed_in ? "flex" : "none";
-  }
-
-  attachGatewayHandler() {
-    if (!this.gatewayCheckboxEl) return;
-
-    this.gatewayCheckboxEl.addEventListener("change", async () => {
-      try {
-        await fetch("/api/account/gateway", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: this.gatewayCheckboxEl.checked }),
-        });
-      } catch {
-        // Put the control back rather than let it claim a state the config
-        // does not hold.
-        this.gatewayCheckboxEl.checked = !this.gatewayCheckboxEl.checked;
-      }
-    });
-  }
-
-  // Skip wallet + RPC setup and enter preview mode. The backend persists the
-  // skip, starts the preview tier, and the dashboard becomes usable for
-  // browsing. A signed-in account is untouched by this: it lives in the
-  // backend's encrypted store, so it is still signed in on the dashboard.
-  async skipSetup() {
-    if (this.skipBtn) {
-      this.skipBtn.disabled = true;
-      this.skipBtn.innerHTML = '<i class="icon-loader"></i> Loading dashboard...';
-    }
-
-    try {
-      this.hideError();
-      const response = await fetch("/api/initialization/skip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
-      if (!result.success) {
-        const errorMsg =
-          result.errors?.length > 0 ? result.errors.join("; ") : "Failed to skip setup";
-        throw new Error(errorMsg);
-      }
-
-      // Land on the token discovery page.
-      window.location.href = "/tokens";
-    } catch (error) {
-      this.showError(error.message || "Failed to skip setup");
-      if (this.skipBtn) {
-        this.skipBtn.disabled = false;
-        this.skipBtn.textContent = "Explore in Preview Mode";
-      }
-    }
-  }
-
-  hideWalletPreview() {
-    const previewEl = document.getElementById("wallet-address-preview");
-    if (previewEl) {
-      previewEl.style.display = "none";
-    }
-  }
-
-  showWalletPreview(address) {
-    const previewEl = document.getElementById("wallet-address-preview");
-    const addressText = document.querySelector(".wallet-address-text");
-    if (previewEl && addressText) {
-      addressText.textContent = address;
-      previewEl.style.display = "flex";
-    }
-  }
-
-  // Validation methods
-  async validateWallet() {
-    const value = this.walletInput?.value.trim() || "";
-    const validationEl = document.getElementById("wallet-validation");
-    if (!validationEl) return;
-
-    if (!value) {
-      validationEl.className = "setup-validation";
-      validationEl.style.display = "none";
-      this.hideWalletPreview();
-      return;
-    }
-
-    // Basic format check with detailed validation
-    let isValidFormat = false;
-    let formatType = "";
-
-    if (value.startsWith("[") && value.endsWith("]")) {
-      try {
-        const arr = JSON.parse(value);
-        if (Array.isArray(arr) && arr.length === 64) {
-          isValidFormat = true;
-          formatType = "JSON array (64 bytes)";
-        } else if (Array.isArray(arr)) {
-          validationEl.className = "setup-validation error";
-          validationEl.innerHTML = `<i class="icon-x"></i> Invalid array length: ${arr.length} (expected 64 bytes)`;
-          this.hideWalletPreview();
-          return;
-        }
-      } catch {
-        validationEl.className = "setup-validation error";
-        validationEl.innerHTML = '<i class="icon-x"></i> Invalid JSON format';
-        this.hideWalletPreview();
+      if (!this.screen || !this.stepContents.length || !this.walletInput || !this.rpcInput) {
+        console.warn("[Setup] Required setup elements were not found");
         return;
       }
-    } else if (/^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(value)) {
-      isValidFormat = true;
-      formatType = "base58";
+
+      this.bindEvents();
+      this.maskWallet(true);
+      this.loadVersion();
+      this.mountAccountPanel();
+      this.attachGatewayHandler();
+      this.resetVerificationStates();
+      this.setStep(1);
+      this.initialized = true;
     }
 
-    if (isValidFormat) {
-      validationEl.className = "setup-validation success";
-      validationEl.innerHTML = `<i class="icon-check"></i> Valid ${formatType} format`;
+    bindEvents() {
+      this.backBtn?.addEventListener("click", () => this.goBack());
+      this.nextBtn?.addEventListener("click", () => this.goNext());
+      this.skipBtn?.addEventListener("click", () => this.skipSetup());
+      this.retryBtn?.addEventListener("click", () => this.reviewCredentials());
+      this.reconnectBtn?.addEventListener("click", () => this.startRestartWait());
+      this.reloadBtn?.addEventListener("click", () => window.location.reload());
 
-      // Try to get wallet address preview via API
+      this.walletInput.addEventListener("input", () => this.debouncedValidateWallet());
+      this.rpcInput.addEventListener("input", () => this.debouncedValidateRpc());
+
+      this.toggleBtn = document.querySelector('[data-toggle="wallet-private-key"]');
+      this.toggleBtn?.addEventListener("click", () => this.toggleVisibility());
+      this.copyBtn = document.querySelector(".wallet-copy-btn");
+      this.copyBtn?.addEventListener("click", () => this.copyWalletAddress());
+    }
+
+    async loadVersion() {
       try {
-        const response = await fetch("/api/initialization/validate", {
+        const result = await requestJson("/api/version");
+        const versionEl = document.getElementById("setup-version");
+        if (versionEl && result?.version) versionEl.textContent = `v${result.version}`;
+      } catch {
+        // Version decoration is optional and must never block setup.
+      }
+    }
+
+    setStep(step, options = {}) {
+      this.currentStep = step;
+      this.screen.dataset.step = String(step);
+
+      this.stepIndicators.forEach((indicator) => {
+        const indicatorStep = Number(indicator.dataset.step);
+        indicator.classList.toggle("active", indicatorStep === step);
+        indicator.classList.toggle("completed", indicatorStep < step);
+        if (indicatorStep === step) indicator.setAttribute("aria-current", "step");
+        else indicator.removeAttribute("aria-current");
+      });
+
+      this.stepContents.forEach((content) => {
+        const active = Number(content.dataset.step) === step;
+        content.classList.toggle("active", active);
+        content.hidden = !active;
+        content.setAttribute("aria-hidden", String(!active));
+        if (active) content.removeAttribute("inert");
+        else content.setAttribute("inert", "");
+      });
+
+      this.updateButtons();
+
+      if (options.focusHeading) {
+        const heading = this.screen.querySelector(`.setup-step-content[data-step="${step}"] h1`);
+        if (heading) {
+          heading.tabIndex = -1;
+          window.requestAnimationFrame(() => heading.focus({ preventScroll: true }));
+        }
+      }
+    }
+
+    updateButtons() {
+      if (this.footer) this.footer.hidden = this.currentStep === 3;
+
+      if (this.backBtn) {
+        this.backBtn.hidden = this.currentStep === 1;
+        this.backBtn.disabled = this.verificationBusy;
+      }
+      if (this.skipBtn) {
+        this.skipBtn.hidden = this.currentStep !== 1;
+        this.skipBtn.disabled = this.verificationBusy;
+      }
+      if (this.nextBtn) {
+        this.nextBtn.hidden = this.currentStep !== 1;
+        this.nextBtn.disabled = this.verificationBusy;
+      }
+    }
+
+    goNext() {
+      if (this.currentStep === 1 && !this.verificationBusy) this.validateAndProceed();
+    }
+
+    goBack() {
+      if (this.currentStep !== 2 || this.verificationBusy) return;
+      this.cancelVerification();
+      this.hideError();
+      this.resetVerificationStates();
+      this.setStep(1, { focusHeading: true });
+    }
+
+    reviewCredentials() {
+      if (this.verificationBusy) return;
+      this.hideError();
+      this.resetVerificationStates();
+      this.setStep(1, { focusHeading: true });
+    }
+
+    cancelVerification() {
+      this.verificationRun += 1;
+      this.verificationAbort?.abort();
+      this.verificationAbort = null;
+      this.verificationBusy = false;
+      this.snapshot = null;
+      this.updateButtons();
+    }
+
+    debouncedValidateWallet() {
+      window.clearTimeout(this.walletValidationTimeout);
+      this.walletValidationTimeout = window.setTimeout(() => this.validateWallet(false), 250);
+    }
+
+    debouncedValidateRpc() {
+      window.clearTimeout(this.rpcValidationTimeout);
+      this.rpcValidationTimeout = window.setTimeout(() => this.validateRpc(false), 250);
+    }
+
+    setInlineValidation(id, input, state, message) {
+      const element = document.getElementById(id);
+      if (!element) return;
+
+      element.className = `setup-validation${state ? ` ${state}` : ""}`;
+      element.textContent = message || "";
+      element.hidden = !message;
+      if (state === "error") input.setAttribute("aria-invalid", "true");
+      else input.removeAttribute("aria-invalid");
+    }
+
+    validateWallet(required) {
+      const result = validateWalletValue(this.walletInput.value, required);
+      this.setInlineValidation("wallet-validation", this.walletInput, result.state, result.message);
+      if (!result.valid) this.hideWalletPreview();
+      return result.valid;
+    }
+
+    rpcUrls() {
+      return parseRpcUrls(this.rpcInput.value);
+    }
+
+    validateRpc(required) {
+      const result = validateRpcValue(this.rpcInput.value, required);
+      this.setInlineValidation("rpc-validation", this.rpcInput, result.state, result.message);
+      return result.valid;
+    }
+
+    async validateAndProceed() {
+      window.clearTimeout(this.walletValidationTimeout);
+      window.clearTimeout(this.rpcValidationTimeout);
+      this.hideError();
+
+      const walletValid = this.validateWallet(true);
+      const rpcValid = this.validateRpc(true);
+      if (!walletValid || !rpcValid) {
+        (walletValid ? this.rpcInput : this.walletInput).focus({ preventScroll: true });
+        return;
+      }
+
+      this.snapshot = Object.freeze({
+        walletPrivateKey: this.walletInput.value.trim(),
+        rpcUrls: Object.freeze([...this.rpcUrls()]),
+      });
+      this.verificationBusy = true;
+      this.verificationRun += 1;
+      const run = this.verificationRun;
+      this.verificationAbort?.abort();
+      this.verificationAbort = new AbortController();
+      this.resetVerificationStates();
+      this.setStep(2, { focusHeading: true });
+      this.updateButtons();
+
+      await this.runVerification(run, this.verificationAbort.signal, this.snapshot);
+    }
+
+    isCurrentRun(run, signal) {
+      return run === this.verificationRun && !signal.aborted;
+    }
+
+    async runVerification(run, signal, snapshot) {
+      this.setVerificationState(
+        "wallet",
+        "running",
+        "Parsing private key",
+        "Checking the key and deriving its public address."
+      );
+      this.setVerificationState(
+        "rpc",
+        "running",
+        "Testing Solana mainnet",
+        `Checking ${snapshot.rpcUrls.length} endpoint${snapshot.rpcUrls.length === 1 ? "" : "s"}.`
+      );
+      this.setVerificationState("save", "pending", "Waiting to save", "");
+      if (this.verificationSummary) {
+        this.verificationSummary.textContent = "Verifying the exact credentials you entered.";
+      }
+
+      try {
+        const validation = await requestJson("/api/initialization/validate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            wallet_private_key: value,
-            rpc_urls: [],
+            wallet_private_key: snapshot.walletPrivateKey,
+            rpc_urls: snapshot.rpcUrls,
           }),
+          signal,
         });
-        if (response.ok) {
-          const result = await response.json();
-          if (result.wallet_address) {
-            this.showWalletPreview(result.wallet_address);
-          }
+        if (!this.isCurrentRun(run, signal)) return;
+
+        this.renderValidationResult(validation);
+        if (!validation?.valid || !validation?.validation_id) {
+          throw new Error(validation?.errors?.join(" ") || "Credential verification failed.");
         }
-      } catch {
-        // Ignore preview errors
+
+        this.setVerificationState(
+          "save",
+          "running",
+          "Encrypting and saving",
+          "Writing the verified configuration on this device."
+        );
+        if (this.verificationSummary) {
+          this.verificationSummary.textContent = "Credentials verified. Saving securely.";
+        }
+
+        const completed = await requestJson("/api/initialization/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            validation_id: validation.validation_id,
+            wallet_private_key: snapshot.walletPrivateKey,
+            rpc_urls: snapshot.rpcUrls,
+          }),
+          signal,
+        });
+        if (!this.isCurrentRun(run, signal)) return;
+        if (!completed?.success) {
+          throw new Error(completed?.errors?.join(" ") || "Setup could not be saved.");
+        }
+
+        this.setVerificationState(
+          "save",
+          "success",
+          "Configuration saved",
+          "Private key encrypted; working RPC endpoints stored."
+        );
+        this.walletInput.value = "";
+        this.hideWalletPreview();
+        this.snapshot = null;
+        this.verificationBusy = false;
+        this.previousInstanceId = completed.instance_id;
+        this.setStep(3, { focusHeading: true });
+        this.startRestartWait();
+      } catch (error) {
+        if (error?.name === "AbortError" || !this.isCurrentRun(run, signal)) return;
+
+        if (document.getElementById("save-verification-card")?.dataset.state === "running") {
+          this.setVerificationState("save", "error", "Could not save setup", error.message);
+        } else if (!document.querySelector('.setup-verification-item[data-state="error"]')) {
+          this.setVerificationState("wallet", "error", "Verification request failed", "");
+          this.setVerificationState("rpc", "error", "Verification request failed", "");
+          this.setVerificationState("save", "pending", "Not saved", "");
+        }
+
+        if (this.verificationSummary) {
+          this.verificationSummary.textContent = "Review the issue, then verify again.";
+        }
+        this.showError(error.message || "Verification failed.", true);
+        this.verificationBusy = false;
+        this.updateButtons();
       }
-    } else {
-      validationEl.className = "setup-validation error";
-      validationEl.innerHTML =
-        '<i class="icon-x"></i> Invalid key format. Must be base58 string or JSON array.';
-      this.hideWalletPreview();
-    }
-  }
-
-  validateRpc() {
-    const value = this.rpcInput?.value.trim() || "";
-    const validationEl = document.getElementById("rpc-validation");
-    if (!validationEl) return;
-
-    if (!value) {
-      validationEl.className = "setup-validation";
-      validationEl.style.display = "none";
-      return;
     }
 
-    const urls = value
-      .split("\n")
-      .map((u) => u.trim())
-      .filter((u) => u);
-
-    if (urls.length === 0) {
-      validationEl.className = "setup-validation error";
-      validationEl.innerHTML = '<i class="icon-x"></i> Please enter at least one RPC URL';
-      return;
+    renderValidationResult(validation) {
+      const summary = summarizeValidation(validation);
+      this.setVerificationState(
+        "wallet",
+        summary.wallet.state,
+        summary.wallet.label,
+        summary.wallet.details
+      );
+      this.setVerificationState("rpc", summary.rpc.state, summary.rpc.label, summary.rpc.details);
+      if (summary.wallet.address) this.showWalletPreview(summary.wallet.address);
     }
 
-    const invalidUrls = urls.filter((url) => !url.startsWith("https://"));
-    if (invalidUrls.length > 0) {
-      validationEl.className = "setup-validation error";
-      validationEl.innerHTML = '<i class="icon-x"></i> All RPC URLs must start with https://';
-      return;
+    setVerificationState(name, state, label, details) {
+      const card = document.getElementById(`${name}-verification-card`);
+      const status = document.getElementById(`${name}-status`);
+      const detail = document.getElementById(`${name}-details`);
+      if (!card || !status || !detail) return;
+
+      card.dataset.state = state;
+      const labelElement = status.querySelector("span:last-child");
+      if (labelElement) labelElement.textContent = label;
+      detail.textContent = details || "";
+      detail.hidden = !details;
     }
 
-    const hasDefaultRpc = urls.some((url) => url.includes("api.mainnet-beta.solana.com"));
-    if (hasDefaultRpc) {
-      validationEl.className = "setup-validation error";
-      validationEl.innerHTML =
-        '<i class="icon-triangle-alert"></i> Default Solana RPC will not work. Use a premium provider.';
-      return;
+    resetVerificationStates() {
+      this.setVerificationState("wallet", "pending", "Waiting to validate", "");
+      this.setVerificationState("rpc", "pending", "Waiting to test endpoints", "");
+      this.setVerificationState("save", "pending", "Waiting to save", "");
+      if (this.verificationSummary) {
+        this.verificationSummary.textContent =
+          "Checking your wallet and Solana mainnet connections.";
+      }
     }
 
-    validationEl.className = "setup-validation success";
-    validationEl.innerHTML = `<i class="icon-check"></i> ${urls.length} valid URL${urls.length > 1 ? "s" : ""}`;
-  }
-
-  async validateAndProceed() {
-    const walletValue = this.walletInput?.value.trim();
-    const rpcValue = this.rpcInput?.value.trim();
-
-    if (!walletValue || !rpcValue) {
-      this.showError("Please fill in all required fields");
-      return;
-    }
-
-    // Disable button during validation
-    if (this.nextBtn) {
-      this.nextBtn.disabled = true;
-      this.nextBtn.innerHTML = '<i class="icon-loader"></i> Validating...';
-    }
-
-    try {
+    async skipSetup() {
+      if (this.verificationBusy) return;
       this.hideError();
-      this.setStep(2);
-      await this.runVerification();
-    } catch (error) {
-      this.showError(error.message || "Verification failed");
-      this.setStep(1);
-    } finally {
-      if (this.nextBtn) {
-        this.nextBtn.disabled = false;
-        this.nextBtn.innerHTML = 'Continue <i class="icon-chevron-right"></i>';
-      }
-    }
-  }
+      this.skipBtn.disabled = true;
+      const originalLabel = this.skipBtn.textContent;
+      this.skipBtn.textContent = "Opening preview…";
 
-  async runVerification() {
-    const walletStatus = document.getElementById("wallet-status");
-    const walletDetails = document.getElementById("wallet-details");
-    const rpcStatus = document.getElementById("rpc-status");
-    const rpcDetails = document.getElementById("rpc-details");
-    const walletCard = document.getElementById("wallet-verification-card");
-    const rpcCard = document.getElementById("rpc-verification-card");
-
-    // Add verifying class for visual feedback
-    walletCard?.classList.add("verifying");
-    rpcCard?.classList.add("verifying");
-
-    try {
-      // Call validate API
-      const result = await this.validateCredentials();
-
-      if (!result || !result.valid) {
-        const errorMsg =
-          result?.errors?.length > 0 ? result.errors.join("; ") : "Validation failed";
-        throw new Error(errorMsg);
-      }
-
-      // Update wallet validation with animation
-      walletCard?.classList.remove("verifying");
-      walletCard?.classList.add("verified");
-      if (walletStatus) {
-        walletStatus.className = "setup-verification-status success";
-        walletStatus.innerHTML =
-          '<i class="icon-check"></i><span>Wallet validated successfully</span>';
-      }
-      if (walletDetails && result.wallet_address) {
-        walletDetails.classList.add("show");
-        walletDetails.textContent = `Address: ${result.wallet_address}`;
-      }
-
-      // Small delay for staggered animation
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Update RPC validation
-      rpcCard?.classList.remove("verifying");
-      rpcCard?.classList.add("verified");
-      if (rpcStatus) {
-        rpcStatus.className = "setup-verification-status success";
-        rpcStatus.innerHTML = '<i class="icon-check"></i><span>RPC connections verified</span>';
-      }
-      if (rpcDetails) {
-        rpcDetails.classList.add("show");
-        if (result.warnings && result.warnings.length > 0) {
-          rpcDetails.textContent = result.warnings.join("; ");
-        } else {
-          rpcDetails.textContent = "All RPC endpoints are operational";
+      try {
+        const result = await requestJson("/api/initialization/skip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        });
+        if (!result?.success) {
+          throw new Error(result?.errors?.join(" ") || "Preview mode could not be started.");
         }
-      }
-
-      // Small delay for visual effect
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Complete initialization
-      const completeResult = await this.completeInitialization();
-
-      if (!completeResult.success) {
-        const errorMsg =
-          completeResult.errors?.length > 0
-            ? completeResult.errors.join("; ")
-            : "Initialization failed";
-        throw new Error(errorMsg);
-      }
-
-      // A clean process boot activates the wallet/RPC configuration. Showing
-      // restart progress here avoids pretending that preview services are the
-      // newly configured full service graph.
-      this.setStep(3);
-      this.startServicesProgress(completeResult.instance_id);
-    } catch (error) {
-      // Remove verifying states
-      walletCard?.classList.remove("verifying");
-      rpcCard?.classList.remove("verifying");
-
-      this.showError(error.message);
-      // Reset verification states
-      if (walletStatus) {
-        walletStatus.className = "setup-verification-status error";
-        walletStatus.innerHTML = '<i class="icon-x"></i><span>Verification failed</span>';
-      }
-      if (rpcStatus) {
-        rpcStatus.className = "setup-verification-status error";
-        rpcStatus.innerHTML = '<i class="icon-x"></i><span>Verification failed</span>';
+        window.location.assign("/tokens");
+      } catch (error) {
+        this.skipBtn.disabled = false;
+        this.skipBtn.textContent = originalLabel;
+        this.showError(error.message || "Preview mode could not be started.", true);
       }
     }
-  }
 
-  async validateCredentials() {
-    const walletPrivateKey = this.walletInput?.value.trim();
-    const rpcUrls = this.rpcInput?.value
-      .split("\n")
-      .map((u) => u.trim())
-      .filter((u) => u);
+    startRestartWait() {
+      if (!this.previousInstanceId) return;
+      this.restartAbort?.abort();
+      this.restartAbort = new AbortController();
+      this.completeState?.setAttribute("data-state", "waiting");
+      if (this.completeIcon) {
+        this.completeIcon.className = "setup-complete-icon icon-circle-check";
+      }
+      if (this.completeText) {
+        this.completeText.textContent = "Restarting ScreenerBot with your verified configuration.";
+      }
+      if (this.servicesStatus) this.servicesStatus.textContent = "Waiting for the new process…";
+      if (this.restartIndicator) this.restartIndicator.hidden = false;
+      if (this.completeActions) this.completeActions.hidden = true;
 
-    const response = await fetch("/api/initialization/validate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        wallet_private_key: walletPrivateKey,
-        rpc_urls: rpcUrls,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      waitForScreenerBotRestart(this.previousInstanceId, {
+        target: "/home",
+        signal: this.restartAbort.signal,
+        onReady: () => {
+          if (this.servicesStatus) {
+            this.servicesStatus.textContent = "ScreenerBot is ready. Opening dashboard…";
+          }
+        },
+      }).catch((error) => {
+        if (error?.name === "AbortError") return;
+        this.completeState?.setAttribute("data-state", "error");
+        if (this.completeIcon) {
+          this.completeIcon.className = "setup-complete-icon icon-triangle-alert";
+        }
+        if (this.completeText) {
+          this.completeText.textContent =
+            "Your verified configuration is safely stored on this device.";
+        }
+        if (this.servicesStatus) this.servicesStatus.textContent = error.message;
+        if (this.restartIndicator) this.restartIndicator.hidden = true;
+        if (this.completeActions) this.completeActions.hidden = false;
+      });
     }
 
-    return response.json();
-  }
-
-  async completeInitialization() {
-    const walletPrivateKey = this.walletInput?.value.trim();
-    const rpcUrls = this.rpcInput?.value
-      .split("\n")
-      .map((u) => u.trim())
-      .filter((u) => u);
-
-    const response = await fetch("/api/initialization/complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        wallet_private_key: walletPrivateKey,
-        rpc_urls: rpcUrls,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    mountAccountPanel() {
+      if (!this.accountPanelEl || !window.AccountPanel) return;
+      this.accountPanel = window.AccountPanel.mount(this.accountPanelEl, {
+        onChange: (status) => this.onAccountChanged(status),
+      });
     }
 
-    return response.json();
-  }
-
-  startServicesProgress(previousInstanceId) {
-    const progressFill = document.getElementById("services-progress");
-    const progressText = document.getElementById("services-status");
-
-    // Clear existing poller
-    if (this.servicesPoller) {
-      clearInterval(this.servicesPoller);
-      this.servicesPoller = null;
+    onAccountChanged(status) {
+      if (!this.gatewayOptionEl || !this.gatewayCheckboxEl) return;
+      const canUseGateway = Boolean(status?.signed_in) && status?.scopes?.includes("rpc:submit");
+      this.gatewayOptionEl.classList.toggle("is-hidden", !canUseGateway);
+      this.gatewayOptionEl.hidden = !canUseGateway;
+      this.gatewayCheckboxEl.checked = Boolean(status?.use_gateway_rpc);
     }
 
-    let visualProgress = 12;
-    if (progressFill) progressFill.style.width = `${visualProgress}%`;
-    if (progressText) progressText.textContent = "Restarting ScreenerBot with full access…";
+    attachGatewayHandler() {
+      if (!this.gatewayCheckboxEl) return;
 
-    this.servicesPoller = setInterval(() => {
-      visualProgress = Math.min(92, visualProgress + Math.max(1, (92 - visualProgress) * 0.08));
-      if (progressFill) progressFill.style.width = `${visualProgress}%`;
-    }, 500);
+      this.gatewayCheckboxEl.addEventListener("change", async () => {
+        if (this.gatewayBusy) return;
+        const requested = this.gatewayCheckboxEl.checked;
+        this.gatewayBusy = true;
+        this.gatewayCheckboxEl.disabled = true;
 
-    waitForScreenerBotRestart(previousInstanceId, {
-      target: "/home",
-      onReady: () => {
-        if (this.servicesPoller) clearInterval(this.servicesPoller);
-        this.servicesPoller = null;
-        if (progressFill) progressFill.style.width = "100%";
-        if (progressText) progressText.textContent = "Full mode ready. Loading dashboard…";
-      },
-    }).catch((error) => {
-      if (this.servicesPoller) clearInterval(this.servicesPoller);
-      this.servicesPoller = null;
-      this.showError(error.message);
-      if (progressText) progressText.textContent = "Restart needs attention";
-    });
-  }
-
-  showError(message) {
-    if (this.errorEl) {
-      this.errorEl.classList.add("show");
+        try {
+          const status = await requestJson("/api/account/gateway", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled: requested }),
+          });
+          this.onAccountChanged(status);
+        } catch (error) {
+          this.gatewayCheckboxEl.checked = !requested;
+          this.showError(error.message || "Gateway preference could not be saved.", false);
+        } finally {
+          this.gatewayBusy = false;
+          this.gatewayCheckboxEl.disabled = false;
+        }
+      });
     }
-    if (this.errorMessages) {
+
+    maskWallet(masked) {
+      this.walletInput.style.webkitTextSecurity = masked ? "disc" : "none";
+      this.walletInput.style.textSecurity = masked ? "disc" : "none";
+      if (!this.toggleBtn) return;
+
+      this.toggleBtn.setAttribute("aria-pressed", String(!masked));
+      const action = masked ? "Show private key" : "Hide private key";
+      this.toggleBtn.setAttribute("aria-label", action);
+      this.toggleBtn.title = action;
+      const icon = this.toggleBtn.querySelector(".toggle-icon");
+      if (icon) icon.className = `toggle-icon ${masked ? "icon-eye" : "icon-eye-off"}`;
+    }
+
+    toggleVisibility() {
+      const isMasked = this.walletInput.style.webkitTextSecurity !== "none";
+      this.maskWallet(!isMasked);
+    }
+
+    showWalletPreview(address) {
+      const preview = document.getElementById("wallet-address-preview");
+      const text = preview?.querySelector(".wallet-address-text");
+      if (!preview || !text) return;
+      text.textContent = address;
+      preview.hidden = false;
+    }
+
+    hideWalletPreview() {
+      const preview = document.getElementById("wallet-address-preview");
+      const text = preview?.querySelector(".wallet-address-text");
+      if (text) text.textContent = "";
+      if (preview) preview.hidden = true;
+    }
+
+    async copyWalletAddress() {
+      const address = document.querySelector(".wallet-address-text")?.textContent?.trim();
+      if (!address || !this.copyBtn) return;
+
+      try {
+        await navigator.clipboard.writeText(address);
+        this.copyBtn.setAttribute("aria-label", "Wallet address copied");
+        this.copyBtn.title = "Copied";
+        window.setTimeout(() => {
+          this.copyBtn?.setAttribute("aria-label", "Copy wallet address");
+          if (this.copyBtn) this.copyBtn.title = "Copy wallet address";
+        }, 1500);
+      } catch {
+        this.copyBtn.setAttribute("aria-label", "Could not copy wallet address");
+        this.copyBtn.title = "Copy failed";
+      }
+    }
+
+    showError(message, focus) {
+      if (!this.errorEl || !this.errorMessages) return;
       this.errorMessages.textContent = message;
-    }
-  }
-
-  hideError() {
-    if (this.errorEl) {
-      this.errorEl.classList.remove("show");
-    }
-  }
-
-  resetVerificationStates() {
-    ["wallet-status", "rpc-status"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.className = "setup-verification-status";
-        el.innerHTML = '<span class="setup-spinner"></span><span>Pending</span>';
+      if (this.retryBtn) {
+        this.retryBtn.textContent = this.currentStep === 2 ? "Review credentials" : "Dismiss";
       }
-    });
-
-    ["wallet-details", "rpc-details"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.classList.remove("show");
-      }
-    });
-
-    // Reset verification card classes
-    ["wallet-verification-card", "rpc-verification-card"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) {
-        el.classList.remove("verifying", "verified");
-      }
-    });
-
-    // Reset password toggle
-    if (this.walletInput) {
-      this.walletInput.style.webkitTextSecurity = "disc";
-      this.walletInput.style.textSecurity = "disc";
+      this.errorEl.hidden = false;
+      if (focus) window.requestAnimationFrame(() => this.errorEl.focus({ preventScroll: true }));
     }
-    const toggleBtn = document.querySelector('[data-toggle="wallet-private-key"]');
-    if (toggleBtn) {
-      const icon = toggleBtn.querySelector(".toggle-icon");
-      if (icon) icon.className = "toggle-icon icon-eye";
+
+    hideError() {
+      if (this.errorEl) this.errorEl.hidden = true;
+      if (this.errorMessages) this.errorMessages.textContent = "";
+    }
+
+    dispose() {
+      window.clearTimeout(this.walletValidationTimeout);
+      window.clearTimeout(this.rpcValidationTimeout);
+      this.cancelVerification();
+      this.restartAbort?.abort();
+      this.restartAbort = null;
+      this.accountPanel?.destroy?.();
+      this.accountPanel = null;
+      this.initialized = false;
     }
   }
 
-  dispose() {
-    if (this.servicesPoller) {
-      clearInterval(this.servicesPoller);
-      this.servicesPoller = null;
-    }
-    this.initialized = false;
-  }
-}
-
-// Export for use
-window.SetupController = new SetupControllerClass();
+  window.SetupController = new SetupControllerClass();
+})();
