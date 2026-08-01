@@ -677,6 +677,15 @@ select,
   text-transform: uppercase;
 }
 
+/* Exact product-name treatment inside otherwise unrelated interface copy. */
+.brand-name {
+  font-family: var(--font-brand) !important;
+  font-style: normal;
+  font-weight: 700;
+  line-height: inherit;
+  letter-spacing: 0.02em;
+}
+
 /* Monospace for addresses, hashes, signatures */
 .font-mono {
   font-family: var(--font-mono);

@@ -439,9 +439,10 @@ pub fn login_template(title: &str, content: &str) -> String {
 </head>
 <body>
     {}
+    <script src="/scripts/core/brand_text.js?v={}"></script>
     <script type="module" src="/scripts/pages/login.js?v={}"></script>
 </body>
 </html>"#,
-        title, combined_styles, content, asset_version
+        title, combined_styles, content, asset_version, asset_version
     )
 }
