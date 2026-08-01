@@ -2,12 +2,8 @@
 (function () {
   "use strict";
 
-  const GOOGLE_MARK = `<svg class="account-google-mark" viewBox="0 0 18 18" aria-hidden="true">
-    <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/>
-    <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"/>
-    <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3-2.33Z"/>
-    <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z"/>
-  </svg>`;
+  const GOOGLE_MARK =
+    '<img class="account-google-mark" src="/assets/google-g.png" alt="" aria-hidden="true" />';
 
   const SCOPE_LABELS = {
     "rpc:submit": "Free signed-transaction submission",
@@ -242,7 +238,7 @@
     renderUnavailable() {
       return `
         <div class="account-unavailable">
-          <p class="account-lead">Account features are temporarily unavailable. Local setup still works.</p>
+          <p class="account-lead">Account features are unavailable right now. Continue setup without signing in.</p>
           ${this.renderError()}
           <button type="button" class="account-btn account-btn-ghost" data-action="retry-status">
             Retry account status
@@ -262,18 +258,16 @@
       return `
         <div class="account-panel-signed-in">
           <div class="account-identity">
-            <i class="icon-circle-check account-identity-mark" aria-hidden="true"></i>
             <div class="account-identity-text">
               <span class="account-identity-name">${name}</span>
               ${email && email !== name ? `<span class="account-identity-email">${email}</span>` : ""}
             </div>
           </div>
           ${scopes ? `<ul class="account-scopes" aria-label="Account features">${scopes}</ul>` : ""}
-          <p class="account-note">Core trading remains local and works without an account.</p>
           <div class="account-actions">
             <button type="button" class="account-btn account-btn-ghost" data-action="signout"
               ${this.busyAction ? "disabled" : ""}>
-              ${this.busyAction === "signout" ? "Signing out…" : "Sign out on this machine"}
+              ${this.busyAction === "signout" ? "Signing out…" : "Sign out"}
             </button>
           </div>
           ${this.renderError()}
@@ -286,54 +280,29 @@
       const disabled = this.busyAction ? "disabled" : "";
       const walletOption = this.walletHasAccount
         ? `<button type="button" class="account-option" data-action="wallet" ${disabled}>
-             <span class="account-option-symbol" aria-hidden="true">
-               <i class="icon-wallet account-option-icon"></i>
-             </span>
-             <span class="account-option-text">
-               <span class="account-option-title">${this.busyAction === "wallet" ? "Signing in…" : "Sign in with this wallet"}</span>
-               <span class="account-option-hint">Signs a free message, never a transaction.</span>
-             </span>
-             <i class="icon-arrow-right account-option-arrow" aria-hidden="true"></i>
+             <span class="account-option-title">${this.busyAction === "wallet" ? "Signing in…" : "Sign in with wallet"}</span>
            </button>`
         : "";
 
       return `
         <div class="account-panel-signed-out">
           <p class="account-lead">
-            Unlock free transaction relay, token voting, and referral rewards.
-          </p>
-          <p class="account-trust-note">
-            <i class="icon-shield-check" aria-hidden="true"></i>
-            <span>Optional — core trading stays local and works without an account.</span>
+            An account adds free transaction sending, token voting, and referral rewards.
           </p>
           <div class="account-options">
-            <button type="button" class="account-option account-option-recommended" data-action="browser" ${disabled}>
-              <span class="account-option-symbol">${GOOGLE_MARK}</span>
-              <span class="account-option-text">
-                <span class="account-option-heading">
-                  <span class="account-option-title">${this.busyAction === "browser" ? "Opening browser…" : "Continue in browser"}</span>
-                  <span class="account-option-badge">Recommended</span>
-                </span>
-                <span class="account-option-hint">Use Google or email. Your password stays in the browser.</span>
-              </span>
-              <i class="icon-arrow-right account-option-arrow" aria-hidden="true"></i>
+            <button type="button" class="account-option" data-action="browser" ${disabled}>
+              ${GOOGLE_MARK}
+              <span class="account-option-title">${this.busyAction === "browser" ? "Opening browser…" : "Continue in browser"}</span>
             </button>
             <button type="button" class="account-option" data-action="email" ${disabled}>
-              <span class="account-option-symbol" aria-hidden="true">
-                <i class="icon-mail account-option-icon"></i>
-              </span>
-              <span class="account-option-text">
-                <span class="account-option-title">Sign in with email</span>
-                <span class="account-option-hint">Enter your ScreenerBot credentials in this app.</span>
-              </span>
-              <i class="icon-arrow-right account-option-arrow" aria-hidden="true"></i>
+              <span class="account-option-title">Sign in with email</span>
             </button>
             ${walletOption}
           </div>
           <p class="account-note account-signup-note">
             <span>New to ScreenerBot?</span>
             <button type="button" class="account-link" data-action="signup">
-              Create an account <i class="icon-external-link" aria-hidden="true"></i>
+              Create an account
             </button>
           </p>
           ${this.renderNotice()}
@@ -346,7 +315,7 @@
       return `
         <form class="account-email-form" data-action="email-submit">
           <button type="button" class="account-link account-back" data-action="menu" ${disabled}>
-            <i class="icon-arrow-left" aria-hidden="true"></i> Back to sign-in options
+            Back to sign-in options
           </button>
           <label class="account-field">
             <span class="account-field-label">Email</span>
@@ -359,12 +328,12 @@
               placeholder="Your password" required ${disabled} />
           </label>
           <button type="submit" class="account-btn account-btn-primary" ${disabled}>
-            ${this.busyAction === "password" ? "Signing in…" : 'Sign in <i class="icon-arrow-right" aria-hidden="true"></i>'}
+            ${this.busyAction === "password" ? "Signing in…" : "Sign in"}
           </button>
           <p class="account-note">
             Need an account or forgot your password?
             <button type="button" class="account-link" data-action="signup" ${disabled}>
-              Open screenerbot.io <i class="icon-external-link" aria-hidden="true"></i>
+              Open screenerbot.io
             </button>
           </p>
           ${this.renderError()}
@@ -373,22 +342,13 @@
 
     renderError() {
       return this.error
-        ? `<div class="account-feedback account-error" role="alert">
-             <i class="icon-circle-alert account-feedback-icon" aria-hidden="true"></i>
-             <span class="account-feedback-copy">
-               <strong>Couldn’t complete sign-in</strong>
-               <span>${escapeHtml(this.error)}</span>
-             </span>
-           </div>`
+        ? `<p class="account-error" role="alert">${escapeHtml(this.error)}</p>`
         : "";
     }
 
     renderNotice() {
       return this.notice
-        ? `<div class="account-feedback account-notice" role="status">
-             <i class="icon-info account-feedback-icon" aria-hidden="true"></i>
-             <span class="account-feedback-copy">${escapeHtml(this.notice)}</span>
-           </div>`
+        ? `<p class="account-notice" role="status">${escapeHtml(this.notice)}</p>`
         : "";
     }
 

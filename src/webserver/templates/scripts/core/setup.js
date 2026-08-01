@@ -420,7 +420,7 @@
       if (this.completeText) {
         this.completeText.textContent = "Restarting ScreenerBot with your verified configuration.";
       }
-      if (this.servicesStatus) this.servicesStatus.textContent = "Waiting for the new process…";
+      if (this.servicesStatus) this.servicesStatus.textContent = "Finishing restart…";
       if (this.restartIndicator) this.restartIndicator.hidden = false;
       if (this.completeActions) this.completeActions.hidden = true;
 

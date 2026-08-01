@@ -240,6 +240,12 @@ pub async fn get_asset(Path(file): Path<String>) -> Response {
             embeds::LOGO_PNG,
         )
             .into_response(),
+        "google-g.png" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "image/png")],
+            embeds::GOOGLE_G_PNG,
+        )
+            .into_response(),
         "lightweight-charts.js" => (
             StatusCode::OK,
             [(http_header::CONTENT_TYPE, "application/javascript")],

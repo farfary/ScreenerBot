@@ -186,12 +186,6 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
     margin-top: 3px;
   }
 
-  .setup-split-aside .account-panel-eyebrow,
-  .setup-split-aside .account-option-badge,
-  .setup-split-aside .account-option-arrow {
-    display: none;
-  }
-
 }
 
 @media (max-height: 720px) {
