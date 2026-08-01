@@ -209,6 +209,7 @@ pub(super) const CONFIG_IMPORT_EXPORT_DIALOG_STYLES: &str =
 // Assets (logos, icons) - Public for asset_serving.rs
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
 pub const LOGO_PNG: &[u8] = include_bytes!("assets/logo.png");
+pub const GOOGLE_G_PNG: &[u8] = include_bytes!("assets/google-g.png");
 pub const LIGHTWEIGHT_CHARTS_JS: &[u8] = include_bytes!("assets/lightweight-charts.js");
 
 // Solana brand assets (solana.com/branding) - Public for asset_serving.rs.

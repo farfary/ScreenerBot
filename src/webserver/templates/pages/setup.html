@@ -70,7 +70,7 @@
                     </button>
                   </div>
                   <p class="setup-security-note" id="wallet-security-note">
-                    Sent only to the local ScreenerBot process, then encrypted before storage.
+                    Encrypted before it is saved.
                   </p>
                   <div
                     class="setup-validation"
@@ -142,10 +142,9 @@
                   <label class="setup-gateway-option is-hidden" id="setup-gateway-option">
                     <input type="checkbox" id="setup-use-gateway" />
                     <span class="setup-gateway-copy">
-                      <span class="setup-gateway-title">Use ScreenerBot to send transactions</span>
+                      <span class="setup-gateway-title">Free transaction sending</span>
                       <span class="setup-gateway-hint">
-                        Free when signed in. Transactions stay locally signed; your RPC remains
-                        required for data and automatic fallback.
+                        Available when signed in. Your RPC remains available as fallback.
                       </span>
                     </span>
                   </label>
@@ -157,13 +156,7 @@
           <aside class="setup-split-aside" aria-labelledby="account-panel-title">
             <div class="account-panel">
               <div class="account-panel-title" id="account-panel-title">
-                <span class="account-panel-title-icon" aria-hidden="true">
-                  <i class="icon-circle-user"></i>
-                </span>
-                <span class="account-panel-heading">
-                  <span>ScreenerBot account</span>
-                  <span class="account-panel-eyebrow">Enhance your setup</span>
-                </span>
+                <span>ScreenerBot account</span>
                 <span class="account-optional">Optional</span>
               </div>
               <div id="setupAccountPanel" aria-live="polite">
@@ -265,7 +258,7 @@
             <span></span>
           </div>
           <p class="setup-progress-text" id="services-status" role="status" aria-live="polite">
-            Waiting for the new process…
+            Finishing restart…
           </p>
           <div class="setup-complete-actions" id="setup-complete-actions" hidden>
             <button type="button" class="setup-btn setup-btn-secondary" id="setup-reconnect">
