@@ -34,6 +34,13 @@ pub const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
 /// - Static assets (/assets/*, /scripts/*, /styles/*)
 /// - Page HTML (/api/pages/*)
 /// - SSE streams (/api/*/stream) - EventSource API doesn't support custom headers
+/// - /oauth/callback - the system browser returns here after a ScreenerBot
+///   account sign-in and cannot send a custom header. Safe because the route
+///   accepts only a `code` and a `state`, both checked against an in-memory
+///   PendingAuth this process created, with the state compared in constant
+///   time, and because it renders a fixed page that echoes nothing back.
+///   NOTE: /api/account/* is deliberately NOT exempt - it is the sign-in API
+///   and must keep requiring the token.
 ///
 /// In CLI mode, this middleware does nothing (allows all requests).
 pub async fn security_gate(request: Request, next: Next) -> Response {
@@ -59,6 +66,7 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
         || path.starts_with("/api/system/bootstrap")
         || path.starts_with("/api/actions")
         || path.starts_with("/api/services")
+        || path == "/oauth/callback"
         || path.ends_with("/stream")
         || !path.starts_with("/api/")
     // All non-API routes (HTML pages) are allowed
@@ -142,6 +150,14 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
         || path == "/api/health"
         || path == "/api/version"
     {
+        return next.run(request).await;
+    }
+
+    // The ScreenerBot account panel sits on the setup screen, so it has to work
+    // before setup is complete. Allowed HERE and not in `security_gate`: these
+    // routes still require the GUI token, which is what keeps a page in another
+    // browser tab from driving them over 127.0.0.1.
+    if path.starts_with("/api/account") {
         return next.run(request).await;
     }
 

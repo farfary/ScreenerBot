@@ -35,6 +35,7 @@
 pub mod circuit_breaker;
 pub mod client;
 pub mod errors;
+pub mod gateway;
 pub mod global;
 pub mod manager;
 pub mod provider;

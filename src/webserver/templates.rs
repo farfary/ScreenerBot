@@ -143,6 +143,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ONBOARDING_PAGE_STYLES,
         SETUP_PAGE_STYLES,
         SETUP_STEPS_STYLES,
+        ACCOUNT_PANEL_STYLES,
         // Lockscreen overlay (security)
         LOCKSCREEN_PAGE_STYLES,
         // Status bar (always visible at bottom)

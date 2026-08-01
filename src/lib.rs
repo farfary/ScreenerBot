@@ -5,6 +5,7 @@
 
 #![allow(warnings)]
 
+pub mod account;
 pub mod actions;
 pub mod ai;
 pub mod apis;

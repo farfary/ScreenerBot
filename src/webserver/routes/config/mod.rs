@@ -20,13 +20,13 @@ pub mod types;
 
 // Re-export handler functions for use by the router
 use getters::{
-    get_ai_config, get_config_metadata, get_events_config, get_filtering_config, get_full_config,
-    get_gui_config, get_gui_defaults, get_holder_watch_config, get_maintenance_config,
-    get_monitoring_config, get_network_config, get_ohlcv_config, get_performance_config,
-    get_pools_config, get_positions_config, get_referral_config, get_rpc_config,
-    get_services_config, get_sol_price_config, get_strategies_config, get_summary_config,
-    get_swaps_config, get_telegram_config, get_tokens_config, get_trader_config, get_wallet_config,
-    patch_any_config,
+    get_account_config, get_ai_config, get_config_metadata, get_events_config,
+    get_filtering_config, get_full_config, get_gui_config, get_gui_defaults,
+    get_holder_watch_config, get_maintenance_config, get_monitoring_config, get_network_config,
+    get_ohlcv_config, get_performance_config, get_pools_config, get_positions_config,
+    get_referral_config, get_rpc_config, get_services_config, get_sol_price_config,
+    get_strategies_config, get_summary_config, get_swaps_config, get_telegram_config,
+    get_tokens_config, get_trader_config, get_wallet_config, patch_any_config,
 };
 use import_export::{export_config, import_config, import_config_preview};
 use operations::{get_config_diff, reload_config_from_disk, reset_config_to_defaults};
@@ -66,6 +66,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/performance", get(get_performance_config))
         .route("/config/network", get(get_network_config))
         .route("/config/referral", get(get_referral_config))
+        .route("/config/account", get(get_account_config))
         .route("/config/metadata", get(get_config_metadata))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
         .route(
@@ -146,6 +147,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route(
             "/config/referral",
             patch(patch_any_config::<config::ReferralConfig>),
+        )
+        .route(
+            "/config/account",
+            patch(patch_any_config::<config::AccountConfig>),
         )
         // Import/Export endpoints
         .route("/config/export", post(export_config))

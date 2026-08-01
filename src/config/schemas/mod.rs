@@ -3,6 +3,7 @@
 
 use crate::config_struct;
 
+mod account;
 mod ai;
 mod connectivity;
 mod events;
@@ -28,6 +29,7 @@ mod trader;
 mod wallet;
 mod webserver;
 
+pub use account::*;
 pub use ai::*;
 pub use connectivity::*;
 pub use events::*;
@@ -137,5 +139,9 @@ config_struct! {
 
         /// Referral attribution (opt-in; inert until a code is set)
         referral: ReferralConfig = ReferralConfig::default(),
+
+        /// ScreenerBot account — optional sign-in. Holds no secrets; tokens
+        /// live in the encrypted store, and the server address is a constant.
+        account: AccountConfig = AccountConfig::default(),
     }
 }

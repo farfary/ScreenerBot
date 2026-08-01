@@ -80,6 +80,9 @@ export const SECTION_ICONS = {
   // is not in the font renders a silent blank box. Same mark as the website
   // admin's referral surfaces, so the two read as one feature.
   referral: "icon-hand-coins",
+  // Verified against assets/lucide-font/lucide.css — a name the font does not
+  // carry renders as a silent blank box.
+  account: "icon-circle-user",
 };
 
 /**

@@ -17,6 +17,11 @@ import { buildHintsTab, attachHintsHandlers } from "./settings/hints_tab.js";
 import { buildNavigationTab, attachNavigationHandlers } from "./settings/navigation_tab.js";
 import { buildLicensesTab, attachLicensesHandlers } from "./settings/licenses_tab.js";
 import { loadTelegramTab } from "./settings/telegram_tab.js";
+import {
+  buildAccountTab,
+  attachAccountHandlers,
+  teardownAccountTab,
+} from "./settings/account_tab.js";
 
 // Global update state to persist across dialog opens
 let globalUpdateState = {
@@ -260,6 +265,9 @@ export class SettingsDialog {
       clearInterval(this._discoveryPoller);
       this._discoveryPoller = null;
     }
+
+    // The account panel polls while a browser sign-in is in flight.
+    teardownAccountTab();
 
     this.dialogEl.classList.remove("active");
 
@@ -567,6 +575,10 @@ export class SettingsDialog {
               <i class="icon-lock"></i>
               <span>Security</span>
             </button>
+            <button class="settings-nav-item" data-tab="account">
+              <i class="icon-circle-user"></i>
+              <span>Account</span>
+            </button>
             <button class="settings-nav-item" data-tab="telegram">
               <i class="icon-send"></i>
               <span>Telegram</span>
@@ -614,6 +626,9 @@ export class SettingsDialog {
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="security">
+              <div class="settings-loading">Loading...</div>
+            </div>
+            <div class="settings-tab" data-tab-content="account">
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="telegram">
@@ -733,6 +748,10 @@ export class SettingsDialog {
         break;
       case "security":
         loadSecurityTab(this, content);
+        break;
+      case "account":
+        content.innerHTML = buildAccountTab();
+        attachAccountHandlers();
         break;
       case "telegram":
         loadTelegramTab(this, content);

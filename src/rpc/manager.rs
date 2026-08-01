@@ -330,6 +330,22 @@ impl RpcManager {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, RpcError> {
+        // A signed-in account may relay transaction SUBMISSION through
+        // screenerbot.io for free. Tried first and never depended on: any
+        // failure returns None and the request continues down the normal
+        // provider path below, so the relay can never stop a trade.
+        //
+        // Deliberately not a provider in the pool — see `rpc/gateway.rs` for
+        // why a method-restricted endpoint must not be selectable by a
+        // component that selects on health rather than on method.
+        if crate::rpc::gateway::should_relay(method) {
+            if let Some(result) =
+                crate::rpc::gateway::relay(&self.http_client, method, &params).await
+            {
+                return Ok(result);
+            }
+        }
+
         let rpc_method = RpcMethod::from_str(method);
         let mut last_error: Option<RpcError> = None;
         let mut tried_providers: Vec<String> = Vec::new();

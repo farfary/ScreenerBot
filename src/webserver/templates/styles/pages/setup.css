@@ -535,3 +535,84 @@
   background: rgb(234 138 46 / 0.2) !important;
   font-weight: 700 !important;
 }
+
+/* ---------------------------------------------------------------------------
+ * Step 1: required credentials on the left, the optional account on the right.
+ * ------------------------------------------------------------------------ */
+
+.setup-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
+  gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.setup-split-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The separator. A single border rather than a spacer element, so there is one
+ * source for the line and it becomes a HORIZONTAL rule for free when the
+ * columns stack. This is a column rule, not the decorative left accent bar that
+ * cards and list items are forbidden — it divides two regions of equal weight
+ * and disappears when they are no longer side by side. */
+.setup-split-aside {
+  min-width: 0;
+  padding-left: 1.5rem;
+  border-left: 1px solid var(--border-color);
+}
+
+/* Below this the two columns are too narrow to read, and the setup window can
+ * be small. Stacking puts the required half first, which is the order the user
+ * has to act in. */
+@media (max-width: 60rem) {
+  .setup-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+  }
+
+  .setup-split-aside {
+    padding-left: 0;
+    padding-top: 1.25rem;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+  }
+}
+
+/* The free-submission option, shown inside the RPC card once signed in. */
+.setup-gateway-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.setup-gateway-option input {
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+}
+
+.setup-gateway-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.setup-gateway-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setup-gateway-hint {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}

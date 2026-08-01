@@ -311,6 +311,7 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("performance", super::PerformanceConfig::field_metadata());
     map.insert("network", super::NetworkConfig::field_metadata());
     map.insert("referral", super::ReferralConfig::field_metadata());
+    map.insert("account", super::AccountConfig::field_metadata());
 
     for section in map.values_mut() {
         section.retain(|_, field| !field.hidden.unwrap_or_default());
@@ -443,7 +444,14 @@ mod tests {
     fn every_section_in_the_map_exposes_its_fields() {
         let metadata = collect_config_metadata();
 
-        for section in ["trader", "filtering", "swaps", "network", "referral"] {
+        for section in [
+            "trader",
+            "filtering",
+            "swaps",
+            "network",
+            "referral",
+            "account",
+        ] {
             let fields = metadata
                 .get(section)
                 .unwrap_or_else(|| panic!("`{section}` is missing from collect_config_metadata(), so the dashboard cannot show it"));
@@ -485,6 +493,39 @@ mod tests {
         let round_tripped: crate::config::ReferralConfig =
             serde_json::from_value(value).expect("referral must deserialize");
         assert_eq!(round_tripped.code, config.referral.code);
+    }
+
+    /// The account section is subject to exactly the same seven-step trap as
+    /// the referral one above, so it is guarded the same way.
+    #[test]
+    fn account_section_is_registered_everywhere() {
+        let metadata = collect_config_metadata();
+        assert!(
+            metadata.contains_key("account"),
+            "account is missing from collect_config_metadata()"
+        );
+
+        let config = crate::config::schemas::Config::default();
+        let value = serde_json::to_value(&config.account).expect("account must serialize");
+        let round_tripped: crate::config::AccountConfig =
+            serde_json::from_value(value).expect("account must deserialize");
+        assert_eq!(
+            round_tripped.auto_wallet_signin,
+            config.account.auto_wallet_signin
+        );
+    }
+
+    /// Signing in with the trading key must never be the default. This is a
+    /// SECURITY default rather than a preference: a bot that signs with the
+    /// wallet unprompted is what a hostile fork would ship, and defaulting to it
+    /// here would make that behaviour look ordinary.
+    #[test]
+    fn wallet_signin_is_opt_in() {
+        let config = crate::config::schemas::Config::default();
+        assert!(
+            !config.account.auto_wallet_signin,
+            "account.auto_wallet_signin must default to false"
+        );
     }
 
     /// The referral code is the one field a user has to be able to find, and it

@@ -57,6 +57,9 @@ class SetupControllerClass {
     this.skipBtn = document.getElementById("setup-skip");
     this.retryBtn = document.getElementById("setup-retry");
     this.errorEl = document.getElementById("setup-error");
+    this.accountPanelEl = document.getElementById("setupAccountPanel");
+    this.gatewayOptionEl = document.getElementById("setup-gateway-option");
+    this.gatewayCheckboxEl = document.getElementById("setup-use-gateway");
     this.errorMessages = document.getElementById("setup-error-messages");
 
     // Input fields
@@ -71,6 +74,8 @@ class SetupControllerClass {
     this.bindEvents();
     this.setupInputMasking();
     this.loadVersion();
+    this.mountAccountPanel();
+    this.attachGatewayHandler();
     this.setStep(1);
     this.initialized = true;
   }
@@ -264,8 +269,55 @@ class SetupControllerClass {
     this.setStep(1);
   }
 
+  /**
+   * Mount the optional account panel beside the credentials.
+   *
+   * The session it creates lives in the BACKEND, not in this page, so it
+   * survives everything that happens next: continuing to full setup, choosing
+   * Preview Mode, and the process restart that either one triggers. Nothing has
+   * to be carried across.
+   */
+  mountAccountPanel() {
+    if (!this.accountPanelEl || !window.AccountPanel) return;
+
+    this.accountPanel = window.AccountPanel.mount(this.accountPanelEl, {
+      onChange: (status) => this.onAccountChanged(status),
+    });
+  }
+
+  /**
+   * Signing in reveals the free-submission option on the LEFT, next to the RPC
+   * field it modifies. It is an addition to the user's own RPC, never a
+   * replacement, so it belongs beside that field rather than in the account
+   * panel where it would read as something the account provides instead.
+   */
+  onAccountChanged(status) {
+    if (!this.gatewayOptionEl) return;
+    this.gatewayOptionEl.style.display = status?.signed_in ? "flex" : "none";
+  }
+
+  attachGatewayHandler() {
+    if (!this.gatewayCheckboxEl) return;
+
+    this.gatewayCheckboxEl.addEventListener("change", async () => {
+      try {
+        await fetch("/api/account/gateway", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: this.gatewayCheckboxEl.checked }),
+        });
+      } catch {
+        // Put the control back rather than let it claim a state the config
+        // does not hold.
+        this.gatewayCheckboxEl.checked = !this.gatewayCheckboxEl.checked;
+      }
+    });
+  }
+
   // Skip wallet + RPC setup and enter preview mode. The backend persists the
-  // skip, starts the preview tier, and the dashboard becomes usable for browsing.
+  // skip, starts the preview tier, and the dashboard becomes usable for
+  // browsing. A signed-in account is untouched by this: it lives in the
+  // backend's encrypted store, so it is still signed in on the dashboard.
   async skipSetup() {
     if (this.skipBtn) {
       this.skipBtn.disabled = true;

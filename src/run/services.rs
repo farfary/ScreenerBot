@@ -36,6 +36,7 @@ pub(super) fn register_all_services(manager: &mut ServiceManager) {
     // Opt-in and inert until the user sets a referral code in Settings. Its
     // is_enabled() is the consent gate — with no code the task never spawns.
     manager.register(Box::new(ReferralService));
+    manager.register(Box::new(AccountService));
     manager.register(Box::new(AtaCleanupService));
     manager.register(Box::new(TraderService::new()));
     manager.register(Box::new(WebserverService));

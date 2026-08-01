@@ -107,6 +107,7 @@ pub(super) const ONBOARDING_PAGE_STYLES: &str =
     include_str!("templates/styles/pages/onboarding.css");
 pub(super) const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css");
 pub(super) const SETUP_STEPS_STYLES: &str = include_str!("templates/styles/pages/setup/steps.css");
+pub(super) const ACCOUNT_PANEL_STYLES: &str = include_str!("templates/styles/ui/account_panel.css");
 pub(super) const LOCKSCREEN_PAGE_STYLES: &str =
     include_str!("templates/styles/pages/lockscreen.css");
 pub(super) const LOGIN_PAGE_STYLES: &str = include_str!("templates/styles/pages/login.css");
@@ -368,6 +369,9 @@ pub const CHART_DATA_JS: &str = include_str!("templates/scripts/ui/chart_data.js
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const SETTINGS_SECURITY_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/security_tab.js");
+pub const ACCOUNT_PANEL_UI: &str = include_str!("templates/scripts/ui/account/panel.js");
+pub const SETTINGS_ACCOUNT_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/account_tab.js");
 pub const SETTINGS_DATA_TAB_UI: &str = include_str!("templates/scripts/ui/settings/data_tab.js");
 pub const SETTINGS_UPDATES_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/updates_tab.js");

@@ -35,6 +35,7 @@ pub struct FullConfigResponse {
     pub ai: config::AiConfig,
     pub network: config::NetworkConfig,
     pub referral: config::ReferralConfig,
+    pub account: config::AccountConfig,
     pub timestamp: String,
 }
 

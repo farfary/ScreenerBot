@@ -4,6 +4,7 @@
 //! - `crate::Error` / `crate::errors::Error`
 //! - `crate::Result<T>` / `crate::errors::Result<T>`
 
+mod account;
 pub mod blockchain;
 mod blockchain_parser;
 
@@ -20,6 +21,7 @@ mod rpc_provider;
 mod service;
 mod startup;
 
+pub use account::*;
 pub use blockchain::*;
 pub use blockchain_parser::*;
 pub use configuration::*;

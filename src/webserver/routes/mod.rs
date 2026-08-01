@@ -9,6 +9,7 @@ use axum::{
 };
 use std::sync::Arc;
 
+pub mod account;
 pub mod actions;
 pub mod ai;
 pub mod asset_serving;
@@ -60,6 +61,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/config", get(config_page))
         .route("/trader", get(trader_page))
         .route("/initialization", get(initialization_page))
+        .route("/oauth/callback", get(account::handlers::oauth_callback))
         .route("/updates", get(updates_page))
         .route("/about", get(about_page))
         .route("/scripts/core/:file", get(get_core_script))
@@ -207,6 +209,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/wallets", wallets::routes())
         .nest("/lockscreen", lockscreen::routes())
         .nest("/auth", auth::routes())
+        .nest("/account", account::routes())
         .nest("/telegram", telegram::routes())
         .nest("/ai", ai::routes())
         .merge(updates::routes())

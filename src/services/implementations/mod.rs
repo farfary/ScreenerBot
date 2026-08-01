@@ -1,4 +1,5 @@
 //! Concrete background service implementations for each bot subsystem.
+pub mod account_service;
 pub mod ai_service;
 pub mod ata_cleanup_service;
 pub mod connectivity_service;
@@ -31,6 +32,7 @@ pub mod trader_service;
 // Telegram service
 pub mod telegram_service;
 
+pub use account_service::AccountService;
 pub use ai_service::AiService;
 pub use ata_cleanup_service::AtaCleanupService;
 pub use connectivity_service::ConnectivityService;

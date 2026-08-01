@@ -1,0 +1,310 @@
+/* ScreenerBot account panel — shared by the setup screen and the settings dialog.
+ *
+ * One stylesheet for one component in two homes. The setup screen sizes it
+ * through its own column; nothing here sets a width, so it fits whatever it is
+ * dropped into.
+ *
+ * Icons are BARE GLYPHS. No ring, tile, chip or glow behind any of them — that
+ * includes Google's mark, which keeps its own four colours and gets no plate.
+ */
+
+.account-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  min-width: 0;
+}
+
+.account-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.account-panel-title i {
+  font-size: 1rem;
+  color: var(--primary-color);
+}
+
+.account-lead,
+.account-note {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.account-note {
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------- options */
+
+.account-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.account-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.account-option:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--primary-color);
+}
+
+.account-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.account-option-icon {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+  font-size: 1rem;
+  color: var(--primary-color);
+}
+
+.account-google-mark {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 0.15rem;
+}
+
+.account-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.account-option-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.account-option-hint {
+  font-size: 0.73rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.account-email-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.account-field-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.account-input {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.account-input::placeholder {
+  color: var(--text-muted);
+}
+
+.account-input:disabled {
+  opacity: 0.55;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.account-btn {
+  padding: 0.5rem 0.875rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.account-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.account-btn-primary {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.account-btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.account-btn-ghost {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.account-btn-ghost:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.account-link {
+  padding: 0;
+  font: inherit;
+  color: var(--link-color);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.account-link:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+.account-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+}
+
+/* -------------------------------------------------------------- signed in */
+
+.account-panel-signed-in {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.account-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.account-identity-mark {
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+  color: var(--success-color);
+}
+
+.account-identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.account-identity-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-identity-email {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-scopes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account-scope {
+  position: relative;
+  padding-left: 0.85rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.account-scope::before {
+  content: "";
+  position: absolute;
+  left: 0.15rem;
+  top: 0.55em;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.account-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ------------------------------------------------------------- messages */
+
+.account-error,
+.account-notice {
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  border-radius: 6px;
+}
+
+.account-error {
+  color: var(--semantic-error-text);
+  background: var(--error-color-light);
+  border: 1px solid var(--error-color);
+}
+
+.account-notice {
+  color: var(--semantic-info-text);
+  background: var(--primary-color-light);
+  border: 1px solid var(--primary-color);
+}

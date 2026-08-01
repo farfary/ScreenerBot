@@ -33,8 +33,14 @@
   <!-- Main Content -->
   <main class="setup-content">
     <div class="setup-form-container">
-      <!-- Step 1: Credentials - Grid Layout -->
+      <!-- Step 1: Credentials on the left, the optional account on the right.
+           Two different kinds of thing, kept visibly apart: the left column is
+           REQUIRED to trade, the right is optional and adds features. Merging
+           them into one list is what makes people think signing in is a step
+           they have to complete. -->
       <div class="setup-step-content active" data-step="1">
+        <div class="setup-split">
+        <div class="setup-split-main">
         <div class="setup-credentials-grid">
           <!-- Header -->
           <div class="setup-step-header">
@@ -105,6 +111,24 @@
                 failover.
               </div>
               <div class="setup-validation" id="rpc-validation"></div>
+
+              <!-- Shown only once an account is signed in. It is an ADDITION to
+                   your own RPC, never a replacement: the gateway carries
+                   transaction submission and nothing else, because pool polling
+                   at ~500ms is almost all of the cost and no free tier survives
+                   it. Saying so here prevents the reasonable wrong conclusion
+                   that this box means an RPC URL is no longer needed. -->
+              <label class="setup-gateway-option" id="setup-gateway-option" style="display: none">
+                <input type="checkbox" id="setup-use-gateway" checked />
+                <span class="setup-gateway-copy">
+                  <span class="setup-gateway-title">Send transactions through ScreenerBot</span>
+                  <span class="setup-gateway-hint">
+                    Free for signed-in accounts. Your bot still signs every transaction locally —
+                    the server only broadcasts it, and cannot alter a signed transaction. Your own
+                    RPC above is still required for prices.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -151,6 +175,21 @@
               </div>
             </div>
           </div>
+        </div>
+        </div>
+
+        <!-- The optional half. It carries its own heading rather than sharing
+             the credentials one, because it is not a credential and is not
+             required to continue. -->
+        <aside class="setup-split-aside">
+          <div class="account-panel">
+            <div class="account-panel-title">
+              <i class="icon-circle-user" aria-hidden="true"></i>
+              ScreenerBot account
+            </div>
+            <div id="setupAccountPanel"></div>
+          </div>
+        </aside>
         </div>
       </div>
 

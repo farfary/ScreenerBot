@@ -521,3 +521,37 @@
 .hint-manage-row--hidden .settings-field-info {
   opacity: 0.55;
 }
+
+/* Settings > Account: a labelled checkbox with a consequence under it.
+ * The hint is not decoration — a toggle that changes where transactions are
+ * broadcast has to say what it does and does not move. */
+.settings-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  cursor: pointer;
+}
+
+.settings-toggle-row input {
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+
+.settings-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.settings-toggle-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-toggle-hint {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}

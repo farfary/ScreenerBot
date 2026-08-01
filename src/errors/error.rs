@@ -1,8 +1,8 @@
 //! Top-level Error enum — unifies all domain-specific error types.
 
 use super::{
-    BlockchainError, ConfigurationError, DataError, DatabaseError, InternalError, IoError,
-    NetworkError, PositionError, RateLimitError, RpcProviderError, ServiceError,
+    AccountError, BlockchainError, ConfigurationError, DataError, DatabaseError, InternalError,
+    IoError, NetworkError, PositionError, RateLimitError, RpcProviderError, ServiceError,
 };
 use crate::rpc::errors::RpcError;
 
@@ -11,6 +11,9 @@ use crate::rpc::errors::RpcError;
 /// This is re-exported as `crate::Error` for ergonomic usage across the codebase.
 #[derive(Debug, Clone)]
 pub enum Error {
+    // ScreenerBot account / sign-in errors
+    Account(AccountError),
+
     // Blockchain & Solana specific errors
     Blockchain(BlockchainError),
 
@@ -54,6 +57,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::Account(e) => write!(f, "Account Error: {e}"),
             Error::Blockchain(e) => write!(f, "Blockchain Error: {e}"),
             Error::Network(e) => write!(f, "Network Error: {e}"),
             Error::Rpc(e) => write!(f, "RPC Error: {e}"),

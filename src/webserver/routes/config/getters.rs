@@ -34,6 +34,7 @@ pub async fn get_full_config() -> Response {
         ai: cfg.ai.clone(),
         network: cfg.network.clone(),
         referral: cfg.referral.clone(),
+        account: cfg.account.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -144,6 +145,16 @@ pub async fn get_network_config() -> Response {
 pub async fn get_referral_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.referral.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/account - Get ScreenerBot account configuration
+pub async fn get_account_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.account.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -331,6 +342,7 @@ where
             "PerformanceConfig" => serde_json::to_value(&cfg.performance).ok(),
             "NetworkConfig" => serde_json::to_value(&cfg.network).ok(),
             "ReferralConfig" => serde_json::to_value(&cfg.referral).ok(),
+            "AccountConfig" => serde_json::to_value(&cfg.account).ok(),
             _ => None,
         });
 
@@ -567,6 +579,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.referral = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "AccountConfig" => {
+                let new_config: config::AccountConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid AccountConfig: {e}"))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.account = new_config;
                     },
                     true,
                 )?;
