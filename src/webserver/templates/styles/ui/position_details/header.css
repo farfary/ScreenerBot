@@ -360,64 +360,6 @@
   padding-left: 68px;
 }
 
-.position-details-dialog .header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.position-details-dialog .pdd-header-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  text-decoration: none;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.position-details-dialog .pdd-header-action:hover {
-  border-color: var(--text-muted);
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
-.position-details-dialog .pdd-header-action.favorite-btn:hover {
-  border-color: var(--warning-color);
-  color: var(--warning-color);
-}
-
-.position-details-dialog .pdd-header-action.favorite-btn.active {
-  background: var(--warning-alpha-20);
-  border-color: var(--warning-color);
-  color: var(--warning-color);
-}
-
-.position-details-dialog .pdd-header-action.favorite-btn.active:hover {
-  filter: brightness(1.15);
-}
-
-.position-details-dialog .pdd-header-action i {
-  width: 14px;
-  height: 14px;
-  font-size: 14px;
-  line-height: 1;
-}
-
-.position-details-dialog .pdd-header-action:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-
 /* Badges */
 .position-details-dialog .pdd-badge {
   display: inline-flex;
@@ -509,38 +451,4 @@
 
 .position-details-dialog .pdd-manual-toggle:hover {
   filter: brightness(1.1);
-}
-
-/* Close Button */
-.position-details-dialog .dialog-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-
-.position-details-dialog .dialog-close:hover {
-  background: var(--danger-alpha-15);
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.position-details-dialog .dialog-close svg,
-.position-details-dialog .dialog-close i {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 1;
 }

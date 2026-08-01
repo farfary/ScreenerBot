@@ -899,14 +899,14 @@ export class TokenDetailsDialog {
                   Sell
                 </button>
               </div>
-              <div class="header-actions">
-                <button class="action-btn favorite-btn" id="favoriteBtn" title="Add to Favorites" aria-label="Add to Favorites" type="button">
+              <div class="dialog-header-actions">
+                <button class="dialog-header-action favorite-btn" id="favoriteBtn" title="Add to Favorites" aria-label="Add to Favorites" type="button">
                   <i class="icon-star"></i>
                 </button>
-                <button class="action-btn" id="copyMintBtn" title="Copy Mint Address" aria-label="Copy Mint Address" type="button">
+                <button class="dialog-header-action" id="copyMintBtn" title="Copy Mint Address" aria-label="Copy Mint Address" type="button">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="action-btn" title="View on Solscan" aria-label="View on Solscan">
+                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="dialog-header-action" title="View on Solscan" aria-label="View on Solscan">
                   <i class="icon-external-link"></i>
                 </a>
               </div>`

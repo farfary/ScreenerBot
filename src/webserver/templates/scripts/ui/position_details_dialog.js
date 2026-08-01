@@ -542,14 +542,14 @@ export class PositionDetailsDialog {
               </div>
             </div>
             <div class="header-right">
-              <div class="header-actions">
-                <button class="pdd-header-action favorite-btn" id="pddFavoriteBtn" type="button" title="Add to Favorites">
+              <div class="dialog-header-actions">
+                <button class="dialog-header-action favorite-btn" id="pddFavoriteBtn" type="button" title="Add to Favorites">
                   <i class="icon-star"></i>
                 </button>
-                <button class="pdd-header-action" id="pddCopyMintBtn" type="button" title="Copy Mint Address">
+                <button class="dialog-header-action" id="pddCopyMintBtn" type="button" title="Copy Mint Address">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/token/${Utils.escapeHtml(pos.mint)}" target="_blank" rel="noopener" class="pdd-header-action" title="View on Solscan" aria-label="View token on Solscan">
+                <a href="https://solscan.io/token/${Utils.escapeHtml(pos.mint)}" target="_blank" rel="noopener" class="dialog-header-action" title="View on Solscan" aria-label="View token on Solscan">
                   <i class="icon-external-link"></i>
                 </a>
               </div>
