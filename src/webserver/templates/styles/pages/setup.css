@@ -18,7 +18,7 @@
   inset: 0;
   z-index: var(--z-setup);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 60px;
+  grid-template-rows: auto minmax(0, 1fr) 72px;
   width: 100vw;
   height: 100vh;
   min-width: 0;
@@ -32,10 +32,6 @@
 .setup-screen[data-theme="blue"] {
   --accent-onboarding: #58a6ff;
   --accent-onboarding-rgb: 88, 166, 255;
-}
-
-.setup-screen[data-step="3"] {
-  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .setup-screen > .window-titlebar {
@@ -59,11 +55,7 @@
 }
 
 .electron-macos .setup-screen {
-  grid-template-rows: 36px auto minmax(0, 1fr) 60px;
-}
-
-.electron-macos .setup-screen[data-step="3"] {
-  grid-template-rows: 36px auto minmax(0, 1fr);
+  grid-template-rows: 36px auto minmax(0, 1fr) 72px;
 }
 
 .setup-header-left,
@@ -493,19 +485,11 @@
 
 @media (max-height: 720px) {
   .setup-screen {
-    grid-template-rows: auto minmax(0, 1fr) 52px;
-  }
-
-  .setup-screen[data-step="3"] {
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) 60px;
   }
 
   .electron-macos .setup-screen {
-    grid-template-rows: 36px auto minmax(0, 1fr) 52px;
-  }
-
-  .electron-macos .setup-screen[data-step="3"] {
-    grid-template-rows: 36px auto minmax(0, 1fr);
+    grid-template-rows: 36px auto minmax(0, 1fr) 60px;
   }
 
   .setup-content {
@@ -547,9 +531,6 @@
     padding-block: 3px;
   }
 
-  .setup-btn {
-    min-height: 36px;
-  }
 }
 
 @media (max-height: 560px) {
