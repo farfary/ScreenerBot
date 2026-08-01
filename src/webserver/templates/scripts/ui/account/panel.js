@@ -296,38 +296,55 @@
       const disabled = this.busyAction ? "disabled" : "";
       const walletOption = this.walletHasAccount
         ? `<button type="button" class="account-option" data-action="wallet" ${disabled}>
-             <i class="icon-wallet account-option-icon" aria-hidden="true"></i>
+             <span class="account-option-symbol" aria-hidden="true">
+               <i class="icon-wallet account-option-icon"></i>
+             </span>
              <span class="account-option-text">
                <span class="account-option-title">${this.busyAction === "wallet" ? "Signing in…" : "Sign in with this wallet"}</span>
                <span class="account-option-hint">Signs a free message, never a transaction.</span>
              </span>
+             <i class="icon-arrow-right account-option-arrow" aria-hidden="true"></i>
            </button>`
         : "";
 
       return `
         <div class="account-panel-signed-out">
           <p class="account-lead">
-            Add free transaction sending, token voting and referral earnings. Core trading works without an account.
+            Unlock free transaction relay, token voting, and referral rewards.
+          </p>
+          <p class="account-trust-note">
+            <i class="icon-shield-check" aria-hidden="true"></i>
+            <span>Optional — core trading stays local and works without an account.</span>
           </p>
           <div class="account-options">
-            <button type="button" class="account-option" data-action="browser" ${disabled}>
-              ${GOOGLE_MARK}
+            <button type="button" class="account-option account-option-recommended" data-action="browser" ${disabled}>
+              <span class="account-option-symbol">${GOOGLE_MARK}</span>
               <span class="account-option-text">
-                <span class="account-option-title">${this.busyAction === "browser" ? "Opening browser…" : "Continue in your browser"}</span>
-                <span class="account-option-hint">Google or email in your own browser. The desktop app never sees the password entered there.</span>
+                <span class="account-option-heading">
+                  <span class="account-option-title">${this.busyAction === "browser" ? "Opening browser…" : "Continue in browser"}</span>
+                  <span class="account-option-badge">Recommended</span>
+                </span>
+                <span class="account-option-hint">Use Google or email. Your password stays in the browser.</span>
               </span>
+              <i class="icon-arrow-right account-option-arrow" aria-hidden="true"></i>
             </button>
             <button type="button" class="account-option" data-action="email" ${disabled}>
-              <i class="icon-mail account-option-icon" aria-hidden="true"></i>
+              <span class="account-option-symbol" aria-hidden="true">
+                <i class="icon-mail account-option-icon"></i>
+              </span>
               <span class="account-option-text">
                 <span class="account-option-title">Sign in with email</span>
-                <span class="account-option-hint">Use your ScreenerBot email and password here.</span>
+                <span class="account-option-hint">Enter your ScreenerBot credentials in this app.</span>
               </span>
+              <i class="icon-arrow-right account-option-arrow" aria-hidden="true"></i>
             </button>
             ${walletOption}
           </div>
-          <p class="account-note">
-            No account? <button type="button" class="account-link" data-action="signup">Create one on screenerbot.io</button>
+          <p class="account-note account-signup-note">
+            <span>New to ScreenerBot?</span>
+            <button type="button" class="account-link" data-action="signup">
+              Create an account <i class="icon-external-link" aria-hidden="true"></i>
+            </button>
           </p>
           ${this.renderNotice()}
           ${this.renderError()}
@@ -339,7 +356,7 @@
       return `
         <form class="account-email-form" data-action="email-submit">
           <button type="button" class="account-link account-back" data-action="menu" ${disabled}>
-            <i class="icon-arrow-left" aria-hidden="true"></i> Other sign-in options
+            <i class="icon-arrow-left" aria-hidden="true"></i> Back to sign-in options
           </button>
           <label class="account-field">
             <span class="account-field-label">Email</span>
@@ -352,11 +369,13 @@
               placeholder="Your password" required ${disabled} />
           </label>
           <button type="submit" class="account-btn account-btn-primary" ${disabled}>
-            ${this.busyAction === "password" ? "Signing in…" : "Sign in"}
+            ${this.busyAction === "password" ? "Signing in…" : 'Sign in <i class="icon-arrow-right" aria-hidden="true"></i>'}
           </button>
           <p class="account-note">
-            Sign-up and password reset stay on the website.
-            <button type="button" class="account-link" data-action="signup" ${disabled}>Open website</button>
+            Need an account or forgot your password?
+            <button type="button" class="account-link" data-action="signup" ${disabled}>
+              Open screenerbot.io <i class="icon-external-link" aria-hidden="true"></i>
+            </button>
           </p>
           ${this.renderError()}
         </form>`;
@@ -364,13 +383,22 @@
 
     renderError() {
       return this.error
-        ? `<p class="account-error" role="alert">${escapeHtml(this.error)}</p>`
+        ? `<div class="account-feedback account-error" role="alert">
+             <i class="icon-circle-alert account-feedback-icon" aria-hidden="true"></i>
+             <span class="account-feedback-copy">
+               <strong>Couldn’t complete sign-in</strong>
+               <span>${escapeHtml(this.error)}</span>
+             </span>
+           </div>`
         : "";
     }
 
     renderNotice() {
       return this.notice
-        ? `<p class="account-notice" role="status">${escapeHtml(this.notice)}</p>`
+        ? `<div class="account-feedback account-notice" role="status">
+             <i class="icon-info account-feedback-icon" aria-hidden="true"></i>
+             <span class="account-feedback-copy">${escapeHtml(this.notice)}</span>
+           </div>`
         : "";
     }
 

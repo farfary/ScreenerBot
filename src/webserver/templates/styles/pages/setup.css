@@ -180,7 +180,7 @@
 
 .setup-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -196,11 +196,33 @@
 }
 
 .setup-split-aside {
+  position: relative;
+  isolation: isolate;
   min-width: 0;
   min-height: 0;
   padding-left: clamp(18px, 2.4vw, 30px);
   overflow: hidden;
   border-left: 1px solid var(--border-color);
+}
+
+.setup-split-aside::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: -80px;
+  left: -70px;
+  width: 240px;
+  height: 240px;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--primary-alpha-10), transparent 70%);
+  opacity: 0.65;
+}
+
+.setup-split-aside > .account-panel {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 330px;
 }
 
 .setup-step-header {
