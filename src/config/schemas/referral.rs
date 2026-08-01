@@ -11,14 +11,13 @@
 //!
 //! With a code set, ONE request goes to screenerbot.io carrying exactly:
 //!
-//!     { referral_code, wallet_pubkeys[], platform, version }
+//!     { referral_code, signed_wallet_proofs[], platform, version }
 //!
-//! `wallet_pubkeys` are PUBLIC addresses — the same strings any block explorer
-//! shows for your trades. A private key never leaves this machine and is never
-//! read by this module. The addresses are needed because that is the only way
-//! the website can match a swap fee it observed on chain to the person who
-//! referred you: the fee transaction names your wallet, and nothing else about
-//! it says where you came from.
+//! Each proof contains a PUBLIC address and a signature over a short statement
+//! binding that address to the chosen code and current time. The private key
+//! never leaves this machine, and the signed text cannot be used as a Solana
+//! transaction. The website needs the proof because a public address alone does
+//! not show who chose the code.
 //!
 //! This repository is public. That claim is checkable by reading
 //! `src/services/implementations/referral_service.rs`, which is the only code

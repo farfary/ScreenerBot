@@ -10,16 +10,15 @@
 //!
 //! When it does run it sends ONE JSON body:
 //!
-//!     { referral_code, wallets: [pubkey...], platform, version }
+//!     { referral_code, proofs: [{ wallet, issued_at, signature }], platform, version }
 //!
 //! and nothing else. Not balances, not positions, not trades, not P&L, not the
 //! config, not an IP we choose to include, not a machine id.
 //!
-//! `wallets` are PUBLIC addresses. A private key is never read by this module —
-//! it calls `list_wallets`, which returns addresses, and there is no code path
-//! here that can reach a keypair. The addresses are required because the
-//! website matches a swap fee it observed ON CHAIN back to the referrer, and
-//! the fee transaction identifies the trader by address and by nothing else.
+//! Each wallet signs a short, domain-separated statement binding its PUBLIC
+//! address to the referral code and current time. Private keys stay local and
+//! no transaction is created. The proof is required because a public address
+//! alone says nothing about who chose the referral code.
 //!
 //! This repository is public, which is what makes the paragraph above worth
 //! writing: it is checkable rather than promised.
@@ -29,6 +28,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::Serialize;
+use solana_sdk::signer::Signer;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -48,9 +48,26 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 #[derive(Serialize)]
 struct ActivationRequest {
     referral_code: String,
-    wallets: Vec<String>,
+    proofs: Vec<ActivationProof>,
     platform: &'static str,
     version: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct ActivationProof {
+    wallet: String,
+    issued_at: u64,
+    signature: String,
+}
+
+fn activation_message(wallet: &str, code: &str, issued_at: u64) -> String {
+    format!(
+        "ScreenerBot Referral Activation v1\n\
+         Domain: screenerbot.io\n\
+         Wallet: {wallet}\n\
+         Referral Code: {code}\n\
+         Issued At: {issued_at}"
+    )
 }
 
 pub struct ReferralService;
@@ -145,13 +162,26 @@ async fn announce_once() {
         return;
     }
 
-    let wallets = match crate::wallets::list_wallets(true).await {
-        Ok(list) => list
+    let issued_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0);
+    let proofs = match crate::wallets::get_wallets_with_keys().await {
+        Ok(wallets) => wallets
             .into_iter()
-            .map(|wallet| wallet.address)
+            .take(25)
+            .map(|wallet| {
+                let address = wallet.wallet.address;
+                let message = activation_message(&address, &code, issued_at);
+                ActivationProof {
+                    wallet: address,
+                    issued_at,
+                    signature: wallet.keypair.sign_message(message.as_bytes()).to_string(),
+                }
+            })
             .collect::<Vec<_>>(),
         Err(error) => {
-            log::debug!("Referral: could not read wallet addresses: {error}");
+            log::debug!("Referral: could not prove wallet ownership: {error}");
             Vec::new()
         }
     };
@@ -159,14 +189,14 @@ async fn announce_once() {
     // No wallet means nothing to attribute. Sending the code alone would tell
     // the server a referral exists that it can never match to any revenue, so
     // it would inflate that referrer's signup count and never their earnings.
-    if wallets.is_empty() {
+    if proofs.is_empty() {
         log::debug!("Referral: no wallets yet, nothing to announce");
         return;
     }
 
     let body = ActivationRequest {
         referral_code: code,
-        wallets,
+        proofs,
         platform: std::env::consts::OS,
         version: env!("CARGO_PKG_VERSION"),
     };
@@ -196,5 +226,25 @@ async fn announce_once() {
             // user needs to see in their trading log.
             log::debug!("Referral: announce failed, will retry later: {error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solana_sdk::signature::Keypair;
+
+    #[test]
+    fn activation_proof_is_bound_to_wallet_code_and_time() {
+        let keypair = Keypair::new();
+        let wallet = keypair.pubkey().to_string();
+        let message = activation_message(&wallet, "CREATOR42", 1_800_000_000);
+        let signature = keypair.sign_message(message.as_bytes());
+
+        assert!(signature.verify(keypair.pubkey().as_ref(), message.as_bytes()));
+        assert!(!signature.verify(
+            keypair.pubkey().as_ref(),
+            activation_message(&wallet, "ATTACKER", 1_800_000_000).as_bytes()
+        ));
     }
 }
