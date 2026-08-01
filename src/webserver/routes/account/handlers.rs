@@ -181,12 +181,15 @@ pub struct GatewayToggle {
 /// `/api/config/*` is blocked until then. Rather than punching a second hole in
 /// `initialization_gate` for the whole config API, the one field the setup
 /// screen touches gets its own route inside the prefix that is already allowed.
+/// It stays in memory until setup completion or Preview Mode persists the full
+/// configuration, so changing this optional switch cannot create config.toml
+/// before the primary setup decision.
 pub async fn set_gateway_enabled(Json(body): Json<GatewayToggle>) -> Response {
     let result = crate::config::update_config_section(
         |cfg| {
             cfg.account.use_gateway_rpc = body.enabled;
         },
-        true,
+        false,
     );
 
     match result {

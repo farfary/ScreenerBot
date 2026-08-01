@@ -1,26 +1,8 @@
-// ScreenerBot account panel — one renderer, two homes.
-//
-// It is mounted on the SETUP screen (right column, beside wallet and RPC) and
-// in the SETTINGS dialog (Account tab). Both show the same states and call the
-// same endpoints, so they cannot drift into disagreeing about whether somebody
-// is signed in.
-//
-// A classic script rather than a module, matching context_menu/builders.js and
-// advanced_chart/themes.js: core/setup.js is not a module and cannot import.
-//
-// The security token is attached to every fetch by the wrapper in base.html, so
-// nothing here handles it.
-
+// Shared ScreenerBot account panel for setup and Settings.
 (function () {
   "use strict";
 
   const SIGN_UP_URL = "https://screenerbot.io/signup";
-
-  /**
-   * Google's own mark, inline. Their brand guidelines do not permit recolouring
-   * it, so it keeps its four colours and — like every icon in this app — gets no
-   * plate, ring or tile behind it.
-   */
   const GOOGLE_MARK = `<svg class="account-google-mark" viewBox="0 0 18 18" aria-hidden="true">
     <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/>
     <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z"/>
@@ -29,13 +11,13 @@
   </svg>`;
 
   const SCOPE_LABELS = {
-    "rpc:submit": "Send signed transactions through ScreenerBot",
-    vote: "Vote on tokens",
-    "referral:read": "Show your referral earnings",
-    "account:read": "Show your account details",
+    "rpc:submit": "Free signed-transaction submission",
+    vote: "Token voting",
+    "referral:read": "Referral earnings",
+    "account:read": "Account details",
   };
 
-  async function request(path, options) {
+  async function request(path, options = {}) {
     const response = await fetch(path, options);
     let body = null;
     try {
@@ -45,14 +27,20 @@
     }
 
     if (!response.ok) {
-      // Every account route answers a failure with a full sentence, and the
-      // server's own wording is what the user reads. A status code never is.
-      const message =
-        body?.error?.message || body?.message || "That did not work. Please try again.";
-      throw new Error(message);
+      throw new Error(
+        body?.error?.message || body?.message || "That did not work. Please try again."
+      );
     }
 
     return body?.data ?? body;
+  }
+
+  async function openExternal(url) {
+    return request("/api/system/open-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
   }
 
   function escapeHtml(value) {
@@ -68,125 +56,136 @@
       this.container = container;
       this.options = options || {};
       this.status = null;
+      this.loadFailed = false;
       this.mode = "menu";
-      this.busy = false;
+      this.busyAction = null;
       this.error = null;
       this.notice = null;
+      this.emailValue = "";
       this.walletHasAccount = false;
-      this.devicePoll = null;
+      this.statusWatch = null;
+      this.destroyed = false;
+      this.focusTarget = null;
     }
 
     async load() {
+      this.loadFailed = false;
+      this.error = null;
+      this.renderLoading();
+
       try {
         this.status = await request("/api/account/status");
-      } catch {
-        // Signed out is the safe assumption; the panel must render either way.
-        this.status = { signed_in: false, scopes: [] };
+        if (this.destroyed) return;
+        this.walletHasAccount = Boolean(this.status.wallet_has_account);
+        this.render();
+        this.options.onChange?.(this.status);
+        if (!this.status.signed_in) this.checkWallet();
+      } catch (error) {
+        if (this.destroyed) return;
+        this.loadFailed = true;
+        this.error = error?.message || "Account status is unavailable.";
+        this.status = null;
+        this.render();
+        this.options.onChange?.({
+          signed_in: false,
+          online: false,
+          use_gateway_rpc: false,
+        });
       }
+    }
 
-      this.render();
-
-      // Asked separately and never awaited by the first paint: it is a network
-      // round trip, and the panel must not sit blank waiting for it.
-      if (!this.status.signed_in) {
-        this.checkWallet();
-      }
+    renderLoading() {
+      if (!this.container) return;
+      this.container.innerHTML =
+        '<p class="account-loading" role="status">Checking account status…</p>';
     }
 
     async checkWallet() {
       try {
         const result = await request("/api/account/signin/wallet/check");
+        if (this.destroyed) return;
+        const changed = this.walletHasAccount !== Boolean(result?.has_account);
         this.walletHasAccount = Boolean(result?.has_account);
-        if (this.walletHasAccount) this.render();
+        if (changed) this.render();
       } catch {
-        // Offline, or no wallet yet. Neither is worth telling anyone about.
+        // Wallet account discovery is optional and never blocks local setup.
       }
     }
 
-    setBusy(busy) {
-      this.busy = busy;
+    setBusy(action) {
+      this.busyAction = action;
       this.render();
     }
 
-    fail(error) {
+    fail(error, focusTarget) {
       this.error = error?.message || String(error);
-      this.busy = false;
+      this.busyAction = null;
+      this.focusTarget = focusTarget || null;
       this.render();
     }
 
     succeed(status) {
       this.status = status;
+      this.loadFailed = false;
       this.error = null;
       this.notice = null;
-      this.busy = false;
+      this.busyAction = null;
       this.mode = "menu";
-      this.stopDevicePoll();
+      this.emailValue = "";
+      this.stopStatusWatch();
       this.render();
       this.options.onChange?.(status);
     }
 
-    // -----------------------------------------------------------------------
-    // Actions
-    // -----------------------------------------------------------------------
-
     async signInWithBrowser() {
       this.error = null;
-      this.setBusy(true);
+      this.setBusy("browser");
 
       try {
         const result = await request("/api/account/signin/browser", { method: "POST" });
-
-        // Opened through the backend so it lands in the SYSTEM browser. An
-        // embedded window would be able to read what the user types, which is
-        // the whole thing this flow exists to avoid.
-        await fetch("/api/system/open-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: result.url }),
-        });
-
+        await openExternal(result.url);
         this.notice =
-          "Finish signing in in your browser, then come back — this panel updates on its own.";
-        this.busy = false;
+          "Finish signing in in your browser, then return here. This panel will update.";
+        this.busyAction = null;
         this.render();
         this.startStatusWatch();
       } catch (error) {
-        this.fail(error);
+        this.fail(error, '[data-action="browser"]');
       }
     }
 
-    /**
-     * After the browser leg the app has no event to wait on: the callback lands
-     * on a different route in the same process. Poll briefly rather than make
-     * the user press something to find out whether it worked.
-     */
     startStatusWatch() {
-      this.stopDevicePoll();
+      this.stopStatusWatch();
       let elapsed = 0;
 
-      this.devicePoll = setInterval(async () => {
+      this.statusWatch = window.setInterval(async () => {
         elapsed += 2000;
-        if (elapsed > 5 * 60 * 1000) return this.stopDevicePoll();
+        if (elapsed > 5 * 60 * 1000) {
+          this.stopStatusWatch();
+          this.notice = "Browser sign-in was not completed. You can start it again.";
+          this.render();
+          return;
+        }
 
         try {
           const status = await request("/api/account/status");
           if (status.signed_in) this.succeed(status);
         } catch {
-          // Keep waiting; a blip is not a failure.
+          // Brief connectivity loss should not cancel an external sign-in.
         }
       }, 2000);
     }
 
-    stopDevicePoll() {
-      if (this.devicePoll) {
-        clearInterval(this.devicePoll);
-        this.devicePoll = null;
-      }
+    stopStatusWatch() {
+      if (!this.statusWatch) return;
+      window.clearInterval(this.statusWatch);
+      this.statusWatch = null;
     }
 
     async signInWithPassword(email, password) {
+      this.emailValue = email;
       this.error = null;
-      this.setBusy(true);
+      this.setBusy("password");
 
       try {
         const status = await request("/api/account/signin/password", {
@@ -196,57 +195,74 @@
         });
         this.succeed(status);
       } catch (error) {
-        this.fail(error);
+        this.fail(error, 'input[name="password"]');
       }
     }
 
-    async signInWithWallet(create) {
+    async signInWithWallet() {
       this.error = null;
-      this.setBusy(true);
+      this.setBusy("wallet");
 
       try {
         const status = await request("/api/account/signin/wallet", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ create: Boolean(create) }),
+          body: JSON.stringify({ create: false }),
         });
         this.succeed(status);
       } catch (error) {
-        this.fail(error);
+        this.fail(error, '[data-action="wallet"]');
       }
     }
 
     async signOut() {
       this.error = null;
-      this.setBusy(true);
+      this.setBusy("signout");
 
       try {
         const status = await request("/api/account/signout", { method: "POST" });
         this.walletHasAccount = false;
         this.succeed(status);
       } catch (error) {
-        this.fail(error);
+        this.fail(error, '[data-action="signout"]');
       }
     }
 
-    // -----------------------------------------------------------------------
-    // Rendering
-    // -----------------------------------------------------------------------
+    async openSignup() {
+      this.error = null;
+      try {
+        await openExternal(SIGN_UP_URL);
+      } catch (error) {
+        this.fail(error, '[data-action="signup"]');
+      }
+    }
 
     render() {
-      if (!this.container) return;
+      if (!this.container || this.destroyed) return;
 
-      this.container.innerHTML = this.status?.signed_in
-        ? this.renderSignedIn()
-        : this.renderSignedOut();
+      if (this.loadFailed) this.container.innerHTML = this.renderUnavailable();
+      else if (this.status?.signed_in) this.container.innerHTML = this.renderSignedIn();
+      else this.container.innerHTML = this.renderSignedOut();
 
+      this.container.setAttribute("aria-busy", String(Boolean(this.busyAction)));
       this.bind();
+      this.restoreFocus();
+    }
+
+    renderUnavailable() {
+      return `
+        <div class="account-unavailable">
+          <p class="account-lead">Account features are temporarily unavailable. Local setup still works.</p>
+          ${this.renderError()}
+          <button type="button" class="account-btn account-btn-ghost" data-action="retry-status">
+            Retry account status
+          </button>
+        </div>`;
     }
 
     renderSignedIn() {
       const name = escapeHtml(this.status.name || this.status.email || "Signed in");
       const email = this.status.email ? escapeHtml(this.status.email) : null;
-
       const scopes = (this.status.scopes || [])
         .map((scope) => SCOPE_LABELS[scope])
         .filter(Boolean)
@@ -262,18 +278,12 @@
               ${email && email !== name ? `<span class="account-identity-email">${email}</span>` : ""}
             </div>
           </div>
-
-          ${scopes ? `<ul class="account-scopes">${scopes}</ul>` : ""}
-
-          <p class="account-note">
-            Signing in adds features. It never gates any of them — your wallet, your RPC and
-            your trading are unchanged.
-          </p>
-
+          ${scopes ? `<ul class="account-scopes" aria-label="Account features">${scopes}</ul>` : ""}
+          <p class="account-note">Core trading remains local and works without an account.</p>
           <div class="account-actions">
             <button type="button" class="account-btn account-btn-ghost" data-action="signout"
-              ${this.busy ? "disabled" : ""}>
-              ${this.busy ? "Signing out…" : "Sign out on this machine"}
+              ${this.busyAction ? "disabled" : ""}>
+              ${this.busyAction === "signout" ? "Signing out…" : "Sign out on this machine"}
             </button>
           </div>
           ${this.renderError()}
@@ -283,12 +293,13 @@
     renderSignedOut() {
       if (this.mode === "email") return this.renderEmailForm();
 
+      const disabled = this.busyAction ? "disabled" : "";
       const walletOption = this.walletHasAccount
-        ? `<button type="button" class="account-option" data-action="wallet" ${this.busy ? "disabled" : ""}>
+        ? `<button type="button" class="account-option" data-action="wallet" ${disabled}>
              <i class="icon-wallet account-option-icon" aria-hidden="true"></i>
              <span class="account-option-text">
-               <span class="account-option-title">Sign in with this wallet</span>
-               <span class="account-option-hint">Your trading wallet already has an account. Signs a free message — not a transaction.</span>
+               <span class="account-option-title">${this.busyAction === "wallet" ? "Signing in…" : "Sign in with this wallet"}</span>
+               <span class="account-option-hint">Signs a free message, never a transaction.</span>
              </span>
            </button>`
         : "";
@@ -296,88 +307,76 @@
       return `
         <div class="account-panel-signed-out">
           <p class="account-lead">
-            Optional. An account adds free transaction sending, token voting and referral
-            earnings. ScreenerBot works exactly the same without one.
+            Add free transaction sending, token voting and referral earnings. Core trading works without an account.
           </p>
-
           <div class="account-options">
-            <button type="button" class="account-option" data-action="browser" ${this.busy ? "disabled" : ""}>
+            <button type="button" class="account-option" data-action="browser" ${disabled}>
               ${GOOGLE_MARK}
               <span class="account-option-text">
-                <span class="account-option-title">Continue in your browser</span>
-                <span class="account-option-hint">Google or email, in your own browser. ScreenerBot never sees your password.</span>
+                <span class="account-option-title">${this.busyAction === "browser" ? "Opening browser…" : "Continue in your browser"}</span>
+                <span class="account-option-hint">Google or email in your own browser. The desktop app never sees the password entered there.</span>
               </span>
             </button>
-
-            <button type="button" class="account-option" data-action="email" ${this.busy ? "disabled" : ""}>
+            <button type="button" class="account-option" data-action="email" ${disabled}>
               <i class="icon-mail account-option-icon" aria-hidden="true"></i>
               <span class="account-option-text">
                 <span class="account-option-title">Sign in with email</span>
-                <span class="account-option-hint">Enter your ScreenerBot email and password here.</span>
+                <span class="account-option-hint">Use your ScreenerBot email and password here.</span>
               </span>
             </button>
-
             ${walletOption}
           </div>
-
           <p class="account-note">
-            No account yet?
-            <button type="button" class="account-link" data-action="signup">Create one on screenerbot.io</button>
+            No account? <button type="button" class="account-link" data-action="signup">Create one on screenerbot.io</button>
           </p>
-
           ${this.renderNotice()}
           ${this.renderError()}
         </div>`;
     }
 
     renderEmailForm() {
+      const disabled = this.busyAction ? "disabled" : "";
       return `
         <form class="account-email-form" data-action="email-submit">
-          <button type="button" class="account-link account-back" data-action="menu">
-            <i class="icon-arrow-left" aria-hidden="true"></i> Other ways to sign in
+          <button type="button" class="account-link account-back" data-action="menu" ${disabled}>
+            <i class="icon-arrow-left" aria-hidden="true"></i> Other sign-in options
           </button>
-
           <label class="account-field">
             <span class="account-field-label">Email</span>
             <input type="email" class="account-input" name="email" autocomplete="email"
-              placeholder="you@example.com" required ${this.busy ? "disabled" : ""} />
+              value="${escapeHtml(this.emailValue)}" placeholder="you@example.com" required ${disabled} />
           </label>
-
           <label class="account-field">
             <span class="account-field-label">Password</span>
             <input type="password" class="account-input" name="password" autocomplete="current-password"
-              placeholder="Your password" required ${this.busy ? "disabled" : ""} />
+              placeholder="Your password" required ${disabled} />
           </label>
-
-          <button type="submit" class="account-btn account-btn-primary" ${this.busy ? "disabled" : ""}>
-            ${this.busy ? "Signing in…" : "Sign in"}
+          <button type="submit" class="account-btn account-btn-primary" ${disabled}>
+            ${this.busyAction === "password" ? "Signing in…" : "Sign in"}
           </button>
-
           <p class="account-note">
-            Sign up and password resets happen on screenerbot.io.
-            <button type="button" class="account-link" data-action="signup">Open it</button>
+            Sign-up and password reset stay on the website.
+            <button type="button" class="account-link" data-action="signup" ${disabled}>Open website</button>
           </p>
-
           ${this.renderError()}
         </form>`;
     }
 
     renderError() {
-      if (!this.error) return "";
-      return `<p class="account-error" role="alert">${escapeHtml(this.error)}</p>`;
+      return this.error
+        ? `<p class="account-error" role="alert">${escapeHtml(this.error)}</p>`
+        : "";
     }
 
     renderNotice() {
-      if (!this.notice) return "";
-      return `<p class="account-notice" role="status">${escapeHtml(this.notice)}</p>`;
+      return this.notice
+        ? `<p class="account-notice" role="status">${escapeHtml(this.notice)}</p>`
+        : "";
     }
 
     bind() {
-      const root = this.container;
-
-      root.querySelectorAll("[data-action]").forEach((element) => {
+      this.container.querySelectorAll("[data-action]").forEach((element) => {
         const action = element.dataset.action;
-
         if (action === "email-submit") {
           element.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -392,6 +391,7 @@
 
         element.addEventListener("click", (event) => {
           event.preventDefault();
+          if (this.busyAction) return;
 
           switch (action) {
             case "browser":
@@ -400,25 +400,26 @@
             case "email":
               this.mode = "email";
               this.error = null;
+              this.focusTarget = 'input[name="email"]';
               this.render();
               break;
             case "menu":
               this.mode = "menu";
               this.error = null;
+              this.focusTarget = '[data-action="email"]';
               this.render();
               break;
             case "wallet":
-              this.signInWithWallet(false);
+              this.signInWithWallet();
               break;
             case "signout":
               this.signOut();
               break;
             case "signup":
-              fetch("/api/system/open-url", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ url: SIGN_UP_URL }),
-              });
+              this.openSignup();
+              break;
+            case "retry-status":
+              this.load();
               break;
             default:
               break;
@@ -427,16 +428,20 @@
       });
     }
 
+    restoreFocus() {
+      if (!this.focusTarget) return;
+      const target = this.container.querySelector(this.focusTarget);
+      this.focusTarget = null;
+      window.requestAnimationFrame(() => target?.focus({ preventScroll: true }));
+    }
+
     destroy() {
-      this.stopDevicePoll();
+      this.destroyed = true;
+      this.stopStatusWatch();
     }
   }
 
   window.AccountPanel = {
-    /**
-     * Mount into a container. Returns the instance so a caller that owns a
-     * lifecycle (the settings dialog) can tear down its poller on close.
-     */
     mount(container, options) {
       if (!container) return null;
       const instance = new AccountPanelInstance(container, options);
