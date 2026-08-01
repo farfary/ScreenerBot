@@ -193,14 +193,14 @@ export class TransactionDetailsDialog {
               </div>
             </div>
             <div class="header-right">
-              <div class="header-actions">
-                <button class="action-btn" id="copySignatureBtn" title="Copy Signature">
+              <div class="dialog-header-actions">
+                <button class="dialog-header-action" id="copySignatureBtn" title="Copy Signature">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="action-btn" title="View on Solscan">
+                <a href="https://solscan.io/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="View on Solscan">
                   <i class="icon-external-link"></i>
                 </a>
-                <a href="https://solana.fm/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="action-btn" title="View on Solana FM">
+                <a href="https://solana.fm/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="View on Solana FM">
                   <i class="icon-external-link"></i>
                 </a>
               </div>

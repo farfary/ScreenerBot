@@ -127,6 +127,8 @@ pub(super) const TRADE_ACTION_DIALOG_STYLES: &str =
 pub(super) const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
 pub(super) const DIALOG_TAB_BAR_STYLES: &str =
     include_str!("templates/styles/ui/dialog_tab_bar.css");
+pub(super) const DIALOG_HEADER_ACTIONS_STYLES: &str =
+    include_str!("templates/styles/ui/dialog_header_actions.css");
 pub(super) const ACTION_BAR_STYLES: &str = include_str!("templates/styles/ui/action_bar.css");
 pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");

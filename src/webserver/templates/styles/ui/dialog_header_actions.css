@@ -1,0 +1,104 @@
+/* =============================================================================
+   FULL-SCREEN DIALOG HEADER CONTROLS — single source of truth
+   Owns the top-right control cluster shared by every full-screen dialog:
+   Token Details, Position Details, Transaction Details and the Billboard.
+
+   Dialogs supply ONLY markup:
+     <div class="dialog-header-actions">
+       <button class="dialog-header-action favorite-btn">…</button>
+       <a class="dialog-header-action">…</a>
+       <button class="dialog-close">…</button>
+     </div>
+
+   Never redeclare these classes in a per-dialog stylesheet — the dashboard CSS
+   is one concatenated document, so a scoped copy silently forks the design.
+   ========================================================================== */
+
+.dialog-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dialog-header-action,
+.dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.dialog-header-action i {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.dialog-header-action:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.dialog-header-action:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.dialog-header-action.favorite-btn:hover {
+  border-color: var(--warning-color);
+  color: var(--warning-color);
+}
+
+.dialog-header-action.favorite-btn.active {
+  border-color: var(--warning-alpha-30);
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+.dialog-header-action.favorite-btn.active:hover {
+  filter: brightness(1.15);
+}
+
+/* Close sits last in the cluster and is the only destructive-tinted control. */
+.dialog-close {
+  margin-left: 4px;
+}
+
+.dialog-close i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  border-color: var(--danger);
+  background: var(--danger-alpha-15);
+  color: var(--danger);
+}
+
+@media (pointer: coarse) {
+  .dialog-header-action,
+  .dialog-close {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+}

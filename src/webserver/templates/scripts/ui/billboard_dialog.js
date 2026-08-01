@@ -123,7 +123,7 @@ class BillboardDialog {
             <button type="button" class="billboard-submit-btn" data-external-url="https://screenerbot.io/submit-token">
               Submit Token
             </button>
-            <button class="billboard-close-btn" title="Close (ESC)">
+            <button class="dialog-close" type="button" title="Close (ESC)">
               <i class="icon-x"></i>
             </button>
           </div>
@@ -138,7 +138,7 @@ class BillboardDialog {
     this.dialogEl = dialog;
 
     // Event listeners
-    const closeBtn = dialog.querySelector(".billboard-close-btn");
+    const closeBtn = dialog.querySelector(".dialog-close");
     if (closeBtn) {
       closeBtn.addEventListener("click", () => this.close());
     }

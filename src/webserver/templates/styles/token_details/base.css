@@ -530,81 +530,6 @@
   line-height: 1;
 }
 
-.token-details-dialog .header-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.token-details-dialog .action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
-  min-height: 42px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  text-decoration: none;
-  cursor: pointer;
-  touch-action: manipulation;
-  transition:
-    color var(--transition-fast),
-    opacity var(--transition-fast);
-}
-
-.token-details-dialog .action-btn:hover {
-  color: var(--text-primary);
-}
-
-.token-details-dialog .action-btn.favorite-btn:hover {
-  color: var(--semantic-warning-text);
-}
-
-.token-details-dialog .action-btn.favorite-btn.active {
-  color: var(--semantic-warning-text);
-}
-
-.token-details-dialog .action-btn.favorite-btn.active:hover {
-  opacity: 0.78;
-}
-
-.token-details-dialog .action-btn i {
-  font-size: 17px;
-  line-height: 1;
-}
-
-.token-details-dialog .dialog-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
-  min-height: 42px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  touch-action: manipulation;
-  transition:
-    color var(--transition-fast),
-    opacity var(--transition-fast);
-}
-
-.token-details-dialog .dialog-close:hover {
-  color: var(--semantic-error-text);
-}
-
-.token-details-dialog .dialog-close i {
-  font-size: 18px;
-  line-height: 1;
-}
-
 /* Static, semantic source health. Labels lead; bare glyphs communicate state
    without blinking dots, decorative borders or a redundant LIVE badge. */
 .token-details-dialog .data-sources-status {
@@ -836,16 +761,8 @@
 }
 
 @media (pointer: coarse) {
-  .token-details-dialog .trade-btn,
-  .token-details-dialog .action-btn,
-  .token-details-dialog .dialog-close {
+  .token-details-dialog .trade-btn {
     min-height: 48px;
-  }
-
-  .token-details-dialog .action-btn,
-  .token-details-dialog .dialog-close {
-    width: 48px;
-    min-width: 48px;
   }
 }
 

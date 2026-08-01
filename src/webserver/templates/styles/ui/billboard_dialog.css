@@ -149,38 +149,6 @@
   color: var(--primary-color);
 }
 
-/* Close button — the standard full-screen-dialog close control (.dialog-close) */
-.billboard-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-  margin-left: 4px;
-}
-
-.billboard-close-btn:hover {
-  background: var(--danger-alpha-15);
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.billboard-close-btn i {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 1;
-}
-
 /* =============================================================================
    BODY + CATEGORIES
    ============================================================================= */
