@@ -138,7 +138,7 @@
       if (this.footer) this.footer.hidden = this.currentStep === 3;
 
       if (this.backBtn) {
-        this.backBtn.hidden = this.currentStep === 1;
+        this.backBtn.hidden = this.currentStep > 2;
         this.backBtn.disabled = this.verificationBusy;
       }
       if (this.skipBtn) {
@@ -156,7 +156,15 @@
     }
 
     goBack() {
-      if (this.currentStep !== 2 || this.verificationBusy) return;
+      if (this.verificationBusy) return;
+
+      if (this.currentStep === 1) {
+        this.hideError();
+        window.OnboardingController?.showFromSetup();
+        return;
+      }
+
+      if (this.currentStep !== 2) return;
       this.cancelVerification();
       this.hideError();
       this.resetVerificationStates();

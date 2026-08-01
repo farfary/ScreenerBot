@@ -1,11 +1,11 @@
-<div id="setupScreen" class="setup-screen" data-step="1">
+<div id="setupScreen" class="setup-screen" data-step="1" data-theme="blue">
   <div class="window-titlebar" aria-hidden="true"></div>
 
-  <header class="setup-header">
-    <div class="setup-header-left">
-      <img src="/assets/logo.svg" alt="" class="setup-logo" />
-      <span class="setup-brand">ScreenerBot</span>
-      <span class="setup-version" id="setup-version"></span>
+  <header class="onboarding-hero setup-header">
+    <div class="onboarding-brand-container setup-header-left">
+      <img src="/assets/logo.svg" alt="" class="onboarding-logo" />
+      <span class="onboarding-brand">ScreenerBot</span>
+      <span class="onboarding-version" id="setup-version"></span>
     </div>
 
     <ol class="setup-progress" aria-label="Setup progress">
@@ -37,7 +37,7 @@
             </header>
 
             <div class="setup-credentials-grid">
-              <section class="setup-card">
+              <section class="setup-card setup-card-wallet">
                 <label class="setup-card-header" for="wallet-private-key">
                   <i class="setup-card-icon icon-key" aria-hidden="true"></i>
                   <span class="setup-card-title">Wallet private key</span>
@@ -53,6 +53,7 @@
                       spellcheck="false"
                       autocomplete="off"
                       autocapitalize="none"
+                      rows="3"
                       aria-required="true"
                       aria-describedby="wallet-security-note wallet-validation"
                       required
@@ -92,7 +93,7 @@
                 </div>
               </section>
 
-              <section class="setup-card">
+              <section class="setup-card setup-card-rpc">
                 <label class="setup-card-header" for="rpc-urls">
                   <i class="setup-card-icon icon-globe" aria-hidden="true"></i>
                   <span class="setup-card-title">RPC endpoints</span>
@@ -108,6 +109,7 @@
                       spellcheck="false"
                       autocomplete="off"
                       autocapitalize="none"
+                      rows="4"
                       aria-required="true"
                       aria-describedby="rpc-guidance rpc-validation"
                       required
@@ -295,8 +297,8 @@
     <button type="button" class="setup-btn setup-btn-secondary" id="setup-back" disabled>
       <i class="icon-chevron-left" aria-hidden="true"></i> Back
     </button>
-    <button type="button" class="setup-btn setup-btn-ghost" id="setup-skip">
-      Preview without wallet or RPC
+    <button type="button" class="setup-btn setup-btn-secondary setup-btn-preview" id="setup-skip">
+      <i class="icon-eye" aria-hidden="true"></i> Preview without wallet or RPC
     </button>
     <button type="button" class="setup-btn setup-btn-primary" id="setup-next">
       Continue <i class="icon-chevron-right" aria-hidden="true"></i>

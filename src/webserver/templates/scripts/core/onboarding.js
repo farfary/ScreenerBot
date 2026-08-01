@@ -198,6 +198,21 @@ class OnboardingControllerClass {
       this.completing = false;
     }
   }
+
+  showFromSetup() {
+    const setupWrapper = document.getElementById("setupScreenWrapper");
+    const setupScreen = document.getElementById("setupScreen");
+    const onboardingScreen = document.getElementById("onboardingScreen");
+
+    if (!onboardingScreen) return;
+
+    if (setupWrapper) setupWrapper.style.display = "none";
+    if (setupScreen) setupScreen.style.display = "none";
+    onboardingScreen.style.display = "grid";
+    this.completing = false;
+    this.goToSlide(this.currentSlide);
+    window.requestAnimationFrame(() => this.nextBtn?.focus({ preventScroll: true }));
+  }
 }
 
 // Export for use
