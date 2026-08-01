@@ -5,10 +5,9 @@
 //! ============================================================================
 //! Everything here is under `/api/account`, which is INSIDE the GUI security
 //! token gate (`webserver/middleware.rs`). That placement is load-bearing.
-//! `security_gate` exempts `/api/initialization`, `/api/actions` and
-//! `/api/services` so the setup screen can run before a token exists — and the
-//! setup screen is exactly where the sign-in panel lives, which makes hanging
-//! these endpoints off `/api/initialization` the obvious shortcut.
+//! The setup screen is exactly where the sign-in panel lives, which makes
+//! hanging these endpoints off the initialization namespace an obvious
+//! shortcut, but every API that changes state remains inside the token gate.
 //!
 //! It would also publish the sign-in API to every website the user has open: a
 //! page in another tab can POST to `http://127.0.0.1:<port>` all day, and the

@@ -34,7 +34,22 @@ pub fn validate_security_token(token: &str) -> bool {
     }
 
     match SECURITY_TOKEN.read().unwrap().as_ref() {
-        Some(stored) => stored == token,
+        Some(stored) => constant_time_eq::constant_time_eq(stored.as_bytes(), token.as_bytes()),
         None => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn constant_time_comparison_accepts_only_an_exact_token() {
+        let expected = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_";
+
+        assert!(constant_time_eq::constant_time_eq(expected, expected));
+        assert!(!constant_time_eq::constant_time_eq(
+            expected,
+            b"1123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_"
+        ));
+        assert!(!constant_time_eq::constant_time_eq(expected, b"short"));
     }
 }
