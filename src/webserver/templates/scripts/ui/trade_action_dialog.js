@@ -289,7 +289,7 @@ export class TradeActionDialog {
                   <span class="quote-value quote-min-received"></span>
                 </div>
                 <div class="quote-row" data-min="normal">
-                  <span class="quote-label">Platform fee <span class="quote-info" title="0.5% — supports ScreenerBot. Built into the quote.">?</span></span>
+                  <span class="quote-label">Platform fee <span class="quote-info" title="0.5% — supports development. Built into the quote.">?</span></span>
                   <span class="quote-value quote-platform-fee"></span>
                 </div>
                 <div class="quote-row" data-min="normal">

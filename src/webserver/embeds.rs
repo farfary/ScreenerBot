@@ -276,6 +276,7 @@ pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifi
 pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");
 pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");
 pub const CORE_CLIENT_READY: &str = include_str!("templates/scripts/core/client_ready.js");
+pub const CORE_BRAND_TEXT: &str = include_str!("templates/scripts/core/brand_text.js");
 pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");
 pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboarding.js");
 pub const CORE_SETUP_RUNTIME: &str = include_str!("templates/scripts/core/setup_runtime.js");

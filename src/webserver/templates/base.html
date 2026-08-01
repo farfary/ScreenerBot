@@ -348,8 +348,8 @@
               type="button"
               class="header-action-btn btn-icon"
               id="restartBtn"
-              aria-label="Restart ScreenerBot"
-              title="Restart ScreenerBot"
+              aria-label="Restart app"
+              title="Restart app"
             >
               <i class="action-icon icon-refresh-cw" aria-hidden="true"></i>
             </button>
@@ -664,6 +664,7 @@
     <!-- NOTE: Do NOT add separate script tags for lifecycle.js, app_state.js, poller.js, dom.js, utils.js
          They are imported by router.js. Adding them with ?v= query params would cause duplicate
          module instances because ES modules treat different URLs as different modules. -->
+    <script src="/scripts/core/brand_text.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/core/router.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/core/connectivity_watcher.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/core/tooltip.js?v={{ASSET_VERSION}}"></script>
