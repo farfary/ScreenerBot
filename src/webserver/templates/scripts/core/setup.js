@@ -135,7 +135,7 @@
     }
 
     updateButtons() {
-      if (this.footer) this.footer.hidden = this.currentStep === 3;
+      if (this.footer) this.footer.hidden = false;
 
       if (this.backBtn) {
         this.backBtn.hidden = this.currentStep > 2;
