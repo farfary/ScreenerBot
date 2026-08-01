@@ -147,11 +147,6 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
     // Allow initialization endpoints and health check
     if path.starts_with("/api/initialization")
         || path.starts_with("/api/system/bootstrap")
-        // Account sign-in and sign-up are available on the setup screen and
-        // use this narrowly scoped endpoint to launch the system browser. It
-        // remains protected by `security_gate`; only initialization gating is
-        // bypassed here.
-        || path == "/api/system/open-url"
         || path == "/api/health"
         || path == "/api/version"
     {

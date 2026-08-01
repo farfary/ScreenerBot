@@ -35,6 +35,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(handlers::account_status))
         .route("/signin/browser", post(handlers::start_browser_signin))
+        .route("/signup", post(handlers::open_signup))
         .route("/signin/password", post(handlers::signin_with_password))
         .route("/signin/wallet", post(handlers::signin_with_wallet))
         .route("/signin/wallet/check", get(handlers::check_wallet_account))

@@ -3,7 +3,7 @@
 use axum::{extract::Query, http::StatusCode, response::Response, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::account;
+use crate::{account, paths};
 use crate::webserver::utils::{error_response, success_response};
 
 #[derive(Serialize)]
@@ -39,21 +39,53 @@ pub async fn account_status() -> Response {
 
 #[derive(Serialize)]
 pub struct BrowserSignInStarted {
-    /// The app opens this in the SYSTEM browser. Returned rather than opened
-    /// here so the dashboard can decide — an Electron shell and a plain browser
-    /// session need different handling, and the backend should not guess.
-    url: String,
+    opened: bool,
 }
 
 /// POST /api/account/signin/browser
+///
+/// Starting the authorization and opening it are intentionally one backend
+/// operation. The account panel is available before initialization, while the
+/// generic system API is not; splitting this across those two API domains made
+/// a valid sign-in depend on a route the initialization gate rejected.
 pub async fn start_browser_signin() -> Response {
     match account::begin_browser_signin() {
-        Ok(url) => ok(BrowserSignInStarted { url }),
+        Ok(url) => match paths::open_url_in_browser(&url) {
+            Ok(()) => ok(BrowserSignInStarted { opened: true }),
+            Err(error) => {
+                account::cancel_browser_signin();
+                error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "ACCOUNT_BROWSER_OPEN_FAILED",
+                    &error,
+                    Some("Open your default browser and try again"),
+                )
+            }
+        },
         Err(error) => error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "ACCOUNT_SIGNIN_UNAVAILABLE",
             &error.to_string(),
             None,
+        ),
+    }
+}
+
+/// POST /api/account/signup
+///
+/// Like browser sign-in, account creation belongs wholly to the account API so
+/// it remains usable on the setup screen without widening the generic system
+/// API before initialization.
+pub async fn open_signup() -> Response {
+    const SIGN_UP_URL: &str = "https://screenerbot.io/signup";
+
+    match paths::open_url_in_browser(SIGN_UP_URL) {
+        Ok(()) => ok(BrowserSignInStarted { opened: true }),
+        Err(error) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ACCOUNT_BROWSER_OPEN_FAILED",
+            &error,
+            Some("Open screenerbot.io/signup in your browser"),
         ),
     }
 }
