@@ -15,7 +15,7 @@
 
 /* macOS Electron: Add titlebar row for traffic lights */
 .electron-macos .onboarding-screen {
-  grid-template-rows: auto auto 1fr auto; /* Titlebar, Hero, Content, Footer */
+  grid-template-rows: 36px auto minmax(0, 1fr) auto;
 }
 
 /* Theme definition */
@@ -45,7 +45,7 @@
 }
 
 /* Window Title Bar - Drag Region (macOS traffic lights only) */
-.window-titlebar {
+.onboarding-screen > .window-titlebar {
   display: none; /* Hidden by default on Windows/Linux/browser */
   width: 100%;
   -webkit-app-region: drag;
@@ -55,7 +55,7 @@
 }
 
 /* Show titlebar only on macOS Electron (needed for traffic lights) */
-.electron-macos .window-titlebar {
+.electron-macos .onboarding-screen > .window-titlebar {
   display: block;
   height: 36px;
 }
