@@ -146,7 +146,7 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   }
 
   .setup-split {
-    grid-template-columns: minmax(0, 1fr) minmax(200px, 230px);
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 240px);
     gap: 16px;
   }
 
@@ -169,7 +169,7 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
 
 @media (max-width: 760px) {
   .setup-split {
-    grid-template-columns: minmax(0, 1fr) minmax(170px, 190px);
+    grid-template-columns: minmax(0, 1fr) minmax(180px, 200px);
     gap: 12px;
   }
 
@@ -184,6 +184,12 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   .setup-provider-links {
     justify-content: flex-start;
     margin-top: 3px;
+  }
+
+  .setup-split-aside .account-panel-eyebrow,
+  .setup-split-aside .account-option-badge,
+  .setup-split-aside .account-option-arrow {
+    display: none;
   }
 
 }
