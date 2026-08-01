@@ -4735,6 +4735,7 @@ dependencies = [
  "clap",
  "colored",
  "console-subscriber",
+ "constant_time_eq",
  "csv",
  "dashmap",
  "dirs",

@@ -30,7 +30,7 @@ config_struct! {
         /// Host/IP address to bind the webserver
         #[metadata(field_metadata! {
             label: "Host",
-            hint: "IP to bind: 127.0.0.1 = localhost only, 0.0.0.0 = all interfaces (VPS/remote). Requires restart.",
+            hint: "IP to bind: 127.0.0.1 = localhost only, 0.0.0.0 = all interfaces (VPS/remote; authentication required). Requires restart.",
             category: "General",
             placeholder: "127.0.0.1",
         })]

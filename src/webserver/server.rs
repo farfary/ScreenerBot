@@ -13,7 +13,7 @@
 //! - No security token required (accessible via browser)
 
 use axum::{middleware::from_fn, Router};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
@@ -86,7 +86,7 @@ async fn find_available_port() -> Result<u16, String> {
 /// In CLI/Headless mode:
 /// - Uses port from config.webserver.port (default 8080)
 /// - Uses host from config.webserver.host (default 127.0.0.1, use 0.0.0.0 for remote)
-/// - No security token required (accessible via browser)
+/// - Password authentication is mandatory for any non-loopback bind
 pub async fn start_server(
     port_override: Option<u16>,
     host_override: Option<String>,
@@ -94,11 +94,17 @@ pub async fn start_server(
     let is_gui = global::is_gui_mode();
 
     // Get config values for headless mode (use defaults if config not loaded yet)
-    let (config_port, config_host) = if crate::global::is_initialization_complete() {
-        with_config(|cfg| (cfg.webserver.port, cfg.webserver.host.clone()))
+    let (config_port, config_host, auth_enabled) = if crate::global::is_initialization_complete() {
+        with_config(|cfg| {
+            (
+                cfg.webserver.port,
+                cfg.webserver.host.clone(),
+                cfg.webserver.auth_enabled,
+            )
+        })
     } else {
         // Use defaults during initialization (will fall back to defaults below anyway)
-        (0, String::new())
+        (0, String::new(), false)
     };
 
     // Determine port and host to use
@@ -147,6 +153,8 @@ pub async fn start_server(
         } else {
             (DEFAULT_HOST.to_string(), "default")
         };
+
+        validate_headless_bind(&host, auth_enabled)?;
 
         global::set_webserver_port(port);
         global::set_webserver_host(&host);
@@ -275,6 +283,21 @@ pub async fn start_server(
     Ok(())
 }
 
+fn validate_headless_bind(host: &str, auth_enabled: bool) -> Result<(), String> {
+    let is_loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+
+    if !is_loopback && !auth_enabled {
+        return Err(format!(
+            "Refusing to bind the headless dashboard to {host} without password authentication. \
+             Enable webserver authentication or bind to 127.0.0.1."
+        ));
+    }
+    Ok(())
+}
+
 /// Trigger webserver shutdown
 pub fn shutdown() {
     logger::debug(LogTag::Webserver, "Triggering webserver shutdown...");
@@ -342,10 +365,16 @@ pub async fn test_port_binding(
         &format!("[TEST-BIND] Initialization complete: {init_complete}"),
     );
 
-    let (config_port, config_host) = if init_complete {
-        with_config(|cfg| (cfg.webserver.port, cfg.webserver.host.clone()))
+    let (config_port, config_host, auth_enabled) = if init_complete {
+        with_config(|cfg| {
+            (
+                cfg.webserver.port,
+                cfg.webserver.host.clone(),
+                cfg.webserver.auth_enabled,
+            )
+        })
     } else {
-        (0, String::new())
+        (0, String::new(), false)
     };
 
     logger::debug(
@@ -381,6 +410,8 @@ pub async fn test_port_binding(
             }
         })
         .unwrap_or_else(|| DEFAULT_HOST.to_string());
+
+    validate_headless_bind(&effective_host, auth_enabled)?;
 
     let addr = format!("{effective_host}:{effective_port}");
 
@@ -521,6 +552,26 @@ fn cleanup_mcp_connection_file() {
             );
         } else {
             logger::debug(LogTag::Webserver, "MCP connection file removed");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_headless_bind;
+
+    #[test]
+    fn loopback_headless_bind_does_not_require_password_auth() {
+        for host in ["127.0.0.1", "localhost", "::1"] {
+            assert!(validate_headless_bind(host, false).is_ok(), "{host}");
+        }
+    }
+
+    #[test]
+    fn remote_headless_bind_requires_password_auth() {
+        for host in ["0.0.0.0", "192.168.1.10", "10.0.0.4", "dashboard.local"] {
+            assert!(validate_headless_bind(host, false).is_err(), "{host}");
+            assert!(validate_headless_bind(host, true).is_ok(), "{host}");
         }
     }
 }
