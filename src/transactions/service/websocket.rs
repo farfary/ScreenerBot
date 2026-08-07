@@ -1,6 +1,9 @@
 //! Transaction service WebSocket — establishes and maintains WebSocket subscriptions.
-//
-// WebSocket integration for real-time transaction notifications
+//!
+//! Wallet log notifications are delivered through the shared `crate::rpc::subscriptions`
+//! transport (one connection, multiplexed across every subscribed address). This module
+//! owns nothing about the transport itself; it only turns a notification into
+//! transaction handling and the side effects specific to our own wallet.
 
 use chrono::Utc;
 use std::sync::Arc;
@@ -12,68 +15,48 @@ use crate::transactions::{
         add_pending_transaction_globally, add_signature_to_known_globally,
         remove_pending_transaction_globally,
     },
-    websocket,
 };
 
 use super::config::{defer_transaction_retry, ServiceConfig};
-use super::lifecycle::{get_global_transaction_manager, SHUTDOWN_NOTIFY};
+use super::lifecycle::get_global_transaction_manager;
 
 // =============================================================================
 // WEBSOCKET INTEGRATION
 // =============================================================================
 
-/// Initialize WebSocket monitoring for real-time transaction notifications
+/// Subscribe to the wallet's log notifications through the shared transport.
 pub async fn initialize_websocket_monitoring(
     wallet_pubkey: solana_sdk::pubkey::Pubkey,
-) -> Result<Option<tokio::sync::mpsc::UnboundedReceiver<String>>, String> {
-    // Determine WS URL: prefer Helius if API key is present in config; else default
-    let ws_url = {
-        let rpc_urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
-
-        // Try to find a Helius API key in the configured RPC URLs
-        let mut api_key: Option<String> = None;
-        for url in rpc_urls.iter() {
-            if url.contains("helius-rpc.com") {
-                if let Some(pos) = url.find("api-key=") {
-                    let key_start = pos + "api-key=".len();
-                    let end = url[key_start..]
-                        .find('&')
-                        .map(|i| key_start + i)
-                        .unwrap_or(url.len());
-                    api_key = Some(url[key_start..end].to_string());
-                    break;
-                }
-            }
-        }
-        api_key.map(|k| websocket::SolanaWebSocketClient::get_helius_ws_url(&k))
-    };
-
-    let ws_url_log = ws_url
-        .clone()
-        .unwrap_or_else(|| websocket::SolanaWebSocketClient::get_default_ws_url());
+) -> Result<Option<crate::rpc::LogsSubscription>, String> {
     logger::info(
         LogTag::Transactions,
-        &format!("Initializing WebSocket monitoring (url: {ws_url_log})"),
+        "Subscribing to wallet log notifications",
     );
 
-    let receiver = websocket::start_websocket_monitoring(
-        wallet_pubkey.to_string(),
-        ws_url,
-        SHUTDOWN_NOTIFY.clone(),
-    )
-    .await?;
-
-    Ok(Some(receiver))
+    crate::rpc::subscribe_logs_mentions(&wallet_pubkey.to_string())
+        .await
+        .map(Some)
+        .map_err(|e| e.to_string())
 }
 
-/// Handle transaction notification from WebSocket
-/// Enhanced with deferral queue for RPC indexing delays
+/// Handle one log notification for our wallet.
 pub async fn handle_websocket_transaction(
     config: &ServiceConfig,
     processor: &Arc<TransactionProcessor>,
-    signature: String,
+    event: crate::rpc::SubscriptionEvent,
 ) -> Result<(), String> {
-    logger::info(
+    let signature = event.signature;
+
+    // The wallet just changed on-chain. This subscription mentions the wallet, so it
+    // sees everything -- our own swaps and anything the owner does from another app --
+    // which makes it the one place that can keep the displayed worth honest. Refresh
+    // the balance now rather than waiting out the snapshot interval (coalesced, so a
+    // burst costs one refresh). This lives here, in the own-wallet consumer, and not
+    // in the transport: a notification for some other watched address must never
+    // refresh our worth.
+    crate::wallet::request_balance_refresh();
+
+    logger::debug(
         LogTag::Transactions,
         &format!("Processing WebSocket transaction: {}", &signature),
     );

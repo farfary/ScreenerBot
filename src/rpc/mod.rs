@@ -42,10 +42,10 @@ pub mod provider;
 pub mod rate_limiter;
 pub mod selector;
 pub mod stats;
+pub mod subscriptions;
 pub mod testing;
 pub mod types;
 pub mod utils;
-pub mod websocket;
 
 // ============================================================================
 // Re-exports - Circuit Breaker
@@ -130,12 +130,13 @@ pub use types::{
 };
 
 // ============================================================================
-// Re-exports - WebSocket Utilities
+// Re-exports - Subscription Transport
 // ============================================================================
 
-pub use websocket::{
-    build_logs_subscribe_payload, create_account_subscribe_payload, get_websocket_url,
-    get_websocket_url_from_http, logs_contains_initialize_account, logs_contains_initialize_mint,
+pub use subscriptions::{
+    connection_state, get_websocket_url, get_websocket_url_from_http, subscribe_logs_mentions,
+    subscription_metrics, ConnectionState, LogsSubscription, SubscriptionEvent,
+    SubscriptionMetrics,
 };
 
 // ============================================================================
@@ -204,7 +205,7 @@ pub async fn get_rpc_url() -> String {
 ///
 /// Converts the primary HTTP RPC URL to its WebSocket equivalent.
 pub fn get_ws_url() -> crate::Result<String> {
-    websocket::get_websocket_url()
+    subscriptions::get_websocket_url()
 }
 
 /// Test if RPC is healthy
