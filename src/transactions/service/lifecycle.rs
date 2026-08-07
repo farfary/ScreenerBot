@@ -9,7 +9,6 @@ use tokio::sync::{Mutex, Notify};
 use crate::logger::{self, LogTag};
 use crate::transactions::{
     manager::TransactionsManager, processor::TransactionProcessor, types::Transaction,
-    utils::is_signature_known_globally,
 };
 
 use super::bootstrap::perform_initial_transaction_bootstrap;

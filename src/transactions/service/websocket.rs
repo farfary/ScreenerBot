@@ -11,6 +11,7 @@ use std::sync::Arc;
 use crate::logger::{self, LogTag};
 use crate::transactions::{
     processor::TransactionProcessor,
+    types::Subject,
     utils::{
         add_pending_transaction_globally, add_signature_to_known_globally,
         remove_pending_transaction_globally,
@@ -46,6 +47,7 @@ pub async fn handle_websocket_transaction(
     event: crate::rpc::SubscriptionEvent,
 ) -> Result<(), String> {
     let signature = event.signature;
+    let subject = Subject(config.wallet_pubkey);
 
     // The wallet just changed on-chain. This subscription mentions the wallet, so it
     // sees everything -- our own swaps and anything the owner does from another app --
@@ -62,13 +64,13 @@ pub async fn handle_websocket_transaction(
     );
 
     // Add to pending transactions for monitoring
-    add_pending_transaction_globally(signature.clone(), Utc::now()).await;
+    add_pending_transaction_globally(subject, signature.clone(), Utc::now()).await;
 
     // Process the transaction
     match processor.process_transaction(&signature).await {
         Ok(_) => {
-            add_signature_to_known_globally(signature.clone()).await;
-            remove_pending_transaction_globally(&signature).await;
+            add_signature_to_known_globally(subject, signature.clone()).await;
+            remove_pending_transaction_globally(subject, &signature).await;
 
             // Update metrics for WebSocket transaction
             if let Some(manager_arc) = get_global_transaction_manager().await {

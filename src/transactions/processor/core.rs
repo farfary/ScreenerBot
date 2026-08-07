@@ -62,8 +62,19 @@ impl TransactionProcessor {
         }
     }
 
-    /// Process a single transaction through the complete pipeline
-    pub async fn process_transaction(&self, signature: &str) -> Result<Transaction, String> {
+    /// The wallet this processor decodes for.
+    pub fn subject(&self) -> crate::transactions::types::Subject {
+        crate::transactions::types::Subject(self.wallet_pubkey)
+    }
+
+    /// Fetch, analyze and project one transaction onto this processor's subject.
+    ///
+    /// Records no event and writes no analysis row -- persisting the decoded result
+    /// is the caller's decision, which is what lets a watched wallet be decoded
+    /// without landing in our own history. It does still cache the raw RPC response
+    /// under this processor's subject (see `extraction.rs`), so a re-decode of the
+    /// same signature does not pay for the fetch twice.
+    pub async fn decode(&self, signature: &str) -> Result<Transaction, String> {
         let start_time = Instant::now();
 
         if self.debug_enabled {
@@ -111,6 +122,16 @@ impl TransactionProcessor {
             );
         }
 
+        Ok(transaction)
+    }
+
+    /// Decode a transaction and persist it for this processor's subject.
+    ///
+    /// This is the own-wallet path: decode, record the processing event, store the
+    /// processed row.
+    pub async fn process_transaction(&self, signature: &str) -> Result<Transaction, String> {
+        let transaction = self.decode(signature).await?;
+
         // Record processing event
         crate::events::record_transaction_event(
             signature,
@@ -124,7 +145,10 @@ impl TransactionProcessor {
 
         // Store processed transaction in database for future retrieval
         if let Some(database) = crate::transactions::database::get_transaction_database().await {
-            if let Err(e) = database.store_processed_transaction(&transaction).await {
+            if let Err(e) = database
+                .store_processed_transaction(self.subject(), &transaction)
+                .await
+            {
                 if self.debug_enabled {
                     logger::info(
                         LogTag::Transactions,

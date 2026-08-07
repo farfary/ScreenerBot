@@ -55,8 +55,8 @@ pub use service::{
 // Public API exports - Types
 pub use types::{
     AtaAnalysis, AtaOperation, AtaOperationType, CachedAnalysis, DeferredRetry, InstructionInfo,
-    SolBalanceChange, SwapPnLInfo, TokenBalanceChange, TokenSwapInfo, TokenTransfer, Transaction,
-    TransactionDirection, TransactionStats, TransactionStatus, TransactionType,
+    SolBalanceChange, Subject, SwapPnLInfo, TokenBalanceChange, TokenSwapInfo, TokenTransfer,
+    Transaction, TransactionDirection, TransactionStats, TransactionStatus, TransactionType,
 };
 
 // Public API exports - Constants from types

@@ -11,6 +11,7 @@ use crate::logger::{self, LogTag};
 use crate::transactions::{
     fetcher::TransactionFetcher,
     processor::TransactionProcessor,
+    types::Subject,
     utils::{
         add_signature_to_known_globally, cleanup_expired_pending_transactions,
         is_signature_known_globally, remove_pending_transaction_globally,
@@ -235,6 +236,7 @@ async fn process_deferred_retries(
     config: &ServiceConfig,
     processor: &Arc<TransactionProcessor>,
 ) -> Result<usize, String> {
+    let subject = Subject(config.wallet_pubkey);
     let now = Utc::now();
     let mut ready_retries = Vec::new();
 
@@ -272,8 +274,8 @@ async fn process_deferred_retries(
 
         match processor.process_transaction(&retry.signature).await {
             Ok(_) => {
-                add_signature_to_known_globally(retry.signature.clone()).await;
-                remove_pending_transaction_globally(&retry.signature).await;
+                add_signature_to_known_globally(subject, retry.signature.clone()).await;
+                remove_pending_transaction_globally(subject, &retry.signature).await;
                 processed += 1;
             }
             Err(e)
@@ -326,6 +328,7 @@ async fn perform_fallback_transaction_check(
     fetcher: &Arc<TransactionFetcher>,
     processor: &Arc<TransactionProcessor>,
 ) -> Result<usize, String> {
+    let subject = Subject(config.wallet_pubkey);
     let pending_txs_count = crate::transactions::utils::get_pending_transactions_count().await;
     let (pending_verification_count, _) = crate::positions::queue::get_queue_status().await;
 
@@ -352,17 +355,17 @@ async fn perform_fallback_transaction_check(
 
     for signature in signatures {
         // Check if signature is already known
-        if !is_signature_known_globally(&signature).await {
+        if !is_signature_known_globally(subject, &signature).await {
             // Process new transaction
             match processor.process_transaction(&signature).await {
                 Ok(_) => {
                     // Add to in-memory global state
-                    add_signature_to_known_globally(signature.clone()).await;
+                    add_signature_to_known_globally(subject, signature.clone()).await;
 
                     // CRITICAL FIX: Verify persistence to database
                     if let Some(db) = transaction_db.as_ref() {
                         // Ensure it's persisted to known_signatures table
-                        if let Err(e) = db.add_known_signature(&signature).await {
+                        if let Err(e) = db.add_known_signature(subject, &signature).await {
                             logger::info(
                                 LogTag::Transactions,
                                 &format!(
@@ -374,7 +377,7 @@ async fn perform_fallback_transaction_check(
                             db_persistence_failures += 1;
                         } else {
                             // Double-check it's actually there
-                            match db.is_signature_known(&signature).await {
+                            match db.is_signature_known(subject, &signature).await {
                                 Ok(true) => {}
                                 Ok(false) => {
                                     logger::info(

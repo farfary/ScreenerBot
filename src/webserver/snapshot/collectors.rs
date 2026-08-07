@@ -606,6 +606,10 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             }
         }
 
+        // Known-signature bookkeeping is scoped to a subject. This snapshot describes
+        // OUR history, so it asks for our own wallet -- never for any other wallet the
+        // app may be watching.
+        let own_subject = crate::transactions::Subject::own().ok();
         let (
             successful_count_result,
             failed_count_result,
@@ -616,8 +620,18 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             db.get_successful_transactions_count(),
             db.get_failed_transactions_count(),
             db.get_bootstrap_state(),
-            db.get_newest_known_signature(),
-            db.get_oldest_known_signature()
+            async {
+                match own_subject {
+                    Some(subject) => db.get_newest_known_signature(subject).await,
+                    None => Ok(None),
+                }
+            },
+            async {
+                match own_subject {
+                    Some(subject) => db.get_oldest_known_signature(subject).await,
+                    None => Ok(None),
+                }
+            }
         );
 
         match successful_count_result {

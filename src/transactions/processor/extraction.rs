@@ -106,7 +106,10 @@ impl TransactionProcessor {
             temp_transaction.status = TransactionStatus::Confirmed;
 
             // Store raw transaction data in cache
-            if let Err(e) = database.store_raw_transaction(&temp_transaction).await {
+            if let Err(e) = database
+                .store_raw_transaction(self.subject(), &temp_transaction)
+                .await
+            {
                 if self.debug_enabled {
                     logger::info(
                         LogTag::Transactions,

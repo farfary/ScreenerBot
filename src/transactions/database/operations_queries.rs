@@ -18,13 +18,14 @@ use super::schema::*;
 // =============================================================================
 
 impl TransactionDatabase {
-    /// Save pending transactions to database
+    /// Save pending transactions to database, for the given subject
     pub async fn save_pending_transactions(
         &self,
+        subject: Subject,
         pending: &HashMap<String, DateTime<Utc>>,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let tx = conn
             .unchecked_transaction()
@@ -44,10 +45,13 @@ impl TransactionDatabase {
         Ok(())
     }
 
-    /// Load pending transactions from database
-    pub async fn get_pending_transactions(&self) -> Result<HashMap<String, DateTime<Utc>>, String> {
+    /// Load pending transactions from database, for the given subject
+    pub async fn get_pending_transactions(
+        &self,
+        subject: Subject,
+    ) -> Result<HashMap<String, DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let mut stmt = conn
             .prepare(
@@ -82,10 +86,14 @@ impl TransactionDatabase {
         Ok(result)
     }
 
-    /// Remove pending transaction
-    pub async fn remove_pending_transaction(&self, signature: &str) -> Result<bool, String> {
+    /// Remove pending transaction, for the given subject
+    pub async fn remove_pending_transaction(
+        &self,
+        subject: Subject,
+        signature: &str,
+    ) -> Result<bool, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let affected = conn
             .execute(
@@ -97,10 +105,10 @@ impl TransactionDatabase {
         Ok(affected > 0)
     }
 
-    /// Get count of pending transactions
-    pub async fn get_pending_transactions_count(&self) -> Result<u64, String> {
+    /// Get count of pending transactions, for the given subject
+    pub async fn get_pending_transactions_count(&self, subject: Subject) -> Result<u64, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let count: i64 = conn
             .query_row(
@@ -153,10 +161,14 @@ impl TransactionDatabase {
         }
     }
 
-    /// Store raw transaction data
-    pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {
+    /// Store raw transaction data, for the given subject
+    pub async fn store_raw_transaction(
+        &self,
+        subject: Subject,
+        transaction: &Transaction,
+    ) -> Result<(), String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let status_str = match &transaction.status {
             TransactionStatus::Pending => "Pending",
@@ -197,13 +209,14 @@ impl TransactionDatabase {
         Ok(())
     }
 
-    /// Store processed transaction analysis snapshot
+    /// Store processed transaction analysis snapshot, for the given subject
     pub async fn store_processed_transaction(
         &self,
+        subject: Subject,
         transaction: &Transaction,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         // Serialize complex fields as JSON strings
         let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
@@ -268,23 +281,32 @@ impl TransactionDatabase {
         Ok(())
     }
 
-    /// Convenience: upsert both raw and processed snapshots
-    pub async fn upsert_full_transaction(&self, transaction: &Transaction) -> Result<(), String> {
-        self.store_raw_transaction(transaction).await?;
-        self.store_processed_transaction(transaction).await?;
+    /// Convenience: upsert both raw and processed snapshots, for the bot's own wallet.
+    /// No subject is threaded through here because this convenience method has no
+    /// caller that is watching another wallet today; it resolves the own-wallet
+    /// subject directly rather than forcing every caller to plumb one through.
+    pub async fn upsert_full_transaction(
+        &self,
+        subject: Subject,
+        transaction: &Transaction,
+    ) -> Result<(), String> {
+        self.store_raw_transaction(subject, transaction).await?;
+        self.store_processed_transaction(subject, transaction)
+            .await?;
         Ok(())
     }
 
-    /// Update transaction status
+    /// Update transaction status, for the given subject
     pub async fn update_transaction_status(
         &self,
+        subject: Subject,
         signature: &str,
         status: &str,
         success: bool,
         error_message: Option<&str>,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         conn
             .execute(
