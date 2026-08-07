@@ -17,6 +17,7 @@
 
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::Position;
+use crate::trader::policy::ExitPolicy;
 use crate::trader::types::TradeDecision;
 use crate::trader::{ai_analysis, evaluators, safety};
 
@@ -102,6 +103,8 @@ pub(crate) async fn evaluate_policy_exit(
     position: &Position,
     current_price: f64,
 ) -> Result<Option<TradeDecision>, String> {
+    let policy = ExitPolicy::from_config();
+
     // Priority 3: AI exit analysis (high priority - if enabled)
     if ai_analysis::should_analyze_exit() {
         // Get token data for AI analysis
@@ -203,7 +206,9 @@ pub(crate) async fn evaluate_policy_exit(
     }
 
     // Priority 4: Stop loss (high priority - fixed threshold from entry)
-    match evaluators::exit_stop_loss::check_stop_loss(position, current_price).await {
+    match evaluators::exit_stop_loss::check_stop_loss(position, current_price, &policy.stop_loss)
+        .await
+    {
         Ok(Some(decision)) => {
             // Log already done in check_stop_loss with full context
 
@@ -236,7 +241,9 @@ pub(crate) async fn evaluate_policy_exit(
     }
 
     // Priority 5: Trailing stop (high priority)
-    match evaluators::exit_trailing::check_trailing_stop(position, current_price).await {
+    match evaluators::exit_trailing::check_trailing_stop(position, current_price, &policy.trailing)
+        .await
+    {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
@@ -273,7 +280,7 @@ pub(crate) async fn evaluate_policy_exit(
     }
 
     // Priority 6: ROI target (normal priority)
-    match evaluators::exit_roi::check_roi_exit(position, current_price).await {
+    match evaluators::exit_roi::check_roi_exit(position, current_price, &policy.roi).await {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
@@ -307,7 +314,7 @@ pub(crate) async fn evaluate_policy_exit(
     }
 
     // Priority 7: Time override (normal priority)
-    match evaluators::exit_time::check_time_override(position, current_price).await {
+    match evaluators::exit_time::check_time_override(position, current_price, &policy.time).await {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,

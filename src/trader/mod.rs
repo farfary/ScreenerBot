@@ -25,14 +25,17 @@
 //! - `types`: Trader types
 
 pub mod actions;
+pub mod admission;
 pub mod ai_analysis;
 pub mod config;
 mod constants;
 mod controller;
+pub mod entry;
 pub mod evaluators;
 pub mod executors;
 pub mod manual;
 pub mod monitors;
+pub mod policy;
 pub mod safety;
 mod types;
 

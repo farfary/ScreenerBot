@@ -1,122 +1,43 @@
-//! Entry evaluation logic with integrated safety checks and AI analysis
+//! Entry evaluation logic with integrated AI analysis
 //!
 //! Evaluates whether an entry should be made for a token by checking:
-//! 1. Connectivity health
-//! 2. Position limits
-//! 3. Existing position check
-//! 4. Re-entry cooldown
-//! 5. Blacklist status
-//! 6. AI entry analysis (if enabled)
-//! 7. Strategy signals
+//! 1. Source-independent admission (see `trader::admission::check_entry_admission`):
+//!    force stop, loss limit, connectivity, position limits, existing position,
+//!    re-entry cooldown, blacklist
+//! 2. AI entry analysis (if enabled)
+//! 3. Strategy signals
 
 use crate::pools::PriceResult;
+use crate::trader::admission::{check_entry_admission, EntryBlock};
 use crate::trader::types::TradeDecision;
-use crate::trader::{ai_analysis, evaluators, safety};
+use crate::trader::{ai_analysis, evaluators};
 
 /// Evaluate entry opportunity for a token
 ///
-/// Performs all safety checks before strategy evaluation:
-/// - Connectivity check (RPC, DexScreener, RugCheck must be healthy)
-/// - Position limits (can't exceed max open positions)
-/// - Existing position check (no duplicate entries)
-/// - Re-entry cooldown (prevents immediate re-entry after exit)
-/// - Blacklist check (token not blacklisted)
-/// - AI entry analysis (if enabled, checks AI recommendation)
-/// - Strategy evaluation (signals from configured strategies)
+/// Runs the source-independent admission gauntlet first (see
+/// [`crate::trader::admission::check_entry_admission`]), then AI entry analysis (if
+/// enabled), then strategy evaluation.
 ///
 /// Returns:
 /// - Ok(Some(TradeDecision)) if entry should be made
-/// - Ok(None) if no entry signal or safety check failed
+/// - Ok(None) if no entry signal or admission check failed
 /// - Err(String) if evaluation failed due to connectivity or other errors
 pub async fn evaluate_entry_for_token(
     token_mint: &str,
     price_info: &PriceResult,
 ) -> Result<Option<TradeDecision>, String> {
-    // Early exit: Force stop is active
-    if crate::global::is_force_stopped() {
-        crate::logger::debug(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by force_stop",
-                &token_mint[..8.min(token_mint.len())]
-            ),
-        );
-        return Ok(None);
-    }
-
-    // Early exit: Loss limit reached
-    if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
-        crate::logger::info(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by loss_limit",
-                &token_mint[..8.min(token_mint.len())]
-            ),
-        );
-        return Ok(None);
-    }
-
-    // 1. Connectivity check - critical endpoints must be healthy
-    if let Some(unhealthy) =
-        crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener", "rugcheck"]).await
+    if let Err(block) = check_entry_admission(token_mint, &["rpc", "dexscreener", "rugcheck"]).await
     {
-        crate::logger::info(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by unhealthy: {}",
-                &token_mint[..8.min(token_mint.len())],
-                unhealthy
-            ),
-        );
-        return Err(format!("Unhealthy endpoints: {unhealthy}"));
-    }
-
-    // 2. Position limits - check if we can open more positions
-    if !safety::check_position_limits().await? {
-        crate::logger::debug(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by position_limits",
-                &token_mint[..8.min(token_mint.len())]
-            ),
-        );
-        return Ok(None); // Hit position limit
-    }
-
-    // 3. Existing position check - prevent duplicate entries
-    if safety::has_open_position(token_mint).await? {
-        crate::logger::debug(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by existing_position",
-                &token_mint[..8.min(token_mint.len())]
-            ),
-        );
-        return Ok(None); // Already have position
-    }
-
-    // 4. Re-entry cooldown - prevent immediate re-entry after exit
-    if safety::is_in_reentry_cooldown(token_mint).await? {
-        crate::logger::info(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by reentry_cooldown",
-                &token_mint[..8.min(token_mint.len())]
-            ),
-        );
-        return Ok(None); // Still in cooldown
-    }
-
-    // 5. Blacklist check - token-level only (not pool-level)
-    if safety::is_blacklisted(token_mint).await {
-        crate::logger::info(
-            crate::logger::LogTag::Trader,
-            &format!(
-                "[ENTRY-EVAL] {}: blocked by blacklist",
-                &token_mint[..8.min(token_mint.len())]
-            ),
-        );
-        return Ok(None); // Token is blacklisted
+        return match block {
+            EntryBlock::Connectivity(unhealthy) => Err(format!("Unhealthy endpoints: {unhealthy}")),
+            EntryBlock::CheckFailed(e) => Err(e),
+            EntryBlock::ForceStopped
+            | EntryBlock::LossLimit
+            | EntryBlock::PositionLimit
+            | EntryBlock::AlreadyOpen
+            | EntryBlock::ReentryCooldown
+            | EntryBlock::Blacklisted => Ok(None),
+        };
     }
 
     // 6. AI entry analysis - check if AI recommends entry (if enabled)

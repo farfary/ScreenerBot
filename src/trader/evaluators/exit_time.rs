@@ -1,7 +1,7 @@
 //! Time-based exit override
 
 use crate::positions::Position;
-use crate::trader::config;
+use crate::trader::policy::TimePolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
@@ -16,6 +16,7 @@ use chrono::Utc;
 pub async fn check_time_override(
     position: &Position,
     current_price: f64,
+    policy: &TimePolicy,
 ) -> Result<Option<TradeDecision>, String> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
@@ -26,14 +27,14 @@ pub async fn check_time_override(
     }
 
     // Check if time override is enabled
-    let time_override_enabled = config::is_time_override_enabled();
+    let time_override_enabled = policy.enabled;
     if !time_override_enabled {
         return Ok(None);
     }
 
     // Get time override configuration
-    let loss_threshold_pct = config::get_time_override_loss_threshold_pct();
-    let duration_seconds = config::get_time_override_duration_seconds();
+    let loss_threshold_pct = policy.loss_threshold_pct;
+    let duration_seconds = policy.duration_seconds;
 
     // Defensive runtime validation of config values
     if !duration_seconds.is_finite() || duration_seconds <= 0.0 {

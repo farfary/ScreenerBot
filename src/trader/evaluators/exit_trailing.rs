@@ -1,7 +1,7 @@
 //! Trailing stop loss implementation
 
 use crate::positions::Position;
-use crate::trader::config;
+use crate::trader::policy::TrailingPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
@@ -9,6 +9,7 @@ use chrono::Utc;
 pub async fn check_trailing_stop(
     position: &Position,
     current_price: f64,
+    policy: &TrailingPolicy,
 ) -> Result<Option<TradeDecision>, String> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
@@ -24,14 +25,14 @@ pub async fn check_trailing_stop(
     }
 
     // Get trailing stop configuration
-    let trailing_enabled = config::is_trailing_stop_enabled();
+    let trailing_enabled = policy.enabled;
     if !trailing_enabled {
         return Ok(None);
     }
 
     // Get trailing percentages
-    let activation_pct = config::get_trailing_stop_activation_pct();
-    let distance_pct = config::get_trailing_stop_distance_pct();
+    let activation_pct = policy.activation_pct;
+    let distance_pct = policy.distance_pct;
 
     // Runtime validation: distance must be less than activation to prevent impossible conditions
     if distance_pct >= activation_pct {

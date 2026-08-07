@@ -24,6 +24,7 @@ use chrono::Duration;
 use common::{aged, config_guard, set_config, test_position};
 use screenerbot::positions::Position;
 use screenerbot::trader::evaluators::{exit_roi, exit_stop_loss, exit_time, exit_trailing};
+use screenerbot::trader::policy::ExitPolicy;
 use screenerbot::trader::safety::check_risk_limits;
 use screenerbot::trader::{TradeAction, TradePriority, TradeReason};
 
@@ -43,12 +44,13 @@ fn enable_stop_loss(threshold_pct: f64) {
 async fn stop_loss_fires_once_the_loss_reaches_the_threshold() {
     let _cfg = config_guard();
     enable_stop_loss(25.0);
+    let policy = ExitPolicy::from_config();
 
     let position = test_position(1.0, 1.0);
     // Exactly 25% down: `loss_pct >= threshold` includes the boundary. (0.75 is chosen
     // because it is exactly representable in binary floating point — 0.80 against a 20%
     // threshold computes to 19.999999999999996 and would test rounding, not the rule.)
-    let decision = exit_stop_loss::check_stop_loss(&position, 0.75)
+    let decision = exit_stop_loss::check_stop_loss(&position, 0.75, &policy.stop_loss)
         .await
         .expect("evaluation succeeded")
         .expect("stop loss must fire at the threshold");
@@ -67,12 +69,15 @@ async fn stop_loss_fires_once_the_loss_reaches_the_threshold() {
 async fn stop_loss_holds_above_the_threshold() {
     let _cfg = config_guard();
     enable_stop_loss(25.0);
+    let policy = ExitPolicy::from_config();
 
     let position = test_position(1.0, 1.0);
-    assert!(exit_stop_loss::check_stop_loss(&position, 0.76)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_stop_loss::check_stop_loss(&position, 0.76, &policy.stop_loss)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -82,6 +87,7 @@ async fn stop_loss_measures_from_the_average_entry_not_the_first_buy() {
     // long past its stop.
     let _cfg = config_guard();
     enable_stop_loss(25.0);
+    let policy = ExitPolicy::from_config();
 
     let mut position = test_position(1.0, 1.0);
     position.average_entry_price = 0.8; // averaged in lower
@@ -90,17 +96,19 @@ async fn stop_loss_measures_from_the_average_entry_not_the_first_buy() {
     // 0.7 is 12.5% below the AVERAGE (no stop) but 30% below the first entry, which
     // WOULD have stopped out if the rule read `entry_price`.
     assert!(
-        exit_stop_loss::check_stop_loss(&position, 0.7)
+        exit_stop_loss::check_stop_loss(&position, 0.7, &policy.stop_loss)
             .await
             .unwrap()
             .is_none(),
         "stop loss must use average_entry_price"
     );
     // 0.6 is exactly 25% below the average.
-    assert!(exit_stop_loss::check_stop_loss(&position, 0.6)
-        .await
-        .unwrap()
-        .is_some());
+    assert!(
+        exit_stop_loss::check_stop_loss(&position, 0.6, &policy.stop_loss)
+            .await
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[tokio::test]
@@ -110,10 +118,11 @@ async fn stop_loss_respects_the_minimum_hold_time() {
     let _cfg = config_guard();
     enable_stop_loss(20.0);
     set_config(|cfg| cfg.trader.stop_loss_min_hold_seconds = 300);
+    let policy = ExitPolicy::from_config();
 
     let fresh = test_position(1.0, 1.0);
     assert!(
-        exit_stop_loss::check_stop_loss(&fresh, 0.1)
+        exit_stop_loss::check_stop_loss(&fresh, 0.1, &policy.stop_loss)
             .await
             .unwrap()
             .is_none(),
@@ -121,22 +130,27 @@ async fn stop_loss_respects_the_minimum_hold_time() {
     );
 
     let held = aged(test_position(1.0, 1.0), Duration::seconds(301));
-    assert!(exit_stop_loss::check_stop_loss(&held, 0.1)
-        .await
-        .unwrap()
-        .is_some());
+    assert!(
+        exit_stop_loss::check_stop_loss(&held, 0.1, &policy.stop_loss)
+            .await
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[tokio::test]
 async fn stop_loss_is_off_when_disabled() {
     let _cfg = config_guard();
     set_config(|cfg| cfg.trader.stop_loss_enabled = false);
+    let policy = ExitPolicy::from_config();
 
     let position = test_position(1.0, 1.0);
-    assert!(exit_stop_loss::check_stop_loss(&position, 0.01)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_stop_loss::check_stop_loss(&position, 0.01, &policy.stop_loss)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -151,9 +165,10 @@ async fn a_partial_stop_loss_may_be_taken_exactly_once() {
         cfg.trader.stop_loss_allow_partial = true;
         cfg.positions.partial_exit_default_pct = 25.0;
     });
+    let policy = ExitPolicy::from_config();
 
     let first = test_position(1.0, 1.0);
-    let decision = exit_stop_loss::check_stop_loss(&first, 0.5)
+    let decision = exit_stop_loss::check_stop_loss(&first, 0.5, &policy.stop_loss)
         .await
         .unwrap()
         .expect("first stop loss fires");
@@ -165,7 +180,7 @@ async fn a_partial_stop_loss_may_be_taken_exactly_once() {
 
     let mut after_one = test_position(1.0, 1.0);
     after_one.partial_exit_count = 1;
-    let decision = exit_stop_loss::check_stop_loss(&after_one, 0.5)
+    let decision = exit_stop_loss::check_stop_loss(&after_one, 0.5, &policy.stop_loss)
         .await
         .unwrap()
         .expect("second stop loss fires");
@@ -179,11 +194,13 @@ async fn a_partial_stop_loss_may_be_taken_exactly_once() {
 async fn a_full_stop_loss_carries_no_exit_percentage() {
     let _cfg = config_guard();
     enable_stop_loss(20.0);
+    let policy = ExitPolicy::from_config();
 
-    let decision = exit_stop_loss::check_stop_loss(&test_position(1.0, 1.0), 0.5)
-        .await
-        .unwrap()
-        .unwrap();
+    let decision =
+        exit_stop_loss::check_stop_loss(&test_position(1.0, 1.0), 0.5, &policy.stop_loss)
+            .await
+            .unwrap()
+            .unwrap();
     assert_eq!(decision.exit_percentage, None);
 }
 
@@ -191,11 +208,12 @@ async fn a_full_stop_loss_carries_no_exit_percentage() {
 async fn stop_loss_rejects_an_unusable_price() {
     let _cfg = config_guard();
     enable_stop_loss(20.0);
+    let policy = ExitPolicy::from_config();
     let position = test_position(1.0, 1.0);
 
     for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         assert!(
-            exit_stop_loss::check_stop_loss(&position, bad)
+            exit_stop_loss::check_stop_loss(&position, bad, &policy.stop_loss)
                 .await
                 .is_err(),
             "price {bad} must be an error, never a silent hold"
@@ -207,12 +225,13 @@ async fn stop_loss_rejects_an_unusable_price() {
 async fn stop_loss_rejects_an_unusable_entry_price() {
     let _cfg = config_guard();
     enable_stop_loss(20.0);
+    let policy = ExitPolicy::from_config();
 
     for bad in [0.0, -1.0, f64::NAN] {
         let mut position = test_position(1.0, 1.0);
         position.average_entry_price = bad;
         assert!(
-            exit_stop_loss::check_stop_loss(&position, 0.5)
+            exit_stop_loss::check_stop_loss(&position, 0.5, &policy.stop_loss)
                 .await
                 .is_err(),
             "entry price {bad} must be an error"
@@ -242,12 +261,15 @@ async fn trailing_stop_does_nothing_before_activation() {
     // The PEAK never reached the activation profit, so the trail was never armed.
     let _cfg = config_guard();
     enable_trailing(50.0, 10.0);
+    let policy = ExitPolicy::from_config();
 
     let position = peaked_at(1.2); // best it ever did was +20%, activation needs +50%
-    assert!(exit_trailing::check_trailing_stop(&position, 1.05)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_trailing::check_trailing_stop(&position, 1.05, &policy.trailing)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -262,9 +284,10 @@ async fn trailing_stop_arms_off_the_peak_not_the_current_price() {
     // sees +12% < 20%, stays silent, and hands the whole run back.
     let _cfg = config_guard();
     enable_trailing(20.0, 10.0);
+    let policy = ExitPolicy::from_config();
 
     let position = peaked_at(1.25);
-    let decision = exit_trailing::check_trailing_stop(&position, 1.12)
+    let decision = exit_trailing::check_trailing_stop(&position, 1.12, &policy.trailing)
         .await
         .unwrap()
         .expect("an armed trail must fire on a retrace through its stop");
@@ -275,11 +298,12 @@ async fn trailing_stop_arms_off_the_peak_not_the_current_price() {
 async fn trailing_stop_fires_once_armed_and_the_peak_is_given_back() {
     let _cfg = config_guard();
     enable_trailing(20.0, 10.0);
+    let policy = ExitPolicy::from_config();
 
     // Peak 2.0, distance 10% -> stop at 1.80. Price 1.79 is armed (+79% profit) and
     // below the stop.
     let position = peaked_at(2.0);
-    let decision = exit_trailing::check_trailing_stop(&position, 1.79)
+    let decision = exit_trailing::check_trailing_stop(&position, 1.79, &policy.trailing)
         .await
         .unwrap()
         .expect("trailing stop must fire");
@@ -292,17 +316,22 @@ async fn trailing_stop_fires_once_armed_and_the_peak_is_given_back() {
 async fn trailing_stop_holds_while_the_price_is_above_the_stop() {
     let _cfg = config_guard();
     enable_trailing(20.0, 10.0);
+    let policy = ExitPolicy::from_config();
 
     // Peak 2.0 -> stop 1.80. At exactly the stop it fires (`<=`); just above it holds.
     let position = peaked_at(2.0);
-    assert!(exit_trailing::check_trailing_stop(&position, 1.81)
-        .await
-        .unwrap()
-        .is_none());
-    assert!(exit_trailing::check_trailing_stop(&position, 1.80)
-        .await
-        .unwrap()
-        .is_some());
+    assert!(
+        exit_trailing::check_trailing_stop(&position, 1.81, &policy.trailing)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        exit_trailing::check_trailing_stop(&position, 1.80, &policy.trailing)
+            .await
+            .unwrap()
+            .is_some()
+    );
 }
 
 #[tokio::test]
@@ -316,10 +345,11 @@ async fn trailing_stop_never_exits_at_a_loss() {
     // 2% loss. Only the profitability guard stops that sale.
     let _cfg = config_guard();
     enable_trailing(20.0, 19.0);
+    let policy = ExitPolicy::from_config();
 
     let position = peaked_at(1.21);
     assert!(
-        exit_trailing::check_trailing_stop(&position, 0.98)
+        exit_trailing::check_trailing_stop(&position, 0.98, &policy.trailing)
             .await
             .unwrap()
             .is_none(),
@@ -331,12 +361,15 @@ async fn trailing_stop_never_exits_at_a_loss() {
 async fn trailing_stop_does_nothing_without_a_recorded_peak() {
     let _cfg = config_guard();
     enable_trailing(20.0, 10.0);
+    let policy = ExitPolicy::from_config();
 
     let position = peaked_at(0.0);
-    assert!(exit_trailing::check_trailing_stop(&position, 5.0)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_trailing::check_trailing_stop(&position, 5.0, &policy.trailing)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -346,9 +379,10 @@ async fn trailing_stop_rejects_a_config_whose_distance_swallows_the_activation()
     // fire. Surfacing it as an error is what makes the misconfiguration visible.
     let _cfg = config_guard();
     enable_trailing(10.0, 10.0);
+    let policy = ExitPolicy::from_config();
 
     let position = peaked_at(2.0);
-    let err = exit_trailing::check_trailing_stop(&position, 1.5)
+    let err = exit_trailing::check_trailing_stop(&position, 1.5, &policy.trailing)
         .await
         .expect_err("equal distance and activation must error");
     assert!(err.contains("must be less than"), "got: {err}");
@@ -358,24 +392,30 @@ async fn trailing_stop_rejects_a_config_whose_distance_swallows_the_activation()
 async fn trailing_stop_is_off_when_disabled() {
     let _cfg = config_guard();
     set_config(|cfg| cfg.positions.trailing_stop_enabled = false);
+    let policy = ExitPolicy::from_config();
 
     let position = peaked_at(2.0);
-    assert!(exit_trailing::check_trailing_stop(&position, 1.0)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_trailing::check_trailing_stop(&position, 1.0, &policy.trailing)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
 async fn trailing_stop_rejects_an_unusable_price() {
     let _cfg = config_guard();
     enable_trailing(20.0, 10.0);
+    let policy = ExitPolicy::from_config();
     let position = peaked_at(2.0);
 
     for bad in [0.0, -1.0, f64::NAN] {
-        assert!(exit_trailing::check_trailing_stop(&position, bad)
-            .await
-            .is_err());
+        assert!(
+            exit_trailing::check_trailing_stop(&position, bad, &policy.trailing)
+                .await
+                .is_err()
+        );
     }
 }
 
@@ -392,9 +432,10 @@ fn enable_roi(target_pct: f64) {
 async fn roi_exit_fires_at_the_target() {
     let _cfg = config_guard();
     enable_roi(50.0);
+    let policy = ExitPolicy::from_config();
 
     let position = test_position(1.0, 1.0);
-    let decision = exit_roi::check_roi_exit(&position, 1.50)
+    let decision = exit_roi::check_roi_exit(&position, 1.50, &policy.roi)
         .await
         .unwrap()
         .expect("ROI target reached");
@@ -407,9 +448,10 @@ async fn roi_exit_fires_at_the_target() {
 async fn roi_exit_holds_below_the_target() {
     let _cfg = config_guard();
     enable_roi(50.0);
+    let policy = ExitPolicy::from_config();
 
     let position = test_position(1.0, 1.0);
-    assert!(exit_roi::check_roi_exit(&position, 1.49)
+    assert!(exit_roi::check_roi_exit(&position, 1.49, &policy.roi)
         .await
         .unwrap()
         .is_none());
@@ -421,10 +463,11 @@ async fn roi_exit_measures_against_the_average_entry() {
     // the position's real cost, not on the first buy.
     let _cfg = config_guard();
     enable_roi(50.0);
+    let policy = ExitPolicy::from_config();
 
     let mut position = test_position(1.0, 1.0);
     position.average_entry_price = 0.5;
-    assert!(exit_roi::check_roi_exit(&position, 0.75)
+    assert!(exit_roi::check_roi_exit(&position, 0.75, &policy.roi)
         .await
         .unwrap()
         .is_some());
@@ -434,21 +477,27 @@ async fn roi_exit_measures_against_the_average_entry() {
 async fn roi_exit_is_off_when_disabled() {
     let _cfg = config_guard();
     set_config(|cfg| cfg.trader.roi_exit_enabled = false);
+    let policy = ExitPolicy::from_config();
 
-    assert!(exit_roi::check_roi_exit(&test_position(1.0, 1.0), 100.0)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_roi::check_roi_exit(&test_position(1.0, 1.0), 100.0, &policy.roi)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
 async fn roi_exit_rejects_an_unusable_price() {
     let _cfg = config_guard();
     enable_roi(50.0);
+    let policy = ExitPolicy::from_config();
     let position = test_position(1.0, 1.0);
 
     for bad in [0.0, -1.0, f64::NAN] {
-        assert!(exit_roi::check_roi_exit(&position, bad).await.is_err());
+        assert!(exit_roi::check_roi_exit(&position, bad, &policy.roi)
+            .await
+            .is_err());
     }
 }
 
@@ -469,16 +518,19 @@ async fn time_override_needs_both_the_age_and_the_loss() {
     // must hold — an old winner and a fresh loser must both be left alone.
     let _cfg = config_guard();
     enable_time_override(24.0, -40.0);
+    let policy = ExitPolicy::from_config();
 
     let old_and_down = aged(test_position(1.0, 1.0), Duration::hours(25));
-    assert!(exit_time::check_time_override(&old_and_down, 0.5)
-        .await
-        .unwrap()
-        .is_some());
+    assert!(
+        exit_time::check_time_override(&old_and_down, 0.5, &policy.time)
+            .await
+            .unwrap()
+            .is_some()
+    );
 
     let old_but_fine = aged(test_position(1.0, 1.0), Duration::hours(25));
     assert!(
-        exit_time::check_time_override(&old_but_fine, 0.9)
+        exit_time::check_time_override(&old_but_fine, 0.9, &policy.time)
             .await
             .unwrap()
             .is_none(),
@@ -487,7 +539,7 @@ async fn time_override_needs_both_the_age_and_the_loss() {
 
     let fresh_and_down = aged(test_position(1.0, 1.0), Duration::hours(1));
     assert!(
-        exit_time::check_time_override(&fresh_and_down, 0.5)
+        exit_time::check_time_override(&fresh_and_down, 0.5, &policy.time)
             .await
             .unwrap()
             .is_none(),
@@ -499,27 +551,33 @@ async fn time_override_needs_both_the_age_and_the_loss() {
 async fn time_override_boundary_is_inclusive_on_both_axes() {
     let _cfg = config_guard();
     enable_time_override(24.0, -40.0);
+    let policy = ExitPolicy::from_config();
 
     // Exactly 24h old and exactly 40% down.
     let position = aged(test_position(1.0, 1.0), Duration::hours(24));
-    assert!(exit_time::check_time_override(&position, 0.60)
-        .await
-        .unwrap()
-        .is_some());
+    assert!(
+        exit_time::check_time_override(&position, 0.60, &policy.time)
+            .await
+            .unwrap()
+            .is_some()
+    );
     // One tick shallower is inside tolerance.
-    assert!(exit_time::check_time_override(&position, 0.601)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_time::check_time_override(&position, 0.601, &policy.time)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[tokio::test]
 async fn time_override_carries_a_high_priority_full_exit() {
     let _cfg = config_guard();
     enable_time_override(24.0, -40.0);
+    let policy = ExitPolicy::from_config();
 
     let position = aged(test_position(1.0, 1.0), Duration::hours(25));
-    let decision = exit_time::check_time_override(&position, 0.5)
+    let decision = exit_time::check_time_override(&position, 0.5, &policy.time)
         .await
         .unwrap()
         .unwrap();
@@ -535,9 +593,10 @@ async fn time_override_rejects_a_positive_loss_threshold() {
     // take-profit. It must be refused, not obeyed.
     let _cfg = config_guard();
     enable_time_override(24.0, 40.0);
+    let policy = ExitPolicy::from_config();
 
     let position = aged(test_position(1.0, 1.0), Duration::hours(25));
-    let err = exit_time::check_time_override(&position, 0.5)
+    let err = exit_time::check_time_override(&position, 0.5, &policy.time)
         .await
         .expect_err("a positive threshold must error");
     assert!(err.contains("must be <= 0"), "got: {err}");
@@ -547,9 +606,10 @@ async fn time_override_rejects_a_positive_loss_threshold() {
 async fn time_override_rejects_a_non_positive_duration() {
     let _cfg = config_guard();
     enable_time_override(0.0, -40.0);
+    let policy = ExitPolicy::from_config();
 
     let position = aged(test_position(1.0, 1.0), Duration::hours(25));
-    assert!(exit_time::check_time_override(&position, 0.5)
+    assert!(exit_time::check_time_override(&position, 0.5, &policy.time)
         .await
         .is_err());
 }
@@ -558,12 +618,15 @@ async fn time_override_rejects_a_non_positive_duration() {
 async fn time_override_is_off_when_disabled() {
     let _cfg = config_guard();
     set_config(|cfg| cfg.trader.time_override_enabled = false);
+    let policy = ExitPolicy::from_config();
 
     let position = aged(test_position(1.0, 1.0), Duration::days(30));
-    assert!(exit_time::check_time_override(&position, 0.01)
-        .await
-        .unwrap()
-        .is_none());
+    assert!(
+        exit_time::check_time_override(&position, 0.01, &policy.time)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }
 
 // ==================== EMERGENCY RISK LIMIT ====================

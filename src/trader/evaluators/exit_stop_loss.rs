@@ -6,6 +6,7 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::Position;
+use crate::trader::policy::StopLossPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
@@ -41,6 +42,7 @@ pub fn get_stop_loss_allow_partial() -> bool {
 pub async fn check_stop_loss(
     position: &Position,
     current_price: f64,
+    policy: &StopLossPolicy,
 ) -> Result<Option<TradeDecision>, String> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
@@ -51,13 +53,13 @@ pub async fn check_stop_loss(
     }
 
     // Check if stop loss is enabled
-    if !is_stop_loss_enabled() {
+    if !policy.enabled {
         return Ok(None);
     }
 
     // Get configuration
-    let threshold_pct = get_stop_loss_threshold_pct();
-    let min_hold_seconds = get_stop_loss_min_hold_seconds();
+    let threshold_pct = policy.threshold_pct;
+    let min_hold_seconds = policy.min_hold_seconds;
 
     // Validate entry price
     let entry_price = position.average_entry_price;
@@ -93,10 +95,10 @@ pub async fn check_stop_loss(
         // and so on, bleeding the position out in a geometric series and paying fees plus
         // slippage on every leg, instead of exiting. If the price is STILL under the stop
         // after we already cut exposure once, the thesis is done — exit fully.
-        let allow_partial = get_stop_loss_allow_partial() && position.partial_exit_count == 0;
+        let allow_partial = policy.allow_partial && position.partial_exit_count == 0;
         let exit_percentage = if allow_partial {
             // Use partial exit percentage from positions config
-            Some(with_config(|cfg| cfg.positions.partial_exit_default_pct))
+            Some(policy.partial_exit_default_pct)
         } else {
             None // Full exit
         };

@@ -1,7 +1,7 @@
 //! Return on Investment (ROI) based exit strategy
 
 use crate::positions::Position;
-use crate::trader::config;
+use crate::trader::policy::RoiPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
@@ -9,6 +9,7 @@ use chrono::Utc;
 pub async fn check_roi_exit(
     position: &Position,
     current_price: f64,
+    policy: &RoiPolicy,
 ) -> Result<Option<TradeDecision>, String> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
@@ -19,13 +20,13 @@ pub async fn check_roi_exit(
     }
 
     // Check if ROI-based exit is enabled
-    let roi_enabled = config::is_roi_exit_enabled();
+    let roi_enabled = policy.enabled;
     if !roi_enabled {
         return Ok(None);
     }
 
     // Get target ROI percentage
-    let target_profit_pct = config::get_target_profit_pct();
+    let target_profit_pct = policy.target_profit_pct;
 
     // Calculate unrealized profit percentage using average entry price
     let entry_price = position.average_entry_price;
