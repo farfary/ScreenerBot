@@ -107,8 +107,10 @@ pub async fn monitor_positions(
 
         // Phase 1: Spawn concurrent evaluation tasks for all positions
         for position in open_positions {
-            // Manual/force buys are manually managed — the auto-trader never auto-sells
-            // or auto-DCAs them. Skip exit evaluation entirely so the user keeps control.
+            // Manual/force buys are manually managed — skip exit evaluation entirely so the
+            // user keeps control. That means no auto take-profit, stop-loss, trailing,
+            // strategy/AI exit, blacklist exit, or >90% risk-limit exit. Auto-DCA is refused
+            // separately, by the DCA evaluator's own manual-management gate.
             // Price/PnL tracking happens elsewhere, so the position stays visible/updated.
             if position.manual_management {
                 logger::debug(

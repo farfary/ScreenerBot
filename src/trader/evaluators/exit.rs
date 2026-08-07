@@ -1,8 +1,13 @@
 //! Exit evaluation coordinator with priority-based checks and AI analysis
 //!
-//! Evaluates whether an exit should be made for a position by checking in priority order:
+//! Evaluates whether an exit should be made for a position by checking in priority order,
+//! split into two groups:
+//!
+//! Safety (1-2, always run, regardless of who owns this position's exits):
 //! 1. Blacklist (emergency - sync)
 //! 2. Risk limits (>90% loss - emergency)
+//!
+//! Policy (3-8, only when the auto-trader owns this position's exits):
 //! 3. AI exit analysis (high priority - if enabled)
 //! 4. Stop loss (high priority - fixed threshold from entry)
 //! 5. Trailing stop (high priority - from peak)
@@ -15,30 +20,15 @@ use crate::positions::Position;
 use crate::trader::types::TradeDecision;
 use crate::trader::{ai_analysis, evaluators, safety};
 
-/// Evaluate exit opportunity for a position
+/// Force stop, the price cascade and the fresh position re-read — everything every exit
+/// rule needs before any of them can run. `None` means nothing is evaluable this tick.
 ///
-/// Checks exit conditions in priority order. First matching condition returns immediately.
-///
-/// Priority order (matching current implementation + AI + risk check):
-/// 1. **Blacklist** (emergency - sync): Token blacklisted → immediate exit
-/// 2. **Risk limits** (emergency): >90% loss → emergency exit
-/// 3. **AI exit analysis** (high priority): AI suggests exit → prioritized exit
-/// 4. **Stop loss** (high priority): Fixed threshold from entry price
-/// 5. **Trailing stop** (high priority): Price dropped from peak by threshold
-/// 6. **ROI target** (normal): Target profit reached
-/// 7. **Time override** (normal): Position held too long
-/// 8. **Strategy exit** (normal): Strategy signals exit
-///
-/// Returns:
-/// - Ok(Some(TradeDecision)) if exit should be made
-/// - Ok(None) if no exit signal
-/// - Err(String) if evaluation failed
-pub async fn evaluate_exit_for_position(
-    position: Position,
-) -> Result<Option<TradeDecision>, String> {
+/// Force stop lives here on purpose: it is the global halt, so no caller can reach an
+/// exit rule without passing it, whichever of the two evaluators below it chooses.
+async fn resolve_evaluation_input(position: &Position) -> Option<(Position, f64)> {
     // Early exit: Force stop is active (even exits are halted during force stop)
     if crate::global::is_force_stopped() {
-        return Ok(None);
+        return None;
     }
 
     // Get current price with fallback cascade:
@@ -56,55 +46,75 @@ pub async fn evaluate_exit_for_position(
                     position.effective_entry_price,
                 )
             } else {
-                return Ok(None); // Invalid price
+                return None; // Invalid price
             }
         }
-        None => return Ok(None), // No price data from any source
+        None => return None, // No price data from any source
     };
 
     // Get fresh position with updated price_highest for accurate trailing stop calculation
     let fresh_position = match crate::positions::get_position_by_mint(&position.mint).await {
         Some(pos) => pos,
-        None => return Ok(None), // Position disappeared
+        None => return None, // Position disappeared
     };
 
+    Some((fresh_position, current_price))
+}
+
+/// Priorities 1-2: blacklist and the >90% loss risk limit. These are SAFETY, not policy:
+/// the token turned out to be a rug, or the position is already destroyed. They apply to
+/// every position the bot is permitted to act on, whatever owns its exits.
+pub(crate) async fn evaluate_safety_exit(
+    position: &Position,
+    current_price: f64,
+) -> Result<Option<TradeDecision>, String> {
     // Priority 1: Blacklist (emergency - token-level DB check only)
-    if let Some(decision) = safety::check_blacklist_exit(&fresh_position, current_price).await {
+    if let Some(decision) = safety::check_blacklist_exit(position, current_price).await {
         crate::logger::info(
             crate::logger::LogTag::Trader,
             &format!(
                 "Token {} blacklisted! Emergency exit signal",
-                fresh_position.symbol
+                position.symbol
             ),
         );
         return Ok(Some(decision));
     }
 
     // Priority 2: Risk limits (>90% loss - emergency)
-    if let Some(decision) = safety::check_risk_limits(&fresh_position, current_price).await? {
+    if let Some(decision) = safety::check_risk_limits(position, current_price).await? {
         crate::logger::info(
             crate::logger::LogTag::Trader,
             &format!(
                 "Risk limit triggered for {} (>90% loss)! Emergency exit signal",
-                fresh_position.symbol
+                position.symbol
             ),
         );
         return Ok(Some(decision));
     }
 
+    Ok(None)
+}
+
+/// Priorities 3-8: AI, stop loss, trailing stop, ROI target, time override, strategy exit.
+/// These are POLICY — opinions about when to take a trade off — and only run when the
+/// auto-trader owns this position's exits.
+pub(crate) async fn evaluate_policy_exit(
+    position: &Position,
+    current_price: f64,
+) -> Result<Option<TradeDecision>, String> {
     // Priority 3: AI exit analysis (high priority - if enabled)
     if ai_analysis::should_analyze_exit() {
         // Get token data for AI analysis
-        match crate::tokens::get_full_token_async(&fresh_position.mint).await {
+        match crate::tokens::get_full_token_async(&position.mint).await {
             Ok(Some(token)) => {
-                match ai_analysis::analyze_exit(&fresh_position, &token).await {
+                match ai_analysis::analyze_exit(position, &token).await {
                     Some(result) => {
                         if result.action == ai_analysis::ExitAction::Exit {
                             crate::logger::info(
                                 crate::logger::LogTag::Trader,
                                 &format!(
                                     "AI suggests exit for {} (confidence: {}%, urgency: {:?}, reason: {})",
-                                    fresh_position.symbol,
+                                    position.symbol,
                                     result.confidence,
                                     result.urgency,
                                     result.reasoning
@@ -113,8 +123,8 @@ pub async fn evaluate_exit_for_position(
 
                             // Create exit decision
                             let trade_decision = TradeDecision {
-                                position_id: fresh_position.id.map(|id| id.to_string()),
-                                mint: fresh_position.mint.clone(),
+                                position_id: position.id.map(|id| id.to_string()),
+                                mint: position.mint.clone(),
                                 action: crate::trader::types::TradeAction::Sell,
                                 reason: crate::trader::types::TradeReason::AiExit,
                                 strategy_id: Some("ai_exit".to_owned()),
@@ -139,12 +149,12 @@ pub async fn evaluate_exit_for_position(
                             crate::events::record_trader_event(
                                 "exit_signal_ai",
                                 crate::events::Severity::Info,
-                                Some(&fresh_position.mint),
+                                Some(&position.mint),
                                 None,
                                 serde_json::json!({
                                     "exit_type": "ai_exit",
-                                    "mint": fresh_position.mint,
-                                    "symbol": fresh_position.symbol,
+                                    "mint": position.mint,
+                                    "symbol": position.symbol,
                                     "current_price": current_price,
                                     "confidence": result.confidence,
                                     "urgency": format!("{:?}", result.urgency),
@@ -160,7 +170,7 @@ pub async fn evaluate_exit_for_position(
                                 crate::logger::LogTag::Trader,
                                 &format!(
                                     "AI suggests holding {} (confidence: {}%, reason: {})",
-                                    fresh_position.symbol, result.confidence, result.reasoning
+                                    position.symbol, result.confidence, result.reasoning
                                 ),
                             );
                         }
@@ -169,7 +179,7 @@ pub async fn evaluate_exit_for_position(
                         // AI analysis failed or is unavailable
                         crate::logger::debug(
                             crate::logger::LogTag::Trader,
-                            &format!("AI exit analysis unavailable for {}", fresh_position.symbol),
+                            &format!("AI exit analysis unavailable for {}", position.symbol),
                         );
                     }
                 }
@@ -179,7 +189,7 @@ pub async fn evaluate_exit_for_position(
                     crate::logger::LogTag::Trader,
                     &format!(
                         "Token data not found for AI exit analysis: {}",
-                        fresh_position.mint
+                        position.mint
                     ),
                 );
             }
@@ -193,7 +203,7 @@ pub async fn evaluate_exit_for_position(
     }
 
     // Priority 4: Stop loss (high priority - fixed threshold from entry)
-    match evaluators::exit_stop_loss::check_stop_loss(&fresh_position, current_price).await {
+    match evaluators::exit_stop_loss::check_stop_loss(position, current_price).await {
         Ok(Some(decision)) => {
             // Log already done in check_stop_loss with full context
 
@@ -201,15 +211,15 @@ pub async fn evaluate_exit_for_position(
             crate::events::record_trader_event(
         "exit_signal_stop_loss",
         crate::events::Severity::Warn,
-        Some(&fresh_position.mint),
+        Some(&position.mint),
         None,
         serde_json::json!({
           "exit_type": "stop_loss",
-          "mint": fresh_position.mint,
-          "symbol": fresh_position.symbol,
-          "entry_price": fresh_position.average_entry_price,
+          "mint": position.mint,
+          "symbol": position.symbol,
+          "entry_price": position.average_entry_price,
           "current_price": current_price,
-          "loss_pct": ((fresh_position.average_entry_price - current_price) / fresh_position.average_entry_price) * 100.0,
+          "loss_pct": ((position.average_entry_price - current_price) / position.average_entry_price) * 100.0,
         }),
       )
       .await;
@@ -220,32 +230,29 @@ pub async fn evaluate_exit_for_position(
         Err(e) => {
             crate::logger::warning(
                 crate::logger::LogTag::Trader,
-                &format!(
-                    "Error checking stop loss for {}: {}",
-                    fresh_position.symbol, e
-                ),
+                &format!("Error checking stop loss for {}: {}", position.symbol, e),
             );
         }
     }
 
     // Priority 5: Trailing stop (high priority)
-    match evaluators::exit_trailing::check_trailing_stop(&fresh_position, current_price).await {
+    match evaluators::exit_trailing::check_trailing_stop(position, current_price).await {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
-                &format!("Trailing stop triggered for {}", fresh_position.symbol),
+                &format!("Trailing stop triggered for {}", position.symbol),
             );
 
             // Record exit signal event
             crate::events::record_trader_event(
                 "exit_signal_trailing_stop",
                 crate::events::Severity::Info,
-                Some(&fresh_position.mint),
+                Some(&position.mint),
                 None,
                 serde_json::json!({
                   "exit_type": "trailing_stop",
-                  "mint": fresh_position.mint,
-                  "symbol": fresh_position.symbol,
+                  "mint": position.mint,
+                  "symbol": position.symbol,
                   "current_price": current_price,
                 }),
             )
@@ -259,30 +266,30 @@ pub async fn evaluate_exit_for_position(
                 crate::logger::LogTag::Trader,
                 &format!(
                     "Error checking trailing stop for {}: {}",
-                    fresh_position.symbol, e
+                    position.symbol, e
                 ),
             );
         }
     }
 
     // Priority 6: ROI target (normal priority)
-    match evaluators::exit_roi::check_roi_exit(&fresh_position, current_price).await {
+    match evaluators::exit_roi::check_roi_exit(position, current_price).await {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
-                &format!("ROI target reached for {}", fresh_position.symbol),
+                &format!("ROI target reached for {}", position.symbol),
             );
 
             // Record ROI exit signal event
             crate::events::record_trader_event(
                 "exit_signal_roi_target",
                 crate::events::Severity::Info,
-                Some(&fresh_position.mint),
+                Some(&position.mint),
                 None,
                 serde_json::json!({
                   "exit_type": "roi_target",
-                  "mint": fresh_position.mint,
-                  "symbol": fresh_position.symbol,
+                  "mint": position.mint,
+                  "symbol": position.symbol,
                   "current_price": current_price,
                 }),
             )
@@ -294,32 +301,29 @@ pub async fn evaluate_exit_for_position(
         Err(e) => {
             crate::logger::warning(
                 crate::logger::LogTag::Trader,
-                &format!(
-                    "Error checking ROI exit for {}: {}",
-                    fresh_position.symbol, e
-                ),
+                &format!("Error checking ROI exit for {}: {}", position.symbol, e),
             );
         }
     }
 
     // Priority 7: Time override (normal priority)
-    match evaluators::exit_time::check_time_override(&fresh_position, current_price).await {
+    match evaluators::exit_time::check_time_override(position, current_price).await {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
-                &format!("Time override triggered for {}", fresh_position.symbol),
+                &format!("Time override triggered for {}", position.symbol),
             );
 
             // Record time override exit signal event
             crate::events::record_trader_event(
                 "exit_signal_time_override",
                 crate::events::Severity::Info,
-                Some(&fresh_position.mint),
+                Some(&position.mint),
                 None,
                 serde_json::json!({
                   "exit_type": "time_override",
-                  "mint": fresh_position.mint,
-                  "symbol": fresh_position.symbol,
+                  "mint": position.mint,
+                  "symbol": position.symbol,
                   "current_price": current_price,
                 }),
             )
@@ -333,21 +337,20 @@ pub async fn evaluate_exit_for_position(
                 crate::logger::LogTag::Trader,
                 &format!(
                     "Error checking time override for {}: {}",
-                    fresh_position.symbol, e
+                    position.symbol, e
                 ),
             );
         }
     }
 
     // Priority 8: Strategy exit (normal priority)
-    match evaluators::StrategyEvaluator::check_exit_strategies(&fresh_position, current_price).await
-    {
+    match evaluators::StrategyEvaluator::check_exit_strategies(position, current_price).await {
         Ok(Some(decision)) => {
             crate::logger::info(
                 crate::logger::LogTag::Trader,
                 &format!(
                     "Strategy exit signal for {} (strategy: {:?})",
-                    fresh_position.symbol, decision.strategy_id
+                    position.symbol, decision.strategy_id
                 ),
             );
 
@@ -355,12 +358,12 @@ pub async fn evaluate_exit_for_position(
             crate::events::record_trader_event(
                 "exit_signal_strategy",
                 crate::events::Severity::Info,
-                Some(&fresh_position.mint),
+                Some(&position.mint),
                 None,
                 serde_json::json!({
                   "exit_type": "strategy",
-                  "mint": fresh_position.mint,
-                  "symbol": fresh_position.symbol,
+                  "mint": position.mint,
+                  "symbol": position.symbol,
                   "strategy_id": decision.strategy_id,
                   "current_price": current_price,
                 }),
@@ -375,7 +378,7 @@ pub async fn evaluate_exit_for_position(
                 crate::logger::LogTag::Trader,
                 &format!(
                     "Error checking strategy exit for {}: {}",
-                    fresh_position.symbol, e
+                    position.symbol, e
                 ),
             );
         }
@@ -383,4 +386,28 @@ pub async fn evaluate_exit_for_position(
 
     // No exit signals
     Ok(None)
+}
+
+/// Evaluate exit opportunity for a position
+///
+/// Checks exit conditions in priority order. First matching condition returns immediately.
+///
+/// Resolves the current price and a fresh position read (see [`resolve_evaluation_input`]),
+/// then runs safety checks (priorities 1-2, see [`evaluate_safety_exit`]) followed by policy
+/// checks (priorities 3-8, see [`evaluate_policy_exit`]).
+///
+/// Returns:
+/// - Ok(Some(TradeDecision)) if exit should be made
+/// - Ok(None) if no exit signal
+/// - Err(String) if evaluation failed
+pub async fn evaluate_exit_for_position(
+    position: Position,
+) -> Result<Option<TradeDecision>, String> {
+    let Some((fresh_position, current_price)) = resolve_evaluation_input(&position).await else {
+        return Ok(None);
+    };
+    if let Some(decision) = evaluate_safety_exit(&fresh_position, current_price).await? {
+        return Ok(Some(decision));
+    }
+    evaluate_policy_exit(&fresh_position, current_price).await
 }

@@ -115,6 +115,15 @@ impl DcaEvaluation {
         };
 
         // Evaluate conditions
+        // The auto-trader only adds SOL to positions whose exits it also owns. A manually
+        // managed position is the user's; averaging into it spends money on a bag the bot is
+        // not allowed to sell. `process_dca_opportunities` reaches `get_open_positions()`
+        // directly, so the exit monitor's manual-management skip never covered this path.
+        if position.manual_management {
+            should_trigger = false;
+            reasons.push("Position is manually managed".to_owned());
+        }
+
         if !config.enabled {
             should_trigger = false;
             reasons.push("DCA disabled in config".to_owned());
