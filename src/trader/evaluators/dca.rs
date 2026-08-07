@@ -14,7 +14,7 @@
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::positions::Position;
-use crate::trader::config;
+use crate::trader::policy::ExitPolicy;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -214,13 +214,7 @@ impl DcaEvaluation {
 /// Process DCA opportunities for eligible positions
 pub async fn process_dca_opportunities() -> Result<Vec<TradeDecision>, String> {
     // Build config snapshot (batch read)
-    let dca_config = DcaConfigSnapshot {
-        enabled: config::is_dca_enabled(),
-        max_count: config::get_dca_max_count() as u32,
-        cooldown_minutes: config::get_dca_cooldown_minutes(),
-        threshold_pct: config::get_dca_threshold_pct(),
-        size_percentage: config::get_dca_size_percentage(),
-    };
+    let dca_config = ExitPolicy::from_config().dca;
 
     // Early exit if DCA is disabled
     if !dca_config.enabled {
