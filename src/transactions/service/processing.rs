@@ -48,7 +48,7 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
     let mut check_interval = interval(Duration::from_secs(config.check_interval_secs));
 
     // Initialize WebSocket if enabled
-    let mut websocket_receiver = if config.enable_websocket {
+    let mut websocket_sub: Option<crate::rpc::LogsSubscription> = if config.enable_websocket {
         initialize_websocket_monitoring(config.wallet_pubkey).await?
     } else {
         None
@@ -60,7 +60,7 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
     // If WebSocket was successfully initialized, mark it as active immediately
     // This prevents unnecessary fallback checks during the initial period when
     // no transactions have occurred yet
-    if websocket_receiver.is_some() {
+    if websocket_sub.is_some() {
         metrics.update_websocket_activity();
         logger::info(
             LogTag::Transactions,
@@ -86,18 +86,18 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
              }
 
              // WebSocket transaction notifications (if WebSocket is active)
-             sig_opt = async {
-               if let Some(ref mut rx) = websocket_receiver {
-                 rx.recv().await
+             event_opt = async {
+               if let Some(ref mut sub) = websocket_sub {
+                 sub.recv().await
                } else {
                  // No WebSocket - return pending (never resolves)
-                 std::future::pending::<Option<String>>().await
+                 std::future::pending::<Option<crate::rpc::SubscriptionEvent>>().await
                }
              } => {
-               match sig_opt {
-                 Some(sig) => {
+               match event_opt {
+                 Some(event) => {
                    metrics.update_websocket_activity();
-                   if let Err(e) = handle_websocket_transaction(&config, &processor, sig).await {
+                   if let Err(e) = handle_websocket_transaction(&config, &processor, event).await {
                      logger::warning(
                        LogTag::Transactions,
                        &format!("WebSocket transaction handling failed: {e}")
@@ -107,9 +107,9 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
                  None => {
                    logger::info(
                      LogTag::Transactions,
-                     "WebSocket channel closed - will attempt reconnection on next health check"
+                     "Log subscription ended - will resubscribe on next health check"
                    );
-                   websocket_receiver = None;
+                   websocket_sub = None;
                  }
                }
              }
@@ -119,30 +119,30 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
                metrics.update_websocket_health_check();
 
                if config.enable_websocket {
-                 let ws_exists = websocket_receiver.is_some();
+                 let ws_exists = websocket_sub.is_some();
 
                  if !ws_exists {
-                   // WebSocket doesn't exist - try to establish it
+                   // Log subscription doesn't exist - try to establish it
                    // This is the ONLY case where we reconnect
                    logger::info(
                      LogTag::Transactions,
-        "No WebSocket connection - attempting to establish..."
+        "No log subscription - attempting to establish..."
                    );
 
                    match initialize_websocket_monitoring(config.wallet_pubkey).await {
-                     Ok(new_receiver) => {
-                       websocket_receiver = new_receiver;
+                     Ok(new_sub) => {
+                       websocket_sub = new_sub;
                        metrics.increment_websocket_reconnect();
                        metrics.update_websocket_activity();
                        logger::info(
                          LogTag::Transactions,
-        "WebSocket connection established successfully"
+        "Log subscription established successfully"
                        );
                      }
                      Err(e) => {
                        logger::info(
                          LogTag::Transactions,
-                         &format!("WebSocket connection failed: {e} - will retry in 15s")
+                         &format!("Log subscription failed: {e} - will retry in 15s")
                        );
                      }
                    }
