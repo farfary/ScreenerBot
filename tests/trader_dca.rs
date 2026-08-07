@@ -313,3 +313,34 @@ fn the_calculations_snapshot_reports_what_was_measured() {
     assert_eq!(calc.current_price, 0.8);
     assert!((calc.pnl_pct - -20.0).abs() < 1e-9);
 }
+
+// ==================== MANAGEMENT AUTHORITY ====================
+
+/// A manually managed position must never be auto-DCA'd — the auto-trader may only spend
+/// SOL on positions whose exits it also owns. If this regresses, the bot averages down
+/// into a bag the user asked to manage themselves.
+#[test]
+fn a_manually_managed_position_never_triggers_a_dca() {
+    let mut position = position_at(0.85); // 15% down, deep enough to trigger otherwise
+    position.manual_management = true;
+    let evaluation = evaluate(&position, permissive_config());
+    assert!(!evaluation.should_trigger);
+    assert!(
+        evaluation
+            .reasons
+            .iter()
+            .any(|r| r.contains("manually managed")),
+        "reasons: {:?}",
+        evaluation.reasons
+    );
+}
+
+/// Positive control for the test above: the identical position and config, but
+/// `manual_management = false`, DOES trigger — proving the management gate is the only
+/// difference and this isn't accidentally blocked by some other condition.
+#[test]
+fn the_same_position_triggers_once_auto_managed() {
+    let mut position = position_at(0.85);
+    position.manual_management = false;
+    assert!(evaluate(&position, permissive_config()).should_trigger);
+}

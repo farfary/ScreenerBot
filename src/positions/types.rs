@@ -156,9 +156,10 @@ pub struct Position {
 
     // ==================== MANUAL MANAGEMENT ====================
     // True when the position was opened by a manual/force buy from the dashboard.
-    // The auto-trader skips such positions entirely (no auto take-profit, stop-loss,
-    // trailing, strategy/AI exit, blacklist exit, or auto-DCA) so the user keeps full
-    // manual control. Default false (auto-managed) for strategy/auto entries.
+    // The exit monitor skips such positions entirely (no auto take-profit, stop-loss,
+    // trailing, strategy/AI exit — including no blacklist or >90% risk-limit exit), and
+    // the DCA evaluator refuses to average into them. Default false (auto-managed) for
+    // strategy/auto entries.
     #[serde(default)]
     pub manual_management: bool,
 }
