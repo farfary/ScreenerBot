@@ -11,6 +11,51 @@ use tabled::Tabled;
 // Analysis cache versioning (bump when snapshot schema changes)
 pub const ANALYSIS_CACHE_VERSION: u32 = 2;
 
+/// The wallet a processing run is *about*.
+///
+/// Every decode, every stored row and every dedupe key is relative to a subject.
+/// The bot's own trading wallet is simply the first subject; watched wallets are
+/// the others. The database has always had a `wallet_address` column on every
+/// table -- the subject is what finally makes that column mean something, instead
+/// of every write silently resolving to the bot's own wallet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Subject(pub solana_sdk::pubkey::Pubkey);
+
+impl Subject {
+    /// The bot's own trading wallet.
+    pub fn own() -> crate::Result<Self> {
+        crate::config::get_wallet_pubkey()
+            .map(Subject)
+            .map_err(|e| {
+                crate::Error::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+                    error: e,
+                })
+            })
+    }
+
+    /// The subject's address in base58, as stored in the `wallet_address` column.
+    pub fn address(&self) -> String {
+        self.0.to_string()
+    }
+
+    /// The underlying public key.
+    pub fn pubkey(&self) -> solana_sdk::pubkey::Pubkey {
+        self.0
+    }
+}
+
+impl From<solana_sdk::pubkey::Pubkey> for Subject {
+    fn from(pubkey: solana_sdk::pubkey::Pubkey) -> Self {
+        Subject(pubkey)
+    }
+}
+
+impl std::fmt::Display for Subject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Deferred retry record for signatures that timed out/dropped
 /// Used for both manager-level retries and service-level deferred queue
 #[derive(Debug, Clone, Serialize, Deserialize)]

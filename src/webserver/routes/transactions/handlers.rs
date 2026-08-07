@@ -143,9 +143,17 @@ pub(super) async fn get_summary(
     let pending_local = 0; // TODO: Get from TransactionsManager if exposed
     let deferred_count = db_stats.total_deferred_retries as usize;
 
-    // Get newest/oldest known signatures
-    let newest_known_signature = db.get_newest_known_signature().await.ok().flatten();
-    let oldest_known_signature = db.get_oldest_known_signature().await.ok().flatten();
+    // Get newest/oldest known signatures. These are scoped to a subject, and this
+    // summary is our own transaction history -- not any other wallet we may watch.
+    let own_subject = crate::transactions::Subject::own().ok();
+    let newest_known_signature = match own_subject {
+        Some(subject) => db.get_newest_known_signature(subject).await.ok().flatten(),
+        None => None,
+    };
+    let oldest_known_signature = match own_subject {
+        Some(subject) => db.get_oldest_known_signature(subject).await.ok().flatten(),
+        None => None,
+    };
 
     Json(TransactionSummaryResponse {
         total,

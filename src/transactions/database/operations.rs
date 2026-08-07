@@ -332,10 +332,14 @@ impl TransactionDatabase {
 // =============================================================================
 
 impl TransactionDatabase {
-    /// Check if signature is known in database
-    pub async fn is_signature_known(&self, signature: &str) -> Result<bool, String> {
+    /// Check if signature is known in database, for the given subject
+    pub async fn is_signature_known(
+        &self,
+        subject: Subject,
+        signature: &str,
+    ) -> Result<bool, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let exists: bool = conn
             .query_row(
@@ -348,10 +352,14 @@ impl TransactionDatabase {
         Ok(exists)
     }
 
-    /// Add signature to known signatures
-    pub async fn add_known_signature(&self, signature: &str) -> Result<(), String> {
+    /// Add signature to known signatures, for the given subject
+    pub async fn add_known_signature(
+        &self,
+        subject: Subject,
+        signature: &str,
+    ) -> Result<(), String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         conn.execute(
             "INSERT OR IGNORE INTO known_signatures (signature, wallet_address) VALUES (?1, ?2)",
@@ -362,10 +370,10 @@ impl TransactionDatabase {
         Ok(())
     }
 
-    /// Get count of known signatures
-    pub async fn get_known_signatures_count(&self) -> Result<u64, String> {
+    /// Get count of known signatures, for the given subject
+    pub async fn get_known_signatures_count(&self, subject: Subject) -> Result<u64, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let count: i64 = conn
             .query_row(
@@ -378,10 +386,13 @@ impl TransactionDatabase {
         Ok(count as u64)
     }
 
-    /// Get the newest known signature (most recently added)
-    pub async fn get_newest_known_signature(&self) -> Result<Option<String>, String> {
+    /// Get the newest known signature (most recently added), for the given subject
+    pub async fn get_newest_known_signature(
+        &self,
+        subject: Subject,
+    ) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let result: Option<String> = conn
             .query_row(
@@ -395,14 +406,17 @@ impl TransactionDatabase {
         Ok(result)
     }
 
-    /// Get the oldest known signature for incremental fetching checkpoint
+    /// Get the oldest known signature for incremental fetching checkpoint, for the given subject
     /// Returns None if no signatures are known yet (first run)
     ///
     /// When fetching backwards from blockchain (newest→oldest), we stop when we hit
     /// the oldest signature we already have, ensuring we only fetch missing history.
-    pub async fn get_oldest_known_signature(&self) -> Result<Option<String>, String> {
+    pub async fn get_oldest_known_signature(
+        &self,
+        subject: Subject,
+    ) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let result: Option<String> = conn
             .query_row(

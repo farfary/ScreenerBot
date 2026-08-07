@@ -541,7 +541,9 @@ mod tests {
         let raw_json_string = raw_json.to_string();
         transaction.raw_transaction_data = Some(raw_json);
 
-        db.upsert_full_transaction(&transaction)
+        let subject =
+            crate::transactions::types::Subject::own().expect("own wallet subject for test");
+        db.upsert_full_transaction(subject, &transaction)
             .await
             .expect("upsert transaction");
 

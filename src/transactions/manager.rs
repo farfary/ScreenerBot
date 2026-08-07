@@ -123,9 +123,11 @@ impl TransactionsManager {
     pub async fn initialize(&mut self) -> Result<(), String> {
         let duration = DurationMeasure::start("TransactionsManager::initialize");
 
+        let subject = Subject(self.wallet_pubkey);
+
         // Load known signatures from database if available
         if let Some(ref db) = self.transaction_database {
-            match db.get_known_signatures_count().await {
+            match db.get_known_signatures_count(subject).await {
                 Ok(count) => {
                     self.total_transactions = count;
                     if self.debug_enabled {
@@ -146,7 +148,7 @@ impl TransactionsManager {
 
         // Load pending transactions from database
         if let Some(ref db) = self.transaction_database {
-            match db.get_pending_transactions().await {
+            match db.get_pending_transactions(subject).await {
                 Ok(pending) => {
                     self.pending_transactions = pending;
                     if self.debug_enabled && !self.pending_transactions.is_empty() {
@@ -222,8 +224,9 @@ impl TransactionsManager {
 
         // Save pending transactions to database
         if let Some(ref db) = self.transaction_database {
+            let subject = Subject(self.wallet_pubkey);
             if let Err(e) = db
-                .save_pending_transactions(&self.pending_transactions)
+                .save_pending_transactions(subject, &self.pending_transactions)
                 .await
             {
                 logger::info(
@@ -310,14 +313,16 @@ impl TransactionsManager {
 
     /// Check if signature is known using database (if available) or fallback to HashSet
     pub async fn is_signature_known(&self, signature: &str) -> bool {
+        let subject = Subject(self.wallet_pubkey);
+
         // First check global cache
-        if is_signature_known_globally(signature).await {
+        if is_signature_known_globally(subject, signature).await {
             return true;
         }
 
         // Then check database if available
         if let Some(ref db) = self.transaction_database {
-            if let Ok(known) = db.is_signature_known(signature).await {
+            if let Ok(known) = db.is_signature_known(subject, signature).await {
                 return known;
             }
         }
@@ -328,12 +333,14 @@ impl TransactionsManager {
 
     /// Add signature to known cache using database (if available) or fallback to HashSet
     pub async fn add_signature_to_known(&mut self, signature: String) {
+        let subject = Subject(self.wallet_pubkey);
+
         // Add to global cache
-        add_signature_to_known_globally(signature.clone()).await;
+        add_signature_to_known_globally(subject, signature.clone()).await;
 
         // Add to database if available
         if let Some(ref db) = self.transaction_database {
-            if let Err(e) = db.add_known_signature(&signature).await {
+            if let Err(e) = db.add_known_signature(subject, &signature).await {
                 if self.debug_enabled {
                     logger::info(
                         LogTag::Transactions,
@@ -375,11 +382,12 @@ impl TransactionsManager {
 impl TransactionsManager {
     /// Add a pending transaction
     pub async fn add_pending_transaction(&mut self, signature: String) {
+        let subject = Subject(self.wallet_pubkey);
         let now = Utc::now();
         self.pending_transactions.insert(signature.clone(), now);
 
         // Also add to global pending cache
-        add_pending_transaction_globally(signature.clone(), now).await;
+        add_pending_transaction_globally(subject, signature.clone(), now).await;
 
         if self.debug_enabled {
             logger::info(
@@ -392,8 +400,9 @@ impl TransactionsManager {
     /// Remove a pending transaction
     pub async fn remove_pending_transaction(&mut self, signature: &str) {
         if self.pending_transactions.remove(signature).is_some() {
+            let subject = Subject(self.wallet_pubkey);
             // Also remove from global pending cache
-            remove_pending_transaction_globally(signature).await;
+            remove_pending_transaction_globally(subject, signature).await;
 
             if self.debug_enabled {
                 logger::info(

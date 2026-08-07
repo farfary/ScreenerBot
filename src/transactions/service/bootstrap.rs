@@ -14,6 +14,7 @@ use crate::transactions::{
     fetcher::TransactionFetcher,
     manager::TransactionsManager,
     processor::TransactionProcessor,
+    types::Subject,
     utils::{add_signature_to_known_globally, is_signature_known_globally, RPC_BATCH_SIZE},
 };
 
@@ -59,6 +60,7 @@ pub async fn perform_initial_transaction_bootstrap(
             mgr.transaction_database.clone(),
         )
     };
+    let subject = Subject(wallet_pubkey);
     let fetcher = TransactionFetcher::new();
     let processor = Arc::new(TransactionProcessor::new(wallet_pubkey));
 
@@ -89,7 +91,8 @@ pub async fn perform_initial_transaction_bootstrap(
                 if state.full_history_completed {
                     // Forward incremental mode
                     bootstrap_mode = "INCREMENTAL".to_owned();
-                    checkpoint_signature = db.get_newest_known_signature().await.unwrap_or(None);
+                    checkpoint_signature =
+                        db.get_newest_known_signature(subject).await.unwrap_or(None);
                 } else {
                     // Backfill mode not completed
                     bootstrap_mode = "FULL".to_owned();
@@ -284,11 +287,11 @@ pub async fn perform_initial_transaction_bootstrap(
 
     // Filter out already known signatures
     for signature in &all_signatures {
-        let mut signature_is_known = is_signature_known_globally(signature).await;
+        let mut signature_is_known = is_signature_known_globally(subject, signature).await;
 
         if !signature_is_known {
             if let Some(db) = transaction_db.as_ref() {
-                match db.is_signature_known(signature).await {
+                match db.is_signature_known(subject, signature).await {
                     Ok(true) => {
                         signature_is_known = true;
                     }
@@ -306,7 +309,7 @@ pub async fn perform_initial_transaction_bootstrap(
 
         if signature_is_known {
             stats.known_signatures_skipped += 1;
-            add_signature_to_known_globally(signature.clone()).await;
+            add_signature_to_known_globally(subject, signature.clone()).await;
             if let Ok(mut mgr) = manager_arc.try_lock() {
                 mgr.known_signatures.insert(signature.clone());
             }
@@ -369,7 +372,7 @@ pub async fn perform_initial_transaction_bootstrap(
             match result {
                 Ok(_) => {
                     if let Some(db) = transaction_db.as_ref() {
-                        if let Err(e) = db.add_known_signature(&signature).await {
+                        if let Err(e) = db.add_known_signature(subject, &signature).await {
                             logger::info(
                                 LogTag::Transactions,
                                 &format!("Failed to persist known signature {signature}: {e}"),
@@ -378,7 +381,7 @@ pub async fn perform_initial_transaction_bootstrap(
                         }
                     }
 
-                    add_signature_to_known_globally(signature.clone()).await;
+                    add_signature_to_known_globally(subject, signature.clone()).await;
                     if let Ok(mut mgr) = manager_arc.try_lock() {
                         mgr.known_signatures.insert(signature.clone());
                         mgr.total_transactions += 1;
@@ -508,7 +511,7 @@ pub async fn perform_initial_transaction_bootstrap(
                     match result {
                         Ok(_) => {
                             if let Some(db) = transaction_db.as_ref() {
-                                if let Err(e) = db.add_known_signature(&signature).await {
+                                if let Err(e) = db.add_known_signature(subject, &signature).await {
                                     logger::info(
                                         LogTag::Transactions,
                                         &format!(
@@ -519,7 +522,7 @@ pub async fn perform_initial_transaction_bootstrap(
                                 }
                             }
 
-                            add_signature_to_known_globally(signature.clone()).await;
+                            add_signature_to_known_globally(subject, signature.clone()).await;
                             if let Ok(mut mgr) = manager_arc.try_lock() {
                                 mgr.known_signatures.insert(signature.clone());
                                 mgr.total_transactions += 1;
@@ -575,7 +578,7 @@ pub async fn perform_initial_transaction_bootstrap(
 
     // Update manager with final count from database
     if let Some(db) = transaction_db.as_ref() {
-        match db.get_known_signatures_count().await {
+        match db.get_known_signatures_count(subject).await {
             Ok(count) => {
                 if let Ok(mut mgr) = manager_arc.try_lock() {
                     mgr.total_transactions = count;
