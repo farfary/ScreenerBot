@@ -19,7 +19,7 @@ mod common;
 use common::config_guard;
 use screenerbot::trader::evaluators::DcaConfigSnapshot;
 use screenerbot::trader::policy::{
-    ExitPolicy, RoiPolicy, StopLossPolicy, TimePolicy, TrailingPolicy,
+    ExitPolicy, ExitPolicyOverrides, RoiPolicy, StopLossPolicy, TimePolicy, TrailingPolicy,
 };
 
 #[test]
@@ -137,4 +137,32 @@ fn dca_policy_equals_the_snapshot_the_dca_evaluator_expects() {
     assert_eq!(dca.cooldown_minutes, expected.cooldown_minutes);
     assert_eq!(dca.threshold_pct, expected.threshold_pct);
     assert_eq!(dca.size_percentage, expected.size_percentage);
+}
+
+#[test]
+fn task_override_changes_only_set_fields_and_unset_fields_inherit() {
+    let _cfg = config_guard();
+    common::set_config(|cfg| {
+        cfg.trader.stop_loss_enabled = true;
+        cfg.trader.stop_loss_threshold_pct = 40.0;
+        cfg.positions.trailing_stop_distance_pct = 5.0;
+        cfg.trader.roi_target_percent = 20.0;
+    });
+    let inherited = ExitPolicy::from_config();
+    let mut resolved = inherited.clone();
+    let mut overrides = ExitPolicyOverrides::default();
+    overrides.stop_loss.threshold_pct = Some(17.0);
+    overrides.trailing.enabled = Some(false);
+    resolved.apply_overrides(&overrides);
+
+    assert_eq!(resolved.stop_loss.threshold_pct, 17.0);
+    assert!(!resolved.trailing.enabled);
+    assert_eq!(resolved.stop_loss.enabled, inherited.stop_loss.enabled);
+    assert_eq!(
+        resolved.trailing.distance_pct,
+        inherited.trailing.distance_pct
+    );
+    assert_eq!(resolved.roi, inherited.roi);
+    assert_eq!(resolved.time, inherited.time);
+    assert_eq!(resolved.dca.enabled, inherited.dca.enabled);
 }

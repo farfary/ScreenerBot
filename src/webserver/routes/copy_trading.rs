@@ -71,7 +71,7 @@ fn default_limit() -> usize {
 }
 
 async fn open_database() -> Result<CopyDatabase, String> {
-    tokio::task::spawn_blocking(CopyDatabase::new)
+    tokio::task::spawn_blocking(CopyDatabase::shared)
         .await
         .map_err(|e| format!("Copy database task failed: {e}"))?
 }
@@ -261,6 +261,22 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
                         ),
                     });
                 }
+            }
+            if let Err(error) =
+                crate::trader::copy::sync_open_position_management(id, updated.exit_mode).await
+            {
+                let rollback = db.update_task(original.clone()).await;
+                let position_rollback =
+                    crate::trader::copy::sync_open_position_management(id, original.exit_mode)
+                        .await;
+                return internal_error(match (rollback, position_rollback) {
+                    (Ok(_), Ok(())) => format!(
+                        "Failed to update copy position ownership; task update was rolled back: {error}"
+                    ),
+                    (task_result, position_result) => format!(
+                        "Failed to update copy position ownership ({error}); rollback results: task={task_result:?}, positions={position_result:?}"
+                    ),
+                });
             }
             success_response(TaskResponse { task: updated })
         }

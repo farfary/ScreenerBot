@@ -15,8 +15,8 @@ pub enum WatchSource {
     /// on; not a row in `watch_targets` and not addressable through the watch API --
     /// it is structural, not something the user adds or removes.
     OwnWallet,
-    /// A copy task consumes this subject's activity. Phase 2c only constructs paper
-    /// tasks; the task id lets matching avoid an event-time database lookup.
+    /// A copy task consumes this subject's activity. The task id lets matching avoid
+    /// an event-time database lookup and binds execution to the intended task.
     Copy { task_id: i64 },
     /// Notify-only: format matching activity through Telegram (and, later, the
     /// dashboard). No money moves. `rule_id` is the owning `watch_targets.id` --

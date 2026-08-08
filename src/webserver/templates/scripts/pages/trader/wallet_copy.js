@@ -18,8 +18,22 @@ const SKIP_LABELS = {
   below_minimum_size: "Calculated copy size is too small",
   invalid_sizing: "Task sizing is invalid",
   invalid_slippage: "Task slippage is invalid",
+  invalid_exit_policy: "Task exit policy is invalid",
   invalid_price: "No usable market price",
+  not_sell_swap: "Target activity was not a sell",
+  exit_mode_disabled: "Target sell ignored by task exit mode",
+  force_stopped: "Trading is force-stopped",
+  copy_position_not_found: "No position owned by this copy task",
+  position_user_only: "Position is managed by the user only",
+  position_management_mismatch: "Position ownership no longer permits copy sells",
 };
+
+const POLICY_CONTROLS = [
+  ["stop-loss", "stop_loss", "threshold_pct"],
+  ["roi", "roi", "target_profit_pct"],
+  ["trailing", "trailing", "distance_pct"],
+  ["time", "time", "duration_seconds"],
+];
 
 const ENTRY_BLOCK_LABELS = {
   force_stopped: "Trading is force-stopped",
@@ -55,6 +69,9 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       if (button) editTask(Number(button.dataset.copyTaskId));
     });
     on($("#wallet-copy-sizing"), "change", updateSizeLabel);
+    POLICY_CONTROLS.forEach(([control]) => {
+      on($(`#wallet-copy-${control}-mode`), "change", () => updatePolicyControl(control));
+    });
     on($("#wallet-copy-global-toggle"), "change", toggleGlobal);
     on($("#stats-wallet-copy-toggle"), "change", toggleGlobal);
   }
@@ -92,7 +109,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     });
     const blockedLabels = {
       force_stop: "Blocked by Force Stop",
-      loss_limit: "Blocked by Loss Limit",
+      loss_limit: "Entries blocked by Loss Limit · exits active",
     };
     const modeSummary = status.live_tasks
       ? `${status.live_tasks} live · ${status.paper_tasks || 0} paper`
@@ -163,6 +180,21 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     $("#wallet-copy-max-token").value = task?.max_sol_per_token ?? "0.5";
     $("#wallet-copy-budget").value = task?.total_budget_sol ?? "2";
     $("#wallet-copy-slippage").value = task?.slippage_pct ?? String(defaultSlippage);
+    $("#wallet-copy-exit-mode").value = task?.exit_mode || "buy_only";
+    POLICY_CONTROLS.forEach(([control, group, field]) => {
+      const override = task?.exit_policy_overrides?.[group] || {};
+      const mode =
+        override.enabled === true ? "enabled" : override.enabled === false ? "disabled" : "inherit";
+      $(`#wallet-copy-${control}-mode`).value = mode;
+      const storedValue = override[field];
+      $(`#wallet-copy-${control}-value`).value =
+        storedValue == null
+          ? ""
+          : control === "time"
+            ? String(Number(storedValue) / 3600)
+            : String(storedValue);
+      updatePolicyControl(control);
+    });
     const formError = $("#wallet-copy-form-error");
     if (formError) formError.textContent = "";
     const modeAction = $("#wallet-copy-mode-action");
@@ -236,6 +268,36 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     if (label) label.textContent = ratio ? "Target ratio (%)" : "Size (SOL)";
   }
 
+  function updatePolicyControl(control) {
+    const mode = $(`#wallet-copy-${control}-mode`)?.value || "inherit";
+    const input = $(`#wallet-copy-${control}-value`);
+    if (!input) return;
+    input.hidden = mode !== "enabled";
+    input.required = mode === "enabled";
+  }
+
+  function readPolicyOverrides(currentTask) {
+    const current = currentTask?.exit_policy_overrides || {};
+    const result = {
+      stop_loss: { ...(current.stop_loss || {}) },
+      trailing: { ...(current.trailing || {}) },
+      roi: { ...(current.roi || {}) },
+      time: { ...(current.time || {}) },
+    };
+    for (const [control, group, field] of POLICY_CONTROLS) {
+      const mode = $(`#wallet-copy-${control}-mode`).value;
+      result[group].enabled = mode === "inherit" ? null : mode === "enabled";
+      if (mode === "enabled") {
+        const value = Number($(`#wallet-copy-${control}-value`).value);
+        if (!Number.isFinite(value) || value <= 0) return null;
+        result[group][field] = control === "time" ? value * 3600 : value;
+      } else {
+        result[group][field] = null;
+      }
+    }
+    return result;
+  }
+
   async function saveTask(event) {
     event.preventDefault();
     const address = $("#wallet-copy-address")?.value.trim() || "";
@@ -251,6 +313,8 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     const maxToken = Number($("#wallet-copy-max-token").value);
     const budget = Number($("#wallet-copy-budget").value);
     const slippage = Number($("#wallet-copy-slippage").value);
+    const currentTask = tasks.find((task) => task.id === selectedId);
+    const exitPolicyOverrides = readPolicyOverrides(currentTask);
     const formError = $("#wallet-copy-form-error");
     if (
       ![size, maxTrade, maxToken, budget, slippage].every(
@@ -258,7 +322,8 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       ) ||
       maxTrade > maxToken ||
       maxToken > budget ||
-      slippage > 50
+      slippage > 50 ||
+      !exitPolicyOverrides
     ) {
       if (formError) {
         formError.textContent =
@@ -276,7 +341,8 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
         sizingKind === "fixed"
           ? { kind: "fixed", sol: size }
           : { kind: "ratio_of_target", pct: size },
-      exit_mode: "buy_only",
+      exit_mode: $("#wallet-copy-exit-mode").value,
+      exit_policy_overrides: exitPolicyOverrides,
       max_sol_per_trade: maxTrade,
       max_sol_per_token: maxToken,
       total_budget_sol: budget,
@@ -354,7 +420,12 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       .map((task) => {
         const short = `${task.target_address.slice(0, 6)}…${task.target_address.slice(-4)}`;
         const mode = task.mode === "live" ? "Live" : "Paper";
-        return `<button type="button" class="wallet-copy-task${task.id === selectedId ? " is-active" : ""}" data-copy-task-id="${task.id}"><strong>${Utils.escapeHtml(task.label || "Unlabelled wallet")}</strong><span>${Utils.escapeHtml(short)}</span><span class="wallet-copy-task-meta"><span>${task.enabled ? "Active" : "Paused"}</span><span>${mode}</span></span></button>`;
+        const exit = {
+          buy_only: "Own exits",
+          mirror: "Mirror sells",
+          hybrid: "Hybrid exits",
+        }[task.exit_mode];
+        return `<button type="button" class="wallet-copy-task${task.id === selectedId ? " is-active" : ""}" data-copy-task-id="${task.id}"><strong>${Utils.escapeHtml(task.label || "Unlabelled wallet")}</strong><span>${Utils.escapeHtml(short)}</span><span class="wallet-copy-task-meta"><span>${task.enabled ? "Active" : "Paused"}</span><span>${mode} · ${exit || "Own exits"}</span></span></button>`;
       })
       .join("");
   }
@@ -378,16 +449,26 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
           live_submitted: "Live submitted",
           live_confirmed: "Live confirmed",
           live_failed: "Live failed",
+          paper_sell_observed: "Paper sell observed",
+          live_sell_submitted: "Copy sell submitted",
+          live_sell_failed: "Copy sell failed",
           skipped: "Skipped",
         };
         const title = titles[outcome.outcome] || "Decision";
         const isSkip = outcome.outcome === "skipped";
         const blockKind = outcome.reason?.block?.kind;
+        const isSell = outcome.outcome?.includes("sell");
+        const isPaperSell = outcome.outcome === "paper_sell_observed";
         const detail = isSkip
           ? blockKind
             ? ENTRY_BLOCK_LABELS[blockKind] || "Entry blocked"
             : SKIP_LABELS[outcome.reason?.kind] || "Policy skip"
-          : outcome.error || `${outcome.sized_sol ?? "—"} SOL`;
+          : outcome.error ||
+            (isSell
+              ? isPaperSell
+                ? `Target sold ${outcome.target_token_amount ?? "—"} tokens · observation only`
+                : `Full close · target sold ${outcome.target_token_amount ?? "—"} tokens`
+              : `${outcome.sized_sol ?? "—"} SOL`);
         const telemetry = outcome.telemetry;
         const arrivalMs =
           telemetry?.target_block_time && telemetry?.detected_at

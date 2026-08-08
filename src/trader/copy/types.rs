@@ -3,8 +3,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Execution mode. `Live` is persisted for forward-compatible task intent, but the
-/// Phase 2c pipeline rejects it before any trading code is reachable.
+use crate::trader::policy::ExitPolicyOverrides;
+
+/// Execution mode. Entering `Live` requires the dedicated confirmation-gated mode
+/// transition before the runtime can submit a trade.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CopyMode {
@@ -48,6 +50,7 @@ pub struct CopyTask {
     pub mode: CopyMode,
     pub sizing: SizingMode,
     pub exit_mode: ExitMode,
+    pub exit_policy_overrides: ExitPolicyOverrides,
     pub max_sol_per_trade: f64,
     pub max_sol_per_token: f64,
     pub total_budget_sol: f64,
@@ -69,6 +72,8 @@ pub struct CopyTaskInput {
     pub mode: CopyMode,
     pub sizing: SizingMode,
     pub exit_mode: ExitMode,
+    #[serde(default)]
+    pub exit_policy_overrides: ExitPolicyOverrides,
     pub max_sol_per_trade: f64,
     pub max_sol_per_token: f64,
     pub total_budget_sol: f64,
@@ -141,6 +146,9 @@ impl CopyTaskInput {
                 maximum_pct: crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT,
             });
         }
+        if !self.exit_policy_overrides.is_valid() {
+            return Err(CopySkip::InvalidExitPolicy);
+        }
         Ok(CopyTask {
             id: 0,
             target_address: self.target_address,
@@ -149,6 +157,7 @@ impl CopyTaskInput {
             mode,
             sizing: self.sizing,
             exit_mode: self.exit_mode,
+            exit_policy_overrides: self.exit_policy_overrides,
             max_sol_per_trade: self.max_sol_per_trade,
             max_sol_per_token: self.max_sol_per_token,
             total_budget_sol: self.total_budget_sol,
@@ -203,6 +212,12 @@ pub struct PipelinePolicy {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CopySkip {
     NotBuySwap,
+    NotSellSwap,
+    ExitModeDisabled,
+    ForceStopped,
+    CopyPositionNotFound,
+    PositionUserOnly,
+    PositionManagementMismatch,
     TaskDisabled,
     ModeTransitionRequired,
     LiveConfirmationRequired,
@@ -229,6 +244,7 @@ pub enum CopySkip {
     InvalidSlippage {
         maximum_pct: f64,
     },
+    InvalidExitPolicy,
     InvalidPrice,
 }
 
@@ -282,12 +298,30 @@ pub struct LiveDecision {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CopySellDecision {
+    pub task_id: i64,
+    pub target_address: String,
+    pub target_signature: String,
+    pub mint: String,
+    pub target_token_amount: f64,
+    pub target_sol_amount: f64,
+    /// `None` means the V1 full-close path. Proportional target sizing is Phase 5.
+    pub exit_percentage: Option<f64>,
+    pub transaction_signature: Option<String>,
+    pub error: Option<String>,
+    pub telemetry: CopyTelemetry,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum CopyOutcome {
     PaperFilled(PaperDecision),
     LiveSubmitted(LiveDecision),
     LiveConfirmed(LiveDecision),
     LiveFailed(LiveDecision),
+    PaperSellObserved(CopySellDecision),
+    LiveSellSubmitted(CopySellDecision),
+    LiveSellFailed(CopySellDecision),
     Skipped {
         task_id: i64,
         signature: String,
@@ -306,6 +340,9 @@ impl CopyOutcome {
             Self::LiveSubmitted(decision)
             | Self::LiveConfirmed(decision)
             | Self::LiveFailed(decision) => decision.task_id,
+            Self::PaperSellObserved(decision)
+            | Self::LiveSellSubmitted(decision)
+            | Self::LiveSellFailed(decision) => decision.task_id,
             Self::Skipped { task_id, .. } => *task_id,
         }
     }

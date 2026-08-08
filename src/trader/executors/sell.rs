@@ -39,7 +39,10 @@ pub(super) fn resolve_exit_size(
     // entire position without asking. That is exactly what this did before, with no
     // error and no warning: turning off auto partial exits made manual take-profit
     // impossible, in the most destructive way possible.
-    let is_user_exit = matches!(reason, TradeReason::ManualExit | TradeReason::ForceSell);
+    let is_user_exit = matches!(
+        reason,
+        TradeReason::ManualExit | TradeReason::ForceSell | TradeReason::CopySell
+    );
 
     // Emergencies must fully liquidate regardless of any percentage.
     // Note: StopLoss is NOT an emergency exit - it respects stop_loss_allow_partial config.
@@ -59,6 +62,13 @@ pub(super) fn resolve_exit_size(
 
 /// Execute a sell trade
 pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, String> {
+    if crate::global::is_force_stopped() {
+        return Ok(TradeResult::failure(
+            decision.clone(),
+            "Cannot execute sell - trading is force stopped".to_owned(),
+            0,
+        ));
+    }
     // Check connectivity before executing trade - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute sell - Unhealthy endpoints: {unhealthy}");
@@ -201,6 +211,14 @@ mod tests {
         assert_eq!(
             resolve_exit_size(&TradeReason::ForceSell, Some(25.0), false),
             ExitSize::Partial(25.0)
+        );
+    }
+
+    #[test]
+    fn a_copy_partial_survives_the_auto_partial_switch_being_off() {
+        assert_eq!(
+            resolve_exit_size(&TradeReason::CopySell, Some(30.0), false),
+            ExitSize::Partial(30.0)
         );
     }
 

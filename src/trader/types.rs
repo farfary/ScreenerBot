@@ -60,6 +60,7 @@ pub enum TradeReason {
     RiskManagement,
     Blacklisted,
     ForceSell,
+    CopySell,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

@@ -85,6 +85,35 @@ pub fn management_for_exit_mode(mode: ExitMode) -> PositionManagement {
     }
 }
 
+/// Keep already-open positions aligned when a task changes between BuyOnly,
+/// Mirror, and Hybrid. Provenance is the selector; no same-mint foreign position
+/// is ever modified.
+pub async fn sync_open_position_management(task_id: i64, mode: ExitMode) -> Result<(), String> {
+    let management = management_for_exit_mode(mode);
+    let positions = crate::positions::get_open_positions().await;
+    for position in positions {
+        if !matches!(
+            position.origin,
+            PositionOrigin::Copy {
+                task_id: origin_task_id,
+                ..
+            } if origin_task_id == task_id
+        ) {
+            continue;
+        }
+        let position_id = position
+            .id
+            .ok_or_else(|| format!("Open copy position {} has no database id", position.mint))?;
+        crate::positions::set_position_management_db(position_id, management).await?;
+        if !crate::positions::set_position_management_in_memory(position_id, management).await {
+            return Err(format!(
+                "Copy position {position_id} disappeared while updating management"
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn prepare_live_entry(
     activity: &WalletActivity,
     task: &CopyTask,

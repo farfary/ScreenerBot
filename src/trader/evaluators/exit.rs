@@ -17,7 +17,6 @@
 
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::Position;
-use crate::trader::policy::ExitPolicy;
 use crate::trader::types::TradeDecision;
 use crate::trader::{ai_analysis, evaluators, safety};
 
@@ -103,7 +102,7 @@ pub(crate) async fn evaluate_policy_exit(
     position: &Position,
     current_price: f64,
 ) -> Result<Option<TradeDecision>, String> {
-    let policy = ExitPolicy::from_config();
+    let policy = crate::trader::policy::resolve_exit_policy(position).await;
 
     // Priority 3: AI exit analysis (high priority - if enabled)
     if ai_analysis::should_analyze_exit() {

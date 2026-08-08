@@ -16,6 +16,7 @@ fn task(sizing: SizingMode) -> CopyTask {
         mode: CopyMode::Paper,
         sizing,
         exit_mode: ExitMode::BuyOnly,
+        exit_policy_overrides: Default::default(),
         max_sol_per_trade: 0.5,
         max_sol_per_token: 1.0,
         total_budget_sol: 2.0,
@@ -191,6 +192,7 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
         mode: CopyMode::Paper,
         sizing,
         exit_mode: ExitMode::BuyOnly,
+        exit_policy_overrides: Default::default(),
         max_sol_per_trade: 0.2,
         max_sol_per_token: 1.0,
         total_budget_sol: 2.0,
@@ -219,5 +221,11 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
     assert_eq!(
         live.into_task(Utc::now()),
         Err(CopySkip::ModeTransitionRequired)
+    );
+    let mut invalid_policy = input(SizingMode::Fixed { sol: 0.1 });
+    invalid_policy.exit_policy_overrides.trailing.distance_pct = Some(150.0);
+    assert_eq!(
+        invalid_policy.into_task(Utc::now()),
+        Err(CopySkip::InvalidExitPolicy)
     );
 }

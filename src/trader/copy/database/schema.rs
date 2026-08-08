@@ -1,4 +1,6 @@
-pub(super) const SCHEMA_VERSION: i64 = 1;
+use rusqlite::Connection;
+
+pub(super) const SCHEMA_VERSION: i64 = 2;
 
 pub(super) const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS copy_metadata (
@@ -13,6 +15,7 @@ CREATE TABLE IF NOT EXISTS copy_tasks (
     mode_json TEXT NOT NULL,
     sizing_json TEXT NOT NULL,
     exit_mode_json TEXT NOT NULL,
+    exit_policy_json TEXT NOT NULL DEFAULT '{}',
     max_sol_per_trade REAL NOT NULL,
     max_sol_per_token REAL NOT NULL,
     total_budget_sol REAL NOT NULL,
@@ -72,3 +75,23 @@ CREATE TABLE IF NOT EXISTS copy_position_links (
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
 );
 "#;
+
+pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
+    let mut statement = connection
+        .prepare("PRAGMA table_info(copy_tasks)")
+        .map_err(|error| format!("Failed to inspect copy task schema: {error}"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| format!("Failed to query copy task schema: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to decode copy task schema: {error}"))?;
+    if !columns.iter().any(|column| column == "exit_policy_json") {
+        connection
+            .execute(
+                "ALTER TABLE copy_tasks ADD COLUMN exit_policy_json TEXT NOT NULL DEFAULT '{}'",
+                [],
+            )
+            .map_err(|error| format!("Failed to add copy exit-policy storage: {error}"))?;
+    }
+    Ok(())
+}

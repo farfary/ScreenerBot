@@ -12,6 +12,7 @@ fn task() -> CopyTask {
         mode: CopyMode::Paper,
         sizing: SizingMode::Fixed { sol: 0.1 },
         exit_mode: ExitMode::BuyOnly,
+        exit_policy_overrides: Default::default(),
         max_sol_per_trade: 0.2,
         max_sol_per_token: 1.0,
         total_budget_sol: 5.0,
@@ -181,4 +182,81 @@ async fn live_activity_claim_is_atomic_and_idempotent() {
         .claim_live_activity(configured.id, "target-signature")
         .await
         .unwrap());
+}
+
+#[tokio::test]
+async fn schema_v1_backfills_explicit_empty_exit_policy_overrides() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TABLE copy_tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    target_address TEXT NOT NULL,
+                    label TEXT,
+                    enabled INTEGER NOT NULL,
+                    mode_json TEXT NOT NULL,
+                    sizing_json TEXT NOT NULL,
+                    exit_mode_json TEXT NOT NULL,
+                    max_sol_per_trade REAL NOT NULL,
+                    max_sol_per_token REAL NOT NULL,
+                    total_budget_sol REAL NOT NULL,
+                    min_target_trade_sol REAL,
+                    max_target_trade_sol REAL,
+                    buy_once_per_token INTEGER NOT NULL,
+                    slippage_pct REAL NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );",
+            )
+            .unwrap();
+    }
+    let db = CopyDatabase::open(&path).unwrap();
+    let inserted = db.insert_task(task()).await.unwrap();
+    assert_eq!(
+        db.get_task(inserted.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .exit_policy_overrides,
+        crate::trader::policy::ExitPolicyOverrides::default()
+    );
+}
+
+#[tokio::test]
+async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let configured = db.insert_task(task()).await.unwrap();
+    let now = Utc::now();
+    let outcome = CopyOutcome::PaperSellObserved(super::super::types::CopySellDecision {
+        task_id: configured.id,
+        target_address: configured.target_address.clone(),
+        target_signature: "target-sell".to_owned(),
+        mint: "mint".to_owned(),
+        target_token_amount: 10.0,
+        target_sol_amount: 0.2,
+        exit_percentage: None,
+        transaction_signature: None,
+        error: None,
+        telemetry: super::super::types::CopyTelemetry {
+            target_block_time: Some(1),
+            detected_at: now,
+            decoded_at: now,
+            decided_at: now,
+            submitted_at: None,
+            confirmed_at: None,
+            target_price_sol: Some(0.02),
+            fill_price_sol: None,
+        },
+    });
+    db.record_outcome(outcome.clone()).await.unwrap();
+    db.record_outcome(outcome).await.unwrap();
+    assert_eq!(
+        db.spend_state(configured.id, "mint").await.unwrap(),
+        SpendState::default()
+    );
+    assert_eq!(db.list_activity(10).await.unwrap().len(), 1);
 }

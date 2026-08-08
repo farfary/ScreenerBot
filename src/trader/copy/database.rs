@@ -1,6 +1,7 @@
 //! SQLite repository for copy tasks, spend, outcomes, activity, and position links.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use chrono::Utc;
 use r2d2::{Pool, PooledConnection};
@@ -13,19 +14,39 @@ use super::types::{
     confirm_mode_transition, CopyActivityRow, CopyMode, CopyOutcome, CopyTask, SpendState,
 };
 
+#[path = "database/rows.rs"]
+mod rows;
 #[path = "database/schema.rs"]
 mod schema;
 
-use schema::{SCHEMA, SCHEMA_VERSION};
+use rows::{json_error, parse_datetime, row_to_task};
+use schema::{migrate, SCHEMA, SCHEMA_VERSION};
 
 #[derive(Clone)]
 pub struct CopyDatabase {
     pool: Pool<SqliteConnectionManager>,
 }
 
+static SHARED_COPY_DATABASE: OnceLock<CopyDatabase> = OnceLock::new();
+
 impl CopyDatabase {
     pub fn new() -> Result<Self, String> {
         Self::open(crate::paths::get_copy_trading_db_path())
+    }
+
+    /// Process-wide pool for runtime consumers. Exit evaluation runs every few
+    /// seconds, so opening a new r2d2 pool for each policy lookup would churn WAL
+    /// connections and defeat the centralized connection configuration.
+    pub fn shared() -> Result<Self, String> {
+        if let Some(database) = SHARED_COPY_DATABASE.get() {
+            return Ok(database.clone());
+        }
+        let database = Self::new()?;
+        let _ = SHARED_COPY_DATABASE.set(database);
+        SHARED_COPY_DATABASE
+            .get()
+            .cloned()
+            .ok_or_else(|| "Failed to initialize shared copy database".to_owned())
     }
 
     /// Explicit-path constructor for isolated tests and offline tools.
@@ -60,6 +81,7 @@ impl CopyDatabase {
         connection
             .execute_batch(SCHEMA)
             .map_err(|e| format!("Failed to initialize copy database: {e}"))?;
+        migrate(&connection)?;
         connection
             .execute(
                 "INSERT INTO copy_metadata (key, value) VALUES ('schema_version', ?1) \
@@ -91,13 +113,15 @@ impl CopyDatabase {
             .map_err(|e| format!("Failed to serialize copy sizing: {e}"))?;
         let exit_mode = serde_json::to_string(&task.exit_mode)
             .map_err(|e| format!("Failed to serialize copy exit mode: {e}"))?;
+        let exit_policy = serde_json::to_string(&task.exit_policy_overrides)
+            .map_err(|e| format!("Failed to serialize copy exit policy: {e}"))?;
         connection
             .execute(
                 "INSERT INTO copy_tasks (target_address, label, enabled, mode_json, sizing_json, \
-                 exit_mode_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, \
+                 exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, \
                  min_target_trade_sol, max_target_trade_sol, buy_once_per_token, slippage_pct, \
                  created_at, updated_at) VALUES \
-                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 params![
                     task.target_address,
                     task.label,
@@ -105,6 +129,7 @@ impl CopyDatabase {
                     mode,
                     sizing,
                     exit_mode,
+                    exit_policy,
                     task.max_sol_per_trade,
                     task.max_sol_per_token,
                     task.total_budget_sol,
@@ -144,7 +169,7 @@ impl CopyDatabase {
         let mut statement = connection
             .prepare(
                 "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
-                 max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
+                 exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
                  max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
                  FROM copy_tasks ORDER BY id DESC",
             )
@@ -169,7 +194,7 @@ impl CopyDatabase {
         connection
             .query_row(
                 "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
-                 max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
+                 exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
                  max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
                  FROM copy_tasks WHERE id = ?1",
                 params![id],
@@ -208,9 +233,9 @@ impl CopyDatabase {
         let affected = connection
             .execute(
                 "UPDATE copy_tasks SET target_address=?1, label=?2, enabled=?3, mode_json=?4, \
-                 sizing_json=?5, exit_mode_json=?6, max_sol_per_trade=?7, max_sol_per_token=?8, \
-                 total_budget_sol=?9, min_target_trade_sol=?10, max_target_trade_sol=?11, \
-                 buy_once_per_token=?12, slippage_pct=?13, updated_at=?14 WHERE id=?15",
+                 sizing_json=?5, exit_mode_json=?6, exit_policy_json=?7, max_sol_per_trade=?8, max_sol_per_token=?9, \
+                 total_budget_sol=?10, min_target_trade_sol=?11, max_target_trade_sol=?12, \
+                 buy_once_per_token=?13, slippage_pct=?14, updated_at=?15 WHERE id=?16",
                 params![
                     task.target_address,
                     task.label,
@@ -221,6 +246,8 @@ impl CopyDatabase {
                         .map_err(|e| format!("Failed to serialize copy sizing: {e}"))?,
                     serde_json::to_string(&task.exit_mode)
                         .map_err(|e| format!("Failed to serialize copy exit mode: {e}"))?,
+                    serde_json::to_string(&task.exit_policy_overrides)
+                        .map_err(|e| format!("Failed to serialize copy exit policy: {e}"))?,
                     task.max_sol_per_trade,
                     task.max_sol_per_token,
                     task.total_budget_sol,
@@ -342,7 +369,7 @@ impl CopyDatabase {
         let mut statement = connection
             .prepare(
                 "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
-                 max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
+                 exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
                  max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
                  FROM copy_tasks WHERE target_address = ?1 AND enabled = 1 ORDER BY id",
             )
@@ -448,6 +475,27 @@ impl CopyDatabase {
                 decision.telemetry.decided_at,
                 "live_failed",
             ),
+            CopyOutcome::PaperSellObserved(decision) => (
+                decision.task_id,
+                decision.target_signature.as_str(),
+                Some(decision.mint.as_str()),
+                decision.telemetry.decided_at,
+                "paper_sell_observed",
+            ),
+            CopyOutcome::LiveSellSubmitted(decision) => (
+                decision.task_id,
+                decision.target_signature.as_str(),
+                Some(decision.mint.as_str()),
+                decision.telemetry.decided_at,
+                "live_sell_submitted",
+            ),
+            CopyOutcome::LiveSellFailed(decision) => (
+                decision.task_id,
+                decision.target_signature.as_str(),
+                Some(decision.mint.as_str()),
+                decision.telemetry.decided_at,
+                "live_sell_failed",
+            ),
             CopyOutcome::Skipped {
                 task_id,
                 signature,
@@ -542,46 +590,6 @@ impl CopyDatabase {
             .commit()
             .map_err(|e| format!("Failed to commit copy outcome: {e}"))
     }
-}
-
-fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask> {
-    let parse_json = |index| -> rusqlite::Result<String> { row.get(index) };
-    let created: String = row.get(14)?;
-    let updated: String = row.get(15)?;
-    Ok(CopyTask {
-        id: row.get(0)?,
-        target_address: row.get(1)?,
-        label: row.get(2)?,
-        enabled: row.get(3)?,
-        mode: serde_json::from_str(&parse_json(4)?).map_err(json_error)?,
-        sizing: serde_json::from_str(&parse_json(5)?).map_err(json_error)?,
-        exit_mode: serde_json::from_str(&parse_json(6)?).map_err(json_error)?,
-        max_sol_per_trade: row.get(7)?,
-        max_sol_per_token: row.get(8)?,
-        total_budget_sol: row.get(9)?,
-        min_target_trade_sol: row.get(10)?,
-        max_target_trade_sol: row.get(11)?,
-        buy_once_per_token: row.get(12)?,
-        slippage_pct: row.get(13)?,
-        created_at: parse_datetime(&created, 14)?,
-        updated_at: parse_datetime(&updated, 15)?,
-    })
-}
-
-fn parse_datetime(value: &str, index: usize) -> rusqlite::Result<chrono::DateTime<Utc>> {
-    chrono::DateTime::parse_from_rfc3339(value)
-        .map(|value| value.with_timezone(&Utc))
-        .map_err(|error| {
-            rusqlite::Error::FromSqlConversionFailure(
-                index,
-                rusqlite::types::Type::Text,
-                Box::new(error),
-            )
-        })
-}
-
-fn json_error(error: serde_json::Error) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 }
 
 #[cfg(test)]

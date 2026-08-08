@@ -22,6 +22,7 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
         mode: CopyMode::Paper,
         sizing: SizingMode::RatioOfTarget { pct: 50.0 },
         exit_mode: ExitMode::BuyOnly,
+        exit_policy_overrides: Default::default(),
         max_sol_per_trade: 1.0,
         max_sol_per_token: 2.0,
         total_budget_sol: 5.0,

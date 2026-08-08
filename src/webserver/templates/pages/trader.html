@@ -431,7 +431,95 @@
                     step="0.1"
                     required
                 /></label>
+                <label
+                  ><span>Exit ownership</span
+                  ><select id="wallet-copy-exit-mode" class="form-select">
+                    <option value="buy_only">Own exit rules</option>
+                    <option value="mirror">Mirror target sells</option>
+                    <option value="hybrid">Hybrid: target + own rules</option>
+                  </select></label
+                >
               </div>
+              <fieldset class="wallet-copy-policy">
+                <legend>Exit policy overrides</legend>
+                <p>Each unset strategy inherits the current global exit configuration.</p>
+                <div class="wallet-copy-policy-grid">
+                  <div class="wallet-copy-policy-field">
+                    <label for="wallet-copy-stop-loss-mode">Stop loss</label
+                    ><select id="wallet-copy-stop-loss-mode" class="form-select">
+                      <option value="inherit">Inherit global</option>
+                      <option value="enabled">Override: enabled</option>
+                      <option value="disabled">Override: disabled</option>
+                    </select>
+                    <input
+                      id="wallet-copy-stop-loss-value"
+                      class="form-input"
+                      type="number"
+                      min="0.1"
+                      max="100"
+                      step="0.1"
+                      placeholder="Loss threshold (%)"
+                      aria-label="Stop loss threshold percentage"
+                      hidden
+                    />
+                  </div>
+                  <div class="wallet-copy-policy-field">
+                    <label for="wallet-copy-roi-mode">Take profit</label
+                    ><select id="wallet-copy-roi-mode" class="form-select">
+                      <option value="inherit">Inherit global</option>
+                      <option value="enabled">Override: enabled</option>
+                      <option value="disabled">Override: disabled</option>
+                    </select>
+                    <input
+                      id="wallet-copy-roi-value"
+                      class="form-input"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      placeholder="Profit target (%)"
+                      aria-label="Take profit target percentage"
+                      hidden
+                    />
+                  </div>
+                  <div class="wallet-copy-policy-field">
+                    <label for="wallet-copy-trailing-mode">Trailing stop</label
+                    ><select id="wallet-copy-trailing-mode" class="form-select">
+                      <option value="inherit">Inherit global</option>
+                      <option value="enabled">Override: enabled</option>
+                      <option value="disabled">Override: disabled</option>
+                    </select>
+                    <input
+                      id="wallet-copy-trailing-value"
+                      class="form-input"
+                      type="number"
+                      min="0.1"
+                      max="100"
+                      step="0.1"
+                      placeholder="Trail distance (%)"
+                      aria-label="Trailing stop distance percentage"
+                      hidden
+                    />
+                  </div>
+                  <div class="wallet-copy-policy-field">
+                    <label for="wallet-copy-time-mode">Maximum hold</label
+                    ><select id="wallet-copy-time-mode" class="form-select">
+                      <option value="inherit">Inherit global</option>
+                      <option value="enabled">Override: enabled</option>
+                      <option value="disabled">Override: disabled</option>
+                    </select>
+                    <input
+                      id="wallet-copy-time-value"
+                      class="form-input"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      placeholder="Duration (hours)"
+                      aria-label="Maximum hold duration in hours"
+                      hidden
+                    />
+                  </div>
+                </div>
+              </fieldset>
               <div class="wallet-copy-form-actions">
                 <button class="btn btn-danger" id="wallet-copy-delete" type="button" hidden>
                   Delete</button

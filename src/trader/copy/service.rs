@@ -12,8 +12,9 @@ use crate::logger::{self, LogTag};
 use crate::wallets::watch::{subscribe_activity, ActivityKind, WalletActivity, WatchSource};
 
 use super::{
-    execute_live_with, matching_tasks, prepare_live_entry, run_paper_pipeline, CopyDatabase,
-    CopyMode, CopyOutcome, CopySkip, CopyTelemetry, LiveSubmitResult, PaperCosts, PipelinePolicy,
+    execute_copy_sell_with, execute_live_with, matching_tasks, paper_sell_outcome,
+    prepare_copy_sell, prepare_live_entry, run_paper_pipeline, CopyDatabase, CopyMode, CopyOutcome,
+    CopySellSubmitResult, CopySkip, CopyTelemetry, LiveSubmitResult, PaperCosts, PipelinePolicy,
     RiskContext, SpendState,
 };
 
@@ -73,6 +74,15 @@ async fn process_activity(
         .collect::<Vec<_>>();
     if tasks.is_empty() {
         return Ok(());
+    }
+    if matches!(
+        activity.kind,
+        ActivityKind::Swap {
+            side: crate::wallets::watch::SwapSide::Sell,
+            ..
+        }
+    ) {
+        return process_sell_activity(database, activity, &tasks, mint).await;
     }
     let filter_passed = if require_filter_pass {
         crate::filtering::get_filtered_token_mints()
@@ -199,6 +209,55 @@ async fn process_activity(
                 )
             },
         )
+        .await;
+        database.record_outcome(outcome).await?;
+    }
+    Ok(())
+}
+
+async fn process_sell_activity(
+    database: &CopyDatabase,
+    activity: &WalletActivity,
+    tasks: &[super::CopyTask],
+    mint: &str,
+) -> Result<(), String> {
+    let force_stopped = crate::global::is_force_stopped();
+    for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
+        let outcome = match paper_sell_outcome(activity, task, force_stopped, Utc::now()) {
+            Ok(outcome) => outcome,
+            Err(reason) => skipped(task.id, activity, mint, reason),
+        };
+        database.record_outcome(outcome).await?;
+    }
+
+    for task in tasks.iter().filter(|task| task.mode == CopyMode::Live) {
+        if !database
+            .claim_live_activity(task.id, &activity.signature)
+            .await?
+        {
+            continue;
+        }
+        let position = crate::positions::get_position_by_mint(mint).await;
+        let plan = match prepare_copy_sell(
+            activity,
+            task,
+            position.as_ref(),
+            crate::global::is_force_stopped(),
+            Utc::now(),
+        ) {
+            Ok(plan) => plan,
+            Err(reason) => {
+                database
+                    .record_outcome(skipped(task.id, activity, mint, reason))
+                    .await?;
+                continue;
+            }
+        };
+        let outcome = execute_copy_sell_with(plan, |decision| async move {
+            CopySellSubmitResult::from_trade_result(
+                crate::trader::executors::execute_trade(&decision).await,
+            )
+        })
         .await;
         database.record_outcome(outcome).await?;
     }
