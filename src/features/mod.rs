@@ -52,6 +52,11 @@ mod tests {
         assert!(is_trading_feature_available("roi_exit"));
         assert!(is_trading_feature_available("stop-loss"));
         assert!(is_trading_feature_available("dca"));
+        assert!(is_trading_feature_available("copy-wallet"));
+        assert_eq!(
+            get_trading_feature_status("copy_wallet"),
+            FeatureStatus::Beta
+        );
         assert!(!is_trading_feature_available("unknown-feature"));
     }
 

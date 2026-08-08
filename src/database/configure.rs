@@ -120,6 +120,9 @@ pub const TOOLS_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 /// strategies.db — Cold: infrequent access
 pub const STRATEGIES_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 
+/// copy_trading.db — Cold: human-managed tasks and append-only decisions
+pub const COPY_TRADING_DB: DbConfig = DbConfig::new(DbPreset::Cold);
+
 /// wallets.db — Cold: wallet list, rarely changes
 pub const WALLETS_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 

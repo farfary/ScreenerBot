@@ -8,7 +8,8 @@ use crate::trader::safety;
 
 /// Why an entry may not proceed. Every variant is a value a caller can record, count and
 /// render — the checks used to be log lines only.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "detail", rename_all = "snake_case")]
 pub enum EntryBlock {
     ForceStopped,
     LossLimit,

@@ -24,6 +24,7 @@ mod dedupe;
 mod poller;
 mod recorder;
 mod service;
+mod source_registry;
 mod types;
 
 pub use classify::classify_transaction_activity;
@@ -150,7 +151,48 @@ fn validate_target_constraints(
 }
 
 pub async fn remove_target(id: i64) -> Result<(), String> {
-    watch_db()?.delete_target(id).await?;
+    let db = watch_db()?;
+    let target = db
+        .get_target(id)
+        .await?
+        .ok_or_else(|| format!("Watch target {id} not found"))?;
+    db.remove_source(&target.address, WatchSource::Alert { rule_id: id })
+        .await?;
+    service::request_reload();
+    Ok(())
+}
+
+/// Attach a paper-copy consumer to an address, sharing an existing alert target
+/// when present. Copy tasks never create a second detection path.
+pub async fn add_copy_source(
+    task_id: i64,
+    address: &str,
+    label: Option<&str>,
+) -> Result<WatchTarget, String> {
+    crate::wallets::validate_address(address)?;
+    let own_wallets = crate::wallets::list_wallets(true).await?;
+    if own_wallets.iter().any(|wallet| wallet.address == address) {
+        return Err("This address is one of your own wallets and cannot be copied".to_owned());
+    }
+    let db = watch_db()?;
+    let current = db.list_targets().await?;
+    if !current.iter().any(|target| target.address == address) {
+        let max_targets = with_config(|cfg| cfg.wallet.watch_max_targets);
+        if current.len() >= max_targets {
+            return Err(format!("Watch target limit reached ({max_targets})"));
+        }
+    }
+    let target = db
+        .upsert_source(address, label, WatchSource::Copy { task_id })
+        .await?;
+    service::request_reload();
+    Ok(target)
+}
+
+pub async fn remove_copy_source(task_id: i64, address: &str) -> Result<(), String> {
+    watch_db()?
+        .remove_source(address, WatchSource::Copy { task_id })
+        .await?;
     service::request_reload();
     Ok(())
 }

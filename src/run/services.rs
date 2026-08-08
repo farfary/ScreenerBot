@@ -18,6 +18,7 @@ pub(super) fn register_all_services(manager: &mut ServiceManager) {
     // Observation starts after TransactionsService initializes transactions.db;
     // its consumer loop is already subscribed before this producer comes online.
     manager.register(Box::new(WalletWatchService));
+    manager.register(Box::new(CopyTradingService));
     manager.register(Box::new(SolPriceService));
 
     // Pool services (4 sub-services + 1 helper coordinator)
@@ -54,7 +55,7 @@ pub(super) fn register_all_services(manager: &mut ServiceManager) {
     // Background utility services
     manager.register(Box::new(UpdateCheckService));
 
-    let service_count = 23; // connectivity, events, wallet_watch, transactions, sol_price, pool_discovery,
+    let service_count = 24; // connectivity, events, wallet_watch, copy_trading, transactions, sol_price, pool_discovery,
                             // pool_fetcher, pool_calculator, pool_analyzer, pools, tokens, filtering, ohlcv,
                             // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, ai,
                             // scheduled_ai_tasks, telegram, update_check

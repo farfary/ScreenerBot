@@ -25,6 +25,7 @@ export const TAB_TO_FEATURE_MAP = {
   "time-rules": "time_override",
   dca: "dca",
   "strategy-control": "strategies",
+  "wallet-copy": "copy_wallet",
   // These tabs don't have feature flags - always available
   stats: null,
   "general-settings": null,

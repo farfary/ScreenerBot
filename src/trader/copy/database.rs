@@ -1,0 +1,575 @@
+//! SQLite repository for copy tasks, spend, outcomes, activity, and position links.
+
+use std::path::{Path, PathBuf};
+
+use chrono::Utc;
+use r2d2::{Pool, PooledConnection};
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{params, OptionalExtension};
+
+use crate::database;
+
+use super::types::{CopyActivityRow, CopyOutcome, CopyTask, SpendState};
+
+const SCHEMA_VERSION: i64 = 1;
+
+const SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS copy_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS copy_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_address TEXT NOT NULL,
+    label TEXT,
+    enabled INTEGER NOT NULL,
+    mode_json TEXT NOT NULL,
+    sizing_json TEXT NOT NULL,
+    exit_mode_json TEXT NOT NULL,
+    max_sol_per_trade REAL NOT NULL,
+    max_sol_per_token REAL NOT NULL,
+    total_budget_sol REAL NOT NULL,
+    min_target_trade_sol REAL,
+    max_target_trade_sol REAL,
+    buy_once_per_token INTEGER NOT NULL,
+    slippage_pct REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_copy_tasks_target_enabled
+    ON copy_tasks(target_address, enabled);
+CREATE TABLE IF NOT EXISTS copy_spend (
+    task_id INTEGER NOT NULL,
+    mint TEXT NOT NULL,
+    spent_sol REAL NOT NULL DEFAULT 0,
+    buy_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, mint),
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS copy_decisions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    signature TEXT NOT NULL,
+    mint TEXT,
+    outcome_json TEXT NOT NULL,
+    decided_at TEXT NOT NULL,
+    UNIQUE (task_id, signature),
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_copy_decisions_task_time
+    ON copy_decisions(task_id, decided_at DESC);
+CREATE TABLE IF NOT EXISTS copy_activity (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    details_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_copy_activity_task_time
+    ON copy_activity(task_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS copy_position_links (
+    task_id INTEGER NOT NULL,
+    position_id TEXT NOT NULL UNIQUE,
+    mint TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, position_id),
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+"#;
+
+#[derive(Clone)]
+pub struct CopyDatabase {
+    pool: Pool<SqliteConnectionManager>,
+}
+
+impl CopyDatabase {
+    pub fn new() -> Result<Self, String> {
+        Self::open(crate::paths::get_copy_trading_db_path())
+    }
+
+    /// Explicit-path constructor for isolated tests and offline tools.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, String> {
+        let path = PathBuf::from(path.as_ref());
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create copy database directory: {e}"))?;
+        }
+        let manager = SqliteConnectionManager::file(path).with_init(|connection| {
+            database::configure_connection(connection, database::COPY_TRADING_DB)
+        });
+        let pool = Pool::builder()
+            .max_size(3)
+            .idle_timeout(None)
+            .max_lifetime(None)
+            .build(manager)
+            .map_err(|e| format!("Failed to create copy database pool: {e}"))?;
+        let db = Self { pool };
+        db.initialize()?;
+        Ok(db)
+    }
+
+    fn connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
+        self.pool
+            .get()
+            .map_err(|e| format!("Failed to get copy database connection: {e}"))
+    }
+
+    fn initialize(&self) -> Result<(), String> {
+        let connection = self.connection()?;
+        connection
+            .execute_batch(SCHEMA)
+            .map_err(|e| format!("Failed to initialize copy database: {e}"))?;
+        connection
+            .execute(
+                "INSERT INTO copy_metadata (key, value) VALUES ('schema_version', ?1) \
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![SCHEMA_VERSION.to_string()],
+            )
+            .map_err(|e| format!("Failed to store copy schema version: {e}"))?;
+        Ok(())
+    }
+
+    pub async fn insert_task(&self, task: CopyTask) -> Result<CopyTask, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.insert_task_sync(task))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn insert_task_sync(&self, mut task: CopyTask) -> Result<CopyTask, String> {
+        let connection = self.connection()?;
+        let mode = serde_json::to_string(&task.mode)
+            .map_err(|e| format!("Failed to serialize copy mode: {e}"))?;
+        let sizing = serde_json::to_string(&task.sizing)
+            .map_err(|e| format!("Failed to serialize copy sizing: {e}"))?;
+        let exit_mode = serde_json::to_string(&task.exit_mode)
+            .map_err(|e| format!("Failed to serialize copy exit mode: {e}"))?;
+        connection
+            .execute(
+                "INSERT INTO copy_tasks (target_address, label, enabled, mode_json, sizing_json, \
+                 exit_mode_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, \
+                 min_target_trade_sol, max_target_trade_sol, buy_once_per_token, slippage_pct, \
+                 created_at, updated_at) VALUES \
+                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    task.target_address,
+                    task.label,
+                    task.enabled,
+                    mode,
+                    sizing,
+                    exit_mode,
+                    task.max_sol_per_trade,
+                    task.max_sol_per_token,
+                    task.total_budget_sol,
+                    task.min_target_trade_sol,
+                    task.max_target_trade_sol,
+                    task.buy_once_per_token,
+                    task.slippage_pct,
+                    task.created_at.to_rfc3339(),
+                    task.updated_at.to_rfc3339(),
+                ],
+            )
+            .map_err(|e| format!("Failed to insert copy task: {e}"))?;
+        task.id = connection.last_insert_rowid();
+        Ok(task)
+    }
+
+    pub async fn enabled_tasks_for_subject(
+        &self,
+        target_address: &str,
+    ) -> Result<Vec<CopyTask>, String> {
+        let db = self.clone();
+        let address = target_address.to_owned();
+        tokio::task::spawn_blocking(move || db.enabled_tasks_for_subject_sync(&address))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    pub async fn list_tasks(&self) -> Result<Vec<CopyTask>, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.list_tasks_sync())
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn list_tasks_sync(&self) -> Result<Vec<CopyTask>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
+                 max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
+                 max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
+                 FROM copy_tasks ORDER BY id DESC",
+            )
+            .map_err(|e| format!("Failed to prepare copy task list: {e}"))?;
+        let rows = statement
+            .query_map([], row_to_task)
+            .map_err(|e| format!("Failed to query copy tasks: {e}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to decode copy task: {e}"))?;
+        Ok(rows)
+    }
+
+    pub async fn get_task(&self, id: i64) -> Result<Option<CopyTask>, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.get_task_sync(id))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn get_task_sync(&self, id: i64) -> Result<Option<CopyTask>, String> {
+        let connection = self.connection()?;
+        connection
+            .query_row(
+                "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
+                 max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
+                 max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
+                 FROM copy_tasks WHERE id = ?1",
+                params![id],
+                row_to_task,
+            )
+            .optional()
+            .map_err(|e| format!("Failed to get copy task {id}: {e}"))
+    }
+
+    pub async fn update_task(&self, task: CopyTask) -> Result<CopyTask, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.update_task_sync(task))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn update_task_sync(&self, mut task: CopyTask) -> Result<CopyTask, String> {
+        let connection = self.connection()?;
+        task.updated_at = Utc::now();
+        let affected = connection
+            .execute(
+                "UPDATE copy_tasks SET target_address=?1, label=?2, enabled=?3, mode_json=?4, \
+                 sizing_json=?5, exit_mode_json=?6, max_sol_per_trade=?7, max_sol_per_token=?8, \
+                 total_budget_sol=?9, min_target_trade_sol=?10, max_target_trade_sol=?11, \
+                 buy_once_per_token=?12, slippage_pct=?13, updated_at=?14 WHERE id=?15",
+                params![
+                    task.target_address,
+                    task.label,
+                    task.enabled,
+                    serde_json::to_string(&task.mode)
+                        .map_err(|e| format!("Failed to serialize copy mode: {e}"))?,
+                    serde_json::to_string(&task.sizing)
+                        .map_err(|e| format!("Failed to serialize copy sizing: {e}"))?,
+                    serde_json::to_string(&task.exit_mode)
+                        .map_err(|e| format!("Failed to serialize copy exit mode: {e}"))?,
+                    task.max_sol_per_trade,
+                    task.max_sol_per_token,
+                    task.total_budget_sol,
+                    task.min_target_trade_sol,
+                    task.max_target_trade_sol,
+                    task.buy_once_per_token,
+                    task.slippage_pct,
+                    task.updated_at.to_rfc3339(),
+                    task.id,
+                ],
+            )
+            .map_err(|e| format!("Failed to update copy task {}: {e}", task.id))?;
+        if affected == 0 {
+            return Err(format!("Copy task {} not found", task.id));
+        }
+        Ok(task)
+    }
+
+    pub async fn delete_task(&self, id: i64) -> Result<bool, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            db.connection()?
+                .execute("DELETE FROM copy_tasks WHERE id = ?1", params![id])
+                .map(|affected| affected > 0)
+                .map_err(|e| format!("Failed to delete copy task {id}: {e}"))
+        })
+        .await
+        .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    pub async fn list_activity(&self, limit: usize) -> Result<Vec<CopyActivityRow>, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.list_activity_sync(limit.clamp(1, 1_000)))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn list_activity_sync(&self, limit: usize) -> Result<Vec<CopyActivityRow>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, task_id, kind, details_json, created_at FROM copy_activity \
+                 ORDER BY id DESC LIMIT ?1",
+            )
+            .map_err(|e| format!("Failed to prepare copy activity query: {e}"))?;
+        let rows = statement
+            .query_map(params![limit], |row| {
+                let json: String = row.get(3)?;
+                let created: String = row.get(4)?;
+                Ok(CopyActivityRow {
+                    id: row.get(0)?,
+                    task_id: row.get(1)?,
+                    kind: row.get(2)?,
+                    outcome: serde_json::from_str(&json).map_err(json_error)?,
+                    created_at: parse_datetime(&created, 4)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query copy activity: {e}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to decode copy activity: {e}"))?;
+        Ok(rows)
+    }
+
+    fn enabled_tasks_for_subject_sync(&self, address: &str) -> Result<Vec<CopyTask>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
+                 max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
+                 max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
+                 FROM copy_tasks WHERE target_address = ?1 AND enabled = 1 ORDER BY id",
+            )
+            .map_err(|e| format!("Failed to prepare copy task query: {e}"))?;
+        let rows = statement
+            .query_map(params![address], row_to_task)
+            .map_err(|e| format!("Failed to query copy tasks: {e}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to decode copy task: {e}"))?;
+        Ok(rows)
+    }
+
+    pub async fn spend_state(&self, task_id: i64, mint: &str) -> Result<SpendState, String> {
+        let db = self.clone();
+        let mint = mint.to_owned();
+        tokio::task::spawn_blocking(move || db.spend_state_sync(task_id, &mint))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn spend_state_sync(&self, task_id: i64, mint: &str) -> Result<SpendState, String> {
+        let connection = self.connection()?;
+        let total_spent_sol: f64 = connection
+            .query_row(
+                "SELECT COALESCE(SUM(spent_sol), 0) FROM copy_spend WHERE task_id = ?1",
+                params![task_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to sum copy spend: {e}"))?;
+        let token = connection
+            .query_row(
+                "SELECT spent_sol, buy_count FROM copy_spend WHERE task_id = ?1 AND mint = ?2",
+                params![task_id, mint],
+                |row| Ok((row.get::<_, f64>(0)?, row.get::<_, u64>(1)?)),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to read token copy spend: {e}"))?
+            .unwrap_or_default();
+        Ok(SpendState {
+            total_spent_sol,
+            token_spent_sol: token.0,
+            token_buy_count: token.1,
+        })
+    }
+
+    /// Persist one outcome. A paper fill's decision and spend increment commit in
+    /// the same SQLite transaction, so budget state cannot lag a recorded fill.
+    pub async fn record_outcome(&self, outcome: CopyOutcome) -> Result<(), String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.record_outcome_sync(outcome))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn record_outcome_sync(&self, outcome: CopyOutcome) -> Result<(), String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|e| format!("Failed to begin copy outcome transaction: {e}"))?;
+        let (task_id, signature, mint, decided_at, kind) = match &outcome {
+            CopyOutcome::PaperFilled(decision) => (
+                decision.task_id,
+                decision.signature.as_str(),
+                Some(decision.mint.as_str()),
+                decision.telemetry.decided_at,
+                "paper_filled",
+            ),
+            CopyOutcome::Skipped {
+                task_id,
+                signature,
+                mint,
+                decided_at,
+                ..
+            } => (
+                *task_id,
+                signature.as_str(),
+                mint.as_deref(),
+                *decided_at,
+                "skipped",
+            ),
+        };
+        let json = serde_json::to_string(&outcome)
+            .map_err(|e| format!("Failed to serialize copy outcome: {e}"))?;
+        transaction
+            .execute(
+                "INSERT INTO copy_decisions (task_id, signature, mint, outcome_json, decided_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5) \
+                 ON CONFLICT(task_id, signature) DO NOTHING",
+                params![task_id, signature, mint, json, decided_at.to_rfc3339()],
+            )
+            .map_err(|e| format!("Failed to record copy decision: {e}"))?;
+        let inserted = transaction.changes() > 0;
+        if inserted {
+            transaction
+                .execute(
+                    "INSERT INTO copy_activity (task_id, kind, details_json, created_at) \
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![task_id, kind, json, Utc::now().to_rfc3339()],
+                )
+                .map_err(|e| format!("Failed to record copy activity: {e}"))?;
+            if let CopyOutcome::PaperFilled(decision) = &outcome {
+                transaction
+                    .execute(
+                        "INSERT INTO copy_spend (task_id, mint, spent_sol, buy_count, updated_at) \
+                         VALUES (?1, ?2, ?3, 1, ?4) \
+                         ON CONFLICT(task_id, mint) DO UPDATE SET \
+                         spent_sol = spent_sol + excluded.spent_sol, \
+                         buy_count = buy_count + 1, updated_at = excluded.updated_at",
+                        params![
+                            decision.task_id,
+                            decision.mint,
+                            decision.sized_sol,
+                            Utc::now().to_rfc3339()
+                        ],
+                    )
+                    .map_err(|e| format!("Failed to update copy spend: {e}"))?;
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|e| format!("Failed to commit copy outcome: {e}"))
+    }
+}
+
+fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask> {
+    let parse_json = |index| -> rusqlite::Result<String> { row.get(index) };
+    let created: String = row.get(14)?;
+    let updated: String = row.get(15)?;
+    Ok(CopyTask {
+        id: row.get(0)?,
+        target_address: row.get(1)?,
+        label: row.get(2)?,
+        enabled: row.get(3)?,
+        mode: serde_json::from_str(&parse_json(4)?).map_err(json_error)?,
+        sizing: serde_json::from_str(&parse_json(5)?).map_err(json_error)?,
+        exit_mode: serde_json::from_str(&parse_json(6)?).map_err(json_error)?,
+        max_sol_per_trade: row.get(7)?,
+        max_sol_per_token: row.get(8)?,
+        total_budget_sol: row.get(9)?,
+        min_target_trade_sol: row.get(10)?,
+        max_target_trade_sol: row.get(11)?,
+        buy_once_per_token: row.get(12)?,
+        slippage_pct: row.get(13)?,
+        created_at: parse_datetime(&created, 14)?,
+        updated_at: parse_datetime(&updated, 15)?,
+    })
+}
+
+fn parse_datetime(value: &str, index: usize) -> rusqlite::Result<chrono::DateTime<Utc>> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|value| value.with_timezone(&Utc))
+        .map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                index,
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        })
+}
+
+fn json_error(error: serde_json::Error) -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+
+    use super::*;
+    use crate::trader::copy::{CopyMode, ExitMode, SizingMode};
+
+    fn task() -> CopyTask {
+        CopyTask {
+            id: 0,
+            target_address: "target".to_owned(),
+            label: Some("Paper".to_owned()),
+            enabled: true,
+            mode: CopyMode::Paper,
+            sizing: SizingMode::Fixed { sol: 0.1 },
+            exit_mode: ExitMode::BuyOnly,
+            max_sol_per_trade: 0.2,
+            max_sol_per_token: 1.0,
+            total_budget_sol: 5.0,
+            min_target_trade_sol: None,
+            max_target_trade_sol: None,
+            buy_once_per_token: false,
+            slippage_pct: 1.0,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[tokio::test]
+    async fn task_and_outcome_round_trip_with_idempotent_spend() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+        let task = db.insert_task(task()).await.unwrap();
+        assert_eq!(
+            db.enabled_tasks_for_subject("target").await.unwrap(),
+            [task.clone()]
+        );
+
+        let now = Utc::now();
+        let outcome = CopyOutcome::PaperFilled(super::super::types::PaperDecision {
+            task_id: task.id,
+            target_address: task.target_address.clone(),
+            signature: "signature".to_owned(),
+            mint: "mint".to_owned(),
+            target_size_sol: 0.2,
+            sized_sol: 0.1,
+            fill: super::super::types::PaperFill {
+                input_sol: 0.1,
+                market_price_sol: 0.01,
+                fill_price_sol: 0.0101,
+                token_amount: 9.85,
+                referral_fee_sol: 0.0005,
+                network_fee_sol: 0.000005,
+                priority_fee_sol: 0.0,
+                total_cost_sol: 0.100005,
+            },
+            telemetry: super::super::types::CopyTelemetry {
+                target_block_time: Some(1),
+                detected_at: now,
+                decoded_at: now,
+                decided_at: now,
+                submitted_at: None,
+                confirmed_at: Some(now),
+                target_price_sol: Some(0.01),
+                fill_price_sol: Some(0.0101),
+            },
+        });
+        db.record_outcome(outcome.clone()).await.unwrap();
+        db.record_outcome(outcome).await.unwrap();
+
+        assert_eq!(
+            db.spend_state(task.id, "mint").await.unwrap(),
+            SpendState {
+                total_spent_sol: 0.1,
+                token_spent_sol: 0.1,
+                token_buy_count: 1,
+            }
+        );
+    }
+}

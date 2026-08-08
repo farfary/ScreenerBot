@@ -6,10 +6,6 @@ use serde::{Deserialize, Serialize};
 /// Why a wallet is under observation. One address can serve more than one source at
 /// once (`sources` on `WatchTarget` is a `Vec`).
 ///
-/// `Copy { task_id }` from the plan (PLAN.md §6.1) is deliberately not modelled yet:
-/// copy trading (`trader/copy/`) does not exist in this phase, so a variant nothing
-/// can construct would be dead code. It is added in the phase that ships copy tasks.
-///
 /// `Serialize`/`Deserialize`: persisted as the `watch_targets.sources` JSON column,
 /// and surfaced verbatim in the target-list/status API responses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,6 +15,9 @@ pub enum WatchSource {
     /// on; not a row in `watch_targets` and not addressable through the watch API --
     /// it is structural, not something the user adds or removes.
     OwnWallet,
+    /// A copy task consumes this subject's activity. Phase 2c only constructs paper
+    /// tasks; the task id lets matching avoid an event-time database lookup.
+    Copy { task_id: i64 },
     /// Notify-only: format matching activity through Telegram (and, later, the
     /// dashboard). No money moves. `rule_id` is the owning `watch_targets.id` --
     /// there is no separate alert-rule table in this phase, so a target IS the rule.

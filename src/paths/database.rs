@@ -45,6 +45,11 @@ pub fn get_strategies_db_path() -> PathBuf {
     get_data_directory().join("strategies.db")
 }
 
+/// Returns the copy-trading policy and paper-decision database path.
+pub fn get_copy_trading_db_path() -> PathBuf {
+    get_data_directory().join("copy_trading.db")
+}
+
 /// Returns the OHLCV database path.
 pub fn get_ohlcvs_db_path() -> PathBuf {
     get_data_directory().join("ohlcvs.db")

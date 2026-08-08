@@ -21,6 +21,7 @@ pub struct ConfigResponse<T> {
 pub struct FullConfigResponse {
     pub rpc: config::RpcConfig,
     pub trader: config::TraderConfig,
+    pub copy_trading: config::CopyTradingConfig,
     pub positions: config::PositionsConfig,
     pub filtering: config::FilteringConfig,
     pub swaps: config::SwapsConfig,
@@ -73,6 +74,7 @@ pub struct UpdateResponse {
 pub const CONFIG_SECTIONS: &[&str] = &[
     "rpc",
     "trader",
+    "copy_trading",
     "positions",
     "filtering",
     "swaps",

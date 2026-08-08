@@ -91,7 +91,7 @@ impl WatchDatabase {
         Ok(db)
     }
 
-    fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
+    pub(super) fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.pool
             .get()
             .map_err(|e| format!("Failed to get watch database connection: {e}"))
@@ -144,7 +144,7 @@ impl WatchDatabase {
             .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
-    fn get_target_sync(&self, id: i64) -> Result<Option<WatchTarget>, String> {
+    pub(super) fn get_target_sync(&self, id: i64) -> Result<Option<WatchTarget>, String> {
         let conn = self.conn()?;
         conn.query_row(
             "SELECT id, address, label, sources, enabled, created_at, updated_at \
@@ -523,5 +523,41 @@ mod tests {
             db.get_cursor("Addr2222").await.unwrap(),
             Some("sig2".to_owned())
         );
+    }
+
+    #[tokio::test]
+    async fn removing_one_source_preserves_the_shared_target_and_cursor() {
+        let (db, _dir) = temp_db();
+        let target = db
+            .insert_alert_target("Shared1111", Some("shared"))
+            .await
+            .unwrap();
+        let alert = target.sources[0];
+        db.upsert_source("Shared1111", None, WatchSource::Copy { task_id: 42 })
+            .await
+            .unwrap();
+        db.set_cursor("Shared1111", "sig").await.unwrap();
+
+        db.remove_source("Shared1111", alert).await.unwrap();
+        let remaining = db
+            .get_target_by_address("Shared1111")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(remaining.sources, [WatchSource::Copy { task_id: 42 }]);
+        assert_eq!(
+            db.get_cursor("Shared1111").await.unwrap().as_deref(),
+            Some("sig")
+        );
+
+        db.remove_source("Shared1111", WatchSource::Copy { task_id: 42 })
+            .await
+            .unwrap();
+        assert!(db
+            .get_target_by_address("Shared1111")
+            .await
+            .unwrap()
+            .is_none());
+        assert!(!db.has_cursor_row("Shared1111").await.unwrap());
     }
 }

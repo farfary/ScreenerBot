@@ -6,6 +6,7 @@ use crate::config_struct;
 mod account;
 mod ai;
 mod connectivity;
+mod copy_trading;
 mod events;
 mod filtering;
 mod gui;
@@ -32,6 +33,7 @@ mod webserver;
 pub use account::*;
 pub use ai::*;
 pub use connectivity::*;
+pub use copy_trading::*;
 pub use events::*;
 pub use filtering::*;
 pub use gui::*;
@@ -73,6 +75,9 @@ config_struct! {
 
         /// Trader configuration
         trader: TraderConfig = TraderConfig::default(),
+
+        /// Global copy-trading policy (per-task limits live in copy_trading.db)
+        copy_trading: CopyTradingConfig = CopyTradingConfig::default(),
 
         /// Positions configuration
         positions: PositionsConfig = PositionsConfig::default(),

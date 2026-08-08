@@ -65,6 +65,8 @@ pub(super) const TRADER_CONTROLS_STYLES: &str =
     include_str!("templates/styles/pages/trader/controls.css");
 pub(super) const TRADER_METRICS_STYLES: &str =
     include_str!("templates/styles/pages/trader/metrics.css");
+pub(super) const TRADER_WALLET_COPY_STYLES: &str =
+    include_str!("templates/styles/pages/trader/wallet_copy.css");
 pub(super) const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 pub(super) const WALLETS_MAIN_WALLET_STYLES: &str =
     include_str!("templates/styles/pages/wallets/main_wallet.css");
@@ -434,6 +436,8 @@ pub const TRADER_CONTROLS_JS: &str = include_str!("templates/scripts/pages/trade
 pub const TRADER_CONFIG_CARDS_JS: &str =
     include_str!("templates/scripts/pages/trader/config_cards.js");
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
+pub const TRADER_WALLET_COPY_JS: &str =
+    include_str!("templates/scripts/pages/trader/wallet_copy.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
 pub const WALLETS_BULK_OPERATIONS_JS: &str =
     include_str!("templates/scripts/pages/wallets/bulk_operations.js");

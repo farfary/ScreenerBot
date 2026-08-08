@@ -170,6 +170,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         STRATEGIES_EDITOR_STYLES,
         STRATEGIES_UI_COMPONENTS_STYLES,
         TRADER_PAGE_STYLES,
+        TRADER_CONFIG_COMPONENTS_STYLES,
+        TRADER_CONTROLS_STYLES,
+        TRADER_METRICS_STYLES,
+        TRADER_WALLET_COPY_STYLES,
         WALLETS_PAGE_STYLES,
         WALLETS_MAIN_WALLET_STYLES,
         WALLETS_MODALS_STYLES,
@@ -231,6 +235,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
                 TRADER_CONFIG_COMPONENTS_STYLES,
                 TRADER_CONTROLS_STYLES,
                 TRADER_METRICS_STYLES,
+                TRADER_WALLET_COPY_STYLES,
             ]
             .join("\n"),
         ),

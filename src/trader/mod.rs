@@ -30,6 +30,7 @@ pub mod ai_analysis;
 pub mod config;
 mod constants;
 mod controller;
+pub mod copy;
 pub mod entry;
 pub mod evaluators;
 pub mod executors;

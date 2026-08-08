@@ -290,6 +290,45 @@
       <!-- /stats-layout -->
     </div>
 
+    <!-- Wallet Copy Tab -->
+    <div id="wallet-copy-tab" class="trader-tab-content" style="display: none">
+      <section class="wallet-copy-shell" aria-label="Wallet copy paper trading">
+        <header class="wallet-copy-header">
+          <div>
+            <span class="wallet-copy-eyebrow">Paper execution</span>
+            <h2>Wallet Copy</h2>
+            <p>Measure copied entries from real wallet activity before enabling live execution.</p>
+          </div>
+          <div class="wallet-copy-mode"><i class="icon-file-clock"></i><span id="wallet-copy-global-status">Paper paused</span><label class="toggle"><input id="wallet-copy-global-toggle" type="checkbox" /><span class="toggle-track"></span></label></div>
+        </header>
+        <div class="wallet-copy-workspace">
+          <aside class="wallet-copy-tasks">
+            <div class="wallet-copy-section-head"><div><strong>Copy tasks</strong><span id="wallet-copy-task-count">0 active</span></div><button class="btn btn-primary" id="wallet-copy-new-task" type="button"><i class="icon-plus"></i> New task</button></div>
+            <div id="wallet-copy-task-list" class="wallet-copy-task-list"><div class="wallet-copy-empty"><i class="icon-copy"></i><strong>No copy tasks</strong><span>Create a paper task to begin measuring decisions.</span></div></div>
+          </aside>
+          <div class="wallet-copy-editor">
+            <div id="wallet-copy-editor-empty" class="wallet-copy-editor-empty"><i class="icon-mouse-pointer-click"></i><strong>Select a task</strong><span>Choose a task to review its limits and paper performance.</span></div>
+            <form id="wallet-copy-form" class="wallet-copy-form" hidden>
+              <input id="wallet-copy-task-id" type="hidden" />
+              <div class="wallet-copy-form-head"><div><span class="wallet-copy-eyebrow">Task settings</span><h3 id="wallet-copy-form-title">New paper task</h3></div><label class="toggle"><input id="wallet-copy-enabled" type="checkbox" checked /><span class="toggle-track"></span></label></div>
+              <div class="wallet-copy-fields">
+                <label><span>Target wallet</span><input id="wallet-copy-address" class="form-input" type="text" autocomplete="off" maxlength="44" required /><small id="wallet-copy-address-error" class="field-error"></small></label>
+                <label><span>Label</span><input id="wallet-copy-label" class="form-input" type="text" maxlength="80" /></label>
+                <label><span>Sizing</span><select id="wallet-copy-sizing" class="form-select"><option value="fixed">Fixed SOL</option><option value="ratio_of_target">Ratio of target</option></select></label>
+                <label><span id="wallet-copy-size-label">Size (SOL)</span><input id="wallet-copy-size" class="form-input" type="number" min="0.001" step="0.001" required /></label>
+                <label><span>Max per trade (SOL)</span><input id="wallet-copy-max-trade" class="form-input" type="number" min="0.001" step="0.001" required /></label>
+                <label><span>Max per token (SOL)</span><input id="wallet-copy-max-token" class="form-input" type="number" min="0.001" step="0.001" required /></label>
+                <label><span>Total budget (SOL)</span><input id="wallet-copy-budget" class="form-input" type="number" min="0.001" step="0.001" required /></label>
+                <label><span>Slippage (%)</span><input id="wallet-copy-slippage" class="form-input" type="number" min="0.1" max="50" step="0.1" required /></label>
+              </div>
+              <div class="wallet-copy-form-actions"><button class="btn btn-danger" id="wallet-copy-delete" type="button" hidden>Delete</button><span class="wallet-copy-form-spacer"></span><button class="btn" id="wallet-copy-cancel" type="button">Cancel</button><button class="btn btn-primary" type="submit">Save paper task</button></div>
+            </form>
+          </div>
+        </div>
+        <section class="wallet-copy-activity"><div class="wallet-copy-section-head"><div><strong>Decision activity</strong><span>Fills, skips and arrival distance</span></div></div><div id="wallet-copy-activity-list" class="wallet-copy-activity-list"><div class="wallet-copy-empty"><i class="icon-activity"></i><strong>No decisions yet</strong><span>Paper outcomes will appear after the target trades.</span></div></div></section>
+      </section>
+    </div>
+
     <!-- Stop Loss Tab -->
     <div id="stop-loss-tab" class="trader-tab-content" style="display: none">
       <div class="config-section">

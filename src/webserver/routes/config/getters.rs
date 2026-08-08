@@ -20,6 +20,7 @@ pub async fn get_full_config() -> Response {
     let data = config::with_config(|cfg| FullConfigResponse {
         rpc: cfg.rpc.clone(),
         trader: cfg.trader.clone(),
+        copy_trading: cfg.copy_trading.clone(),
         positions: cfg.positions.clone(),
         filtering: cfg.filtering.clone(),
         swaps: cfg.swaps.clone(),
@@ -281,6 +282,14 @@ pub async fn get_wallet_config() -> Response {
     success_response(data)
 }
 
+pub async fn get_copy_trading_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.copy_trading.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+    success_response(data)
+}
+
 /// GET /api/config/performance - Get performance configuration
 pub async fn get_performance_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
@@ -339,6 +348,7 @@ where
             "StrategiesConfig" => serde_json::to_value(&cfg.strategies).ok(),
             "HolderWatchConfig" => serde_json::to_value(&cfg.holder_watch).ok(),
             "WalletConfig" => serde_json::to_value(&cfg.wallet).ok(),
+            "CopyTradingConfig" => serde_json::to_value(&cfg.copy_trading).ok(),
             "PerformanceConfig" => serde_json::to_value(&cfg.performance).ok(),
             "NetworkConfig" => serde_json::to_value(&cfg.network).ok(),
             "ReferralConfig" => serde_json::to_value(&cfg.referral).ok(),
@@ -552,6 +562,12 @@ where
                     },
                     true,
                 )?;
+            }
+            "CopyTradingConfig" => {
+                let new_config: config::CopyTradingConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid CopyTradingConfig: {e}"))?;
+                new_config.validate()?;
+                config::update_config_section(|cfg| cfg.copy_trading = new_config, true)?;
             }
             "PerformanceConfig" => {
                 let new_config: config::PerformanceConfig = serde_json::from_value(section_json)

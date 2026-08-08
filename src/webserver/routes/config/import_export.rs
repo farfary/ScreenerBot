@@ -88,6 +88,7 @@ fn get_section_label(section: &str) -> String {
     match section {
         "rpc" => "RPC".to_owned(),
         "trader" => "Auto Trader".to_owned(),
+        "copy_trading" => "Wallet Copy".to_owned(),
         "positions" => "Positions".to_owned(),
         "filtering" => "Filtering".to_owned(),
         "swaps" => "Swaps".to_owned(),
@@ -172,6 +173,12 @@ fn apply_section_to_config(
         "trader" => {
             cfg.trader =
                 serde_json::from_value(value).map_err(|e| format!("Invalid TraderConfig: {e}"))?;
+        }
+        "copy_trading" => {
+            let copy: config::CopyTradingConfig = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid CopyTradingConfig: {e}"))?;
+            copy.validate()?;
+            cfg.copy_trading = copy;
         }
         "positions" => {
             cfg.positions = serde_json::from_value(value)
@@ -261,6 +268,7 @@ pub async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response
             let section_value = match *section {
                 "rpc" => serde_json::to_value(&cfg.rpc).ok(),
                 "trader" => serde_json::to_value(&cfg.trader).ok(),
+                "copy_trading" => serde_json::to_value(&cfg.copy_trading).ok(),
                 "positions" => serde_json::to_value(&cfg.positions).ok(),
                 "filtering" => serde_json::to_value(&cfg.filtering).ok(),
                 "swaps" => serde_json::to_value(&cfg.swaps).ok(),
@@ -375,6 +383,9 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
             "trader" => serde_json::from_value::<config::TraderConfig>(value.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
+            "copy_trading" => serde_json::from_value::<config::CopyTradingConfig>(value.clone())
+                .map_err(|e| e.to_string())
+                .and_then(|copy| copy.validate()),
             "positions" => serde_json::from_value::<config::PositionsConfig>(value.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
@@ -418,6 +429,7 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
         let current_value = config::with_config(|cfg| match *section {
             "rpc" => serde_json::to_value(&cfg.rpc).ok(),
             "trader" => serde_json::to_value(&cfg.trader).ok(),
+            "copy_trading" => serde_json::to_value(&cfg.copy_trading).ok(),
             "positions" => serde_json::to_value(&cfg.positions).ok(),
             "filtering" => serde_json::to_value(&cfg.filtering).ok(),
             "swaps" => serde_json::to_value(&cfg.swaps).ok(),
@@ -525,6 +537,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
                 let current = match section.as_str() {
                     "rpc" => serde_json::to_value(&candidate_config.rpc).ok(),
                     "trader" => serde_json::to_value(&candidate_config.trader).ok(),
+                    "copy_trading" => serde_json::to_value(&candidate_config.copy_trading).ok(),
                     "positions" => serde_json::to_value(&candidate_config.positions).ok(),
                     "filtering" => serde_json::to_value(&candidate_config.filtering).ok(),
                     "swaps" => serde_json::to_value(&candidate_config.swaps).ok(),
@@ -600,6 +613,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
                     match section.as_str() {
                         "rpc" => cfg.rpc = candidate_config.rpc.clone(),
                         "trader" => cfg.trader = candidate_config.trader.clone(),
+                        "copy_trading" => cfg.copy_trading = candidate_config.copy_trading.clone(),
                         "positions" => cfg.positions = candidate_config.positions.clone(),
                         "filtering" => cfg.filtering = candidate_config.filtering.clone(),
                         "swaps" => cfg.swaps = candidate_config.swaps.clone(),

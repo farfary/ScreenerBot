@@ -93,6 +93,7 @@ pub struct TradingFeatures {
     pub partial_exit: FeatureStatus,
     pub loss_blacklist: FeatureStatus,
     pub strategies: FeatureStatus,
+    pub copy_wallet: FeatureStatus,
 }
 
 impl Default for TradingFeatures {
@@ -106,6 +107,7 @@ impl Default for TradingFeatures {
             partial_exit: FeatureStatus::Available,
             loss_blacklist: FeatureStatus::Available,
             strategies: FeatureStatus::Available,
+            copy_wallet: FeatureStatus::Beta,
         }
     }
 }
@@ -122,6 +124,7 @@ impl TradingFeatures {
             "partial-exit" | "partial_exit" => self.partial_exit,
             "loss-blacklist" | "loss_blacklist" => self.loss_blacklist,
             "strategies" => self.strategies,
+            "copy-wallet" | "copy_wallet" => self.copy_wallet,
             _ => FeatureStatus::Disabled,
         }
     }

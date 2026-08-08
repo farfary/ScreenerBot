@@ -20,8 +20,8 @@ pub mod types;
 
 // Re-export handler functions for use by the router
 use getters::{
-    get_account_config, get_ai_config, get_config_metadata, get_events_config,
-    get_filtering_config, get_full_config, get_gui_config, get_gui_defaults,
+    get_account_config, get_ai_config, get_config_metadata, get_copy_trading_config,
+    get_events_config, get_filtering_config, get_full_config, get_gui_config, get_gui_defaults,
     get_holder_watch_config, get_maintenance_config, get_monitoring_config, get_network_config,
     get_ohlcv_config, get_performance_config, get_pools_config, get_positions_config,
     get_referral_config, get_rpc_config, get_services_config, get_sol_price_config,
@@ -63,6 +63,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/strategies", get(get_strategies_config))
         .route("/config/holder_watch", get(get_holder_watch_config))
         .route("/config/wallet", get(get_wallet_config))
+        .route("/config/copy_trading", get(get_copy_trading_config))
         .route("/config/performance", get(get_performance_config))
         .route("/config/network", get(get_network_config))
         .route("/config/referral", get(get_referral_config))
@@ -135,6 +136,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route(
             "/config/wallet",
             patch(patch_any_config::<config::WalletConfig>),
+        )
+        .route(
+            "/config/copy_trading",
+            patch(patch_any_config::<config::CopyTradingConfig>),
         )
         .route(
             "/config/performance",

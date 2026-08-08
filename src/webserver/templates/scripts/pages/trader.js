@@ -16,11 +16,13 @@ import {
   handleFeatureRestrictedTab,
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
+import { createWalletCopy } from "./trader/wallet_copy.js";
 
 // Sub-tabs configuration. Strategy Control is second and the embedded Strategies
 // editor is third (Strategies was formerly its own top-level tab).
 const SUB_TABS = [
   { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
+  { id: "wallet-copy", label: '<i class="icon-copy"></i> Wallet Copy' },
   { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
   { id: "strategies", label: '<i class="icon-square-pen"></i> Strategies' },
   { id: "stop-loss", label: '<i class="icon-shield-off"></i> Stop Loss' },
@@ -73,6 +75,7 @@ function createLifecycle() {
     playError,
     eventCleanups,
   });
+  const walletCopy = createWalletCopy({ $, Utils, requestManager, ConfirmationDialog });
 
   // Embedded Strategies subtab — drives the strategies page module's lifecycle.
   // A local ctx adapter owns the strategies pollers so they start when the
@@ -182,6 +185,7 @@ function createLifecycle() {
     // Show selected tab
     const tabMap = {
       stats: "stats-tab",
+      "wallet-copy": "wallet-copy-tab",
       "stop-loss": "stop-loss-tab",
       "trailing-stop": "trailing-stop-tab",
       roi: "roi-tab",
@@ -208,7 +212,7 @@ function createLifecycle() {
       traderContent?.classList.add("trader-content--fullbleed");
       activateStrategiesSubtab();
     } else {
-      traderContent?.classList.remove("trader-content--fullbleed");
+      traderContent?.classList.toggle("trader-content--fullbleed", tabId === "wallet-copy");
       deactivateStrategiesSubtab();
     }
     traderContent?.classList.toggle("trader-content--split-scroll", tabId === "stats");
@@ -251,6 +255,7 @@ function createLifecycle() {
     if (tabId === "time-rules") {
       updateTimeRulesStatus();
     }
+    if (tabId === "wallet-copy") walletCopy.load();
   }
 
   /**
@@ -1336,6 +1341,7 @@ function createLifecycle() {
 
       // Setup form handlers
       setupFormHandlers();
+      walletCopy.setup(addTrackedListener);
 
       // Setup trading controls event handlers
       controls.setupControlsEventHandlers();
@@ -1457,6 +1463,7 @@ function createLifecycle() {
       state.stats = null;
       state.strategies = [];
       _lastPositionsKey = null;
+      walletCopy.reset();
     },
   };
 }
