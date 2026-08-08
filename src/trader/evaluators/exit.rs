@@ -413,8 +413,14 @@ pub async fn evaluate_exit_for_position(
     let Some((fresh_position, current_price)) = resolve_evaluation_input(&position).await else {
         return Ok(None);
     };
-    if let Some(decision) = evaluate_safety_exit(&fresh_position, current_price).await? {
-        return Ok(Some(decision));
+    if fresh_position.management.allows_safety_exits() {
+        if let Some(decision) = evaluate_safety_exit(&fresh_position, current_price).await? {
+            return Ok(Some(decision));
+        }
     }
-    evaluate_policy_exit(&fresh_position, current_price).await
+    if fresh_position.management.allows_policy_exits() {
+        evaluate_policy_exit(&fresh_position, current_price).await
+    } else {
+        Ok(None)
+    }
 }

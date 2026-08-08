@@ -498,22 +498,48 @@ export class PositionDetailsDialog {
     const statusBadge = isOpen
       ? '<span class="pdd-badge pdd-position-status pdd-badge-success">Open</span>'
       : '<span class="pdd-badge pdd-position-status pdd-badge-secondary">Closed</span>';
-    // Manual management: open positions get an interactive toggle (enable/disable the
-    // auto-trader for this position); closed positions just show the historical state.
     const manualHint = this._renderManualHint();
+    const managementLabels = {
+      auto_trader: "Auto Trader",
+      user_only: "User Only",
+      copy_task: "Copy Task",
+      hybrid: "Hybrid",
+    };
+    const origin = pos.origin || { kind: "auto" };
+    const sourceWallet = String(origin.source_wallet || "unknown");
+    const shortSourceWallet =
+      sourceWallet.length > 14
+        ? `${sourceWallet.slice(0, 6)}…${sourceWallet.slice(-4)}`
+        : sourceWallet;
+    const originLabel =
+      origin.kind === "copy"
+        ? `Copied · task ${Utils.escapeHtml(String(origin.task_id ?? "unknown"))} · ${Utils.escapeHtml(shortSourceWallet)}`
+        : origin.kind === "manual"
+          ? "Manual entry"
+          : origin.strategy_id
+            ? `Auto · ${Utils.escapeHtml(origin.strategy_id)}`
+            : "Auto entry";
+    const originBadge = `<span class="pdd-badge pdd-badge-secondary" title="Position origin">${originLabel}</span>`;
+    const availableManagementLabels =
+      origin.kind === "copy"
+        ? managementLabels
+        : Object.fromEntries(
+            Object.entries(managementLabels).filter(([value]) =>
+              ["auto_trader", "user_only"].includes(value)
+            )
+          );
     const manualBadge = isOpen
-      ? `<button type="button" id="pddManualToggle" class="pdd-badge pdd-manual-toggle ${
-          pos.manual_management ? "is-on" : "is-off"
-        }" aria-pressed="${pos.manual_management ? "true" : "false"}" title="${
-          pos.manual_management
-            ? "Manual management ON — auto-trader will not sell this position. Click to hand it back to the auto-trader."
-            : "Manual management OFF — auto-trader manages this position. Click to take manual control."
-        }"><i class="icon-shield"></i> ${
-          pos.manual_management ? "Manual" : "Auto-managed"
-        }</button>${manualHint}`
-      : pos.manual_management
-        ? '<span class="pdd-badge pdd-badge-manual" title="Manually bought — the auto-trader did not auto-sell or DCA this position"><i class="icon-shield"></i> Manual</span>'
-        : "";
+      ? `<label class="pdd-badge pdd-manual-toggle"><i class="icon-shield"></i><select id="pddManagementSelect" aria-label="Position management">${Object.entries(
+          availableManagementLabels
+        )
+          .map(
+            ([value, label]) =>
+              `<option value="${value}"${pos.management === value ? " selected" : ""}>${label}</option>`
+          )
+          .join("")}</select></label>${manualHint}`
+      : `<span class="pdd-badge pdd-badge-secondary"><i class="icon-shield"></i> ${
+          managementLabels[pos.management] || pos.management
+        }</span>`;
 
     return `
       <div class="dialog-backdrop"></div>
@@ -560,6 +586,7 @@ export class PositionDetailsDialog {
             <div class="header-lower-row">
               <div class="header-badges">
                 ${statusBadge}
+                ${originBadge}
                 ${manualBadge}
                 <span class="pdd-pending-swaps" id="pddPendingSwaps"></span>
               </div>
@@ -869,13 +896,16 @@ export class PositionDetailsDialog {
 
     // Manual-management toggle (open positions). Dispatches the shared toggle event;
     // the global handler does the POST + toast and broadcasts the change back.
-    const manualToggle = this.dialogEl.querySelector("#pddManualToggle");
+    const manualToggle = this.dialogEl.querySelector("#pddManagementSelect");
     if (manualToggle) {
       this._manualToggleHandler = () => {
-        const next = !this.positionData.manual_management;
         window.dispatchEvent(
           new CustomEvent("screenerbot:toggle-position-management", {
-            detail: { id: this.positionData.id, mint: this.positionData.mint, enabled: next },
+            detail: {
+              id: this.positionData.id,
+              mint: this.positionData.mint,
+              management: manualToggle.value,
+            },
           })
         );
       };
@@ -884,9 +914,9 @@ export class PositionDetailsDialog {
 
     // Reflect management changes (from here or the row context menu) in this dialog.
     this._managementChangedHandler = (event) => {
-      const { id, enabled } = event.detail || {};
+      const { id, management } = event.detail || {};
       if (id == null || id !== this.positionData?.id) return;
-      this.positionData.manual_management = !!enabled;
+      this.positionData.management = management;
       this._refreshManualToggle();
     };
     window.addEventListener(
@@ -898,11 +928,11 @@ export class PositionDetailsDialog {
     HintTrigger.initAll();
   }
 
-  /** Render the manual-management hint trigger HTML (empty if hints are off). */
+  /** Render the position-management hint trigger HTML (empty if hints are off). */
   _renderManualHint() {
-    const hint = Hints.getHint("positions.manualManagement");
+    const hint = Hints.getHint("positions.positionManagement");
     if (!hint) return "";
-    return HintTrigger.render(hint, "positions.manualManagement", {
+    return HintTrigger.render(hint, "positions.positionManagement", {
       size: "sm",
       position: "bottom",
     });
@@ -910,16 +940,8 @@ export class PositionDetailsDialog {
 
   /** Update the toggle button's state/label in place after a management change. */
   _refreshManualToggle() {
-    const btn = this.dialogEl?.querySelector("#pddManualToggle");
-    if (!btn) return;
-    const on = !!this.positionData.manual_management;
-    btn.classList.toggle("is-on", on);
-    btn.classList.toggle("is-off", !on);
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
-    btn.title = on
-      ? "Manual management ON — auto-trader will not sell this position. Click to hand it back to the auto-trader."
-      : "Manual management OFF — auto-trader manages this position. Click to take manual control.";
-    btn.innerHTML = `<i class="icon-shield"></i> ${on ? "Manual" : "Auto-managed"}`;
+    const select = this.dialogEl?.querySelector("#pddManagementSelect");
+    if (select) select.value = this.positionData.management;
   }
 
   /**
@@ -1022,16 +1044,16 @@ window.addEventListener("screenerbot:open-position-details", async (event) => {
 // On success it broadcasts `screenerbot:position-management-changed` so an open
 // positions table / dialog can refresh.
 window.addEventListener("screenerbot:toggle-position-management", async (event) => {
-  const { id, enabled } = event.detail || {};
+  const { id, management } = event.detail || {};
   if (id == null) return;
 
   try {
     const data = await requestManager.fetch(
-      `/api/positions/${encodeURIComponent(id)}/manual-management`,
+      `/api/positions/${encodeURIComponent(id)}/management`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !!enabled }),
+        body: JSON.stringify({ management }),
         priority: "high",
       }
     );
@@ -1039,18 +1061,15 @@ window.addEventListener("screenerbot:toggle-position-management", async (event) 
       throw new Error(data.message || "Request failed");
     }
     Utils.showToast(
-      data?.message ||
-        (enabled
-          ? "Manual management enabled — auto-trader won't sell this position"
-          : "Manual management disabled — auto-trader now manages this position"),
+      data?.message || `Position management set to ${management}`,
       "success"
     );
     window.dispatchEvent(
       new CustomEvent("screenerbot:position-management-changed", {
-        detail: { id, enabled: !!enabled },
+        detail: { id, management },
       })
     );
   } catch (err) {
-    Utils.showToast(err?.message || "Failed to update manual management", "error");
+    Utils.showToast(err?.message || "Failed to update position management", "error");
   }
 });

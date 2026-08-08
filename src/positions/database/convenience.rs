@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::params;
 
 use crate::logger::{self, LogTag};
-use crate::positions::types::{EntryRecord, ExitRecord, Position};
+use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
 
 use super::global::GLOBAL_POSITIONS_DB;
 use super::types::{
@@ -82,17 +82,14 @@ pub async fn set_position_archived_db(id: i64, archived: bool) -> Result<bool, S
     }
 }
 
-/// Enable or disable manual management for a position by ID (reversible flag).
-pub async fn set_position_manual_management_db(
+/// Change action ownership for a position by ID.
+pub async fn set_position_management_db(
     id: i64,
-    manual_management: bool,
+    management: PositionManagement,
 ) -> Result<bool, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => {
-            db.set_position_manual_management(id, manual_management)
-                .await
-        }
+        Some(db) => db.set_position_management(id, management).await,
         None => Err("Positions database not initialized".to_owned()),
     }
 }

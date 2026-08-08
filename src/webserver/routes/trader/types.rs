@@ -1,5 +1,6 @@
 //! Type definitions for trader API
 
+use crate::positions::PositionManagement;
 use serde::{Deserialize, Serialize};
 
 // =============================================================================
@@ -38,10 +39,9 @@ pub struct ManualBuyRequest {
     pub size_sol: Option<f64>,
     #[serde(default)]
     pub force: Option<bool>,
-    /// Whether the resulting position is manually managed (auto-trader leaves it alone).
-    /// Defaults to true: dashboard manual buys are protected unless the user opts out.
+    /// Ownership mode for the resulting position. Dashboard buys default to user-only.
     #[serde(default)]
-    pub manual_management: Option<bool>,
+    pub management: Option<PositionManagement>,
     /// Per-trade slippage override in percent. `None` = use the configured slippage
     /// (`swaps.slippage.*`). Manual trading only — the auto-trader is always config-driven.
     #[serde(default)]

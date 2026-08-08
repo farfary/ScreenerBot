@@ -10,7 +10,7 @@ use crate::positions::state::{
     acquire_global_position_permit, acquire_position_lock, add_position, add_signature_to_index,
     LAST_OPEN_TIME,
 };
-use crate::positions::types::{Position, VerificationKind};
+use crate::positions::types::{Position, PositionManagement, PositionOrigin, VerificationKind};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
@@ -23,31 +23,37 @@ use serde_json::json;
 pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
     let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
     // Auto-trader entry: slippage always follows config.
-    open_position_impl(token_mint, trade_size_sol, false, None).await
+    open_position_impl(
+        token_mint,
+        trade_size_sol,
+        PositionOrigin::Auto { strategy_id: None },
+        PositionManagement::AutoTrader,
+        None,
+    )
+    .await
 }
 
 /// Open a new position with an explicit SOL size (used by manual buys).
 ///
-/// `manual_management` marks the position as manually managed: when true the
-/// auto-trader will never auto-sell or auto-DCA it (manual/force buys), leaving the
-/// user in full control.
 pub async fn open_position_with_size(
     token_mint: &str,
     trade_size_sol: f64,
-    manual_management: bool,
+    origin: PositionOrigin,
+    management: PositionManagement,
     slippage_pct: Option<f64>,
 ) -> Result<String, String> {
     if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
         return Err(format!("Invalid trade size: {trade_size_sol}"));
     }
-    open_position_impl(token_mint, trade_size_sol, manual_management, slippage_pct).await
+    open_position_impl(token_mint, trade_size_sol, origin, management, slippage_pct).await
 }
 
 /// Internal helper to open a new position with an explicit SOL size
 async fn open_position_impl(
     token_mint: &str,
     trade_size_sol: f64,
-    manual_management: bool,
+    origin: PositionOrigin,
+    management: PositionManagement,
     slippage_pct: Option<f64>,
 ) -> Result<String, String> {
     // Ensure the token exists in the local DB. For manual/force buys this lets the user
@@ -291,8 +297,8 @@ async fn open_position_impl(
         // New positions are never archived
         archived: false,
         archived_at: None,
-        // Manual/force buys are flagged so the auto-trader leaves them alone
-        manual_management,
+        origin,
+        management,
     };
 
     // Save to database (with retry) and get ID

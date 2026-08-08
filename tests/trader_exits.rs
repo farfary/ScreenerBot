@@ -22,11 +22,39 @@ mod common;
 
 use chrono::Duration;
 use common::{aged, config_guard, set_config, test_position};
-use screenerbot::positions::Position;
+use screenerbot::positions::{Position, PositionManagement};
 use screenerbot::trader::evaluators::{exit_roi, exit_stop_loss, exit_time, exit_trailing};
 use screenerbot::trader::policy::ExitPolicy;
 use screenerbot::trader::safety::check_risk_limits;
 use screenerbot::trader::{TradeAction, TradePriority, TradeReason};
+
+#[test]
+fn position_management_matches_the_exit_ownership_matrix() {
+    let cases = [
+        (PositionManagement::AutoTrader, true, true, true, false),
+        (PositionManagement::CopyTask, true, false, false, true),
+        (PositionManagement::Hybrid, true, true, false, true),
+        (PositionManagement::UserOnly, false, false, false, false),
+    ];
+    for (management, safety, policy, dca, copy_sell) in cases {
+        assert_eq!(
+            management.allows_safety_exits(),
+            safety,
+            "{management:?} safety"
+        );
+        assert_eq!(
+            management.allows_policy_exits(),
+            policy,
+            "{management:?} policy"
+        );
+        assert_eq!(management.allows_auto_dca(), dca, "{management:?} DCA");
+        assert_eq!(
+            management.allows_copy_sell(),
+            copy_sell,
+            "{management:?} copy sell"
+        );
+    }
+}
 
 // ==================== STOP LOSS ====================
 

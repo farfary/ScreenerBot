@@ -10,7 +10,7 @@ pub(super) static POSITIONS_DB_INITIALIZED: LazyLock<AtomicBool> =
     LazyLock::new(|| AtomicBool::new(false));
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 1;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 2;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
@@ -29,7 +29,7 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
   dca_count, average_entry_price, last_dca_time,
-  archived, archived_at, manual_management
+  archived, archived_at, origin_kind, origin_ref, management
 "#;
 
 pub(super) const SCHEMA_POSITIONS: &str = r#"
@@ -90,8 +90,10 @@ CREATE TABLE IF NOT EXISTS positions (
   -- Archival (dashboard "Remove -> Archive"; reversible, hides from open/closed lists)
   archived BOOLEAN NOT NULL DEFAULT 0, -- True when user archived the position
   archived_at TEXT, -- When the position was archived (RFC3339)
-  -- Manual management (manual/force buy -> auto-trader never auto-sells/DCAs it)
-  manual_management BOOLEAN NOT NULL DEFAULT 0, -- True when opened by a manual/force buy
+  -- Durable provenance and action ownership
+  origin_kind TEXT NOT NULL DEFAULT 'auto',
+  origin_ref TEXT,
+  management TEXT NOT NULL DEFAULT 'auto_trader',
   -- Timestamps
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -232,12 +234,6 @@ pub(super) const MIGRATION_ADD_ARCHIVE_FIELDS: &str = r#"
 -- Add archival fields to positions table (safe migration - columns are nullable/defaulted)
 ALTER TABLE positions ADD COLUMN archived BOOLEAN NOT NULL DEFAULT 0;
 ALTER TABLE positions ADD COLUMN archived_at TEXT;
-"#;
-
-pub(super) const MIGRATION_ADD_MANUAL_MANAGEMENT: &str = r#"
--- Add manual-management flag to positions table (safe migration - defaulted to 0).
--- Positions opened via a manual/force buy are flagged so the auto-trader skips them.
-ALTER TABLE positions ADD COLUMN manual_management BOOLEAN NOT NULL DEFAULT 0;
 "#;
 
 // Performance indexes

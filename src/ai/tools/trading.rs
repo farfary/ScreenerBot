@@ -107,16 +107,20 @@ impl Tool for BuyTokenTool {
             ));
         }
 
-        // Execute buy. AI-initiated buys stay auto-managed (manual_management = false)
-        // so the AI/auto-trader can manage their exits; only user dashboard buys default
-        // to manual management.
-        let result =
-            match manual::manual_buy(&params.mint_address, params.amount_sol, false, None).await {
-                Ok(r) => r,
-                Err(e) => {
-                    return ToolResult::error(format!("Buy failed: {e}"));
-                }
-            };
+        // AI-initiated buys are manual in provenance but opt into auto-trader ownership.
+        let result = match manual::manual_buy(
+            &params.mint_address,
+            params.amount_sol,
+            positions::PositionManagement::AutoTrader,
+            None,
+        )
+        .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return ToolResult::error(format!("Buy failed: {e}"));
+            }
+        };
 
         // Build response
         let response = TradeResponse {

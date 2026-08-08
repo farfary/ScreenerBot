@@ -419,8 +419,9 @@ td[data-column-id="token"] {
   position: relative;
 }
 
-/* Inline manual management tag — fills the full height of the token cell */
-.pos-manual-tag {
+/* Highest-priority provenance tag — fills the full height of the token cell. */
+.pos-ind > td[data-column-id="token"]::after {
+  content: "";
   position: absolute;
   top: 0;
   bottom: 0;
@@ -444,8 +445,14 @@ td[data-column-id="token"] {
   user-select: none;
 }
 
-.pos-manual-tag--hidden {
-  visibility: hidden;
+.pos-ind-manual > td[data-column-id="token"]::after {
+  content: "Manual";
+}
+
+.pos-ind-copy > td[data-column-id="token"]::after {
+  content: "Copy";
+  background: var(--info-alpha-10);
+  color: var(--info-color);
 }
 
 /* Pending (synthetic) rows are non-interactive placeholders */

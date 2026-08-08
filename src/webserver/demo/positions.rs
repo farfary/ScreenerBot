@@ -68,7 +68,8 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 token_decimals: Some(9),
                 archived: false,
                 archived_at: None,
-                manual_management: false,
+                origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
+                management: crate::positions::PositionManagement::AutoTrader,
             });
             id_counter += 1;
         }
@@ -132,7 +133,8 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 token_decimals: Some(9),
                 archived: false,
                 archived_at: None,
-                manual_management: false,
+                origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
+                management: crate::positions::PositionManagement::AutoTrader,
             });
             id_counter += 1;
         }

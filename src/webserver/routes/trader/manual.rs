@@ -115,9 +115,9 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         ),
     );
 
-    // Default to manually managed (auto-trader leaves the position alone) unless the
-    // user explicitly opted into auto-trader handling via the trade dialog checkbox.
-    let manual_management = req.manual_management.unwrap_or(true);
+    let management = req
+        .management
+        .unwrap_or(crate::positions::PositionManagement::UserOnly);
 
     // Use standard manual_buy - action tracking is handled inside
     let slippage_pct = match validate_slippage(req.slippage_pct) {
@@ -125,8 +125,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         Err(resp) => return resp,
     };
 
-    let result =
-        crate::trader::manual::manual_buy(&req.mint, size, manual_management, slippage_pct).await;
+    let result = crate::trader::manual::manual_buy(&req.mint, size, management, slippage_pct).await;
 
     match result {
         Ok(tr) => {

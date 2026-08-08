@@ -1,5 +1,6 @@
 //! Position route types — data structures for position API responses.
 
+use crate::positions::{PositionManagement, PositionOrigin};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -60,8 +61,8 @@ pub struct PositionResponse {
     // Archival
     pub archived: bool,
     pub archived_at: Option<i64>,
-    // Manual management: true when opened by a manual/force buy (auto-trader skips it)
-    pub manual_management: bool,
+    pub origin: PositionOrigin,
+    pub management: PositionManagement,
 }
 
 #[derive(Debug, Serialize)]

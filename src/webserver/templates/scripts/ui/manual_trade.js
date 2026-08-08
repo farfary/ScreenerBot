@@ -6,7 +6,7 @@
  * the billboard. The copies had already drifted apart, in ways that were silent and
  * wrong:
  *
- *   - Only the tokens page forwarded `manual_management` from the dialog's
+ *   - Only the tokens page forwarded the position ownership choice from the dialog's
  *     checkbox. Buying from the context menu or token details therefore DISCARDED
  *     the user's choice, so a manual buy could be auto-sold by the trader --
  *     manual/force buys are supposed to be protected from auto-sell.
@@ -82,7 +82,7 @@ async function fetchPosition(mint) {
       symbol: position.symbol || null,
       name: position.name || null,
       logo: position.logo_url || data?.token_info?.image_url || null,
-      manualManagement: position.manual_management === true,
+      positionManagement: position.management || "auto_trader",
     };
   } catch {
     // No position, or the lookup failed — the trade still proceeds.
@@ -184,11 +184,7 @@ function buildBody(action, mint, result) {
     mint,
     ...slippage,
     ...(result.amount ? { size_sol: result.amount } : {}),
-    // The dialog's manual-management checkbox (default true). Must be forwarded:
-    // dropping it silently opts a manual buy back into auto-sell.
-    ...(typeof result.manual_management === "boolean"
-      ? { manual_management: result.manual_management }
-      : {}),
+    ...(typeof result.management === "string" ? { management: result.management } : {}),
   };
 }
 
@@ -263,7 +259,7 @@ export async function manualTrade({
       holdings: position?.holdings ?? 0,
       decimals: position?.decimals ?? identity?.decimals ?? null,
       currentSize: position?.currentSize ?? null,
-      manualManagement: position?.manualManagement ?? null,
+      positionManagement: position?.positionManagement ?? null,
     };
 
     if (action !== "sell") {

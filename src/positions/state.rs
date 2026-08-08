@@ -359,15 +359,13 @@ pub async fn set_position_archived_in_memory(position_id: i64, archived: bool) -
     .await
 }
 
-/// Toggle the in-memory manual-management flag for a position by ID. Keeps the cached
-/// position in sync with the DB so the auto-trader's exit monitor sees the change at
-/// once (it reads from the in-memory list).
-pub async fn set_position_manual_management_in_memory(
+/// Change ownership in memory after persistence so evaluators see it immediately.
+pub async fn set_position_management_in_memory(
     position_id: i64,
-    manual_management: bool,
+    management: crate::positions::types::PositionManagement,
 ) -> bool {
     update_position_state_by_id(position_id, |p| {
-        p.manual_management = manual_management;
+        p.management = management;
     })
     .await
 }

@@ -26,6 +26,115 @@ pub enum TradeOrigin {
     Manual,
 }
 
+/// Durable provenance for a position. This records why the position exists and
+/// is independent from who is currently allowed to manage it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PositionOrigin {
+    Auto { strategy_id: Option<String> },
+    Manual,
+    Copy { task_id: i64, source_wallet: String },
+}
+
+impl PositionOrigin {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Auto { .. } => "auto",
+            Self::Manual => "manual",
+            Self::Copy { .. } => "copy",
+        }
+    }
+
+    pub fn reference(&self) -> Option<String> {
+        match self {
+            Self::Auto { strategy_id } => strategy_id.clone(),
+            Self::Manual => None,
+            Self::Copy {
+                task_id,
+                source_wallet,
+            } => Some(format!("{task_id}:{source_wallet}")),
+        }
+    }
+
+    pub fn from_columns(kind: &str, reference: Option<String>) -> Result<Self, String> {
+        match kind {
+            "auto" => Ok(Self::Auto {
+                strategy_id: reference,
+            }),
+            "manual" => Ok(Self::Manual),
+            "copy" => {
+                let value =
+                    reference.ok_or_else(|| "copy origin is missing origin_ref".to_owned())?;
+                let (task_id, source_wallet) = value
+                    .split_once(':')
+                    .ok_or_else(|| "copy origin_ref must contain task id and wallet".to_owned())?;
+                Ok(Self::Copy {
+                    task_id: task_id
+                        .parse()
+                        .map_err(|_| "copy origin_ref has an invalid task id".to_owned())?,
+                    source_wallet: source_wallet.to_owned(),
+                })
+            }
+            other => Err(format!("unknown position origin kind: {other}")),
+        }
+    }
+}
+
+/// Ownership policy for automated actions on a position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PositionManagement {
+    AutoTrader,
+    UserOnly,
+    CopyTask,
+    Hybrid,
+}
+
+impl PositionManagement {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AutoTrader => "auto_trader",
+            Self::UserOnly => "user_only",
+            Self::CopyTask => "copy_task",
+            Self::Hybrid => "hybrid",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "auto_trader" => Ok(Self::AutoTrader),
+            "user_only" => Ok(Self::UserOnly),
+            "copy_task" => Ok(Self::CopyTask),
+            "hybrid" => Ok(Self::Hybrid),
+            other => Err(format!("unknown position management: {other}")),
+        }
+    }
+
+    pub fn allows_safety_exits(self) -> bool {
+        !matches!(self, Self::UserOnly)
+    }
+
+    pub fn allows_policy_exits(self) -> bool {
+        matches!(self, Self::AutoTrader | Self::Hybrid)
+    }
+
+    pub fn allows_auto_dca(self) -> bool {
+        matches!(self, Self::AutoTrader)
+    }
+
+    pub fn allows_copy_sell(self) -> bool {
+        matches!(self, Self::CopyTask | Self::Hybrid)
+    }
+
+    /// Copy-owned modes require durable copy provenance so a real task can find
+    /// and manage the position. Auto-trader and user ownership are valid for
+    /// every origin.
+    pub fn is_valid_for_origin(self, origin: &PositionOrigin) -> bool {
+        !matches!(self, Self::CopyTask | Self::Hybrid)
+            || matches!(origin, PositionOrigin::Copy { .. })
+    }
+}
+
 /// Price source for logging and tracking
 #[derive(Debug, Clone, Copy)]
 pub enum PriceSource {
@@ -154,14 +263,9 @@ pub struct Position {
     #[serde(default)]
     pub archived_at: Option<DateTime<Utc>>, // When it was archived
 
-    // ==================== MANUAL MANAGEMENT ====================
-    // True when the position was opened by a manual/force buy from the dashboard.
-    // The exit monitor skips such positions entirely (no auto take-profit, stop-loss,
-    // trailing, strategy/AI exit — including no blacklist or >90% risk-limit exit), and
-    // the DCA evaluator refuses to average into them. Default false (auto-managed) for
-    // strategy/auto entries.
-    #[serde(default)]
-    pub manual_management: bool,
+    // ==================== PROVENANCE & OWNERSHIP ====================
+    pub origin: PositionOrigin,
+    pub management: PositionManagement,
 }
 
 // ==================== EXIT & ENTRY HISTORY ====================
@@ -193,4 +297,25 @@ pub struct EntryRecord {
     pub transaction_signature: String,
     pub is_dca: bool,               // true if DCA, false if initial entry
     pub fees_lamports: Option<u64>, // Transaction fee
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PositionManagement, PositionOrigin};
+
+    #[test]
+    fn copy_owned_management_requires_copy_provenance() {
+        let manual = PositionOrigin::Manual;
+        let copy = PositionOrigin::Copy {
+            task_id: 7,
+            source_wallet: "wallet".to_owned(),
+        };
+
+        assert!(PositionManagement::AutoTrader.is_valid_for_origin(&manual));
+        assert!(PositionManagement::UserOnly.is_valid_for_origin(&manual));
+        assert!(!PositionManagement::CopyTask.is_valid_for_origin(&manual));
+        assert!(!PositionManagement::Hybrid.is_valid_for_origin(&manual));
+        assert!(PositionManagement::CopyTask.is_valid_for_origin(&copy));
+        assert!(PositionManagement::Hybrid.is_valid_for_origin(&copy));
+    }
 }

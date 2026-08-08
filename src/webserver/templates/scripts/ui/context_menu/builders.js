@@ -194,15 +194,23 @@
         action: () => this._viewPositionDetails(context),
       });
 
-      // Manual-management toggle. Current state is read straight from the row DOM
-      // (the row carries the `pos-ind-manual` class only when manual management is on),
-      // so the menu label is always accurate without extra plumbing.
-      const isManual = !!context.element?.classList?.contains("pos-ind-manual");
+      const management = context.element?.dataset?.management || "auto_trader";
+      const modes = [
+        ["auto_trader", "Auto Trader"],
+        ["user_only", "User Only"],
+      ];
+      if (context.element?.dataset?.originKind === "copy") {
+        modes.push(["copy_task", "Copy Task"], ["hybrid", "Hybrid"]);
+      }
       items.push({
         type: "item",
-        label: isManual ? "Disable manual management" : "Enable manual management",
+        label: "Management",
         icon: "shield",
-        action: () => this._toggleManualManagement(context, !isManual),
+        submenu: modes.map(([value, label]) => ({
+          type: "item",
+          label: value === management ? `✓ ${label}` : label,
+          action: () => this._setPositionManagement(context, value),
+        })),
       });
 
       // Favorites toggle

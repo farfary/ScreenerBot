@@ -22,7 +22,7 @@
     //
     // All three go through the shared manual-trade flow (ui/manual_trade.js), which
     // owns the dialog, the payload and the toasts. This file used to hand-roll its
-    // own copy, which had drifted: it dropped the dialog's `manual_management` flag
+    // own copy, which had drifted: it dropped the dialog's ownership choice
     // (so a manual buy could be auto-sold) and POSTed "add" to the /buy endpoint.
     // =========================================================================
 
@@ -108,16 +108,13 @@
       );
     };
 
-    // Toggle manual management for a position. The positions page owns the position
-    // id + reload, so we dispatch a decoupled event it listens for (same pattern as
-    // open-position-details).
-    manager._toggleManualManagement = function (context, enabled) {
+    manager._setPositionManagement = function (context, management) {
       // The positions table keys rows by position id (data-row-id), so read it from the
       // row element for an unambiguous target.
       const id = context.element?.dataset?.rowId || null;
       window.dispatchEvent(
         new CustomEvent("screenerbot:toggle-position-management", {
-          detail: { id, mint: context.mint, enabled },
+          detail: { id, mint: context.mint, management },
         })
       );
     };

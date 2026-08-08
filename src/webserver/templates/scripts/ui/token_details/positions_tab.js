@@ -123,9 +123,15 @@ function renderPositionSummary(position) {
     : "—";
 
   const metadata = [];
-  if (position.manual_management) {
-    metadata.push('<span class="position-meta-item">Manual</span>');
-  }
+  const ownershipLabels = {
+    auto_trader: "Auto Trader",
+    user_only: "User Only",
+    copy_task: "Copy Task",
+    hybrid: "Hybrid",
+  };
+  metadata.push(
+    `<span class="position-meta-item">${ownershipLabels[position.management] || "Auto Trader"}</span>`
+  );
   if (position.dca_count > 0) {
     metadata.push(`<span class="position-meta-item">DCA ${position.dca_count}</span>`);
   }

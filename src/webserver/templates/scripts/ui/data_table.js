@@ -972,6 +972,7 @@ export class DataTable {
         const rowId = this._getRowId(row, index);
         const isSelected = this.state.selectedRows.has(rowId);
         const customClass = this._computeRowClass(row);
+        const customAttributes = this._computeRowAttributes(row);
         const rowClass = [isSelected ? "selected" : "", customClass]
           .filter(Boolean)
           .join(" ");
@@ -979,7 +980,7 @@ export class DataTable {
         return `
         <tr
           data-row-id="${rowId}"
-          class="${rowClass}"${customClass ? ` data-dt-row-class="${customClass}"` : ""}
+          class="${rowClass}"${customClass ? ` data-dt-row-class="${customClass}"` : ""}${customAttributes}
         >
           ${this._renderRow(row, index)}
         </tr>
@@ -1017,6 +1018,55 @@ export class DataTable {
       this._log("error", "rowClass function failed", error);
       return "";
     }
+  }
+
+  _computeRowAttributes(row) {
+    const fn = this.options.rowAttributes;
+    if (typeof fn !== "function") return "";
+    try {
+      const attributes = fn(row);
+      if (!attributes || typeof attributes !== "object") return "";
+      const entries = Object.entries(attributes).filter(
+        ([name, value]) =>
+          /^data-[a-z0-9-]+$/.test(name) && name !== "data-dt-row-attributes" && value != null
+      );
+      const rendered = entries
+        .map(([name, value]) => {
+          const escaped = String(value)
+            .replaceAll("&", "&amp;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;");
+          return ` ${name}="${escaped}"`;
+        })
+        .join("");
+      const names = entries.map(([name]) => name).join(" ");
+      return `${rendered}${names ? ` data-dt-row-attributes="${names}"` : ""}`;
+    } catch (error) {
+      this._log("error", "rowAttributes function failed", error);
+      return "";
+    }
+  }
+
+  _syncRowAttributes(tr, row) {
+    const fn = this.options.rowAttributes;
+    if (typeof fn !== "function") return;
+    const previous = (tr.dataset.dtRowAttributes || "").split(" ").filter(Boolean);
+    let attributes = {};
+    try {
+      attributes = fn(row) || {};
+    } catch (error) {
+      this._log("error", "rowAttributes function failed", error);
+    }
+    const next = Object.entries(attributes)
+      .filter(
+        ([name, value]) =>
+          /^data-[a-z0-9-]+$/.test(name) && name !== "data-dt-row-attributes" && value != null
+      )
+      .map(([name]) => name);
+    previous.filter((name) => !next.includes(name)).forEach((name) => tr.removeAttribute(name));
+    next.forEach((name) => tr.setAttribute(name, String(attributes[name])));
+    tr.dataset.dtRowAttributes = next.join(" ");
   }
 
   /**
@@ -1086,6 +1136,7 @@ export class DataTable {
 
     // Keep the optional per-row state class in sync (pending/selling/etc.)
     this._syncRowClass(tr, row);
+    this._syncRowAttributes(tr, row);
 
     visibleColumns.forEach((col) => {
       const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
@@ -1171,6 +1222,7 @@ export class DataTable {
           tr.classList.add("selected");
         }
         this._syncRowClass(tr, row);
+        this._syncRowAttributes(tr, row);
         tr.innerHTML = this._renderRow(row, index);
         // Subtle enter animation only on incremental updates (not initial load),
         // so freshly-injected rows (e.g. a pending buy) slide in gracefully.

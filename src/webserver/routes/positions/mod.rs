@@ -23,8 +23,7 @@ use detail::get_position_details;
 use force_close::force_close_position;
 use list::{get_positions, get_positions_stats};
 use manage::{
-    archive_position, delete_all_archived, delete_position, set_manual_management,
-    unarchive_position,
+    archive_position, delete_all_archived, delete_position, set_management, unarchive_position,
 };
 
 // Re-export load_positions_with_filters as it's used by other modules (e.g. snapshot.rs)
@@ -52,9 +51,6 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/positions/:position_id/unarchive",
             post(unarchive_position),
         )
-        .route(
-            "/positions/:position_id/manual-management",
-            post(set_manual_management),
-        )
+        .route("/positions/:position_id/management", post(set_management))
         .route("/positions/:position_id", delete(delete_position))
 }

@@ -35,7 +35,7 @@ pub use state::{
     get_position_by_id, get_position_by_mint, init_global_position_semaphore, is_open_position,
     is_partial_exit_pending, is_token_in_cooldown, parse_position_slot_error,
     reconcile_global_position_semaphore, remove_position_by_id, set_position_archived_in_memory,
-    set_position_manual_management_in_memory, MINT_TO_POSITION_INDEX, POSITIONS,
+    set_position_management_in_memory, MINT_TO_POSITION_INDEX, POSITIONS,
     POSITION_SLOT_UNAVAILABLE_ERR, SIG_TO_MINT_INDEX,
 };
 
@@ -65,11 +65,11 @@ pub use db::{
     get_position_by_id as get_db_position_by_id, get_positions_database,
     get_recent_closed_positions_for_mint, get_token_snapshot, get_token_snapshots,
     initialize_positions_database, load_all_positions, save_entry_record, save_exit_record,
-    save_position, save_token_snapshot, set_position_archived_db,
-    set_position_manual_management_db, update_position, update_position_price_fields,
-    with_positions_database, with_positions_database_async, DailyTradingStats, PeriodTradingStats,
-    PositionState, PositionStateHistory, PositionTracking, PositionsDatabase,
-    PositionsDatabaseStats, TokenSnapshot,
+    save_position, save_token_snapshot, set_position_archived_db, set_position_management_db,
+    update_position, update_position_price_fields, with_positions_database,
+    with_positions_database_async, DailyTradingStats, PeriodTradingStats, PositionState,
+    PositionStateHistory, PositionTracking, PositionsDatabase, PositionsDatabaseStats,
+    TokenSnapshot,
 };
 
 pub use helpers::{
@@ -86,5 +86,6 @@ pub use state::PositionLockGuard;
 pub use transitions::PositionTransition;
 pub use types::{
     EntryRecord, ExitRecord, GiveUpReason, PendingDcaSwap, PendingPartialExit, Position,
-    PriceSource, TradeOrigin, VerificationKind, VerificationOutcome,
+    PositionManagement, PositionOrigin, PriceSource, TradeOrigin, VerificationKind,
+    VerificationOutcome,
 };

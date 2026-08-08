@@ -1,7 +1,7 @@
 //! Buy operation execution
 
 use crate::logger::{self, LogTag};
-use crate::positions::{self, TradeOrigin};
+use crate::positions::{self, PositionManagement, PositionOrigin, TradeOrigin};
 use crate::trader::config;
 use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
 
@@ -11,21 +11,32 @@ use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
 /// protected from the auto-trader by default. Dashboard manual buys that need an
 /// explicit choice call [`execute_buy_managed`] instead.
 pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String> {
-    let manual_management = matches!(
+    let is_manual = matches!(
         decision.reason,
         TradeReason::ManualEntry | TradeReason::ForceBuy
     );
-    execute_buy_managed(decision, manual_management).await
+    let origin = if is_manual {
+        PositionOrigin::Manual
+    } else {
+        PositionOrigin::Auto {
+            strategy_id: decision.strategy_id.clone(),
+        }
+    };
+    let management = if is_manual {
+        PositionManagement::UserOnly
+    } else {
+        PositionManagement::AutoTrader
+    };
+    execute_buy_managed(decision, origin, management).await
 }
 
-/// Execute a buy trade with an explicit manual-management choice.
+/// Execute a buy trade with explicit provenance and ownership.
 ///
-/// `manual_management` controls whether the auto-trader leaves the resulting position
-/// alone (no auto take-profit/stop-loss/strategy exit or DCA). Used by manual/force
-/// buys where the user can opt the position into or out of auto-trader management.
+/// The origin and ownership policy are persisted independently.
 pub async fn execute_buy_managed(
     decision: &TradeDecision,
-    manual_management: bool,
+    origin: PositionOrigin,
+    management: PositionManagement,
 ) -> Result<TradeResult, String> {
     // Check connectivity before executing trade - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
@@ -53,12 +64,11 @@ pub async fn execute_buy_managed(
         config::get_trade_size_sol() * crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
     let trade_size_sol = trade_size_sol.min(max_allowed);
 
-    // Call positions open with size so manual size is honored. `manual_management`
-    // flags the position so the auto-trader never auto-sells or auto-DCAs it.
     match positions::open_position_with_size(
         &decision.mint,
         trade_size_sol,
-        manual_management,
+        origin,
+        management,
         decision.slippage_pct,
     )
     .await

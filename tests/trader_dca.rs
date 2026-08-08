@@ -320,27 +320,33 @@ fn the_calculations_snapshot_reports_what_was_measured() {
 /// SOL on positions whose exits it also owns. If this regresses, the bot averages down
 /// into a bag the user asked to manage themselves.
 #[test]
-fn a_manually_managed_position_never_triggers_a_dca() {
-    let mut position = position_at(0.85); // 15% down, deep enough to trigger otherwise
-    position.manual_management = true;
-    let evaluation = evaluate(&position, permissive_config());
-    assert!(!evaluation.should_trigger);
-    assert!(
-        evaluation
-            .reasons
-            .iter()
-            .any(|r| r.contains("manually managed")),
-        "reasons: {:?}",
-        evaluation.reasons
-    );
+fn every_non_auto_trader_management_refuses_auto_dca() {
+    for management in [
+        screenerbot::positions::PositionManagement::UserOnly,
+        screenerbot::positions::PositionManagement::CopyTask,
+        screenerbot::positions::PositionManagement::Hybrid,
+    ] {
+        let mut position = position_at(0.85);
+        position.management = management;
+        let evaluation = evaluate(&position, permissive_config());
+        assert!(!evaluation.should_trigger, "management={management:?}");
+        assert!(
+            evaluation
+                .reasons
+                .iter()
+                .any(|r| r.contains("does not allow auto-DCA")),
+            "reasons: {:?}",
+            evaluation.reasons
+        );
+    }
 }
 
 /// Positive control for the test above: the identical position and config, but
-/// `manual_management = false`, DOES trigger — proving the management gate is the only
+/// AutoTrader ownership DOES trigger — proving the management gate is the only
 /// difference and this isn't accidentally blocked by some other condition.
 #[test]
 fn the_same_position_triggers_once_auto_managed() {
     let mut position = position_at(0.85);
-    position.manual_management = false;
+    position.management = screenerbot::positions::PositionManagement::AutoTrader;
     assert!(evaluate(&position, permissive_config()).should_trigger);
 }

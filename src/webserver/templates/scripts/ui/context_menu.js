@@ -153,8 +153,8 @@ class ContextMenuManager {
   _determineContext(target) {
     // Resolve the DataTable ROW. NOTE: the table stamps `data-row-id` on the <tr> AND
     // on its <td> cells (for sticky-column diffing), so a plain `closest("[data-row-id]")`
-    // returns the <td> — which lacks row-level classes like `pos-ind-manual` and only
-    // contains its own cell. Always resolve the <tr> so row state (manual-management) and
+    // returns the <td>, which lacks row-level ownership data and only contains its own
+    // cell. Always resolve the <tr> so `data-management` and
     // a row-wide `data-mint` lookup work regardless of which cell was clicked.
     const tableRow = target.closest("tr[data-row-id]") || target.closest("[data-row-id]");
 

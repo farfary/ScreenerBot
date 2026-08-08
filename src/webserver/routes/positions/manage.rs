@@ -34,15 +34,15 @@ pub struct DeleteResponse {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct ManualManagementRequest {
-    pub enabled: bool,
+pub struct ManagementRequest {
+    pub management: positions::PositionManagement,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ManualManagementResponse {
+pub struct ManagementResponse {
     pub success: bool,
     pub position_id: i64,
-    pub manual_management: bool,
+    pub management: positions::PositionManagement,
     pub message: String,
 }
 
@@ -189,14 +189,10 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
     })
 }
 
-/// POST /positions/:id/manual-management — enable/disable manual management.
-///
-/// When enabled the auto-trader leaves the position alone (no auto take-profit/
-/// stop-loss/strategy exit or DCA). Reversible; no data is deleted and no trading slot
-/// changes (the position stays open either way).
-pub(super) async fn set_manual_management(
+/// POST /positions/:id/management — change action ownership without changing provenance.
+pub(super) async fn set_management(
     Path(position_id): Path<i64>,
-    Json(req): Json<ManualManagementRequest>,
+    Json(req): Json<ManagementRequest>,
 ) -> Response {
     let position = match positions::get_position_by_id(position_id).await {
         Some(p) => p,
@@ -210,35 +206,40 @@ pub(super) async fn set_manual_management(
         }
     };
 
+    if !req.management.is_valid_for_origin(&position.origin) {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_POSITION_MANAGEMENT",
+            "Copy-owned management requires a copy-origin position",
+            None,
+        );
+    }
+
     // Persist first, then mirror into memory so a failed write doesn't desync state.
-    if let Err(e) = positions::set_position_manual_management_db(position_id, req.enabled).await {
+    if let Err(e) = positions::set_position_management_db(position_id, req.management).await {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            "MANUAL_MANAGEMENT_FAILED",
-            "Failed to update manual management",
+            "MANAGEMENT_FAILED",
+            "Failed to update position management",
             Some(&e),
         );
     }
-    positions::set_position_manual_management_in_memory(position_id, req.enabled).await;
+    positions::set_position_management_in_memory(position_id, req.management).await;
 
     logger::info(
         LogTag::Positions,
         &format!(
-            "Position {position_id} ({}) manual management {}",
+            "Position {position_id} ({}) management set to {}",
             position.symbol,
-            if req.enabled { "enabled" } else { "disabled" }
+            req.management.as_str()
         ),
     );
 
-    success_response(ManualManagementResponse {
+    success_response(ManagementResponse {
         success: true,
         position_id,
-        manual_management: req.enabled,
-        message: if req.enabled {
-            "Manual management enabled — auto-trader will not sell this position".to_owned()
-        } else {
-            "Manual management disabled — auto-trader now manages this position".to_owned()
-        },
+        management: req.management,
+        message: format!("Position management set to {}", req.management.as_str()),
     })
 }
 

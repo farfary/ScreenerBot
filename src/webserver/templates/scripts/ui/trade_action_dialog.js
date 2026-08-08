@@ -757,9 +757,9 @@ export class TradeActionDialog {
 
     // Inject the hint trigger once (idempotent) and wire the global popover handler.
     if (this.manageHintEl && !this.manageHintEl.firstChild) {
-      const hint = Hints.getHint("positions.manualManagement");
+      const hint = Hints.getHint("positions.positionManagement");
       if (hint) {
-        this.manageHintEl.innerHTML = HintTrigger.render(hint, "positions.manualManagement", {
+        this.manageHintEl.innerHTML = HintTrigger.render(hint, "positions.positionManagement", {
           size: "sm",
           position: "bottom",
         });
@@ -1483,9 +1483,9 @@ export class TradeActionDialog {
     } else {
       // buy or add
       result = value === "" ? {} : { amount: value };
-      // Buy opens a position: carry the manual-management choice (default true).
+      // Buy opens a position: carry typed ownership (checked means user-only).
       if (this.currentAction === "buy" && this.manageCheckboxEl) {
-        result.manual_management = this.manageCheckboxEl.checked;
+        result.management = this.manageCheckboxEl.checked ? "user_only" : "auto_trader";
       }
     }
 

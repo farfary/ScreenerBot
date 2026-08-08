@@ -19,14 +19,20 @@ use chrono::Utc;
 /// Records the trade for tracking purposes.
 /// Action progress is broadcast to dashboard via SSE.
 ///
-/// `manual_management` controls whether the resulting position is left to the user
-/// (true: auto-trader will not auto-sell/DCA it) or handed to the auto-trader (false).
+/// `management` selects the automation policy; provenance remains manual.
 pub async fn manual_buy(
     mint: &str,
     size_sol: f64,
-    manual_management: bool,
+    management: positions::PositionManagement,
     slippage_pct: Option<f64>,
 ) -> Result<TradeResult, String> {
+    if !management.is_valid_for_origin(&positions::PositionOrigin::Manual) {
+        return Err(format!(
+            "{} management requires a copy-origin position",
+            management.as_str()
+        ));
+    }
+
     // Get token symbol for action display
     let symbol = crate::tokens::get_full_token_async(mint)
         .await
@@ -105,8 +111,14 @@ pub async fn manual_buy(
     };
 
     // Execute trade (includes quote + swap). A manual buy is always a Buy, so route
-    // straight to the buy executor with the explicit manual-management choice.
-    let result = match executors::execute_buy_managed(&decision, manual_management).await {
+    // straight to the buy executor with the explicit ownership choice.
+    let result = match executors::execute_buy_managed(
+        &decision,
+        positions::PositionOrigin::Manual,
+        management,
+    )
+    .await
+    {
         Ok(result) => result,
         Err(e) => {
             // Check if this is a quote error or later

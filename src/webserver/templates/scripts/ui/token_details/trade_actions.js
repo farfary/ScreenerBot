@@ -17,7 +17,7 @@ export function applyTradeActionsMixin(DialogClass) {
    *
    * The trade itself runs through the shared manual-trade flow (ui/manual_trade.js),
    * which owns the dialog, the payload and the toasts. This used to be a local copy
-   * that silently dropped the dialog's `manual_management` flag, so a manual buy
+   * that silently dropped the dialog's ownership choice, so a manual buy
    * from here could be picked up and auto-sold by the trader.
    * @private
    */

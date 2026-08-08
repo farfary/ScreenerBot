@@ -141,9 +141,14 @@ function createLifecycle() {
   //   { id, test(row)->bool, label }
   const POSITION_INDICATORS = [
     {
+      id: "copy",
+      test: (row) => row?.origin?.kind === "copy",
+      label: "Copied position",
+    },
+    {
       id: "manual",
-      test: (row) => Boolean(row?.manual_management),
-      label: "Manual management",
+      test: (row) => row?.origin?.kind === "manual",
+      label: "Manual position",
     },
   ];
 
@@ -860,6 +865,10 @@ function createLifecycle() {
           if (indicator) classes.push(indicator);
           return classes.join(" ");
         },
+        rowAttributes: (row) => ({
+          "data-management": row?.management || "auto_trader",
+          "data-origin-kind": row?.origin?.kind || "auto",
+        }),
         // Animate rows leaving the Open list as they finish closing or a pending
         // buy resolves into a real position.
         rowExitAnimation: (tr) =>
@@ -997,9 +1006,9 @@ function createLifecycle() {
       // row class immediately (the backend already persisted it), so the Manual ribbon
       // flips without waiting on a poll/refetch round-trip.
       const handleManagementChanged = (e) => {
-        const { id, enabled } = e?.detail || {};
+        const { id, management } = e?.detail || {};
         if (id == null) return;
-        table?.updateRow(id, { manual_management: !!enabled });
+        table?.updateRow(id, { management });
       };
       window.addEventListener("screenerbot:position-management-changed", handleManagementChanged);
       ctx.onDispose(() =>

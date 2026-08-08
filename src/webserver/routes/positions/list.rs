@@ -135,7 +135,8 @@ fn map_position_to_response_with_logo(
         token_decimals,
         archived: p.archived,
         archived_at: p.archived_at.map(|dt| dt.timestamp()),
-        manual_management: p.manual_management,
+        origin: p.origin.clone(),
+        management: p.management,
     }
 }
 
