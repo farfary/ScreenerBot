@@ -108,8 +108,8 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       if (toggle) toggle.checked = Boolean(status.enabled);
     });
     const blockedLabels = {
-      force_stop: "Blocked by Force Stop",
-      loss_limit: "Entries blocked by Loss Limit · exits active",
+      force_stop: "Force Stop is active",
+      loss_limit: "Loss limit blocks entries · exits stay active",
     };
     const modeSummary = status.live_tasks
       ? `${status.live_tasks} live · ${status.paper_tasks || 0} paper`
@@ -118,11 +118,18 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       ? "Paused"
       : status.blocked_reason
         ? blockedLabels[status.blocked_reason] || "Entries blocked"
-        : `Active · ${modeSummary}`;
+        : modeSummary;
+    const compactStatus = !status.enabled
+      ? "Paused"
+      : status.blocked_reason === "force_stop"
+        ? "Force stopped"
+        : status.blocked_reason
+          ? "Entries limited"
+          : "Running";
     const globalStatus = $("#wallet-copy-global-status");
     const statsStatus = $("#stats-wallet-copy-status");
     if (globalStatus) globalStatus.textContent = statusText;
-    if (statsStatus) statsStatus.textContent = statusText;
+    if (statsStatus) statsStatus.textContent = compactStatus;
   }
 
   async function toggleGlobal(event) {
@@ -202,11 +209,9 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       modeAction.hidden = !task;
       modeAction.dataset.mode = task?.mode || "paper";
       modeAction.textContent = task?.mode === "live" ? "Return to Paper" : "Arm Live";
-      modeAction.classList.toggle("btn-danger", task?.mode !== "live");
     }
     const modeState = $("#wallet-copy-task-mode");
-    if (modeState)
-      modeState.textContent = task?.mode === "live" ? "Live execution" : "Paper execution";
+    if (modeState) modeState.textContent = task?.mode === "live" ? "Live mode" : "Paper mode";
     updateSizeLabel();
     renderTasks();
   }
@@ -265,7 +270,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
   function updateSizeLabel() {
     const ratio = $("#wallet-copy-sizing")?.value === "ratio_of_target";
     const label = $("#wallet-copy-size-label");
-    if (label) label.textContent = ratio ? "Target ratio (%)" : "Size (SOL)";
+    if (label) label.textContent = ratio ? "Wallet trade share (%)" : "Copy amount (SOL)";
   }
 
   function updatePolicyControl(control) {
@@ -406,14 +411,17 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
   function renderTasks() {
     const root = $("#wallet-copy-task-list");
     const count = $("#wallet-copy-task-count");
-    if (count) count.textContent = `${tasks.filter((task) => task.enabled).length} active`;
+    if (count) {
+      const active = tasks.filter((task) => task.enabled).length;
+      count.textContent = `${active} active ${active === 1 ? "task" : "tasks"}`;
+    }
     if (!root) return;
     const renderKey = JSON.stringify([tasks, selectedId]);
     if (renderKey === lastTaskRenderKey) return;
     lastTaskRenderKey = renderKey;
     if (!tasks.length) {
       root.innerHTML =
-        '<div class="wallet-copy-empty"><i class="icon-copy"></i><strong>No copy tasks</strong><span>Create a paper task to measure it safely before going live.</span></div>';
+        '<div class="wallet-copy-empty"><i class="icon-copy"></i><strong>No copy tasks</strong><span>Add a wallet and begin in Paper mode.</span></div>';
       return;
     }
     root.innerHTML = tasks
@@ -425,17 +433,31 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
           mirror: "Mirror sells",
           hybrid: "Hybrid exits",
         }[task.exit_mode];
-        return `<button type="button" class="wallet-copy-task${task.id === selectedId ? " is-active" : ""}" data-copy-task-id="${task.id}"><strong>${Utils.escapeHtml(task.label || "Unlabelled wallet")}</strong><span>${Utils.escapeHtml(short)}</span><span class="wallet-copy-task-meta"><span>${task.enabled ? "Active" : "Paused"}</span><span>${mode} · ${exit || "Own exits"}</span></span></button>`;
+        return `<button type="button" class="wallet-copy-task${task.id === selectedId ? " is-active" : ""}" data-copy-task-id="${task.id}" aria-pressed="${task.id === selectedId}"><span class="wallet-copy-task-name">${Utils.escapeHtml(task.label || "Unnamed wallet")}</span><span class="wallet-copy-task-state">${task.enabled ? "Active" : "Paused"}</span><span class="wallet-copy-task-address">${Utils.escapeHtml(short)}</span><span class="wallet-copy-task-mode">${mode} · ${exit || "Own exits"}</span></button>`;
       })
       .join("");
   }
 
+  function formatActivityTime(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
   function renderActivity(items) {
     const root = $("#wallet-copy-activity-list");
+    const columns = $("#wallet-copy-activity-columns");
     if (!root) return;
     const renderKey = JSON.stringify(items);
     if (renderKey === lastActivityRenderKey) return;
     lastActivityRenderKey = renderKey;
+    if (columns) columns.hidden = !items.length;
     if (!items.length) {
       root.innerHTML =
         '<div class="wallet-copy-empty"><strong>No decisions yet</strong><span>Paper fills, live submissions and skips will appear here.</span></div>';
@@ -479,13 +501,16 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
             ? ` · ${(arrivalMs / 1000).toFixed(1)}s arrival`
             : "";
         const timestamp = telemetry?.decided_at || outcome.decided_at;
-        return `<div class="wallet-copy-task"><strong>${title}</strong><span>${Utils.escapeHtml(outcome.mint || outcome.signature || "")}</span><span class="wallet-copy-task-meta"><span>${Utils.escapeHtml(`${detail}${arrival}`)}</span><span>${Utils.escapeHtml(timestamp || item.created_at || "")}</span></span></div>`;
+        const identity = outcome.mint || outcome.signature || "—";
+        return `<div class="wallet-copy-activity-row"><strong>${title}</strong><span class="wallet-copy-activity-detail"><span class="wallet-copy-activity-mint" title="${Utils.escapeHtml(identity)}">${Utils.escapeHtml(identity)}</span><span class="wallet-copy-activity-result">${Utils.escapeHtml(`${detail}${arrival}`)}</span></span><time class="wallet-copy-activity-time">${Utils.escapeHtml(formatActivityTime(timestamp || item.created_at))}</time></div>`;
       })
       .join("");
   }
 
   function renderLoadError() {
     const root = $("#wallet-copy-task-list");
+    const columns = $("#wallet-copy-activity-columns");
+    if (columns) columns.hidden = true;
     if (root)
       root.innerHTML =
         '<div class="wallet-copy-empty"><i class="icon-circle-alert"></i><strong>Copy tasks unavailable</strong><span>Try again in a moment.</span></div>';

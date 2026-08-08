@@ -22,7 +22,6 @@
   width: 100%;
   max-height: 100%;
   overflow: hidden;
-  padding-left: 9px; /* reserve the manual-tag gap plus logo breathing room */
 }
 
 .position-token--actions-2 {
@@ -75,11 +74,30 @@
 }
 
 .position-token .token-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-secondary);
   font-size: 0.85rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.position-token .token-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.position-origin-label {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.position-origin-copy {
+  color: var(--info-color);
 }
 
 .position-token__actions {
@@ -404,55 +422,6 @@
 
 .pos-row-failed > td {
   background-image: linear-gradient(0deg, rgb(239, 68, 68, 0.1), rgb(239, 68, 68, 0.1));
-}
-
-/* ===========================================================================
-   Per-position row indicators — absolute tag on the left edge of the token cell.
-   The td[data-column-id="token"] is the positioned ancestor (position:relative
-   comes from .data-table.uniform-rows td, reinforced below). The tag fills the
-   full row height regardless of td padding. Space is always reserved via
-   padding-left on .position-token so the logo never shifts.
-   =========================================================================== */
-
-/* Ensure the token td is the positioned ancestor for the absolute tag. */
-td[data-column-id="token"] {
-  position: relative;
-}
-
-/* Highest-priority provenance tag — fills the full height of the token cell. */
-.pos-ind > td[data-column-id="token"]::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-size: 7.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  line-height: 1;
-  white-space: nowrap;
-  border-radius: 0;
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-  pointer-events: none;
-  user-select: none;
-}
-
-.pos-ind-manual > td[data-column-id="token"]::after {
-  content: "Manual";
-}
-
-.pos-ind-copy > td[data-column-id="token"]::after {
-  content: "Copy";
-  background: var(--info-alpha-10);
-  color: var(--info-color);
 }
 
 /* Pending (synthetic) rows are non-interactive placeholders */

@@ -127,47 +127,17 @@ function createLifecycle() {
     )}">${icon}<span class="pos-state-text">${label}</span></div>`;
   };
 
-  // Systematic per-position row indicators.
-  //
-  // These surface persistent per-position status (e.g. "Manual management") as a compact
-  // vertical label on the ROW's left edge (the first/actions cell), drawn purely in CSS.
-  // The token logo/symbol column is never touched, so logos stay aligned across every row
-  // whether or not a row has an indicator.
-  //
-  // To add a new indicator: append ONE descriptor here AND one CSS rule
-  // (`.pos-ind-<id> > td:first-child::after { content: "<Label>"; }`) in positions.css.
-  // Indicators are priority-ordered; the first matching one is shown (a single row has
-  // room for one vertical label).
-  //   { id, test(row)->bool, label }
-  const POSITION_INDICATORS = [
-    {
-      id: "copy",
-      test: (row) => row?.origin?.kind === "copy",
-      label: "Copied position",
-    },
-    {
-      id: "manual",
-      test: (row) => row?.origin?.kind === "manual",
-      label: "Manual position",
-    },
-  ];
-
-  // The `pos-ind pos-ind-<id>` row class for the highest-priority active indicator (or "").
-  const positionIndicatorClass = (row) => {
-    const primary = POSITION_INDICATORS.find((d) => {
-      try {
-        return d.test(row);
-      } catch {
-        return false;
-      }
-    });
-    return primary ? `pos-ind pos-ind-${primary.id}` : "";
+  const positionOriginLabel = (row) => {
+    if (row?.origin?.kind === "copy") return "Copy";
+    if (row?.origin?.kind === "manual") return "Manual";
+    return "";
   };
 
   const tokenCell = (row, actionsHtml = "", actionCount = 0) => {
     const logo = row.logo_url || row.image_url || "";
     const symbol = row.symbol || "?";
     const name = row.name || "";
+    const originLabel = positionOriginLabel(row);
     const logoHtml = logo
       ? `<img class="token-logo" src="${Utils.escapeHtml(logo)}" alt="${Utils.escapeHtml(
           symbol
@@ -178,7 +148,11 @@ function createLifecycle() {
         ${logoHtml}
         <div class="position-token-meta">
           <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
-          <div class="token-name">${Utils.escapeHtml(name)}</div>
+          <div class="token-name"><span>${Utils.escapeHtml(name)}</span>${
+            originLabel
+              ? `<span class="position-origin-label position-origin-${originLabel.toLowerCase()}">${originLabel}</span>`
+              : ""
+          }</div>
           ${stateCaption(row)}
         </div>
       </div>
@@ -859,10 +833,6 @@ function createLifecycle() {
           const classes = [];
           if (row?._state) classes.push(`pos-row-${row._state}`);
           else if (row?._justClosed) classes.push("pos-row-just-closed");
-          // Persistent per-position indicators (e.g. manual management) — row-level left
-          // edge label, independent of the transient state classes above.
-          const indicator = positionIndicatorClass(row);
-          if (indicator) classes.push(indicator);
           return classes.join(" ");
         },
         rowAttributes: (row) => ({

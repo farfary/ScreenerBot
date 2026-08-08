@@ -1,7 +1,7 @@
 .wallet-copy-shell {
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) minmax(150px, 0.38fr);
+  grid-template-rows: auto minmax(0, 1fr) minmax(148px, 0.34fr);
   background: var(--bg-primary);
 }
 
@@ -12,46 +12,66 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--spacing-md);
 }
 
 .wallet-copy-header {
-  padding: 1.35rem 1.5rem;
+  padding: var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
 }
 
-.wallet-copy-header h2,
-.wallet-copy-form-head h3 {
-  margin: 0.15rem 0 0;
-}
-
-.wallet-copy-header p {
-  margin: 0.35rem 0 0;
-  color: var(--text-secondary);
-}
-
-.wallet-copy-eyebrow {
-  color: var(--text-tertiary);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.wallet-copy-mode {
-  display: inline-flex;
+.wallet-copy-heading h2 {
+  display: flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
+  gap: var(--spacing-sm);
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.wallet-copy-heading h2 i {
+  color: var(--primary-color);
+  font-size: 1rem;
+}
+
+.wallet-copy-heading p {
+  max-width: 62ch;
+  margin: var(--spacing-xs) 0 0;
   color: var(--text-secondary);
-  white-space: nowrap;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.wallet-copy-master-control {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 190px;
+  padding-left: var(--spacing-lg);
+  border-left: 1px solid var(--border-color);
+}
+
+.wallet-copy-master-control > div {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.wallet-copy-master-label {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+#wallet-copy-global-status {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.35;
 }
 
 .wallet-copy-workspace {
   display: grid;
-  grid-template-columns: minmax(250px, 0.36fr) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 0.32fr) minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -59,7 +79,7 @@
 .wallet-copy-editor,
 .wallet-copy-activity {
   min-height: 0;
-  padding: 1rem 1.25rem;
+  padding: var(--spacing-md) var(--spacing-lg);
 }
 
 .wallet-copy-tasks {
@@ -68,139 +88,251 @@
 
 .wallet-copy-section-head > div {
   display: grid;
-  gap: 0.2rem;
+  gap: 2px;
 }
 
-.wallet-copy-section-head span {
-  color: var(--text-tertiary);
-  font-size: 0.78rem;
+.wallet-copy-section-head h3,
+.wallet-copy-form-head h3,
+.wallet-copy-form-section h4 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.wallet-copy-section-head h3,
+.wallet-copy-form-head h3 {
+  font-size: 0.9rem;
+}
+
+.wallet-copy-section-head span,
+.wallet-copy-form-title span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
 }
 
 .wallet-copy-task-list,
 .wallet-copy-activity-list {
-  margin-top: 0.9rem;
   overflow: auto;
 }
 
 .wallet-copy-task-list {
-  height: calc(100% - 3rem);
+  height: calc(100% - 42px);
+  margin-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
 }
 
 .wallet-copy-empty,
 .wallet-copy-editor-empty {
   height: 100%;
-  min-height: 130px;
+  min-height: 128px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 0.35rem;
-  color: var(--text-tertiary);
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xl);
+  color: var(--text-muted);
   text-align: center;
 }
 
 .wallet-copy-empty i,
 .wallet-copy-editor-empty i {
-  font-size: 1.35rem;
+  margin-bottom: var(--spacing-xs);
+  color: var(--text-tertiary);
+  font-size: 1.15rem;
 }
 
 .wallet-copy-empty strong,
 .wallet-copy-editor-empty strong {
   color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.wallet-copy-empty span,
+.wallet-copy-editor-empty span {
+  max-width: 38ch;
+  font-size: 0.76rem;
+  line-height: 1.45;
 }
 
 .wallet-copy-task {
   width: 100%;
   display: grid;
-  gap: 0.4rem;
-  padding: 0.8rem;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-secondary);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px var(--spacing-sm);
+  padding: 0.75rem var(--spacing-sm);
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-primary);
   text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
 }
 
-.wallet-copy-task + .wallet-copy-task {
-  margin-top: 0.55rem;
-}
-
+.wallet-copy-task:hover,
 .wallet-copy-task.is-active {
-  border-color: var(--accent-color);
+  background: var(--bg-card-hover);
+}
+
+.wallet-copy-task:active {
   background: var(--bg-tertiary);
 }
 
-.wallet-copy-task-meta {
-  display: flex;
-  justify-content: space-between;
+.wallet-copy-task-name {
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-task-state {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.wallet-copy-task-address {
+  overflow: hidden;
   color: var(--text-tertiary);
-  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-task-mode {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .wallet-copy-form {
   height: 100%;
   overflow: auto;
+  padding-right: var(--spacing-xs);
+}
+
+.wallet-copy-form-head {
+  padding-bottom: var(--spacing-md);
+}
+
+.wallet-copy-form-title {
+  display: grid;
+  gap: 3px;
+}
+
+.wallet-copy-task-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.wallet-copy-form-section {
+  margin: 0;
+  padding: var(--spacing-md) 0;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.wallet-copy-form-section h4,
+.wallet-copy-policy legend {
+  padding: 0;
+  font-size: 0.76rem;
+  font-weight: 600;
 }
 
 .wallet-copy-fields {
-  margin-top: 1rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem var(--spacing-md);
+  margin-top: 0.75rem;
 }
 
-.wallet-copy-fields label {
+.wallet-copy-field-wide {
+  grid-column: span 2;
+}
+
+.wallet-copy-fields label,
+.wallet-copy-policy-field {
   display: grid;
-  gap: 0.35rem;
+  align-content: start;
+  gap: var(--spacing-xs);
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.73rem;
+  font-weight: 500;
 }
 
-.wallet-copy-policy {
-  margin: 1rem 0 0;
-  padding: 0.9rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+.wallet-copy-fields label > span,
+.wallet-copy-policy-field > label {
+  min-height: 1rem;
 }
 
-.wallet-copy-policy legend {
-  padding: 0 0.35rem;
-  color: var(--text-primary);
-  font-weight: 700;
+.wallet-copy-fields label small {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 400;
 }
 
 .wallet-copy-policy > p {
-  margin: 0 0 0.75rem;
-  color: var(--text-tertiary);
-  font-size: 0.75rem;
+  max-width: 62ch;
+  margin: var(--spacing-xs) 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 .wallet-copy-policy-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-md);
 }
 
-.wallet-copy-policy-field {
-  display: grid;
-  gap: 0.35rem;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
-
-.wallet-copy-policy-grid input[hidden] {
+.wallet-copy-policy-grid input[hidden],
+.wallet-copy-form[hidden],
+.wallet-copy-delete-action[hidden],
+.wallet-copy-mode-action[hidden],
+.wallet-copy-activity-columns[hidden] {
   display: none;
 }
 
 .wallet-copy-form-actions {
-  margin-top: 1.1rem;
-  justify-content: flex-end;
+  position: sticky;
+  bottom: 0;
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-md) 0;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
   flex-wrap: wrap;
+}
+
+.wallet-copy-delete-action {
+  color: var(--error-color);
+}
+
+.wallet-copy-delete-action:hover {
+  background: var(--danger-alpha-10);
+  color: var(--error-color);
+}
+
+.wallet-copy-mode-action {
+  color: var(--warning-color);
+}
+
+.wallet-copy-mode-action:hover {
+  border-color: var(--warning-color);
+  background: var(--warning-alpha-10);
+  color: var(--warning-color);
 }
 
 #wallet-copy-form-error:not(:empty) {
   display: block;
-  margin-top: 0.6rem;
+  margin-top: var(--spacing-sm);
 }
 
 .wallet-copy-form-spacer {
@@ -208,11 +340,74 @@
 }
 
 .wallet-copy-activity {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   border-top: 1px solid var(--border-color);
 }
 
+.wallet-copy-activity-columns,
+.wallet-copy-activity-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 2fr) minmax(130px, 0.8fr);
+  gap: var(--spacing-md);
+  align-items: center;
+}
+
+.wallet-copy-activity-columns {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .wallet-copy-activity-list {
-  max-height: calc(100% - 2.5rem);
+  min-height: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.wallet-copy-activity-row {
+  min-height: 40px;
+  padding: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wallet-copy-activity-row strong {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.wallet-copy-activity-detail {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(0, 1.3fr);
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.wallet-copy-activity-mint {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-activity-result {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-activity-time {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  text-align: right;
+  white-space: nowrap;
 }
 
 #wallet-copy-tab {
@@ -222,10 +417,29 @@
   overflow: hidden;
 }
 
-@media (width <= 820px) {
+@media (width <= 1100px) {
+  .wallet-copy-fields,
+  .wallet-copy-policy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wallet-copy-field-wide {
+    grid-column: span 2;
+  }
+}
+
+@media (width <= 800px) {
   .wallet-copy-shell {
     display: block;
     overflow: auto;
+  }
+
+  .wallet-copy-header {
+    align-items: flex-start;
+  }
+
+  .wallet-copy-master-control {
+    min-width: 170px;
   }
 
   .wallet-copy-workspace {
@@ -239,14 +453,48 @@
 
   .wallet-copy-task-list {
     height: auto;
-    max-height: 250px;
+    max-height: 260px;
   }
 
-  .wallet-copy-fields {
+  .wallet-copy-activity {
+    min-height: 240px;
+  }
+}
+
+@media (width <= 540px) {
+  .wallet-copy-header,
+  .wallet-copy-form-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .wallet-copy-master-control {
+    width: 100%;
+    padding: var(--spacing-sm) 0 0;
+    border-top: 1px solid var(--border-color);
+    border-left: 0;
+  }
+
+  .wallet-copy-fields,
+  .wallet-copy-policy-grid,
+  .wallet-copy-activity-columns,
+  .wallet-copy-activity-row {
     grid-template-columns: 1fr;
   }
 
-  .wallet-copy-policy-grid {
-    grid-template-columns: 1fr;
+  .wallet-copy-field-wide {
+    grid-column: auto;
+  }
+
+  .wallet-copy-activity-columns {
+    display: none;
+  }
+
+  .wallet-copy-activity-row {
+    gap: var(--spacing-xs);
+  }
+
+  .wallet-copy-activity-time {
+    text-align: left;
   }
 }

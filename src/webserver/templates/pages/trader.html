@@ -307,14 +307,16 @@
     <div id="wallet-copy-tab" class="trader-tab-content" style="display: none">
       <section class="wallet-copy-shell" aria-label="Wallet copy trading">
         <header class="wallet-copy-header">
-          <div>
-            <span class="wallet-copy-eyebrow">Observed wallet execution</span>
-            <h2>Wallet Copy</h2>
-            <p>Measure copied entries from real wallet activity before enabling live execution.</p>
+          <div class="wallet-copy-heading">
+            <h2><i class="icon-copy"></i> Wallet Copy</h2>
+            <p>Follow selected wallets with clear sizing, spending limits and exit ownership.</p>
           </div>
-          <div class="wallet-copy-mode">
-            <i class="icon-file-clock"></i><span id="wallet-copy-global-status">Paused</span
-            ><label class="toggle"
+          <div class="wallet-copy-master-control">
+            <div>
+              <span class="wallet-copy-master-label">Copy execution</span>
+              <span id="wallet-copy-global-status">Paused</span>
+            </div>
+            <label class="toggle" aria-label="Enable wallet copy execution"
               ><input id="wallet-copy-global-toggle" type="checkbox" /><span
                 class="toggle-track"
               ></span
@@ -325,41 +327,42 @@
           <aside class="wallet-copy-tasks">
             <div class="wallet-copy-section-head">
               <div>
-                <strong>Copy tasks</strong><span id="wallet-copy-task-count">0 active</span>
+                <h3>Wallets</h3><span id="wallet-copy-task-count">0 active tasks</span>
               </div>
-              <button class="btn btn-primary" id="wallet-copy-new-task" type="button">
+              <button class="btn btn-primary btn-sm" id="wallet-copy-new-task" type="button">
                 <i class="icon-plus"></i> New task
               </button>
             </div>
             <div id="wallet-copy-task-list" class="wallet-copy-task-list">
               <div class="wallet-copy-empty">
                 <i class="icon-copy"></i><strong>No copy tasks</strong
-                ><span>Create a paper task to measure it safely before going live.</span>
+                ><span>Add a wallet and begin in Paper mode.</span>
               </div>
             </div>
           </aside>
           <div class="wallet-copy-editor">
             <div id="wallet-copy-editor-empty" class="wallet-copy-editor-empty">
-              <i class="icon-mouse-pointer-click"></i><strong>Select a task</strong
-              ><span>Choose a task to review its limits and paper performance.</span>
+              <i class="icon-mouse-pointer-click"></i><strong>Select a wallet</strong
+              ><span>Choose a task to review or change its copy rules.</span>
             </div>
             <form id="wallet-copy-form" class="wallet-copy-form" hidden>
               <input id="wallet-copy-task-id" type="hidden" />
               <div class="wallet-copy-form-head">
-                <div>
-                  <span class="wallet-copy-eyebrow" id="wallet-copy-task-mode"
-                    >Paper execution</span
-                  >
+                <div class="wallet-copy-form-title">
                   <h3 id="wallet-copy-form-title">New copy task</h3>
+                  <span id="wallet-copy-task-mode">Paper mode</span>
                 </div>
-                <label class="toggle"
-                  ><input id="wallet-copy-enabled" type="checkbox" checked /><span
-                    class="toggle-track"
-                  ></span
+                <label class="wallet-copy-task-toggle"
+                  ><span>Task enabled</span><span class="toggle"
+                    ><input id="wallet-copy-enabled" type="checkbox" checked /><span
+                      class="toggle-track"
+                    ></span></span
                 ></label>
               </div>
+              <section class="wallet-copy-form-section">
+                <h4>Task settings</h4>
               <div class="wallet-copy-fields">
-                <label
+                <label class="wallet-copy-field-wide"
                   ><span>Target wallet</span
                   ><input
                     id="wallet-copy-address"
@@ -367,21 +370,27 @@
                     type="text"
                     autocomplete="off"
                     maxlength="44"
+                    placeholder="Solana wallet address"
                     required /><small id="wallet-copy-address-error" class="field-error"></small
                 ></label>
                 <label
-                  ><span>Label</span
-                  ><input id="wallet-copy-label" class="form-input" type="text" maxlength="80"
+                  ><span>Task name <small>Optional</small></span
+                  ><input
+                    id="wallet-copy-label"
+                    class="form-input"
+                    type="text"
+                    maxlength="80"
+                    placeholder="e.g. Primary wallet"
                 /></label>
                 <label
-                  ><span>Sizing</span
+                  ><span>Sizing method</span
                   ><select id="wallet-copy-sizing" class="form-select">
-                    <option value="fixed">Fixed SOL</option>
-                    <option value="ratio_of_target">Ratio of target</option>
+                    <option value="fixed">Fixed SOL amount</option>
+                    <option value="ratio_of_target">Share of wallet trade</option>
                   </select></label
                 >
                 <label
-                  ><span id="wallet-copy-size-label">Size (SOL)</span
+                  ><span id="wallet-copy-size-label">Copy amount (SOL)</span
                   ><input
                     id="wallet-copy-size"
                     class="form-input"
@@ -391,7 +400,7 @@
                     required
                 /></label>
                 <label
-                  ><span>Max per trade (SOL)</span
+                  ><span>Per trade limit (SOL)</span
                   ><input
                     id="wallet-copy-max-trade"
                     class="form-input"
@@ -401,7 +410,7 @@
                     required
                 /></label>
                 <label
-                  ><span>Max per token (SOL)</span
+                  ><span>Per token limit (SOL)</span
                   ><input
                     id="wallet-copy-max-token"
                     class="form-input"
@@ -434,22 +443,23 @@
                 <label
                   ><span>Exit ownership</span
                   ><select id="wallet-copy-exit-mode" class="form-select">
-                    <option value="buy_only">Own exit rules</option>
-                    <option value="mirror">Mirror target sells</option>
-                    <option value="hybrid">Hybrid: target + own rules</option>
+                    <option value="buy_only">Use my exit rules</option>
+                    <option value="mirror">Mirror wallet sells</option>
+                    <option value="hybrid">Wallet sells + my rules</option>
                   </select></label
                 >
               </div>
-              <fieldset class="wallet-copy-policy">
-                <legend>Exit policy overrides</legend>
-                <p>Each unset strategy inherits the current global exit configuration.</p>
+              </section>
+              <fieldset class="wallet-copy-form-section wallet-copy-policy">
+                <legend>Exit rule overrides</legend>
+                <p>Use the Trader defaults or override only the rules this task needs.</p>
                 <div class="wallet-copy-policy-grid">
                   <div class="wallet-copy-policy-field">
                     <label for="wallet-copy-stop-loss-mode">Stop loss</label
                     ><select id="wallet-copy-stop-loss-mode" class="form-select">
-                      <option value="inherit">Inherit global</option>
-                      <option value="enabled">Override: enabled</option>
-                      <option value="disabled">Override: disabled</option>
+                      <option value="inherit">Use Trader default</option>
+                      <option value="enabled">Enabled for this task</option>
+                      <option value="disabled">Disabled for this task</option>
                     </select>
                     <input
                       id="wallet-copy-stop-loss-value"
@@ -466,9 +476,9 @@
                   <div class="wallet-copy-policy-field">
                     <label for="wallet-copy-roi-mode">Take profit</label
                     ><select id="wallet-copy-roi-mode" class="form-select">
-                      <option value="inherit">Inherit global</option>
-                      <option value="enabled">Override: enabled</option>
-                      <option value="disabled">Override: disabled</option>
+                      <option value="inherit">Use Trader default</option>
+                      <option value="enabled">Enabled for this task</option>
+                      <option value="disabled">Disabled for this task</option>
                     </select>
                     <input
                       id="wallet-copy-roi-value"
@@ -484,9 +494,9 @@
                   <div class="wallet-copy-policy-field">
                     <label for="wallet-copy-trailing-mode">Trailing stop</label
                     ><select id="wallet-copy-trailing-mode" class="form-select">
-                      <option value="inherit">Inherit global</option>
-                      <option value="enabled">Override: enabled</option>
-                      <option value="disabled">Override: disabled</option>
+                      <option value="inherit">Use Trader default</option>
+                      <option value="enabled">Enabled for this task</option>
+                      <option value="disabled">Disabled for this task</option>
                     </select>
                     <input
                       id="wallet-copy-trailing-value"
@@ -503,9 +513,9 @@
                   <div class="wallet-copy-policy-field">
                     <label for="wallet-copy-time-mode">Maximum hold</label
                     ><select id="wallet-copy-time-mode" class="form-select">
-                      <option value="inherit">Inherit global</option>
-                      <option value="enabled">Override: enabled</option>
-                      <option value="disabled">Override: disabled</option>
+                      <option value="inherit">Use Trader default</option>
+                      <option value="enabled">Enabled for this task</option>
+                      <option value="disabled">Disabled for this task</option>
                     </select>
                     <input
                       id="wallet-copy-time-value"
@@ -521,12 +531,21 @@
                 </div>
               </fieldset>
               <div class="wallet-copy-form-actions">
-                <button class="btn btn-danger" id="wallet-copy-delete" type="button" hidden>
-                  Delete</button
-                ><button class="btn btn-danger" id="wallet-copy-mode-action" type="button" hidden>
+                <button
+                  class="btn btn-ghost wallet-copy-delete-action"
+                  id="wallet-copy-delete"
+                  type="button"
+                  hidden>
+                  <i class="icon-trash-2"></i> Delete</button
+                ><button
+                  class="btn btn-outline wallet-copy-mode-action"
+                  id="wallet-copy-mode-action"
+                  type="button"
+                  hidden>
                   Arm Live</button
                 ><span class="wallet-copy-form-spacer"></span
-                ><button class="btn" id="wallet-copy-cancel" type="button">Cancel</button
+                ><button class="btn btn-secondary" id="wallet-copy-cancel" type="button"
+                  >Cancel</button
                 ><button class="btn btn-primary" type="submit">Save task</button>
               </div>
               <small id="wallet-copy-form-error" class="field-error" aria-live="polite"></small>
@@ -536,9 +555,12 @@
         <section class="wallet-copy-activity">
           <div class="wallet-copy-section-head">
             <div>
-              <strong>Decision activity</strong
-              ><span>Fills, submissions, skips and arrival distance</span>
+              <h3>Recent activity</h3
+              ><span>Copy decisions and execution results</span>
             </div>
+          </div>
+          <div id="wallet-copy-activity-columns" class="wallet-copy-activity-columns" hidden>
+            <span>Decision</span><span>Details</span><span>Time</span>
           </div>
           <div id="wallet-copy-activity-list" class="wallet-copy-activity-list">
             <div class="wallet-copy-empty">
