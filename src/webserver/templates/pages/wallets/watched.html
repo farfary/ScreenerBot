@@ -1,0 +1,51 @@
+<!-- Watched Wallets Tab Panel -->
+<div class="wallet-tab-panel hidden" id="panel-watched" data-panel="watched">
+  <div class="watched-wallets-layout">
+    <section class="watched-wallets-add" aria-labelledby="watched-wallets-heading">
+      <div class="watched-wallets-copy">
+        <h2 id="watched-wallets-heading"><i class="icon-eye"></i> Watch a public wallet</h2>
+        <p>Record its on-chain activity and send trade alerts through your Telegram settings.</p>
+      </div>
+      <form id="watched-wallet-form" class="watched-wallet-form" novalidate>
+        <div class="watched-field watched-field--address">
+          <label for="watched-wallet-address">Wallet address</label>
+          <input
+            id="watched-wallet-address"
+            name="address"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Solana address"
+            required
+          />
+          <span class="field-error" id="watched-wallet-address-error" aria-live="polite"></span>
+        </div>
+        <div class="watched-field">
+          <label for="watched-wallet-label">Label</label>
+          <input
+            id="watched-wallet-label"
+            name="label"
+            type="text"
+            maxlength="60"
+            placeholder="Optional name"
+          />
+        </div>
+        <button class="btn primary watched-wallet-submit" type="submit">
+          <i class="icon-plus"></i> Add watch
+        </button>
+      </form>
+    </section>
+    <section class="watched-wallets-list" aria-labelledby="watched-wallets-list-heading">
+      <div class="watched-wallets-list-header">
+        <div>
+          <h2 id="watched-wallets-list-heading">Watched addresses</h2>
+          <p id="watched-wallets-summary">Loading observation targets…</p>
+        </div>
+      </div>
+      <div id="watched-wallets-root" class="watched-wallets-root" aria-live="polite">
+        <div class="watched-wallet-skeleton" aria-hidden="true"></div>
+        <div class="watched-wallet-skeleton" aria-hidden="true"></div>
+      </div>
+    </section>
+  </div>
+</div>

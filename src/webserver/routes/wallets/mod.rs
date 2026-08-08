@@ -16,6 +16,7 @@ pub mod export;
 pub mod import;
 pub mod types;
 pub mod utils;
+pub mod watch;
 
 // Re-export types for external consumers
 pub use types::*;
@@ -39,4 +40,5 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/:id/set-main", post(crud::set_main_wallet))
         .route("/:id/archive", post(crud::archive_wallet))
         .route("/:id/restore", post(crud::restore_wallet))
+        .nest("/watch", watch::routes())
 }

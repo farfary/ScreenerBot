@@ -72,6 +72,8 @@ pub(super) const WALLETS_MODALS_STYLES: &str =
     include_str!("templates/styles/pages/wallets/modals.css");
 pub(super) const WALLETS_IMPORT_EXPORT_STYLES: &str =
     include_str!("templates/styles/pages/wallets/import_export.css");
+pub(super) const WALLETS_WATCHED_STYLES: &str =
+    include_str!("templates/styles/pages/wallets/watched.css");
 pub(super) const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
 pub(super) const TOOLS_CONTENT_STYLES: &str =
     include_str!("templates/styles/pages/tools/content.css");
@@ -436,6 +438,7 @@ pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wall
 pub const WALLETS_BULK_OPERATIONS_JS: &str =
     include_str!("templates/scripts/pages/wallets/bulk_operations.js");
 pub const WALLETS_RENDERERS_JS: &str = include_str!("templates/scripts/pages/wallets/renderers.js");
+pub const WALLETS_WATCHED_JS: &str = include_str!("templates/scripts/pages/wallets/watched.js");
 pub const TOOLS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tools.js");
 pub const TOOLS_WALLET_TOOLS: &str = include_str!("templates/scripts/pages/tools/wallet_tools.js");
 pub const TOOLS_TOKEN_TOOLS: &str = include_str!("templates/scripts/pages/tools/token_tools.js");
@@ -467,6 +470,7 @@ pub(super) const CONFIG_PAGE: &str = include_str!("templates/pages/config.html")
 pub(super) const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 pub(super) const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
 pub(super) const WALLETS_PAGE: &str = include_str!("templates/pages/wallets.html");
+pub(super) const WALLETS_WATCHED_PANEL: &str = include_str!("templates/pages/wallets/watched.html");
 pub(super) const TOOLS_PAGE: &str = include_str!("templates/pages/tools.html");
 pub(super) const AI_PAGE: &str = include_str!("templates/pages/ai.html");
 pub(super) const HOME_PAGE: &str = include_str!("templates/pages/home.html");

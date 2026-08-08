@@ -1,0 +1,69 @@
+//! Per-subject persistence policy (§5.4).
+//!
+//! | Field | Own wallet | Watched target |
+//! |---|---|---|
+//! | `raw_transactions.raw_transaction_data` | stored | not stored (`TransactionProcessor::new_for_watch_target` skips it at decode time) |
+//! | `processed_transactions` | stored | stored |
+//! | retention | unlimited | rolling window (`wallet.watch_retention_days`) |
+//! | `record_transaction_event` | yes | no -- the watch service emits its own `WalletActivity` |
+//!
+//! The raw-JSON split happens earlier, in the processor the funnel decodes with; this
+//! module only decides the two things that are actually about RECORDING: whether an
+//! event fires, and whether the failed-transaction path (which does not classify)
+//! still gets a row.
+
+use crate::events;
+use crate::logger::{self, LogTag};
+use crate::transactions::database::get_transaction_database;
+use crate::transactions::types::{Subject, Transaction};
+
+use super::types::WatchSource;
+
+/// Persist a decoded transaction per the subject's policy. Call this AFTER
+/// classification (or after the failed-transaction short-circuit) and BEFORE the
+/// dedupe commit -- see `dedupe`'s doc for why the ordering matters.
+pub(super) async fn record(
+    subject: Subject,
+    sources: &[WatchSource],
+    transaction: &Transaction,
+) -> Result<(), String> {
+    let is_own_wallet = sources.contains(&WatchSource::OwnWallet);
+
+    let Some(db) = get_transaction_database().await else {
+        logger::warning(
+            LogTag::WalletWatch,
+            "Transaction database not initialized; dropping a decoded row",
+        );
+        return Err("Transaction database not initialized".to_owned());
+    };
+
+    if let Err(e) = db.store_processed_transaction(subject, transaction).await {
+        logger::warning(
+            LogTag::WalletWatch,
+            &format!(
+                "Failed to store processed transaction {} for {}: {e}",
+                transaction.signature, subject
+            ),
+        );
+        return Err(e);
+    }
+
+    // Only the own wallet's transactions drive the events feed / position
+    // verification side effects -- a watched target's activity is surfaced through
+    // `WalletActivity` instead, which is what the alert (and, later, copy) consumers
+    // subscribe to. Recording it as an own-wallet-shaped event too would double up
+    // the dashboard's notification centre for every trade a followed wallet makes.
+    if is_own_wallet {
+        events::record_transaction_event(
+            &transaction.signature,
+            "processed",
+            transaction.success,
+            transaction.fee_lamports,
+            transaction.slot,
+            None,
+        )
+        .await;
+    }
+
+    Ok(())
+}

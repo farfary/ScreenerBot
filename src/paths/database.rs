@@ -18,9 +18,16 @@ pub fn get_positions_db_path() -> PathBuf {
     get_data_directory().join("positions.db")
 }
 
-/// Returns the wallet database path.
+/// Returns the wallet database path (balance monitor: snapshots, worth history).
 pub fn get_wallet_db_path() -> PathBuf {
     get_data_directory().join("wallet.db")
+}
+
+/// Returns the wallets database path (wallet list/keys, and the watch service's
+/// `watch_targets` / `watch_cursors` tables -- a distinct file from `wallet.db`
+/// above, despite the similar name).
+pub fn get_wallets_db_path() -> PathBuf {
+    get_data_directory().join("wallets.db")
 }
 
 /// Returns the events database path.

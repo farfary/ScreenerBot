@@ -497,7 +497,7 @@ fn calculate_balance_confidence(
 // =============================================================================
 
 /// Get account keys from transaction message (supports both legacy and v0)
-fn account_keys_from_message(message: &Value) -> Vec<String> {
+pub(crate) fn account_keys_from_message(message: &Value) -> Vec<String> {
     // jsonParsed v0 can be:
     // - array of strings
     // - array of objects { pubkey, signer, writable, source }

@@ -81,12 +81,15 @@ impl TransactionDatabase {
     }
 
     /// Reconcile known_signatures with already processed transactions
-    /// Ensures no processed transaction is missing from known_signatures
+    /// Ensures no processed transaction is missing from known_signatures, for any
+    /// subject -- both columns of the composite key must be carried across, or every
+    /// row would violate the `wallet_address NOT NULL` constraint and silently
+    /// reconcile nothing (`INSERT OR IGNORE` swallows constraint failures).
     pub async fn reconcile_known_with_processed(&self) -> Result<usize, String> {
         let conn = self.get_connection()?;
         let affected = conn
             .execute(
-                "INSERT OR IGNORE INTO known_signatures(signature) SELECT signature FROM processed_transactions",
+                "INSERT OR IGNORE INTO known_signatures(signature, wallet_address) SELECT signature, wallet_address FROM processed_transactions",
                 []
             )
             .map_err(|e| format!("Failed to reconcile known signatures: {e}"))?;

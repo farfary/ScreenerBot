@@ -6,7 +6,7 @@ use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use crate::database;
-use crate::paths::get_data_directory;
+use crate::paths::get_wallets_db_path;
 
 mod schema;
 mod token_balances;
@@ -22,7 +22,7 @@ pub struct WalletsDatabase {
 impl WalletsDatabase {
     /// Create or open the wallets database
     pub fn new() -> Result<Self, String> {
-        let db_path = get_data_directory().join("wallets.db");
+        let db_path = get_wallets_db_path();
 
         // Ensure data directory exists
         if let Some(parent) = db_path.parent() {

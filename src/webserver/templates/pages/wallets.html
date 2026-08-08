@@ -51,6 +51,18 @@
         <i class="icon-refresh-cw"></i>
       </button>
     </div>
+
+    <div class="wallets-tab-actions hidden" data-tab-actions="watched">
+      <button
+        class="btn-icon"
+        id="refresh-watched-wallets-btn"
+        type="button"
+        title="Refresh"
+        aria-label="Refresh watched wallets"
+      >
+        <i class="icon-refresh-cw"></i>
+      </button>
+    </div>
   </div>
 
   <!-- Main Content -->
@@ -72,6 +84,8 @@
       <div class="wallet-tab-panel hidden" id="panel-archive" data-panel="archive">
         <div id="archive-table-container"></div>
       </div>
+
+      {{WATCHED_WALLETS_PANEL}}
     </div>
   </main>
 
@@ -489,7 +503,7 @@
         </div>
 
         <div class="form-actions">
-          <button type="button" class="btn" id="export-cancel-btn">Cancel</button>
+          <button type="button" class="btn" id="bulk-export-cancel-btn">Cancel</button>
         </div>
       </div>
     </div>

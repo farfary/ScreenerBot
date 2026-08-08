@@ -350,7 +350,9 @@ fn combine_detection_results(
 // =============================================================================
 
 /// Extract all program IDs from transaction instructions
-fn extract_program_ids(tx_data: &crate::rpc::TransactionDetails) -> Result<Vec<String>, String> {
+pub(crate) fn extract_program_ids(
+    tx_data: &crate::rpc::TransactionDetails,
+) -> Result<Vec<String>, String> {
     let mut program_ids = Vec::new();
 
     let message = &tx_data.transaction.message;

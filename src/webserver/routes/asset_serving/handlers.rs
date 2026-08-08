@@ -124,6 +124,7 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "wallets.js" => Some(embeds::WALLETS_PAGE_SCRIPT),
         "wallets/bulk_operations.js" => Some(embeds::WALLETS_BULK_OPERATIONS_JS),
         "wallets/renderers.js" => Some(embeds::WALLETS_RENDERERS_JS),
+        "wallets/watched.js" => Some(embeds::WALLETS_WATCHED_JS),
         "tools.js" => Some(embeds::TOOLS_PAGE_SCRIPT),
         "tools/wallet_tools.js" => Some(embeds::TOOLS_WALLET_TOOLS),
         "tools/token_tools.js" => Some(embeds::TOOLS_TOKEN_TOOLS),

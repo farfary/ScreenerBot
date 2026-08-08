@@ -3,7 +3,16 @@
  * Handles bulk import/export functionality with multi-step wizards
  */
 
-export function createBulkOperations({ $, Utils, on, showModal, hideModal, enhanceAllSelects, loadAllData, walletsData }) {
+export function createBulkOperations({
+  $,
+  Utils,
+  on,
+  showModal,
+  hideModal,
+  enhanceAllSelects,
+  loadAllData,
+  walletsData,
+}) {
   // =============================================================================
   // Bulk Import State (local to this module)
   // =============================================================================
@@ -529,7 +538,7 @@ export function createBulkOperations({ $, Utils, on, showModal, hideModal, enhan
 
     // Close buttons
     const closeBtn = $("#bulk-export-modal-close");
-    const cancelBtn = $("#export-cancel-btn");
+    const cancelBtn = $("#bulk-export-cancel-btn");
     if (closeBtn) on(closeBtn, "click", () => hideBulkExportModal());
     if (cancelBtn) on(cancelBtn, "click", () => hideBulkExportModal());
 

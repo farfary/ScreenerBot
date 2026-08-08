@@ -8,6 +8,44 @@
   overflow: hidden;
 }
 
+.transactions-subject-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.transactions-subject-bar label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.transactions-subject-bar select {
+  min-width: 220px;
+  max-width: 360px;
+}
+
+.transactions-subject-bar span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+@media (width <= 640px) {
+  .transactions-subject-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .transactions-subject-bar select {
+    max-width: none;
+    width: 100%;
+  }
+}
+
 /* DataTable container */
 #transactions-root {
   flex: 1;

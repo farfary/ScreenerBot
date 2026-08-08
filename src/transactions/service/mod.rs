@@ -1,23 +1,23 @@
-//! Background service coordinating real-time transaction monitoring and WebSocket processing.
+//! Background service coordinating own-wallet transaction bootstrap and housekeeping.
 // Background service and coordination for the transactions module
 //
-// This module provides the main background service that coordinates
-// real-time transaction monitoring, WebSocket integration, and periodic processing.
+// Real-time detection (WebSocket + poll fallback + gap-fill) lives in
+// `wallets::watch` -- one funnel, three triggers, shared by every subject including
+// the own wallet. This service now owns only what is genuinely own-wallet-specific:
+// the one-time historical bootstrap and ongoing deferred-retry/cleanup housekeeping.
 //
 // Split into sub-modules:
 // - `config`: Constants, ServiceConfig, deferred retry queue
 // - `lifecycle`: Service start/stop/status, global state management
 // - `bootstrap`: Initial transaction history loading
-// - `processing`: Main service loop and periodic tasks
-// - `websocket`: WebSocket integration for real-time notifications
-// - `health`: Health monitoring and metrics
+// - `processing`: Own-wallet activity consumer + periodic housekeeping
+// - `health`: Housekeeping metrics
 
 pub mod bootstrap;
 pub mod config;
 pub mod health;
 pub mod lifecycle;
 pub mod processing;
-pub mod websocket;
 
 // Re-export public API for backward compatibility
 pub use lifecycle::{

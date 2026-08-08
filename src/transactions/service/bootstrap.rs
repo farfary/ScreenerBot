@@ -155,7 +155,7 @@ pub async fn perform_initial_transaction_bootstrap(
 
     loop {
         let signatures = fetcher
-            .fetch_signatures_page(wallet_pubkey, batch_limit, before.as_deref())
+            .fetch_signatures_page(wallet_pubkey, batch_limit, before.as_deref(), None)
             .await?;
 
         if signatures.is_empty() {

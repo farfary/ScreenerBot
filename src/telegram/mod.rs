@@ -85,6 +85,7 @@ pub mod pagination;
 pub mod polling;
 pub mod session;
 pub mod types;
+pub(crate) mod wallet_alerts;
 
 // ============================================================================
 // PUBLIC API RE-EXPORTS

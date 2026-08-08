@@ -31,6 +31,7 @@ pub struct TransactionProcessor {
     pub(super) debug_enabled: bool,
     pub(super) cache_only: bool,
     pub(super) force_refresh: bool,
+    pub(super) retain_raw_json: bool,
 }
 
 impl TransactionProcessor {
@@ -43,6 +44,7 @@ impl TransactionProcessor {
             debug_enabled: false,
             cache_only: false,
             force_refresh: false,
+            retain_raw_json: true,
         }
     }
 
@@ -59,6 +61,24 @@ impl TransactionProcessor {
             debug_enabled: false,
             cache_only,
             force_refresh,
+            retain_raw_json: true,
+        }
+    }
+
+    /// Create a processor for a watched (non-own) subject: the raw jsonParsed
+    /// response is fetched (needed to decode) but never persisted, only the decoded
+    /// analytics row is. A busy target's raw blobs would otherwise be far larger than
+    /// its decoded rows and dwarf `transactions.db` -- see the wallet-watch recording
+    /// policy (own wallet: full retention; watched target: decoded row only).
+    pub fn new_for_watch_target(wallet_pubkey: Pubkey) -> Self {
+        Self {
+            wallet_pubkey,
+            fetcher: TransactionFetcher::new(),
+            analyzer: TransactionAnalyzer::new(false),
+            debug_enabled: false,
+            cache_only: false,
+            force_refresh: false,
+            retain_raw_json: false,
         }
     }
 
@@ -71,9 +91,9 @@ impl TransactionProcessor {
     ///
     /// Records no event and writes no analysis row -- persisting the decoded result
     /// is the caller's decision, which is what lets a watched wallet be decoded
-    /// without landing in our own history. It does still cache the raw RPC response
-    /// under this processor's subject (see `extraction.rs`), so a re-decode of the
-    /// same signature does not pay for the fetch twice.
+    /// without landing in our own history. Own-wallet processors cache the raw RPC
+    /// response; `new_for_watch_target` retains it on the returned decoded value for
+    /// classification but does not persist the JSON blob (see `extraction.rs`).
     pub async fn decode(&self, signature: &str) -> Result<Transaction, String> {
         let start_time = Instant::now();
 

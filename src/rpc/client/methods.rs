@@ -322,12 +322,16 @@ pub trait RpcClientMethods {
     /// Get transaction signatures for an address
     ///
     /// Returns signatures in reverse chronological order (newest first).
-    /// Use `before` for pagination to get older signatures.
+    /// Use `before` for pagination to get older signatures. Use `until` to stop the
+    /// search at (and exclude) a known signature -- the gap-fill / cursor-resume case,
+    /// where paging all the way back to `before=None` would re-walk history already
+    /// on file.
     fn get_signatures_for_address(
         &self,
         address: &Pubkey,
         limit: Option<usize>,
         before: Option<&Signature>,
+        until: Option<&Signature>,
     ) -> impl std::future::Future<Output = crate::Result<Vec<SignatureInfo>>> + Send;
 
     /// Batch get multiple transactions by signatures
@@ -431,12 +435,14 @@ pub trait RpcClientMethods {
 
     /// Get wallet signatures (alias for get_signatures_for_address)
     ///
-    /// Convenience alias for code using this method name.
+    /// Convenience alias for code using this method name. `until` is the base58
+    /// signature to stop paging at (exclusive) -- see `get_signatures_for_address`.
     fn get_wallet_signatures_main_rpc(
         &self,
         wallet_pubkey: &Pubkey,
         limit: usize,
         before: Option<&str>,
+        until: Option<&str>,
     ) -> impl std::future::Future<Output = crate::Result<Vec<SignatureInfo>>> + Send;
 
     /// Get transaction details (returns TransactionDetails type)
