@@ -1,0 +1,184 @@
+use chrono::Utc;
+
+use super::*;
+use crate::trader::copy::{CopyMode, ExitMode, SizingMode};
+
+fn task() -> CopyTask {
+    CopyTask {
+        id: 0,
+        target_address: "target".to_owned(),
+        label: Some("Paper".to_owned()),
+        enabled: true,
+        mode: CopyMode::Paper,
+        sizing: SizingMode::Fixed { sol: 0.1 },
+        exit_mode: ExitMode::BuyOnly,
+        max_sol_per_trade: 0.2,
+        max_sol_per_token: 1.0,
+        total_budget_sol: 5.0,
+        min_target_trade_sol: None,
+        max_target_trade_sol: None,
+        buy_once_per_token: false,
+        slippage_pct: 1.0,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
+}
+
+#[tokio::test]
+async fn task_and_outcome_round_trip_with_idempotent_spend() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let task = db.insert_task(task()).await.unwrap();
+    assert_eq!(
+        db.enabled_tasks_for_subject("target").await.unwrap(),
+        [task.clone()]
+    );
+
+    let now = Utc::now();
+    let outcome = CopyOutcome::PaperFilled(super::super::types::PaperDecision {
+        task_id: task.id,
+        target_address: task.target_address.clone(),
+        signature: "signature".to_owned(),
+        mint: "mint".to_owned(),
+        target_size_sol: 0.2,
+        sized_sol: 0.1,
+        fill: super::super::types::PaperFill {
+            input_sol: 0.1,
+            market_price_sol: 0.01,
+            fill_price_sol: 0.0101,
+            token_amount: 9.85,
+            referral_fee_sol: 0.0005,
+            network_fee_sol: 0.000005,
+            priority_fee_sol: 0.0,
+            total_cost_sol: 0.100005,
+        },
+        telemetry: super::super::types::CopyTelemetry {
+            target_block_time: Some(1),
+            detected_at: now,
+            decoded_at: now,
+            decided_at: now,
+            submitted_at: None,
+            confirmed_at: Some(now),
+            target_price_sol: Some(0.01),
+            fill_price_sol: Some(0.0101),
+        },
+    });
+    db.record_outcome(outcome.clone()).await.unwrap();
+    db.record_outcome(outcome).await.unwrap();
+
+    assert_eq!(
+        db.spend_state(task.id, "mint").await.unwrap(),
+        SpendState {
+            total_spent_sol: 0.1,
+            token_spent_sol: 0.1,
+            token_buy_count: 1,
+        }
+    );
+}
+
+fn live_outcome(task: &CopyTask, pending: bool) -> CopyOutcome {
+    let now = Utc::now();
+    let decision = super::super::types::LiveDecision {
+        task_id: task.id,
+        target_address: task.target_address.clone(),
+        target_signature: "live-target-signature".to_owned(),
+        mint: "live-mint".to_owned(),
+        target_size_sol: 0.2,
+        sized_sol: 0.1,
+        transaction_signature: Some("our-signature".to_owned()),
+        error: None,
+        telemetry: super::super::types::CopyTelemetry {
+            target_block_time: Some(1),
+            detected_at: now,
+            decoded_at: now,
+            decided_at: now,
+            submitted_at: Some(now),
+            confirmed_at: (!pending).then_some(now),
+            target_price_sol: Some(0.01),
+            fill_price_sol: Some(0.011),
+        },
+    };
+    if pending {
+        CopyOutcome::LiveSubmitted(decision)
+    } else {
+        CopyOutcome::LiveConfirmed(decision)
+    }
+}
+
+#[tokio::test]
+async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let configured = db.insert_task(task()).await.unwrap();
+    let configured = db
+        .set_task_mode(
+            configured.id,
+            CopyMode::Live,
+            Some(super::super::types::LIVE_ARM_CONFIRMATION.to_owned()),
+        )
+        .await
+        .unwrap();
+
+    let submitted = live_outcome(&configured, true);
+    db.record_outcome(submitted.clone()).await.unwrap();
+    db.record_outcome(submitted).await.unwrap();
+    db.record_outcome(live_outcome(&configured, false))
+        .await
+        .unwrap();
+    let CopyOutcome::LiveSubmitted(mut failed) = live_outcome(&configured, true) else {
+        unreachable!()
+    };
+    failed.target_signature = "definite-pre-submit-failure".to_owned();
+    failed.transaction_signature = None;
+    failed.error = Some("quote rejected".to_owned());
+    failed.telemetry.submitted_at = None;
+    db.record_outcome(CopyOutcome::LiveFailed(failed))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        db.spend_state(configured.id, "live-mint").await.unwrap(),
+        SpendState {
+            total_spent_sol: 0.1,
+            token_spent_sol: 0.1,
+            token_buy_count: 1,
+        }
+    );
+    let activity = db.list_activity(10).await.unwrap();
+    assert_eq!(
+        activity.len(),
+        3,
+        "submitted, confirmation, definite failure"
+    );
+    assert!(activity
+        .iter()
+        .any(|row| matches!(&row.outcome, CopyOutcome::LiveConfirmed(_))));
+}
+
+#[tokio::test]
+async fn generic_task_update_cannot_change_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let mut configured = db.insert_task(task()).await.unwrap();
+    assert!(db
+        .set_task_mode(configured.id, CopyMode::Live, None)
+        .await
+        .is_err());
+    configured.mode = CopyMode::Live;
+    assert!(db.update_task(configured).await.is_err());
+}
+
+#[tokio::test]
+async fn live_activity_claim_is_atomic_and_idempotent() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let configured = db.insert_task(task()).await.unwrap();
+    assert!(db
+        .claim_live_activity(configured.id, "target-signature")
+        .await
+        .unwrap());
+    assert!(!db
+        .claim_live_activity(configured.id, "target-signature")
+        .await
+        .unwrap());
+}

@@ -159,6 +159,12 @@
 .wallet-copy-form-actions {
   margin-top: 1.1rem;
   justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+#wallet-copy-form-error:not(:empty) {
+  display: block;
+  margin-top: 0.6rem;
 }
 
 .wallet-copy-form-spacer {

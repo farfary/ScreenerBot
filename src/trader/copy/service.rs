@@ -1,4 +1,4 @@
-//! Runtime paper consumer of the shared wallet-observation broadcast.
+//! Runtime paper/live consumer of the shared wallet-observation broadcast.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,7 +12,8 @@ use crate::logger::{self, LogTag};
 use crate::wallets::watch::{subscribe_activity, ActivityKind, WalletActivity, WatchSource};
 
 use super::{
-    run_paper_pipeline, CopyDatabase, CopyOutcome, CopySkip, PaperCosts, PipelinePolicy,
+    execute_live_with, matching_tasks, prepare_live_entry, run_paper_pipeline, CopyDatabase,
+    CopyMode, CopyOutcome, CopySkip, CopyTelemetry, LiveSubmitResult, PaperCosts, PipelinePolicy,
     RiskContext, SpendState,
 };
 
@@ -24,12 +25,12 @@ pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
             received = receiver.recv() => match received {
                 Ok(activity) => {
                     if let Err(error) = process_activity(&database, &activity).await {
-                        logger::warning(LogTag::Trader, &format!("Paper copy activity failed: {error}"));
+                        logger::warning(LogTag::Trader, &format!("Copy activity failed: {error}"));
                     }
                 }
                 Err(RecvError::Lagged(count)) => logger::warning(
                     LogTag::Trader,
-                    &format!("Paper copy consumer lagged by {count} wallet activities"),
+                    &format!("Copy consumer lagged by {count} wallet activities"),
                 ),
                 Err(RecvError::Closed) => return,
             }
@@ -66,23 +67,11 @@ async fn process_activity(
     let tasks = database
         .enabled_tasks_for_subject(&activity.subject)
         .await?;
+    let tasks = matching_tasks(activity, &tasks)
+        .into_iter()
+        .cloned()
+        .collect::<Vec<_>>();
     if tasks.is_empty() {
-        return Ok(());
-    }
-    if let Err(block) = crate::trader::admission::check_entry_admission(mint, &["rpc"]).await {
-        for task in tasks {
-            database
-                .record_outcome(CopyOutcome::Skipped {
-                    task_id: task.id,
-                    signature: activity.signature.clone(),
-                    mint: Some(mint.clone()),
-                    reason: CopySkip::EntryBlocked {
-                        block: block.clone(),
-                    },
-                    decided_at: Utc::now(),
-                })
-                .await?;
-        }
         return Ok(());
     }
     let filter_passed = if require_filter_pass {
@@ -114,34 +103,127 @@ async fn process_activity(
             },
         );
     }
-    let decision_price = crate::pools::get_pool_price(mint)
-        .map(|price| price.price_sol)
-        .or(*price_sol)
-        .unwrap_or(f64::NAN);
     let (trade_size_sol, priority_lamports) = with_config(|config| {
         (
             config.trader.trade_size_sol,
             config.swaps.jupiter.default_priority_fee,
         )
     });
-    let outcomes = run_paper_pipeline(
-        activity,
-        &tasks,
-        &spend,
-        &risk,
-        PipelinePolicy {
-            require_filter_pass,
-            engine_trade_size_sol: trade_size_sol,
-        },
-        decision_price,
-        PaperCosts {
-            network_fee_sol: 0.000005,
-            priority_fee_sol: crate::utils::lamports_to_sol(priority_lamports),
-        },
-        Utc::now(),
-    );
-    for outcome in outcomes {
+    let policy = PipelinePolicy {
+        require_filter_pass,
+        engine_trade_size_sol: trade_size_sol,
+    };
+    let paper_tasks = tasks
+        .iter()
+        .filter(|task| task.mode == CopyMode::Paper)
+        .cloned()
+        .collect::<Vec<_>>();
+    if !paper_tasks.is_empty() {
+        let decision_price = crate::pools::get_pool_price(mint)
+            .map(|price| price.price_sol)
+            .or(*price_sol)
+            .unwrap_or(f64::NAN);
+        let paper_outcomes = if let Err(block) =
+            crate::trader::admission::check_entry_admission(mint, &["rpc"]).await
+        {
+            paper_tasks
+                .iter()
+                .map(|task| {
+                    skipped(
+                        task.id,
+                        activity,
+                        mint,
+                        CopySkip::EntryBlocked {
+                            block: block.clone(),
+                        },
+                    )
+                })
+                .collect()
+        } else {
+            run_paper_pipeline(
+                activity,
+                &paper_tasks,
+                &spend,
+                &risk,
+                policy,
+                decision_price,
+                PaperCosts {
+                    network_fee_sol: 0.000005,
+                    priority_fee_sol: crate::utils::lamports_to_sol(priority_lamports),
+                },
+                Utc::now(),
+            )
+        };
+        for outcome in paper_outcomes {
+            database.record_outcome(outcome).await?;
+        }
+    }
+
+    for task in tasks.iter().filter(|task| task.mode == CopyMode::Live) {
+        let decided_at = Utc::now();
+        let plan = match prepare_live_entry(
+            activity,
+            task,
+            spend.get(&task.id).copied().unwrap_or_default(),
+            risk.get(&task.id).copied().unwrap_or_default(),
+            policy,
+            decided_at,
+        ) {
+            Ok(plan) => plan,
+            Err(reason) => {
+                database
+                    .record_outcome(skipped(task.id, activity, mint, reason))
+                    .await?;
+                continue;
+            }
+        };
+        if !database
+            .claim_live_activity(task.id, &activity.signature)
+            .await?
+        {
+            continue;
+        }
+        let outcome = execute_live_with(
+            plan,
+            |entry_mint| async move {
+                crate::trader::admission::check_entry_admission(&entry_mint, &["rpc"]).await?;
+                crate::trader::admission::check_open_cooldown().await?;
+                if !crate::trader::entry::try_reserve_entry(&entry_mint).await {
+                    return Err(crate::trader::admission::EntryBlock::EntryReserved);
+                }
+                Ok(())
+            },
+            |decision, context| async move {
+                LiveSubmitResult::from_trade_result(
+                    crate::trader::entry::submit_entry_with_context(decision, context).await,
+                )
+            },
+        )
+        .await;
         database.record_outcome(outcome).await?;
     }
     Ok(())
+}
+
+fn skipped(task_id: i64, activity: &WalletActivity, mint: &str, reason: CopySkip) -> CopyOutcome {
+    CopyOutcome::Skipped {
+        task_id,
+        signature: activity.signature.clone(),
+        mint: Some(mint.to_owned()),
+        reason,
+        decided_at: Utc::now(),
+        telemetry: Some(CopyTelemetry {
+            target_block_time: activity.block_time,
+            detected_at: activity.detected_at,
+            decoded_at: activity.decoded_at,
+            decided_at: Utc::now(),
+            submitted_at: None,
+            confirmed_at: None,
+            target_price_sol: match &activity.kind {
+                ActivityKind::Swap { price_sol, .. } => *price_sol,
+                _ => None,
+            },
+            fill_price_sol: None,
+        }),
+    }
 }

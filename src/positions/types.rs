@@ -189,6 +189,13 @@ pub struct PendingDcaSwap {
     pub size_sol: f64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntrySubmission {
+    pub transaction_signature: String,
+    pub confirmation_pending: bool,
+    pub entry_price_sol: f64,
+}
+
 // ==================== POSITION STRUCTURES ====================
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

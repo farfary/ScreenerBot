@@ -2,7 +2,7 @@
 
 use crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT;
 
-use super::types::{CopyMode, CopySkip, CopyTask, PipelinePolicy, RiskContext, SpendState};
+use super::types::{CopySkip, CopyTask, PipelinePolicy, RiskContext, SpendState};
 
 pub fn precheck(
     task: &CopyTask,
@@ -13,9 +13,6 @@ pub fn precheck(
 ) -> Result<(), CopySkip> {
     if !task.enabled {
         return Err(CopySkip::TaskDisabled);
-    }
-    if task.mode != CopyMode::Paper {
-        return Err(CopySkip::LiveModeUnavailable);
     }
     if context.is_self_wallet {
         return Err(CopySkip::SelfCopy);

@@ -1,10 +1,10 @@
-//! Global paper copy-trading policy. Per-target limits live in copy_trading.db.
+//! Global copy-trading policy. Per-target limits and mode live in copy_trading.db.
 
 use crate::{config_struct, field_metadata};
 
 config_struct! {
     pub struct CopyTradingConfig {
-        #[metadata(field_metadata! { label: "Wallet Copy", hint: "Enable paper copy task processing", impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { label: "Wallet Copy", hint: "Enable copy task processing", impact: "high", category: "Copy Trading", })]
         enabled: bool = false,
         #[metadata(field_metadata! { label: "Maximum Active Tasks", hint: "Maximum simultaneously enabled copy tasks", min: 1, max: 50, step: 1, impact: "high", category: "Copy Trading", })]
         max_active_tasks: usize = 10,
@@ -12,7 +12,7 @@ config_struct! {
         default_slippage_pct: f64 = 2.0,
         #[metadata(field_metadata! { label: "Default Mode", hint: "New copy tasks always begin in paper mode", impact: "low", category: "Copy Trading", hidden: true, })]
         default_mode: String = "paper".to_owned(),
-        #[metadata(field_metadata! { label: "Require Filter Pass", hint: "Only paper-copy tokens accepted by the filtering pipeline", impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { label: "Require Filter Pass", hint: "Only copy tokens accepted by the filtering pipeline", impact: "high", category: "Copy Trading", })]
         require_filter_pass: bool = true,
         #[metadata(field_metadata! { label: "Block On Force Stop", hint: "Copy entries always obey the global force stop", impact: "high", category: "Copy Trading", hidden: true, })]
         block_on_force_stop: bool = true,
@@ -34,7 +34,10 @@ impl CopyTradingConfig {
             ));
         }
         if self.default_mode != "paper" {
-            return Err("Copy trading remains paper-only in this release".to_owned());
+            return Err(
+                "New copy tasks must default to paper; arm live per task with confirmation"
+                    .to_owned(),
+            );
         }
         if !self.block_on_force_stop {
             return Err("Copy trading cannot bypass the global force stop".to_owned());

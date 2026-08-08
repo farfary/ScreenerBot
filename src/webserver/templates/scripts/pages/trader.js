@@ -41,6 +41,7 @@ function createLifecycle() {
   let tabBar = null;
   let configCards = null;
   let statsPoller = null;
+  let walletCopyPoller = null;
   let configPoller = null;
   let strategiesPoller = null;
 
@@ -228,6 +229,12 @@ function createLifecycle() {
       }
     }
 
+    if (tabId === "wallet-copy") {
+      if (walletCopyPoller && !walletCopyPoller.running) walletCopyPoller.start();
+    } else if (walletCopyPoller?.running) {
+      walletCopyPoller.stop();
+    }
+
     if (tabId === "strategy-control") {
       loadStrategies({ showLoading: true });
       if (strategiesPoller && !strategiesPoller.running) {
@@ -256,6 +263,7 @@ function createLifecycle() {
       updateTimeRulesStatus();
     }
     if (tabId === "wallet-copy") walletCopy.load();
+    if (tabId === "stats") walletCopy.loadStatus();
   }
 
   /**
@@ -603,8 +611,7 @@ function createLifecycle() {
   function formatExitType(type) {
     if (!type) return "Unknown";
     return (
-      EXIT_TYPE_LABELS[type] ||
-      type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+      EXIT_TYPE_LABELS[type] || type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     );
   }
 
@@ -662,7 +669,9 @@ function createLifecycle() {
         priority: "normal",
       });
 
-      const key = JSON.stringify(data.positions?.map(p => ({ id: p.id, roi: p.roi_percent, size: p.size_sol })) ?? null);
+      const key = JSON.stringify(
+        data.positions?.map((p) => ({ id: p.id, roi: p.roi_percent, size: p.size_sol })) ?? null
+      );
       if (key === _lastPositionsKey) return;
       _lastPositionsKey = key;
 
@@ -932,26 +941,25 @@ function createLifecycle() {
     }
 
     container.innerHTML = strategies
-      .map(
-        (strategy) => {
-          const strategyType = String(strategy.strategy_type || "").toUpperCase();
-          const isEntry = strategyType === "ENTRY";
-          const typeClass = isEntry ? "is-entry" : "is-exit";
-          const statusClass = strategy.enabled ? "is-enabled" : "is-disabled";
-          const statusLabel = strategy.enabled ? "Enabled" : "Disabled";
-          const description = strategy.description
-            ? Utils.escapeHtml(strategy.description)
-            : "No description provided.";
-          const priority =
-            strategy.priority !== null && strategy.priority !== undefined
-              ? Utils.escapeHtml(String(strategy.priority))
-              : "Auto";
-          const strategyId = Utils.escapeHtml(String(strategy.id));
-          const strategyName = strategy.name
-            ? Utils.escapeHtml(String(strategy.name))
-            : "Unnamed strategy";
+      .map((strategy) => {
+        const strategyType = String(strategy.strategy_type || "").toUpperCase();
+        const isEntry = strategyType === "ENTRY";
+        const typeClass = isEntry ? "is-entry" : "is-exit";
+        const statusClass = strategy.enabled ? "is-enabled" : "is-disabled";
+        const statusLabel = strategy.enabled ? "Enabled" : "Disabled";
+        const description = strategy.description
+          ? Utils.escapeHtml(strategy.description)
+          : "No description provided.";
+        const priority =
+          strategy.priority !== null && strategy.priority !== undefined
+            ? Utils.escapeHtml(String(strategy.priority))
+            : "Auto";
+        const strategyId = Utils.escapeHtml(String(strategy.id));
+        const strategyName = strategy.name
+          ? Utils.escapeHtml(String(strategy.name))
+          : "Unnamed strategy";
 
-          return `
+        return `
         <div class="strategy-control-item ${statusClass}">
           <div class="strategy-control-item-header">
             <div class="strategy-control-main">
@@ -983,8 +991,7 @@ function createLifecycle() {
           </div>
         </div>
       `;
-        }
-      )
+      })
       .join("");
 
     // Attach event listeners for toggle switches
@@ -1351,7 +1358,6 @@ function createLifecycle() {
 
       // Setup navigation links
       setupNavigation();
-
     },
 
     /**
@@ -1374,9 +1380,19 @@ function createLifecycle() {
             if (state.currentTab === "stats") {
               await loadStats();
               await controls.loadControlsStatus();
+              await walletCopy.loadStatus();
             }
           },
           { label: "Trader Stats", intervalMs: 5000 }
+        )
+      );
+
+      walletCopyPoller = ctx.managePoller(
+        new Poller(
+          async () => {
+            if (state.currentTab === "wallet-copy") await walletCopy.load();
+          },
+          { label: "Wallet Copy", intervalMs: 5000 }
         )
       );
 
@@ -1422,6 +1438,7 @@ function createLifecycle() {
       if (state.currentTab === "stats") {
         await loadStats();
         await controls.loadControlsStatus();
+        await walletCopy.loadStatus();
       }
       if (state.currentTab === "strategy-control" && strategiesPoller) {
         strategiesPoller.start();
@@ -1461,6 +1478,7 @@ function createLifecycle() {
       tabBar = null;
       state.config = null;
       state.stats = null;
+      walletCopyPoller = null;
       state.strategies = [];
       _lastPositionsKey = null;
       walletCopy.reset();

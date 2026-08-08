@@ -36,6 +36,8 @@ pub async fn evaluate_entry_for_token(
             | EntryBlock::PositionLimit
             | EntryBlock::AlreadyOpen
             | EntryBlock::ReentryCooldown
+            | EntryBlock::OpenCooldown { .. }
+            | EntryBlock::EntryReserved
             | EntryBlock::Blacklisted => Ok(None),
         };
     }

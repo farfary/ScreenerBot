@@ -1,5 +1,4 @@
-//! Paper copy-trading task and activity API. Live mode is rejected by the
-//! domain input validator and has no route to the trader submission path.
+//! Copy-trading task, guarded mode-transition, and activity API.
 
 use axum::{
     extract::{Path, Query},
@@ -12,7 +11,9 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::trader::copy::{CopyDatabase, CopyTask, CopyTaskInput};
+use crate::trader::copy::{
+    confirm_mode_transition, CopyDatabase, CopyMode, CopyTask, CopyTaskInput,
+};
 use crate::wallets::watch;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
@@ -25,6 +26,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/tasks/:id",
             get(get_task).patch(update_task).delete(delete_task),
         )
+        .route("/tasks/:id/mode", axum::routing::post(set_task_mode))
         .route("/activity", get(list_activity))
 }
 
@@ -41,18 +43,27 @@ struct TaskResponse {
 #[derive(Serialize)]
 struct StatusResponse {
     enabled: bool,
-    paper_only: bool,
+    live_available: bool,
+    blocked_reason: Option<&'static str>,
     default_mode: String,
     default_slippage_pct: f64,
     force_stop_blocks: bool,
     total_tasks: usize,
     active_tasks: usize,
+    paper_tasks: usize,
+    live_tasks: usize,
 }
 
 #[derive(Deserialize)]
 struct ActivityQuery {
     #[serde(default = "default_limit")]
     limit: usize,
+}
+
+#[derive(Deserialize)]
+struct ModeRequest {
+    mode: CopyMode,
+    confirmation: Option<String>,
 }
 
 fn default_limit() -> usize {
@@ -80,12 +91,27 @@ async fn status() -> Response {
                     });
                 success_response(StatusResponse {
                     enabled,
-                    paper_only: true,
+                    live_available: true,
+                    blocked_reason: if crate::global::is_force_stopped() {
+                        Some("force_stop")
+                    } else if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
+                        Some("loss_limit")
+                    } else {
+                        None
+                    },
                     default_mode,
                     default_slippage_pct,
                     force_stop_blocks,
                     total_tasks: tasks.len(),
                     active_tasks: tasks.iter().filter(|task| task.enabled).count(),
+                    paper_tasks: tasks
+                        .iter()
+                        .filter(|task| task.enabled && task.mode == CopyMode::Paper)
+                        .count(),
+                    live_tasks: tasks
+                        .iter()
+                        .filter(|task| task.enabled && task.mode == CopyMode::Live)
+                        .count(),
                 })
             }
             Err(error) => internal_error(error),
@@ -180,7 +206,7 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
         Ok(None) => return not_found(id),
         Err(error) => return internal_error(error),
     };
-    let mut task = match input.into_task(Utc::now()) {
+    let mut task = match input.into_task_for_update(Utc::now(), original.mode) {
         Ok(task) => task,
         Err(reason) => return invalid_task(reason),
     };
@@ -247,6 +273,37 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
     }
 }
 
+async fn set_task_mode(Path(id): Path<i64>, Json(request): Json<ModeRequest>) -> Response {
+    let db = match open_database().await {
+        Ok(db) => db,
+        Err(error) => return internal_error(error),
+    };
+    let current = match db.get_task(id).await {
+        Ok(Some(task)) => task,
+        Ok(None) => return not_found(id),
+        Err(error) => return internal_error(error),
+    };
+    let mode = match confirm_mode_transition(
+        current.mode,
+        request.mode,
+        request.confirmation.as_deref(),
+    ) {
+        Ok(mode) => mode,
+        Err(reason) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "LIVE_CONFIRMATION_REQUIRED",
+                "Arming live copy trading requires explicit confirmation",
+                Some(&format!("{reason:?}")),
+            )
+        }
+    };
+    match db.set_task_mode(id, mode, request.confirmation).await {
+        Ok(task) => success_response(TaskResponse { task }),
+        Err(error) => internal_error(error),
+    }
+}
+
 async fn delete_task(Path(id): Path<i64>) -> Response {
     let db = match open_database().await {
         Ok(db) => db,
@@ -297,7 +354,7 @@ fn invalid_task(reason: impl std::fmt::Debug) -> Response {
     error_response(
         StatusCode::BAD_REQUEST,
         "INVALID_TASK",
-        "Invalid paper copy task",
+        "Invalid copy task",
         Some(&format!("{reason:?}")),
     )
 }

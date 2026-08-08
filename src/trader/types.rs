@@ -28,8 +28,8 @@ pub struct TradeDecision {
     /// Per-trade slippage override, in percent.
     ///
     /// `None` = follow the configured slippage (`swaps.slippage.*`), which is what the
-    /// AUTO-TRADER always does — it must stay config-driven. Only MANUAL trades set
-    /// this, when the user overrides slippage in the trade dialog.
+    /// AUTO-TRADER always does — it must stay config-driven. Manual and explicitly
+    /// configured copy tasks may set a bounded override.
     pub slippage_pct: Option<f64>,
 }
 
@@ -46,6 +46,7 @@ pub enum TradeReason {
     StrategySignal,
     ManualEntry,
     ForceBuy,
+    CopyBuy,
     DCAScheduled,
 
     // Exit reasons
@@ -80,6 +81,9 @@ pub struct TradeResult {
     pub position_id: Option<String>,
     pub execution_timestamp: DateTime<Utc>,
     pub retry_count: u32,
+    /// The swap has a signature but the router confirmation poll timed out. It must
+    /// be reconciled, never retried as a fresh buy.
+    pub confirmation_pending: bool,
 }
 
 impl TradeResult {
@@ -101,6 +105,7 @@ impl TradeResult {
             position_id,
             execution_timestamp: Utc::now(),
             retry_count: 0,
+            confirmation_pending: false,
         }
     }
 
@@ -116,6 +121,7 @@ impl TradeResult {
             position_id: None,
             execution_timestamp: Utc::now(),
             retry_count,
+            confirmation_pending: false,
         }
     }
 }

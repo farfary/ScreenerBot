@@ -1,10 +1,46 @@
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const LIVE_ARM_CONFIRMATION = "ARM LIVE COPY TRADING";
+
+const SKIP_LABELS = {
+  not_buy_swap: "Target activity was not a buy",
+  task_disabled: "Task is paused",
+  mode_transition_required: "Execution mode must be changed separately",
+  live_confirmation_required: "Live execution needs confirmation",
+  unsupported_sizing_mode: "Sizing mode is not supported yet",
+  self_copy: "Target belongs to this account",
+  target_below_minimum: "Target trade is below the minimum",
+  target_above_maximum: "Target trade is above the maximum",
+  already_bought: "Buy-once limit reached",
+  blacklisted: "Token is blocked by risk controls",
+  filter_required: "Token did not pass filtering",
+  budget_exhausted: "Task budget is exhausted",
+  token_cap_reached: "Per-token limit reached",
+  below_minimum_size: "Calculated copy size is too small",
+  invalid_sizing: "Task sizing is invalid",
+  invalid_slippage: "Task slippage is invalid",
+  invalid_price: "No usable market price",
+};
+
+const ENTRY_BLOCK_LABELS = {
+  force_stopped: "Trading is force-stopped",
+  loss_limit: "The loss limit is blocking new entries",
+  connectivity: "Required services are temporarily unavailable",
+  position_limit: "Open-position limit reached",
+  already_open: "A position is already open",
+  reentry_cooldown: "Token re-entry cooldown is active",
+  open_cooldown: "Global entry cooldown is active",
+  entry_reserved: "Another entry is already processing",
+  blacklisted: "Token is blocked by risk controls",
+  check_failed: "A safety check could not complete",
+};
 
 export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog }) {
   let tasks = [];
   let selectedId = null;
   let setupDone = false;
   let defaultSlippage = 2;
+  let lastTaskRenderKey = "";
+  let lastActivityRenderKey = "";
 
   function setup(on) {
     if (setupDone) return;
@@ -13,12 +49,14 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     on($("#wallet-copy-cancel"), "click", closeEditor);
     on($("#wallet-copy-form"), "submit", saveTask);
     on($("#wallet-copy-delete"), "click", deleteTask);
+    on($("#wallet-copy-mode-action"), "click", changeTaskMode);
     on($("#wallet-copy-task-list"), "click", (event) => {
       const button = event.target.closest("button[data-copy-task-id]");
       if (button) editTask(Number(button.dataset.copyTaskId));
     });
     on($("#wallet-copy-sizing"), "change", updateSizeLabel);
     on($("#wallet-copy-global-toggle"), "change", toggleGlobal);
+    on($("#stats-wallet-copy-toggle"), "change", toggleGlobal);
   }
 
   async function load() {
@@ -31,11 +69,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       tasks = taskData.tasks || taskData || [];
       renderTasks();
       renderActivity(activityData.activity || activityData.items || activityData || []);
-      const globalToggle = $("#wallet-copy-global-toggle");
-      if (globalToggle) globalToggle.checked = Boolean(statusData.enabled);
-      defaultSlippage = Number(statusData.default_slippage_pct) || 2;
-      const globalStatus = $("#wallet-copy-global-status");
-      if (globalStatus) globalStatus.textContent = statusData.enabled ? "Paper active" : "Paper paused";
+      applyStatus(statusData);
       if (selectedId && !tasks.some((task) => task.id === selectedId)) closeEditor();
     } catch (error) {
       console.error("[Trader] Wallet copy load failed:", error);
@@ -43,9 +77,46 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     }
   }
 
+  async function loadStatus() {
+    try {
+      applyStatus(await requestManager.fetch("/api/copy-trading/status"));
+    } catch (error) {
+      console.error("[Trader] Wallet copy status failed:", error);
+    }
+  }
+
+  function applyStatus(status) {
+    defaultSlippage = Number(status.default_slippage_pct) || 2;
+    [$("#wallet-copy-global-toggle"), $("#stats-wallet-copy-toggle")].forEach((toggle) => {
+      if (toggle) toggle.checked = Boolean(status.enabled);
+    });
+    const blockedLabels = {
+      force_stop: "Blocked by Force Stop",
+      loss_limit: "Blocked by Loss Limit",
+    };
+    const modeSummary = status.live_tasks
+      ? `${status.live_tasks} live · ${status.paper_tasks || 0} paper`
+      : `${status.paper_tasks || 0} paper`;
+    const statusText = !status.enabled
+      ? "Paused"
+      : status.blocked_reason
+        ? blockedLabels[status.blocked_reason] || "Entries blocked"
+        : `Active · ${modeSummary}`;
+    const globalStatus = $("#wallet-copy-global-status");
+    const statsStatus = $("#stats-wallet-copy-status");
+    if (globalStatus) globalStatus.textContent = statusText;
+    if (statsStatus) statsStatus.textContent = statusText;
+  }
+
   async function toggleGlobal(event) {
     const enabled = event.currentTarget.checked;
-    event.currentTarget.disabled = true;
+    const toggles = [$("#wallet-copy-global-toggle"), $("#stats-wallet-copy-toggle")].filter(
+      Boolean
+    );
+    toggles.forEach((toggle) => {
+      toggle.disabled = true;
+      toggle.checked = enabled;
+    });
     try {
       await requestManager.fetch("/api/config/copy_trading", {
         method: "PATCH",
@@ -54,13 +125,17 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
         priority: "high",
         skipDedup: true,
       });
-      Utils.showToast(enabled ? "Paper copying resumed" : "Paper copying paused", "success");
-      await load();
+      Utils.showToast(enabled ? "Wallet copy resumed" : "Wallet copy paused", "success");
+      await loadStatus();
     } catch {
-      event.currentTarget.checked = !enabled;
-      Utils.showToast("Paper copy status could not be changed", "error");
+      toggles.forEach((toggle) => {
+        toggle.checked = !enabled;
+      });
+      Utils.showToast("Wallet copy status could not be changed", "error");
     } finally {
-      event.currentTarget.disabled = false;
+      toggles.forEach((toggle) => {
+        toggle.disabled = false;
+      });
     }
   }
 
@@ -71,7 +146,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     const form = $("#wallet-copy-form");
     if (!form) return;
     form.hidden = false;
-    $("#wallet-copy-form-title").textContent = task ? task.label || "Paper task" : "New paper task";
+    $("#wallet-copy-form-title").textContent = task ? task.label || "Copy task" : "New copy task";
     $("#wallet-copy-task-id").value = task?.id || "";
     $("#wallet-copy-delete").hidden = !task;
     $("#wallet-copy-address").value = task?.target_address || "";
@@ -88,14 +163,69 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     $("#wallet-copy-max-token").value = task?.max_sol_per_token ?? "0.5";
     $("#wallet-copy-budget").value = task?.total_budget_sol ?? "2";
     $("#wallet-copy-slippage").value = task?.slippage_pct ?? String(defaultSlippage);
+    const formError = $("#wallet-copy-form-error");
+    if (formError) formError.textContent = "";
+    const modeAction = $("#wallet-copy-mode-action");
+    if (modeAction) {
+      modeAction.hidden = !task;
+      modeAction.dataset.mode = task?.mode || "paper";
+      modeAction.textContent = task?.mode === "live" ? "Return to Paper" : "Arm Live";
+      modeAction.classList.toggle("btn-danger", task?.mode !== "live");
+    }
+    const modeState = $("#wallet-copy-task-mode");
+    if (modeState)
+      modeState.textContent = task?.mode === "live" ? "Live execution" : "Paper execution";
     updateSizeLabel();
     renderTasks();
+  }
+
+  async function changeTaskMode(event) {
+    const task = tasks.find((item) => item.id === selectedId);
+    if (!task) return;
+    const requestedMode = task.mode === "live" ? "paper" : "live";
+    if (requestedMode === "live") {
+      const name = task.label || task.target_address;
+      const { confirmed } = await ConfirmationDialog.show({
+        title: "Arm Live Copy Trading",
+        message: `Allow “${name}” to submit real swaps from your wallet? Per-trade and total-budget limits remain enforced.`,
+        confirmLabel: "Arm Live",
+        cancelLabel: "Keep Paper",
+        variant: "danger",
+      });
+      if (!confirmed) return;
+    }
+    event.currentTarget.disabled = true;
+    try {
+      await requestManager.fetch(`/api/copy-trading/tasks/${task.id}/mode`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: requestedMode,
+          ...(requestedMode === "live" ? { confirmation: LIVE_ARM_CONFIRMATION } : {}),
+        }),
+        priority: "high",
+        skipDedup: true,
+      });
+      Utils.showToast(
+        requestedMode === "live" ? "Live copy armed" : "Task returned to paper",
+        "success"
+      );
+      await load();
+      editTask(task.id);
+    } catch (error) {
+      console.error("[Trader] Wallet copy mode change failed:", error);
+      Utils.showToast("Execution mode could not be changed", "error");
+    } finally {
+      event.currentTarget.disabled = false;
+    }
   }
 
   function closeEditor() {
     selectedId = null;
     const form = $("#wallet-copy-form");
     if (form) form.hidden = true;
+    const formError = $("#wallet-copy-form-error");
+    if (formError) formError.textContent = "";
     $("#wallet-copy-editor-empty")?.removeAttribute("hidden");
     renderTasks();
   }
@@ -117,20 +247,43 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     if (error) error.textContent = "";
     const sizingKind = $("#wallet-copy-sizing").value;
     const size = Number($("#wallet-copy-size").value);
+    const maxTrade = Number($("#wallet-copy-max-trade").value);
+    const maxToken = Number($("#wallet-copy-max-token").value);
+    const budget = Number($("#wallet-copy-budget").value);
+    const slippage = Number($("#wallet-copy-slippage").value);
+    const formError = $("#wallet-copy-form-error");
+    if (
+      ![size, maxTrade, maxToken, budget, slippage].every(
+        (value) => Number.isFinite(value) && value > 0
+      ) ||
+      maxTrade > maxToken ||
+      maxToken > budget ||
+      slippage > 50
+    ) {
+      if (formError) {
+        formError.textContent =
+          "Use positive values, keep per-trade ≤ per-token ≤ total budget, and slippage ≤ 50%.";
+      }
+      return;
+    }
+    if (formError) formError.textContent = "";
     const payload = {
       target_address: address,
       label: $("#wallet-copy-label").value.trim() || null,
       enabled: $("#wallet-copy-enabled").checked,
-      mode: "paper",
-      sizing: sizingKind === "fixed" ? { kind: "fixed", sol: size } : { kind: "ratio_of_target", pct: size },
+      mode: tasks.find((task) => task.id === selectedId)?.mode || "paper",
+      sizing:
+        sizingKind === "fixed"
+          ? { kind: "fixed", sol: size }
+          : { kind: "ratio_of_target", pct: size },
       exit_mode: "buy_only",
-      max_sol_per_trade: Number($("#wallet-copy-max-trade").value),
-      max_sol_per_token: Number($("#wallet-copy-max-token").value),
-      total_budget_sol: Number($("#wallet-copy-budget").value),
+      max_sol_per_trade: maxTrade,
+      max_sol_per_token: maxToken,
+      total_budget_sol: budget,
       min_target_trade_sol: null,
       max_target_trade_sol: null,
       buy_once_per_token: true,
-      slippage_pct: Number($("#wallet-copy-slippage").value),
+      slippage_pct: slippage,
     };
     const submit = event.currentTarget.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
@@ -143,12 +296,12 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
         priority: "high",
         skipDedup: true,
       });
-      Utils.showToast(id ? "Paper task updated" : "Paper task created", "success");
+      Utils.showToast(id ? "Copy task updated" : "Paper task created", "success");
       closeEditor();
       await load();
     } catch (loadError) {
       console.error("[Trader] Wallet copy save failed:", loadError);
-      Utils.showToast("Paper task could not be saved", "error");
+      Utils.showToast("Copy task could not be saved", "error");
     } finally {
       if (submit) submit.disabled = false;
     }
@@ -159,7 +312,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     if (!task) return;
     const { confirmed } = await ConfirmationDialog.show({
       title: "Delete Copy Task",
-      message: `Delete paper task "${task.label || task.target_address}"? Its recorded activity will also be removed.`,
+      message: `Delete copy task "${task.label || task.target_address}"? Its recorded activity will also be removed.`,
       confirmLabel: "Delete",
       cancelLabel: "Cancel",
       variant: "danger",
@@ -175,10 +328,10 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       });
       closeEditor();
       await load();
-      Utils.showToast("Paper task deleted", "success");
+      Utils.showToast("Copy task deleted", "success");
     } catch (deleteError) {
       console.error("[Trader] Wallet copy delete failed:", deleteError);
-      Utils.showToast("Paper task could not be deleted", "error");
+      Utils.showToast("Copy task could not be deleted", "error");
     } finally {
       event.currentTarget.disabled = false;
     }
@@ -189,14 +342,19 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     const count = $("#wallet-copy-task-count");
     if (count) count.textContent = `${tasks.filter((task) => task.enabled).length} active`;
     if (!root) return;
+    const renderKey = JSON.stringify([tasks, selectedId]);
+    if (renderKey === lastTaskRenderKey) return;
+    lastTaskRenderKey = renderKey;
     if (!tasks.length) {
-      root.innerHTML = '<div class="wallet-copy-empty"><i class="icon-copy"></i><strong>No copy tasks</strong><span>Create a paper task to begin measuring decisions.</span></div>';
+      root.innerHTML =
+        '<div class="wallet-copy-empty"><i class="icon-copy"></i><strong>No copy tasks</strong><span>Create a paper task to measure it safely before going live.</span></div>';
       return;
     }
     root.innerHTML = tasks
       .map((task) => {
         const short = `${task.target_address.slice(0, 6)}…${task.target_address.slice(-4)}`;
-        return `<button type="button" class="wallet-copy-task${task.id === selectedId ? " is-active" : ""}" data-copy-task-id="${task.id}"><strong>${Utils.escapeHtml(task.label || "Unlabelled wallet")}</strong><span>${Utils.escapeHtml(short)}</span><span class="wallet-copy-task-meta"><span>${task.enabled ? "Active" : "Paused"}</span><span>Paper</span></span></button>`;
+        const mode = task.mode === "live" ? "Live" : "Paper";
+        return `<button type="button" class="wallet-copy-task${task.id === selectedId ? " is-active" : ""}" data-copy-task-id="${task.id}"><strong>${Utils.escapeHtml(task.label || "Unlabelled wallet")}</strong><span>${Utils.escapeHtml(short)}</span><span class="wallet-copy-task-meta"><span>${task.enabled ? "Active" : "Paused"}</span><span>${mode}</span></span></button>`;
       })
       .join("");
   }
@@ -204,32 +362,61 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
   function renderActivity(items) {
     const root = $("#wallet-copy-activity-list");
     if (!root) return;
+    const renderKey = JSON.stringify(items);
+    if (renderKey === lastActivityRenderKey) return;
+    lastActivityRenderKey = renderKey;
     if (!items.length) {
-      root.innerHTML = '<div class="wallet-copy-empty"><strong>No decisions yet</strong><span>Observed paper fills and skips will appear here.</span></div>';
+      root.innerHTML =
+        '<div class="wallet-copy-empty"><strong>No decisions yet</strong><span>Paper fills, live submissions and skips will appear here.</span></div>';
       return;
     }
     root.innerHTML = items
       .map((item) => {
         const outcome = item.outcome || {};
-        const filled = outcome.outcome === "paper_filled";
-        const title = filled ? "Paper fill" : "Skipped";
-        const detail = filled ? `${outcome.sized_sol ?? "—"} SOL` : outcome.reason?.kind || "Policy skip";
-        const timestamp = filled ? outcome.telemetry?.decided_at : outcome.decided_at;
-        return `<div class="wallet-copy-task"><strong>${title}</strong><span>${Utils.escapeHtml(outcome.mint || outcome.signature || "")}</span><span class="wallet-copy-task-meta"><span>${Utils.escapeHtml(detail)}</span><span>${Utils.escapeHtml(timestamp || item.created_at || "")}</span></span></div>`;
+        const titles = {
+          paper_filled: "Paper fill",
+          live_submitted: "Live submitted",
+          live_confirmed: "Live confirmed",
+          live_failed: "Live failed",
+          skipped: "Skipped",
+        };
+        const title = titles[outcome.outcome] || "Decision";
+        const isSkip = outcome.outcome === "skipped";
+        const blockKind = outcome.reason?.block?.kind;
+        const detail = isSkip
+          ? blockKind
+            ? ENTRY_BLOCK_LABELS[blockKind] || "Entry blocked"
+            : SKIP_LABELS[outcome.reason?.kind] || "Policy skip"
+          : outcome.error || `${outcome.sized_sol ?? "—"} SOL`;
+        const telemetry = outcome.telemetry;
+        const arrivalMs =
+          telemetry?.target_block_time && telemetry?.detected_at
+            ? new Date(telemetry.detected_at).getTime() - Number(telemetry.target_block_time) * 1000
+            : null;
+        const arrival =
+          Number.isFinite(arrivalMs) && arrivalMs >= 0
+            ? ` · ${(arrivalMs / 1000).toFixed(1)}s arrival`
+            : "";
+        const timestamp = telemetry?.decided_at || outcome.decided_at;
+        return `<div class="wallet-copy-task"><strong>${title}</strong><span>${Utils.escapeHtml(outcome.mint || outcome.signature || "")}</span><span class="wallet-copy-task-meta"><span>${Utils.escapeHtml(`${detail}${arrival}`)}</span><span>${Utils.escapeHtml(timestamp || item.created_at || "")}</span></span></div>`;
       })
       .join("");
   }
 
   function renderLoadError() {
     const root = $("#wallet-copy-task-list");
-    if (root) root.innerHTML = '<div class="wallet-copy-empty"><i class="icon-circle-alert"></i><strong>Copy tasks unavailable</strong><span>Try again in a moment.</span></div>';
+    if (root)
+      root.innerHTML =
+        '<div class="wallet-copy-empty"><i class="icon-circle-alert"></i><strong>Copy tasks unavailable</strong><span>Try again in a moment.</span></div>';
   }
 
   function reset() {
     tasks = [];
     selectedId = null;
     setupDone = false;
+    lastTaskRenderKey = "";
+    lastActivityRenderKey = "";
   }
 
-  return { setup, load, reset };
+  return { setup, load, loadStatus, reset };
 }

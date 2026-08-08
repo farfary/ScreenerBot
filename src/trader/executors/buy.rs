@@ -73,7 +73,8 @@ pub async fn execute_buy_managed(
     )
     .await
     {
-        Ok(transaction_signature) => {
+        Ok(submission) => {
+            let transaction_signature = submission.transaction_signature;
             logger::info(
                 LogTag::Trader,
                 &format!(
@@ -82,13 +83,15 @@ pub async fn execute_buy_managed(
                 ),
             );
 
-            Ok(TradeResult::success(
+            let mut result = TradeResult::success(
                 decision.clone(),
                 transaction_signature,
-                decision.price_sol.unwrap_or_default(), // Will be updated by verification
+                submission.entry_price_sol,
                 trade_size_sol,
                 None, // Position ID will be set by verification
-            ))
+            );
+            result.confirmation_pending = submission.confirmation_pending;
+            Ok(result)
         }
         Err(e) => {
             if let Some(remaining) = crate::positions::parse_position_slot_error(&e) {

@@ -1,10 +1,7 @@
-//! Paper copy-trading decision core.
-//!
-//! The runtime consumes the shared wallet-observation broadcast but deliberately has
-//! no call to `submit_entry`: `Live` tasks are rejected during input validation and
-//! again by `risk::precheck` before execution can be reached.
+//! Copy-trading decision core with paper simulation and guarded live submission.
 
 mod database;
+mod live;
 mod matcher;
 mod paper;
 mod pipeline;
@@ -14,6 +11,10 @@ mod sizing;
 mod types;
 
 pub use database::CopyDatabase;
+pub use live::{
+    execute_live_with, management_for_exit_mode, prepare_live_entry, LiveSubmitResult,
+    PreparedLiveEntry,
+};
 pub use matcher::matching_tasks;
 pub use paper::{simulate_fill, PaperCosts, PAPER_REFERRAL_FEE_BPS};
 pub use pipeline::run_paper_pipeline;

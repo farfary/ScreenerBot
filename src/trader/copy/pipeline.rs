@@ -95,5 +95,15 @@ fn skipped(
         mint,
         reason,
         decided_at,
+        telemetry: Some(CopyTelemetry {
+            target_block_time: activity.block_time,
+            detected_at: activity.detected_at,
+            decoded_at: activity.decoded_at,
+            decided_at,
+            submitted_at: None,
+            confirmed_at: None,
+            target_price_sol: None,
+            fill_price_sol: None,
+        }),
     }
 }

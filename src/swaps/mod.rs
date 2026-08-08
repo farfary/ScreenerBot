@@ -8,7 +8,7 @@ pub mod types;
 // Re-export router system
 pub use operations::{
     execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening,
-    unconfirmed_swap_signature,
+    unconfirmed_swap_signature, unconfirmed_swap_signature_from_message,
 };
 pub use registry::{get_registry, RouterRegistry};
 pub use router::SwapRouter;

@@ -6,6 +6,7 @@
 
 use crate::logger::{self, LogTag};
 use crate::positions;
+use crate::positions::{PositionManagement, PositionOrigin};
 use crate::trader::types::{TradeDecision, TradeResult};
 use crate::trader::{actions, constants, executors};
 use std::collections::HashMap;
@@ -17,6 +18,12 @@ use tokio::time::{Duration, Instant};
 /// Expires after ENTRY_RESERVATION_TIMEOUT_SECS to handle cases where entry fails
 static ENTRY_CYCLE_RESERVATIONS: LazyLock<RwLock<HashMap<String, Instant>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryContext {
+    pub origin: PositionOrigin,
+    pub management: PositionManagement,
+}
 
 /// Try to reserve a token for entry processing in this cycle
 /// Returns true if reservation successful, false if already reserved
@@ -47,6 +54,21 @@ pub async fn clear_entry_reservation(mint: &str) {
 /// events including the capacity-guard branch, and clearing the mint reservation on every
 /// path. Shared by the strategy monitor and any other entry source.
 pub async fn submit_entry(decision: TradeDecision) -> Option<TradeResult> {
+    let context = EntryContext {
+        origin: PositionOrigin::Auto {
+            strategy_id: decision.strategy_id.clone(),
+        },
+        management: PositionManagement::AutoTrader,
+    };
+    submit_entry_with_context(decision, context).await
+}
+
+/// The shared submission lifecycle with explicit durable provenance. Copy entries use
+/// this rather than teaching `TradeReason` to impersonate position ownership.
+pub async fn submit_entry_with_context(
+    decision: TradeDecision,
+    context: EntryContext,
+) -> Option<TradeResult> {
     // Record entry signal event
     crate::events::record_trader_event(
         "entry_signal_generated",
@@ -87,7 +109,12 @@ pub async fn submit_entry(decision: TradeDecision) -> Option<TradeResult> {
 
     // Execute the trade
     let mint_for_cleanup = decision.mint.clone();
-    match executors::execute_trade(&decision).await {
+    let execution = if matches!(decision.action, crate::trader::types::TradeAction::Buy) {
+        executors::execute_buy_managed(&decision, context.origin, context.management).await
+    } else {
+        executors::execute_trade(&decision).await
+    };
+    match execution {
         Ok(result) => {
             // Clear reservation after execution attempt
             clear_entry_reservation(&mint_for_cleanup).await;

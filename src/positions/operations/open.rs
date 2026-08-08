@@ -10,7 +10,9 @@ use crate::positions::state::{
     acquire_global_position_permit, acquire_position_lock, add_position, add_signature_to_index,
     LAST_OPEN_TIME,
 };
-use crate::positions::types::{Position, PositionManagement, PositionOrigin, VerificationKind};
+use crate::positions::types::{
+    EntrySubmission, Position, PositionManagement, PositionOrigin, VerificationKind,
+};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
@@ -20,7 +22,7 @@ use chrono::Utc;
 use serde_json::json;
 
 /// Open a new position using trade size from configuration (auto-trader path)
-pub async fn open_position_direct(token_mint: &str) -> Result<String, String> {
+pub async fn open_position_direct(token_mint: &str) -> Result<EntrySubmission, String> {
     let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
     // Auto-trader entry: slippage always follows config.
     open_position_impl(
@@ -41,7 +43,7 @@ pub async fn open_position_with_size(
     origin: PositionOrigin,
     management: PositionManagement,
     slippage_pct: Option<f64>,
-) -> Result<String, String> {
+) -> Result<EntrySubmission, String> {
     if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
         return Err(format!("Invalid trade size: {trade_size_sol}"));
     }
@@ -55,7 +57,7 @@ async fn open_position_impl(
     origin: PositionOrigin,
     management: PositionManagement,
     slippage_pct: Option<f64>,
-) -> Result<String, String> {
+) -> Result<EntrySubmission, String> {
     // Ensure the token exists in the local DB. For manual/force buys this lets the user
     // trade tokens that were never tracked by the pool service or that failed filtering
     // (decimals fetched from chain + metadata fetched from APIs on demand).
@@ -240,11 +242,42 @@ async fn open_position_impl(
         .await
         .map_err(|e| format!("Quote failed: {e}"))?;
 
-    let swap_result = execute_swap_with_fallback(&api_token, quote)
-        .await
-        .map_err(|e| format!("Swap failed: {e}"))?;
-
-    let transaction_signature = swap_result.transaction_signature;
+    let expected_output_amount = quote.output_amount;
+    let (transaction_signature, output_amount, confirmation_pending, effective_entry_price) =
+        match execute_swap_with_fallback(&api_token, quote).await {
+            Ok(result) => {
+                let effective_price = effective_entry_price_sol(
+                    trade_size_sol,
+                    result.output_amount,
+                    api_token.decimals,
+                )
+                .unwrap_or(entry_price);
+                (
+                    result.transaction_signature,
+                    result.output_amount,
+                    false,
+                    effective_price,
+                )
+            }
+            Err(error) => match crate::swaps::unconfirmed_swap_signature(&error) {
+                Some(signature) => {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Entry swap {signature} was submitted but confirmation timed out; creating the pending position and handing it to verification"
+                        ),
+                    );
+                    let effective_price = effective_entry_price_sol(
+                        trade_size_sol,
+                        expected_output_amount,
+                        api_token.decimals,
+                    )
+                    .unwrap_or(entry_price);
+                    (signature, expected_output_amount, true, effective_price)
+                }
+                None => return Err(format!("Swap failed: {error}")),
+            },
+        };
 
     // Create position
     let position = Position {
@@ -342,7 +375,7 @@ async fn open_position_impl(
         Some(&transaction_signature),
         None,
         trade_size_sol,
-        swap_result.output_amount,
+        output_amount,
         None,
         None,
     )
@@ -365,6 +398,17 @@ async fn open_position_impl(
     );
 
     enqueue_verification(verification_item).await;
+
+    if confirmation_pending {
+        crate::events::record_position_event_flexible(
+            "entry_submitted_unconfirmed",
+            crate::events::Severity::Warn,
+            Some(&api_token.mint),
+            Some(&transaction_signature),
+            json!({ "position_id": position_id }),
+        )
+        .await;
+    }
 
     // We successfully created the position; clear pending-open now
     crate::positions::state::clear_pending_open(&api_token.mint).await;
@@ -391,5 +435,34 @@ async fn open_position_impl(
         *last = Some(Utc::now());
     }
 
-    Ok(transaction_signature)
+    Ok(EntrySubmission {
+        transaction_signature,
+        confirmation_pending,
+        entry_price_sol: effective_entry_price,
+    })
+}
+
+fn effective_entry_price_sol(
+    input_sol: f64,
+    output_amount: u64,
+    decimals: Option<u8>,
+) -> Option<f64> {
+    let token_amount = output_amount as f64 / 10_f64.powi(i32::from(decimals?));
+    let price = input_sol / token_amount;
+    (input_sol.is_finite() && input_sol > 0.0 && price.is_finite() && price > 0.0).then_some(price)
+}
+
+#[cfg(test)]
+mod submission_price_tests {
+    use super::effective_entry_price_sol;
+
+    #[test]
+    fn entry_submission_price_uses_the_quoted_token_amount() {
+        assert_eq!(
+            effective_entry_price_sol(0.2, 50_000_000, Some(6)),
+            Some(0.004)
+        );
+        assert_eq!(effective_entry_price_sol(0.2, 0, Some(6)), None);
+        assert_eq!(effective_entry_price_sol(0.2, 50_000_000, None), None);
+    }
 }

@@ -1,4 +1,4 @@
-//! Domain values for paper copy trading.
+//! Domain values for paper and confirmation-gated live copy trading.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,9 @@ pub enum CopyMode {
     Paper,
     Live,
 }
+
+/// Explicit acknowledgement required by the dedicated mode-transition endpoint.
+pub const LIVE_ARM_CONFIRMATION: &str = "ARM LIVE COPY TRADING";
 
 /// How this bot derives its SOL input from the target's SOL input.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -78,8 +81,23 @@ pub struct CopyTaskInput {
 impl CopyTaskInput {
     pub fn into_task(self, now: DateTime<Utc>) -> Result<CopyTask, CopySkip> {
         if self.mode != CopyMode::Paper {
-            return Err(CopySkip::LiveModeUnavailable);
+            return Err(CopySkip::ModeTransitionRequired);
         }
+        self.into_task_with_mode(now, CopyMode::Paper)
+    }
+
+    pub fn into_task_for_update(
+        self,
+        now: DateTime<Utc>,
+        current_mode: CopyMode,
+    ) -> Result<CopyTask, CopySkip> {
+        if self.mode != current_mode {
+            return Err(CopySkip::ModeTransitionRequired);
+        }
+        self.into_task_with_mode(now, current_mode)
+    }
+
+    fn into_task_with_mode(self, now: DateTime<Utc>, mode: CopyMode) -> Result<CopyTask, CopySkip> {
         if self.target_address.trim().is_empty()
             || !self.max_sol_per_trade.is_finite()
             || self.max_sol_per_trade <= 0.0
@@ -128,7 +146,7 @@ impl CopyTaskInput {
             target_address: self.target_address,
             label: self.label,
             enabled: self.enabled,
-            mode: self.mode,
+            mode,
             sizing: self.sizing,
             exit_mode: self.exit_mode,
             max_sol_per_trade: self.max_sol_per_trade,
@@ -142,6 +160,20 @@ impl CopyTaskInput {
             updated_at: now,
         })
     }
+}
+
+pub fn confirm_mode_transition(
+    current: CopyMode,
+    requested: CopyMode,
+    confirmation: Option<&str>,
+) -> Result<CopyMode, CopySkip> {
+    if current == requested || requested == CopyMode::Paper {
+        return Ok(requested);
+    }
+    if confirmation != Some(LIVE_ARM_CONFIRMATION) {
+        return Err(CopySkip::LiveConfirmationRequired);
+    }
+    Ok(CopyMode::Live)
 }
 
 /// Persisted spend state used by risk and sizing. Values are cumulative and must be
@@ -172,7 +204,8 @@ pub struct PipelinePolicy {
 pub enum CopySkip {
     NotBuySwap,
     TaskDisabled,
-    LiveModeUnavailable,
+    ModeTransitionRequired,
+    LiveConfirmationRequired,
     UnsupportedSizingMode,
     SelfCopy,
     TargetBelowMinimum {
@@ -236,15 +269,33 @@ pub struct PaperDecision {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LiveDecision {
+    pub task_id: i64,
+    pub target_address: String,
+    pub target_signature: String,
+    pub mint: String,
+    pub target_size_sol: f64,
+    pub sized_sol: f64,
+    pub transaction_signature: Option<String>,
+    pub error: Option<String>,
+    pub telemetry: CopyTelemetry,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "outcome", rename_all = "snake_case")]
 pub enum CopyOutcome {
     PaperFilled(PaperDecision),
+    LiveSubmitted(LiveDecision),
+    LiveConfirmed(LiveDecision),
+    LiveFailed(LiveDecision),
     Skipped {
         task_id: i64,
         signature: String,
         mint: Option<String>,
         reason: CopySkip,
         decided_at: DateTime<Utc>,
+        #[serde(default)]
+        telemetry: Option<CopyTelemetry>,
     },
 }
 
@@ -252,6 +303,9 @@ impl CopyOutcome {
     pub fn task_id(&self) -> i64 {
         match self {
             Self::PaperFilled(decision) => decision.task_id,
+            Self::LiveSubmitted(decision)
+            | Self::LiveConfirmed(decision)
+            | Self::LiveFailed(decision) => decision.task_id,
             Self::Skipped { task_id, .. } => *task_id,
         }
     }
@@ -264,4 +318,26 @@ pub struct CopyActivityRow {
     pub kind: String,
     pub outcome: CopyOutcome,
     pub created_at: DateTime<Utc>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_skip_without_telemetry_still_decodes() {
+        let json = r#"{
+            "outcome":"skipped",
+            "task_id":1,
+            "signature":"target-signature",
+            "mint":"mint",
+            "reason":{"kind":"task_disabled"},
+            "decided_at":"2026-01-01T00:00:00Z"
+        }"#;
+        let outcome: CopyOutcome = serde_json::from_str(json).unwrap();
+        let CopyOutcome::Skipped { telemetry, .. } = outcome else {
+            panic!("expected skipped outcome")
+        };
+        assert_eq!(telemetry, None);
+    }
 }

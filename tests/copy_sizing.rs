@@ -164,7 +164,7 @@ fn target_filters_buy_once_self_copy_and_slippage_are_enforced() {
 }
 
 #[test]
-fn live_mode_is_disabled_by_construction() {
+fn live_mode_uses_the_same_risk_precheck_as_paper() {
     let mut live = task(SizingMode::Fixed { sol: 0.1 });
     live.mode = CopyMode::Live;
     assert_eq!(
@@ -178,7 +178,7 @@ fn live_mode_is_disabled_by_construction() {
                 engine_trade_size_sol: 1.0
             }
         ),
-        Err(CopySkip::LiveModeUnavailable)
+        Ok(())
     );
 }
 
@@ -218,6 +218,6 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
     live.mode = CopyMode::Live;
     assert_eq!(
         live.into_task(Utc::now()),
-        Err(CopySkip::LiveModeUnavailable)
+        Err(CopySkip::ModeTransitionRequired)
     );
 }

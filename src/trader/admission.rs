@@ -17,9 +17,59 @@ pub enum EntryBlock {
     PositionLimit,
     AlreadyOpen,
     ReentryCooldown,
+    OpenCooldown {
+        wait_secs: u64,
+    },
+    EntryReserved,
     Blacklisted,
     /// A check itself failed (DB/state error), not a rejection.
     CheckFailed(String),
+}
+
+/// Remaining global entry cooldown, kept separate from the strategy admission path so
+/// existing strategy scheduling behavior does not change. Copy uses it to persist an
+/// honest typed skip before reaching the string error in `open_position_impl`.
+pub fn open_cooldown_wait_secs(
+    last_open: Option<chrono::DateTime<chrono::Utc>>,
+    now: chrono::DateTime<chrono::Utc>,
+    cooldown_secs: u64,
+) -> Option<u64> {
+    let last_open = last_open?;
+    let elapsed = now.signed_duration_since(last_open).num_seconds().max(0) as u64;
+    (elapsed < cooldown_secs).then_some(cooldown_secs - elapsed)
+}
+
+pub async fn check_open_cooldown() -> Result<(), EntryBlock> {
+    let cooldown_secs = crate::config::with_config(|config| {
+        config.positions.position_open_cooldown_secs.max(0) as u64
+    });
+    let last_open = *crate::positions::state::LAST_OPEN_TIME.read().await;
+    match open_cooldown_wait_secs(last_open, chrono::Utc::now(), cooldown_secs) {
+        Some(wait_secs) => Err(EntryBlock::OpenCooldown { wait_secs }),
+        None => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, TimeZone, Utc};
+
+    use super::open_cooldown_wait_secs;
+
+    #[test]
+    fn open_cooldown_reports_the_boundary_without_rounding_it_away() {
+        let now = Utc.timestamp_opt(100, 0).unwrap();
+        assert_eq!(open_cooldown_wait_secs(None, now, 5), None);
+        assert_eq!(open_cooldown_wait_secs(Some(now), now, 5), Some(5));
+        assert_eq!(
+            open_cooldown_wait_secs(Some(now - Duration::seconds(4)), now, 5),
+            Some(1)
+        );
+        assert_eq!(
+            open_cooldown_wait_secs(Some(now - Duration::seconds(5)), now, 5),
+            None
+        );
+    }
 }
 
 /// Run the source-independent admission gauntlet for a potential entry.

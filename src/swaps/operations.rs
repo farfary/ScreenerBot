@@ -349,7 +349,10 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
 /// The signature is embedded in the error text, so a caller can stop retrying and hand it
 /// to verification, which reconciles what really happened on chain.
 pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
-    let message = error.to_string();
+    unconfirmed_swap_signature_from_message(&error.to_string())
+}
+
+pub fn unconfirmed_swap_signature_from_message(message: &str) -> Option<String> {
     let (_, after) = message.split_once("Transaction ")?;
     let (signature, _) = after.split_once(" not confirmed within timeout")?;
 
@@ -358,6 +361,25 @@ pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
         return None;
     }
     Some(signature.to_owned())
+}
+
+#[cfg(test)]
+mod submitted_timeout_tests {
+    use super::unconfirmed_swap_signature_from_message;
+
+    #[test]
+    fn submitted_timeout_recovers_the_signature_for_verification() {
+        assert_eq!(
+            unconfirmed_swap_signature_from_message(
+                "RPC error: Transaction 5abcXYZ not confirmed within timeout"
+            ),
+            Some("5abcXYZ".to_owned())
+        );
+        assert_eq!(
+            unconfirmed_swap_signature_from_message("quote rejected before submission"),
+            None
+        );
+    }
 }
 
 /// Check if error is retryable (network/transient issues)
