@@ -515,6 +515,46 @@ mod tests {
         );
     }
 
+    #[test]
+    fn wallet_watch_fields_are_all_visible_and_round_trip() {
+        let metadata = collect_config_metadata();
+        let wallet = metadata.get("wallet").expect("wallet section missing");
+        for field in [
+            "watch_enabled",
+            "watch_max_targets",
+            "watch_poll_interval_secs",
+            "watch_poll_fallback_secs",
+            "watch_retention_days",
+        ] {
+            assert!(
+                wallet.contains_key(field),
+                "wallet.{field} is absent from config metadata"
+            );
+        }
+
+        let config = crate::config::schemas::Config::default();
+        let value = serde_json::to_value(&config.wallet).expect("wallet must serialize");
+        let round_tripped: crate::config::WalletConfig =
+            serde_json::from_value(value).expect("wallet must deserialize");
+        assert_eq!(round_tripped.watch_enabled, config.wallet.watch_enabled);
+        assert_eq!(
+            round_tripped.watch_max_targets,
+            config.wallet.watch_max_targets
+        );
+        assert_eq!(
+            round_tripped.watch_poll_interval_secs,
+            config.wallet.watch_poll_interval_secs
+        );
+        assert_eq!(
+            round_tripped.watch_poll_fallback_secs,
+            config.wallet.watch_poll_fallback_secs
+        );
+        assert_eq!(
+            round_tripped.watch_retention_days,
+            config.wallet.watch_retention_days
+        );
+    }
+
     /// Signing in with the trading key must never be the default. This is a
     /// SECURITY default rather than a preference: a bot that signs with the
     /// wallet unprompted is what a hostile fork would ship, and defaulting to it

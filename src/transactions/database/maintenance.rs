@@ -116,6 +116,56 @@ impl TransactionDatabase {
         Ok(())
     }
 
+    /// Delete `raw_transactions` / `processed_transactions` rows older than
+    /// `retention_days` for every subject EXCEPT `own_wallet_address`.
+    ///
+    /// The own wallet keeps unlimited retention; a watched target's rolling window
+    /// (`wallet.watch_retention_days`) is what keeps `transactions.db` from being
+    /// eaten by one busy KOL (§5.4). `known_signatures` is deliberately untouched --
+    /// dedupe must keep working for a purged signature so it is never re-decoded, it
+    /// just stops carrying analytics data forever.
+    pub async fn cleanup_stale_target_transactions(
+        &self,
+        own_wallet_address: &str,
+        retention_days: u32,
+    ) -> Result<usize, String> {
+        let conn = self.get_connection()?;
+        let cutoff_expr = format!("datetime('now', '-{retention_days} days')");
+
+        let deleted_processed = conn
+            .execute(
+                &format!(
+                    "DELETE FROM processed_transactions \
+                     WHERE wallet_address != ?1 AND processed_at < {cutoff_expr}"
+                ),
+                params![own_wallet_address],
+            )
+            .map_err(|e| format!("Failed to cleanup stale target processed_transactions: {e}"))?;
+
+        let deleted_raw = conn
+            .execute(
+                &format!(
+                    "DELETE FROM raw_transactions \
+                     WHERE wallet_address != ?1 AND created_at < {cutoff_expr}"
+                ),
+                params![own_wallet_address],
+            )
+            .map_err(|e| format!("Failed to cleanup stale target raw_transactions: {e}"))?;
+
+        let total = deleted_processed + deleted_raw;
+        if total > 0 {
+            logger::info(
+                LogTag::Transactions,
+                &format!(
+                    "Watch retention cleanup: removed {deleted_processed} processed + \
+                     {deleted_raw} raw rows older than {retention_days}d for non-own subjects"
+                ),
+            );
+        }
+
+        Ok(total)
+    }
+
     /// Get integrity report
     pub async fn get_integrity_report(&self) -> Result<IntegrityReport, String> {
         let conn = self.get_connection()?;

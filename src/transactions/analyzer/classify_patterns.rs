@@ -19,9 +19,13 @@ pub(super) async fn detect_flow_patterns(
     dex_analysis: &DexAnalysis,
 ) -> Result<Vec<FlowPattern>, String> {
     let mut patterns = Vec::new();
+    let has_dex_program = dex_analysis
+        .program_ids
+        .iter()
+        .any(|id| crate::transactions::program_ids::detect_router_from_program_id(id).is_some());
 
     // Look for swap patterns: SOL out + Token in (buy) or Token out + SOL in (sell)
-    patterns.extend(detect_swap_patterns(flow_analysis).await?);
+    patterns.extend(detect_swap_patterns(flow_analysis, has_dex_program).await?);
 
     // Look for transfer patterns: Single token movement
     patterns.extend(detect_transfer_patterns(flow_analysis).await?);
@@ -32,9 +36,10 @@ pub(super) async fn detect_flow_patterns(
     // Instruction-aware fallback: if no clear swap patterns were found yet, but we
     // observe inner transferChecked credits of WSOL, infer a token->SOL sell by
     // pairing the largest negative non-WSOL token change with SOL out.
-    if !patterns
-        .iter()
-        .any(|p| matches!(p.pattern_type, PatternType::SimpleSwap))
+    if has_dex_program
+        && !patterns
+            .iter()
+            .any(|p| matches!(p.pattern_type, PatternType::SimpleSwap))
     {
         let wsol_ui = sum_inner_wsol_transferchecked_ui(tx_data);
         if wsol_ui > 0.0 {
@@ -184,8 +189,14 @@ pub(super) async fn detect_flow_patterns(
 }
 
 /// Detect swap patterns (buy/sell operations)
-async fn detect_swap_patterns(flow_analysis: &FlowAnalysis) -> Result<Vec<FlowPattern>, String> {
+async fn detect_swap_patterns(
+    flow_analysis: &FlowAnalysis,
+    has_dex_program: bool,
+) -> Result<Vec<FlowPattern>, String> {
     let mut patterns = Vec::new();
+    if !has_dex_program {
+        return Ok(patterns);
+    }
     let sol_mint = WSOL_MINT;
 
     // Find accounts with both SOL and token changes
@@ -528,4 +539,42 @@ fn sum_inner_wsol_transferchecked_ui(tx_data: &crate::rpc::TransactionDetails) -
         }
     }
     total_ui
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    fn fee_paying_token_receipt() -> FlowAnalysis {
+        FlowAnalysis {
+            flow_patterns: Vec::new(),
+            nodes: vec![FlowNode {
+                account: "subject".to_owned(),
+                sol_change: -0.000005,
+                token_changes: HashMap::from([("mint".to_owned(), 25.0)]),
+                node_type: NodeType::Wallet,
+            }],
+            edges: Vec::new(),
+            flow_confidence: 1.0,
+        }
+    }
+
+    #[tokio::test]
+    async fn balance_shape_without_a_dex_program_is_not_a_swap() {
+        let patterns = detect_swap_patterns(&fee_paying_token_receipt(), false)
+            .await
+            .expect("classification");
+        assert!(patterns.is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_same_balance_shape_with_a_dex_program_is_a_swap() {
+        let patterns = detect_swap_patterns(&fee_paying_token_receipt(), true)
+            .await
+            .expect("classification");
+        assert_eq!(patterns.len(), 1);
+        assert!(matches!(patterns[0].pattern_type, PatternType::SimpleSwap));
+    }
 }

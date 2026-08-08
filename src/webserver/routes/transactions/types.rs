@@ -9,10 +9,17 @@ use crate::transactions::{
 
 #[derive(Debug, Deserialize)]
 pub struct ListTransactionsRequest {
+    /// Omitted for the bot's own wallet; otherwise a currently watched address.
+    pub subject: Option<String>,
     #[serde(default)]
     pub filters: TransactionListFilters,
     #[serde(default)]
     pub pagination: PaginationParams,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct TransactionSubjectQuery {
+    pub subject: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -78,8 +78,11 @@ export class TransactionDetailsDialog {
     this.isLoading = true;
 
     try {
+      const subjectQuery = this.transactionData.subject
+        ? `?subject=${encodeURIComponent(this.transactionData.subject)}`
+        : "";
       const data = await requestManager.fetch(
-        `/api/transactions/${this.transactionData.signature}`,
+        `/api/transactions/${this.transactionData.signature}${subjectQuery}`,
         {
           priority: "high",
         }

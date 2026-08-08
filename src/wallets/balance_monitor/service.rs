@@ -24,7 +24,9 @@ use super::database::{
     increment_snapshots, GLOBAL_WALLET_DB,
 };
 use super::types::*;
-use super::worth::{publish_snapshot, settle_refresh_burst, wait_for_refresh_request};
+use super::worth::{
+    publish_snapshot, request_balance_refresh, settle_refresh_burst, wait_for_refresh_request,
+};
 
 // =============================================================================
 // INITIALIZATION
@@ -281,6 +283,13 @@ pub async fn start_wallet_monitoring_service(
                 tokio::time::interval(Duration::from_secs(metrics_all_secs));
             let mut cleanup_counter = 0;
 
+            // The own-wallet consumer of the shared wallet-watch activity feed (§6.5
+            // of the wallet-observation plan): a notification for some OTHER watched
+            // address must never refresh our worth, so this is filtered to our own
+            // address rather than reacting to every subject the watch service sees.
+            let own_wallet_address = crate::utils::get_wallet_address().ok();
+            let mut watch_activity_rx = crate::wallets::watch::subscribe_activity();
+
             loop {
                 tokio::select! {
                 _ = shutdown.notified() => {
@@ -314,6 +323,25 @@ pub async fn start_wallet_monitoring_service(
                     // The interval exists to catch what the stream misses, so restart it
                     // from now — a fresh snapshot means no periodic one is due yet.
                     interval.reset();
+                }
+                // Own-wallet activity from the shared wallet-watch service (WS,
+                // poll fallback or gap-fill -- all three converge on the same
+                // broadcast). Wakes the branch above rather than refreshing
+                // directly, so the same burst-debounce applies here too.
+                activity = watch_activity_rx.recv() => {
+                    match activity {
+                        Ok(activity) if Some(activity.subject.as_str()) == own_wallet_address.as_deref() => {
+                            request_balance_refresh();
+                        }
+                        Ok(_) => {} // some other watched subject -- never refreshes our worth
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                            logger::debug(
+                                LogTag::Wallet,
+                                &format!("Wallet-watch activity consumer lagged by {skipped} messages"),
+                            );
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {}
+                    }
                 }
                 _ = interval.tick() => {
                     // Skip the RPC-backed snapshot while the network is confirmed

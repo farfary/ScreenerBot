@@ -113,7 +113,7 @@ impl TransactionFetcher {
 
         // Use optimized signature fetching with rate limiting
         let signatures = self
-            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, None)
+            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, None, None)
             .await?;
 
         let duration = start_time.elapsed();
@@ -138,13 +138,14 @@ impl TransactionFetcher {
         wallet_pubkey: Pubkey,
         limit: usize,
         before: Option<&str>,
+        until: Option<&str>,
     ) -> Result<Vec<String>, String> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
 
         loop {
             match self
-                .fetch_signatures_batch(rpc_client, wallet_pubkey, limit, before)
+                .fetch_signatures_batch(rpc_client, wallet_pubkey, limit, before, until)
                 .await
             {
                 Ok(signatures) => {
@@ -191,10 +192,11 @@ impl TransactionFetcher {
         wallet_pubkey: Pubkey,
         limit: usize,
         before: Option<&str>,
+        until: Option<&str>,
     ) -> Result<Vec<String>, String> {
         // Use the existing RPC client method
         let sig_infos = rpc_client
-            .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before)
+            .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before, until)
             .await
             .map_err(|e| format!("RPC signature fetch failed: {e}"))?;
 
@@ -206,29 +208,35 @@ impl TransactionFetcher {
         Ok(signatures)
     }
 
-    /// Fetch a specific page of signatures with optional pagination cursor
+    /// Fetch a specific page of signatures with optional pagination cursor.
+    ///
+    /// `until` stops the page at (and excludes) a known signature -- the cursor-resume
+    /// / gap-fill case, where a watch target only needs what landed after the last
+    /// signature it already recorded, not a full walk back to `before=None`.
     pub async fn fetch_signatures_page(
         &self,
         wallet_pubkey: Pubkey,
         limit: usize,
         before: Option<&str>,
+        until: Option<&str>,
     ) -> Result<Vec<String>, String> {
         let start_time = Instant::now();
 
         logger::debug(
             LogTag::Transactions,
             &format!(
-                "Fetching {} signatures for wallet: {} (before={})",
+                "Fetching {} signatures for wallet: {} (before={}, until={})",
                 limit,
                 &wallet_pubkey.to_string(),
-                before.unwrap_or("latest")
+                before.unwrap_or("latest"),
+                until.unwrap_or("none")
             ),
         );
 
         let rpc_client = get_rpc_client();
 
         let signatures = self
-            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, before)
+            .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, before, until)
             .await?;
 
         let duration = start_time.elapsed();
@@ -618,6 +626,7 @@ impl BatchSignatureFetcher {
                     wallet_pubkey,
                     batch_limit,
                     before.as_deref(),
+                    None,
                 )
                 .await?;
 

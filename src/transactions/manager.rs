@@ -60,7 +60,6 @@ pub struct TransactionsManager {
     pub errors: Arc<std::sync::atomic::AtomicU64>,
     pub websocket_received: Arc<std::sync::atomic::AtomicU64>,
     pub bootstrap_fetched: Arc<std::sync::atomic::AtomicU64>,
-    pub rpc_fallback_fetched: Arc<std::sync::atomic::AtomicU64>,
 }
 
 // =============================================================================
@@ -115,7 +114,6 @@ impl TransactionsManager {
             errors: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             websocket_received: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             bootstrap_fetched: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            rpc_fallback_fetched: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         })
     }
 
@@ -287,12 +285,10 @@ impl TransactionsManager {
         let errors = self.errors.load(Ordering::Relaxed);
         let ws = self.websocket_received.load(Ordering::Relaxed);
         let bootstrap = self.bootstrap_fetched.load(Ordering::Relaxed);
-        let fallback = self.rpc_fallback_fetched.load(Ordering::Relaxed);
 
         let mut custom = HashMap::new();
         custom.insert("websocket_received".to_owned(), ws as f64);
         custom.insert("bootstrap_fetched".to_owned(), bootstrap as f64);
-        custom.insert("rpc_fallback_fetched".to_owned(), fallback as f64);
         custom.insert(
             "known_signatures".to_owned(),
             self.known_signatures.len() as f64,

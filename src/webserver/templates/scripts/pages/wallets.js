@@ -6,12 +6,14 @@
 import { registerPage } from "../core/lifecycle.js";
 import { $, on } from "../core/dom.js";
 import { Poller } from "../core/poller.js";
+import { requestManager } from "../core/request_manager.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import * as Utils from "../core/utils.js";
 import * as Hints from "../core/hints.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 import { createBulkOperations } from "./wallets/bulk_operations.js";
 import { createWalletRenderers } from "./wallets/renderers.js";
+import { createWatchedWallets } from "./wallets/watched.js";
 
 // =============================================================================
 // Constants
@@ -23,6 +25,7 @@ const WALLET_TABS = [
   { id: "main", label: '<i class="icon-star"></i> Main Wallet' },
   { id: "secondaries", label: '<i class="icon-wallet"></i> Secondaries' },
   { id: "archive", label: '<i class="icon-archive"></i> Archive' },
+  { id: "watched", label: '<i class="icon-eye"></i> Watched' },
 ];
 
 // =============================================================================
@@ -41,6 +44,7 @@ let currentDeleteWalletId = null;
 // Module instances
 let bulk = null;
 let renderers = null;
+let watched = null;
 
 // =============================================================================
 // Lifecycle
@@ -77,6 +81,8 @@ function createLifecycle() {
         handleWalletAction,
       });
 
+      watched = createWatchedWallets({ $, on, Utils, requestManager });
+
       // Initialize tab bar
       tabBar = new TabBar({
         container: "#subTabsContainer",
@@ -96,9 +102,10 @@ function createLifecycle() {
 
       // Setup event handlers
       setupEventHandlers();
+      watched.setup();
 
       // Load initial data
-      await loadAllData();
+      await loadActiveTab();
 
       // Update panel visibility and tab-specific toolbar buttons
       updatePanelVisibility();
@@ -117,7 +124,7 @@ function createLifecycle() {
 
       // Start polling for balance updates
       poller = new Poller(async () => {
-        await loadAllData();
+        await loadActiveTab();
       }, POLL_INTERVAL);
 
       ctx.managePoller(poller);
@@ -147,8 +154,7 @@ function switchTab(tabId) {
   updatePanelVisibility();
   updateToolbarActions();
 
-  // Re-render content for the active tab (delegated to renderers)
-  renderers.renderCurrentPanel();
+  void loadActiveTab();
 }
 
 function updatePanelVisibility() {
@@ -180,7 +186,12 @@ function updateToolbarActions() {
 
 function setupEventHandlers() {
   // Refresh buttons (one per tab, all call the same handler)
-  ["#refresh-wallets-btn", "#refresh-wallets-btn-sec", "#refresh-wallets-btn-arc"].forEach((sel) => {
+  [
+    "#refresh-wallets-btn",
+    "#refresh-wallets-btn-sec",
+    "#refresh-wallets-btn-arc",
+    "#refresh-watched-wallets-btn",
+  ].forEach((sel) => {
     const btn = $(sel);
     if (btn) on(btn, "click", handleRefresh);
   });
@@ -389,6 +400,14 @@ async function loadAllData({ force = false } = {}) {
   renderers.renderCurrentPanel();
 }
 
+async function loadActiveTab({ force = false } = {}) {
+  if (currentTab === "watched") {
+    await watched?.load({ force });
+    return;
+  }
+  await loadAllData({ force });
+}
+
 async function loadWallets() {
   try {
     const response = await fetch("/api/wallets?include_inactive=true");
@@ -453,7 +472,7 @@ async function handleRefresh(e) {
   btn.disabled = true;
 
   try {
-    await loadAllData({ force: true });
+    await loadActiveTab({ force: true });
     Utils.showToast("Wallets refreshed", "success");
   } catch {
     Utils.showToast("Failed to refresh", "error");
@@ -767,6 +786,7 @@ function cleanup() {
   if (renderers) {
     renderers.destroyTokenTable();
   }
+  watched?.reset();
   walletsData = [];
   tokenHoldings = [];
   currentTab = "main";
@@ -777,6 +797,7 @@ function cleanup() {
   tabBar = null;
   bulk = null;
   renderers = null;
+  watched = null;
 }
 
 // =============================================================================

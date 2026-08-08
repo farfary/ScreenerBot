@@ -6,16 +6,21 @@ use std::sync::atomic::AtomicBool;
 use std::sync::LazyLock;
 
 /// Database schema version for migration management
-pub(super) const DATABASE_SCHEMA_VERSION: u32 = 4;
+pub(super) const DATABASE_SCHEMA_VERSION: u32 = 5;
 
 /// Static flag to track if database has been initialized (to reduce log noise)
 pub(super) static DATABASE_INITIALIZED: LazyLock<AtomicBool> =
     LazyLock::new(|| AtomicBool::new(false));
 
 /// Raw transactions table schema - stores blockchain data
+///
+/// Keyed by `(signature, wallet_address)`, not `signature` alone: a single signature
+/// can legitimately belong to more than one subject (the target sending to us, or two
+/// watched wallets trading the same pool in one bundle), and each subject needs its
+/// own row. See `TransactionDatabase::migrate_signature_wallet_tables` (v5).
 pub(super) const SCHEMA_RAW_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS raw_transactions (
-    signature TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     slot INTEGER,
     block_time INTEGER,
@@ -29,14 +34,19 @@ CREATE TABLE IF NOT EXISTS raw_transactions (
     accounts_count INTEGER NOT NULL DEFAULT 0,
     raw_transaction_data TEXT, -- JSON blob of raw Solana transaction data
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (signature, wallet_address)
 );
 "#;
 
 /// Processed transactions table schema - stores analysis results
+///
+/// Same composite-key rationale as `raw_transactions`; the foreign key follows suit
+/// so it references an actual unique parent key instead of the now-non-unique
+/// `signature` column alone.
 pub(super) const SCHEMA_PROCESSED_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS processed_transactions (
-    signature TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     transaction_type TEXT NOT NULL, -- Serialized TransactionType enum
     direction TEXT NOT NULL, -- 'Incoming', 'Outgoing', 'Internal', 'Unknown'
@@ -70,41 +80,46 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     processed_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
 
-    FOREIGN KEY (signature) REFERENCES raw_transactions(signature) ON DELETE CASCADE
+    PRIMARY KEY (signature, wallet_address),
+    FOREIGN KEY (signature, wallet_address) REFERENCES raw_transactions(signature, wallet_address) ON DELETE CASCADE
 );
 "#;
 
 /// Known signatures tracking table
 pub(super) const SCHEMA_KNOWN_SIGNATURES: &str = r#"
 CREATE TABLE IF NOT EXISTS known_signatures (
-    signature TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'known',
-    added_at TEXT NOT NULL DEFAULT (datetime('now'))
+    added_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (signature, wallet_address)
 );
 "#;
 
 /// Deferred retries tracking table
 pub(super) const SCHEMA_DEFERRED_RETRIES: &str = r#"
 CREATE TABLE IF NOT EXISTS deferred_retries (
-    signature TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
+    wallet_address TEXT NOT NULL,
     next_retry_at TEXT NOT NULL,
     remaining_attempts INTEGER NOT NULL DEFAULT 3,
     current_delay_secs INTEGER NOT NULL DEFAULT 60,
     last_error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (signature, wallet_address)
 );
 "#;
 
 /// Pending transactions tracking table
 pub(super) const SCHEMA_PENDING_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS pending_transactions (
-    signature TEXT PRIMARY KEY,
+    signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     added_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_checked_at TEXT,
-    check_count INTEGER NOT NULL DEFAULT 0
+    check_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (signature, wallet_address)
 );
 "#;
 

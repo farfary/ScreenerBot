@@ -152,6 +152,12 @@ impl Service for TelegramService {
             }));
             handles.push(sender_handle);
 
+            let shutdown_clone = shutdown.clone();
+            let alert_monitor = monitor.clone();
+            handles.push(tokio::spawn(alert_monitor.instrument(async move {
+                crate::telegram::wallet_alerts::run(shutdown_clone).await;
+            })));
+
             // Start command handler if enabled
             if config.commands_enabled {
                 match polling::start_polling(shutdown.clone(), self.command_handler_running.clone())

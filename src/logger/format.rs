@@ -109,6 +109,9 @@ fn format_tag(tag: &LogTag) -> ColoredString {
         LogTag::Wallet => format!("{:<width$}", "WALLET", width = TAG_WIDTH)
             .bright_magenta()
             .bold(),
+        LogTag::WalletWatch => format!("{:<width$}", "WATCH", width = TAG_WIDTH)
+            .bright_magenta()
+            .bold(),
         LogTag::System => format!("{:<width$}", "SYSTEM", width = TAG_WIDTH)
             .bright_yellow()
             .bold(),

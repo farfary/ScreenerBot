@@ -15,6 +15,7 @@ pub mod sol_price_service;
 pub mod transactions_service;
 pub mod update_check_service;
 pub mod wallet_service;
+pub mod wallet_watch_service;
 pub mod webserver_service;
 
 // Pool sub-services
@@ -48,6 +49,7 @@ pub use sol_price_service::SolPriceService;
 pub use transactions_service::TransactionsService;
 pub use update_check_service::UpdateCheckService;
 pub use wallet_service::WalletService;
+pub use wallet_watch_service::WalletWatchService;
 pub use webserver_service::WebserverService;
 
 // Pool sub-services

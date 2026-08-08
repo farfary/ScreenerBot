@@ -23,8 +23,22 @@ impl TransactionDatabase {
         cursor: Option<&TransactionCursor>,
         limit: usize,
     ) -> Result<TransactionListResult, String> {
+        let subject = Subject::own().map_err(|e| e.to_string())?;
+        self.list_transactions_for_subject(subject, filters, cursor, limit)
+            .await
+    }
+
+    /// List transactions for an explicitly validated subject. Web/API callers must
+    /// resolve authorization before reaching this database boundary.
+    pub async fn list_transactions_for_subject(
+        &self,
+        subject: Subject,
+        filters: &TransactionListFilters,
+        cursor: Option<&TransactionCursor>,
+        limit: usize,
+    ) -> Result<TransactionListResult, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         // Limit page size to max 200 for performance
         let effective_limit = limit.min(200);
@@ -364,8 +378,17 @@ impl TransactionDatabase {
         &self,
         filters: &TransactionListFilters,
     ) -> Result<u64, String> {
+        let subject = Subject::own().map_err(|e| e.to_string())?;
+        self.count_transactions_for_subject(subject, filters).await
+    }
+
+    pub async fn count_transactions_for_subject(
+        &self,
+        subject: Subject,
+        filters: &TransactionListFilters,
+    ) -> Result<u64, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let mut query =
             "SELECT COUNT(*) FROM raw_transactions r WHERE r.wallet_address = ?1".to_owned();
@@ -479,7 +502,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::transactions::types::{
-        SolBalanceChange, TransactionDirection, TransactionStatus, TransactionType,
+        SolBalanceChange, Subject, TransactionDirection, TransactionStatus, TransactionType,
     };
 
     fn sample_row(
@@ -510,7 +533,6 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[ignore = "requires wallet config: database init calls get_wallet_address()"]
     async fn upsert_and_fetch_transaction_caches_raw_and_processed() {
         let dir = tempdir().expect("create temp dir");
         let db_path = dir.path().join("transactions.db");
@@ -541,14 +563,13 @@ mod tests {
         let raw_json_string = raw_json.to_string();
         transaction.raw_transaction_data = Some(raw_json);
 
-        let subject =
-            crate::transactions::types::Subject::own().expect("own wallet subject for test");
+        let subject = Subject(solana_sdk::pubkey::Pubkey::new_unique());
         db.upsert_full_transaction(subject, &transaction)
             .await
             .expect("upsert transaction");
 
         let fetched = db
-            .get_transaction(&transaction.signature)
+            .get_transaction_for_subject(subject, &transaction.signature)
             .await
             .expect("fetch transaction")
             .expect("transaction exists");

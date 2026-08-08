@@ -149,5 +149,61 @@ config_struct! {
             category: "Safety",
         })]
         min_balance_sol: f64 = 0.01,
+
+        #[metadata(field_metadata! {
+            label: "Watch Enabled",
+            hint: "Master switch for the wallet observation service. The own wallet is always watched regardless of this setting",
+            impact: "high",
+            category: "Watch",
+        })]
+        watch_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Max Watch Targets",
+            hint: "Maximum number of pasted addresses that can be watched at once (subscription + RPC budget guard)",
+            min: 1,
+            max: 50,
+            step: 1,
+            unit: "targets",
+            impact: "medium",
+            category: "Watch",
+        })]
+        watch_max_targets: usize = 10,
+
+        #[metadata(field_metadata! {
+            label: "Watch Poll Interval",
+            hint: "Seconds between baseline signature polls per target, as a safety net for a silent WebSocket drop",
+            min: 5,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            impact: "medium",
+            category: "Watch",
+        })]
+        watch_poll_interval_secs: u64 = 30,
+
+        #[metadata(field_metadata! {
+            label: "Watch Poll Fallback Interval",
+            hint: "Seconds between escalated signature polls while the shared subscription is not connected",
+            min: 1,
+            max: 60,
+            step: 1,
+            unit: "seconds",
+            impact: "medium",
+            category: "Watch",
+        })]
+        watch_poll_fallback_secs: u64 = 3,
+
+        #[metadata(field_metadata! {
+            label: "Watch Retention",
+            hint: "Days to keep a watched (non-own) wallet's decoded transaction rows before they are purged",
+            min: 1,
+            max: 365,
+            step: 1,
+            unit: "days",
+            impact: "low",
+            category: "Watch",
+        })]
+        watch_retention_days: u32 = 30,
     }
 }

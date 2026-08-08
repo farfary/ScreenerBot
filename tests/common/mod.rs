@@ -520,7 +520,7 @@ pub fn real_db_env() -> Option<TempDir> {
 
     let started = std::time::Instant::now();
     let mut copied = 0u64;
-    for name in ["tokens.db", "pools.db", "ohlcvs.db"] {
+    for name in ["tokens.db", "pools.db", "ohlcvs.db", "transactions.db"] {
         copied += copy_db(&source, &target, name);
     }
     eprintln!(

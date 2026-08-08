@@ -39,6 +39,7 @@ mod manager;
 pub mod recovery;
 mod types;
 pub mod validation;
+pub mod watch;
 
 // Re-export types
 pub use types::{

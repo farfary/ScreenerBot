@@ -174,6 +174,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         WALLETS_MAIN_WALLET_STYLES,
         WALLETS_MODALS_STYLES,
         WALLETS_IMPORT_EXPORT_STYLES,
+        WALLETS_WATCHED_STYLES,
         TOOLS_BASE_STYLES,
         TOOLS_CONTENT_STYLES,
         TOOLS_COMPONENTS_STYLES,
@@ -240,6 +241,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
                 WALLETS_MAIN_WALLET_STYLES,
                 WALLETS_MODALS_STYLES,
                 WALLETS_IMPORT_EXPORT_STYLES,
+                WALLETS_WATCHED_STYLES,
             ]
             .join("\n"),
         ),
@@ -378,7 +380,8 @@ pub fn trader_content() -> String {
 }
 
 pub fn wallets_content() -> String {
-    render_page(WALLETS_PAGE)
+    let html = WALLETS_PAGE.replace("{{WATCHED_WALLETS_PANEL}}", WALLETS_WATCHED_PANEL);
+    render_page(&html)
 }
 
 pub fn tools_content() -> String {

@@ -111,12 +111,12 @@ function formatTokenDisplay(row) {
 }
 
 function createLifecycle() {
-  let ctxRef = null;
   let table = null;
   let poller = null;
   let txDialog = null;
 
   const state = {
+    subject: "",
     filters: { ...DEFAULT_FILTERS },
     signature: "",
     totalEstimate: null,
@@ -148,6 +148,7 @@ function createLifecycle() {
   };
 
   const buildRequestPayload = (cursor = null) => ({
+    subject: state.subject || null,
     filters: buildFiltersPayload(),
     pagination: {
       cursor,
@@ -206,12 +207,12 @@ function createLifecycle() {
           typeof failedCountGlobal === "number" && failedCountGlobal > 0 ? "warning" : "success",
       },
     ]);
-
   };
 
   const fetchSummary = async ({ signal: _signal } = {}) => {
     try {
-      const data = await requestManager.fetch("/api/transactions/summary", {
+      const query = state.subject ? `?subject=${encodeURIComponent(state.subject)}` : "";
+      const data = await requestManager.fetch(`/api/transactions/summary${query}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -219,6 +220,7 @@ function createLifecycle() {
         },
         cache: "no-store",
         priority: "normal",
+        skipDedup: true,
       });
 
       state.summary = data ?? null;
@@ -246,6 +248,7 @@ function createLifecycle() {
         body: JSON.stringify(payload),
         cache: "no-store",
         priority: "normal",
+        skipDedup: true,
       });
       if (
         data?.total_estimate !== undefined &&
@@ -311,6 +314,7 @@ function createLifecycle() {
           body: JSON.stringify(nextPayload),
           cache: "no-store",
           priority: "normal",
+          skipDedup: true,
         });
 
         const nextItems = Array.isArray(nextData?.items) ? nextData.items : [];
@@ -352,7 +356,11 @@ function createLifecycle() {
 
     const paginationState =
       typeof table.getPaginationState === "function" ? table.getPaginationState() : null;
-    if (paginationState?.loadingNext || paginationState?.loadingPrev || paginationState?.loadingInitial) {
+    if (
+      paginationState?.loadingNext ||
+      paginationState?.loadingPrev ||
+      paginationState?.loadingInitial
+    ) {
       return true;
     }
 
@@ -411,7 +419,7 @@ function createLifecycle() {
   };
 
   return {
-    init(_ctx) {
+    async init(_ctx) {
       const initialSort = loadPersistedSort(TRANSACTIONS_STATE_KEY) || {
         column: "timestamp",
         direction: "desc",
@@ -499,7 +507,7 @@ function createLifecycle() {
             if (!txDialog) {
               txDialog = new TransactionDetailsDialog();
             }
-            txDialog.show(row);
+            txDialog.show({ ...row, subject: state.subject });
           }
         },
         sorting: {
@@ -655,15 +663,20 @@ function createLifecycle() {
         apply: false,
       });
       updateToolbar();
+      await setupSubjectSelector();
     },
 
     activate(ctx) {
-      ctxRef = ctx;
       if (!poller) {
-        poller = ctx.managePoller(new Poller(() => {
-          fetchSummary({});
-          requestReload("poll", { silent: true, preserveScroll: true });
-        }, { label: "Transactions" }));
+        poller = ctx.managePoller(
+          new Poller(
+            () => {
+              fetchSummary({});
+              requestReload("poll", { silent: true, preserveScroll: true });
+            },
+            { label: "Transactions" }
+          )
+        );
       }
       poller.start();
       if ((table?.getData?.() ?? []).length === 0) {
@@ -694,13 +707,47 @@ function createLifecycle() {
         txDialog.close();
         txDialog = null;
       }
-      ctxRef = null;
       state.filters = { ...DEFAULT_FILTERS };
+      state.subject = "";
       state.signature = "";
       state.totalEstimate = null;
       state.summary = null;
     },
   };
+
+  async function setupSubjectSelector() {
+    const select = document.querySelector("#transaction-subject-select");
+    const note = document.querySelector("#transaction-subject-note");
+    if (!select) return;
+
+    try {
+      const data = await requestManager.fetch("/api/wallets/watch/", { priority: "normal" });
+      for (const target of data.targets || []) {
+        const option = document.createElement("option");
+        option.value = target.address;
+        const short = `${target.address.slice(0, 6)}…${target.address.slice(-4)}`;
+        option.textContent = target.label ? `${target.label} · ${short}` : short;
+        select.append(option);
+      }
+    } catch (error) {
+      console.warn("[Transactions] Failed to load watched-wallet subjects:", error);
+    }
+
+    select.addEventListener("change", () => {
+      state.subject = select.value;
+      state.summary = null;
+      state.totalEstimate = null;
+      if (note) {
+        note.textContent = state.subject
+          ? "Observed activity for this watched wallet"
+          : "Your own wallet activity";
+      }
+      Promise.all([
+        fetchSummary({}),
+        requestReload("subject", { silent: false, resetScroll: true }),
+      ]).catch(() => {});
+    });
+  }
 }
 
 registerPage("transactions", createLifecycle());

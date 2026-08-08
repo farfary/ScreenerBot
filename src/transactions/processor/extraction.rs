@@ -81,12 +81,20 @@ impl TransactionProcessor {
 
         // Step 5: Store in cache for future use (unless cache-only mode)
         if !self.cache_only {
-            // Create a minimal transaction for caching raw data
+            // Create a minimal transaction for caching raw data. A watched target's
+            // processor sets `retain_raw_json = false`: the JSON blob is what makes a
+            // busy wallet's rows far larger than the own wallet's, and dedupe already
+            // means this signature is decoded once, so there is no repeat fetch to
+            // save by caching it.
             let mut temp_transaction = Transaction::new(signature.to_string());
-            temp_transaction.raw_transaction_data = Some(
-                serde_json::to_value(&tx_details)
-                    .map_err(|e| format!("Failed to serialize transaction details: {e}"))?,
-            );
+            temp_transaction.raw_transaction_data = if self.retain_raw_json {
+                Some(
+                    serde_json::to_value(&tx_details)
+                        .map_err(|e| format!("Failed to serialize transaction details: {e}"))?,
+                )
+            } else {
+                None
+            };
             temp_transaction.slot = Some(tx_details.slot);
             temp_transaction.block_time = tx_details.block_time;
             if let Some(block_time) = tx_details.block_time {
@@ -244,5 +252,49 @@ impl TransactionProcessor {
         transaction.populate_from_raw_data();
 
         Ok(transaction)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use solana_sdk::pubkey::Pubkey;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn watch_target_decode_projection_retains_raw_json_in_returned_value() {
+        let details: crate::rpc::TransactionDetails = serde_json::from_value(json!({
+            "slot": 42,
+            "transaction": {
+                "message": {
+                    "accountKeys": [Pubkey::default().to_string()],
+                    "instructions": []
+                },
+                "signatures": ["signature"]
+            },
+            "meta": {
+                "err": null,
+                "preBalances": [1_000_000],
+                "postBalances": [995_000],
+                "preTokenBalances": [],
+                "postTokenBalances": [],
+                "fee": 5_000,
+                "computeUnitsConsumed": null,
+                "logMessages": [],
+                "innerInstructions": []
+            },
+            "blockTime": 1
+        }))
+        .expect("valid transaction fixture");
+        let processor = TransactionProcessor::new_for_watch_target(Pubkey::default());
+
+        let decoded = processor
+            .create_transaction_from_data("signature", &details)
+            .await
+            .expect("project fixture");
+
+        assert!(decoded.raw_transaction_data.is_some());
+        assert!(!processor.retain_raw_json);
     }
 }

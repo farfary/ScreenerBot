@@ -828,6 +828,7 @@ impl RpcClientMethods for RpcClient {
         address: &Pubkey,
         limit: Option<usize>,
         before: Option<&Signature>,
+        until: Option<&Signature>,
     ) -> crate::Result<Vec<SignatureInfo>> {
         let mut config = serde_json::Map::new();
 
@@ -842,6 +843,13 @@ impl RpcClientMethods for RpcClient {
             config.insert(
                 "before".to_owned(),
                 serde_json::Value::String(before_sig.to_string()),
+            );
+        }
+
+        if let Some(until_sig) = until {
+            config.insert(
+                "until".to_owned(),
+                serde_json::Value::String(until_sig.to_string()),
             );
         }
 
@@ -1227,18 +1235,25 @@ impl RpcClientMethods for RpcClient {
         wallet_pubkey: &Pubkey,
         limit: usize,
         before: Option<&str>,
+        until: Option<&str>,
     ) -> crate::Result<Vec<SignatureInfo>> {
-        let before_sig = match before {
-            Some(sig_str) => Some(Signature::from_str(sig_str).map_err(|e| {
+        let parse_sig = |sig_str: &str| -> crate::Result<Signature> {
+            Signature::from_str(sig_str).map_err(|e| {
                 crate::Error::Data(crate::errors::DataError::ParseError {
                     data_type: "Signature".to_owned(),
                     error: e.to_string(),
                 })
-            })?),
-            None => None,
+            })
         };
-        self.get_signatures_for_address(wallet_pubkey, Some(limit), before_sig.as_ref())
-            .await
+        let before_sig = before.map(parse_sig).transpose()?;
+        let until_sig = until.map(parse_sig).transpose()?;
+        self.get_signatures_for_address(
+            wallet_pubkey,
+            Some(limit),
+            before_sig.as_ref(),
+            until_sig.as_ref(),
+        )
+        .await
     }
 
     async fn get_transaction_details(

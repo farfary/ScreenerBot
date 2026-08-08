@@ -320,8 +320,18 @@ impl TransactionDatabase {
 
     /// Get transaction by signature with full analysis data
     pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {
+        let subject = Subject::own().map_err(|e| e.to_string())?;
+        self.get_transaction_for_subject(subject, signature).await
+    }
+
+    /// Get a transaction for an explicitly selected subject.
+    pub async fn get_transaction_for_subject(
+        &self,
+        subject: Subject,
+        signature: &str,
+    ) -> Result<Option<Transaction>, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         // Join raw_transactions with processed_transactions to get full data
         let result = conn.query_row(
@@ -493,8 +503,17 @@ impl TransactionDatabase {
 
     /// Get successful transactions count
     pub async fn get_successful_transactions_count(&self) -> Result<u64, String> {
+        let subject = Subject::own().map_err(|e| e.to_string())?;
+        self.get_successful_transactions_count_for_subject(subject)
+            .await
+    }
+
+    pub async fn get_successful_transactions_count_for_subject(
+        &self,
+        subject: Subject,
+    ) -> Result<u64, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let count: i64 = conn
             .query_row(
@@ -509,8 +528,17 @@ impl TransactionDatabase {
 
     /// Get failed transactions count
     pub async fn get_failed_transactions_count(&self) -> Result<u64, String> {
+        let subject = Subject::own().map_err(|e| e.to_string())?;
+        self.get_failed_transactions_count_for_subject(subject)
+            .await
+    }
+
+    pub async fn get_failed_transactions_count_for_subject(
+        &self,
+        subject: Subject,
+    ) -> Result<u64, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address = subject.address();
 
         let count: i64 = conn
             .query_row(
