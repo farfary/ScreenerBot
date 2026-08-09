@@ -2,6 +2,7 @@
    Chat Input Area - Clean Minimal Design
    ============================================================================ */
 
+@scope (.chat-widget) {
 .chat-input-area {
   border-top: 1px solid var(--border-color);
   background: var(--bg-secondary);
@@ -33,10 +34,10 @@
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--primary-color);
-  animation: badgeSlideIn 0.2s ease-out;
+  animation: badge-slide-in 0.2s ease-out;
 }
 
-@keyframes badgeSlideIn {
+@keyframes badge-slide-in {
   from {
     opacity: 0;
     transform: translateY(4px) scale(0.95);
@@ -109,10 +110,10 @@
 /* Error state */
 .chat-input-container.has-error {
   border-color: var(--danger-color);
-  animation: inputShake 0.4s ease-out;
+  animation: input-shake 0.4s ease-out;
 }
 
-@keyframes inputShake {
+@keyframes input-shake {
   0%,
   100% {
     transform: translateX(0);
@@ -306,10 +307,10 @@
 
 /* Loading spinner state */
 .send-btn.is-loading i {
-  animation: sendSpin 0.8s linear infinite;
+  animation: send-spin 0.8s linear infinite;
 }
 
-@keyframes sendSpin {
+@keyframes send-spin {
   from {
     transform: rotate(0deg);
   }
@@ -369,7 +370,7 @@
   height: 4px;
   background: currentcolor;
   border-radius: var(--radius-full);
-  animation: typingDot 1.2s infinite ease-in-out;
+  animation: status-typing-dot 1.2s infinite ease-in-out;
 }
 
 .input-status .typing-dots span:nth-child(2) {
@@ -380,7 +381,7 @@
   animation-delay: 0.4s;
 }
 
-@keyframes typingDot {
+@keyframes status-typing-dot {
   0%,
   60%,
   100% {
@@ -411,4 +412,6 @@
 
 .char-count.danger {
   color: var(--danger-color);
+}
+
 }

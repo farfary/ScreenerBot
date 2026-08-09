@@ -2,6 +2,7 @@
    Chat Panel Styles
    ============================================================================ */
 
+@scope (.chat-widget) {
 .chat-container {
   display: flex;
   flex: 1;
@@ -370,10 +371,10 @@
   color: var(--text-muted);
   gap: var(--spacing-md);
   padding: var(--spacing-xl);
-  animation: fadeIn 0.4s ease-out;
+  animation: fade-in 0.4s ease-out;
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
   from {
     opacity: 0;
   }
@@ -469,4 +470,5 @@
     grid-template-columns: 1fr;
     max-width: 400px;
   }
+}
 }

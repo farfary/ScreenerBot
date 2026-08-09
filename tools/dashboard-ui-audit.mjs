@@ -109,6 +109,10 @@ const routerSource = await readFile(
   resolve(root, "src/webserver/templates/scripts/core/router.js"),
   "utf8"
 );
+const chatWidgetSource = await readFile(
+  resolve(root, "src/webserver/templates/scripts/core/chat_widget.js"),
+  "utf8"
+);
 
 if (templatesSource.includes("__PAGE_STYLES__") || baseSource.includes("__PAGE_STYLES__")) {
   errors.push("Page CSS must not be serialized into a global JavaScript registry");
@@ -118,6 +122,26 @@ if (!templatesSource.includes("pub fn page_styles")) {
 }
 if (!routerSource.includes("/styles/pages/")) {
   errors.push("router.js must load route-scoped page styles from /styles/pages/");
+}
+
+const aiStyleManifest = templatesSource.match(/"ai"\s*=>\s*\[([\s\S]*?)\]\s*\.join/);
+const globalStyleManifest = templatesSource.match(/let combined_styles = \[([\s\S]*?)\];/);
+const chatWidgetStyles = [
+  "CHAT_WIDGET_LAYOUT_STYLES",
+  "CHAT_WIDGET_MESSAGES_STYLES",
+  "CHAT_WIDGET_INPUT_STYLES",
+];
+
+if (!chatWidgetSource.includes('class="chat-widget chat-container')) {
+  errors.push("ChatWidget must expose the .chat-widget CSS scope root");
+}
+for (const style of chatWidgetStyles) {
+  if (!globalStyleManifest?.[1].includes(style)) {
+    errors.push(`${style} must be loaded by the global shared-style manifest`);
+  }
+  if (aiStyleManifest?.[1].includes(style)) {
+    errors.push(`${style} must not depend on the AI route-scoped style manifest`);
+  }
 }
 
 if (errors.length) {

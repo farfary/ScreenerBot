@@ -63,7 +63,7 @@ export class ChatWidget {
   _buildHTML() {
     const sidebarClass = this.opts.showSidebar ? "" : " cw-no-sidebar";
     this.root.innerHTML = `
-      <div class="chat-container${sidebarClass}">
+      <div class="chat-widget chat-container${sidebarClass}">
         ${
           this.opts.showSidebar
             ? `

@@ -68,9 +68,6 @@ pub fn page_styles(page: &str) -> Option<String> {
             AI_SETTINGS_TESTING_STYLES,
             AI_PROVIDERS_STYLES,
             AI_INSTRUCTIONS_STYLES,
-            AI_CHAT_STYLES,
-            AI_CHAT_MESSAGES_STYLES,
-            AI_CHAT_INPUT_STYLES,
             AI_AUTOMATION_STYLES,
         ]
         .join("\n"),
@@ -214,6 +211,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         BILLBOARD_ROW_STYLES,
         POOL_SELECTOR_STYLES,
         EXIT_DIALOG_STYLES,
+        CHAT_WIDGET_LAYOUT_STYLES,
+        CHAT_WIDGET_MESSAGES_STYLES,
+        CHAT_WIDGET_INPUT_STYLES,
         GLOBAL_CHAT_STYLES,
         CONFIG_IMPORT_EXPORT_DIALOG_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)

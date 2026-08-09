@@ -1,12 +1,15 @@
+/* Shared ChatWidget message content. */
+
+@scope (.chat-widget) {
 /* Message Bubbles */
 .message {
   display: flex;
   gap: var(--spacing-md);
   position: relative;
-  animation: messageSlideIn 0.25s ease-out;
+  animation: message-slide-in 0.25s ease-out;
 }
 
-@keyframes messageSlideIn {
+@keyframes message-slide-in {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -68,7 +71,7 @@
 .message.user .message-bubble {
   background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
   color: white;
-  border-bottom-inline-end-radius: var(--radius-sm);
+  border-end-end-radius: var(--radius-sm);
   box-shadow: 0 2px 8px var(--primary-alpha-20);
 }
 
@@ -76,7 +79,7 @@
   background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
-  border-bottom-inline-start-radius: var(--radius-sm);
+  border-end-start-radius: var(--radius-sm);
 }
 
 .message-meta {
@@ -290,7 +293,7 @@
 .typing-indicator {
   display: flex;
   gap: var(--spacing-md);
-  animation: messageSlideIn 0.25s ease-out;
+  animation: message-slide-in 0.25s ease-out;
 }
 
 .typing-indicator .message-avatar {
@@ -311,7 +314,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  border-bottom-inline-start-radius: var(--radius-sm);
+  border-end-start-radius: var(--radius-sm);
   padding: var(--spacing-md);
   display: flex;
   gap: 6px;
@@ -323,7 +326,7 @@
   height: 8px;
   border-radius: var(--radius-full);
   background: var(--primary-color);
-  animation: typingDot 1.4s infinite ease-in-out;
+  animation: message-typing-dot 1.4s infinite ease-in-out;
 }
 
 .typing-dot:nth-child(1) {
@@ -338,7 +341,7 @@
   animation-delay: 0.32s;
 }
 
-@keyframes typingDot {
+@keyframes message-typing-dot {
   0%,
   60%,
   100% {
@@ -365,10 +368,10 @@
   border-radius: var(--radius-xl);
   box-shadow: 0 8px 32px rgb(0, 0, 0, 0.3);
   z-index: var(--z-popover);
-  animation: slideUp 0.2s ease;
+  animation: slide-up 0.2s ease;
 }
 
-@keyframes slideUp {
+@keyframes slide-up {
   from {
     opacity: 0;
     transform: translate(-50%, 20px);
@@ -461,4 +464,5 @@
 .message.user .chat-inline-code {
   background: rgb(255, 255, 255, 0.2);
   color: inherit;
+}
 }

@@ -94,11 +94,12 @@ pub(super) const AI_PROVIDERS_STYLES: &str =
     include_str!("templates/styles/pages/ai/providers.css");
 pub(super) const AI_INSTRUCTIONS_STYLES: &str =
     include_str!("templates/styles/pages/ai/instructions.css");
-pub(super) const AI_CHAT_STYLES: &str = include_str!("templates/styles/pages/ai/chat.css");
-pub(super) const AI_CHAT_MESSAGES_STYLES: &str =
-    include_str!("templates/styles/pages/ai/chat_messages.css");
-pub(super) const AI_CHAT_INPUT_STYLES: &str =
-    include_str!("templates/styles/pages/ai/chat_input.css");
+pub(super) const CHAT_WIDGET_LAYOUT_STYLES: &str =
+    include_str!("templates/styles/components/chat_widget/layout.css");
+pub(super) const CHAT_WIDGET_MESSAGES_STYLES: &str =
+    include_str!("templates/styles/components/chat_widget/messages.css");
+pub(super) const CHAT_WIDGET_INPUT_STYLES: &str =
+    include_str!("templates/styles/components/chat_widget/input.css");
 pub(super) const AI_AUTOMATION_STYLES: &str =
     include_str!("templates/styles/pages/ai/automation.css");
 pub(super) const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
