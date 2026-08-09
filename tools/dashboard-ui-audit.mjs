@@ -113,6 +113,10 @@ const chatWidgetSource = await readFile(
   resolve(root, "src/webserver/templates/scripts/core/chat_widget.js"),
   "utf8"
 );
+const chatWidgetLayoutSource = await readFile(
+  resolve(root, "src/webserver/templates/styles/components/chat_widget/layout.css"),
+  "utf8"
+);
 
 if (templatesSource.includes("__PAGE_STYLES__") || baseSource.includes("__PAGE_STYLES__")) {
   errors.push("Page CSS must not be serialized into a global JavaScript registry");
@@ -134,6 +138,13 @@ const chatWidgetStyles = [
 
 if (!chatWidgetSource.includes('class="chat-widget chat-container')) {
   errors.push("ChatWidget must expose the .chat-widget CSS scope root");
+}
+if (
+  /(^|[\s,{])(?:\.cw-history-drawer(?:\.sessions-open)?|\.chat-container\.sessions-open)\s+\./m.test(
+    chatWidgetLayoutSource
+  )
+) {
+  errors.push("ChatWidget root modifiers inside @scope must use :scope.cw-history-drawer");
 }
 for (const style of chatWidgetStyles) {
   if (!globalStyleManifest?.[1].includes(style)) {

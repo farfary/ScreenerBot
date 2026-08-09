@@ -27,7 +27,7 @@
     display: none;
   }
 
-  .cw-history-drawer .chat-sessions-sidebar {
+  :scope.cw-history-drawer .chat-sessions-sidebar {
     position: absolute;
     inset: 0 auto 0 0;
     z-index: var(--z-popover);
@@ -36,11 +36,11 @@
     box-shadow: var(--shadow-lg);
   }
 
-  .cw-history-drawer.sessions-open .chat-sessions-sidebar {
+  :scope.cw-history-drawer.sessions-open .chat-sessions-sidebar {
     transform: translateX(0);
   }
 
-  .cw-history-drawer .chat-sessions-scrim {
+  :scope.cw-history-drawer .chat-sessions-scrim {
     position: absolute;
     inset: 0;
     z-index: var(--z-dropdown);
@@ -55,7 +55,7 @@
       visibility 0.2s ease;
   }
 
-  .cw-history-drawer.sessions-open .chat-sessions-scrim {
+  :scope.cw-history-drawer.sessions-open .chat-sessions-scrim {
     opacity: 1;
     visibility: visible;
   }
@@ -388,7 +388,7 @@
     display: none;
   }
 
-  .cw-history-drawer .cw-sessions-toggle {
+  :scope.cw-history-drawer .cw-sessions-toggle {
     display: inline-flex;
   }
 
@@ -400,7 +400,7 @@
     padding: var(--spacing-lg) var(--spacing-xl);
     display: flex;
     flex-direction: column;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-md);
     scroll-behavior: smooth;
     overscroll-behavior: contain;
   }
@@ -536,7 +536,7 @@
 
   @media (width <= 640px) {
     .chat-sessions-sidebar,
-    .cw-history-drawer .chat-sessions-sidebar {
+    :scope.cw-history-drawer .chat-sessions-sidebar {
       position: absolute;
       inset: 0 auto 0 0;
       z-index: var(--z-popover);
@@ -545,7 +545,7 @@
       box-shadow: var(--shadow-lg);
     }
 
-    .chat-container.sessions-open .chat-sessions-sidebar {
+    :scope.sessions-open .chat-sessions-sidebar {
       transform: translateX(0);
     }
 

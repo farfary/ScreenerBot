@@ -970,17 +970,26 @@ export class ChatWidget {
             : statusClass === "pendingconfirmation"
               ? "Awaiting Confirmation"
               : "Pending";
+    const statusIcon =
+      statusClass === "executed" || statusClass === "success"
+        ? "circle-check"
+        : statusClass === "failed" || statusClass === "denied"
+          ? "circle-x"
+          : "clock-3";
 
     const toolName = tool.tool_name || tool.name || "Unknown Tool";
+    const toolLabel = toolName
+      .replace(/[_-]+/g, " ")
+      .replace(/^\w/, (character) => character.toUpperCase());
 
     return `
       <div class="tool-call ${statusClass}">
-        <div class="tool-call-header">
-          <div class="tool-call-title"><i class="icon-wrench"></i> ${Utils.escapeHtml(toolName)}</div>
-          <span class="tool-call-status ${statusClass}">${statusText}</span>
-          <button class="tool-call-expand" type="button"><i class="icon-chevron-down"></i></button>
-        </div>
-        <div class="tool-call-body" style="display:none;">
+        <button class="tool-call-header" type="button" aria-expanded="false">
+          <span class="tool-call-title" title="${Utils.escapeHtml(toolName)}"><i class="icon-wrench"></i><span>${Utils.escapeHtml(toolLabel)}</span></span>
+          <span class="tool-call-status ${statusClass}"><i class="icon-${statusIcon}"></i><span>${statusText}</span></span>
+          <i class="tool-call-expand-icon icon-chevron-down" aria-hidden="true"></i>
+        </button>
+        <div class="tool-call-body" hidden>
           <div class="tool-call-section">
             <div class="tool-call-label">Input:</div>
             <div class="tool-call-input"><pre class="tool-call-code">${Utils.escapeHtml(JSON.stringify(tool.input || {}, null, 2))}</pre></div>
@@ -996,17 +1005,13 @@ export class ChatWidget {
   // ---------------------------------------------------------------------------
 
   _setupToolExpandHandlers() {
-    this.$$(".tool-call-expand").forEach((btn) => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const body = btn.closest(".tool-call").querySelector(".tool-call-body");
-        if (body.style.display === "none") {
-          body.style.display = "block";
-          btn.classList.add("expanded");
-        } else {
-          body.style.display = "none";
-          btn.classList.remove("expanded");
-        }
+    this.$$(".tool-call-header").forEach((header) => {
+      header.onclick = () => {
+        const body = header.closest(".tool-call")?.querySelector(".tool-call-body");
+        if (!body) return;
+        body.hidden = !body.hidden;
+        header.classList.toggle("expanded", !body.hidden);
+        header.setAttribute("aria-expanded", String(!body.hidden));
       };
     });
   }
