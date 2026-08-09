@@ -215,6 +215,11 @@ pub enum CopySkip {
     NotSellSwap,
     ExitModeDisabled,
     ForceStopped,
+    LatencyKillSwitch {
+        average_ms: u64,
+        threshold_ms: u64,
+    },
+    ClaimReconciledAbandoned,
     CopyPositionNotFound,
     PositionUserOnly,
     PositionManagementMismatch,
@@ -279,6 +284,8 @@ pub struct PaperDecision {
     pub signature: String,
     pub mint: String,
     pub target_size_sol: f64,
+    #[serde(default)]
+    pub target_token_amount: f64,
     pub sized_sol: f64,
     pub fill: PaperFill,
     pub telemetry: CopyTelemetry,
@@ -291,6 +298,8 @@ pub struct LiveDecision {
     pub target_signature: String,
     pub mint: String,
     pub target_size_sol: f64,
+    #[serde(default)]
+    pub target_token_amount: f64,
     pub sized_sol: f64,
     pub transaction_signature: Option<String>,
     pub error: Option<String>,
@@ -355,6 +364,39 @@ pub struct CopyActivityRow {
     pub kind: String,
     pub outcome: CopyOutcome,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct ArrivalDistanceStats {
+    pub samples: usize,
+    pub minimum_ms: Option<u64>,
+    pub median_ms: Option<u64>,
+    pub p95_ms: Option<u64>,
+    pub maximum_ms: Option<u64>,
+    pub average_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct CopyTaskStats {
+    pub task_id: i64,
+    pub decisions: usize,
+    pub filled_buys: usize,
+    pub observed_sells: usize,
+    pub skipped: usize,
+    pub submitted: usize,
+    pub failed: usize,
+    pub open_positions: usize,
+    pub closed_positions: usize,
+    pub realized_pnl_sol: f64,
+    pub unrealized_pnl_sol: f64,
+    pub arrival_distance: ArrivalDistanceStats,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaimReconciliation {
+    Confirmed,
+    Submitted,
+    Abandoned,
 }
 
 #[cfg(test)]

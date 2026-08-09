@@ -22,6 +22,7 @@ pub struct PreparedLiveEntry {
     pub task: CopyTask,
     pub target_signature: String,
     pub target_size_sol: f64,
+    pub target_token_amount: f64,
     pub decision: TradeDecision,
     pub context: EntryContext,
     pub telemetry: CopyTelemetry,
@@ -129,6 +130,7 @@ pub fn prepare_live_entry(
         mint,
         side: SwapSide::Buy,
         sol_amount: target_size_sol,
+        token_amount: target_token_amount,
         price_sol: target_price_sol,
         ..
     } = &activity.kind
@@ -141,6 +143,7 @@ pub fn prepare_live_entry(
         task: task.clone(),
         target_signature: activity.signature.clone(),
         target_size_sol: *target_size_sol,
+        target_token_amount: *target_token_amount,
         decision: TradeDecision {
             position_id: None,
             mint: mint.clone(),
@@ -226,6 +229,7 @@ fn live_decision(plan: &PreparedLiveEntry) -> LiveDecision {
         target_signature: plan.target_signature.clone(),
         mint: plan.decision.mint.clone(),
         target_size_sol: plan.target_size_sol,
+        target_token_amount: plan.target_token_amount,
         sized_sol: plan.decision.size_sol.unwrap_or_default(),
         transaction_signature: None,
         error: None,

@@ -53,6 +53,7 @@ pub fn paper_sell_outcome(
     activity: &WalletActivity,
     task: &CopyTask,
     force_stopped: bool,
+    target_holding_before_sell: f64,
     decided_at: DateTime<Utc>,
 ) -> Result<CopyOutcome, CopySkip> {
     if task.exit_mode == ExitMode::BuyOnly {
@@ -68,6 +69,7 @@ pub fn paper_sell_outcome(
         mint,
         target_token_amount,
         target_sol_amount,
+        proportional_exit_percentage(target_token_amount, target_holding_before_sell),
         telemetry(activity, target_price_sol, decided_at),
     )))
 }
@@ -77,6 +79,7 @@ pub fn prepare_copy_sell(
     task: &CopyTask,
     position: Option<&Position>,
     force_stopped: bool,
+    target_holding_before_sell: f64,
     decided_at: DateTime<Utc>,
 ) -> Result<PreparedCopySell, CopySkip> {
     if task.mode != CopyMode::Live {
@@ -108,6 +111,8 @@ pub fn prepare_copy_sell(
     }
 
     let telemetry = telemetry(activity, target_price_sol, decided_at);
+    let exit_percentage =
+        proportional_exit_percentage(target_token_amount, target_holding_before_sell);
     Ok(PreparedCopySell {
         task: task.clone(),
         target_signature: activity.signature.clone(),
@@ -123,9 +128,7 @@ pub fn prepare_copy_sell(
             priority: TradePriority::High,
             price_sol: target_price_sol,
             size_sol: None,
-            // Phase 4 V1 mirrors the sell signal as a full close. CopySell is still
-            // percentage-safe in resolve_exit_size for the Phase 5 proportional path.
-            exit_percentage: None,
+            exit_percentage,
             slippage_pct: Some(task.slippage_pct),
         },
         telemetry,
@@ -143,6 +146,7 @@ where
         &plan.decision.mint,
         plan.target_token_amount,
         plan.target_sol_amount,
+        plan.decision.exit_percentage,
         plan.telemetry.clone(),
     );
     match submit(plan.decision).await {
@@ -180,6 +184,7 @@ fn sell_decision(
     mint: &str,
     target_token_amount: f64,
     target_sol_amount: f64,
+    exit_percentage: Option<f64>,
     telemetry: CopyTelemetry,
 ) -> CopySellDecision {
     CopySellDecision {
@@ -189,11 +194,28 @@ fn sell_decision(
         mint: mint.to_owned(),
         target_token_amount,
         target_sol_amount,
-        exit_percentage: None,
+        exit_percentage,
         transaction_signature: None,
         error: None,
         telemetry,
     }
+}
+
+/// Mirror the fraction of the target's observed inventory that was sold. Unknown
+/// inventory fails safely to a full close; a known fraction is always explicit so
+/// the global partial-exit toggle cannot widen it.
+pub fn proportional_exit_percentage(
+    target_token_amount: f64,
+    target_holding_before_sell: f64,
+) -> Option<f64> {
+    if !target_token_amount.is_finite()
+        || target_token_amount <= 0.0
+        || !target_holding_before_sell.is_finite()
+        || target_holding_before_sell <= 0.0
+    {
+        return None;
+    }
+    Some((target_token_amount / target_holding_before_sell * 100.0).clamp(0.01, 100.0))
 }
 
 fn telemetry(

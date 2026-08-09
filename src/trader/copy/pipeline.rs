@@ -65,6 +65,10 @@ pub fn run_paper_pipeline(
                 signature: activity.signature.clone(),
                 mint: mint.clone(),
                 target_size_sol: *target_size_sol,
+                target_token_amount: match &activity.kind {
+                    ActivityKind::Swap { token_amount, .. } => *token_amount,
+                    _ => 0.0,
+                },
                 sized_sol,
                 fill: fill.clone(),
                 telemetry: CopyTelemetry {

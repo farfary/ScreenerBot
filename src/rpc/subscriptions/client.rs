@@ -194,11 +194,12 @@ fn drain_pending_commands(
 async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
     let mut registry = Registry::new();
     let mut attempt: u32 = 0;
+    let mut provider_index: usize = 0;
     let mut next_request_id: u64 = 1;
 
     'outer: loop {
-        let url = match payloads::get_websocket_url() {
-            Ok(u) => u,
+        let urls = match payloads::get_websocket_urls() {
+            Ok(urls) => urls,
             Err(e) => {
                 logger::warning(
                     LogTag::Websocket,
@@ -212,15 +213,23 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
             }
         };
 
+        provider_index %= urls.len();
+        let url = urls[provider_index].as_str().to_owned();
         let stream = match crate::net::connect_ws(&url).await {
             Ok(s) => s,
             Err(e) => {
-                let delay = reconnect_delay_secs(attempt);
+                provider_index = (provider_index + 1) % urls.len();
+                let completed_cycle = provider_index == 0;
+                let delay = if completed_cycle {
+                    reconnect_delay_secs(attempt)
+                } else {
+                    0
+                };
                 logger::info(
                     LogTag::Websocket,
                     &format!(
-                        "WebSocket connect failed: {e} (retry in {delay}s, attempt {})",
-                        attempt + 1
+                        "WebSocket provider {} failed: {e} (next provider in {delay}s)",
+                        crate::rpc::mask_url(&url)
                     ),
                 );
                 set_state(if attempt >= 4 {
@@ -229,8 +238,12 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                     ConnectionState::Reconnecting
                 });
                 drain_pending_commands(&mut commands, &mut registry);
-                tokio::time::sleep(Duration::from_secs(delay)).await;
-                attempt += 1;
+                if delay > 0 {
+                    tokio::time::sleep(Duration::from_secs(delay)).await;
+                }
+                if completed_cycle {
+                    attempt += 1;
+                }
                 continue 'outer;
             }
         };
@@ -346,13 +359,23 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
 
         RECONNECTS.fetch_add(1, Relaxed);
         set_state(ConnectionState::Reconnecting);
-        let delay = reconnect_delay_secs(attempt);
+        provider_index = (provider_index + 1) % urls.len();
+        let completed_cycle = provider_index == 0;
+        let delay = if completed_cycle {
+            reconnect_delay_secs(attempt)
+        } else {
+            0
+        };
         logger::warning(
             LogTag::Websocket,
-            &format!("WebSocket disconnected - reconnecting in {delay}s"),
+            &format!("WebSocket disconnected - failing over in {delay}s"),
         );
-        tokio::time::sleep(Duration::from_secs(delay)).await;
-        attempt += 1;
+        if delay > 0 {
+            tokio::time::sleep(Duration::from_secs(delay)).await;
+        }
+        if completed_cycle {
+            attempt += 1;
+        }
     }
 }
 

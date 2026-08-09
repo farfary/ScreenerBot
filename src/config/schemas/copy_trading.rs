@@ -16,6 +16,12 @@ config_struct! {
         require_filter_pass: bool = true,
         #[metadata(field_metadata! { label: "Block On Force Stop", hint: "Copy entries always obey the global force stop", impact: "high", category: "Copy Trading", hidden: true, })]
         block_on_force_stop: bool = true,
+        #[metadata(field_metadata! { label: "Latency Kill Switch", hint: "Pause a copy task when its recent target-to-detection delay stays above the configured limit", impact: "high", category: "Copy Trading", })]
+        latency_kill_switch_enabled: bool = true,
+        #[metadata(field_metadata! { label: "Maximum Arrival Delay", hint: "Pause after the trailing sample window exceeds this average target-to-detection delay", min: 250, max: 30000, step: 250, unit: "ms", impact: "high", category: "Copy Trading", })]
+        max_arrival_distance_ms: u64 = 4000,
+        #[metadata(field_metadata! { label: "Latency Sample Window", hint: "Number of recent observations used by the latency kill switch", min: 3, max: 100, step: 1, impact: "medium", category: "Copy Trading", })]
+        latency_window_size: usize = 10,
     }
 }
 
@@ -41,6 +47,12 @@ impl CopyTradingConfig {
         }
         if !self.block_on_force_stop {
             return Err("Copy trading cannot bypass the global force stop".to_owned());
+        }
+        if !(250..=30_000).contains(&self.max_arrival_distance_ms) {
+            return Err("Maximum copy arrival delay must be between 250 and 30000 ms".to_owned());
+        }
+        if !(3..=100).contains(&self.latency_window_size) {
+            return Err("Copy latency sample window must be between 3 and 100".to_owned());
         }
         Ok(())
     }

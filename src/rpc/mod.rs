@@ -134,9 +134,9 @@ pub use types::{
 // ============================================================================
 
 pub use subscriptions::{
-    connection_state, get_websocket_url, get_websocket_url_from_http, subscribe_logs_mentions,
-    subscription_metrics, ConnectionState, LogsSubscription, SubscriptionEvent,
-    SubscriptionMetrics,
+    connection_state, get_websocket_url, get_websocket_url_from_http, get_websocket_urls,
+    subscribe_logs_mentions, subscription_metrics, websocket_url_for_attempt, ConnectionState,
+    LogsSubscription, SubscriptionEvent, SubscriptionMetrics,
 };
 
 // ============================================================================

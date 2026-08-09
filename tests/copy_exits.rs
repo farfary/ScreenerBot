@@ -78,6 +78,7 @@ fn target_sell_selects_only_the_same_tasks_copy_position() {
             &task(ExitMode::Mirror, CopyMode::Live),
             Some(&strategy_position),
             false,
+            100.0,
             Utc::now(),
         )
         .unwrap_err(),
@@ -89,16 +90,14 @@ fn target_sell_selects_only_the_same_tasks_copy_position() {
         &task(ExitMode::Mirror, CopyMode::Live),
         Some(&copy_position(PositionManagement::CopyTask)),
         false,
+        100.0,
         Utc::now(),
     )
     .unwrap();
     assert_eq!(plan.decision.action, TradeAction::Sell);
     assert_eq!(plan.decision.reason, TradeReason::CopySell);
     assert_eq!(plan.decision.position_id.as_deref(), Some("42"));
-    assert_eq!(
-        plan.decision.exit_percentage, None,
-        "Phase 4 mirrors a target sell as a full close"
-    );
+    assert_eq!(plan.decision.exit_percentage, Some(30.0));
 }
 
 #[test]
@@ -111,6 +110,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
             &task(ExitMode::BuyOnly, CopyMode::Live),
             Some(&position),
             false,
+            100.0,
             Utc::now(),
         )
         .unwrap_err(),
@@ -122,6 +122,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
             &task(ExitMode::Mirror, CopyMode::Live),
             Some(&position),
             true,
+            100.0,
             Utc::now(),
         )
         .unwrap_err(),
@@ -133,6 +134,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
             &task(ExitMode::Mirror, CopyMode::Live),
             Some(&copy_position(PositionManagement::UserOnly)),
             false,
+            100.0,
             Utc::now(),
         )
         .unwrap_err(),
@@ -146,6 +148,7 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
         &task(ExitMode::Hybrid, CopyMode::Live),
         Some(&copy_position(PositionManagement::Hybrid)),
         false,
+        100.0,
         Utc::now(),
     )
     .is_ok());
@@ -157,6 +160,7 @@ fn paper_mode_records_sell_observation_without_claiming_a_position() {
         &sell_activity(),
         &task(ExitMode::Mirror, CopyMode::Paper),
         false,
+        100.0,
         Utc::now(),
     )
     .unwrap();
@@ -170,6 +174,7 @@ async fn submitted_and_failed_copy_sells_are_distinct_activity_outcomes() {
         &task(ExitMode::Mirror, CopyMode::Live),
         Some(&copy_position(PositionManagement::CopyTask)),
         false,
+        100.0,
         Utc::now(),
     )
     .unwrap();

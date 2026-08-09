@@ -42,6 +42,7 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
         signature: "signature".to_owned(),
         mint: "mint".to_owned(),
         target_size_sol: 0.2,
+        target_token_amount: 20.0,
         sized_sol: 0.1,
         fill: super::super::types::PaperFill {
             input_sol: 0.1,
@@ -85,6 +86,7 @@ fn live_outcome(task: &CopyTask, pending: bool) -> CopyOutcome {
         target_signature: "live-target-signature".to_owned(),
         mint: "live-mint".to_owned(),
         target_size_sol: 0.2,
+        target_token_amount: 20.0,
         sized_sol: 0.1,
         transaction_signature: Some("our-signature".to_owned()),
         error: None,
@@ -182,6 +184,42 @@ async fn live_activity_claim_is_atomic_and_idempotent() {
         .claim_live_activity(configured.id, "target-signature")
         .await
         .unwrap());
+}
+
+#[tokio::test]
+async fn target_inventory_is_idempotent_and_returns_pre_sell_holding() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let task = db.insert_task(task()).await.unwrap();
+
+    assert_eq!(
+        db.observe_target_inventory(task.id, "buy", "mint", 100.0)
+            .await
+            .unwrap(),
+        0.0
+    );
+    db.observe_target_inventory(task.id, "buy", "mint", 100.0)
+        .await
+        .unwrap();
+    assert_eq!(db.target_holding(task.id, "mint").await.unwrap(), 100.0);
+    assert_eq!(
+        db.observe_target_inventory(task.id, "sell", "mint", -30.0)
+            .await
+            .unwrap(),
+        100.0
+    );
+    assert_eq!(db.target_holding(task.id, "mint").await.unwrap(), 70.0);
+}
+
+#[tokio::test]
+async fn stale_claim_reconciliation_is_fail_closed_and_idempotent() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let task = db.insert_task(task()).await.unwrap();
+    assert!(db.claim_live_activity(task.id, "orphan").await.unwrap());
+    assert_eq!(db.reconcile_stale_claims(0).await.unwrap(), 1);
+    assert_eq!(db.reconcile_stale_claims(0).await.unwrap(), 0);
+    assert!(!db.claim_live_activity(task.id, "orphan").await.unwrap());
 }
 
 #[tokio::test]

@@ -11,7 +11,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::database;
 
 use super::types::{
-    confirm_mode_transition, CopyActivityRow, CopyMode, CopyOutcome, CopyTask, SpendState,
+    confirm_mode_transition, CopyActivityRow, CopyMode, CopyOutcome, CopySkip, CopyTask, SpendState,
 };
 
 #[path = "database/rows.rs"]
@@ -213,11 +213,11 @@ impl CopyDatabase {
 
     fn update_task_sync(&self, mut task: CopyTask) -> Result<CopyTask, String> {
         let connection = self.connection()?;
-        let current_mode: String = connection
+        let (current_mode, current_address): (String, String) = connection
             .query_row(
-                "SELECT mode_json FROM copy_tasks WHERE id=?1",
+                "SELECT mode_json, target_address FROM copy_tasks WHERE id=?1",
                 params![task.id],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
             .map_err(|e| format!("Failed to inspect copy task {} mode: {e}", task.id))?
@@ -262,6 +262,20 @@ impl CopyDatabase {
             .map_err(|e| format!("Failed to update copy task {}: {e}", task.id))?;
         if affected == 0 {
             return Err(format!("Copy task {} not found", task.id));
+        }
+        if current_address != task.target_address {
+            connection
+                .execute(
+                    "DELETE FROM copy_target_events WHERE task_id=?1",
+                    params![task.id],
+                )
+                .map_err(|e| format!("Failed to reset target inventory events: {e}"))?;
+            connection
+                .execute(
+                    "DELETE FROM copy_target_holdings WHERE task_id=?1",
+                    params![task.id],
+                )
+                .map_err(|e| format!("Failed to reset target inventory: {e}"))?;
         }
         Ok(task)
     }
@@ -331,11 +345,96 @@ impl CopyDatabase {
         .map_err(|e| format!("Copy database task failed: {e}"))?
     }
 
+    pub async fn pause_task(&self, id: i64) -> Result<bool, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            db.connection()?
+                .execute(
+                    "UPDATE copy_tasks SET enabled=0, updated_at=?2 WHERE id=?1 AND enabled=1",
+                    params![id, Utc::now().to_rfc3339()],
+                )
+                .map(|affected| affected > 0)
+                .map_err(|e| format!("Failed to pause copy task {id}: {e}"))
+        })
+        .await
+        .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
     pub async fn list_activity(&self, limit: usize) -> Result<Vec<CopyActivityRow>, String> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.list_activity_sync(limit.clamp(1, 1_000)))
             .await
             .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    pub async fn list_task_activity(
+        &self,
+        task_id: i64,
+        limit: usize,
+    ) -> Result<Vec<CopyActivityRow>, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            db.list_task_activity_sync(task_id, limit.clamp(1, 10_000))
+        })
+        .await
+        .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    pub async fn list_unconfirmed_live_entries(
+        &self,
+    ) -> Result<Vec<super::types::LiveDecision>, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let connection = db.connection()?;
+            let mut statement = connection
+                .prepare("SELECT outcome_json FROM copy_decisions ORDER BY id")
+                .map_err(|e| format!("Failed to prepare submitted copy query: {e}"))?;
+            let outcomes = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|e| format!("Failed to query submitted copies: {e}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("Failed to decode submitted copy rows: {e}"))?;
+            Ok(outcomes
+                .into_iter()
+                .filter_map(|json| serde_json::from_str::<CopyOutcome>(&json).ok())
+                .filter_map(|outcome| match outcome {
+                    CopyOutcome::LiveSubmitted(decision) => Some(decision),
+                    _ => None,
+                })
+                .collect())
+        })
+        .await
+        .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn list_task_activity_sync(
+        &self,
+        task_id: i64,
+        limit: usize,
+    ) -> Result<Vec<CopyActivityRow>, String> {
+        let connection = self.connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, task_id, kind, details_json, created_at FROM copy_activity \
+                 WHERE task_id=?1 ORDER BY id DESC LIMIT ?2",
+            )
+            .map_err(|e| format!("Failed to prepare task activity query: {e}"))?;
+        let rows = statement
+            .query_map(params![task_id, limit], |row| {
+                let json: String = row.get(3)?;
+                let created: String = row.get(4)?;
+                Ok(CopyActivityRow {
+                    id: row.get(0)?,
+                    task_id: row.get(1)?,
+                    kind: row.get(2)?,
+                    outcome: serde_json::from_str(&json).map_err(json_error)?,
+                    created_at: parse_datetime(&created, 4)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query task activity: {e}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to decode task activity: {e}"))?;
+        Ok(rows)
     }
 
     fn list_activity_sync(&self, limit: usize) -> Result<Vec<CopyActivityRow>, String> {
@@ -398,7 +497,7 @@ impl CopyDatabase {
         tokio::task::spawn_blocking(move || {
             db.connection()?
                 .execute(
-                    "INSERT INTO copy_live_claims (task_id, signature, claimed_at) VALUES (?1, ?2, ?3) ON CONFLICT(task_id, signature) DO NOTHING",
+                    "INSERT INTO copy_live_claims (task_id, signature, claimed_at, state, updated_at) VALUES (?1, ?2, ?3, 'claimed', ?3) ON CONFLICT(task_id, signature) DO NOTHING",
                     params![task_id, signature, Utc::now().to_rfc3339()],
                 )
                 .map(|affected| affected > 0)
@@ -406,6 +505,123 @@ impl CopyDatabase {
         })
         .await
         .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    pub async fn target_holding(&self, task_id: i64, mint: &str) -> Result<f64, String> {
+        let db = self.clone();
+        let mint = mint.to_owned();
+        tokio::task::spawn_blocking(move || {
+            db.connection()?
+                .query_row(
+                    "SELECT token_amount FROM copy_target_holdings WHERE task_id=?1 AND mint=?2",
+                    params![task_id, mint],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map(|value| value.unwrap_or_default())
+                .map_err(|e| format!("Failed to read target holding: {e}"))
+        })
+        .await
+        .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    /// Idempotently apply one observed target token delta and return the holding
+    /// immediately before it. This is observation state, independent of whether our
+    /// copy decision fills, skips, or fails.
+    pub async fn observe_target_inventory(
+        &self,
+        task_id: i64,
+        signature: &str,
+        mint: &str,
+        token_delta: f64,
+    ) -> Result<f64, String> {
+        let db = self.clone();
+        let signature = signature.to_owned();
+        let mint = mint.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let mut connection = db.connection()?;
+            let transaction = connection.transaction().map_err(|e| format!("Failed to begin target inventory update: {e}"))?;
+            let before = transaction.query_row(
+                "SELECT token_amount FROM copy_target_holdings WHERE task_id=?1 AND mint=?2",
+                params![task_id, mint],
+                |row| row.get::<_, f64>(0),
+            ).optional().map_err(|e| format!("Failed to read target inventory: {e}"))?.unwrap_or_default();
+            let inserted = transaction.execute(
+                "INSERT INTO copy_target_events (task_id, signature, mint, token_delta, observed_at) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(task_id, signature) DO NOTHING",
+                params![task_id, signature, mint, token_delta, Utc::now().to_rfc3339()],
+            ).map_err(|e| format!("Failed to record target inventory event: {e}"))? > 0;
+            if inserted {
+                update_target_holding(&transaction, task_id, &mint, token_delta)?;
+            }
+            transaction.commit().map_err(|e| format!("Failed to commit target inventory update: {e}"))?;
+            Ok(before)
+        })
+        .await
+        .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    /// Fail closed after a crash: stale claims are marked abandoned and surfaced as
+    /// activity, but are never made spendable again because submission may have happened.
+    pub async fn reconcile_stale_claims(&self, grace_seconds: u64) -> Result<usize, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || db.reconcile_stale_claims_sync(grace_seconds))
+            .await
+            .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
+    fn reconcile_stale_claims_sync(&self, grace_seconds: u64) -> Result<usize, String> {
+        let mut connection = self.connection()?;
+        let transaction = connection
+            .transaction()
+            .map_err(|e| format!("Failed to begin claim reconciliation: {e}"))?;
+        transaction.execute(
+            "UPDATE copy_live_claims SET state='settled', updated_at=?1 WHERE state='claimed' AND EXISTS (SELECT 1 FROM copy_decisions d WHERE d.task_id=copy_live_claims.task_id AND d.signature=copy_live_claims.signature)",
+            params![Utc::now().to_rfc3339()],
+        ).map_err(|e| format!("Failed to settle legacy copy claims: {e}"))?;
+        let cutoff =
+            Utc::now() - chrono::Duration::seconds(grace_seconds.min(i64::MAX as u64) as i64);
+        let stale = {
+            let mut statement = transaction
+                .prepare("SELECT task_id, signature FROM copy_live_claims WHERE state='claimed' AND datetime(claimed_at) <= datetime(?1)")
+                .map_err(|e| format!("Failed to prepare stale claim query: {e}"))?;
+            let rows = statement
+                .query_map(params![cutoff.to_rfc3339()], |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                })
+                .map_err(|e| format!("Failed to query stale claims: {e}"))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| format!("Failed to decode stale claims: {e}"))?;
+            rows
+        };
+        for (task_id, signature) in &stale {
+            let now = Utc::now();
+            let outcome = CopyOutcome::Skipped {
+                task_id: *task_id,
+                signature: signature.clone(),
+                mint: None,
+                reason: CopySkip::ClaimReconciledAbandoned,
+                decided_at: now,
+                telemetry: None,
+            };
+            let json = serde_json::to_string(&outcome)
+                .map_err(|e| format!("Failed to serialize reconciled claim: {e}"))?;
+            transaction.execute(
+                "INSERT INTO copy_decisions (task_id, signature, mint, outcome_json, decided_at) VALUES (?1, ?2, NULL, ?3, ?4) ON CONFLICT(task_id, signature) DO NOTHING",
+                params![task_id, signature, json, now.to_rfc3339()],
+            ).map_err(|e| format!("Failed to record reconciled claim decision: {e}"))?;
+            transaction.execute(
+                "INSERT INTO copy_activity (task_id, kind, details_json, created_at) VALUES (?1, 'claim_abandoned', ?2, ?3)",
+                params![task_id, json, now.to_rfc3339()],
+            ).map_err(|e| format!("Failed to record reconciled claim activity: {e}"))?;
+            transaction.execute(
+                "UPDATE copy_live_claims SET state='abandoned', updated_at=?3 WHERE task_id=?1 AND signature=?2",
+                params![task_id, signature, now.to_rfc3339()],
+            ).map_err(|e| format!("Failed to abandon stale claim: {e}"))?;
+        }
+        transaction
+            .commit()
+            .map_err(|e| format!("Failed to commit claim reconciliation: {e}"))?;
+        Ok(stale.len())
     }
 
     fn spend_state_sync(&self, task_id: i64, mint: &str) -> Result<SpendState, String> {
@@ -586,10 +802,44 @@ impl CopyDatabase {
                 }
             }
         }
+        let claim_state = match &outcome {
+            CopyOutcome::LiveSubmitted(_) | CopyOutcome::LiveSellSubmitted(_) => Some("submitted"),
+            CopyOutcome::LiveConfirmed(_)
+            | CopyOutcome::LiveFailed(_)
+            | CopyOutcome::LiveSellFailed(_)
+            | CopyOutcome::Skipped { .. } => Some("settled"),
+            _ => None,
+        };
+        if let Some(state) = claim_state {
+            transaction.execute(
+                "UPDATE copy_live_claims SET state=?3, updated_at=?4 WHERE task_id=?1 AND signature=?2",
+                params![task_id, signature, state, Utc::now().to_rfc3339()],
+            ).map_err(|e| format!("Failed to settle copy claim: {e}"))?;
+        }
         transaction
             .commit()
             .map_err(|e| format!("Failed to commit copy outcome: {e}"))
     }
+}
+
+fn update_target_holding(
+    transaction: &rusqlite::Transaction<'_>,
+    task_id: i64,
+    mint: &str,
+    delta: f64,
+) -> Result<(), String> {
+    if !delta.is_finite() || delta == 0.0 {
+        return Ok(());
+    }
+    transaction.execute(
+        "INSERT INTO copy_target_holdings (task_id, mint, token_amount, updated_at) VALUES (?1, ?2, 0, ?3) ON CONFLICT(task_id, mint) DO NOTHING",
+        params![task_id, mint, Utc::now().to_rfc3339()],
+    ).map_err(|e| format!("Failed to initialize target holding: {e}"))?;
+    transaction.execute(
+        "UPDATE copy_target_holdings SET token_amount=MAX(0, token_amount + ?3), updated_at=?4 WHERE task_id=?1 AND mint=?2",
+        params![task_id, mint, delta, Utc::now().to_rfc3339()],
+    ).map_err(|e| format!("Failed to update target holding: {e}"))?;
+    Ok(())
 }
 
 #[cfg(test)]

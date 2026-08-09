@@ -4,23 +4,34 @@ use crate::config;
 use crate::rpc::provider::derive_websocket_url;
 use crate::{Error, Result};
 
-/// Get the WebSocket URL from the primary configured RPC endpoint.
-///
-/// Converts the first RPC URL from config to a WebSocket URL.
-/// Returns an error if no RPC URLs are configured.
-pub fn get_websocket_url() -> Result<String> {
+/// Get every usable WebSocket URL in configured provider order.
+pub fn get_websocket_urls() -> Result<Vec<String>> {
     let rpc_urls = config::with_config(|cfg| cfg.rpc.urls.clone());
-
-    if rpc_urls.is_empty() {
+    let urls = rpc_urls
+        .iter()
+        .filter_map(|url| derive_websocket_url(url))
+        .collect::<Vec<_>>();
+    if urls.is_empty() {
         return Err(Error::Configuration(
             crate::errors::ConfigurationError::Generic {
-                message: "No RPC URLs configured".to_owned(),
+                message: "No usable RPC URLs configured".to_owned(),
             },
         ));
     }
+    Ok(urls)
+}
 
-    let http_url = &rpc_urls[0];
-    get_websocket_url_from_http(http_url)
+/// Backward-compatible primary URL accessor.
+pub fn get_websocket_url() -> Result<String> {
+    get_websocket_urls()?.into_iter().next().ok_or_else(|| {
+        Error::Configuration(crate::errors::ConfigurationError::Generic {
+            message: "No usable RPC URLs configured".to_owned(),
+        })
+    })
+}
+
+pub fn websocket_url_for_attempt(urls: &[String], attempt: u32) -> Option<&str> {
+    (!urls.is_empty()).then(|| urls[attempt as usize % urls.len()].as_str())
 }
 
 /// Convert an HTTP/HTTPS RPC URL to its WebSocket equivalent.

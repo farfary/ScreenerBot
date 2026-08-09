@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::trader::copy::{
-    confirm_mode_transition, CopyDatabase, CopyMode, CopyTask, CopyTaskInput,
+    build_task_stats, confirm_mode_transition, CopyDatabase, CopyMode, CopyTask, CopyTaskInput,
 };
 use crate::wallets::watch;
 use crate::webserver::state::AppState;
@@ -27,6 +27,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             get(get_task).patch(update_task).delete(delete_task),
         )
         .route("/tasks/:id/mode", axum::routing::post(set_task_mode))
+        .route("/tasks/:id/stats", get(task_stats))
         .route("/activity", get(list_activity))
 }
 
@@ -364,6 +365,26 @@ async fn list_activity(Query(query): Query<ActivityQuery>) -> Response {
         },
         Err(error) => internal_error(error),
     }
+}
+
+async fn task_stats(Path(id): Path<i64>) -> Response {
+    let db = match open_database().await {
+        Ok(db) => db,
+        Err(error) => return internal_error(error),
+    };
+    match db.get_task(id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return not_found(id),
+        Err(error) => return internal_error(error),
+    }
+    let activity = match db.list_task_activity(id, 10_000).await {
+        Ok(activity) => activity,
+        Err(error) => return internal_error(error),
+    };
+    let mut positions = crate::positions::get_open_positions().await;
+    positions.extend(crate::positions::get_closed_positions().await);
+    positions.extend(crate::positions::get_archived_positions().await);
+    success_response(build_task_stats(id, &activity, &positions))
 }
 
 fn invalid_task(reason: impl std::fmt::Debug) -> Response {

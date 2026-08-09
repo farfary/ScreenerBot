@@ -229,3 +229,63 @@ impl TransactionDatabase {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::params;
+
+    use super::TransactionDatabase;
+
+    #[tokio::test]
+    async fn target_retention_never_deletes_own_wallet_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = TransactionDatabase::new_with_path(dir.path().join("transactions.db"))
+            .await
+            .unwrap();
+        let connection = db.get_connection().unwrap();
+        for (signature, wallet, created_at) in [
+            ("own-old", "own", "2020-01-01 00:00:00"),
+            ("target-old", "target", "2020-01-01 00:00:00"),
+            ("target-new", "target", "2999-01-01 00:00:00"),
+        ] {
+            connection.execute(
+                "INSERT INTO raw_transactions (signature, wallet_address, timestamp, status, success, created_at) VALUES (?1, ?2, ?3, 'Confirmed', 1, ?3)",
+                params![signature, wallet, created_at],
+            ).unwrap();
+        }
+        for (signature, wallet, processed_at) in [
+            ("own-old", "own", "2020-01-01 00:00:00"),
+            ("target-old", "target", "2020-01-01 00:00:00"),
+        ] {
+            connection.execute(
+                "INSERT INTO processed_transactions (signature, wallet_address, transaction_type, direction, processed_at) VALUES (?1, ?2, 'Unknown', 'Unknown', ?3)",
+                params![signature, wallet, processed_at],
+            ).unwrap();
+        }
+        drop(connection);
+
+        assert_eq!(
+            db.cleanup_stale_target_transactions("own", 30)
+                .await
+                .unwrap(),
+            2
+        );
+        let connection = db.get_connection().unwrap();
+        let remaining_raw: Vec<String> = connection
+            .prepare("SELECT signature FROM raw_transactions ORDER BY signature")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(remaining_raw, ["own-old", "target-new"]);
+        let own_processed: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM processed_transactions WHERE signature='own-old'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(own_processed, 1);
+    }
+}

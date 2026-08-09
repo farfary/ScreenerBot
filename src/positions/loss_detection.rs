@@ -1,6 +1,9 @@
 //! Loss detection — identifies positions hitting stop-loss or trailing-stop thresholds.
 
-use super::{lib::calculate_position_pnl, types::Position};
+use super::{
+    lib::calculate_position_pnl,
+    types::{Position, PositionOrigin},
+};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::tokens::cleanup;
@@ -30,6 +33,18 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
     if !loss_blacklist_enabled {
         return Ok(());
     }
+    if matches!(position.origin, PositionOrigin::Copy { .. })
+        && !with_config(|cfg| cfg.positions.loss_blacklist_copy_origins)
+    {
+        logger::info(
+            LogTag::Positions,
+            &format!(
+                "Copy-origin loss for {} will not alter the global blacklist",
+                position.mint
+            ),
+        );
+        return Ok(());
+    }
 
     // Calculate final P&L for loss detection
     let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None).await;
@@ -50,7 +65,20 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
         if net_pnl_percent <= threshold {
             // Add to database-backed blacklist
             if let Some(db) = get_global_database() {
-                match cleanup::blacklist_token(&position.mint, "PoorPerformance", &db) {
+                let reason = match &position.origin {
+                    PositionOrigin::Copy {
+                        task_id,
+                        source_wallet,
+                    } => {
+                        format!("PoorPerformance:copy:{task_id}:{source_wallet}")
+                    }
+                    PositionOrigin::Auto { strategy_id } => format!(
+                        "PoorPerformance:auto:{}",
+                        strategy_id.as_deref().unwrap_or("unattributed")
+                    ),
+                    PositionOrigin::Manual => "PoorPerformance:manual".to_owned(),
+                };
+                match cleanup::blacklist_token(&position.mint, &reason, &db) {
                     Ok(_) => {
                         logger::info(
                             LogTag::Positions,

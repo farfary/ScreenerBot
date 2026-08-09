@@ -13,7 +13,9 @@ mod payloads;
 mod registry;
 mod types;
 
-pub use payloads::{get_websocket_url, get_websocket_url_from_http};
+pub use payloads::{
+    get_websocket_url, get_websocket_url_from_http, get_websocket_urls, websocket_url_for_attempt,
+};
 pub use types::{ConnectionState, LogsSubscription, SubscriptionEvent, SubscriptionMetrics};
 
 /// Subscribe to `logsSubscribe` notifications mentioning `address`.

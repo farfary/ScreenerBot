@@ -51,6 +51,13 @@ config_struct! {
             category: "Loss Detection",
         })]
         loss_blacklist_threshold_pct: f64 = -15.0,
+        #[metadata(field_metadata! {
+            label: "Blacklist Copy Losses",
+            hint: "Allow a losing copy-trading position to blacklist a token globally",
+            impact: "high",
+            category: "Loss Detection",
+        })]
+        loss_blacklist_copy_origins: bool = false,
 
         // ==================== PARTIAL EXIT CONFIGURATION ====================
         #[metadata(field_metadata! {

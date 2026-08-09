@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-pub(super) const SCHEMA_VERSION: i64 = 2;
+pub(super) const SCHEMA_VERSION: i64 = 3;
 
 pub(super) const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS copy_metadata (
@@ -51,6 +51,25 @@ CREATE TABLE IF NOT EXISTS copy_live_claims (
     task_id INTEGER NOT NULL,
     signature TEXT NOT NULL,
     claimed_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'claimed',
+    updated_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (task_id, signature),
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS copy_target_holdings (
+    task_id INTEGER NOT NULL,
+    mint TEXT NOT NULL,
+    token_amount REAL NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, mint),
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS copy_target_events (
+    task_id INTEGER NOT NULL,
+    signature TEXT NOT NULL,
+    mint TEXT NOT NULL,
+    token_delta REAL NOT NULL,
+    observed_at TEXT NOT NULL,
     PRIMARY KEY (task_id, signature),
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
 );
@@ -92,6 +111,36 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
                 [],
             )
             .map_err(|error| format!("Failed to add copy exit-policy storage: {error}"))?;
+    }
+    let mut statement = connection
+        .prepare("PRAGMA table_info(copy_live_claims)")
+        .map_err(|error| format!("Failed to inspect copy claim schema: {error}"))?;
+    let claim_columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| format!("Failed to query copy claim schema: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to decode copy claim schema: {error}"))?;
+    if !claim_columns.iter().any(|column| column == "state") {
+        connection
+            .execute(
+                "ALTER TABLE copy_live_claims ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'",
+                [],
+            )
+            .map_err(|error| format!("Failed to add copy claim state: {error}"))?;
+    }
+    if !claim_columns.iter().any(|column| column == "updated_at") {
+        connection
+            .execute(
+                "ALTER TABLE copy_live_claims ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+                [],
+            )
+            .map_err(|error| format!("Failed to add copy claim update time: {error}"))?;
+        connection
+            .execute(
+                "UPDATE copy_live_claims SET updated_at = claimed_at WHERE updated_at = ''",
+                [],
+            )
+            .map_err(|error| format!("Failed to backfill copy claim update time: {error}"))?;
     }
     Ok(())
 }

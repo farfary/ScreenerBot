@@ -26,6 +26,8 @@ const SKIP_LABELS = {
   copy_position_not_found: "No position owned by this copy task",
   position_user_only: "Position is managed by the user only",
   position_management_mismatch: "Position ownership no longer permits copy sells",
+  latency_kill_switch: "Task paused because target activity arrived too late",
+  claim_reconciled_abandoned: "An interrupted live claim was closed without retrying",
 };
 
 const POLICY_CONTROLS = [
@@ -214,6 +216,27 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     if (modeState) modeState.textContent = task?.mode === "live" ? "Live mode" : "Paper mode";
     updateSizeLabel();
     renderTasks();
+    if (task) loadTaskStats(task.id);
+    else $("#wallet-copy-task-stats")?.setAttribute("hidden", "");
+  }
+
+  async function loadTaskStats(id) {
+    const root = $("#wallet-copy-task-stats");
+    if (!root) return;
+    try {
+      const stats = await requestManager.fetch("/api/copy-trading/tasks/" + id + "/stats");
+      if (selectedId !== id) return;
+      const pnl = (Number(stats.realized_pnl_sol) || 0) + (Number(stats.unrealized_pnl_sol) || 0);
+      $("#wallet-copy-stats-pnl").textContent = (pnl >= 0 ? "+" : "") + pnl.toFixed(4) + " SOL";
+      const p95 = stats.arrival_distance?.p95_ms;
+      $("#wallet-copy-stats-arrival").textContent = p95 == null ? "—" : (p95 / 1000).toFixed(1) + "s";
+      $("#wallet-copy-stats-positions").textContent = (stats.open_positions || 0) + " open · " + (stats.closed_positions || 0) + " closed";
+      $("#wallet-copy-stats-decisions").textContent = String(stats.decisions || 0);
+      root.removeAttribute("hidden");
+    } catch (error) {
+      console.error("[Trader] Wallet copy stats failed:", error);
+      root.setAttribute("hidden", "");
+    }
   }
 
   async function changeTaskMode(event) {
@@ -264,6 +287,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     const formError = $("#wallet-copy-form-error");
     if (formError) formError.textContent = "";
     $("#wallet-copy-editor-empty")?.removeAttribute("hidden");
+    $("#wallet-copy-task-stats")?.setAttribute("hidden", "");
     renderTasks();
   }
 
@@ -489,7 +513,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
             (isSell
               ? isPaperSell
                 ? `Target sold ${outcome.target_token_amount ?? "—"} tokens · observation only`
-                : `Full close · target sold ${outcome.target_token_amount ?? "—"} tokens`
+                : `${outcome.exit_percentage == null ? "Full close" : `${Number(outcome.exit_percentage).toFixed(1)}% exit`} · target sold ${outcome.target_token_amount ?? "—"} tokens`
               : `${outcome.sized_sol ?? "—"} SOL`);
         const telemetry = outcome.telemetry;
         const arrivalMs =

@@ -4,7 +4,7 @@
 //! endpoints, so an https endpoint has to become wss, an http one ws, and an
 //! endpoint that is already a WebSocket URL has to pass through untouched.
 
-use screenerbot::rpc::get_websocket_url_from_http;
+use screenerbot::rpc::{get_websocket_url_from_http, websocket_url_for_attempt};
 
 #[test]
 fn https_becomes_wss() {
@@ -43,4 +43,25 @@ fn query_string_is_preserved() {
 #[test]
 fn garbage_input_is_an_error() {
     assert!(get_websocket_url_from_http("not a url").is_err());
+}
+
+#[test]
+fn reconnect_attempts_rotate_across_providers() {
+    let urls = vec![
+        "wss://one.example".to_owned(),
+        "wss://two.example".to_owned(),
+    ];
+    assert_eq!(
+        websocket_url_for_attempt(&urls, 0),
+        Some("wss://one.example")
+    );
+    assert_eq!(
+        websocket_url_for_attempt(&urls, 1),
+        Some("wss://two.example")
+    );
+    assert_eq!(
+        websocket_url_for_attempt(&urls, 2),
+        Some("wss://one.example")
+    );
+    assert_eq!(websocket_url_for_attempt(&[], 0), None);
 }
