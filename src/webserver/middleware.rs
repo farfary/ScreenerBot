@@ -276,6 +276,7 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
     // Static assets with version hash - aggressive caching (immutable, 1 year)
     if has_version
         && (path.starts_with("/scripts/")
+            || path.starts_with("/styles/")
             || path.starts_with("/assets/")
             || path.starts_with("/fonts/"))
     {
@@ -286,6 +287,7 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
     }
     // Static assets without version hash - short cache with revalidation
     else if path.starts_with("/scripts/")
+        || path.starts_with("/styles/")
         || path.starts_with("/assets/")
         || path.starts_with("/fonts/")
     {

@@ -2,11 +2,6 @@
    Bulk Import/Export Modal Styles
    ============================================================================= */
 
-/* Larger modal for import wizard */
-.modal-dialog.modal-lg {
-  max-width: 640px;
-}
-
 /* Import Steps Indicator */
 .import-steps {
   display: flex;

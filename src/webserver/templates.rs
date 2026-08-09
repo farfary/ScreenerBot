@@ -8,6 +8,81 @@ use crate::{arguments, version};
 // Import all embedded assets from the embeds module
 use super::embeds::*;
 
+/// Return the complete stylesheet bundle owned by a routable dashboard page.
+///
+/// Shared primitives and overlays are part of the base template. Page styles are
+/// deliberately separate so a page cannot change another page through the global
+/// cascade merely because it was visited earlier.
+pub fn page_styles(page: &str) -> Option<String> {
+    let styles = match page {
+        "services" => SERVICES_PAGE_STYLES.to_string(),
+        "transactions" => TRANSACTIONS_PAGE_STYLES.to_string(),
+        "events" => EVENTS_PAGE_STYLES.to_string(),
+        "tokens" => TOKENS_PAGE_STYLES.to_string(),
+        "positions" => POSITIONS_PAGE_STYLES.to_string(),
+        "filtering" => [
+            FILTERING_BASE_STYLES,
+            FILTERING_RESULTS_STYLES,
+            FILTERING_RESULTS_EXPLORER_STYLES,
+        ]
+        .join("\n"),
+        "config" => [
+            CONFIG_PAGE_STYLES,
+            CONFIG_SIDEBAR_STYLES,
+            CONFIG_FIELDS_STYLES,
+            CONFIG_RESPONSIVE_STYLES,
+        ]
+        .join("\n"),
+        "trader" => [
+            STRATEGIES_PAGE_STYLES,
+            STRATEGIES_CONDITION_CARDS_STYLES,
+            STRATEGIES_MODALS_STYLES,
+            STRATEGIES_EDITOR_STYLES,
+            STRATEGIES_UI_COMPONENTS_STYLES,
+            TRADER_PAGE_STYLES,
+            TRADER_CONFIG_COMPONENTS_STYLES,
+            TRADER_CONTROLS_STYLES,
+            TRADER_METRICS_STYLES,
+            TRADER_WALLET_COPY_STYLES,
+        ]
+        .join("\n"),
+        "wallets" => [
+            WALLETS_PAGE_STYLES,
+            WALLETS_MAIN_WALLET_STYLES,
+            WALLETS_MODALS_STYLES,
+            WALLETS_IMPORT_EXPORT_STYLES,
+            WALLETS_WATCHED_STYLES,
+        ]
+        .join("\n"),
+        "tools" => [
+            TOOLS_BASE_STYLES,
+            TOOLS_CONTENT_STYLES,
+            TOOLS_COMPONENTS_STYLES,
+            TOOLS_WALLET_STYLES,
+            TOOLS_TOKEN_STYLES,
+            TOOLS_TRADING_STYLES,
+        ]
+        .join("\n"),
+        "ai" => [
+            AI_BASE_STYLES,
+            AI_SETTINGS_TESTING_STYLES,
+            AI_PROVIDERS_STYLES,
+            AI_INSTRUCTIONS_STYLES,
+            AI_CHAT_STYLES,
+            AI_CHAT_MESSAGES_STYLES,
+            AI_CHAT_INPUT_STYLES,
+            AI_AUTOMATION_STYLES,
+        ]
+        .join("\n"),
+        "home" => [HOME_PAGE_STYLES, HOME_CALENDAR_STYLES].join("\n"),
+        "updates" => UPDATES_PAGE_STYLES.to_string(),
+        "about" => ABOUT_PAGE_STYLES.to_string(),
+        "initialization" => String::new(),
+        _ => return None,
+    };
+    Some(styles)
+}
+
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     use crate::global;
@@ -73,7 +148,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         .replace("url('lucide.ttf", "url('/assets/fonts/lucide.ttf")
         .replace("url('lucide.svg", "url('/assets/fonts/lucide.svg");
 
-    let mut combined_styles = vec![
+    let combined_styles = [
         FOUNDATION_STYLES,
         SCROLLBAR_STYLES, // Global scrollbar system - must be early to set defaults
         FLOATING_STYLES,  // Global floating UI system (dropdowns, popovers, dialogs)
@@ -94,6 +169,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TABLE_TOOLBAR_STYLES,
         EVENTS_DIALOG_STYLES,
         TRADE_ACTION_DIALOG_STYLES,
+        QUICK_TRADE_STYLES,
+        INPUT_DIALOG_STYLES,
         TAB_BAR_STYLES,
         DIALOG_TAB_BAR_STYLES,
         DIALOG_HEADER_ACTIONS_STYLES,
@@ -149,150 +226,13 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         LOCKSCREEN_PAGE_STYLES,
         // Status bar (always visible at bottom)
         STATUS_BAR_STYLES,
-        // All page styles included upfront to prevent FOUC (Flash of Unstyled Content)
-        // when navigating via SPA router. The CSS is small enough that bundling all
-        // is better than risking style injection race conditions in WebView.
-        SERVICES_PAGE_STYLES,
-        TRANSACTIONS_PAGE_STYLES,
-        EVENTS_PAGE_STYLES,
-        TOKENS_PAGE_STYLES,
-        POSITIONS_PAGE_STYLES,
-        FILTERING_BASE_STYLES,
-        FILTERING_RESULTS_STYLES,
-        FILTERING_RESULTS_EXPLORER_STYLES,
-        CONFIG_PAGE_STYLES,
-        CONFIG_SIDEBAR_STYLES,
-        CONFIG_FIELDS_STYLES,
-        CONFIG_RESPONSIVE_STYLES,
-        STRATEGIES_PAGE_STYLES,
-        STRATEGIES_CONDITION_CARDS_STYLES,
-        STRATEGIES_MODALS_STYLES,
-        STRATEGIES_EDITOR_STYLES,
-        STRATEGIES_UI_COMPONENTS_STYLES,
-        TRADER_PAGE_STYLES,
-        TRADER_CONFIG_COMPONENTS_STYLES,
-        TRADER_CONTROLS_STYLES,
-        TRADER_METRICS_STYLES,
-        TRADER_WALLET_COPY_STYLES,
-        WALLETS_PAGE_STYLES,
-        WALLETS_MAIN_WALLET_STYLES,
-        WALLETS_MODALS_STYLES,
-        WALLETS_IMPORT_EXPORT_STYLES,
-        WALLETS_WATCHED_STYLES,
-        TOOLS_BASE_STYLES,
-        TOOLS_CONTENT_STYLES,
-        TOOLS_COMPONENTS_STYLES,
-        TOOLS_WALLET_STYLES,
-        TOOLS_TOKEN_STYLES,
-        TOOLS_TRADING_STYLES,
-        AI_BASE_STYLES,
-        AI_SETTINGS_TESTING_STYLES,
-        AI_PROVIDERS_STYLES,
-        AI_INSTRUCTIONS_STYLES,
-        AI_CHAT_STYLES,
-        AI_CHAT_MESSAGES_STYLES,
-        AI_CHAT_INPUT_STYLES,
-        AI_AUTOMATION_STYLES,
-        HOME_PAGE_STYLES,
-        HOME_CALENDAR_STYLES,
-        UPDATES_PAGE_STYLES,
-        ABOUT_PAGE_STYLES,
     ];
-    // Suppress unused variable warning - active_tab was used for conditional style loading
-    // but we now include all styles upfront to prevent FOUC in WebView
-    let _ = active_tab;
-    html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
-    let mut page_style_injections = String::new();
-    for (page, styles) in [
-        ("services", SERVICES_PAGE_STYLES),
-        ("transactions", TRANSACTIONS_PAGE_STYLES),
-        ("events", EVENTS_PAGE_STYLES),
-        ("tokens", TOKENS_PAGE_STYLES),
-        ("positions", POSITIONS_PAGE_STYLES),
-        (
-            "filtering",
-            &[
-                FILTERING_BASE_STYLES,
-                FILTERING_RESULTS_STYLES,
-                FILTERING_RESULTS_EXPLORER_STYLES,
-            ]
-            .join("\n"),
-        ),
-        (
-            "config",
-            &[
-                CONFIG_PAGE_STYLES,
-                CONFIG_SIDEBAR_STYLES,
-                CONFIG_FIELDS_STYLES,
-                CONFIG_RESPONSIVE_STYLES,
-            ]
-            .join("\n"),
-        ),
-        (
-            "trader",
-            &[
-                TRADER_PAGE_STYLES,
-                TRADER_CONFIG_COMPONENTS_STYLES,
-                TRADER_CONTROLS_STYLES,
-                TRADER_METRICS_STYLES,
-                TRADER_WALLET_COPY_STYLES,
-            ]
-            .join("\n"),
-        ),
-        (
-            "wallets",
-            &[
-                WALLETS_PAGE_STYLES,
-                WALLETS_MAIN_WALLET_STYLES,
-                WALLETS_MODALS_STYLES,
-                WALLETS_IMPORT_EXPORT_STYLES,
-                WALLETS_WATCHED_STYLES,
-            ]
-            .join("\n"),
-        ),
-        (
-            "tools",
-            &[
-                TOOLS_BASE_STYLES,
-                TOOLS_CONTENT_STYLES,
-                TOOLS_COMPONENTS_STYLES,
-                TOOLS_WALLET_STYLES,
-                TOOLS_TOKEN_STYLES,
-                TOOLS_TRADING_STYLES,
-            ]
-            .join("\n"),
-        ),
-        (
-            "ai",
-            &[
-                AI_BASE_STYLES,
-                AI_SETTINGS_TESTING_STYLES,
-                AI_PROVIDERS_STYLES,
-                AI_INSTRUCTIONS_STYLES,
-                AI_CHAT_STYLES,
-                AI_CHAT_MESSAGES_STYLES,
-                AI_CHAT_INPUT_STYLES,
-                AI_AUTOMATION_STYLES,
-            ]
-            .join("\n"),
-        ),
-        ("home", &[HOME_PAGE_STYLES, HOME_CALENDAR_STYLES].join("\n")),
-        ("updates", UPDATES_PAGE_STYLES),
-        ("about", ABOUT_PAGE_STYLES),
-    ] {
-        if styles.trim().is_empty() {
-            continue;
-        }
-        let page_json =
-            serde_json::to_string(page).expect("failed to serialize page name for style map");
-        let styles_json =
-            serde_json::to_string(styles).expect("failed to serialize page styles for style map");
-        page_style_injections.push_str(&format!(
-            "window.__PAGE_STYLES__[{}] = {};\n",
-            page_json, styles_json
-        ));
-    }
-    html = html.replace("/*__PAGE_STYLES__*/", &page_style_injections);
+    html = html.replace("/*__GLOBAL_STYLES__*/", &combined_styles.join("\n"));
+    html = html.replace(
+        "/*__INITIAL_PAGE_STYLES__*/",
+        &page_styles(active_tab).unwrap_or_default(),
+    );
+    html = html.replace("{{ACTIVE_TAB}}", active_tab);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
     html
 }
@@ -454,4 +394,38 @@ pub fn login_template(title: &str, content: &str) -> String {
 </html>"#,
         title, combined_styles, content, asset_version, asset_version
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_styles;
+
+    #[test]
+    fn every_spa_page_has_an_explicit_style_bundle() {
+        let pages = [
+            "home",
+            "services",
+            "transactions",
+            "events",
+            "tokens",
+            "positions",
+            "filtering",
+            "config",
+            "trader",
+            "wallets",
+            "tools",
+            "ai",
+            "updates",
+            "about",
+            "initialization",
+        ];
+
+        for page in pages {
+            assert!(
+                page_styles(page).is_some(),
+                "missing page CSS bundle for {page}"
+            );
+        }
+        assert!(page_styles("unknown-page").is_none());
+    }
 }

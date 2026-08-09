@@ -615,22 +615,5 @@ class InputDialog {
   }
 }
 
-// Inject keyframe animation for shake effect
-const styleId = "input-dialog-keyframes";
-if (!document.getElementById(styleId)) {
-  const style = document.createElement("style");
-  style.id = styleId;
-  style.textContent = `
-    @keyframes input-dialog-shake {
-      0%, 100% { transform: translateX(0); }
-      10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-      20%, 40%, 60%, 80% { transform: translateX(4px); }
-    }
-    .input-dialog-backdrop--visible { opacity: 1 !important; }
-    .input-dialog--visible { opacity: 1 !important; transform: translate(-50%, -50%) scale(1) !important; }
-  `;
-  document.head.appendChild(style);
-}
-
 // Export for use in other modules
 export { InputDialog };

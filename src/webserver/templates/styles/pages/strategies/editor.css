@@ -79,20 +79,6 @@
   padding: 1rem;
 }
 
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.section-header h3 {
-  font-size: 0.9rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text-color);
-}
-
 /* Strategy Filters */
 .strategy-filters,
 .template-filters {

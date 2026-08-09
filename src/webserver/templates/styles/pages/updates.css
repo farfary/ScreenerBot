@@ -203,9 +203,15 @@
 }
 
 .release-notes-content {
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
   color: var(--text-secondary);
+  font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .release-notes-content h3 {
@@ -227,12 +233,6 @@
 }
 
 /* Empty State */
-.empty-state {
-  text-align: center;
-  padding: var(--spacing-2xl);
-  color: var(--text-tertiary);
-}
-
 .empty-state i {
   font-size: 48px;
   margin-bottom: var(--spacing-md);
@@ -252,5 +252,3 @@
   border-radius: var(--radius-full);
   animation: spin 1s linear infinite;
 }
-
-

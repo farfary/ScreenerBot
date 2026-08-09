@@ -6,7 +6,7 @@
  */
 
 import {
-  CONFIG_CATEGORIES,
+  buildConfigCategories,
   formatTimestampForInput,
   getTimeRangeLabel,
   getStatusMessage,
@@ -81,40 +81,40 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const metricsHtml = `
       <div class="status-view">
-        <div class="status-card dominant">
+        <div class="metric-card" data-accent="primary">
           <span class="metric-label">Total Tokens</span>
           <span class="metric-value">${Utils.formatNumber(total_tokens, 0)}</span>
-          <span class="metric-meta">In filtering cache</span>
+          <span class="metric-detail">In filtering cache</span>
         </div>
-        <div class="status-card">
+        <div class="metric-card">
           <span class="metric-label">With Price</span>
           <span class="metric-value">${Utils.formatNumber(with_pool_price, 0)}</span>
-          <span class="metric-meta">${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing</span>
+          <span class="metric-detail">${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing</span>
         </div>
-        <div class="status-card dominant">
+        <div class="metric-card" data-accent="primary">
           <span class="metric-label">Passed Filters</span>
           <span class="metric-value">${Utils.formatNumber(passed_filtering, 0)}</span>
-          <span class="metric-meta">${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed</span>
+          <span class="metric-detail">${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed</span>
         </div>
-        <div class="status-card">
+        <div class="metric-card">
           <span class="metric-label">Open Positions</span>
           <span class="metric-value">${Utils.formatNumber(open_positions, 0)}</span>
-          <span class="metric-meta">Active trades</span>
+          <span class="metric-detail">Active trades</span>
         </div>
-        <div class="status-card warning">
+        <div class="metric-card" data-accent="warning">
           <span class="metric-label">Blacklisted</span>
           <span class="metric-value">${Utils.formatNumber(blacklisted, 0)}</span>
-          <span class="metric-meta">Flagged tokens</span>
+          <span class="metric-detail">Flagged tokens</span>
         </div>
-        <div class="status-card">
+        <div class="metric-card">
           <span class="metric-label">With OHLCV</span>
           <span class="metric-value">${Utils.formatNumber(with_ohlcv, 0)}</span>
-          <span class="metric-meta">Historical data</span>
+          <span class="metric-detail">Historical data</span>
         </div>
-        <div class="status-card">
+        <div class="metric-card">
           <span class="metric-label">Last Refresh</span>
           <span class="metric-value">${updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never"}</span>
-          <span class="metric-meta">${updated_at ? new Date(updated_at).toLocaleString() : "No refresh yet"}</span>
+          <span class="metric-detail">${updated_at ? new Date(updated_at).toLocaleString() : "No refresh yet"}</span>
         </div>
       </div>
     `;
@@ -456,7 +456,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
   function renderExplorerView() {
     if (!state.analytics) {
-      return "<div class=\"loading-spinner\">Loading…</div>";
+      return '<div class="loading-spinner">Loading…</div>';
     }
 
     const data = state.analytics;
@@ -598,7 +598,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const toggleId = `category-toggle-${source}-${enableKey}`;
 
     return `
-    <label class="category-switch">
+    <label class="toggle toggle-sm" aria-label="Toggle ${Utils.escapeHtml(_categoryName)}">
       <input
         type="checkbox"
         id="${toggleId}"
@@ -606,7 +606,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         data-enable-key="${enableKey}"
         ${enabled ? "checked" : ""}
       />
-      <span class="slider"></span>
+      <span class="toggle-track"></span>
     </label>
   `;
   }
@@ -667,7 +667,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     }
 
     const targetSource = state.activeTab || "meta";
-    const categories = Object.entries(CONFIG_CATEGORIES).filter(([, data]) => {
+    const categories = Object.entries(buildConfigCategories(state.metadata)).filter(([, data]) => {
       if (targetSource === "meta") return data.source === "meta";
       return data.source === targetSource;
     });
@@ -699,14 +699,14 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     return `
     <div class="source-toggle-wrapper">
       <span class="label">${sourceLabel}</span>
-      <label class="source-switch">
+      <label class="toggle" aria-label="${Utils.escapeHtml(sourceLabel)}">
         <input
           type="checkbox"
           id="${toggleId}"
           data-source-toggle="${source}"
           ${enabled ? "checked" : ""}
         />
-        <span class="slider"></span>
+        <span class="toggle-track"></span>
       </label>
     </div>
   `;

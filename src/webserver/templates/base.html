@@ -127,7 +127,10 @@
         background-color: #f8f9fb;
         color: #1f2937;
       }
-      /*__INJECTED_STYLES__*/
+      /*__GLOBAL_STYLES__*/
+    </style>
+    <style data-page-style="{{ACTIVE_TAB}}">
+      /*__INITIAL_PAGE_STYLES__*/
     </style>
   </head>
 
@@ -654,11 +657,6 @@
         </span>
       </div>
     </footer>
-
-    <script>
-      window.__PAGE_STYLES__ = {};
-      /*__PAGE_STYLES__*/
-    </script>
 
     <!-- Core ES Modules - Only router.js needs to be loaded explicitly; it imports the others -->
     <!-- NOTE: Do NOT add separate script tags for lifecycle.js, app_state.js, poller.js, dom.js, utils.js

@@ -128,6 +128,8 @@ pub(super) const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/
 pub(super) const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
 pub(super) const TRADE_ACTION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/trade_action_dialog.css");
+pub(super) const QUICK_TRADE_STYLES: &str = include_str!("templates/styles/ui/quick_trade.css");
+pub(super) const INPUT_DIALOG_STYLES: &str = include_str!("templates/styles/ui/input_dialog.css");
 pub(super) const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
 pub(super) const DIALOG_TAB_BAR_STYLES: &str =
     include_str!("templates/styles/ui/dialog_tab_bar.css");

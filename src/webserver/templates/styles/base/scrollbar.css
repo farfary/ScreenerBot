@@ -533,7 +533,6 @@
 
 /* Navigation tabs - hidden scrollbar for clean appearance */
 .tabs,
-.sub-tabs-container,
 .details-tab-list,
 .notification-tabs,
 .header-row-2,
@@ -546,7 +545,6 @@
 }
 
 .tabs::-webkit-scrollbar,
-.sub-tabs-container::-webkit-scrollbar,
 .details-tab-list::-webkit-scrollbar,
 .notification-tabs::-webkit-scrollbar,
 .header-row-2::-webkit-scrollbar,

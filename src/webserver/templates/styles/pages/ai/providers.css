@@ -241,44 +241,6 @@
   animation: spin 0.8s linear infinite;
 }
 
-/* ============================================================================
-   Modal
-   ============================================================================ */
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgb(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-dialog);
-  backdrop-filter: blur(4px);
-  padding: var(--spacing-lg);
-}
-
-/* Standard Modal Dialog (matches wallets.css pattern) */
-.modal-dialog {
-  width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 20px 40px var(--shadow-lg);
-  overflow: hidden;
-}
-
-.modal-dialog.modal-sm {
-  max-width: 400px;
-}
-
-.modal-dialog.modal-lg {
-  max-width: 640px;
-}
-
 /* Provider Config Modal - improved layout */
 .provider-config-modal {
   max-width: 600px;
@@ -295,13 +257,7 @@
 }
 
 .provider-config-modal .provider-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  background: var(--primary-alpha-10);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--primary-color);
 }
 
 .provider-config-modal .provider-icon i {
@@ -533,22 +489,15 @@
     opacity: 0;
     transform: scale(0.96);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
   }
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-}
-
-.modal-header h3 {
+.provider-config-modal .modal-header h3,
+.instruction-modal .modal-header h3 {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
@@ -558,53 +507,10 @@
   gap: var(--spacing-sm);
 }
 
-.modal-header h3 i {
+.provider-config-modal .modal-header h3 i,
+.instruction-modal .modal-header h3 i {
   font-size: 1.1rem;
   color: var(--primary-color);
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-}
-
-.modal-close:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-
-.modal-close i {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.modal-body {
-  padding: var(--spacing-lg);
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-secondary);
 }
 
 .modal-body .form-group {
@@ -678,6 +584,7 @@
   padding: var(--input-padding-y, 8px) var(--input-padding-x, 12px);
   border: 1px solid var(--border-color);
   border-radius: var(--input-border-radius, 6px);
+
   /* background-color (not the `background` shorthand) so a <select> keeps the global arrow. */
   background-color: var(--bg-secondary);
   color: var(--text-primary);
@@ -797,4 +704,3 @@
   max-height: 200px;
   overflow-y: auto;
 }
-

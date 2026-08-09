@@ -387,7 +387,6 @@ export class TradeActionDialog {
     `;
 
     // Inject quick trade styles
-    this._injectQuickTradeStyles();
 
     document.body.appendChild(overlay);
 

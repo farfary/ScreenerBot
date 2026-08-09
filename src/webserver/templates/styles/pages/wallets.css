@@ -105,13 +105,11 @@
   scrollbar-gutter: stable;
 }
 
-
 /* =============================================================================
    Main Wallet Section - Enhanced Design
    ============================================================================= */
 
 /* Extracted to wallets/main_wallet.css */
-
 
 /* =============================================================================
    Wallets Table (Secondaries & Archive) - Enhanced Design
@@ -321,32 +319,11 @@
    Empty State - Enhanced Design
    ============================================================================= */
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.wallets-page .empty-state {
   justify-content: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-2xl) var(--spacing-lg);
-  text-align: center;
   min-height: 400px;
 }
 
-.empty-state-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  flex-shrink: 0;
-  border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
-  border: 1px solid var(--border-color);
-  margin-bottom: var(--spacing-md);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
-}
-
-/* Icon inside the empty state circle */
 .wallets-page .empty-state-icon i {
   font-size: 1.75rem;
   color: var(--text-secondary);
@@ -358,62 +335,29 @@
   justify-content: center;
 }
 
-/* Legacy icon style (direct child, not in icon container) */
 .wallets-page .empty-state > i:not(.empty-state-icon i) {
   font-size: 2rem;
   color: var(--text-muted);
   opacity: 0.5;
 }
 
-.empty-state-title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.4;
-}
-
-.empty-state-description {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
+.wallets-page .empty-state-description {
   max-width: 420px;
-  line-height: 1.6;
 }
 
-.empty-state p {
+.wallets-page .empty-state p {
   margin: 0;
   font-size: 0.875rem;
   color: var(--text-secondary);
 }
 
-.empty-state small {
+.wallets-page .empty-state small {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
 
-.empty-state-action {
-  margin-top: var(--spacing-md);
-}
-
-.empty-state-action .btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 24px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  border-radius: var(--radius-md);
+.wallets-page .empty-state-action .btn {
   min-width: 140px;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.empty-state-action .btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
 }
 
 /* Button icon inside empty state action */
@@ -478,7 +422,6 @@
   color: var(--text-secondary);
 }
 
-
 /* =============================================================================
    Modal Styles
    ============================================================================= */
@@ -497,8 +440,6 @@
   animation: spin 1s linear infinite;
 }
 
-
-
 /* =============================================================================
    Responsive Design
    ============================================================================= */
@@ -515,17 +456,7 @@
   .wallets-main {
     padding: var(--spacing-md);
   }
-
-  .modal-dialog {
-    max-height: 100vh;
-    border-radius: 0;
-  }
-
-  .modal-overlay {
-    padding: 0;
-  }
 }
-
 
 /* =============================================================================
    Bulk Import/Export Modal Styles

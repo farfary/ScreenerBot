@@ -31,6 +31,7 @@ import { createFilteringRenderers } from "./filtering/renderers.js";
 // ============================================================================
 
 const state = {
+  metadata: null,
   config: null,
   draft: null,
   stats: null,
@@ -64,7 +65,6 @@ function addTrackedListener(element, event, handler) {
   element.addEventListener(event, handler);
   eventCleanups.push(() => element.removeEventListener(event, handler));
 }
-
 
 // Time range filter functions
 async function setTimeRangePreset(preset) {
@@ -103,6 +103,12 @@ async function setTimeRangePreset(preset) {
 // ============================================================================
 async function fetchConfig() {
   return await requestManager.fetch("/api/config/filtering", {
+    priority: "high",
+  });
+}
+
+async function fetchConfigMetadata() {
+  return await requestManager.fetch("/api/config/metadata", {
     priority: "high",
   });
 }
@@ -160,7 +166,6 @@ async function fetchAnalytics() {
   });
 }
 
-
 // ============================================================================
 // RENDERERS
 // ============================================================================
@@ -171,7 +176,6 @@ let renderers = null;
 // ============================================================================
 // DOM UPDATE HELPERS
 // ============================================================================
-
 
 let globalHandlersBound = false;
 
@@ -259,7 +263,8 @@ function updateConfigPanels(options = {}) {
   // Scroll lives on the inner .config-scroll-area (config tabs), .analytics-scroll-area
   // (analytics tab), or the two independent status columns (.status-metrics-section /
   // .status-rejection-section). Save them all before the innerHTML replacement.
-  const prevScrollEl = container.querySelector(".config-scroll-area, .analytics-scroll-area") || container;
+  const prevScrollEl =
+    container.querySelector(".config-scroll-area, .analytics-scroll-area") || container;
   const previousScroll = prevScrollEl.scrollTop;
   const prevLeftScroll = container.querySelector(".status-metrics-section")?.scrollTop ?? 0;
   const prevRightScroll = container.querySelector(".status-rejection-section")?.scrollTop ?? 0;
@@ -267,7 +272,8 @@ function updateConfigPanels(options = {}) {
   container.innerHTML = renderers.renderConfigPanels();
   bindConfigHandlers();
 
-  const nextScrollEl = container.querySelector(".config-scroll-area, .analytics-scroll-area") || container;
+  const nextScrollEl =
+    container.querySelector(".config-scroll-area, .analytics-scroll-area") || container;
   if (options.scrollTop === 0) {
     nextScrollEl.scrollTo({ top: 0, behavior: options.smooth ? "smooth" : "auto" });
   } else if (options.preserveScroll) {
@@ -515,8 +521,9 @@ function handleImportConfig() {
 
 async function loadConfig() {
   try {
-    const response = await fetchConfig();
+    const [response, metadataResponse] = await Promise.all([fetchConfig(), fetchConfigMetadata()]);
     state.config = response.data || response;
+    state.metadata = (metadataResponse.data || metadataResponse).filtering || {};
     state.draft = JSON.parse(JSON.stringify(state.config)); // Deep clone for nested structures
     state.hasChanges = false;
   } catch (error) {
@@ -1018,7 +1025,6 @@ window.filteringPage = {
     window.filteringPage.explorerPage = page;
     const container = document.getElementById("explorer-detail-view");
     const reason = window.filteringPage.currentReason;
-    const label = window.filteringPage.currentReasonLabel;
     const searchQuery = window.filteringPage.tokenSearchQuery;
 
     if (!container || !reason) return;

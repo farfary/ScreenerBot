@@ -1292,6 +1292,12 @@ function createLifecycle() {
 
       // Fetch feature status early (non-blocking, but before tab bar setup)
       const featurePromise = fetchFeatureStatus(requestManager);
+      const metadataPromise = requestManager
+        .fetch("/api/config/metadata", { priority: "normal" })
+        .catch((error) => {
+          console.warn("[Trader] Configuration metadata unavailable:", error);
+          return null;
+        });
 
       // Per-card Save/Reset controls (injected into each config card header).
       // saveConfig POSTs + hot-reloads + reloads the form, after which
@@ -1300,7 +1306,9 @@ function createLifecycle() {
       configCards.setup();
 
       // Wait for features before setting up tabs (important for initial tab selection)
-      tradingFeatures = await featurePromise;
+      const [features, metadataResponse] = await Promise.all([featurePromise, metadataPromise]);
+      tradingFeatures = features;
+      configCards.applyMetadata(metadataResponse?.data || metadataResponse || {});
 
       // Initialize tab bar with beforeChange hook for feature validation
       tabBar = new TabBar({

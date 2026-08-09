@@ -63,6 +63,14 @@
   min-height: 0; /* No minimum height needed */
   position: relative;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sub-tabs-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .sub-tabs-container[data-ui="tab-bar"] {
@@ -251,7 +259,7 @@
 
 /* Force hide sub-tabs container (useful for pages without sub-tabs) */
 .sub-tabs-container.hidden {
-  display: none !important;
+  display: none;
 }
 
 /* Compact mode (for dense UIs) */
@@ -371,4 +379,3 @@
 .tab-scroll-wrapper.has-scroll-buttons::after {
   display: none;
 }
-

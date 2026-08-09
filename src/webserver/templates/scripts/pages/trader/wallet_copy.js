@@ -229,8 +229,10 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
       const pnl = (Number(stats.realized_pnl_sol) || 0) + (Number(stats.unrealized_pnl_sol) || 0);
       $("#wallet-copy-stats-pnl").textContent = (pnl >= 0 ? "+" : "") + pnl.toFixed(4) + " SOL";
       const p95 = stats.arrival_distance?.p95_ms;
-      $("#wallet-copy-stats-arrival").textContent = p95 == null ? "—" : (p95 / 1000).toFixed(1) + "s";
-      $("#wallet-copy-stats-positions").textContent = (stats.open_positions || 0) + " open · " + (stats.closed_positions || 0) + " closed";
+      $("#wallet-copy-stats-arrival").textContent =
+        p95 == null ? "—" : (p95 / 1000).toFixed(1) + "s";
+      $("#wallet-copy-stats-positions").textContent =
+        (stats.open_positions || 0) + " open · " + (stats.closed_positions || 0) + " closed";
       $("#wallet-copy-stats-decisions").textContent = String(stats.decisions || 0);
       root.removeAttribute("hidden");
     } catch (error) {
@@ -445,7 +447,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     lastTaskRenderKey = renderKey;
     if (!tasks.length) {
       root.innerHTML =
-        '<div class="wallet-copy-empty"><i class="icon-copy"></i><strong>No copy tasks</strong><span>Add a wallet and begin in Paper mode.</span></div>';
+        '<div class="empty-state wallet-copy-empty"><i class="empty-state-icon icon-copy"></i><strong class="empty-state-title">No copy tasks</strong><span class="empty-state-description">Add a wallet and begin in Paper mode.</span></div>';
       return;
     }
     root.innerHTML = tasks
@@ -484,7 +486,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     if (columns) columns.hidden = !items.length;
     if (!items.length) {
       root.innerHTML =
-        '<div class="wallet-copy-empty"><strong>No decisions yet</strong><span>Paper fills, live submissions and skips will appear here.</span></div>';
+        '<div class="empty-state wallet-copy-empty"><strong class="empty-state-title">No decisions yet</strong><span class="empty-state-description">Paper fills, live submissions and skips will appear here.</span></div>';
       return;
     }
     root.innerHTML = items
@@ -537,7 +539,7 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     if (columns) columns.hidden = true;
     if (root)
       root.innerHTML =
-        '<div class="wallet-copy-empty"><i class="icon-circle-alert"></i><strong>Copy tasks unavailable</strong><span>Try again in a moment.</span></div>';
+        '<div class="empty-state wallet-copy-empty"><i class="empty-state-icon icon-circle-alert"></i><strong class="empty-state-title">Copy tasks unavailable</strong><span class="empty-state-description">Try again in a moment.</span></div>';
   }
 
   function reset() {

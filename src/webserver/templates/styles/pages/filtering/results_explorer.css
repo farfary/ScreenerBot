@@ -872,12 +872,3 @@
     min-width: 150px;
   }
 }
-
-/* Force visibility of sub-tabs on filtering page to prevent race conditions */
-.sub-tabs-container[data-page="filtering"] {
-  display: flex !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  min-height: 35px;
-  z-index: 10;
-}

@@ -215,117 +215,52 @@
   gap: var(--spacing-md);
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.form-group label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.form-group input:not([type="checkbox"], [type="radio"]),
-.form-group textarea,
-.form-group select {
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background-color: var(--input-bg);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  font-family: inherit;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.form-group select {
-  /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding-right: 32px;
-  cursor: pointer;
-}
-
-.form-group input:not([type="checkbox"], [type="radio"]):focus,
-.form-group textarea:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-alpha-20);
-}
-
-.form-group input::placeholder,
-.form-group textarea::placeholder {
-  color: var(--text-muted);
-}
-
-.form-group small {
+.tools-page .form-group small {
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
 /* Required field indicator */
-.form-group label .required {
+.tools-page .form-group label .required {
   color: var(--error-color);
   font-weight: 700;
   margin-left: 2px;
 }
 
 /* Input validation states */
-.form-group input:not([type="checkbox"], [type="radio"]):invalid:not(:placeholder-shown) {
+.tools-page
+  .form-group
+  input:not([type="checkbox"], [type="radio"]):invalid:not(:placeholder-shown) {
   border-color: var(--error-color);
 }
 
-.form-group input:not([type="checkbox"], [type="radio"]):invalid:not(:placeholder-shown):focus {
+.tools-page
+  .form-group
+  input:not([type="checkbox"], [type="radio"]):invalid:not(:placeholder-shown):focus {
   box-shadow: 0 0 0 3px var(--danger-alpha-20);
 }
 
 /* Standalone checkbox group (not in form-row) */
-.form-group.checkbox-group {
+.tools-page .form-group.checkbox-group {
   flex-flow: row wrap;
   align-items: flex-start;
   gap: var(--spacing-sm);
 }
 
-.form-group.checkbox-group > label {
+.tools-page .form-group.checkbox-group > label {
   flex: 0 0 auto;
 }
 
-.form-group.checkbox-group > small {
+.tools-page .form-group.checkbox-group > small {
   flex: 1 1 100%;
   margin-top: 0;
 }
 
-.form-group.checkbox-group label {
+.tools-page .form-group.checkbox-group label {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
   cursor: pointer;
-}
-
-
-/* Input group */
-.input-group {
-  display: flex;
-  gap: var(--spacing-sm);
-}
-
-.input-group input {
-  flex: 1;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--input-bg);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-}
-
-.input-group input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-alpha-20);
 }
 
 /* Image upload area */
@@ -409,8 +344,6 @@
 /* =============================================================================
    Animations
    ============================================================================= */
-
-
 
 .spin {
   animation: spin 1s linear infinite;

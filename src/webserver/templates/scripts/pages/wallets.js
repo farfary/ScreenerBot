@@ -257,11 +257,11 @@ function setupAddWalletModal() {
       const importContent = $("#import-tab-content");
 
       if (tabId === "create") {
-        createContent.classList.remove("hidden");
-        importContent.classList.add("hidden");
+        createContent.classList.add("active");
+        importContent.classList.remove("active");
       } else {
-        createContent.classList.add("hidden");
-        importContent.classList.remove("hidden");
+        createContent.classList.remove("active");
+        importContent.classList.add("active");
       }
     });
   });

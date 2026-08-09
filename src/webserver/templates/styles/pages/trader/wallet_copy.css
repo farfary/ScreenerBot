@@ -124,34 +124,6 @@
 .wallet-copy-editor-empty {
   height: 100%;
   min-height: 128px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xl);
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.wallet-copy-empty i,
-.wallet-copy-editor-empty i {
-  margin-bottom: var(--spacing-xs);
-  color: var(--text-tertiary);
-  font-size: 1.15rem;
-}
-
-.wallet-copy-empty strong,
-.wallet-copy-editor-empty strong {
-  color: var(--text-primary);
-  font-size: 0.85rem;
-}
-
-.wallet-copy-empty span,
-.wallet-copy-editor-empty span {
-  max-width: 38ch;
-  font-size: 0.76rem;
-  line-height: 1.45;
 }
 
 .wallet-copy-task {

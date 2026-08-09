@@ -68,6 +68,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/scripts/core/:file", get(get_core_script))
         .route("/scripts/pages/*file", get(get_page_script))
         .route("/scripts/ui/*file", get(get_ui_script))
+        .route("/styles/pages/:page", get(get_page_styles))
         .route("/assets/:file", get(get_asset))
         .route("/assets/fonts/:file", get(get_font))
         .route("/assets/providers/:file", get(get_provider_logo))

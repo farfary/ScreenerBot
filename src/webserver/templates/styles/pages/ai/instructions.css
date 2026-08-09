@@ -223,15 +223,6 @@
 }
 
 /* Empty State */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  text-align: center;
-}
-
 .empty-icon {
   width: 48px;
   height: 48px;
@@ -477,4 +468,3 @@
   padding: 1rem;
   margin-top: 1rem;
 }
-

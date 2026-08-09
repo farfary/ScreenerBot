@@ -1,4 +1,4 @@
-use crate::webserver::embeds;
+use crate::webserver::{embeds, templates};
 use axum::{
     extract::Path,
     http::{header as http_header, StatusCode},
@@ -48,6 +48,30 @@ fn serve_js(content: &str) -> Response {
         versioned,
     )
         .into_response()
+}
+
+fn serve_css(content: String) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (http_header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (
+                http_header::CACHE_CONTROL,
+                "no-store, no-cache, must-revalidate",
+            ),
+        ],
+        content,
+    )
+        .into_response()
+}
+
+/// Serve the isolated stylesheet bundle for one routable dashboard page.
+pub async fn get_page_styles(Path(page): Path<String>) -> Response {
+    let page = page.strip_suffix(".css").unwrap_or(&page);
+    match templates::page_styles(page) {
+        Some(css) => serve_css(css),
+        None => (StatusCode::NOT_FOUND, "Page stylesheet not found").into_response(),
+    }
 }
 
 /// Serve core JavaScript modules

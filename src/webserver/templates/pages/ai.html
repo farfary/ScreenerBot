@@ -34,7 +34,12 @@
           </button>
         </li>
         <li>
-          <button class="ai-nav-item" type="button" data-tab="instructions" aria-label="Instructions">
+          <button
+            class="ai-nav-item"
+            type="button"
+            data-tab="instructions"
+            aria-label="Instructions"
+          >
             <span class="nav-item-icon"><i class="icon-file-text"></i></span>
             <span class="ai-nav-label">Instructions</span>
           </button>
@@ -64,8 +69,7 @@
     <main class="ai-main-panel">
       <div id="ai-content">
         <!-- Chat Panel (populated by ChatWidget) -->
-        <div id="chat-panel" class="ai-panel-content active">
-        </div>
+        <div id="chat-panel" class="ai-panel-content active"></div>
 
         <!-- Stats Panel (Overview) -->
         <div id="stats-panel" class="ai-panel-content">
@@ -98,28 +102,28 @@
 
           <!-- Key Metrics -->
           <div class="metrics-grid">
-            <div class="metric-card" data-accent="primary">
+            <div class="metric-card metric-card--with-icon" data-accent="primary">
               <div class="metric-icon"><i class="icon-hash"></i></div>
               <div class="metric-content">
                 <div class="metric-label">Total Evaluations</div>
                 <div class="metric-value" id="metric-total-evaluations">0</div>
               </div>
             </div>
-            <div class="metric-card" data-accent="success">
+            <div class="metric-card metric-card--with-icon" data-accent="success">
               <div class="metric-icon"><i class="icon-zap"></i></div>
               <div class="metric-content">
                 <div class="metric-label">Cache Hit Rate</div>
                 <div class="metric-value" id="metric-cache-hit-rate">0%</div>
               </div>
             </div>
-            <div class="metric-card" data-accent="info">
+            <div class="metric-card metric-card--with-icon" data-accent="info">
               <div class="metric-icon"><i class="icon-timer"></i></div>
               <div class="metric-content">
                 <div class="metric-label">Avg Latency</div>
                 <div class="metric-value" id="metric-avg-latency">0ms</div>
               </div>
             </div>
-            <div class="metric-card" data-accent="warning">
+            <div class="metric-card metric-card--with-icon" data-accent="warning">
               <div class="metric-icon"><i class="icon-server"></i></div>
               <div class="metric-content">
                 <div class="metric-label">Active Providers</div>
@@ -566,7 +570,12 @@
                 Schedule AI tasks to run automatically on intervals or at specific times
               </p>
             </div>
-            <button type="button" class="btn btn-primary" id="new-automation-btn" aria-label="Create new automation task">
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="new-automation-btn"
+              aria-label="Create new automation task"
+            >
               <i class="icon-plus"></i> New Task
             </button>
           </div>
@@ -597,8 +606,15 @@
               <div class="empty-state" id="no-automation-tasks">
                 <i class="empty-icon icon-zap"></i>
                 <p class="empty-text">No scheduled tasks yet</p>
-                <p class="empty-state-subtitle">Create your first automated AI task to get started</p>
-                <button type="button" class="btn btn-secondary" id="empty-add-automation-btn" aria-label="Create first automation task">
+                <p class="empty-state-subtitle">
+                  Create your first automated AI task to get started
+                </p>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  id="empty-add-automation-btn"
+                  aria-label="Create first automation task"
+                >
                   Create Your First Task
                 </button>
               </div>
@@ -608,9 +624,7 @@
           <!-- Recent Runs Timeline -->
           <div class="automation-runs-section">
             <div class="automation-runs-header">
-              <h3 class="automation-runs-title">
-                <i class="icon-clock"></i> Recent Runs
-              </h3>
+              <h3 class="automation-runs-title"><i class="icon-clock"></i> Recent Runs</h3>
               <span class="automation-runs-count" id="auto-runs-count"></span>
             </div>
             <div class="automation-runs-list" id="automation-runs-list">

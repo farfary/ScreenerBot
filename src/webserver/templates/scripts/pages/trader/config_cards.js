@@ -254,6 +254,41 @@ export function createTraderConfigCards({ saveConfig }) {
     snapshot();
   }
 
+  /**
+   * Apply the same schema metadata used by the main Configuration tab to this
+   * curated Auto Trader layout. The layout remains task-focused, while field
+   * names, help text, units and numeric constraints retain one backend owner.
+   */
+  function applyMetadata(allMetadata = {}) {
+    CARD_SPECS.forEach((spec) => {
+      const sectionMetadata = allMetadata[spec.section] || {};
+      spec.fields.forEach((field) => {
+        const metadata = sectionMetadata[field.key];
+        const input = document.getElementById(field.id);
+        if (!metadata || !input) return;
+
+        const group = input.closest(".config-group");
+        const label = group?.querySelector(`label[for="${field.id}"] span`);
+        const hint = group?.querySelector(".config-hint");
+        const unit = group?.querySelector(".input-unit");
+
+        if (label && metadata.label) label.textContent = metadata.label;
+        if (hint && metadata.hint) hint.textContent = metadata.hint;
+        if (unit && metadata.unit) unit.textContent = metadata.unit;
+
+        if (input.type === "number" && field.type !== "minutes-to-seconds") {
+          if (metadata.min != null) input.min = String(metadata.min);
+          if (metadata.max != null) input.max = String(metadata.max);
+          if (metadata.step != null) input.step = String(metadata.step);
+        }
+
+        const accessibleName = metadata.label || field.key;
+        input.setAttribute("aria-label", accessibleName);
+        if (metadata.hint) input.setAttribute("title", metadata.hint);
+      });
+    });
+  }
+
   // Record the current field values as the saved baseline and re-hide buttons.
   // Called after every config load/save so "dirty" means "differs from saved".
   function snapshot() {
@@ -276,5 +311,5 @@ export function createTraderConfigCards({ saveConfig }) {
     cards.length = 0;
   }
 
-  return { setup, snapshot, dispose, hasDirtyCards };
+  return { setup, applyMetadata, snapshot, dispose, hasDirtyCards };
 }

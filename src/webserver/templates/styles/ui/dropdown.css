@@ -3,6 +3,30 @@
    Uses global floating UI system from floating.css
    ============================================================================= */
 
+.dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-btn {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 1.2em;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-base),
+    background-color var(--transition-base);
+}
+
+.dropdown-btn:hover {
+  border-color: var(--link-color);
+  background: var(--bg-card-hover);
+}
+
 .dropdown-menu {
   position: absolute;
   top: calc(100% + 6px);

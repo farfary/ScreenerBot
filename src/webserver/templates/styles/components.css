@@ -440,66 +440,44 @@
   font-size: 1.5rem;
 }
 
-/* Dropdown Menu Styles - Moved to ui/dropdown.css */
-.dropdown-container {
-  position: relative;
-  display: inline-block;
-}
-
-.dropdown-btn {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: 1.2em;
-  font-weight: bold;
-  cursor: pointer;
-  color: var(--text-primary);
-  transition: all var(--transition-base);
-}
-
-.dropdown-btn:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--link-color);
-}
-
 /* Modal Styles */
 .modal-overlay {
-  display: none;
   position: fixed;
   inset: 0;
-  background: rgb(0, 0, 0, 0.7);
-  z-index: 2000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-overlay.show {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: var(--spacing-lg);
+  background: rgb(0, 0, 0, 0.6);
+  z-index: var(--z-dialog);
+  backdrop-filter: blur(4px);
 }
 
-.modal-content {
-  background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  width: 90%;
+.modal-overlay.hidden,
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal-content,
+.modal-dialog {
+  width: 100%;
   max-width: 900px;
   max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
-  animation: modalSlideIn 0.3s ease-out;
 }
 
-@keyframes modalSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-50px);
-  }
+.modal-dialog.modal-sm {
+  max-width: 480px;
+}
 
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.modal-dialog.modal-lg {
+  max-width: 760px;
 }
 
 .modal-header {
@@ -507,8 +485,8 @@
   justify-content: space-between;
   align-items: center;
   padding: var(--spacing-lg) var(--spacing-lg);
-  border-bottom: 2px solid var(--border-color);
-  background: var(--table-header-bg);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
 }
 
 .modal-title {
@@ -538,10 +516,27 @@
   color: var(--text-primary);
 }
 
+.modal-close i {
+  font-size: 1rem;
+  line-height: 1;
+}
+
 .modal-body {
   padding: var(--spacing-lg);
   max-height: calc(90vh - 140px);
   overflow-y: auto;
+}
+
+@media (width <= 600px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-content,
+  .modal-dialog {
+    max-height: 100vh;
+    border-radius: 0;
+  }
 }
 
 .modal-tabs {
@@ -552,6 +547,10 @@
 }
 
 .modal-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
   padding: var(--spacing-sm) var(--spacing-lg);
   background: none;
   border: none;
@@ -578,7 +577,18 @@
 }
 
 .modal-tab-content.active {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card);
 }
 
 .debug-section {
@@ -740,20 +750,44 @@
 
 /* Metric Card: For displaying key metrics, statistics, values */
 .metric-card {
-  background: var(--bg-secondary);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
   text-align: center;
-  transition: all var(--transition-base);
+  transition:
+    border-color var(--transition-base),
+    background-color var(--transition-base);
 }
 
 .metric-card:hover {
-  border-color: var(--link-color);
-  box-shadow: 0 2px 8px var(--shadow-sm);
+  border-color: var(--primary-alpha-30);
+  background: var(--bg-card-hover);
 }
 
-.metric-card-label {
+.metric-card--with-icon {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  text-align: left;
+}
+
+.metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--primary-color);
+  font-size: 1.1rem;
+}
+
+.metric-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-card-label,
+.metric-label {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -762,7 +796,8 @@
   font-weight: 600;
 }
 
-.metric-card-value {
+.metric-card-value,
+.metric-value {
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--text-primary);
@@ -770,7 +805,51 @@
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.metric-detail {
+  margin-top: var(--spacing-xs);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.35;
+}
+
+.metric-value.positive,
+.metric-highlight-success .metric-icon,
+.metric-card[data-accent="success"] .metric-icon {
+  color: var(--success-color);
+}
+
+.metric-value.negative,
+.metric-highlight-danger .metric-icon {
+  color: var(--error-color);
+}
+
+.metric-card[data-accent="info"] .metric-icon {
+  color: var(--semantic-info-text);
+}
+
+.metric-card[data-accent="warning"] .metric-icon {
+  color: var(--semantic-warning-text);
+}
+
+.metric-card-primary,
+.metric-card[data-accent="primary"] {
+  border-color: var(--primary-alpha-30);
+}
+
+.metric-highlight-success,
+.metric-card[data-accent="success"] {
+  border-color: var(--success-alpha-30);
+}
+
+.metric-card[data-accent="warning"] {
+  border-color: var(--warning-alpha-30);
+}
+
+.metric-highlight-danger {
+  border-color: var(--danger-alpha-30);
 }
 
 /* Metric Card Grid Layout Helper */

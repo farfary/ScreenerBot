@@ -37,25 +37,48 @@ export function getCurrentPage() {
   return _state.currentPage;
 }
 
+function activatePageStyles(pageName) {
+  document.head.querySelectorAll("[data-page-style]").forEach((styleEl) => {
+    if (styleEl.getAttribute("data-page-style") !== pageName) {
+      styleEl.remove();
+    }
+  });
+}
+
 function ensurePageStyles(pageName) {
   if (typeof pageName !== "string" || !pageName) {
-    return;
+    return Promise.resolve();
   }
-  const registry = window.__PAGE_STYLES__;
-  if (!registry || typeof registry !== "object") {
-    return;
+
+  const existing = document.head.querySelector(`[data-page-style="${pageName}"]`);
+  if (existing) {
+    activatePageStyles(pageName);
+    return Promise.resolve();
   }
-  if (document.head.querySelector(`style[data-page-style="${pageName}"]`)) {
-    return;
-  }
-  const styles = registry[pageName];
-  if (typeof styles !== "string" || !styles.trim()) {
-    return;
-  }
-  const styleTag = document.createElement("style");
-  styleTag.setAttribute("data-page-style", pageName);
-  styleTag.textContent = styles;
-  document.head.appendChild(styleTag);
+
+  return new Promise((resolve, reject) => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = `/styles/pages/${encodeURIComponent(pageName)}.css${assetQuery}`;
+    link.setAttribute("data-page-style", pageName);
+    link.addEventListener(
+      "load",
+      () => {
+        activatePageStyles(pageName);
+        resolve();
+      },
+      { once: true }
+    );
+    link.addEventListener(
+      "error",
+      () => {
+        link.remove();
+        reject(new Error(`Stylesheet unavailable for ${pageName}`));
+      },
+      { once: true }
+    );
+    document.head.appendChild(link);
+  });
 }
 
 export function setActiveTab(pageName) {
@@ -200,7 +223,7 @@ export async function loadPage(pageName) {
   if (cachedEl) {
     console.log("[Router] Using cached page:", pageName);
 
-    ensurePageStyles(pageName);
+    await ensurePageStyles(pageName);
     displayPageElement(mainContent, cachedEl);
     await PageLifecycleRegistry.activate(pageName);
 
@@ -220,7 +243,7 @@ export async function loadPage(pageName) {
 
   const loadingEl = document.createElement("div");
   loadingEl.className = "page-loading";
-  loadingEl.innerHTML = "<div class=\"loading-spinner\">Loading…</div>";
+  loadingEl.innerHTML = '<div class="loading-spinner">Loading…</div>';
 
   Object.values(_state.pageCache).forEach((el) => {
     el.style.display = "none";
@@ -239,7 +262,7 @@ export async function loadPage(pageName) {
     _state.pageCache[pageName] = pageEl;
 
     loadingEl.remove();
-    ensurePageStyles(pageName);
+    await ensurePageStyles(pageName);
     displayPageElement(mainContent, pageEl);
 
     // Load page-specific module if it exists
@@ -403,11 +426,11 @@ export function initRouter() {
   if (existingContainer) {
     console.log("[Router] Found existing page container (cached), reusing:", initialPage);
     _state.pageCache[initialPage] = existingContainer;
-    ensurePageStyles(initialPage);
 
     // Load and activate page module for cached container (needed for event handlers)
     (async () => {
       try {
+        await ensurePageStyles(initialPage);
         await import(`../pages/${initialPage}.js${assetQuery}`);
         await PageLifecycleRegistry.activate(initialPage);
       } catch (err) {
@@ -434,11 +457,11 @@ export function initRouter() {
     }
     _state.pageCache[initialPage] = pageEl;
     mainContent.appendChild(pageEl);
-    ensurePageStyles(initialPage);
 
     // Try to load and activate page module
     (async () => {
       try {
+        await ensurePageStyles(initialPage);
         await import(`../pages/${initialPage}.js${assetQuery}`);
         await PageLifecycleRegistry.activate(initialPage);
       } catch (err) {
