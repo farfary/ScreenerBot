@@ -139,12 +139,11 @@ const chatWidgetStyles = [
 if (!chatWidgetSource.includes('class="chat-widget chat-container')) {
   errors.push("ChatWidget must expose the .chat-widget CSS scope root");
 }
-if (
-  /(^|[\s,{])(?:\.cw-history-drawer(?:\.sessions-open)?|\.chat-container\.sessions-open)\s+\./m.test(
-    chatWidgetLayoutSource
-  )
-) {
-  errors.push("ChatWidget root modifiers inside @scope must use :scope.cw-history-drawer");
+if (/(?:^|\n)\s*\.chat-container\s*\{/m.test(chatWidgetLayoutSource)) {
+  errors.push("ChatWidget scope-root layout must target :scope, not descendant .chat-container");
+}
+if (/(^|[\s,{])\.cw-host-(?:page|dialog)(?:\.sessions-open)?\s+\./m.test(chatWidgetLayoutSource)) {
+  errors.push("ChatWidget root host modifiers inside @scope must use :scope.cw-host-*");
 }
 for (const style of chatWidgetStyles) {
   if (!globalStyleManifest?.[1].includes(style)) {

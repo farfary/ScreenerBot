@@ -13,12 +13,15 @@ export class ChatWidget {
   /**
    * @param {HTMLElement} root - Container element to render chat into
    * @param {Object} opts
-   * @param {boolean} [opts.showSidebar=true] - Show sessions sidebar
+   * @param {"page"|"dialog"} [opts.layout="page"] - Host-specific session layout
    * @param {Function} [opts.onClose] - Called when user wants to close (Escape in dialog)
    */
   constructor(root, opts = {}) {
     this.root = root;
-    this.opts = { showSidebar: true, historyDrawer: false, ...opts };
+    this.opts = { layout: "page", ...opts };
+    if (!new Set(["page", "dialog"]).has(this.opts.layout)) {
+      throw new Error(`[ChatWidget] Unsupported layout: ${this.opts.layout}`);
+    }
 
     this.state = {
       sessions: [],
@@ -64,12 +67,9 @@ export class ChatWidget {
   // ---------------------------------------------------------------------------
 
   _buildHTML() {
-    const sidebarClass = `${this.opts.showSidebar ? "" : " cw-no-sidebar"}${this.opts.historyDrawer ? " cw-history-drawer" : ""}`;
+    const hostClass = ` cw-host-${this.opts.layout}`;
     this.root.innerHTML = `
-      <div class="chat-widget chat-container${sidebarClass}">
-        ${
-          this.opts.showSidebar
-            ? `
+      <div class="chat-widget chat-container${hostClass}">
         <div class="chat-sessions-sidebar">
           <div class="sessions-header">
             <h3>Sessions</h3>
@@ -82,16 +82,14 @@ export class ChatWidget {
             <input type="text" class="cw-sessions-search" placeholder="Search chats..." aria-label="Search chat sessions" />
           </div>
           <div class="sessions-list cw-sessions-list"></div>
-        </div>`
-            : ""
-        }
-        ${this.opts.showSidebar && this.opts.historyDrawer ? '<button class="chat-sessions-scrim" type="button" aria-label="Close chat history"></button>' : ""}
+        </div>
+        <button class="chat-sessions-scrim" type="button" aria-label="Close chat history"></button>
 
         <div class="chat-main">
           <div class="chat-header">
             <span class="chat-title cw-chat-title">New Chat</span>
             <div class="chat-actions">
-              <button class="chat-action-btn cw-sessions-toggle" type="button" title="Chat history" aria-label="Open chat history">
+              <button class="chat-action-btn cw-sessions-toggle" type="button" title="Chat history" aria-label="Open chat history" aria-expanded="false">
                 <i class="icon-panel-left"></i>
               </button>
               <button class="chat-action-btn cw-new-session-btn" type="button" title="New Chat" aria-label="Start a new chat">
@@ -170,11 +168,10 @@ export class ChatWidget {
     this._on(this.$(".new-session-btn"), "click", () => this.createSession());
     this._on(this.$(".cw-new-session-btn"), "click", () => this.createSession());
     this._on(this.$(".cw-sessions-toggle"), "click", () => {
-      this.$(".chat-container")?.classList.toggle("sessions-open");
+      const container = this.$(".chat-container");
+      this._setSessionsOpen(!container?.classList.contains("sessions-open"));
     });
-    this._on(this.$(".chat-sessions-scrim"), "click", () => {
-      this.$(".chat-container")?.classList.remove("sessions-open");
-    });
+    this._on(this.$(".chat-sessions-scrim"), "click", () => this._setSessionsOpen(false));
     this._on(this.$(".cw-close-btn"), "click", () => this.opts.onClose?.());
 
     // Sessions search
@@ -327,7 +324,7 @@ export class ChatWidget {
     this._renderSessions();
     this._updateChatHeader(session);
     this._showChatInterface();
-    this.$(".chat-container")?.classList.remove("sessions-open");
+    this._setSessionsOpen(false);
     await this._loadMessages(session, true);
   }
 
@@ -1076,6 +1073,7 @@ export class ChatWidget {
   }
 
   _showDraft() {
+    this._setSessionsOpen(false);
     this._isDraft = true;
     this.state.currentSession = null;
     this.state.messages = [];
@@ -1165,6 +1163,11 @@ export class ChatWidget {
     if (icon) icon.className = this.state.isLoading ? "icon-square" : "icon-send";
   }
 
+  _setSessionsOpen(open) {
+    this.$(".chat-container")?.classList.toggle("sessions-open", open);
+    this.$(".cw-sessions-toggle")?.setAttribute("aria-expanded", String(open));
+  }
+
   _handleKeydown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1177,7 +1180,10 @@ export class ChatWidget {
       return;
     }
     if (e.key === "Escape") {
-      if (this.state.pendingConfirmation) {
+      if (this.$(".chat-container")?.classList.contains("sessions-open")) {
+        e.preventDefault();
+        this._setSessionsOpen(false);
+      } else if (this.state.pendingConfirmation) {
         e.preventDefault();
         this.confirmTool(false);
       } else if (this.state.isLoading) {

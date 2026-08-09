@@ -91,8 +91,7 @@ class GlobalChat {
     if (!this._widget) {
       const body = this._overlay.querySelector(".global-chat-body");
       this._widget = new ChatWidget(body, {
-        showSidebar: true,
-        historyDrawer: true,
+        layout: "dialog",
         onClose: () => this.close(),
       });
     }

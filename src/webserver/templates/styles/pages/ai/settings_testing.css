@@ -333,43 +333,6 @@
    ============================================================================ */
 
 @media (width <= 768px) {
-  /* Stack sidebar on mobile */
-  .ai-layout {
-    flex-direction: column;
-  }
-
-  .ai-sidebar {
-    width: 100%;
-    border-inline-end: none;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .ai-sidebar-nav {
-    display: flex;
-    overflow-x: auto;
-    padding: 8px;
-  }
-
-  .ai-nav-item {
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px 12px;
-    min-width: 80px;
-    text-align: center;
-  }
-
-  .ai-nav-item.active::before {
-    display: none;
-  }
-
-  .ai-nav-label {
-    font-size: 12px;
-  }
-
-  .ai-sidebar-footer {
-    display: none;
-  }
-
   .ai-main-panel {
     padding: 16px;
   }

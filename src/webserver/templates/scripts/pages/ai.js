@@ -6,6 +6,7 @@ import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playToggleOn, playError } from "../core/sounds.js";
 import { ChatWidget } from "../core/chat_widget.js";
+import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 
 // Import tab modules
 import { createProvidersTab } from "./ai/providers_tab.js";
@@ -15,16 +16,17 @@ import { createAutomationTab } from "./ai/automation_tab.js";
 // Constants
 const DEFAULT_TAB = "chat";
 const AI_STATE_KEY = "ai.activeTab";
-const AI_TAB_IDS = new Set([
-  "chat",
-  "history",
-  "stats",
-  "providers",
-  "settings",
-  "testing",
-  "instructions",
-  "automation",
-]);
+const AI_TABS = [
+  { id: "chat", label: "Chat" },
+  { id: "stats", label: "Overview" },
+  { id: "providers", label: "Providers" },
+  { id: "instructions", label: "Instructions" },
+  { id: "automation", label: "Automation" },
+  { id: "history", label: "History" },
+  { id: "testing", label: "Testing" },
+  { id: "settings", label: "Settings" },
+];
+const AI_TAB_IDS = new Set(AI_TABS.map(({ id }) => id));
 
 // Provider names mapping
 const PROVIDER_NAMES = {
@@ -47,6 +49,7 @@ function createLifecycle() {
   let chatPoller = null;
   let automationPoller = null;
   let _chatWidget = null;
+  let subTabBar = null;
 
   // Hash guards — skip re-render when polled data is unchanged
   let _lastDecisionsKey = null;
@@ -108,36 +111,6 @@ function createLifecycle() {
   // ============================================================================
   // Tab Management
   // ============================================================================
-
-  /**
-   * Initialize sidebar navigation
-   */
-  function initSubTabs() {
-    const navItems = $$(".ai-nav-item");
-    navItems.forEach((item) => {
-      addTrackedListener(item, "click", () => {
-        const tabId = item.dataset.tab;
-        if (tabId && tabId !== state.currentTab) {
-          console.log("[AI] Sidebar navigation to:", tabId);
-          state.currentTab = tabId;
-          AppState.save(AI_STATE_KEY, tabId);
-          window.history.pushState({ page: "ai", subtab: tabId }, "", `#${tabId}`);
-          updateSidebarNavigation(tabId);
-          switchTab(tabId);
-        }
-      });
-    });
-  }
-
-  /**
-   * Update sidebar navigation active state
-   */
-  function updateSidebarNavigation(tabId) {
-    $$(".ai-nav-item").forEach((item) => {
-      const isActive = item.dataset.tab === tabId;
-      item.classList.toggle("active", isActive);
-    });
-  }
 
   /**
    * Switch between main tabs
@@ -702,7 +675,7 @@ function createLifecycle() {
 
     // Clear the static HTML - ChatWidget builds its own
     container.innerHTML = "";
-    _chatWidget = new ChatWidget(container, { showSidebar: true, historyDrawer: true });
+    _chatWidget = new ChatWidget(container, { layout: "page" });
   }
 
   /**
@@ -838,12 +811,6 @@ function createLifecycle() {
         `#${state.currentTab}`
       );
 
-      // Initialize sidebar navigation
-      initSubTabs();
-
-      // Set initial active state
-      updateSidebarNavigation(state.currentTab);
-
       // Show the initial tab content
       switchTab(state.currentTab);
 
@@ -859,7 +826,12 @@ function createLifecycle() {
         if (!AI_TAB_IDS.has(tabId) || tabId === state.currentTab) return;
         state.currentTab = tabId;
         AppState.save(AI_STATE_KEY, tabId);
-        updateSidebarNavigation(tabId);
+        subTabBar?.setActive(tabId, {
+          silent: true,
+          skipValidation: true,
+          historyMode: "replace",
+          playSound: false,
+        });
         switchTab(tabId);
       });
 
@@ -877,6 +849,30 @@ function createLifecycle() {
      */
     async activate(ctx) {
       console.log("[AI] Activating page");
+
+      if (!subTabBar) {
+        subTabBar = new TabBar({
+          container: "#subTabsContainer",
+          tabs: AI_TABS,
+          defaultTab: state.currentTab,
+          stateKey: AI_STATE_KEY,
+          pageName: "ai",
+          onChange: (tabId) => {
+            state.currentTab = tabId;
+            switchTab(tabId);
+          },
+        });
+        TabBarManager.register("ai", subTabBar);
+      }
+      ctx.manageTabBar(subTabBar);
+      TabBarManager.register("ai", subTabBar);
+      subTabBar.show({ force: true });
+
+      const restoredTab = subTabBar.getActiveTab();
+      if (restoredTab && restoredTab !== state.currentTab) {
+        state.currentTab = restoredTab;
+        switchTab(restoredTab);
+      }
 
       // Create pollers
       statusPoller = ctx.managePoller(
@@ -977,6 +973,8 @@ function createLifecycle() {
         _chatWidget.destroy();
         _chatWidget = null;
       }
+      subTabBar = null;
+      TabBarManager.unregister("ai");
 
       // Clean up event listeners
       eventCleanups.forEach((cleanup) => cleanup());
