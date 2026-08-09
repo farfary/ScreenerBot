@@ -292,8 +292,7 @@ function createLifecycle() {
     if (!container) return;
 
     if (!decisions || decisions.length === 0) {
-      container.innerHTML =
-        '<div class="empty-state">No recent decisions</div>';
+      container.innerHTML = '<div class="empty-state">No recent decisions</div>';
       return;
     }
 
@@ -301,8 +300,7 @@ function createLifecycle() {
       .map((d) => {
         const decision = (d.decision || "").toLowerCase();
         const state = decision === "allow" ? "allow" : decision === "reject" ? "reject" : "neutral";
-        const icon =
-          state === "allow" ? "circle-check" : state === "reject" ? "circle-x" : "info";
+        const icon = state === "allow" ? "circle-check" : state === "reject" ? "circle-x" : "info";
         const time = d.timestamp ? Utils.formatTimeAgo(new Date(d.timestamp)) : "";
         const confidence = Math.round((d.confidence || 0) * 100);
         const latency = Math.round(d.latency_ms || 0);
@@ -462,7 +460,8 @@ function createLifecycle() {
   async function clearCache() {
     const confirmed = await ConfirmationDialog.show({
       title: "Clear Cache",
-      message: "Are you sure you want to clear the AI cache? This will remove all cached AI responses.",
+      message:
+        "Are you sure you want to clear the AI cache? This will remove all cached AI responses.",
       confirmText: "Clear Cache",
       confirmClass: "danger",
     });
@@ -703,7 +702,7 @@ function createLifecycle() {
 
     // Clear the static HTML - ChatWidget builds its own
     container.innerHTML = "";
-    _chatWidget = new ChatWidget(container, { showSidebar: true });
+    _chatWidget = new ChatWidget(container, { showSidebar: true, historyDrawer: true });
   }
 
   /**
@@ -739,15 +738,6 @@ function createLifecycle() {
   async function deleteSession(sessionId) {
     if (_chatWidget) {
       await _chatWidget.deleteSession(sessionId);
-    }
-  }
-
-  /**
-   * Summarize chat session
-   */
-  async function summarizeSession(sessionId) {
-    if (_chatWidget) {
-      await _chatWidget.summarizeSession(sessionId);
     }
   }
 
@@ -821,7 +811,6 @@ function createLifecycle() {
   api.createSession = createSession;
   api.selectSession = selectSession;
   api.deleteSession = deleteSession;
-  api.summarizeSession = summarizeSession;
   api.generateSessionTitle = generateSessionTitle;
   api.cancelRequest = cancelRequest;
 

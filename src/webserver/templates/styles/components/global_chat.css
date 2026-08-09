@@ -38,7 +38,9 @@
   justify-content: center;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.3s ease, visibility 0.3s ease;
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease;
 }
 
 .global-chat-overlay.is-open {
@@ -65,64 +67,19 @@
   overflow: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  box-shadow: 0 24px 80px rgb(0, 0, 0, 0.5),
-    0 8px 32px rgb(0, 0, 0, 0.3);
+  box-shadow: 0 20px 64px rgb(0, 0, 0, 0.4);
   display: flex;
   flex-direction: column;
-  transform: scale(0.9) translateY(20px);
+  transform: scale(0.985) translateY(6px);
   opacity: 0;
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 0.3s ease;
+  transition:
+    transform 0.2s ease-out,
+    opacity 0.18s ease-out;
 }
 
 .global-chat-overlay.is-open .global-chat-dialog {
   transform: scale(1) translateY(0);
   opacity: 1;
-}
-
-/* Dialog header */
-.global-chat-dialog-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-card);
-  flex-shrink: 0;
-}
-
-.global-chat-dialog-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.global-chat-dialog-title i {
-  font-size: 16px;
-  color: var(--primary-color);
-}
-
-.global-chat-dialog-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-lg);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background var(--transition-fast), color 0.15s ease;
-  font-size: 16px;
-}
-
-.global-chat-dialog-close:hover {
-  background: var(--hover-bg);
-  color: var(--text-primary);
 }
 
 /* Chat widget area inside dialog */
@@ -141,33 +98,14 @@
   height: 100%;
 }
 
-/* ---------------------------------------------------------------------------
-   ChatWidget overrides for textarea (class-based instead of #chat-input)
-   --------------------------------------------------------------------------- */
-.cw-chat-input {
-  width: 100%;
-  min-height: 40px;
-  max-height: 180px;
-  padding: 10px 14px;
-  border: none;
-  outline: none;
-  resize: none;
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.cw-chat-input::placeholder {
-  color: var(--text-muted);
-}
-
-.cw-chat-input:focus {
-  outline: none;
-}
-
 /* No-sidebar variant (for compact mode) */
 .cw-no-sidebar .chat-sessions-sidebar {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-chat-overlay,
+  .global-chat-dialog {
+    transition: none;
+  }
 }

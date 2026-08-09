@@ -18,7 +18,7 @@ export class ChatWidget {
    */
   constructor(root, opts = {}) {
     this.root = root;
-    this.opts = { showSidebar: true, ...opts };
+    this.opts = { showSidebar: true, historyDrawer: false, ...opts };
 
     this.state = {
       sessions: [],
@@ -64,7 +64,7 @@ export class ChatWidget {
   // ---------------------------------------------------------------------------
 
   _buildHTML() {
-    const sidebarClass = this.opts.showSidebar ? "" : " cw-no-sidebar";
+    const sidebarClass = `${this.opts.showSidebar ? "" : " cw-no-sidebar"}${this.opts.historyDrawer ? " cw-history-drawer" : ""}`;
     this.root.innerHTML = `
       <div class="chat-widget chat-container${sidebarClass}">
         ${
@@ -85,6 +85,7 @@ export class ChatWidget {
         </div>`
             : ""
         }
+        ${this.opts.showSidebar && this.opts.historyDrawer ? '<button class="chat-sessions-scrim" type="button" aria-label="Close chat history"></button>' : ""}
 
         <div class="chat-main">
           <div class="chat-header">
@@ -96,75 +97,55 @@ export class ChatWidget {
               <button class="chat-action-btn cw-new-session-btn" type="button" title="New Chat" aria-label="Start a new chat">
                 <i class="icon-plus"></i>
               </button>
-              <button class="chat-action-btn cw-summarize-btn" type="button" title="Summarize" aria-label="Summarize conversation">
-                <i class="icon-file-text"></i>
-              </button>
               <button class="chat-action-btn cw-delete-btn" type="button" title="Delete" aria-label="Delete session">
                 <i class="icon-trash"></i>
               </button>
+              ${this.opts.onClose ? '<button class="chat-action-btn cw-close-btn" type="button" title="Close" aria-label="Close Assistant"><i class="icon-x"></i></button>' : ""}
             </div>
           </div>
 
           <div class="chat-messages cw-chat-messages" aria-live="polite" aria-atomic="false">
             <div class="chat-empty-state cw-empty-state">
-              <div class="empty-state-icon"><i class="icon-bot-message-square"></i></div>
+              <div class="empty-state-kicker"><i class="icon-bot-message-square"></i><span>Assistant</span></div>
               <h3>How can I help you today?</h3>
-              <p class="empty-state-subtitle">Ask anything about your portfolio, analyze tokens, or execute trading actions.</p>
+              <p class="empty-state-subtitle">Review your portfolio, investigate a token, or understand recent trading activity.</p>
               <div class="quick-prompts">
                 <button class="quick-prompt" type="button" data-prompt="What's my current wallet balance and open positions?">
-                  <i class="icon-wallet"></i><span>Check my balance</span>
+                  <i class="icon-wallet"></i><span>Review open positions</span><i class="icon-arrow-up-right"></i>
                 </button>
                 <button class="quick-prompt" type="button" data-prompt="Analyze the security and risks of this token: ">
-                  <i class="icon-shield-check"></i><span>Security check</span>
+                  <i class="icon-shield-check"></i><span>Analyze a token</span><i class="icon-arrow-up-right"></i>
                 </button>
-                <button class="quick-prompt" type="button" data-prompt="Show me my open positions with current P&amp;L">
-                  <i class="icon-trending-up"></i><span>View positions</span>
-                </button>
-                <button class="quick-prompt" type="button" data-prompt="What tokens are passing the filter criteria right now?">
-                  <i class="icon-list-filter"></i><span>Filtered tokens</span>
-                </button>
-                <button class="quick-prompt" type="button" data-prompt="Help me configure my trading entry and exit settings">
-                  <i class="icon-settings"></i><span>Configure trading</span>
-                </button>
-                <button class="quick-prompt" type="button" data-prompt="What's the current market status and any notable opportunities?">
-                  <i class="icon-activity"></i><span>Market overview</span>
+                <button class="quick-prompt" type="button" data-prompt="Explain my recent trading activity and any important outcomes">
+                  <i class="icon-activity"></i><span>Explain recent activity</span><i class="icon-arrow-up-right"></i>
                 </button>
               </div>
             </div>
           </div>
 
-          <div class="modal-overlay cw-tool-modal" style="display:none">
-            <div class="modal-dialog modal-sm">
-              <div class="modal-header">
-                <h3><i class="icon-triangle-alert"></i> Confirm Tool Execution</h3>
-                <button class="modal-close cw-tool-modal-close" type="button" aria-label="Deny tool execution"><i class="icon-x"></i></button>
-              </div>
-              <div class="modal-body">
-                <p><strong class="cw-tool-name">Tool Name</strong></p>
-                <p class="cw-tool-description">This tool requires your approval to execute.</p>
-                <div class="tool-call-section">
-                  <div class="tool-call-label">Input:</div>
-                  <pre class="cw-tool-input tool-call-code">{}</pre>
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button class="btn btn-secondary cw-deny-tool" type="button">Deny</button>
-                <button class="btn btn-primary cw-confirm-tool" type="button">Allow</button>
-              </div>
+          <section class="tool-confirmation cw-tool-modal" aria-live="polite" hidden>
+            <div class="tool-confirmation-copy">
+              <div class="tool-confirmation-title"><i class="icon-triangle-alert"></i><strong class="cw-tool-name">Tool Name</strong></div>
+              <p class="cw-tool-description">This action requires your approval.</p>
+              <details class="tool-confirmation-details">
+                <summary>Review input</summary>
+                <pre class="cw-tool-input tool-call-code">{}</pre>
+              </details>
             </div>
-          </div>
+            <div class="confirmation-actions">
+              <button class="btn btn-secondary cw-deny-tool" type="button">Deny</button>
+              <button class="btn btn-primary cw-confirm-tool" type="button">Allow</button>
+            </div>
+          </section>
 
           <div class="chat-input-area">
             <div class="chat-context cw-chat-context"></div>
             <div class="chat-input-container cw-input-container">
               <div class="chat-input-wrapper">
                 <textarea class="cw-chat-input" placeholder="Message Assistant..." rows="1" aria-label="Message input"></textarea>
-                <div class="input-hint cw-input-hint"><kbd>⌘</kbd><kbd>↵</kbd> to send</div>
+                <div class="input-hint cw-input-hint"><kbd>Enter</kbd> to send <span>·</span> <kbd>Shift</kbd><kbd>Enter</kbd> for a new line</div>
               </div>
               <div class="chat-input-actions">
-                <button class="cancel-btn cw-cancel-btn" type="button" aria-label="Cancel request" title="Cancel (Esc)">
-                  <i class="icon-x"></i>
-                </button>
                 <button class="send-btn cw-send-btn" type="button" disabled aria-label="Send message" title="Send message">
                   <i class="icon-send"></i>
                 </button>
@@ -191,15 +172,19 @@ export class ChatWidget {
     this._on(this.$(".cw-sessions-toggle"), "click", () => {
       this.$(".chat-container")?.classList.toggle("sessions-open");
     });
+    this._on(this.$(".chat-sessions-scrim"), "click", () => {
+      this.$(".chat-container")?.classList.remove("sessions-open");
+    });
+    this._on(this.$(".cw-close-btn"), "click", () => this.opts.onClose?.());
 
     // Sessions search
     this._on(this.$(".cw-sessions-search"), "input", () => this._renderSessions());
 
     // Send button
-    this._on(this.$(".cw-send-btn"), "click", () => this.sendMessage());
-
-    // Cancel button
-    this._on(this.$(".cw-cancel-btn"), "click", () => this.cancelRequest());
+    this._on(this.$(".cw-send-btn"), "click", () => {
+      if (this.state.isLoading) this.cancelRequest();
+      else this.sendMessage();
+    });
 
     // Chat input
     const input = this.$(".cw-chat-input");
@@ -209,14 +194,6 @@ export class ChatWidget {
     // Tool confirmation buttons
     this._on(this.$(".cw-confirm-tool"), "click", () => this.confirmTool(true));
     this._on(this.$(".cw-deny-tool"), "click", () => this.confirmTool(false));
-    this._on(this.$(".cw-tool-modal-close"), "click", () => this.confirmTool(false));
-
-    // Modal overlay click to close
-    const modal = this.$(".cw-tool-modal");
-    this._on(modal, "click", (e) => {
-      if (e.target === modal) this.confirmTool(false);
-    });
-
     // Quick prompt buttons
     this.$$(".quick-prompt").forEach((btn) => {
       this._on(btn, "click", () => {
@@ -246,9 +223,15 @@ export class ChatWidget {
             const orig = icon.className;
             icon.className = "icon-check";
             setTimeout(() => (icon.className = orig), 1500);
-            Utils.showToast({ type: "success", title: "Copied", message: "Message copied to clipboard" });
+            Utils.showToast({
+              type: "success",
+              title: "Copied",
+              message: "Message copied to clipboard",
+            });
           })
-          .catch(() => Utils.showToast({ type: "error", title: "Error", message: "Failed to copy message" }));
+          .catch(() =>
+            Utils.showToast({ type: "error", title: "Error", message: "Failed to copy message" })
+          );
       } else if (action === "regenerate") {
         this.regenerateLastMessage();
       }
@@ -379,25 +362,11 @@ export class ChatWidget {
     }
   }
 
-  async summarizeSession(sessionId) {
-    try {
-      const response = await fetch(`/api/ai/chat/sessions/${sessionId}/summarize`, { method: "POST" });
-      if (!response.ok) throw new Error("Failed to summarize session");
-
-      const data = await response.json();
-      playToggleOn();
-      await this.loadSessions();
-      Utils.showToast({ type: "success", title: "Success", message: `Session summarized: ${data.summary}` });
-    } catch (error) {
-      console.error("[ChatWidget] Error summarizing session:", error);
-      playError();
-      Utils.showToast({ type: "error", title: "Error", message: "Failed to summarize session" });
-    }
-  }
-
   async generateSessionTitle(sessionId) {
     try {
-      const response = await fetch(`/api/ai/chat/sessions/${sessionId}/generate-title`, { method: "POST" });
+      const response = await fetch(`/api/ai/chat/sessions/${sessionId}/generate-title`, {
+        method: "POST",
+      });
       if (!response.ok) return;
 
       const data = await response.json();
@@ -415,6 +384,7 @@ export class ChatWidget {
   }
 
   async sendMessage() {
+    if (this.state.isLoading) return;
     const input = this.$(".cw-chat-input");
     if (!input) return;
 
@@ -422,7 +392,11 @@ export class ChatWidget {
     if (!message) return;
 
     if (message.length > 4000) {
-      Utils.showToast({ type: "error", title: "Message too long", message: "Please shorten your message to under 4,000 characters" });
+      Utils.showToast({
+        type: "error",
+        title: "Message too long",
+        message: "Please shorten your message to under 4,000 characters",
+      });
       return;
     }
 
@@ -456,12 +430,11 @@ export class ChatWidget {
 
     input.value = "";
     input.style.height = "auto";
-    input.disabled = true;
     this.state.isLoading = true;
 
     this._updateSendButton();
     this._updateCharCount();
-    this._updateInputStatus('<span class="typing-dots"><span></span><span></span><span></span></span> Thinking...', "sending");
+    this._updateInputStatus("");
 
     const userMessage = { role: "user", content: message, timestamp: new Date().toISOString() };
     this.state.messages.push(userMessage);
@@ -524,13 +497,19 @@ export class ChatWidget {
         setTimeout(() => container.classList.remove("has-error"), 400);
       }
 
-      this._updateInputStatus(`<i class="icon-circle-alert"></i> ${Utils.escapeHtml(error.message || "Failed to send")}`, "error");
+      this._updateInputStatus(
+        `<i class="icon-circle-alert"></i> ${Utils.escapeHtml(error.message || "Failed to send")}`,
+        "error"
+      );
       setTimeout(() => this._updateInputStatus(""), 5000);
 
-      Utils.showToast({ type: "error", title: "Error", message: error.message || "Failed to send message" });
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: error.message || "Failed to send message",
+      });
     } finally {
       if (this._abortController === controller) this._abortController = null;
-      input.disabled = false;
       this.state.isLoading = false;
       this._updateSendButton();
       input.focus();
@@ -547,7 +526,11 @@ export class ChatWidget {
     const lastUserMessage = this.state.messages[lastUserIndex].content;
     const previousAssistant = this.state.messages[lastUserIndex + 1];
     if (!previousAssistant?.id || previousAssistant.role !== "assistant") {
-      Utils.showToast({ type: "error", title: "Error", message: "Reload the chat before regenerating this response" });
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Reload the chat before regenerating this response",
+      });
       return;
     }
     const previousMessages = this.state.messages;
@@ -561,7 +544,7 @@ export class ChatWidget {
     this._showTypingIndicator();
     this.state.isLoading = true;
     this._updateSendButton();
-    this._updateInputStatus('<span class="typing-dots"><span></span><span></span><span></span></span> Regenerating...', "sending");
+    this._updateInputStatus("");
 
     try {
       const response = await fetch("/api/ai/chat", {
@@ -605,7 +588,11 @@ export class ChatWidget {
 
       await this.loadSessions();
 
-      Utils.showToast({ type: "success", title: "Regenerated", message: "Response regenerated successfully" });
+      Utils.showToast({
+        type: "success",
+        title: "Regenerated",
+        message: "Response regenerated successfully",
+      });
     } catch (error) {
       if (error.name === "AbortError") return;
       console.error("[ChatWidget] Error regenerating:", error);
@@ -613,9 +600,16 @@ export class ChatWidget {
       this._renderMessagesForce();
       playError();
       this._hideTypingIndicator();
-      this._updateInputStatus(`<i class="icon-circle-alert"></i> ${error.message || "Failed to regenerate"}`, "error");
+      this._updateInputStatus(
+        `<i class="icon-circle-alert"></i> ${Utils.escapeHtml(error.message || "Failed to regenerate")}`,
+        "error"
+      );
       setTimeout(() => this._updateInputStatus(""), 5000);
-      Utils.showToast({ type: "error", title: "Error", message: error.message || "Failed to regenerate response" });
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: error.message || "Failed to regenerate response",
+      });
     } finally {
       this._abortController = null;
       this.state.isLoading = false;
@@ -630,7 +624,6 @@ export class ChatWidget {
 
     const input = this.$(".cw-chat-input");
     if (input) {
-      input.disabled = false;
       input.focus();
     }
 
@@ -661,18 +654,27 @@ export class ChatWidget {
 
       if (approved) {
         playToggleOn();
-        Utils.showToast({ type: "success", title: "Success", message: "Tool executed successfully" });
+        Utils.showToast({
+          type: "success",
+          title: "Success",
+          message: "Tool executed successfully",
+        });
       } else {
         Utils.showToast({ type: "info", title: "Cancelled", message: "Tool execution cancelled" });
       }
 
       this.state.pendingConfirmation = data.pending_confirmations?.[0] || null;
       await this.loadSessions();
-      if (this.state.pendingConfirmation) this._showToolConfirmation(this.state.pendingConfirmation);
+      if (this.state.pendingConfirmation)
+        this._showToolConfirmation(this.state.pendingConfirmation);
     } catch (error) {
       console.error("[ChatWidget] Error confirming tool:", error);
       playError();
-      Utils.showToast({ type: "error", title: "Error", message: "Failed to confirm tool execution" });
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to confirm tool execution",
+      });
       this._showToolConfirmation(confirmation);
     }
   }
@@ -704,7 +706,8 @@ export class ChatWidget {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const data = await response.json();
-      if (generation !== this._messageLoadGeneration || this.state.currentSession !== sessionId) return;
+      if (generation !== this._messageLoadGeneration || this.state.currentSession !== sessionId)
+        return;
       const newMessages = data.messages || [];
 
       if (!forceRender && this.state.messages.length === newMessages.length) {
@@ -717,7 +720,8 @@ export class ChatWidget {
 
       this._renderMessagesForce();
     } catch (error) {
-      if (generation !== this._messageLoadGeneration || this.state.currentSession !== sessionId) return;
+      if (generation !== this._messageLoadGeneration || this.state.currentSession !== sessionId)
+        return;
       console.error("[ChatWidget] Error loading messages:", error.message || error);
       this.state.messages = [];
       this._renderMessagesForce();
@@ -744,7 +748,9 @@ export class ChatWidget {
       );
     }
 
-    sessions.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+    sessions.sort(
+      (a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)
+    );
 
     if (sessions.length === 0) {
       container.innerHTML = `
@@ -761,8 +767,18 @@ export class ChatWidget {
     }
 
     const fp =
-      JSON.stringify(sessions.map((s) => ({ id: s.id, title: s.title, message_count: s.message_count, updated_at: s.updated_at }))) +
-      "|" + this.state.currentSession + "|" + searchQuery;
+      JSON.stringify(
+        sessions.map((s) => ({
+          id: s.id,
+          title: s.title,
+          message_count: s.message_count,
+          updated_at: s.updated_at,
+        }))
+      ) +
+      "|" +
+      this.state.currentSession +
+      "|" +
+      searchQuery;
 
     if (fp === this._prevSessionsJson) return;
     this._prevSessionsJson = fp;
@@ -827,7 +843,10 @@ export class ChatWidget {
       container.innerHTML = "";
       if (emptyState) container.appendChild(emptyState);
       emptyState.style.display = "none";
-      container.insertAdjacentHTML("beforeend", this.state.messages.map((m) => this._renderMessage(m)).join(""));
+      container.insertAdjacentHTML(
+        "beforeend",
+        this.state.messages.map((m) => this._renderMessage(m)).join("")
+      );
       this._setupToolExpandHandlers();
       this._scrollToBottom();
     }
@@ -848,7 +867,10 @@ export class ChatWidget {
     if (emptyState) emptyState.style.display = "none";
 
     container.querySelectorAll(".message").forEach((el) => el.remove());
-    container.insertAdjacentHTML("beforeend", this.state.messages.map((m) => this._renderMessage(m)).join(""));
+    container.insertAdjacentHTML(
+      "beforeend",
+      this.state.messages.map((m) => this._renderMessage(m)).join("")
+    );
     this._setupToolExpandHandlers();
     this._scrollToBottom();
   }
@@ -902,7 +924,11 @@ export class ChatWidget {
 
     let parsedToolCalls = msg.tool_calls;
     if (typeof parsedToolCalls === "string") {
-      try { parsedToolCalls = JSON.parse(parsedToolCalls); } catch { parsedToolCalls = null; }
+      try {
+        parsedToolCalls = JSON.parse(parsedToolCalls);
+      } catch {
+        parsedToolCalls = null;
+      }
     }
 
     const toolCallsHtml =
@@ -911,21 +937,22 @@ export class ChatWidget {
         : "";
 
     const actionsHtml = msg.content
-      ? `<div class="message-actions">
-          <button class="message-action-btn" title="Copy" data-action="copy" data-content="${Utils.escapeHtml(msg.content)}">
+      ? `<div class="message-actions" aria-label="Message actions">
+          <button class="message-action-btn" type="button" title="Copy" aria-label="Copy message" data-action="copy" data-content="${Utils.escapeHtml(msg.content)}">
             <i class="icon-copy"></i>
           </button>
-          ${!isUser ? '<button class="message-action-btn" title="Regenerate" data-action="regenerate"><i class="icon-refresh-cw"></i></button>' : ""}
+          ${!isUser ? '<button class="message-action-btn" type="button" title="Regenerate" aria-label="Regenerate response" data-action="regenerate"><i class="icon-refresh-cw"></i></button>' : ""}
         </div>`
       : "";
 
     return `
       <div class="message ${isUser ? "user" : "assistant"}">
-        <div class="message-avatar"><i class="icon-${isUser ? "user" : "bot"}"></i></div>
+        ${isUser ? "" : '<div class="message-avatar" aria-hidden="true"><i class="icon-bot"></i></div>'}
         <div class="message-content">
+          <div class="message-author">${isUser ? "You" : "Assistant"}</div>
           ${toolCallsHtml}
-          ${msg.content ? `<div class="message-bubble">${isUser ? Utils.escapeHtml(msg.content) : this._formatMarkdown(msg.content)}${actionsHtml}</div>` : ""}
-          <div class="message-meta">${timestamp}</div>
+          ${msg.content ? `<div class="message-bubble">${isUser ? Utils.escapeHtml(msg.content) : this._formatMarkdown(msg.content)}</div>` : ""}
+          <div class="message-footer"><div class="message-meta">${timestamp}</div>${actionsHtml}</div>
         </div>
       </div>`;
   }
@@ -934,11 +961,15 @@ export class ChatWidget {
     const statusRaw = tool.status || "pending";
     const statusClass = statusRaw.toLowerCase();
     const statusText =
-      statusClass === "executed" ? "Executed"
-        : statusClass === "failed" ? "Failed"
-        : statusClass === "denied" ? "Denied"
-        : statusClass === "pendingconfirmation" ? "Awaiting Confirmation"
-        : "Pending";
+      statusClass === "executed"
+        ? "Executed"
+        : statusClass === "failed"
+          ? "Failed"
+          : statusClass === "denied"
+            ? "Denied"
+            : statusClass === "pendingconfirmation"
+              ? "Awaiting Confirmation"
+              : "Pending";
 
     const toolName = tool.tool_name || tool.name || "Unknown Tool";
 
@@ -986,12 +1017,16 @@ export class ChatWidget {
 
     const indicator = document.createElement("div");
     indicator.className = "typing-indicator";
+    indicator.setAttribute("role", "status");
+    indicator.setAttribute("aria-label", "Assistant is thinking");
     indicator.innerHTML = `
       <div class="message-avatar"><i class="icon-bot"></i></div>
-      <div class="typing-dots">
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
+      <div class="typing-content">
+        <span class="message-author">Assistant</span>
+        <span class="typing-label">Thinking</span>
+        <span class="typing-dots" aria-hidden="true">
+          <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+        </span>
       </div>`;
     container.appendChild(indicator);
     this._scrollToBottom();
@@ -1014,25 +1049,20 @@ export class ChatWidget {
     const desc = this.$(".cw-tool-description");
     const inp = this.$(".cw-tool-input");
     if (name) name.textContent = confirmation.tool_name || "Unknown Tool";
-    if (desc) desc.textContent = confirmation.description || "This tool requires your approval to execute.";
+    if (desc)
+      desc.textContent = confirmation.description || "This tool requires your approval to execute.";
     if (inp) inp.textContent = JSON.stringify(confirmation.input || {}, null, 2);
-    modal.style.display = "flex";
+    modal.hidden = false;
   }
 
   _hideToolConfirmation() {
     const modal = this.$(".cw-tool-modal");
-    if (modal) modal.style.display = "none";
+    if (modal) modal.hidden = true;
   }
 
   _updateChatHeader(session) {
     const title = this.$(".cw-chat-title");
     if (title) title.textContent = session.title || "New Chat";
-
-    const summarizeBtn = this.$(".cw-summarize-btn");
-    if (summarizeBtn) {
-      summarizeBtn.disabled = session.message_count === 0;
-      summarizeBtn.onclick = () => this.summarizeSession(session.id);
-    }
 
     const deleteBtn = this.$(".cw-delete-btn");
     if (deleteBtn) {
@@ -1052,10 +1082,8 @@ export class ChatWidget {
     this._renderMessagesForce();
     const title = this.$(".cw-chat-title");
     if (title) title.textContent = "New Chat";
-    for (const selector of [".cw-summarize-btn", ".cw-delete-btn"]) {
-      const button = this.$(selector);
-      if (button) button.disabled = true;
-    }
+    const deleteButton = this.$(".cw-delete-btn");
+    if (deleteButton) deleteButton.disabled = true;
   }
 
   _showChatInterface() {
@@ -1068,8 +1096,8 @@ export class ChatWidget {
   _updateKeyboardHint() {
     const hint = this.$(".cw-input-hint");
     if (!hint) return;
-    const isMac = navigator.platform?.toUpperCase().indexOf("MAC") >= 0 || navigator.userAgent?.toUpperCase().indexOf("MAC") >= 0;
-    hint.innerHTML = isMac ? "<kbd>⌘</kbd><kbd>↵</kbd> to send" : "<kbd>Ctrl</kbd><kbd>↵</kbd> to send";
+    hint.innerHTML =
+      "<kbd>Enter</kbd> to send <span>·</span> <kbd>Shift</kbd><kbd>Enter</kbd> for a new line";
   }
 
   _handleInputChange() {
@@ -1087,11 +1115,22 @@ export class ChatWidget {
     if (!input || !counter) return;
 
     const len = input.value.length;
-    if (len === 0) { counter.textContent = ""; counter.className = "char-count cw-char-count"; }
-    else if (len > 4000) { counter.textContent = `${len.toLocaleString()} / 4,000`; counter.className = "char-count cw-char-count danger"; }
-    else if (len > 3500) { counter.textContent = `${len.toLocaleString()} / 4,000`; counter.className = "char-count cw-char-count warning"; }
-    else if (len > 100) { counter.textContent = len.toLocaleString(); counter.className = "char-count cw-char-count"; }
-    else { counter.textContent = ""; counter.className = "char-count cw-char-count"; }
+    if (len === 0) {
+      counter.textContent = "";
+      counter.className = "char-count cw-char-count";
+    } else if (len > 4000) {
+      counter.textContent = `${len.toLocaleString()} / 4,000`;
+      counter.className = "char-count cw-char-count danger";
+    } else if (len > 3500) {
+      counter.textContent = `${len.toLocaleString()} / 4,000`;
+      counter.className = "char-count cw-char-count warning";
+    } else if (len > 100) {
+      counter.textContent = len.toLocaleString();
+      counter.className = "char-count cw-char-count";
+    } else {
+      counter.textContent = "";
+      counter.className = "char-count cw-char-count";
+    }
   }
 
   _updateInputStatus(status, type = "") {
@@ -1103,9 +1142,7 @@ export class ChatWidget {
 
   _updateSendButton() {
     const sendBtn = this.$(".cw-send-btn");
-    const cancelBtn = this.$(".cw-cancel-btn");
     const input = this.$(".cw-chat-input");
-    const container = this.$(".cw-input-container");
 
     if (!sendBtn || !input) return;
 
@@ -1113,12 +1150,15 @@ export class ChatWidget {
     const isOverLimit = input.value.length > 4000;
     const canSend = hasText && !this.state.isLoading && !isOverLimit;
 
-    sendBtn.disabled = !canSend;
-    sendBtn.setAttribute("aria-label", canSend ? "Send message" : "Type a message to send");
-    sendBtn.classList.toggle("is-loading", this.state.isLoading);
-
-    if (cancelBtn) cancelBtn.classList.toggle("visible", this.state.isLoading);
-    if (container) container.classList.toggle("is-sending", this.state.isLoading);
+    sendBtn.disabled = this.state.isLoading ? false : !canSend;
+    sendBtn.setAttribute(
+      "aria-label",
+      this.state.isLoading ? "Stop response" : canSend ? "Send message" : "Type a message to send"
+    );
+    sendBtn.setAttribute("title", this.state.isLoading ? "Stop response (Esc)" : "Send message");
+    sendBtn.classList.toggle("is-stopping", this.state.isLoading);
+    const icon = sendBtn.querySelector("i");
+    if (icon) icon.className = this.state.isLoading ? "icon-square" : "icon-send";
   }
 
   _handleKeydown(e) {

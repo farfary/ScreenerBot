@@ -47,16 +47,7 @@ class GlobalChat {
     this._overlay.setAttribute("aria-hidden", "true");
     this._overlay.innerHTML = `
       <div class="global-chat-overlay-bg"></div>
-      <div class="global-chat-dialog" role="dialog" aria-modal="true" aria-labelledby="global-chat-title">
-        <div class="global-chat-dialog-header">
-          <div class="global-chat-dialog-title" id="global-chat-title">
-            <i class="icon-bot-message-square"></i>
-            AI Assistant
-          </div>
-          <button type="button" class="global-chat-dialog-close" aria-label="Close chat" title="Close (Esc)">
-            <i class="icon-x"></i>
-          </button>
-        </div>
+      <div class="global-chat-dialog" role="dialog" aria-modal="true" aria-label="AI Assistant">
         <div class="global-chat-body"></div>
       </div>
     `;
@@ -65,8 +56,7 @@ class GlobalChat {
     // folds together with the other actions on mid screens. Fall back to the
     // actions container, then body, if the expected structure is missing.
     const headerActionsItems =
-      document.querySelector(".header-actions-items") ||
-      document.querySelector(".header-actions");
+      document.querySelector(".header-actions-items") || document.querySelector(".header-actions");
     if (headerActionsItems) {
       headerActionsItems.insertBefore(this._btn, headerActionsItems.firstChild);
     } else {
@@ -79,11 +69,9 @@ class GlobalChat {
     this._btn.addEventListener("click", () => this.toggle());
 
     // Close via overlay background click
-    this._overlay.querySelector(".global-chat-overlay-bg").addEventListener("click", () => this.close());
-
-    // Close button
-    this._overlay.querySelector(".global-chat-dialog-close").addEventListener("click", () => this.close());
-
+    this._overlay
+      .querySelector(".global-chat-overlay-bg")
+      .addEventListener("click", () => this.close());
   }
 
   toggle() {
@@ -104,6 +92,7 @@ class GlobalChat {
       const body = this._overlay.querySelector(".global-chat-body");
       this._widget = new ChatWidget(body, {
         showSidebar: true,
+        historyDrawer: true,
         onClose: () => this.close(),
       });
     }
@@ -123,7 +112,7 @@ class GlobalChat {
     setTimeout(() => {
       const input = this._widget.$(".cw-chat-input");
       if (input) input.focus();
-    }, 350);
+    }, 220);
   }
 
   close() {
