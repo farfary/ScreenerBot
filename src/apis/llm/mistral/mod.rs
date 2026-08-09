@@ -118,9 +118,16 @@ impl MistralClient {
                 provider: "mistral".to_owned(),
                 message: "No choices in response".to_owned(),
             })?;
+        let content = choice
+            .message
+            .text()
+            .ok_or_else(|| LlmError::InvalidResponse {
+                provider: "mistral".to_owned(),
+                message: "Choice contained no text content".to_owned(),
+            })?;
 
         Ok(ChatResponse::new(
-            choice.message.content.clone(),
+            content,
             Usage::new(
                 response.usage.prompt_tokens,
                 response.usage.completion_tokens,

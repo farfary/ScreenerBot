@@ -490,6 +490,12 @@ export class ChatWidget {
       console.error("[ChatWidget] Error sending message:", error);
       playError();
       this._hideTypingIndicator();
+      this.state.messages = this.state.messages.filter((item) => item !== userMessage);
+      this._renderMessagesForce();
+      if (!input.value.trim()) {
+        input.value = message;
+        this._handleInputChange();
+      }
 
       const container = this.$(".cw-input-container");
       if (container) {
@@ -498,16 +504,9 @@ export class ChatWidget {
       }
 
       this._updateInputStatus(
-        `<i class="icon-circle-alert"></i> ${Utils.escapeHtml(error.message || "Failed to send")}`,
+        '<i class="icon-circle-alert"></i> Assistant could not complete the response. Your message is ready to retry.',
         "error"
       );
-      setTimeout(() => this._updateInputStatus(""), 5000);
-
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: error.message || "Failed to send message",
-      });
     } finally {
       if (this._abortController === controller) this._abortController = null;
       this.state.isLoading = false;

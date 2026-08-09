@@ -122,7 +122,6 @@ impl OpenRouterClient {
 
     /// Convert OpenRouter response to unified ChatResponse
     fn parse_openrouter_response(
-        &self,
         response: OpenRouterResponse,
         latency_ms: f64,
     ) -> Result<ChatResponse, LlmError> {
@@ -134,9 +133,16 @@ impl OpenRouterClient {
                 provider: "openrouter".to_owned(),
                 message: "No choices in response".to_owned(),
             })?;
+        let content = choice
+            .message
+            .text()
+            .ok_or_else(|| LlmError::InvalidResponse {
+                provider: "openrouter".to_owned(),
+                message: "Choice contained no text content".to_owned(),
+            })?;
 
         Ok(ChatResponse::new(
-            choice.message.content.clone(),
+            content,
             Usage::new(
                 response.usage.prompt_tokens,
                 response.usage.completion_tokens,
@@ -308,7 +314,7 @@ impl LlmClient for OpenRouterClient {
         };
 
         // Parse and convert response
-        self.parse_openrouter_response(openrouter_response, latency_ms)
+        Self::parse_openrouter_response(openrouter_response, latency_ms)
     }
 
     async fn get_stats(&self) -> crate::apis::stats::ApiStats {
@@ -406,5 +412,39 @@ mod tests {
         let client =
             OpenRouterClient::new("sk-or-test".to_owned(), None, true, None, None).unwrap();
         assert_eq!(client.provider(), Provider::OpenRouter);
+    }
+
+    #[test]
+    fn test_null_content_uses_reasoning_text() {
+        let response: OpenRouterResponse = serde_json::from_str(
+            r#"{
+                "id":"test","object":"chat.completion","created":1,"model":"test/model",
+                "choices":[{"index":0,"message":{"role":"assistant","content":null,"reasoning":"Reasoned answer"},"finish_reason":"stop"}],
+                "usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}
+            }"#,
+        )
+        .unwrap();
+        let parsed = OpenRouterClient::parse_openrouter_response(response, 12.0).unwrap();
+
+        assert_eq!(parsed.content, "Reasoned answer");
+    }
+
+    #[test]
+    fn test_null_content_without_reasoning_is_invalid_response() {
+        let response: OpenRouterResponse = serde_json::from_str(
+            r#"{
+                "id":"test","object":"chat.completion","created":1,"model":"test/model",
+                "choices":[{"index":0,"message":{"role":"assistant","content":null},"finish_reason":"stop"}],
+                "usage":{"prompt_tokens":2,"completion_tokens":0,"total_tokens":2}
+            }"#,
+        )
+        .unwrap();
+        let error = OpenRouterClient::parse_openrouter_response(response, 12.0).unwrap_err();
+
+        assert!(matches!(
+            error,
+            LlmError::InvalidResponse { provider, message }
+                if provider == "openrouter" && message == "Choice contained no text content"
+        ));
     }
 }

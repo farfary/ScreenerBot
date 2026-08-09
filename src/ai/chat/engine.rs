@@ -244,7 +244,23 @@ impl ChatEngine {
             }
 
             // Call LLM
-            let llm_response = self.call_llm(&messages).await?;
+            let llm_response = match self.call_llm(&messages).await {
+                Ok(response) => response,
+                Err(error) => {
+                    if replaced_message_id.is_none() && tool_calls_info.is_empty() {
+                        if let Err(cleanup_error) = database::delete_message(&pool, user_message_id)
+                        {
+                            logger::warning(
+                                LogTag::Api,
+                                &format!(
+                                    "Failed to remove incomplete chat turn {user_message_id}: {cleanup_error}"
+                                ),
+                            );
+                        }
+                    }
+                    return Err(error);
+                }
+            };
             let content = llm_response.content.trim();
 
             logger::debug(LogTag::Api, &format!("LLM response: {content}"));

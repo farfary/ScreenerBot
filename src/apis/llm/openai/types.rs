@@ -110,8 +110,27 @@ pub struct OpenAiResponseMessage {
     /// Role (always "assistant")
     pub role: String,
 
-    /// Generated content
-    pub content: String,
+    /// Generated content. OpenAI-compatible gateways may return null for
+    /// reasoning-only choices.
+    #[serde(default)]
+    pub content: Option<String>,
+
+    /// Reasoning text returned by models that separate it from final content.
+    #[serde(default, alias = "reasoning_content")]
+    pub reasoning: Option<String>,
+}
+
+impl OpenAiResponseMessage {
+    pub fn text(&self) -> Option<&str> {
+        self.content
+            .as_deref()
+            .filter(|content| !content.trim().is_empty())
+            .or_else(|| {
+                self.reasoning
+                    .as_deref()
+                    .filter(|reasoning| !reasoning.trim().is_empty())
+            })
+    }
 }
 
 /// Token usage statistics
