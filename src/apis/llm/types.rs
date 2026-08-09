@@ -86,6 +86,10 @@ pub struct ChatRequest {
     /// Response format (for JSON mode)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<ResponseFormat>,
+
+    /// Native function definitions available to the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
 }
 
 impl ChatRequest {
@@ -97,6 +101,7 @@ impl ChatRequest {
             temperature: None,
             max_tokens: None,
             response_format: None,
+            tools: None,
         }
     }
 
@@ -117,6 +122,28 @@ impl ChatRequest {
         self.response_format = Some(ResponseFormat::json_object());
         self
     }
+
+    /// Enable provider-native function calling.
+    pub fn with_tools(mut self, tools: Vec<ToolDefinition>) -> Self {
+        self.tools = (!tools.is_empty()).then_some(tools);
+        self
+    }
+}
+
+/// Provider-neutral function definition.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
+/// Provider-neutral function call emitted by a model.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: serde_json::Value,
 }
 
 /// Response format configuration
@@ -163,6 +190,14 @@ pub struct ChatResponse {
 
     /// Latency in milliseconds
     pub latency_ms: f64,
+
+    /// Private model reasoning, retained for diagnostics but never rendered as an answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning: Option<String>,
+
+    /// Native function calls returned by the provider.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tool_calls: Vec<ToolCall>,
 }
 
 impl ChatResponse {
@@ -180,7 +215,19 @@ impl ChatResponse {
             finish_reason: finish_reason.into(),
             model: model.into(),
             latency_ms,
+            reasoning: None,
+            tool_calls: Vec::new(),
         }
+    }
+
+    pub fn with_reasoning(mut self, reasoning: Option<String>) -> Self {
+        self.reasoning = reasoning;
+        self
+    }
+
+    pub fn with_tool_calls(mut self, tool_calls: Vec<ToolCall>) -> Self {
+        self.tool_calls = tool_calls;
+        self
     }
 }
 

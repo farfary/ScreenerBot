@@ -88,8 +88,7 @@ impl ChatEngine {
             prompt.push('\n');
         }
 
-        // Add tool calling instructions - CRITICAL: Be extremely explicit
-        prompt.push_str("## CRITICAL INSTRUCTIONS - TOOL USAGE\n\n");
+        prompt.push_str("## Tool usage\n\n");
         prompt.push_str(
             "YOU MUST USE TOOLS FOR ALL DATA REQUESTS AND ACTIONS. This is not optional.\n\n",
         );
@@ -106,9 +105,7 @@ impl ChatEngine {
         prompt.push_str("- Abstract questions: 'how does trading work?', 'what is Solana?'\n");
         prompt.push_str("- Requests for help/clarification that don't involve specific data\n\n");
 
-        prompt.push_str("### REQUIRED Tool Call Format:\n");
-        prompt.push_str("When calling tools, output ONLY the JSON code block - nothing else.\n");
-        prompt.push_str("DO NOT add explanatory text before or after the JSON.\n\n");
+        prompt.push_str("Use the provider's function-calling interface whenever it is available. Do not narrate your plan or expose private reasoning. If native function calling is unavailable, use this JSON fallback and output nothing else with it:\n\n");
         prompt.push_str("Format:\n");
         prompt.push_str("```json\n");
         prompt.push_str("{\n");
@@ -160,7 +157,7 @@ impl ChatEngine {
         let definitions = self.tool_registry.list_definitions();
         for def in definitions {
             let confirmation_note = if def.requires_confirmation {
-                " ⚠️ [REQUIRES USER CONFIRMATION]"
+                " [REQUIRES USER CONFIRMATION]"
             } else {
                 ""
             };
@@ -212,7 +209,7 @@ impl ChatEngine {
             }
         }
 
-        prompt.push_str("\n## CRITICAL RULES - MUST FOLLOW\n");
+        prompt.push_str("\n## Rules\n");
         prompt.push_str("1. DEFAULT ACTION: When in doubt, CALL A TOOL. Tool calling is preferred over natural responses.\n");
         prompt.push_str(
             "2. NEVER add explanatory text with tool calls - ONLY output the JSON code block\n",
@@ -231,31 +228,47 @@ impl ChatEngine {
         prompt
     }
 
-    /// Call LLM with messages
-    ///
-    /// TODO: Add native function calling support for providers that support it:
-    /// - OpenAI: Use 'tools' parameter with function definitions
-    /// - Anthropic: Use 'tools' parameter (Claude 3+)
-    /// - This would be more reliable than text-based parsing
-    /// Current approach uses text-based tool calling (JSON in markdown) which is provider-agnostic
-    /// but less reliable. Consider adding provider-specific native tool calling in the future.
+    /// Call the configured LLM with native tool definitions.
     pub(super) async fn call_llm(
         &self,
         messages: &[LlmChatMessage],
     ) -> Result<crate::apis::llm::ChatResponse, AiError> {
-        let llm_manager = get_llm_manager();
+        let tools = self
+            .tool_registry
+            .list_definitions()
+            .into_iter()
+            .map(|definition| crate::apis::llm::ToolDefinition {
+                name: definition.name,
+                description: definition.description,
+                parameters: definition.parameters,
+            })
+            .collect();
+        if let Some(completion) = &self.completion {
+            let request = LlmChatRequest::new("test-model", messages.to_vec())
+                .with_temperature(0.2)
+                .with_max_tokens(4000)
+                .with_tools(tools);
+            return match tokio::time::timeout(Duration::from_secs(60), completion.complete(request))
+                .await
+            {
+                Ok(result) => {
+                    result.map_err(|error| AiError::LlmError(format!("LLM call failed: {error}")))
+                }
+                Err(_) => Err(AiError::LlmError(
+                    "LLM call timed out after 60 seconds".to_owned(),
+                )),
+            };
+        }
 
-        // Get default provider and model from config
+        let llm_manager = get_llm_manager();
         let provider_name = crate::config::with_config(|cfg| cfg.ai.default_provider.clone());
         let provider = Provider::from_str(&provider_name)
             .ok_or_else(|| AiError::ProviderNotConfigured(provider_name.clone()))?;
-
         let model = self.get_model_for_provider(provider);
-
         let request = LlmChatRequest::new(model, messages.to_vec())
-            .with_temperature(0.7)
-            .with_max_tokens(2000);
-
+            .with_temperature(0.2)
+            .with_max_tokens(4000)
+            .with_tools(tools);
         match tokio::time::timeout(Duration::from_secs(60), llm_manager.call(provider, request))
             .await
         {
@@ -603,7 +616,7 @@ impl ChatEngine {
                 ToolCallStatus::Executed => {
                     if let Some(data) = &result.output {
                         output.push_str(&format!(
-                            "✅ Success\n{}\n",
+                            "Success\n{}\n",
                             serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string())
                         ));
                     }
@@ -611,16 +624,16 @@ impl ChatEngine {
                 ToolCallStatus::Failed => {
                     if let Some(data) = &result.output {
                         output.push_str(&format!(
-                            "❌ Failed\n{}\n",
+                            "Failed\n{}\n",
                             serde_json::to_string_pretty(data).unwrap_or_else(|_| data.to_string())
                         ));
                     }
                 }
                 ToolCallStatus::PendingConfirmation => {
-                    output.push_str("⏳ Pending user confirmation\n");
+                    output.push_str("Pending user confirmation\n");
                 }
                 ToolCallStatus::Denied => {
-                    output.push_str("🚫 Denied by user\n");
+                    output.push_str("Denied by user\n");
                 }
             }
         }

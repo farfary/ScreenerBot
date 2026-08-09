@@ -24,9 +24,7 @@ pub use self::types::{
 };
 
 use crate::apis::client::RateLimiter;
-use crate::apis::llm::{
-    ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, MessageRole, Provider, Usage,
-};
+use crate::apis::llm::{ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, Provider};
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
@@ -96,28 +94,7 @@ impl OpenRouterClient {
 
     /// Convert unified ChatRequest to OpenRouter-specific format
     fn build_openrouter_request(&self, request: ChatRequest) -> OpenRouterRequest {
-        let messages = request
-            .messages
-            .into_iter()
-            .map(|msg| OpenRouterMessage {
-                role: match msg.role {
-                    MessageRole::System => "system".to_owned(),
-                    MessageRole::User => "user".to_owned(),
-                    MessageRole::Assistant => "assistant".to_owned(),
-                },
-                content: msg.content,
-            })
-            .collect();
-
-        OpenRouterRequest {
-            model: request.model,
-            messages,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-            response_format: request
-                .response_format
-                .map(|rf| OpenRouterResponseFormat { type_: rf.type_ }),
-        }
+        request.into()
     }
 
     /// Convert OpenRouter response to unified ChatResponse
@@ -125,32 +102,7 @@ impl OpenRouterClient {
         response: OpenRouterResponse,
         latency_ms: f64,
     ) -> Result<ChatResponse, LlmError> {
-        // Get the first choice
-        let choice = response
-            .choices
-            .first()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "openrouter".to_owned(),
-                message: "No choices in response".to_owned(),
-            })?;
-        let content = choice
-            .message
-            .text()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "openrouter".to_owned(),
-                message: "Choice contained no text content".to_owned(),
-            })?;
-
-        Ok(ChatResponse::new(
-            content,
-            Usage::new(
-                response.usage.prompt_tokens,
-                response.usage.completion_tokens,
-            ),
-            choice.finish_reason.clone(),
-            response.model,
-            latency_ms,
-        ))
+        response.into_chat_response("openrouter", latency_ms)
     }
 
     /// Execute the API call
@@ -415,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn test_null_content_uses_reasoning_text() {
+    fn test_reasoning_is_not_exposed_as_answer() {
         let response: OpenRouterResponse = serde_json::from_str(
             r#"{
                 "id":"test","object":"chat.completion","created":1,"model":"test/model",
@@ -424,9 +376,12 @@ mod tests {
             }"#,
         )
         .unwrap();
-        let parsed = OpenRouterClient::parse_openrouter_response(response, 12.0).unwrap();
-
-        assert_eq!(parsed.content, "Reasoned answer");
+        let error = OpenRouterClient::parse_openrouter_response(response, 12.0).unwrap_err();
+        assert!(matches!(
+            error,
+            LlmError::InvalidResponse { provider, message }
+                if provider == "openrouter" && message.contains("reasoning but no answer")
+        ));
     }
 
     #[test]
@@ -444,7 +399,25 @@ mod tests {
         assert!(matches!(
             error,
             LlmError::InvalidResponse { provider, message }
-                if provider == "openrouter" && message == "Choice contained no text content"
+                if provider == "openrouter" && message.contains("no answer or tool calls")
         ));
+    }
+
+    #[test]
+    fn test_native_tool_call_with_null_content() {
+        let response: OpenRouterResponse = serde_json::from_str(
+            r#"{
+                "id":"test","object":"chat.completion","created":1,"model":"test/model",
+                "choices":[{"index":0,"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"get_balance","arguments":"{}"}}]},"finish_reason":"tool_calls"}],
+                "usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}
+            }"#,
+        )
+        .unwrap();
+        let parsed = OpenRouterClient::parse_openrouter_response(response, 12.0).unwrap();
+
+        assert!(parsed.content.is_empty());
+        assert_eq!(parsed.tool_calls.len(), 1);
+        assert_eq!(parsed.tool_calls[0].name, "get_balance");
+        assert_eq!(parsed.tool_calls[0].arguments, serde_json::json!({}));
     }
 }

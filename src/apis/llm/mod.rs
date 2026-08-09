@@ -26,7 +26,8 @@ pub mod types;
 
 // Re-export core types
 pub use types::{
-    ChatMessage, ChatRequest, ChatResponse, LlmError, MessageRole, ResponseFormat, Usage,
+    ChatMessage, ChatRequest, ChatResponse, LlmError, MessageRole, ResponseFormat, ToolCall,
+    ToolDefinition, Usage,
 };
 
 use crate::apis::client::RateLimiter;

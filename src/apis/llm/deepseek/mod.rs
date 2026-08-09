@@ -28,9 +28,7 @@ pub use self::types::{
 };
 
 use crate::apis::client::RateLimiter;
-use crate::apis::llm::{
-    ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, MessageRole, Provider, Usage,
-};
+use crate::apis::llm::{ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, Provider};
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
@@ -88,28 +86,7 @@ impl DeepSeekClient {
 
     /// Convert unified ChatRequest to DeepSeek-specific format
     fn build_deepseek_request(&self, request: ChatRequest) -> DeepSeekRequest {
-        let messages = request
-            .messages
-            .into_iter()
-            .map(|msg| DeepSeekMessage {
-                role: match msg.role {
-                    MessageRole::System => "system".to_owned(),
-                    MessageRole::User => "user".to_owned(),
-                    MessageRole::Assistant => "assistant".to_owned(),
-                },
-                content: msg.content,
-            })
-            .collect();
-
-        DeepSeekRequest {
-            model: request.model,
-            messages,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-            response_format: request
-                .response_format
-                .map(|rf| DeepSeekResponseFormat { type_: rf.type_ }),
-        }
+        request.into()
     }
 
     /// Convert DeepSeek response to unified ChatResponse
@@ -118,32 +95,7 @@ impl DeepSeekClient {
         response: DeepSeekResponse,
         latency_ms: f64,
     ) -> Result<ChatResponse, LlmError> {
-        // Get the first choice
-        let choice = response
-            .choices
-            .first()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "deepseek".to_owned(),
-                message: "No choices in response".to_owned(),
-            })?;
-        let content = choice
-            .message
-            .text()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "deepseek".to_owned(),
-                message: "Choice contained no text content".to_owned(),
-            })?;
-
-        Ok(ChatResponse::new(
-            content,
-            Usage::new(
-                response.usage.prompt_tokens,
-                response.usage.completion_tokens,
-            ),
-            choice.finish_reason.clone(),
-            response.model,
-            latency_ms,
-        ))
+        response.into_chat_response("deepseek", latency_ms)
     }
 
     /// Execute the API call

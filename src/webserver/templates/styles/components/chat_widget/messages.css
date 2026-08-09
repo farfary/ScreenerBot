@@ -283,9 +283,7 @@
 
   .typing-content {
     display: grid;
-    grid-template-columns: auto auto;
-    align-items: center;
-    gap: 2px 4px;
+    gap: 4px;
     min-height: 42px;
   }
 
@@ -295,6 +293,43 @@
 
   .typing-label {
     font-size: 0.875rem;
+  }
+
+  .agent-progress-line {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+  }
+
+  .agent-progress-tools {
+    display: grid;
+    gap: 3px;
+  }
+
+  .agent-progress-tool {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--spacing-xs);
+    min-width: min(360px, 60vw);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+  }
+
+  .agent-progress-tool span {
+    text-transform: capitalize;
+  }
+
+  .agent-progress-tool small {
+    color: var(--text-muted);
+  }
+
+  .agent-progress-tool.complete i {
+    color: var(--success);
+  }
+
+  .agent-progress-tool.failed i {
+    color: var(--error);
   }
 
   .typing-dots {

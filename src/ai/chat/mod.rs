@@ -23,7 +23,9 @@ pub use database::{
 };
 
 // Re-export engine items
-pub use engine::{get_chat_engine, init_chat_engine, try_get_chat_engine, ChatEngine};
+pub use engine::{
+    get_chat_engine, init_chat_engine, try_get_chat_engine, ChatEngine, ChatProgressEvent,
+};
 
 // Re-export chat types
 pub use types::{

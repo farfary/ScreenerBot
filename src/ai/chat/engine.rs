@@ -5,13 +5,15 @@
 
 use super::database;
 pub use super::types::{
-    ChatContext, ChatRequest, ChatResponse, ToolCallInfo, ToolCallStatus, ToolMode,
+    ChatContext, ChatProgressEvent, ChatRequest, ChatResponse, ToolCallInfo, ToolCallStatus,
+    ToolMode,
 };
 use super::types::{ConfirmationState, PendingConfirmation, ToolCall};
 use crate::ai::tools::{create_tool_registry, ToolRegistry};
 use crate::ai::types::AiError;
 use crate::apis::llm::ChatMessage as LlmChatMessage;
 use crate::logger::{self, LogTag};
+use async_trait::async_trait;
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -157,6 +159,15 @@ impl ConfirmationManager {
 pub struct ChatEngine {
     pub(super) tool_registry: Arc<ToolRegistry>,
     pub(super) confirmation_manager: Arc<ConfirmationManager>,
+    pub(super) completion: Option<Arc<dyn ChatCompletion>>,
+}
+
+#[async_trait]
+pub(super) trait ChatCompletion: Send + Sync {
+    async fn complete(
+        &self,
+        request: crate::apis::llm::ChatRequest,
+    ) -> Result<crate::apis::llm::ChatResponse, crate::apis::llm::LlmError>;
 }
 
 impl ChatEngine {
@@ -168,15 +179,54 @@ impl ChatEngine {
         Self {
             tool_registry,
             confirmation_manager,
+            completion: None,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_test_dependencies(
+        tool_registry: ToolRegistry,
+        completion: Arc<dyn ChatCompletion>,
+    ) -> Self {
+        Self {
+            tool_registry: Arc::new(tool_registry),
+            confirmation_manager: Arc::new(ConfirmationManager::new()),
+            completion: Some(completion),
         }
     }
 
     /// Process a user message and generate response
     pub async fn process_message(&self, request: ChatRequest) -> Result<ChatResponse, AiError> {
-        // Get database pool
+        self.process_message_with_progress(request, None).await
+    }
+
+    /// Process a user message while emitting safe, user-visible progress events.
+    pub async fn process_message_streaming(
+        &self,
+        request: ChatRequest,
+        progress: tokio::sync::mpsc::UnboundedSender<ChatProgressEvent>,
+    ) -> Result<ChatResponse, AiError> {
+        self.process_message_with_progress(request, Some(progress))
+            .await
+    }
+
+    async fn process_message_with_progress(
+        &self,
+        request: ChatRequest,
+        progress: Option<tokio::sync::mpsc::UnboundedSender<ChatProgressEvent>>,
+    ) -> Result<ChatResponse, AiError> {
         let pool = database::get_chat_pool()
             .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
+        self.process_message_with_pool(request, &pool, progress)
+            .await
+    }
 
+    async fn process_message_with_pool(
+        &self,
+        request: ChatRequest,
+        pool: &r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
+        progress: Option<tokio::sync::mpsc::UnboundedSender<ChatProgressEvent>>,
+    ) -> Result<ChatResponse, AiError> {
         let (user_message_id, history, replaced_message_id) = if let Some(message_id) =
             request.regenerate_message_id
         {
@@ -243,6 +293,10 @@ impl ChatEngine {
                 break "I've reached the maximum number of tool calls. Please try breaking this down into smaller requests.".to_owned();
             }
 
+            if let Some(progress) = &progress {
+                let _ = progress.send(ChatProgressEvent::Thinking { iteration });
+            }
+
             // Call LLM
             let llm_response = match self.call_llm(&messages).await {
                 Ok(response) => response,
@@ -266,7 +320,18 @@ impl ChatEngine {
             logger::debug(LogTag::Api, &format!("LLM response: {content}"));
 
             // Parse tool calls from response
-            let tool_calls = self.parse_tool_calls(content);
+            let tool_calls = if llm_response.tool_calls.is_empty() {
+                self.parse_tool_calls(content)
+            } else {
+                llm_response
+                    .tool_calls
+                    .into_iter()
+                    .map(|call| ToolCall {
+                        name: call.name,
+                        arguments: call.arguments,
+                    })
+                    .collect()
+            };
 
             if tool_calls.is_empty() {
                 // No more tool calls, we're done
@@ -277,6 +342,23 @@ impl ChatEngine {
                 LogTag::Api,
                 &format!("Parsed {} tool calls", tool_calls.len()),
             );
+
+            if progress.as_ref().is_some_and(|sender| sender.is_closed()) {
+                if replaced_message_id.is_none() && tool_calls_info.is_empty() {
+                    let _ = database::delete_message(pool, user_message_id);
+                }
+                return Err(AiError::ValidationError(
+                    "Chat request was cancelled".to_owned(),
+                ));
+            }
+
+            if let Some(progress) = &progress {
+                for tool_call in &tool_calls {
+                    let _ = progress.send(ChatProgressEvent::ToolStarted {
+                        tool_name: tool_call.name.clone(),
+                    });
+                }
+            }
 
             // Execute tools
             let (results, pending) = self
@@ -290,6 +372,14 @@ impl ChatEngine {
                 )
                 .await;
 
+            if let Some(progress) = &progress {
+                for result in &results {
+                    let _ = progress.send(ChatProgressEvent::ToolFinished {
+                        tool_call: result.clone(),
+                    });
+                }
+            }
+
             // If there are pending confirmations, return early
             if !pending.is_empty() {
                 logger::info(
@@ -302,13 +392,32 @@ impl ChatEngine {
                         AiError::ParseError(format!("Failed to replace assistant response: {e}"))
                     })?;
                 }
-                return Ok(ChatResponse {
-                    message_id: user_message_id,
+                let tool_calls_json = serde_json::to_string(&results).ok();
+                let assistant_message_id = database::add_message(
+                    &pool,
+                    request.session_id,
+                    "assistant",
+                    content,
+                    tool_calls_json.as_deref(),
+                )
+                .map_err(|error| {
+                    AiError::ParseError(format!(
+                        "Failed to save pending assistant response: {error}"
+                    ))
+                })?;
+                let response = ChatResponse {
+                    message_id: assistant_message_id,
                     content: content.to_string(),
                     tool_calls: results,
                     pending_confirmations: pending,
                     is_complete: false,
-                });
+                };
+                if let Some(progress) = &progress {
+                    let _ = progress.send(ChatProgressEvent::Complete {
+                        response: response.clone(),
+                    });
+                }
+                return Ok(response);
             }
 
             // Add tool results to conversation
@@ -316,7 +425,9 @@ impl ChatEngine {
 
             // Build tool results message
             let tool_results_text = self.format_tool_results(&results);
-            messages.push(LlmChatMessage::assistant(content));
+            if !content.is_empty() {
+                messages.push(LlmChatMessage::assistant(content));
+            }
             messages.push(LlmChatMessage::user(format!(
                 "Tool execution results:\n{}",
                 tool_results_text
@@ -370,13 +481,19 @@ impl ChatEngine {
             ),
         );
 
-        Ok(ChatResponse {
+        let response = ChatResponse {
             message_id: assistant_message_id,
             content: final_content,
             tool_calls: tool_calls_info,
             pending_confirmations: Vec::new(),
             is_complete: true,
-        })
+        };
+        if let Some(progress) = &progress {
+            let _ = progress.send(ChatProgressEvent::Complete {
+                response: response.clone(),
+            });
+        }
+        Ok(response)
     }
 
     /// Process a confirmation response from user
@@ -498,5 +615,142 @@ impl ChatEngine {
 impl Default for ChatEngine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ai::tools::{Tool, ToolCategory, ToolDefinition, ToolResult};
+    use crate::apis::llm::{LlmError, ToolCall as LlmToolCall, Usage};
+    use async_trait::async_trait;
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+
+    struct MockCompletion {
+        responses: Mutex<VecDeque<crate::apis::llm::ChatResponse>>,
+    }
+
+    #[async_trait]
+    impl ChatCompletion for MockCompletion {
+        async fn complete(
+            &self,
+            request: crate::apis::llm::ChatRequest,
+        ) -> Result<crate::apis::llm::ChatResponse, LlmError> {
+            assert!(request
+                .tools
+                .as_ref()
+                .is_some_and(|tools| tools.iter().any(|tool| tool.name == "test_balance")));
+            self.responses
+                .lock()
+                .expect("mock completion lock")
+                .pop_front()
+                .ok_or_else(|| LlmError::InvalidResponse {
+                    provider: "mock".to_owned(),
+                    message: "No queued response".to_owned(),
+                })
+        }
+    }
+
+    struct TestBalanceTool;
+
+    #[async_trait]
+    impl Tool for TestBalanceTool {
+        fn definition(&self) -> ToolDefinition {
+            ToolDefinition {
+                name: "test_balance".to_owned(),
+                description: "Return a deterministic balance".to_owned(),
+                category: ToolCategory::Portfolio,
+                parameters: serde_json::json!({"type": "object", "properties": {}}),
+                requires_confirmation: false,
+            }
+        }
+
+        async fn execute(&self, _params: serde_json::Value) -> ToolResult {
+            ToolResult::success(serde_json::json!({"sol_balance": 2.5}))
+        }
+    }
+
+    #[tokio::test]
+    async fn full_agent_turn_streams_native_tool_execution_and_persists_result() {
+        let pool = database::test_pool();
+        let session_id = database::create_session(&pool, "Agent flow").expect("create session");
+        let mut registry = ToolRegistry::new();
+        registry.register(Arc::new(TestBalanceTool));
+        let completion = Arc::new(MockCompletion {
+            responses: Mutex::new(VecDeque::from([
+                crate::apis::llm::ChatResponse::new(
+                    "",
+                    Usage::default(),
+                    "tool_calls",
+                    "mock",
+                    1.0,
+                )
+                .with_tool_calls(vec![LlmToolCall {
+                    id: "call-1".to_owned(),
+                    name: "test_balance".to_owned(),
+                    arguments: serde_json::json!({}),
+                }]),
+                crate::apis::llm::ChatResponse::new(
+                    "Your wallet balance is 2.5 SOL.",
+                    Usage::default(),
+                    "stop",
+                    "mock",
+                    1.0,
+                ),
+            ])),
+        });
+        let engine = ChatEngine::with_test_dependencies(registry, completion);
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+
+        let response = engine
+            .process_message_with_pool(
+                ChatRequest {
+                    session_id,
+                    message: "What is my balance?".to_owned(),
+                    regenerate_message_id: None,
+                    context: None,
+                    headless: false,
+                    tool_mode: ToolMode::ReadOnly,
+                },
+                &pool,
+                Some(sender),
+            )
+            .await
+            .expect("complete agent turn");
+
+        assert_eq!(response.content, "Your wallet balance is 2.5 SOL.");
+        assert_eq!(response.tool_calls.len(), 1);
+        assert!(matches!(
+            response.tool_calls[0].status,
+            ToolCallStatus::Executed
+        ));
+        let messages = database::get_messages(&pool, session_id).expect("persisted messages");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[1].content, response.content);
+        let executions =
+            database::get_tool_executions(&pool, messages[0].id).expect("persisted tool execution");
+        assert_eq!(executions.len(), 1);
+
+        let mut event_types = Vec::new();
+        while let Ok(event) = receiver.try_recv() {
+            event_types.push(match event {
+                ChatProgressEvent::Thinking { .. } => "thinking",
+                ChatProgressEvent::ToolStarted { .. } => "tool_started",
+                ChatProgressEvent::ToolFinished { .. } => "tool_finished",
+                ChatProgressEvent::Complete { .. } => "complete",
+                ChatProgressEvent::Error { .. } => "error",
+            });
+        }
+        assert_eq!(
+            event_types,
+            [
+                "thinking",
+                "tool_started",
+                "tool_finished",
+                "thinking",
+                "complete"
+            ]
+        );
     }
 }

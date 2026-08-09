@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::apis::llm::{ChatRequest, ChatResponse, LlmError, MessageRole, ToolCall, Usage};
+
 // ============================================================================
 // REQUEST TYPES
 // ============================================================================
@@ -29,6 +31,68 @@ pub struct OpenAiRequest {
     /// Response format (for JSON mode)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<OpenAiResponseFormat>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<OpenAiTool>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<String>,
+}
+
+impl From<ChatRequest> for OpenAiRequest {
+    fn from(request: ChatRequest) -> Self {
+        let tools = request.tools.map(|definitions| {
+            definitions
+                .into_iter()
+                .map(|definition| OpenAiTool {
+                    type_: "function".to_owned(),
+                    function: OpenAiFunction {
+                        name: definition.name,
+                        description: definition.description,
+                        parameters: definition.parameters,
+                    },
+                })
+                .collect::<Vec<_>>()
+        });
+        let tool_choice = tools.as_ref().map(|_| "auto".to_owned());
+
+        Self {
+            model: request.model,
+            messages: request
+                .messages
+                .into_iter()
+                .map(|message| OpenAiMessage {
+                    role: match message.role {
+                        MessageRole::System => "system".to_owned(),
+                        MessageRole::User => "user".to_owned(),
+                        MessageRole::Assistant => "assistant".to_owned(),
+                    },
+                    content: message.content,
+                })
+                .collect(),
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
+            response_format: request.response_format.map(|format| OpenAiResponseFormat {
+                type_: format.type_,
+            }),
+            tools,
+            tool_choice,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OpenAiTool {
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub function: OpenAiFunction,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OpenAiFunction {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
 }
 
 /// Message in OpenAI format
@@ -118,6 +182,22 @@ pub struct OpenAiResponseMessage {
     /// Reasoning text returned by models that separate it from final content.
     #[serde(default, alias = "reasoning_content")]
     pub reasoning: Option<String>,
+
+    #[serde(default)]
+    pub tool_calls: Vec<OpenAiToolCall>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAiToolCall {
+    #[serde(default)]
+    pub id: String,
+    pub function: OpenAiToolCallFunction,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAiToolCallFunction {
+    pub name: String,
+    pub arguments: String,
 }
 
 impl OpenAiResponseMessage {
@@ -125,11 +205,6 @@ impl OpenAiResponseMessage {
         self.content
             .as_deref()
             .filter(|content| !content.trim().is_empty())
-            .or_else(|| {
-                self.reasoning
-                    .as_deref()
-                    .filter(|reasoning| !reasoning.trim().is_empty())
-            })
     }
 }
 
@@ -144,4 +219,59 @@ pub struct OpenAiUsage {
 
     /// Total tokens used
     pub total_tokens: u32,
+}
+
+impl OpenAiResponse {
+    pub fn into_chat_response(
+        self,
+        provider: &str,
+        latency_ms: f64,
+    ) -> Result<ChatResponse, LlmError> {
+        let choice = self
+            .choices
+            .first()
+            .ok_or_else(|| LlmError::InvalidResponse {
+                provider: provider.to_owned(),
+                message: "No choices in response".to_owned(),
+            })?;
+        let tool_calls = choice
+            .message
+            .tool_calls
+            .iter()
+            .map(|call| {
+                let arguments =
+                    serde_json::from_str(&call.function.arguments).map_err(|error| {
+                        LlmError::InvalidResponse {
+                            provider: provider.to_owned(),
+                            message: format!(
+                                "Invalid arguments for tool {}: {error}",
+                                call.function.name
+                            ),
+                        }
+                    })?;
+                Ok(ToolCall {
+                    id: call.id.clone(),
+                    name: call.function.name.clone(),
+                    arguments,
+                })
+            })
+            .collect::<Result<Vec<_>, LlmError>>()?;
+        let content = choice.message.text().unwrap_or_default().to_owned();
+        if content.trim().is_empty() && tool_calls.is_empty() {
+            return Err(LlmError::InvalidResponse {
+                provider: provider.to_owned(),
+                message: "Choice contained reasoning but no answer or tool calls".to_owned(),
+            });
+        }
+
+        Ok(ChatResponse::new(
+            content,
+            Usage::new(self.usage.prompt_tokens, self.usage.completion_tokens),
+            choice.finish_reason.clone(),
+            self.model,
+            latency_ms,
+        )
+        .with_reasoning(choice.message.reasoning.clone())
+        .with_tool_calls(tool_calls))
+    }
 }

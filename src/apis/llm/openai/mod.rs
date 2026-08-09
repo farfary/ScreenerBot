@@ -13,9 +13,7 @@ pub use self::types::{
 };
 
 use crate::apis::client::RateLimiter;
-use crate::apis::llm::{
-    ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, MessageRole, Provider, Usage,
-};
+use crate::apis::llm::{ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, Provider};
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
@@ -73,28 +71,7 @@ impl OpenAiClient {
 
     /// Convert unified ChatRequest to OpenAI-specific format
     fn build_openai_request(&self, request: ChatRequest) -> OpenAiRequest {
-        let messages = request
-            .messages
-            .into_iter()
-            .map(|msg| OpenAiMessage {
-                role: match msg.role {
-                    MessageRole::System => "system".to_owned(),
-                    MessageRole::User => "user".to_owned(),
-                    MessageRole::Assistant => "assistant".to_owned(),
-                },
-                content: msg.content,
-            })
-            .collect();
-
-        OpenAiRequest {
-            model: request.model,
-            messages,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-            response_format: request
-                .response_format
-                .map(|rf| OpenAiResponseFormat { type_: rf.type_ }),
-        }
+        request.into()
     }
 
     /// Convert OpenAI response to unified ChatResponse
@@ -103,32 +80,7 @@ impl OpenAiClient {
         response: OpenAiResponse,
         latency_ms: f64,
     ) -> Result<ChatResponse, LlmError> {
-        // Get the first choice
-        let choice = response
-            .choices
-            .first()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "openai".to_owned(),
-                message: "No choices in response".to_owned(),
-            })?;
-        let content = choice
-            .message
-            .text()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "openai".to_owned(),
-                message: "Choice contained no text content".to_owned(),
-            })?;
-
-        Ok(ChatResponse::new(
-            content,
-            Usage::new(
-                response.usage.prompt_tokens,
-                response.usage.completion_tokens,
-            ),
-            choice.finish_reason.clone(),
-            response.model,
-            latency_ms,
-        ))
+        response.into_chat_response("openai", latency_ms)
     }
 
     /// Execute the API call

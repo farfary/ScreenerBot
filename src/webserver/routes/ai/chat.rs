@@ -3,13 +3,16 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::Response,
+    response::{sse::Event, Response, Sse},
     Json,
 };
 use serde::Serialize;
+use std::convert::Infallible;
 use std::sync::Arc;
+use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 
 use crate::ai::chat::database as chat_db;
+use crate::ai::chat::ChatProgressEvent;
 use crate::ai::permissions::ToolPermissions;
 use crate::ai::{try_get_chat_engine, ChatRequest as ChatEngineRequest};
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
@@ -109,23 +112,6 @@ pub async fn send_chat_message(
     // Process message
     match engine.process_message(chat_request).await {
         Ok(response) => {
-            if !response.is_complete {
-                let tool_calls = serde_json::to_string(&response.tool_calls).ok();
-                if let Err(e) = chat_db::add_message(
-                    &pool,
-                    req.session_id,
-                    "assistant",
-                    &response.content,
-                    tool_calls.as_deref(),
-                ) {
-                    return error_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "DB_ERROR",
-                        &format!("Failed to save pending assistant response: {e}"),
-                        None,
-                    );
-                }
-            }
             logger::info(
                 LogTag::Api,
                 &format!(
@@ -142,6 +128,90 @@ pub async fn send_chat_message(
             None,
         ),
     }
+}
+
+/// POST /api/ai/chat/stream - Stream agent progress and the final response.
+pub async fn stream_chat_message(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<SendChatMessageRequest>,
+) -> Result<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>, Response> {
+    if req.message.trim().is_empty() {
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_MESSAGE",
+            "Message cannot be empty",
+            None,
+        ));
+    }
+    if req.message.len() > 10000 {
+        return Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "MESSAGE_TOO_LONG",
+            "Message exceeds maximum length of 10,000 characters",
+            None,
+        ));
+    }
+    let pool = chat_db::get_chat_pool().ok_or_else(|| {
+        error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "CHAT_DB_NOT_INITIALIZED",
+            "Chat database not initialized",
+            None,
+        )
+    })?;
+    match chat_db::get_session(&pool, req.session_id) {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return Err(error_response(
+                StatusCode::NOT_FOUND,
+                "SESSION_NOT_FOUND",
+                &format!("Chat session {} not found", req.session_id),
+                None,
+            ));
+        }
+        Err(error) => {
+            return Err(error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                &format!("Failed to validate session: {error}"),
+                None,
+            ));
+        }
+    }
+    let engine = try_get_chat_engine().ok_or_else(|| {
+        error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "CHAT_NOT_INITIALIZED",
+            "Chat engine not initialized",
+            None,
+        )
+    })?;
+    let chat_request = ChatEngineRequest {
+        session_id: req.session_id,
+        message: req.message,
+        regenerate_message_id: req.regenerate_message_id,
+        context: req.context,
+        headless: false,
+        tool_mode: Default::default(),
+    };
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let error_sender = sender.clone();
+    tokio::spawn(async move {
+        if let Err(error) = engine.process_message_streaming(chat_request, sender).await {
+            let _ = error_sender.send(ChatProgressEvent::Error {
+                message: format!("{error}"),
+            });
+            logger::error(LogTag::Api, &format!("Streaming chat failed: {error}"));
+        }
+    });
+
+    let stream = UnboundedReceiverStream::new(receiver).map(|event| {
+        let data = serde_json::to_string(&event).unwrap_or_else(|_| {
+            r#"{"type":"error","message":"Failed to serialize chat event"}"#.to_owned()
+        });
+        Ok(Event::default().data(data))
+    });
+    Ok(Sse::new(stream))
 }
 
 /// GET /api/ai/chat/sessions - List all chat sessions

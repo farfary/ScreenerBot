@@ -191,6 +191,19 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
+pub(super) fn test_pool() -> Pool<SqliteConnectionManager> {
+    let manager = SqliteConnectionManager::memory();
+    let pool = Pool::builder()
+        .max_size(1)
+        .idle_timeout(None)
+        .max_lifetime(None)
+        .build(manager)
+        .expect("chat test pool");
+    initialize_schema(&pool.get().expect("chat test connection")).expect("chat test schema");
+    pool
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
@@ -216,19 +229,7 @@ mod tests {
     use super::*;
 
     fn setup_test_pool() -> Pool<SqliteConnectionManager> {
-        let manager = SqliteConnectionManager::memory();
-        let pool = Pool::builder()
-            .max_size(1)
-            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None) // SQLite: no connection recycling
-            .build(manager)
-            .unwrap();
-
-        let conn = pool.get().unwrap();
-        initialize_schema(&conn).unwrap();
-        drop(conn);
-
-        pool
+        test_pool()
     }
 
     #[test]

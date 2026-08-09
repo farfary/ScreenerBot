@@ -25,9 +25,7 @@ pub use self::types::{
 };
 
 use crate::apis::client::RateLimiter;
-use crate::apis::llm::{
-    ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, MessageRole, Provider, Usage,
-};
+use crate::apis::llm::{ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, Provider};
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
@@ -85,28 +83,7 @@ impl GroqClient {
 
     /// Convert unified ChatRequest to Groq-specific format (same as OpenAI)
     fn build_groq_request(&self, request: ChatRequest) -> GroqRequest {
-        let messages = request
-            .messages
-            .into_iter()
-            .map(|msg| GroqMessage {
-                role: match msg.role {
-                    MessageRole::System => "system".to_owned(),
-                    MessageRole::User => "user".to_owned(),
-                    MessageRole::Assistant => "assistant".to_owned(),
-                },
-                content: msg.content,
-            })
-            .collect();
-
-        GroqRequest {
-            model: request.model,
-            messages,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-            response_format: request
-                .response_format
-                .map(|rf| GroqResponseFormat { type_: rf.type_ }),
-        }
+        request.into()
     }
 
     /// Convert Groq response to unified ChatResponse
@@ -115,32 +92,7 @@ impl GroqClient {
         response: GroqResponse,
         latency_ms: f64,
     ) -> Result<ChatResponse, LlmError> {
-        // Get the first choice
-        let choice = response
-            .choices
-            .first()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "groq".to_owned(),
-                message: "No choices in response".to_owned(),
-            })?;
-        let content = choice
-            .message
-            .text()
-            .ok_or_else(|| LlmError::InvalidResponse {
-                provider: "groq".to_owned(),
-                message: "Choice contained no text content".to_owned(),
-            })?;
-
-        Ok(ChatResponse::new(
-            content,
-            Usage::new(
-                response.usage.prompt_tokens,
-                response.usage.completion_tokens,
-            ),
-            choice.finish_reason.clone(),
-            response.model,
-            latency_ms,
-        ))
+        response.into_chat_response("groq", latency_ms)
     }
 
     /// Execute the API call

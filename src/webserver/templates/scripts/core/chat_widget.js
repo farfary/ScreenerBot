@@ -439,20 +439,10 @@ export class ChatWidget {
     this._showTypingIndicator();
 
     try {
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, message }),
-        signal,
-      });
-
+      const data = await this._streamChat({ session_id: sessionId, message }, signal, (event) =>
+        this._updateAgentProgress(event)
+      );
       if (signal.aborted) return;
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API error: ${response.status}`);
-      }
-
-      const data = await response.json();
       if (this.state.currentSession !== sessionId) return;
 
       this._hideTypingIndicator();
@@ -543,24 +533,16 @@ export class ChatWidget {
     this._updateInputStatus("");
 
     try {
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await this._streamChat(
+        {
           session_id: this.state.currentSession,
           message: lastUserMessage,
           regenerate_message_id: previousAssistant.id,
-        }),
+        },
         signal,
-      });
-
+        (event) => this._updateAgentProgress(event)
+      );
       if (signal.aborted) return;
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `API error: ${response.status}`);
-      }
-
-      const data = await response.json();
       this._hideTypingIndicator();
       this._updateInputStatus("");
 
@@ -1024,10 +1006,11 @@ export class ChatWidget {
       <div class="message-avatar"><i class="icon-bot"></i></div>
       <div class="typing-content">
         <span class="message-author">Assistant</span>
-        <span class="typing-label">Thinking</span>
+        <div class="agent-progress-line"><span class="typing-label">Preparing response</span>
         <span class="typing-dots" aria-hidden="true">
           <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
-        </span>
+        </span></div>
+        <div class="agent-progress-tools"></div>
       </div>`;
     container.appendChild(indicator);
     this._scrollToBottom();
@@ -1036,6 +1019,81 @@ export class ChatWidget {
   _hideTypingIndicator() {
     const el = this.$(".typing-indicator");
     if (el) el.remove();
+  }
+
+  _updateAgentProgress(event) {
+    const indicator = this.$(".typing-indicator");
+    if (!indicator) return;
+    const label = indicator.querySelector(".typing-label");
+    const tools = indicator.querySelector(".agent-progress-tools");
+    if (event.type === "thinking") {
+      if (label)
+        label.textContent = event.iteration > 0 ? "Reviewing tool results" : "Planning response";
+      return;
+    }
+    if (event.type === "tool_started") {
+      if (label) label.textContent = "Using tools";
+      if (!tools) return;
+      const row = document.createElement("div");
+      row.className = "agent-progress-tool running";
+      row.dataset.toolName = event.tool_name;
+      row.innerHTML = `<i class="icon-clock-3"></i><span>${Utils.escapeHtml(event.tool_name.replace(/[_-]+/g, " "))}</span><small>Running</small>`;
+      tools.appendChild(row);
+      this._scrollToBottom();
+      return;
+    }
+    if (event.type === "tool_finished" && tools) {
+      const call = event.tool_call;
+      const row = Array.from(tools.querySelectorAll(".agent-progress-tool")).find(
+        (item) => item.dataset.toolName === call.tool_name && item.classList.contains("running")
+      );
+      if (row) {
+        const failed = String(call.status).toLowerCase() === "failed";
+        row.className = `agent-progress-tool ${failed ? "failed" : "complete"}`;
+        row.querySelector("i").className = failed ? "icon-circle-x" : "icon-circle-check";
+        row.querySelector("small").textContent = failed ? "Failed" : "Complete";
+      }
+    }
+  }
+
+  async _streamChat(payload, signal, onEvent) {
+    const response = await fetch("/api/ai/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `API error: ${response.status}`);
+    }
+    if (!response.body) throw new Error("Assistant progress stream is unavailable");
+
+    const reader = response.body.getReader();
+    const decoder = new window.TextDecoder();
+    let buffer = "";
+    let finalResponse = null;
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() || "";
+      for (const frame of frames) {
+        const data = frame
+          .split("\n")
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trimStart())
+          .join("\n");
+        if (!data) continue;
+        const event = JSON.parse(data);
+        if (event.type === "error") throw new Error(event.message || "Assistant request failed");
+        onEvent?.(event);
+        if (event.type === "complete") finalResponse = event.response;
+      }
+      if (done) break;
+    }
+    if (!finalResponse) throw new Error("Assistant response ended before completion");
+    return finalResponse;
   }
 
   _scrollToBottom() {

@@ -35,6 +35,17 @@ pub struct ChatResponse {
     pub is_complete: bool,
 }
 
+/// Incremental events emitted while an agent turn is running.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChatProgressEvent {
+    Thinking { iteration: usize },
+    ToolStarted { tool_name: String },
+    ToolFinished { tool_call: ToolCallInfo },
+    Complete { response: ChatResponse },
+    Error { message: String },
+}
+
 /// Information about a tool call
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallInfo {

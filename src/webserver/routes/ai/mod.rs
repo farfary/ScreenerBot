@@ -29,7 +29,7 @@ use automation::{
 use chat::{
     confirm_tool_execution, create_chat_session, delete_chat_session, generate_session_title,
     get_chat_session, get_permissions, list_chat_sessions, list_tools, send_chat_message,
-    summarize_chat_session, update_permissions,
+    stream_chat_message, summarize_chat_session, update_permissions,
 };
 use instructions::{
     create_instruction, delete_instruction, get_history_detail, get_instruction, list_history,
@@ -76,6 +76,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/history/:id", get(get_history_detail))
         // Chat Routes
         .route("/chat", post(send_chat_message))
+        .route("/chat/stream", post(stream_chat_message))
         .route("/chat/sessions", get(list_chat_sessions))
         .route("/chat/sessions", post(create_chat_session))
         .route("/chat/sessions/:id", get(get_chat_session))
