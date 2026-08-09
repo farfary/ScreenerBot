@@ -41,20 +41,32 @@ async function ensureInit() {
 }
 
 // Flush pending saves to server (debounced batch save)
-async function flushPendingSaves() {
+export async function flushPendingSaves({ keepalive = false } = {}) {
   if (pendingSaves.size === 0) return;
 
-  const entries = Object.fromEntries(pendingSaves);
-  pendingSaves.clear();
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+    saveTimeout = null;
+  }
+  const snapshot = new Map(pendingSaves);
+  const entries = Object.fromEntries(snapshot);
 
   try {
-    await fetch("/api/ui-state/batch-save", {
+    const response = await fetch("/api/ui-state/batch-save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entries }),
+      keepalive,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    snapshot.forEach((value, key) => {
+      if (pendingSaves.get(key) === value) pendingSaves.delete(key);
     });
   } catch (e) {
     console.warn("[AppState] Failed to batch save state:", e);
+    if (!keepalive && pendingSaves.size > 0) {
+      saveTimeout = setTimeout(flushPendingSaves, 1000);
+    }
   }
 }
 
@@ -142,3 +154,7 @@ export function isInitialized() {
 export function getAll() {
   return stateCache ? { ...stateCache } : null;
 }
+
+window.addEventListener("pagehide", () => {
+  void flushPendingSaves({ keepalive: true });
+});

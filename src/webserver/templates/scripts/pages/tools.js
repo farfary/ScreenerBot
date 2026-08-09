@@ -6,6 +6,7 @@
 import { registerPage } from "../core/lifecycle.js";
 import { $, $$, on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import * as Hints from "../core/hints.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 
@@ -231,16 +232,6 @@ function getToolFeatureStatus(toolId) {
 }
 
 /**
- * Check if a tool is available (can be clicked/used)
- * @param {string} toolId - The tool ID
- * @returns {boolean} True if tool is available or beta
- */
-function _isToolAvailable(toolId) {
-  const status = getToolFeatureStatus(toolId);
-  return status === FEATURE_STATUS.AVAILABLE || status === FEATURE_STATUS.BETA;
-}
-
-/**
  * Apply feature status to all tool navigation items
  */
 function applyFeatureStatusToUI() {
@@ -308,7 +299,7 @@ function applyFeatureStatusToUI() {
 // Tool Navigation
 // =============================================================================
 
-function selectTool(toolId) {
+function selectTool(toolId, { historyMode = "push" } = {}) {
   const definition = TOOL_DEFINITIONS[toolId];
   if (!definition) {
     console.warn(`Unknown tool: ${toolId}`);
@@ -351,59 +342,24 @@ function selectTool(toolId) {
 
   // Save state
   saveToolState(toolId);
-}
-
-/**
- * Get human-readable status label
- */
-function getStatusLabel(status) {
-  const labels = {
-    ready: "Ready",
-    running: "Running",
-    error: "Error",
-    coming: "Coming Soon",
-  };
-  return labels[status] || "Ready";
-}
-
-/**
- * Update a tool's status indicator
- */
-function updateToolStatus(toolId, status, tooltip = null) {
-  const navItem = $(`.nav-item[data-tool="${toolId}"]`);
-  if (navItem) {
-    navItem.dataset.status = status;
-    const statusIndicator = navItem.querySelector(".nav-item-status");
-    if (statusIndicator && tooltip) {
-      statusIndicator.dataset.tooltip = tooltip;
-    }
-  }
-
-  // Update header if this is the current tool
-  if (currentTool === toolId) {
-    // Status tracked in nav item only
+  if (window.location.hash !== `#${toolId}`) {
+    window.history[historyMode === "push" ? "pushState" : "replaceState"](
+      { page: "tools", subtab: toolId },
+      "",
+      `#${toolId}`
+    );
   }
 }
 
 function saveToolState(toolId) {
-  try {
-    localStorage.setItem(TOOLS_STATE_KEY, JSON.stringify({ activeTool: toolId }));
-  } catch (e) {
-    console.warn("Failed to save tools state:", e);
-  }
+  AppState.save(TOOLS_STATE_KEY, toolId);
 }
 
 function loadToolState() {
-  try {
-    const saved = localStorage.getItem(TOOLS_STATE_KEY);
-    if (saved) {
-      const state = JSON.parse(saved);
-      return state.activeTool || DEFAULT_TOOL;
-    }
-  } catch (e) {
-    console.warn("Failed to load tools state:", e);
-  }
-  return DEFAULT_TOOL;
+  const hashTool = window.location.hash.slice(1);
+  if (TOOL_DEFINITIONS[hashTool]) return hashTool;
+  const savedTool = AppState.load(TOOLS_STATE_KEY, DEFAULT_TOOL);
+  return TOOL_DEFINITIONS[savedTool] ? savedTool : DEFAULT_TOOL;
 }
 
 // =============================================================================
@@ -411,6 +367,7 @@ function loadToolState() {
 // =============================================================================
 
 function createLifecycle() {
+  let popstateHandler = null;
   return {
     async init() {
       // Initialize hints system
@@ -454,7 +411,15 @@ function createLifecycle() {
 
       // Load saved state or default
       const savedTool = loadToolState();
-      selectTool(savedTool);
+      selectTool(savedTool, { historyMode: "replace" });
+
+      popstateHandler = () => {
+        const hashTool = window.location.hash.slice(1);
+        if (TOOL_DEFINITIONS[hashTool] && hashTool !== currentTool) {
+          selectTool(hashTool, { historyMode: "replace" });
+        }
+      };
+      on(window, "popstate", popstateHandler);
     },
 
     activate() {
@@ -478,6 +443,8 @@ function createLifecycle() {
         off(nav, "click", toolClickHandler);
       }
       toolClickHandler = null;
+      if (popstateHandler) off(window, "popstate", popstateHandler);
+      popstateHandler = null;
       currentTool = null;
       featureStatus = {}; // Reset feature status
 

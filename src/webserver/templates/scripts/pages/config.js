@@ -89,6 +89,14 @@ const state = {
   saving: false,
 };
 
+function syncSectionFromHash() {
+  const sectionId = window.location.hash.slice(1);
+  if (!sectionId || !state.metadata?.[sectionId] || sectionId === state.activeSection) return;
+  state.activeSection = sectionId;
+  AppState.save(`${CONFIG_STATE_KEY}.activeSection`, sectionId);
+  render();
+}
+
 function setState(partial) {
   Object.assign(state, partial);
   render();
@@ -240,6 +248,7 @@ function renderSidebar() {
         return;
       }
       AppState.save(`${CONFIG_STATE_KEY}.activeSection`, sectionId);
+      window.history.pushState({ page: "config", subtab: sectionId }, "", `#${sectionId}`);
       setState({ activeSection: sectionId });
     });
 
@@ -1250,6 +1259,19 @@ async function init(ctx) {
       return;
     }
   }
+
+
+  syncSectionFromHash();
+  if (state.activeSection && window.location.hash !== `#${state.activeSection}`) {
+    window.history.replaceState(
+      { page: "config", subtab: state.activeSection },
+      "",
+      `#${state.activeSection}`
+    );
+  }
+  const popstateHandler = () => syncSectionFromHash();
+  on(window, "popstate", popstateHandler);
+  ctx.onDispose(() => off(window, "popstate", popstateHandler));
 
   await loadConfig();
   render();

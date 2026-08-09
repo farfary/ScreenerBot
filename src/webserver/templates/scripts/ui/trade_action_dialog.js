@@ -1,6 +1,7 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 import { applyQuickTradeMixin } from "./trade_action/quick_trade.js";
@@ -116,6 +117,7 @@ export class TradeActionDialog {
     this._presetClickListener = this._handlePresetClick.bind(this);
     this._inputChangeListener = this._handleInputChange.bind(this);
     this._focusTrap = null;
+    this._releaseEscape = null;
 
     // Quick trade mode bound listeners
     this._quickPasteListener = this._handleQuickPaste.bind(this);
@@ -549,6 +551,7 @@ export class TradeActionDialog {
     this._isOpen = true;
 
     document.addEventListener("keydown", this._keyListener, true);
+    this._releaseEscape = pushEscapeHandler(() => this._handleCancelClick());
 
     // Activate focus trap
     this._focusTrap = createFocusTrap(this.dialog);
@@ -619,6 +622,8 @@ export class TradeActionDialog {
     this._isOpen = false;
 
     document.removeEventListener("keydown", this._keyListener, true);
+    this._releaseEscape?.();
+    this._releaseEscape = null;
 
     // Deactivate focus trap
     if (this._focusTrap) {
@@ -1613,12 +1618,6 @@ export class TradeActionDialog {
   _handleKeyDown(event) {
     if (!this._isOpen) {
       return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      this._handleCancelClick();
     }
 
     if (event.key === "Enter") {

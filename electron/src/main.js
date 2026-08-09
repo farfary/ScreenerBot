@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 const os = require('os');
+const { pathToFileURL } = require('url');
 
 // ============================================================================
 // EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
@@ -53,6 +54,54 @@ let dashboardLoaded = false; // True once the dashboard URL has been loaded succ
 let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in window-state.json
 let backendRestartRequested = false;
 let backendRestartTarget = '/home';
+
+function isSafeExternalUrl(rawUrl) {
+  try {
+    const protocol = new URL(rawUrl).protocol;
+    return protocol === 'https:' || protocol === 'http:';
+  } catch (_) {
+    return false;
+  }
+}
+
+function isDashboardUrl(rawUrl) {
+  if (!CONFIG.port) return false;
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === 'http:'
+      && url.hostname === CONFIG.host
+      && url.port === String(CONFIG.port);
+  } catch (_) {
+    return false;
+  }
+}
+
+function currentDashboardRoute() {
+  try {
+    const url = new URL(mainWindow?.webContents.getURL() || '');
+    if (!isDashboardUrl(url.href)) return '/home';
+    url.searchParams.delete('electron');
+    url.searchParams.delete('theme');
+    const search = url.searchParams.toString();
+    return `${url.pathname}${search ? `?${search}` : ''}${url.hash}`;
+  } catch (_) {
+    return '/home';
+  }
+}
+
+function openExternalUrl(rawUrl) {
+  if (!isSafeExternalUrl(rawUrl)) {
+    console.warn('[Electron] Blocked unsupported external URL:', rawUrl);
+    return;
+  }
+  shell.openExternal(rawUrl).catch(err => {
+    console.error('[Electron] Failed to open external URL:', err.message);
+  });
+}
+
+function isLoadingPageUrl(rawUrl) {
+  return rawUrl === pathToFileURL(path.join(__dirname, 'index.html')).href;
+}
 
 function getBackendExtraArgs() {
   const raw = process.env.SCREENERBOT_EXTRA_ARGS || '';
@@ -134,7 +183,6 @@ function createTray() {
         if (mainWindow) {
           mainWindow.show();
           mainWindow.focus();
-          mainWindow.loadURL(`http://${CONFIG.host}:${CONFIG.port}?electron=1`);
         }
       }
     },
@@ -403,9 +451,9 @@ function startBackend(extraArgs = []) {
           if (line.trim() === 'SCREENERBOT_RESTART') {
             backendRestartRequested = true;
             try {
-              const currentPath = new URL(mainWindow?.webContents.getURL() || '').pathname;
-              backendRestartTarget = currentPath && currentPath !== '/initialization'
-                ? currentPath
+              const currentRoute = currentDashboardRoute();
+              backendRestartTarget = currentRoute && !currentRoute.startsWith('/initialization')
+                ? currentRoute
                 : '/home';
             } catch (_) {
               backendRestartTarget = '/home';
@@ -474,11 +522,8 @@ function startBackend(extraArgs = []) {
         return;
       }
 
-      if (!dashboardLoaded) {
-        showBootError(genericBootError(
-          `The backend stopped before the dashboard was ready (exit code ${code}).`
-        ));
-      }
+      const phase = dashboardLoaded ? 'while the dashboard was running' : 'before the dashboard was ready';
+      showBootError(genericBootError(`The backend stopped ${phase} (exit code ${code}).`));
     });
 
     console.log('[Electron] Backend process spawned with PID:', backendProcess.pid);
@@ -789,8 +834,36 @@ function createWindow() {
 
   // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openExternalUrl(url);
     return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isDashboardUrl(url) || isLoadingPageUrl(url)) return;
+    event.preventDefault();
+    openExternalUrl(url);
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    dashboardLoaded = isDashboardUrl(mainWindow.webContents.getURL());
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3 || !isDashboardUrl(validatedURL) || isQuitting) return;
+    dashboardLoaded = false;
+    showBootError(genericBootError(`The dashboard failed to load (${errorDescription}, ${errorCode}).`));
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    if (isQuitting) return;
+    dashboardLoaded = false;
+    showBootError(genericBootError(`The dashboard renderer stopped (${details.reason}).`));
+  });
+
+  mainWindow.on('unresponsive', () => {
+    if (isQuitting) return;
+    dashboardLoaded = false;
+    showBootError(genericBootError('The dashboard became unresponsive.'));
   });
 
   // Ensure zoom shortcuts work consistently across keyboard layouts.
@@ -1117,11 +1190,16 @@ function loadMainApp(route = '/') {
   const safeRoute = typeof route === 'string' && route.startsWith('/') && !route.startsWith('//')
     ? route
     : '/';
-  const separator = safeRoute.includes('?') ? '&' : '?';
-  const appUrl = `http://${CONFIG.host}:${CONFIG.port}${safeRoute}${separator}electron=1&theme=${currentTheme}`;
-  console.log('[Electron] Loading main app:', appUrl);
-  dashboardLoaded = true;
-  mainWindow.loadURL(appUrl);
+  const appUrl = new URL(safeRoute, `http://${CONFIG.host}:${CONFIG.port}`);
+  appUrl.searchParams.set('electron', '1');
+  appUrl.searchParams.set('theme', currentTheme);
+  console.log('[Electron] Loading main app:', appUrl.href);
+  dashboardLoaded = false;
+  mainWindow.loadURL(appUrl.href).catch(err => {
+    if (!isQuitting) {
+      showBootError(genericBootError(`The dashboard URL could not be loaded (${err.message}).`));
+    }
+  });
 }
 
 /**

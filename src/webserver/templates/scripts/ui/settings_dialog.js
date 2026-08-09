@@ -4,6 +4,7 @@
  */
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 import { getCurrentPage } from "../core/router.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
@@ -272,10 +273,8 @@ export class SettingsDialog {
     this.dialogEl.classList.remove("active");
 
     setTimeout(() => {
-      if (this._escapeHandler) {
-        document.removeEventListener("keydown", this._escapeHandler);
-        this._escapeHandler = null;
-      }
+      this._releaseEscape?.();
+      this._releaseEscape = null;
 
       if (this.dialogEl) {
         this.dialogEl.remove();
@@ -662,12 +661,7 @@ export class SettingsDialog {
     backdrop.addEventListener("click", () => this.close());
 
     // ESC key
-    this._escapeHandler = (e) => {
-      if (e.key === "Escape") {
-        this.close();
-      }
-    };
-    document.addEventListener("keydown", this._escapeHandler);
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Save button
     const saveBtn = this.dialogEl.querySelector("#settingsSaveBtn");

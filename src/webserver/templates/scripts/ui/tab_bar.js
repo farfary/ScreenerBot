@@ -342,10 +342,14 @@ export class TabBar {
     }
   }
 
-  _updateHash() {
+  _updateHash(historyMode = "replace") {
     if (this.activeTab && window.location.hash !== `#${this.activeTab}`) {
       // Update hash without triggering scroll or full navigation
-      history.replaceState(null, "", `#${this.activeTab}`);
+      history[historyMode === "push" ? "pushState" : "replaceState"](
+        { page: this.pageName, subtab: this.activeTab },
+        "",
+        `#${this.activeTab}`
+      );
     }
   }
 
@@ -354,7 +358,12 @@ export class TabBar {
   // --------------------------------------------------------------------------
 
   async setActive(tabId, options = {}) {
-    const { silent = false, skipValidation = false } = options;
+    const {
+      silent = false,
+      skipValidation = false,
+      historyMode = silent ? "replace" : "push",
+      playSound: shouldPlaySound = !silent,
+    } = options;
 
     if (!tabId || !this.tabs.some((t) => t.id === tabId)) {
       console.warn(`[TabBar] Invalid tab ID: ${tabId}`);
@@ -382,7 +391,7 @@ export class TabBar {
     this.activeTab = tabId;
 
     // Play tab switch sound (only for user-initiated switches, not silent/restore)
-    if (!silent) {
+    if (shouldPlaySound) {
       playTabSwitch();
     }
 
@@ -393,7 +402,7 @@ export class TabBar {
     this._saveState();
 
     // Update URL hash
-    this._updateHash();
+    this._updateHash(historyMode);
 
     // Emit events
     if (!silent) {
@@ -634,6 +643,18 @@ class TabBarManagerClass {
 
   getActiveTabBar() {
     return this.currentPage ? this.instances.get(this.currentPage) : null;
+  }
+
+  async syncFromLocation(pageName = this.currentPage) {
+    const tabBar = pageName ? this.instances.get(pageName) : null;
+    const hashTab = window.location.hash.slice(1);
+    if (!tabBar || !hashTab || hashTab === tabBar.activeTab) return;
+    if (!tabBar.tabs.some((tab) => tab.id === hashTab)) return;
+    await tabBar.setActive(hashTab, {
+      skipValidation: true,
+      historyMode: "replace",
+      playSound: false,
+    });
   }
 
   getAllTabBars() {

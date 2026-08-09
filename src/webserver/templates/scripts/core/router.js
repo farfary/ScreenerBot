@@ -3,9 +3,27 @@ import { PageLifecycleRegistry } from "./lifecycle.js";
 import * as AppState from "./app_state.js";
 import { waitForReady } from "./bootstrap.js";
 import { playClick, playTabSwitch } from "./sounds.js";
+import { closeStackedOverlays } from "./escape_stack.js";
 
 const assetVersion = window.__ASSET_VERSION__ || "";
 const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : "";
+
+const PAGE_TITLES = Object.freeze({
+  home: "Home",
+  tokens: "Tokens",
+  positions: "Positions",
+  events: "Events",
+  services: "Services",
+  transactions: "Transactions",
+  filtering: "Filtering",
+  wallets: "Wallets",
+  tools: "Tools",
+  ai: "AI",
+  config: "Configuration",
+  trader: "Auto Trader",
+  updates: "Updates",
+  about: "About",
+});
 
 // Import TabBarManager for coordinated tab bar management
 let TabBarManager = null;
@@ -31,6 +49,8 @@ const _state = {
   timeoutMs: 10000,
   pageCache: {},
   initializedPages: {},
+  navigationId: 0,
+  navigationController: null,
 };
 
 export function getCurrentPage() {
@@ -45,6 +65,10 @@ function activatePageStyles(pageName) {
   });
 }
 
+function updateDocumentTitle(pageName) {
+  document.title = `${PAGE_TITLES[pageName] || "Dashboard"} - ScreenerBot`;
+}
+
 function ensurePageStyles(pageName) {
   if (typeof pageName !== "string" || !pageName) {
     return Promise.resolve();
@@ -52,7 +76,6 @@ function ensurePageStyles(pageName) {
 
   const existing = document.head.querySelector(`[data-page-style="${pageName}"]`);
   if (existing) {
-    activatePageStyles(pageName);
     return Promise.resolve();
   }
 
@@ -64,7 +87,6 @@ function ensurePageStyles(pageName) {
     link.addEventListener(
       "load",
       () => {
-        activatePageStyles(pageName);
         resolve();
       },
       { once: true }
@@ -155,9 +177,8 @@ function displayPageElement(mainContent, pageEl) {
   pageEl.style.display = "";
 }
 
-async function fetchPageContent(pageName, timeoutMs) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+async function fetchPageContent(pageName, timeoutMs, controller) {
+  const timeoutId = setTimeout(() => controller.abort("timeout"), timeoutMs);
 
   try {
     const response = await fetch(`/api/pages/${pageName}${assetQuery}`, {
@@ -175,37 +196,25 @@ async function fetchPageContent(pageName, timeoutMs) {
     return html;
   } catch (error) {
     clearTimeout(timeoutId);
-    if (error.name === "AbortError") {
+    if (error.name === "AbortError" && controller.signal.reason === "timeout") {
       throw new Error("Request timeout");
     }
     throw error;
   }
 }
 
-export async function loadPage(pageName) {
-  if (!pageName) return;
+export async function loadPage(pageName, { historyMode = "push" } = {}) {
+  if (!pageName || !PAGE_TITLES[pageName]) return;
+
+  const navigationId = ++_state.navigationId;
+  _state.navigationController?.abort("superseded");
+  const controller = new AbortController();
+  _state.navigationController = controller;
+  const isCurrentNavigation = () => navigationId === _state.navigationId;
 
   console.log("[Router] Loading page:", pageName);
 
   const previousPage = _state.currentPage;
-  if (previousPage) {
-    await PageLifecycleRegistry.deactivate(previousPage);
-  }
-
-  runCleanupHandlers();
-
-  _state.currentPage = pageName;
-  setActiveTab(pageName);
-
-  // Notify TabBarManager about page switch (deferred to ensure DOM is ready)
-  if (TabBarManager) {
-    TabBarManager.onPageSwitch(pageName, previousPage);
-  }
-
-  // Notify ActionBarManager about page switch (deferred to ensure DOM is ready)
-  if (ActionBarManager) {
-    ActionBarManager.onPageSwitch(pageName, previousPage);
-  }
 
   // Select main.content specifically - there are multiple <main> elements
   // (onboarding-content, setup-content, content) and we need the visible one
@@ -218,52 +227,31 @@ export async function loadPage(pageName) {
   // Remove any unresolved loading placeholders
   mainContent.querySelectorAll(".page-loading").forEach((el) => el.remove());
 
-  // Cached page path – reuse existing container
-  const cachedEl = _state.pageCache[pageName];
-  if (cachedEl) {
-    console.log("[Router] Using cached page:", pageName);
-
-    await ensurePageStyles(pageName);
-    displayPageElement(mainContent, cachedEl);
-    await PageLifecycleRegistry.activate(pageName);
-
-    const targetUrl = `/${pageName}`;
-    if (window.location.pathname !== targetUrl) {
-      window.history.pushState({ page: pageName }, "", targetUrl);
-    }
-
-    AppState.save("lastTab", pageName);
-    console.log("[Router] Cached page displayed:", pageName);
-    return;
-  }
-
-  // Page not cached – show loading state and fetch content
-  mainContent.setAttribute("data-loading", "true");
-  removeCachedPageElements(mainContent);
-
+  let pageEl = _state.pageCache[pageName] || null;
   const loadingEl = document.createElement("div");
   loadingEl.className = "page-loading";
+  loadingEl.dataset.navigationId = String(navigationId);
   loadingEl.innerHTML = '<div class="loading-spinner">Loading…</div>';
-
-  Object.values(_state.pageCache).forEach((el) => {
-    el.style.display = "none";
-  });
-  mainContent.appendChild(loadingEl);
+  if (!pageEl) {
+    mainContent.setAttribute("data-loading", "true");
+    mainContent.appendChild(loadingEl);
+  }
 
   try {
-    const html = await fetchPageContent(pageName, _state.timeoutMs);
+    if (!pageEl) {
+      const html = await fetchPageContent(pageName, _state.timeoutMs, controller);
+      if (!isCurrentNavigation()) return;
 
-    const pageEl = document.createElement("div");
-    pageEl.className = "page-container";
-    pageEl.id = `page-${pageName}`;
-    pageEl.setAttribute("data-page", pageName);
-    pageEl.innerHTML = html;
+      pageEl = document.createElement("div");
+      pageEl.className = "page-container";
+      pageEl.id = `page-${pageName}`;
+      pageEl.setAttribute("data-page", pageName);
+      pageEl.innerHTML = html;
+      _state.pageCache[pageName] = pageEl;
+    }
 
-    _state.pageCache[pageName] = pageEl;
-
-    loadingEl.remove();
     await ensurePageStyles(pageName);
-    displayPageElement(mainContent, pageEl);
+    if (!isCurrentNavigation()) return;
 
     // Load page-specific module if it exists
     try {
@@ -272,16 +260,45 @@ export async function loadPage(pageName) {
       console.warn(`[Router] No module for page ${pageName}:`, err.message);
     }
 
-    await PageLifecycleRegistry.activate(pageName);
+    if (!isCurrentNavigation()) return;
+
+    if (previousPage && previousPage !== pageName) {
+      await PageLifecycleRegistry.deactivate(previousPage);
+    }
+    if (!isCurrentNavigation()) return;
+
+    closeStackedOverlays();
+    runCleanupHandlers();
+    loadingEl.remove();
+    mainContent.removeAttribute("data-loading");
+    activatePageStyles(pageName);
+    displayPageElement(mainContent, pageEl);
+    _state.currentPage = pageName;
+    setActiveTab(pageName);
+    TabBarManager?.onPageSwitch(pageName, previousPage);
+    ActionBarManager?.onPageSwitch(pageName, previousPage);
+    updateDocumentTitle(pageName);
 
     const targetUrl = `/${pageName}`;
-    if (window.location.pathname !== targetUrl) {
+    if (historyMode === "replace") {
+      window.history.replaceState({ page: pageName }, "", targetUrl);
+    } else if (historyMode === "push" && window.location.pathname !== targetUrl) {
       window.history.pushState({ page: pageName }, "", targetUrl);
     }
+
+    // Commit the page path before activation. Page-owned subtab controllers can
+    // then add their canonical hash to this same history entry without carrying
+    // a hash over from the previous page or having the router erase the new one.
+    await PageLifecycleRegistry.activate(pageName);
+    await TabBarManager?.syncFromLocation(pageName);
 
     AppState.save("lastTab", pageName);
     console.log("[Router] New page loaded and cached:", pageName);
   } catch (error) {
+    if (!isCurrentNavigation() || controller.signal.reason === "superseded") {
+      loadingEl.remove();
+      return;
+    }
     console.error("[Router] Failed to load page:", pageName, error);
 
     // A connection error (backend crashed / network dropped / restart in
@@ -289,6 +306,7 @@ export async function loadPage(pageName) {
     // error — the connectivity watcher already shows the global overlay, and we
     // reload this page automatically the moment the backend answers again.
     if (isConnectionError(error)) {
+      if (!loadingEl.isConnected) mainContent.appendChild(loadingEl);
       renderOfflinePlaceholder(loadingEl, pageName);
       return;
     }
@@ -337,14 +355,14 @@ function renderOfflinePlaceholder(loadingEl, pageName) {
   if (retryBtn) {
     retryBtn.addEventListener("click", () => {
       if (window.__SB_CONNECTIVITY__) window.__SB_CONNECTIVITY__.pingNow();
-      loadPage(pageName);
+      loadPage(pageName, { historyMode: "replace" });
     });
   }
   // Auto-recover: reload this page the moment the backend comes back.
   const onReconnect = () => {
     window.removeEventListener("screenerbot:reconnected", onReconnect);
-    // Only reload if the user is still looking at this (failed) page.
-    if (_state.currentPage === pageName) loadPage(pageName);
+    // Only reload if this failed navigation is still the visible placeholder.
+    if (loadingEl.isConnected) loadPage(pageName, { historyMode: "replace" });
   };
   window.addEventListener("screenerbot:reconnected", onReconnect, { once: true });
 }
@@ -383,7 +401,11 @@ export function initRouter() {
   window.addEventListener("popstate", (e) => {
     const pageName = e.state?.page || getPageFromPath();
     if (pageName) {
-      loadPage(pageName);
+      if (pageName === _state.currentPage) {
+        void TabBarManager?.syncFromLocation(pageName);
+      } else {
+        loadPage(pageName, { historyMode: "none" });
+      }
     }
   });
 
@@ -410,11 +432,17 @@ export function initRouter() {
   const isStoredPageValid = storedPage
     ? Boolean(document.querySelector(`nav .tab[data-page="${storedPage}"]`))
     : false;
+  const isElectron = Boolean(window.electronAPI?.isElectron);
   const initialPage =
-    pathPage || serverActiveTab || (isStoredPageValid ? storedPage : null) || "home";
+    pathPage ||
+    (isElectron && isStoredPageValid ? storedPage : null) ||
+    serverActiveTab ||
+    (isStoredPageValid ? storedPage : null) ||
+    "home";
 
   _state.currentPage = initialPage;
   setActiveTab(initialPage);
+  updateDocumentTitle(initialPage);
 
   // Check if content is already server-rendered
   // mainContent already queried above for cleanup
@@ -423,7 +451,12 @@ export function initRouter() {
   const existingContainer = mainContent?.querySelector(
     `.page-container[data-page="${initialPage}"]`
   );
-  if (existingContainer) {
+  if (mainContent && serverActiveTab && serverActiveTab !== initialPage) {
+    // `/` is server-rendered as Home. Electron may restore another persisted
+    // page, so never relabel Home's markup as that page; fetch the real partial.
+    mainContent.replaceChildren();
+    loadPage(initialPage, { historyMode: "replace" });
+  } else if (existingContainer) {
     console.log("[Router] Found existing page container (cached), reusing:", initialPage);
     _state.pageCache[initialPage] = existingContainer;
 
@@ -471,7 +504,7 @@ export function initRouter() {
   } else {
     // No server-rendered content, fetch it
     console.log("[Router] No server-rendered content, fetching:", initialPage);
-    loadPage(initialPage);
+    loadPage(initialPage, { historyMode: "replace" });
   }
 }
 

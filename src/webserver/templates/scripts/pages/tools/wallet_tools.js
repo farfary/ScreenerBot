@@ -16,9 +16,6 @@ function renderWalletCleanupTool(container, actionsContainer) {
   const hint = Hints.getHint("tools.walletCleanup");
   const hintHtml = hint ? HintTrigger.render(hint, "tools.walletCleanup", { size: "sm" }) : "";
 
-  // Load auto cleanup state from localStorage
-  const autoCleanupEnabled = localStorage.getItem("ata.autoCleanup") === "true";
-
   container.innerHTML = `
     <div class="tool-panel wallet-cleanup-tool">
       <div class="tool-section">
@@ -29,22 +26,6 @@ function renderWalletCleanupTool(container, actionsContainer) {
           </div>
         </div>
         <div class="section-content">
-          <div class="auto-cleanup-row">
-            <div class="auto-cleanup-info">
-              <label class="toggle">
-                <input type="checkbox" id="auto-cleanup-toggle" ${autoCleanupEnabled ? "checked" : ""}>
-                <span class="toggle-track"></span>
-              </label>
-              <div class="auto-cleanup-text">
-                <span class="auto-cleanup-label">Auto Cleanup</span>
-                <span class="auto-cleanup-desc">Automatically close empty ATAs every 5 minutes (preference saved locally)</span>
-              </div>
-            </div>
-            <div class="auto-cleanup-status ${autoCleanupEnabled ? "active" : ""}" id="auto-cleanup-status">
-              <i class="icon-${autoCleanupEnabled ? "check-circle" : "circle"}"></i>
-              <span>${autoCleanupEnabled ? "Active" : "Inactive"}</span>
-            </div>
-          </div>
           <div class="scan-stats">
             <div class="stat-card">
               <div class="stat-value" id="empty-atas-count">—</div>
@@ -73,12 +54,6 @@ function renderWalletCleanupTool(container, actionsContainer) {
 
   HintTrigger.initAll();
 
-  // Wire up auto cleanup toggle
-  const autoCleanupToggle = $("#auto-cleanup-toggle");
-  if (autoCleanupToggle) {
-    on(autoCleanupToggle, "change", handleAutoCleanupToggle);
-  }
-
   actionsContainer.innerHTML = `
     <button class="btn primary" id="scan-atas-btn">
       <i class="icon-scan"></i> Scan Wallet
@@ -98,35 +73,6 @@ function renderWalletCleanupTool(container, actionsContainer) {
   if (cleanupBtn) {
     on(cleanupBtn, "click", handleCleanupATAs);
   }
-}
-
-/**
- * Handle auto cleanup toggle change
- *
- * Note: This toggle saves to localStorage and is a frontend-only preference.
- * The auto-cleanup runs on app startup and periodically when the Tools page
- * is active. The preference persists across sessions via localStorage.
- */
-function handleAutoCleanupToggle(event) {
-  const enabled = event.target.checked;
-  localStorage.setItem("ata.autoCleanup", enabled ? "true" : "false");
-
-  // Update status indicator
-  const statusEl = $("#auto-cleanup-status");
-  if (statusEl) {
-    statusEl.className = `auto-cleanup-status ${enabled ? "active" : ""}`;
-    statusEl.innerHTML = `
-      <i class="icon-${enabled ? "check-circle" : "circle"}"></i>
-      <span>${enabled ? "Active" : "Inactive"}</span>
-    `;
-  }
-
-  Utils.showToast(
-    enabled
-      ? "Auto cleanup enabled - empty ATAs will be closed automatically"
-      : "Auto cleanup disabled",
-    enabled ? "success" : "info"
-  );
 }
 
 async function handleScanATAs() {

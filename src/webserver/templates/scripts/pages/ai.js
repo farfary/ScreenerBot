@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playToggleOn, playError } from "../core/sounds.js";
 import { ChatWidget } from "../core/chat_widget.js";
@@ -13,6 +14,17 @@ import { createAutomationTab } from "./ai/automation_tab.js";
 
 // Constants
 const DEFAULT_TAB = "chat";
+const AI_STATE_KEY = "ai.activeTab";
+const AI_TAB_IDS = new Set([
+  "chat",
+  "history",
+  "stats",
+  "providers",
+  "settings",
+  "testing",
+  "instructions",
+  "automation",
+]);
 
 // Provider names mapping
 const PROVIDER_NAMES = {
@@ -108,6 +120,8 @@ function createLifecycle() {
         if (tabId && tabId !== state.currentTab) {
           console.log("[AI] Sidebar navigation to:", tabId);
           state.currentTab = tabId;
+          AppState.save(AI_STATE_KEY, tabId);
+          window.history.pushState({ page: "ai", subtab: tabId }, "", `#${tabId}`);
           updateSidebarNavigation(tabId);
           switchTab(tabId);
         }
@@ -822,11 +836,24 @@ function createLifecycle() {
     async init(_ctx) {
       console.log("[AI] Initializing");
 
+      const hashTab = window.location.hash.slice(1);
+      const savedTab = AppState.load(AI_STATE_KEY, DEFAULT_TAB);
+      state.currentTab = AI_TAB_IDS.has(hashTab)
+        ? hashTab
+        : AI_TAB_IDS.has(savedTab)
+          ? savedTab
+          : DEFAULT_TAB;
+      window.history.replaceState(
+        { page: "ai", subtab: state.currentTab },
+        "",
+        `#${state.currentTab}`
+      );
+
       // Initialize sidebar navigation
       initSubTabs();
 
       // Set initial active state
-      updateSidebarNavigation(DEFAULT_TAB);
+      updateSidebarNavigation(state.currentTab);
 
       // Show the initial tab content
       switchTab(state.currentTab);
@@ -837,6 +864,15 @@ function createLifecycle() {
       setupInstructionHandlers();
       setupChatHandlers();
       automationTab.setupAutomationHandlers();
+
+      addTrackedListener(window, "popstate", () => {
+        const tabId = window.location.hash.slice(1);
+        if (!AI_TAB_IDS.has(tabId) || tabId === state.currentTab) return;
+        state.currentTab = tabId;
+        AppState.save(AI_STATE_KEY, tabId);
+        updateSidebarNavigation(tabId);
+        switchTab(tabId);
+      });
 
       // Setup stats toggle
       const statsToggle = $("#stats-ai-toggle");

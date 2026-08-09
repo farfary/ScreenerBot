@@ -26,8 +26,33 @@ function onKeydown(event) {
 
   // Stop lower overlays' own listeners (any not yet migrated to this stack) from
   // also reacting to the same key press.
-  event.stopPropagation();
+  event.preventDefault();
+  event.stopImmediatePropagation();
   top.handler(event);
+}
+
+export function hasOpenOverlay() {
+  if (stack.length > 0) return true;
+
+  return Array.from(
+    document.querySelectorAll(
+      'dialog[open], [aria-modal="true"], [role="dialog"], .modal-overlay, .dialog-overlay'
+    )
+  ).some((element) => {
+    if (element.hidden || element.getAttribute("aria-hidden") === "true") return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+  });
+}
+
+export function closeStackedOverlays() {
+  [...stack].reverse().forEach((entry) => {
+    try {
+      entry.handler();
+    } catch (error) {
+      console.error("[EscapeStack] Overlay close failed:", error);
+    }
+  });
 }
 
 /**

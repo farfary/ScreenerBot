@@ -708,6 +708,7 @@
       import { TradeActionDialog } from "/scripts/ui/trade_action_dialog.js?v={{ASSET_VERSION}}";
       import { playSuccess, playError } from "/scripts/core/sounds.js?v={{ASSET_VERSION}}";
       import { showToast } from "/scripts/core/toast.js?v={{ASSET_VERSION}}";
+      import { hasOpenOverlay } from "/scripts/core/escape_stack.js?v={{ASSET_VERSION}}";
 
       // Global trade dialog instance for keyboard shortcuts
       let globalTradeDialog = null;
@@ -736,29 +737,7 @@
        * Check if any dialog/modal is currently open
        */
       function isDialogOpen() {
-        // Trade action dialog overlay
-        const tradeDialog = document.querySelector(".trade-action-dialog-overlay.is-visible");
-        if (tradeDialog) return true;
-
-        // Search dialog
-        const searchDialog = document.querySelector(".search-dialog.visible");
-        if (searchDialog) return true;
-
-        // Settings dialog
-        const settingsDialog = document.querySelector(".settings-dialog-overlay.visible");
-        if (settingsDialog) return true;
-
-        // Any visible confirmation dialogs
-        const confirmDialog = document.querySelector(".confirmation-dialog-overlay.visible");
-        if (confirmDialog) return true;
-
-        // Position/token details dialogs
-        const detailsDialog = document.querySelector(
-          ".position-details-dialog-overlay.visible, .token-details-dialog-overlay.visible"
-        );
-        if (detailsDialog) return true;
-
-        return false;
+        return hasOpenOverlay();
       }
 
       /**
