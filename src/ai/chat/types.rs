@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub struct ChatRequest {
     pub session_id: i64,
     pub message: String,
+    #[serde(default)]
+    pub regenerate_message_id: Option<i64>,
     pub context: Option<ChatContext>,
     /// When true, auto-approve tool calls (for scheduled tasks)
     #[serde(default)]

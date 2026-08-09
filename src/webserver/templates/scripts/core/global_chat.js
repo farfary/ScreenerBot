@@ -3,6 +3,7 @@
  * Instantiates a ChatWidget inside a dialog overlay.
  */
 import { ChatWidget } from "./chat_widget.js";
+import { pushEscapeHandler } from "./escape_stack.js";
 import { playPanelOpen, playPanelClose } from "./sounds.js";
 
 class GlobalChat {
@@ -10,6 +11,8 @@ class GlobalChat {
     this._widget = null;
     this._isOpen = false;
     this._built = false;
+    this._releaseEscape = null;
+    this._previousFocus = null;
   }
 
   init() {
@@ -41,11 +44,12 @@ class GlobalChat {
     // Overlay
     this._overlay = document.createElement("div");
     this._overlay.className = "global-chat-overlay";
+    this._overlay.setAttribute("aria-hidden", "true");
     this._overlay.innerHTML = `
       <div class="global-chat-overlay-bg"></div>
-      <div class="global-chat-dialog">
+      <div class="global-chat-dialog" role="dialog" aria-modal="true" aria-labelledby="global-chat-title">
         <div class="global-chat-dialog-header">
-          <div class="global-chat-dialog-title">
+          <div class="global-chat-dialog-title" id="global-chat-title">
             <i class="icon-bot-message-square"></i>
             AI Assistant
           </div>
@@ -80,19 +84,6 @@ class GlobalChat {
     // Close button
     this._overlay.querySelector(".global-chat-dialog-close").addEventListener("click", () => this.close());
 
-    // Escape key closes dialog
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this._isOpen) {
-        // Only close if not typing in the chat input or not loading
-        const active = document.activeElement;
-        const isChatInput = active?.classList.contains("cw-chat-input");
-        if (!isChatInput || !this._widget?.state.isLoading) {
-          e.preventDefault();
-          e.stopPropagation();
-          this.close();
-        }
-      }
-    });
   }
 
   toggle() {
@@ -106,6 +97,7 @@ class GlobalChat {
   open() {
     if (this._isOpen) return;
     this._isOpen = true;
+    this._previousFocus = document.activeElement;
 
     // Lazy-init widget on first open
     if (!this._widget) {
@@ -118,6 +110,8 @@ class GlobalChat {
 
     this._btn.classList.add("is-open");
     this._overlay.classList.add("is-open");
+    this._overlay.setAttribute("aria-hidden", "false");
+    this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Load sessions and start polling
     this._widget.loadSessions();
@@ -138,11 +132,16 @@ class GlobalChat {
 
     this._btn.classList.remove("is-open");
     this._overlay.classList.remove("is-open");
+    this._overlay.setAttribute("aria-hidden", "true");
+    this._releaseEscape?.();
+    this._releaseEscape = null;
 
     if (this._widget) {
       this._widget.stopPolling();
-      this._widget.cancelRequest();
     }
+
+    this._previousFocus?.focus?.();
+    this._previousFocus = null;
 
     playPanelClose();
   }

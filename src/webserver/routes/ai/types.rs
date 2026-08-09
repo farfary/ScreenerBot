@@ -276,6 +276,7 @@ pub struct HistoryQuery {
 pub struct SendChatMessageRequest {
     pub session_id: i64,
     pub message: String,
+    pub regenerate_message_id: Option<i64>,
     pub context: Option<ChatContext>,
 }
 
@@ -298,7 +299,7 @@ pub struct GetChatSessionResponse {
 #[derive(Debug, Deserialize)]
 pub struct ConfirmToolExecutionRequest {
     pub approved: bool,
-    pub session_id: Option<i64>,
+    pub session_id: i64,
 }
 
 // ============================================================================

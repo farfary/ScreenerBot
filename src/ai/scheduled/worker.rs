@@ -168,6 +168,7 @@ async fn execute_scheduled_task(
     let request = ChatRequest {
         session_id,
         message: task.instruction.clone(),
+        regenerate_message_id: None,
         context: None,
         headless: true,
         tool_mode,

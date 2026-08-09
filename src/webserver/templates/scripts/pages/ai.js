@@ -756,7 +756,7 @@ function createLifecycle() {
    */
   async function generateSessionTitle(sessionId) {
     if (_chatWidget) {
-      await _chatWidget.generateTitle(sessionId);
+      await _chatWidget.generateSessionTitle(sessionId);
     }
   }
 

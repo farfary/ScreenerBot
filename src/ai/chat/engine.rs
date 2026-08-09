@@ -177,10 +177,47 @@ impl ChatEngine {
         let pool = database::get_chat_pool()
             .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
 
-        // Add user message to history
-        let user_message_id =
-            database::add_message(&pool, request.session_id, "user", &request.message, None)
-                .map_err(|e| AiError::ParseError(format!("Failed to save user message: {e}")))?;
+        let (user_message_id, history, replaced_message_id) = if let Some(message_id) =
+            request.regenerate_message_id
+        {
+            let history = database::get_messages(&pool, request.session_id).map_err(|e| {
+                AiError::ParseError(format!("Failed to load regeneration history: {e}"))
+            })?;
+            let target_index = history
+                .iter()
+                .position(|message| message.id == message_id && message.role == "assistant")
+                .ok_or_else(|| {
+                    AiError::ValidationError(
+                        "Regeneration target is not an assistant message in this session"
+                            .to_owned(),
+                    )
+                })?;
+            if target_index + 1 != history.len() || target_index == 0 {
+                return Err(AiError::ValidationError(
+                    "Only the latest assistant response can be regenerated".to_owned(),
+                ));
+            }
+            let user_message = &history[target_index - 1];
+            if user_message.role != "user" {
+                return Err(AiError::ValidationError(
+                    "Regeneration target has no preceding user message".to_owned(),
+                ));
+            }
+            (
+                user_message.id,
+                history[..target_index].to_vec(),
+                Some(message_id),
+            )
+        } else {
+            let message_id =
+                database::add_message(&pool, request.session_id, "user", &request.message, None)
+                    .map_err(|e| {
+                        AiError::ParseError(format!("Failed to save user message: {e}"))
+                    })?;
+            let history = database::get_messages(&pool, request.session_id)
+                .map_err(|e| AiError::ParseError(format!("Failed to load history: {e}")))?;
+            (message_id, history, None)
+        };
 
         logger::debug(
             LogTag::Api,
@@ -189,10 +226,6 @@ impl ChatEngine {
                 request.session_id, user_message_id
             ),
         );
-
-        // Load conversation history
-        let history = database::get_messages(&pool, request.session_id)
-            .map_err(|e| AiError::ParseError(format!("Failed to load history: {e}")))?;
 
         // Build messages for LLM (system + history)
         let mut messages = self.build_messages(&history, &request.context)?;
@@ -248,6 +281,11 @@ impl ChatEngine {
                     &format!("Waiting for {} confirmations", pending.len()),
                 );
 
+                if let Some(message_id) = replaced_message_id {
+                    database::delete_message(&pool, message_id).map_err(|e| {
+                        AiError::ParseError(format!("Failed to replace assistant response: {e}"))
+                    })?;
+                }
                 return Ok(ChatResponse {
                     message_id: user_message_id,
                     content: content.to_string(),
@@ -302,6 +340,12 @@ impl ChatEngine {
         )
         .map_err(|e| AiError::ParseError(format!("Failed to save assistant message: {e}")))?;
 
+        if let Some(message_id) = replaced_message_id {
+            database::delete_message(&pool, message_id).map_err(|e| {
+                AiError::ParseError(format!("Failed to replace assistant response: {e}"))
+            })?;
+        }
+
         logger::info(
             LogTag::Api,
             &format!(
@@ -324,7 +368,7 @@ impl ChatEngine {
         &self,
         confirmation_id: &str,
         approved: bool,
-        session_id: Option<i64>,
+        session_id: i64,
     ) -> Result<ChatResponse, AiError> {
         // Get confirmation state
         let state = self
@@ -335,13 +379,10 @@ impl ChatEngine {
                 AiError::ValidationError("Confirmation not found or expired".to_owned())
             })?;
 
-        // Validate session_id if provided
-        if let Some(sid) = session_id {
-            if state.session_id != sid {
-                return Err(AiError::ValidationError(
-                    "Confirmation does not belong to this session".to_owned(),
-                ));
-            }
+        if state.session_id != session_id {
+            return Err(AiError::ValidationError(
+                "Confirmation does not belong to this session".to_owned(),
+            ));
         }
 
         // Remove confirmation from pending

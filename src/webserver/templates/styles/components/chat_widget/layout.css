@@ -4,6 +4,7 @@
 
 @scope (.chat-widget) {
 .chat-container {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -345,6 +346,10 @@
   line-height: 1;
 }
 
+.cw-sessions-toggle {
+  display: none;
+}
+
 /* Messages Area */
 .chat-messages {
   flex: 1;
@@ -466,9 +471,50 @@
 
 /* Responsive: Stack prompts on smaller screens */
 @media (width <= 768px) {
+  .chat-sessions-sidebar {
+    width: 240px;
+    min-width: 240px;
+  }
+
+  .message-content {
+    max-width: 85%;
+  }
+
   .quick-prompts {
     grid-template-columns: 1fr;
     max-width: 400px;
+  }
+}
+
+@media (width <= 640px) {
+  .chat-sessions-sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: var(--z-popover);
+    display: none;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .chat-container.sessions-open .chat-sessions-sidebar {
+    display: flex;
+  }
+
+  .cw-sessions-toggle {
+    display: inline-flex;
+  }
+
+  .message-content {
+    max-width: 95%;
+  }
+
+  .chat-header,
+  .chat-messages,
+  .chat-input-area {
+    padding: var(--spacing-md);
+  }
+
+  .input-hint {
+    display: none;
   }
 }
 }

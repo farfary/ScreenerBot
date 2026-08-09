@@ -100,6 +100,7 @@ pub async fn send_chat_message(
     let chat_request = ChatEngineRequest {
         session_id: req.session_id,
         message: req.message,
+        regenerate_message_id: req.regenerate_message_id,
         context: req.context,
         headless: false,
         tool_mode: Default::default(),
@@ -108,6 +109,23 @@ pub async fn send_chat_message(
     // Process message
     match engine.process_message(chat_request).await {
         Ok(response) => {
+            if !response.is_complete {
+                let tool_calls = serde_json::to_string(&response.tool_calls).ok();
+                if let Err(e) = chat_db::add_message(
+                    &pool,
+                    req.session_id,
+                    "assistant",
+                    &response.content,
+                    tool_calls.as_deref(),
+                ) {
+                    return error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "DB_ERROR",
+                        &format!("Failed to save pending assistant response: {e}"),
+                        None,
+                    );
+                }
+            }
             logger::info(
                 LogTag::Api,
                 &format!(
@@ -582,6 +600,32 @@ pub async fn confirm_tool_execution(
         .await
     {
         Ok(response) => {
+            let pool = match chat_db::get_chat_pool() {
+                Some(pool) => pool,
+                None => {
+                    return error_response(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "CHAT_DB_NOT_INITIALIZED",
+                        "Chat database not initialized",
+                        None,
+                    )
+                }
+            };
+            let tool_calls = serde_json::to_string(&response.tool_calls).ok();
+            if let Err(e) = chat_db::add_message(
+                &pool,
+                req.session_id,
+                "assistant",
+                &response.content,
+                tool_calls.as_deref(),
+            ) {
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    &format!("Failed to save confirmation response: {e}"),
+                    None,
+                );
+            }
             logger::info(
                 LogTag::Api,
                 &format!(

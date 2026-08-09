@@ -107,7 +107,8 @@
   box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
 }
 
-.message:hover .message-actions {
+.message:hover .message-actions,
+.message:focus-within .message-actions {
   opacity: 1;
   visibility: visible;
 }
