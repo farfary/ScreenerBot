@@ -53,6 +53,9 @@
     </div>
 
     <div class="wallets-tab-actions hidden" data-tab-actions="watched">
+      <button class="btn primary" id="add-watch-btn" type="button">
+        <i class="icon-plus"></i> Watch Wallet
+      </button>
       <button
         class="btn-icon"
         id="refresh-watched-wallets-btn"
@@ -85,7 +88,10 @@
         <div id="archive-table-container"></div>
       </div>
 
-      {{WATCHED_WALLETS_PANEL}}
+      <!-- Watched Tab Panel -->
+      <div class="wallet-tab-panel hidden" id="panel-watched" data-panel="watched">
+        <div id="watched-wallets-root" aria-live="polite"></div>
+      </div>
     </div>
   </main>
 
@@ -204,6 +210,56 @@
             </div>
           </form>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Watch Wallet Modal -->
+  <div class="modal-overlay hidden" id="watch-wallet-modal">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h2><i class="icon-eye"></i> Watch Wallet</h2>
+        <button class="modal-close" type="button" id="watch-modal-close" aria-label="Close modal">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form class="wallet-form" id="watched-wallet-form" novalidate>
+          <div class="form-group">
+            <label for="watched-wallet-address">
+              Wallet Address <span class="required">*</span>
+            </label>
+            <input
+              type="text"
+              id="watched-wallet-address"
+              name="address"
+              placeholder="Solana address"
+              autocomplete="off"
+              spellcheck="false"
+              required
+            />
+            <small>
+              Records the wallet's on-chain activity and sends trade alerts through your Telegram
+              settings.
+            </small>
+            <small class="form-error hidden" id="watched-wallet-address-error" aria-live="polite">
+            </small>
+          </div>
+          <div class="form-group">
+            <label for="watched-wallet-label">Label</label>
+            <input
+              type="text"
+              id="watched-wallet-label"
+              name="label"
+              placeholder="Optional name"
+              maxlength="60"
+            />
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" id="watch-cancel-btn">Cancel</button>
+            <button type="submit" class="btn primary"><i class="icon-plus"></i> Add Watch</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

@@ -4,7 +4,7 @@ import { DataTable } from "../../ui/data_table.js";
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-export function createWatchedWallets({ $, on, Utils, requestManager }) {
+export function createWatchedWallets({ $, on, Utils, requestManager, showModal, hideModal }) {
   let targets = [];
   let statuses = new Map();
   let loading = false;
@@ -55,7 +55,46 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
   function setup() {
     const form = $("#watched-wallet-form");
     if (form) on(form, "submit", addTarget);
+
+    const modal = $("#watch-wallet-modal");
+    if (modal) {
+      on(modal, "click", (event) => {
+        if (event.target === modal) hideAddModal();
+      });
+    }
+    const closeBtn = $("#watch-modal-close");
+    if (closeBtn) on(closeBtn, "click", () => hideAddModal());
+    const cancelBtn = $("#watch-cancel-btn");
+    if (cancelBtn) on(cancelBtn, "click", () => hideAddModal());
+
     ensureTable();
+  }
+
+  function showAddModal() {
+    resetForm();
+    showModal("watch-wallet-modal");
+    $("#watched-wallet-address")?.focus();
+  }
+
+  function hideAddModal() {
+    hideModal("watch-wallet-modal");
+    resetForm();
+  }
+
+  function resetForm() {
+    $("#watched-wallet-form")?.reset();
+    setAddressError("");
+  }
+
+  function setAddressError(message) {
+    const errorEl = $("#watched-wallet-address-error");
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.classList.toggle("hidden", !message);
+    }
+    const addressInput = $("#watched-wallet-address");
+    if (message) addressInput?.setAttribute("aria-invalid", "true");
+    else addressInput?.removeAttribute("aria-invalid");
   }
 
   function ensureTable() {
@@ -73,7 +112,7 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
       fitToContainer: true,
       sorting: { mode: "client", column: "label", direction: "asc" },
       emptyTitle: "No watched addresses",
-      emptyMessage: "Add a public wallet above to begin recording its activity.",
+      emptyMessage: "Use Watch Wallet to record a public wallet's on-chain activity.",
       toolbar: {
         search: { enabled: true, mode: "client", placeholder: "Search watched wallets..." },
       },
@@ -141,16 +180,14 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
     event.preventDefault();
     const addressInput = $("#watched-wallet-address");
     const labelInput = $("#watched-wallet-label");
-    const errorEl = $("#watched-wallet-address-error");
     const submit = event.currentTarget.querySelector('button[type="submit"]');
     const address = addressInput?.value.trim() || "";
     if (!SOLANA_ADDRESS_RE.test(address)) {
-      if (errorEl) errorEl.textContent = "Enter a valid Solana wallet address.";
-      addressInput?.setAttribute("aria-invalid", "true");
+      setAddressError("Enter a valid Solana wallet address.");
+      addressInput?.focus();
       return;
     }
-    if (errorEl) errorEl.textContent = "";
-    addressInput?.removeAttribute("aria-invalid");
+    setAddressError("");
     if (submit) submit.disabled = true;
     try {
       await requestManager.fetch("/api/wallets/watch/", {
@@ -160,7 +197,7 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
         priority: "high",
         skipDedup: true,
       });
-      event.currentTarget.reset();
+      hideAddModal();
       Utils.showToast("Wallet watch added", "success");
       await load({ force: true });
     } catch (error) {
@@ -168,7 +205,7 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
         error.status === 409
           ? "That wallet is already watched."
           : "Wallet watch could not be added.";
-      if (errorEl) errorEl.textContent = message;
+      setAddressError(message);
       Utils.showToast(message, "error");
     } finally {
       if (submit) submit.disabled = false;
@@ -210,10 +247,6 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
   }
 
   function render() {
-    const summary = $("#watched-wallets-summary");
-    if (summary)
-      summary.textContent = `${targets.length} ${targets.length === 1 ? "address" : "addresses"}`;
-
     const t = ensureTable();
     if (!t) return;
 
@@ -256,5 +289,5 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
     }
   }
 
-  return { setup, load, reset };
+  return { setup, load, reset, showAddModal, hideAddModal };
 }

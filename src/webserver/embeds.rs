@@ -476,7 +476,6 @@ pub(super) const CONFIG_PAGE: &str = include_str!("templates/pages/config.html")
 pub(super) const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 pub(super) const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
 pub(super) const WALLETS_PAGE: &str = include_str!("templates/pages/wallets.html");
-pub(super) const WALLETS_WATCHED_PANEL: &str = include_str!("templates/pages/wallets/watched.html");
 pub(super) const TOOLS_PAGE: &str = include_str!("templates/pages/tools.html");
 pub(super) const AI_PAGE: &str = include_str!("templates/pages/ai.html");
 pub(super) const HOME_PAGE: &str = include_str!("templates/pages/home.html");

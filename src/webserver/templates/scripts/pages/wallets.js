@@ -81,7 +81,14 @@ function createLifecycle() {
         handleWalletAction,
       });
 
-      watched = createWatchedWallets({ $, on, Utils, requestManager });
+      watched = createWatchedWallets({
+        $,
+        on,
+        Utils,
+        requestManager,
+        showModal,
+        hideModal,
+      });
 
       // Initialize tab bar
       tabBar = new TabBar({
@@ -209,6 +216,12 @@ function setupEventHandlers() {
   }
   if (exportBtn) {
     on(exportBtn, "click", () => bulk.showBulkExportModal());
+  }
+
+  // Watched-tab buttons
+  const addWatchBtn = $("#add-watch-btn");
+  if (addWatchBtn) {
+    on(addWatchBtn, "click", () => watched?.showAddModal());
   }
 
   // Keyboard support for closing modals
@@ -765,6 +778,7 @@ function hideAllModals() {
   closeArchiveModal();
   closeDeleteModal();
   hideModal("add-wallet-modal");
+  watched?.hideAddModal();
   bulk.hideBulkImportModal();
   bulk.hideBulkExportModal();
 }

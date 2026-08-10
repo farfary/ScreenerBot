@@ -325,8 +325,7 @@ pub fn trader_content() -> String {
 }
 
 pub fn wallets_content() -> String {
-    let html = WALLETS_PAGE.replace("{{WATCHED_WALLETS_PANEL}}", WALLETS_WATCHED_PANEL);
-    render_page(&html)
+    render_page(WALLETS_PAGE)
 }
 
 pub fn tools_content() -> String {
