@@ -1,14 +1,25 @@
+#wallet-copy-tab {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 .wallet-copy-shell {
   height: 100%;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) minmax(148px, 0.34fr);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-primary);
 }
 
 .wallet-copy-header,
 .wallet-copy-section-head,
 .wallet-copy-form-head,
-.wallet-copy-form-actions {
+.wallet-copy-form-actions,
+.wallet-copy-detail-head,
+.wallet-copy-detail-actions,
+.wallet-copy-header-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -16,16 +27,25 @@
 }
 
 .wallet-copy-header {
-  padding: var(--spacing-lg);
+  flex-shrink: 0;
+  padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
+}
+
+.wallet-copy-heading h2,
+.wallet-copy-detail-head h3,
+.wallet-copy-onboarding h3,
+.wallet-copy-section-head h3,
+.wallet-copy-form-title h2 {
+  margin: 0;
+  color: var(--text-primary);
 }
 
 .wallet-copy-heading h2 {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  margin: 0;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
 }
 
 .wallet-copy-heading h2 i {
@@ -37,93 +57,188 @@
   max-width: 62ch;
   margin: var(--spacing-xs) 0 0;
   color: var(--text-secondary);
-  font-size: 0.82rem;
-  line-height: 1.5;
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
-.wallet-copy-master-control {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  min-width: 190px;
-  padding-left: var(--spacing-lg);
-  border-left: 1px solid var(--border-color);
+.wallet-copy-header-actions {
+  justify-content: flex-end;
 }
 
-.wallet-copy-master-control > div {
+.wallet-copy-system-state {
+  min-width: 150px;
   display: grid;
   gap: 2px;
-  flex: 1;
-}
-
-.wallet-copy-master-label {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-#wallet-copy-global-status {
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  line-height: 1.35;
-}
-
-.wallet-copy-workspace {
-  display: grid;
-  grid-template-columns: minmax(240px, 0.32fr) minmax(0, 1fr);
-  min-height: 0;
-}
-
-.wallet-copy-tasks,
-.wallet-copy-editor,
-.wallet-copy-activity {
-  min-height: 0;
-  padding: var(--spacing-md) var(--spacing-lg);
-}
-
-.wallet-copy-tasks {
+  padding-right: var(--spacing-md);
   border-right: 1px solid var(--border-color);
 }
 
-.wallet-copy-section-head > div {
+.wallet-copy-master-label,
+.wallet-copy-system-state strong {
+  font-size: 0.7rem;
+}
+
+.wallet-copy-master-label {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wallet-copy-system-state strong {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.wallet-copy-onboarding {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.65fr);
+  align-items: center;
+  gap: clamp(3rem, 8vw, 8rem);
+  max-width: 1120px;
+  width: 100%;
+  margin: 0 auto;
+  padding: clamp(2rem, 7vh, 5rem) clamp(2rem, 6vw, 5rem);
+}
+
+.wallet-copy-onboarding[hidden],
+.wallet-copy-operations[hidden],
+.wallet-copy-policy-grid input[hidden],
+.wallet-copy-activity-columns[hidden] {
+  display: none;
+}
+
+.wallet-copy-onboarding-copy {
+  max-width: 620px;
+}
+
+.wallet-copy-onboarding h3 {
+  font-size: clamp(1.5rem, 2.2vw, 2.15rem);
+  line-height: 1.15;
+}
+
+.wallet-copy-onboarding-copy p {
+  max-width: 58ch;
+  margin: var(--spacing-md) 0 var(--spacing-lg);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.wallet-copy-onboarding-steps {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: copy-step;
+}
+
+.wallet-copy-onboarding-steps li {
+  display: grid;
+  grid-template-columns: 28px 90px minmax(0, 1fr);
+  gap: var(--spacing-sm);
+  align-items: baseline;
+  padding: var(--spacing-md) 0;
+  border-bottom: 1px solid var(--border-color);
+  counter-increment: copy-step;
+}
+
+.wallet-copy-onboarding-steps li::before {
+  content: counter(copy-step, decimal-leading-zero);
+  color: var(--primary-color);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.wallet-copy-onboarding-steps strong {
+  color: var(--text-primary);
+  font-size: 0.78rem;
+}
+
+.wallet-copy-onboarding-steps span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.wallet-copy-operations {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.wallet-copy-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wallet-copy-summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-right: 1px solid var(--border-color);
+}
+
+.wallet-copy-summary > div:last-child {
+  border-right: 0;
+}
+
+.wallet-copy-summary span,
+.wallet-copy-task-stats span,
+.wallet-copy-section-head span,
+.wallet-copy-form-title span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+.wallet-copy-summary strong,
+.wallet-copy-task-stats strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 0.28fr) minmax(0, 1fr);
+}
+
+.wallet-copy-tasks {
+  min-height: 0;
+  padding: var(--spacing-md);
+  border-right: 1px solid var(--border-color);
+}
+
+.wallet-copy-section-head > div,
+.wallet-copy-form-title {
   display: grid;
   gap: 2px;
 }
 
-.wallet-copy-section-head h3,
-.wallet-copy-form-head h3,
-.wallet-copy-form-section h4 {
-  margin: 0;
-  color: var(--text-primary);
-}
-
-.wallet-copy-section-head h3,
-.wallet-copy-form-head h3 {
-  font-size: 0.9rem;
-}
-
-.wallet-copy-section-head span,
-.wallet-copy-form-title span {
-  color: var(--text-muted);
-  font-size: 0.7rem;
-}
-
-.wallet-copy-task-list,
-.wallet-copy-activity-list {
-  overflow: auto;
+.wallet-copy-section-head h3 {
+  font-size: 0.82rem;
 }
 
 .wallet-copy-task-list {
-  height: calc(100% - 42px);
-  margin-top: var(--spacing-md);
+  height: calc(100% - 40px);
+  min-height: 0;
+  margin-top: var(--spacing-sm);
+  overflow: auto;
   border-top: 1px solid var(--border-color);
-}
-
-.wallet-copy-empty,
-.wallet-copy-editor-empty {
-  height: 100%;
-  min-height: 128px;
 }
 
 .wallet-copy-task {
@@ -131,7 +246,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px var(--spacing-sm);
-  padding: 0.75rem var(--spacing-sm);
+  padding: 0.75rem var(--spacing-xs);
   border: 0;
   border-bottom: 1px solid var(--border-color);
   border-radius: 0;
@@ -147,81 +262,290 @@
   background: var(--bg-card-hover);
 }
 
-.wallet-copy-task:active {
-  background: var(--bg-tertiary);
+.wallet-copy-task-name,
+.wallet-copy-task-address,
+.wallet-copy-task-pnl,
+.wallet-copy-task-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .wallet-copy-task-name {
-  overflow: hidden;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.wallet-copy-task-state {
+.wallet-copy-task-address,
+.wallet-copy-task-pnl,
+.wallet-copy-task-meta {
   color: var(--text-muted);
-  font-size: 0.68rem;
-  font-weight: 600;
-}
-
-.wallet-copy-task-address {
-  overflow: hidden;
-  color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 0.68rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.64rem;
 }
 
-.wallet-copy-task-mode {
-  color: var(--text-muted);
-  font-size: 0.68rem;
+.wallet-copy-task-pnl,
+.wallet-copy-task-meta {
   text-align: right;
+}
+
+.wallet-copy-task-budget {
+  height: 3px;
+  align-self: center;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.wallet-copy-task-budget > span,
+.wallet-copy-budget-track > span {
+  height: 100%;
+  display: block;
+  background: var(--primary-color);
+}
+
+.wallet-copy-state {
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
-.wallet-copy-form {
-  height: 100%;
-  overflow: auto;
-  padding-right: var(--spacing-xs);
+.wallet-copy-state-live {
+  color: var(--success-color);
 }
 
-.wallet-copy-form-head {
+.wallet-copy-state-force_stopped,
+.wallet-copy-state-entries_blocked {
+  color: var(--warning-color);
+}
+
+.wallet-copy-state-paused,
+.wallet-copy-state-system_paused {
+  color: var(--text-muted);
+}
+
+.wallet-copy-detail {
+  min-height: 0;
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
+  overflow: auto;
+}
+
+.wallet-copy-detail-head {
+  align-items: flex-start;
   padding-bottom: var(--spacing-md);
 }
 
-.wallet-copy-form-title {
+.wallet-copy-detail-head > div:first-child {
+  min-width: 0;
   display: grid;
   gap: 3px;
+}
+
+.wallet-copy-detail-head h3 {
+  overflow: hidden;
+  font-size: 1.05rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-detail-address {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-detail-actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
 }
 
 .wallet-copy-task-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wallet-copy-task-stats > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 0;
+}
+
+.wallet-copy-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-xl);
+  padding: var(--spacing-lg) 0;
+}
+
+.wallet-copy-detail-section {
+  min-width: 0;
+}
+
+.wallet-copy-budget-track {
+  height: 5px;
+  margin: var(--spacing-md) 0;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.wallet-copy-definition-list {
+  display: grid;
+  gap: 0;
+  margin: var(--spacing-sm) 0 0;
+}
+
+.wallet-copy-definition-list > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
   gap: var(--spacing-md);
-  padding: var(--spacing-sm) 0 var(--spacing-md);
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wallet-copy-definition-list dt,
+.wallet-copy-definition-list dd {
+  margin: 0;
+  font-size: 0.7rem;
+}
+
+.wallet-copy-definition-list dt {
+  color: var(--text-muted);
+}
+
+.wallet-copy-definition-list dd {
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.wallet-copy-activity {
+  display: grid;
+  grid-template-rows: auto auto minmax(110px, auto);
+  padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-color);
 }
 
-.wallet-copy-task-stats[hidden] {
-  display: none;
-}
-
-.wallet-copy-task-stats div {
+.wallet-copy-activity-columns,
+.wallet-copy-activity-row {
   display: grid;
-  gap: 3px;
+  grid-template-columns: minmax(110px, 0.7fr) minmax(0, 2fr) minmax(120px, 0.7fr);
+  gap: var(--spacing-md);
+  align-items: center;
 }
 
-.wallet-copy-task-stats span {
+.wallet-copy-activity-columns {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
   color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wallet-copy-activity-list {
+  min-height: 110px;
+  max-height: 280px;
+  overflow: auto;
+  border-top: 1px solid var(--border-color);
+}
+
+.wallet-copy-activity-row {
+  min-height: 40px;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wallet-copy-activity-row > strong {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.wallet-copy-activity-detail {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(90px, 0.7fr) minmax(0, 1.3fr);
+  gap: var(--spacing-sm);
+  color: var(--text-secondary);
   font-size: 0.66rem;
 }
 
-.wallet-copy-task-stats strong {
-  color: var(--text-primary);
-  font-size: 0.82rem;
-  font-variant-numeric: tabular-nums;
+.wallet-copy-activity-mint,
+.wallet-copy-activity-result {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-copy-activity-mint,
+.wallet-copy-activity-time {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.wallet-copy-activity-time {
+  font-size: 0.62rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.wallet-copy-activity-empty,
+.wallet-copy-load-error {
+  min-height: 140px;
+  display: grid;
+  place-content: center;
+  gap: var(--spacing-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.wallet-copy-activity-empty strong,
+.wallet-copy-load-error strong {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.wallet-copy-activity-empty span,
+.wallet-copy-load-error span {
+  font-size: 0.68rem;
+}
+
+.wallet-copy-load-error {
+  height: 100%;
+}
+
+.wallet-copy-dialog-panel {
+  width: min(980px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+}
+
+.wallet-copy-settings-panel {
+  width: min(620px, calc(100vw - 48px));
+}
+
+.wallet-copy-dialog .modal-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.wallet-copy-dialog .modal-header p {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.wallet-copy-form {
+  min-height: 0;
+}
+
+.wallet-copy-form-head {
+  justify-content: flex-end;
+  padding-bottom: var(--spacing-md);
 }
 
 .wallet-copy-task-toggle {
@@ -229,7 +553,7 @@
   align-items: center;
   gap: var(--spacing-sm);
   color: var(--text-secondary);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 500;
 }
 
@@ -242,7 +566,9 @@
 
 .wallet-copy-form-section h4,
 .wallet-copy-policy legend {
+  margin: 0;
   padding: 0;
+  color: var(--text-primary);
   font-size: 0.76rem;
   font-weight: 600;
 }
@@ -259,23 +585,19 @@
 }
 
 .wallet-copy-fields label,
-.wallet-copy-policy-field {
+.wallet-copy-policy-field,
+.wallet-copy-settings-form > label {
   display: grid;
   align-content: start;
   gap: var(--spacing-xs);
   color: var(--text-secondary);
-  font-size: 0.73rem;
+  font-size: 0.71rem;
   font-weight: 500;
-}
-
-.wallet-copy-fields label > span,
-.wallet-copy-policy-field > label {
-  min-height: 1rem;
 }
 
 .wallet-copy-fields label small {
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: 0.64rem;
   font-weight: 400;
 }
 
@@ -283,7 +605,7 @@
   max-width: 62ch;
   margin: var(--spacing-xs) 0 0.75rem;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   line-height: 1.45;
 }
 
@@ -293,157 +615,121 @@
   gap: var(--spacing-md);
 }
 
-.wallet-copy-policy-grid input[hidden],
-.wallet-copy-form[hidden],
-.wallet-copy-delete-action[hidden],
-.wallet-copy-mode-action[hidden],
-.wallet-copy-activity-columns[hidden] {
-  display: none;
-}
-
 .wallet-copy-form-actions {
   position: sticky;
   bottom: 0;
   margin-top: var(--spacing-sm);
-  padding: var(--spacing-md) 0;
+  padding: var(--spacing-md) 0 0;
   border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  flex-wrap: wrap;
-}
-
-.wallet-copy-delete-action {
-  color: var(--error-color);
-}
-
-.wallet-copy-delete-action:hover {
-  background: var(--danger-alpha-10);
-  color: var(--error-color);
-}
-
-.wallet-copy-mode-action {
-  color: var(--warning-color);
-}
-
-.wallet-copy-mode-action:hover {
-  border-color: var(--warning-color);
-  background: var(--warning-alpha-10);
-  color: var(--warning-color);
-}
-
-#wallet-copy-form-error:not(:empty) {
-  display: block;
-  margin-top: var(--spacing-sm);
+  background: var(--bg-card);
 }
 
 .wallet-copy-form-spacer {
   flex: 1;
 }
 
-.wallet-copy-activity {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  border-top: 1px solid var(--border-color);
-}
-
-.wallet-copy-activity-columns,
-.wallet-copy-activity-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 2fr) minmax(130px, 0.8fr);
-  gap: var(--spacing-md);
-  align-items: center;
-}
-
-.wallet-copy-activity-columns {
+#wallet-copy-form-error:not(:empty),
+#wallet-copy-settings-error:not(:empty) {
+  display: block;
   margin-top: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  color: var(--text-muted);
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
-.wallet-copy-activity-list {
-  min-height: 0;
-  border-top: 1px solid var(--border-color);
+.wallet-copy-settings-form {
+  display: grid;
+  gap: 0;
 }
 
-.wallet-copy-activity-row {
-  min-height: 40px;
-  padding: var(--spacing-sm);
+.wallet-copy-settings-form > label {
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 0.7fr);
+  align-items: center;
+  padding: var(--spacing-sm) 0;
   border-bottom: 1px solid var(--border-color);
 }
 
-.wallet-copy-activity-row strong {
-  font-size: 0.75rem;
-  font-weight: 600;
+.wallet-copy-settings-form > label > :last-child {
+  justify-self: end;
 }
 
-.wallet-copy-activity-detail {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(100px, 0.7fr) minmax(0, 1.3fr);
-  gap: var(--spacing-sm);
-  color: var(--text-secondary);
-  font-size: 0.7rem;
+.wallet-copy-settings-form .form-input {
+  width: 180px;
 }
 
-.wallet-copy-activity-mint {
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wallet-copy-activity-result {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wallet-copy-activity-time {
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
-  text-align: right;
-  white-space: nowrap;
-}
-
-#wallet-copy-tab {
-  height: 100%;
-  min-height: 0;
-  padding: 0;
-  overflow: hidden;
+.wallet-copy-settings-form .modal-footer {
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-left: 0;
 }
 
 @media (width <= 1100px) {
-  .wallet-copy-fields,
-  .wallet-copy-policy-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .wallet-copy-field-wide {
-    grid-column: span 2;
-  }
-}
-
-@media (width <= 800px) {
-  .wallet-copy-shell {
-    display: block;
-    overflow: auto;
-  }
-
   .wallet-copy-header {
     align-items: flex-start;
   }
 
-  .wallet-copy-master-control {
-    min-width: 170px;
+  .wallet-copy-header-actions {
+    flex-wrap: wrap;
+  }
+
+  .wallet-copy-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .wallet-copy-summary > div:nth-child(3) {
+    border-right: 0;
+  }
+
+  .wallet-copy-summary > div:nth-child(-n + 3) {
+    border-bottom: 1px solid var(--border-color);
   }
 
   .wallet-copy-workspace {
+    grid-template-columns: minmax(260px, 0.34fr) minmax(0, 1fr);
+  }
+
+  .wallet-copy-detail-grid,
+  .wallet-copy-fields,
+  .wallet-copy-policy-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 800px) {
+  #wallet-copy-tab {
+    overflow: auto;
+  }
+
+  .wallet-copy-shell {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .wallet-copy-header,
+  .wallet-copy-onboarding,
+  .wallet-copy-detail-head {
+    align-items: stretch;
     grid-template-columns: 1fr;
+  }
+
+  .wallet-copy-header,
+  .wallet-copy-detail-head {
+    flex-direction: column;
+  }
+
+  .wallet-copy-header-actions,
+  .wallet-copy-detail-actions {
+    justify-content: flex-start;
+  }
+
+  .wallet-copy-system-state {
+    min-width: 130px;
+  }
+
+  .wallet-copy-onboarding {
+    gap: var(--spacing-xl);
+  }
+
+  .wallet-copy-operations,
+  .wallet-copy-workspace {
+    display: block;
   }
 
   .wallet-copy-tasks {
@@ -453,33 +739,40 @@
 
   .wallet-copy-task-list {
     height: auto;
-    max-height: 260px;
+    max-height: 320px;
   }
 
-  .wallet-copy-activity {
-    min-height: 240px;
+  .wallet-copy-detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (width <= 540px) {
-  .wallet-copy-header,
-  .wallet-copy-form-head {
+  .wallet-copy-header-actions,
+  .wallet-copy-detail-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .wallet-copy-master-control {
-    width: 100%;
-    padding: var(--spacing-sm) 0 0;
-    border-top: 1px solid var(--border-color);
-    border-left: 0;
+  .wallet-copy-system-state {
+    padding: 0 0 var(--spacing-sm);
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
   }
 
+  .wallet-copy-summary,
+  .wallet-copy-task-stats,
   .wallet-copy-fields,
   .wallet-copy-policy-grid,
-  .wallet-copy-activity-columns,
-  .wallet-copy-activity-row {
+  .wallet-copy-activity-row,
+  .wallet-copy-settings-form > label {
     grid-template-columns: 1fr;
+  }
+
+  .wallet-copy-summary > div,
+  .wallet-copy-summary > div:nth-child(3) {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .wallet-copy-field-wide {
@@ -496,5 +789,13 @@
 
   .wallet-copy-activity-time {
     text-align: left;
+  }
+
+  .wallet-copy-settings-form > label > :last-child {
+    justify-self: stretch;
+  }
+
+  .wallet-copy-settings-form .form-input {
+    width: 100%;
   }
 }

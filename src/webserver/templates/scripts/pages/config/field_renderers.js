@@ -62,7 +62,6 @@ export const SECTION_ICONS = {
   tokens: "icon-coins",
   pools: "icon-database",
   wallet: "icon-wallet",
-  copy_trading: "icon-copy",
   sol_price: "icon-sun",
   events: "icon-radio",
   webserver: "icon-network",

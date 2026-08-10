@@ -76,6 +76,7 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
             token_buy_count: 1,
         }
     );
+    assert_eq!(db.task_total_spent(task.id).await.unwrap(), 0.1);
 }
 
 fn live_outcome(task: &CopyTask, pending: bool) -> CopyOutcome {

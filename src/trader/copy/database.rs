@@ -489,6 +489,21 @@ impl CopyDatabase {
             .map_err(|e| format!("Copy database task failed: {e}"))?
     }
 
+    pub async fn task_total_spent(&self, task_id: i64) -> Result<f64, String> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            db.connection()?
+                .query_row(
+                    "SELECT COALESCE(SUM(spent_sol), 0) FROM copy_spend WHERE task_id = ?1",
+                    params![task_id],
+                    |row| row.get(0),
+                )
+                .map_err(|e| format!("Failed to sum copy task {task_id} spend: {e}"))
+        })
+        .await
+        .map_err(|e| format!("Copy database task failed: {e}"))?
+    }
+
     /// Atomically claim a target activity before any live admission/submission work.
     /// A false result means another delivery already owns it and must never spend again.
     pub async fn claim_live_activity(&self, task_id: i64, signature: &str) -> Result<bool, String> {

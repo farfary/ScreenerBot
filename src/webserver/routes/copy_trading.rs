@@ -20,12 +20,10 @@ use crate::webserver::utils::{error_response, success_response};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/overview", get(overview))
         .route("/status", get(status))
         .route("/tasks", get(list_tasks).post(create_task))
-        .route(
-            "/tasks/:id",
-            get(get_task).patch(update_task).delete(delete_task),
-        )
+        .route("/tasks/:id", get(get_task).patch(update_task))
         .route("/tasks/:id/mode", axum::routing::post(set_task_mode))
         .route("/tasks/:id/stats", get(task_stats))
         .route("/activity", get(list_activity))
@@ -41,7 +39,7 @@ struct TaskResponse {
     task: CopyTask,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct StatusResponse {
     enabled: bool,
     live_available: bool,
@@ -53,6 +51,23 @@ struct StatusResponse {
     active_tasks: usize,
     paper_tasks: usize,
     live_tasks: usize,
+}
+
+#[derive(Serialize)]
+struct TaskSummary {
+    #[serde(flatten)]
+    task: CopyTask,
+    stats: crate::trader::copy::CopyTaskStats,
+    spent_sol: f64,
+    remaining_budget_sol: f64,
+    effective_state: &'static str,
+}
+
+#[derive(Serialize)]
+struct OverviewResponse {
+    status: StatusResponse,
+    tasks: Vec<TaskSummary>,
+    activity: Vec<crate::trader::copy::CopyActivityRow>,
 }
 
 #[derive(Deserialize)]
@@ -80,44 +95,102 @@ async fn open_database() -> Result<CopyDatabase, String> {
 async fn status() -> Response {
     match open_database().await {
         Ok(db) => match db.list_tasks().await {
-            Ok(tasks) => {
-                let (enabled, default_mode, default_slippage_pct, force_stop_blocks) =
-                    crate::config::with_config(|config| {
-                        (
-                            config.copy_trading.enabled,
-                            config.copy_trading.default_mode.clone(),
-                            config.copy_trading.default_slippage_pct,
-                            config.copy_trading.block_on_force_stop,
-                        )
-                    });
-                success_response(StatusResponse {
-                    enabled,
-                    live_available: true,
-                    blocked_reason: if crate::global::is_force_stopped() {
-                        Some("force_stop")
-                    } else if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
-                        Some("loss_limit")
-                    } else {
-                        None
-                    },
-                    default_mode,
-                    default_slippage_pct,
-                    force_stop_blocks,
-                    total_tasks: tasks.len(),
-                    active_tasks: tasks.iter().filter(|task| task.enabled).count(),
-                    paper_tasks: tasks
-                        .iter()
-                        .filter(|task| task.enabled && task.mode == CopyMode::Paper)
-                        .count(),
-                    live_tasks: tasks
-                        .iter()
-                        .filter(|task| task.enabled && task.mode == CopyMode::Live)
-                        .count(),
-                })
-            }
+            Ok(tasks) => success_response(build_status(&tasks)),
             Err(error) => internal_error(error),
         },
         Err(error) => internal_error(error),
+    }
+}
+
+async fn overview() -> Response {
+    let db = match open_database().await {
+        Ok(db) => db,
+        Err(error) => return internal_error(error),
+    };
+    let tasks = match db.list_tasks().await {
+        Ok(tasks) => tasks,
+        Err(error) => return internal_error(error),
+    };
+    let activity = match db.list_activity(50).await {
+        Ok(activity) => activity,
+        Err(error) => return internal_error(error),
+    };
+    let mut positions = crate::positions::get_open_positions().await;
+    positions.extend(crate::positions::get_closed_positions().await);
+    positions.extend(crate::positions::get_archived_positions().await);
+    let status = build_status(&tasks);
+    let mut summaries = Vec::with_capacity(tasks.len());
+    for task in tasks {
+        let task_activity = match db.list_task_activity(task.id, 10_000).await {
+            Ok(activity) => activity,
+            Err(error) => return internal_error(error),
+        };
+        let spent_sol = match db.task_total_spent(task.id).await {
+            Ok(spent) => spent,
+            Err(error) => return internal_error(error),
+        };
+        let effective_state = if !status.enabled {
+            "system_paused"
+        } else if status.blocked_reason == Some("force_stop") {
+            "force_stopped"
+        } else if !task.enabled {
+            "paused"
+        } else if status.blocked_reason.is_some() {
+            "entries_blocked"
+        } else if task.mode == CopyMode::Live {
+            "live"
+        } else {
+            "paper"
+        };
+        summaries.push(TaskSummary {
+            stats: build_task_stats(task.id, &task_activity, &positions),
+            remaining_budget_sol: (task.total_budget_sol - spent_sol).max(0.0),
+            spent_sol,
+            effective_state,
+            task,
+        });
+    }
+    success_response(OverviewResponse {
+        status,
+        tasks: summaries,
+        activity,
+    })
+}
+
+fn build_status(tasks: &[CopyTask]) -> StatusResponse {
+    let (enabled, default_mode, default_slippage_pct, force_stop_blocks) =
+        crate::config::with_config(|config| {
+            (
+                config.copy_trading.enabled,
+                config.copy_trading.default_mode.clone(),
+                config.copy_trading.default_slippage_pct,
+                config.copy_trading.block_on_force_stop,
+            )
+        });
+    StatusResponse {
+        enabled,
+        live_available: crate::global::is_initialization_complete()
+            && !crate::global::is_force_stopped(),
+        blocked_reason: if crate::global::is_force_stopped() {
+            Some("force_stop")
+        } else if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
+            Some("loss_limit")
+        } else {
+            None
+        },
+        default_mode,
+        default_slippage_pct,
+        force_stop_blocks,
+        total_tasks: tasks.len(),
+        active_tasks: tasks.iter().filter(|task| task.enabled).count(),
+        paper_tasks: tasks
+            .iter()
+            .filter(|task| task.enabled && task.mode == CopyMode::Paper)
+            .count(),
+        live_tasks: tasks
+            .iter()
+            .filter(|task| task.enabled && task.mode == CopyMode::Live)
+            .count(),
     }
 }
 
@@ -318,42 +391,6 @@ async fn set_task_mode(Path(id): Path<i64>, Json(request): Json<ModeRequest>) ->
     match db.set_task_mode(id, mode, request.confirmation).await {
         Ok(task) => success_response(TaskResponse { task }),
         Err(error) => internal_error(error),
-    }
-}
-
-async fn delete_task(Path(id): Path<i64>) -> Response {
-    let db = match open_database().await {
-        Ok(db) => db,
-        Err(error) => return internal_error(error),
-    };
-    let task = match db.get_task(id).await {
-        Ok(Some(task)) => task,
-        Ok(None) => return not_found(id),
-        Err(error) => return internal_error(error),
-    };
-    if let Err(error) = watch::remove_copy_source(id, &task.target_address).await {
-        return internal_error(format!(
-            "Copy task was retained because its watch source could not be removed: {error}"
-        ));
-    }
-    match db.delete_task(id).await {
-        Ok(true) => success_response(serde_json::json!({ "message": "Copy task removed" })),
-        Ok(false) => not_found(id),
-        Err(error) => {
-            let restored = if task.enabled {
-                watch::add_copy_source(id, &task.target_address, task.label.as_deref())
-                    .await
-                    .map(|_| ())
-            } else {
-                Ok(())
-            };
-            internal_error(match restored {
-                Ok(()) => format!("Copy task deletion failed; watch source was restored: {error}"),
-                Err(restore) => format!(
-                    "Copy task deletion failed ({error}) and its watch source could not be restored ({restore})"
-                ),
-            })
-        }
     }
 }
 

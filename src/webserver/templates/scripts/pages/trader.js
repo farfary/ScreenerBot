@@ -22,7 +22,7 @@ import { createWalletCopy } from "./trader/wallet_copy.js";
 // editor is third (Strategies was formerly its own top-level tab).
 const SUB_TABS = [
   { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
-  { id: "wallet-copy", label: '<i class="icon-copy"></i> Wallet Copy' },
+  { id: "wallet-copy", label: '<i class="icon-copy"></i> Copy Trading' },
   { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
   { id: "strategies", label: '<i class="icon-square-pen"></i> Strategies' },
   { id: "stop-loss", label: '<i class="icon-shield-off"></i> Stop Loss' },
@@ -263,7 +263,6 @@ function createLifecycle() {
       updateTimeRulesStatus();
     }
     if (tabId === "wallet-copy") walletCopy.load();
-    if (tabId === "stats") walletCopy.loadStatus();
   }
 
   /**
@@ -1388,7 +1387,6 @@ function createLifecycle() {
             if (state.currentTab === "stats") {
               await loadStats();
               await controls.loadControlsStatus();
-              await walletCopy.loadStatus();
             }
           },
           { label: "Trader Stats", intervalMs: 5000 }
@@ -1446,7 +1444,6 @@ function createLifecycle() {
       if (state.currentTab === "stats") {
         await loadStats();
         await controls.loadControlsStatus();
-        await walletCopy.loadStatus();
       }
       if (state.currentTab === "strategy-control" && strategiesPoller) {
         strategiesPoller.start();

@@ -387,7 +387,7 @@ export class PositionDetailsDialog {
         if (this._manualToggleHandler) {
           const manualToggle = this.dialogEl.querySelector("#pddManualToggle");
           if (manualToggle) {
-            manualToggle.removeEventListener("click", this._manualToggleHandler);
+            manualToggle.removeEventListener("change", this._manualToggleHandler);
           }
           this._manualToggleHandler = null;
         }
@@ -529,7 +529,7 @@ export class PositionDetailsDialog {
             )
           );
     const manualBadge = isOpen
-      ? `<label class="pdd-badge pdd-manual-toggle"><i class="icon-shield"></i><select id="pddManagementSelect" aria-label="Position management">${Object.entries(
+      ? `<label class="pdd-badge pdd-manual-toggle"><i class="icon-shield"></i><select id="pddManagementSelect" aria-label="Position management" data-custom-select>${Object.entries(
           availableManagementLabels
         )
           .map(
@@ -909,7 +909,7 @@ export class PositionDetailsDialog {
           })
         );
       };
-      manualToggle.addEventListener("click", this._manualToggleHandler);
+      manualToggle.addEventListener("change", this._manualToggleHandler);
     }
 
     // Reflect management changes (from here or the row context menu) in this dialog.
@@ -941,7 +941,10 @@ export class PositionDetailsDialog {
   /** Update the toggle button's state/label in place after a management change. */
   _refreshManualToggle() {
     const select = this.dialogEl?.querySelector("#pddManagementSelect");
-    if (select) select.value = this.positionData.management;
+    if (select) {
+      select.value = this.positionData.management;
+      select._customSelectInstance?.setValue(this.positionData.management);
+    }
   }
 
   /**
@@ -1048,22 +1051,16 @@ window.addEventListener("screenerbot:toggle-position-management", async (event) 
   if (id == null) return;
 
   try {
-    const data = await requestManager.fetch(
-      `/api/positions/${encodeURIComponent(id)}/management`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ management }),
-        priority: "high",
-      }
-    );
+    const data = await requestManager.fetch(`/api/positions/${encodeURIComponent(id)}/management`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ management }),
+      priority: "high",
+    });
     if (data && data.success === false) {
       throw new Error(data.message || "Request failed");
     }
-    Utils.showToast(
-      data?.message || `Position management set to ${management}`,
-      "success"
-    );
+    Utils.showToast(data?.message || `Position management set to ${management}`, "success");
     window.dispatchEvent(
       new CustomEvent("screenerbot:position-management-changed", {
         detail: { id, management },

@@ -65,6 +65,16 @@ function selectorsIn(css) {
 const errors = [];
 const cssFiles = (await walk(stylesRoot)).filter((file) => file.endsWith(".css"));
 
+function auditSelectContract(file, source) {
+  for (const match of source.matchAll(/<select\b[^>]*>/gi)) {
+    if (/\bdata-custom-select\b/i.test(match[0])) continue;
+    const line = source.slice(0, match.index).split("\n").length;
+    errors.push(
+      `${relative(root, file)}:${line}: native select is forbidden; add data-custom-select`
+    );
+  }
+}
+
 for (const file of cssFiles) {
   const css = await readFile(file, "utf8");
   const path = relative(stylesRoot, file);
@@ -93,6 +103,7 @@ for (const file of await walk(scriptsRoot)) {
   if (/createElement\(["']style["']\)|<style\b/i.test(source)) {
     errors.push(`${relative(root, file)}: runtime or embedded CSS is forbidden; use styles/`);
   }
+  if (!file.endsWith("custom_select.js")) auditSelectContract(file, source);
 }
 
 for (const file of await walk(pagesRoot)) {
@@ -101,6 +112,7 @@ for (const file of await walk(pagesRoot)) {
   if (/<style\b/i.test(source)) {
     errors.push(`${relative(root, file)}: page templates must not contain <style>`);
   }
+  auditSelectContract(file, source);
 }
 
 const templatesSource = await readFile(resolve(root, "src/webserver/templates.rs"), "utf8");
