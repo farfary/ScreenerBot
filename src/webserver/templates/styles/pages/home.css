@@ -1,121 +1,74 @@
-/* Home Dashboard - Advanced Compact Layout */
-
-/* ===== Layout Variables ===== */
+/* Home — one continuous, fixed portfolio workspace. */
 .home-dashboard {
-  --home-gap: 0.75rem;
-  --home-padding: 0.75rem;
-  --card-radius: 14px;
-  --card-padding: 0.85rem;
-  --row-padding: 0.4rem 0.6rem;
+  --home-padding: 1rem;
   --label-size: 0.625rem;
   --value-size: 0.875rem;
+  --row-padding: 0.5rem 0;
 
-  /* One shared surface treatment so every home card reads as the same family. */
-  --card-border: 1px solid var(--border-color);
-  --card-shadow: 0 2px 12px -6px var(--shadow-lg), 0 1px 2px var(--shadow-sm);
-  --chip-bg: var(--bg-primary);
-
-  display: flex;
-  flex-direction: column;
-  gap: var(--home-gap);
-  padding: var(--home-padding);
-  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   width: 100%;
-  overflow-x: hidden;
-  min-height: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
 }
 
-/* ===== Wallet Hero Card =====
-   The hero is ONE container like every other card (no nested second box): it is a
-   .dashboard-card, and simply layers a soft accent glow on the shared surface to
-   read as the primary card. Its inner .wallet-hero is a pure layout wrapper. */
-.hero-card {
-  position: relative;
-  padding: 0.8rem 1rem;
-  background:
-    radial-gradient(
-      130% 150% at 100% 0%,
-      color-mix(in srgb, var(--primary) 13%, transparent) 0%,
-      transparent 46%
-    ),
-    linear-gradient(
-      160deg,
-      color-mix(in srgb, var(--primary) 5%, var(--bg-card)),
-      var(--bg-card) 60%
-    );
+/* Portfolio overview */
+.portfolio-overview {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 1.7fr);
+  min-width: 0;
+  border-bottom: 1px solid var(--border-color);
 }
 
-/* Glassy hairline highlight across the hero's very top edge. */
-.hero-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--primary) 35%, transparent),
-    transparent
-  );
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-/* Two stacked rows: headline + sparkline on top, a minimal horizontal stat row
-   across the bottom. The styled box is .hero-card. */
-.wallet-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-}
-
-/* Top row: headline (left) · sparkline (right). */
-.hero-top {
+.portfolio-headline {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
+  min-width: 0;
+  padding: 1rem 1.25rem;
 }
 
-/* align-items:flex-start is load-bearing for the loading skeleton: a column flex
-   container blockifies and STRETCHES its children, so a skeleton bar on the
-   balance would span the whole column instead of hugging the number. */
-.hero-main {
+.portfolio-primary {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  min-width: 0;
   gap: 0.25rem;
-  flex-shrink: 0;
 }
 
 .hero-label {
+  margin: 0;
+  color: var(--text-tertiary);
   font-size: 0.64rem;
   font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
   letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .hero-balance {
-  font-family: var(--font-data);
-  font-size: clamp(1.8rem, 2.9vw, 2.45rem);
-  font-weight: 700;
-  line-height: 1.02;
-  letter-spacing: -0.015em;
   color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: clamp(1.8rem, 2.7vw, 2.45rem);
+  font-weight: 700;
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  white-space: nowrap;
 }
 
-/* The unit (SOL) rides small and muted so the number carries the weight. */
 .hero-unit {
+  margin-left: 0.35em;
+  color: var(--text-tertiary);
   font-size: 0.46em;
   font-weight: 600;
-  color: var(--text-tertiary);
   letter-spacing: 0.03em;
-  margin-left: 0.35em;
 }
 
 .hero-sub {
@@ -123,75 +76,42 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.5rem;
+  color: var(--text-secondary);
   font-family: var(--font-data);
+  font-size: 0.72rem;
   font-feature-settings: "tnum" 1;
 }
 
-.hero-usd {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-/* Tinted pill so today's direction reads instantly. */
 .hero-change {
-  display: inline-flex;
-  gap: 0.3rem;
-  align-items: baseline;
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.12rem 0.5rem;
-  border-radius: var(--radius-full);
-  background: var(--bg-secondary);
+  font-weight: 700;
 }
 
-.hero-change.profit {
-  background: color-mix(in srgb, var(--badge-online) 15%, transparent);
-}
-
-.hero-change.loss {
-  background: color-mix(in srgb, var(--badge-error) 15%, transparent);
-}
-
-.hero-change-value {
-  font-size: 0.85rem;
-  letter-spacing: 0.01em;
-}
-
-.hero-change-label {
-  font-size: 0.68rem;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Profit / loss / flat semantics for the change line. */
+.hero-change.profit,
 .hero-change-value.profit,
 .change-percent.profit {
   color: var(--badge-online);
 }
 
+.hero-change.loss,
 .hero-change-value.loss,
 .change-percent.loss {
   color: var(--badge-error);
 }
 
+.hero-change.flat,
 .hero-change-value.flat,
 .change-percent.flat {
   color: var(--text-secondary);
 }
 
-/* Right-hand aside: the balance sparkline. */
-.hero-aside {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
+.hero-change-label {
+  color: var(--text-muted);
 }
 
 .hero-spark {
-  width: 132px;
-  height: 44px;
-  display: block;
+  width: 8.25rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
   overflow: visible;
 }
 
@@ -201,17 +121,14 @@
 
 .hero-spark-line {
   fill: none;
-  stroke: var(--primary);
-  stroke-width: 2;
-  stroke-linejoin: round;
+  stroke: var(--text-tertiary);
   stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
-/* Soft area under the line for depth (an area chart, not a bare line). */
 .hero-spark-area {
-  stroke: none;
-  fill: color-mix(in srgb, var(--primary) 15%, transparent);
+  fill: color-mix(in srgb, var(--text-tertiary) 10%, transparent);
 }
 
 .hero-spark.up .hero-spark-line {
@@ -219,7 +136,7 @@
 }
 
 .hero-spark.up .hero-spark-area {
-  fill: color-mix(in srgb, var(--badge-online) 15%, transparent);
+  fill: color-mix(in srgb, var(--badge-online) 12%, transparent);
 }
 
 .hero-spark.down .hero-spark-line {
@@ -227,416 +144,373 @@
 }
 
 .hero-spark.down .hero-spark-area {
-  fill: color-mix(in srgb, var(--badge-error) 15%, transparent);
+  fill: color-mix(in srgb, var(--badge-error) 12%, transparent);
 }
 
-/* ===== Minimal horizontal stat row across the bottom of the hero (borderless) =====
-   Four inline "label value" items on a fixed 4-column grid. No boxes, no borders.
-   A grid (not flex + space-between) so each stat keeps a FIXED column: with
-   space-between, every value width change on a poll tick re-spaced its
-   neighbours, so the row visibly twitched as numbers updated. */
-.hero-stats {
+.portfolio-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.4rem 1rem;
   min-width: 0;
+  border-left: 1px solid var(--border-color);
 }
 
-.hero-stat {
+.portfolio-stat {
   display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.38rem;
   min-width: 0;
+  padding: 1rem;
 }
 
-.hero-stat-label {
-  font-size: 0.6rem;
-  font-weight: 600;
+.portfolio-stat + .portfolio-stat {
+  border-left: 1px solid var(--border-color);
+}
+
+.hero-stat-label,
+.position-label,
+.pipeline-metric span {
   color: var(--text-tertiary);
+  font-size: var(--label-size);
+  font-weight: 600;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
 .hero-stat-value {
+  min-width: 0;
+  color: var(--text-primary);
   font-family: var(--font-data);
   font-size: 0.9rem;
   font-weight: 700;
-  color: var(--text-primary);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
   white-space: nowrap;
 }
 
-.hero-stat-value.profit {
+.hero-stat-value.profit,
+.position-value.profit,
+.pipeline-metric strong.success {
   color: var(--badge-online);
 }
 
-.hero-stat-value.loss {
+.hero-stat-value.loss,
+.position-value.loss,
+.pipeline-metric strong.danger {
   color: var(--badge-error);
 }
 
 .hero-stat-value .hero-unit {
-  font-size: 0.6em;
   margin-left: 0.2em;
+  font-size: 0.6em;
 }
 
 .hero-stat-sub {
+  display: block;
+  max-width: 100%;
+  margin-left: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
   font-size: 0.66rem;
   font-weight: 500;
-  color: var(--text-tertiary);
-  margin-left: 0.1rem;
-}
-
-/* Ease every value swap: skeleton -> real number (background/colour fade out of
-   the placeholder bar) and profit <-> loss recolouring on later poll ticks. */
-.hero-balance,
-.hero-usd,
-.hero-change,
-.hero-change-value,
-.change-percent,
-.hero-stat-value {
-  transition:
-    color var(--transition-base),
-    background-color var(--transition-base);
-}
-
-/* ===== Content Grid - responsive, reorderable ===== */
-.content-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--home-gap);
-  align-items: start;
-  /* Pack rows to the top; leftover vertical space stays at the bottom instead
-     of stretching the row tracks (which pushed the second row down). */
-  align-content: start;
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-/* Wide cards span the full row / half the grid. */
-.content-grid > .hero-card {
-  grid-column: 1 / -1;
-}
-
-.content-grid > .calendar-card {
-  grid-column: span 2;
-}
-
-/* ===== Dashboard Cards — one shared elevated surface for the whole page ===== */
-.dashboard-card {
-  background: var(--bg-card);
-  border: var(--card-border);
-  border-radius: var(--card-radius);
-  padding: var(--card-padding);
-  box-shadow: var(--card-shadow);
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: opacity var(--transition-base);
-}
-
-/* Clean header: title left, actions right, a hairline divider bled to the edges. */
-.dashboard-card .card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 0 0.55rem;
-  margin: 0 0 0.7rem;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.dashboard-card .card-header h2 {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.dashboard-card .card-header h2 i {
-  font-size: 0.8rem;
-  color: var(--primary);
-  opacity: 0.85;
-}
-
-/* ===== Positions Card ===== */
-.positions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.position-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--row-padding);
-  background: var(--chip-bg);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  transition: border-color var(--transition-fast);
-}
-
-.position-row:hover {
-  border-color: color-mix(in srgb, var(--primary) 28%, var(--border-color));
-}
-
-.position-row.highlight {
-  background: color-mix(in srgb, var(--badge-online) 9%, var(--chip-bg));
-  border-color: color-mix(in srgb, var(--badge-online) 28%, var(--border-color));
-}
-
-.position-label {
-  font-size: var(--label-size);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.position-value {
-  font-family: var(--font-data);
-  font-size: var(--value-size);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.position-value.profit {
-  color: var(--badge-online);
-}
-
-.position-value.loss {
-  color: var(--badge-error);
-}
-
-/* ===== Tokens Card ===== */
-.tokens-stats {
+/* Fixed workspace */
+.home-workspace {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.35rem;
-  margin-bottom: 0.4rem;
-  flex: 0 0 auto;
-  align-content: start;
+  grid-template-columns: minmax(0, 1.85fr) minmax(19rem, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.token-row {
+.calendar-workspace {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.75rem 1rem;
+  overflow: hidden;
+  border-right: 1px solid var(--border-color);
+}
+
+.workspace-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: var(--row-padding);
-  background: var(--chip-bg);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  transition: border-color var(--transition-fast);
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  min-height: 2rem;
+  padding-bottom: 0.55rem;
 }
 
-.token-row:hover {
-  border-color: color-mix(in srgb, var(--primary) 28%, var(--border-color));
-}
-
-.token-label {
-  font-size: var(--label-size);
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.token-value {
-  font-size: var(--value-size);
+.workspace-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.8rem;
   font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.workspace-header h2 i {
+  color: var(--primary);
+  font-size: 0.82rem;
+}
+
+.home-operations {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.operations-section {
+  min-width: 0;
+  min-height: 0;
+  padding: 0.75rem 1rem;
+}
+
+.exposure-section {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.section-count {
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.metric-ledger {
+  display: grid;
+  grid-template-rows: repeat(5, minmax(2.5rem, auto));
+  align-content: start;
+  min-height: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 0;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border-color-muted, var(--border-color));
+}
+
+.metric-row:last-child {
+  border-bottom: 0;
+}
+
+.position-value {
+  overflow: hidden;
   color: var(--text-primary);
   font-family: var(--font-data);
+  font-size: var(--value-size);
+  font-weight: 700;
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.token-value.success {
-  color: var(--badge-online);
+.pipeline-section {
+  padding-bottom: 0;
+  border-top: 1px solid var(--border-color);
 }
 
-.token-value.danger {
-  color: var(--badge-error);
+.pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 -1rem;
+  border-top: 1px solid var(--border-color);
 }
 
-/* ===== Responsive Design ===== */
-@media (width <= 1100px) {
-  .content-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .content-grid > .calendar-card {
-    grid-column: 1 / -1;
-  }
+.pipeline-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.65rem 1rem;
 }
 
-@media (width <= 800px) {
-  .content-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .content-grid > .calendar-card,
-  .content-grid > .hero-card {
-    grid-column: 1 / -1;
-  }
-
-  /* Four stat columns get too tight to hold "label value" on one line. */
-  .hero-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.pipeline-metric:not(:nth-child(3n + 1)) {
+  border-left: 1px solid var(--border-color);
 }
 
-@media (width <= 500px) {
-  .home-dashboard {
-    --home-gap: 0.5rem;
-    --home-padding: 0.625rem;
-    --card-padding: 0.625rem;
-  }
-
-  .hero-card {
-    padding: 0.75rem;
-  }
-
-  /* Sparkline is decorative; drop it first when width is tight. Hide the whole
-     .hero-aside (not just the svg) so its loading skeleton goes with it. */
-  .hero-aside {
-    display: none;
-  }
-
-  .tokens-stats {
-    grid-template-columns: 1fr;
-  }
+.pipeline-metric:nth-child(n + 4) {
+  border-top: 1px solid var(--border-color);
 }
 
-/* ===== Loading State - Skeleton Animation ===== */
+.pipeline-metric strong {
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-feature-settings: "tnum" 1;
+  line-height: 1;
+}
 
-/* Shimmer animation for loading cards */
+/* Loading state */
 @keyframes home-shimmer {
-  0% {
+  from {
     transform: translateX(-100%);
   }
 
-  100% {
+  to {
     transform: translateX(100%);
   }
 }
 
-/* The hero is itself a .dashboard-card and carries `loading` on the CARD (not on
-   its inner .wallet-hero wrapper) — the shimmer below is keyed on
-   `.dashboard-card.loading`, so a `loading` class parked on the inner wrapper
-   left the hero as the ONE card with no shimmer at all. */
-
-/* Loading state for dashboard cards */
-.dashboard-card.loading {
+.home-dashboard.loading {
   position: relative;
-  overflow: hidden;
 }
 
-.dashboard-card.loading::after {
+.home-dashboard.loading::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgb(0 0 0 / 0.04) 50%, transparent 100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text-primary) 3%, transparent), transparent);
   animation: home-shimmer 1.5s ease-in-out infinite;
   pointer-events: none;
 }
 
-[data-theme="dark"] .dashboard-card.loading::after {
-  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.03) 50%, transparent 100%);
-}
-
-/* Pulsing placeholder bars for values in the loading state.
-   The fill MUST NOT be --bg-secondary: in BOTH themes it is the SAME colour as
-   --bg-card (dark #161b22, light #fff), so a bar painted with it on a card was
-   invisible — the values just vanished and the cards rendered as bare floating
-   labels. --bg-card-hover is the one surface token that reads against a card in
-   both themes. */
 .loading .hero-balance,
 .loading .hero-usd,
 .loading .hero-change,
 .loading .hero-stat-value,
 .loading .position-value,
-.loading .token-value,
+.loading .pipeline-metric strong,
 .loading .cell-pnl,
 .loading .cell-value {
+  display: inline-block;
+  min-width: 3ch;
   color: transparent;
   background: var(--bg-card-hover);
   border-radius: var(--radius-sm);
-  animation: pulse-subtle 1.5s ease-in-out infinite;
 }
 
-/* The hero's values are inline spans / stretched flex children: inline-block
-   makes each one a self-contained bar that hugs its placeholder text, so the
-   skeleton has the same geometry as the real value and nothing jumps on load. */
-.loading .hero-balance,
-.loading .hero-usd,
-.loading .hero-change,
-.loading .hero-stat-value {
-  display: inline-block;
-  min-width: 3ch;
-}
-
-/* Nested spans set their OWN colour, so they'd print straight through the bar
-   they sit inside. The change pill is one single bar, not two nested ones. */
 .loading .hero-unit,
 .loading .hero-stat-sub,
 .loading .hero-change-value,
 .loading .change-percent {
   color: transparent;
   background: none;
-  animation: none;
-}
-
-/* The sparkline has no points until data arrives, so it left a hole in the top
-   row. Skeleton its wrapper at the svg's exact size and hide the empty svg. */
-.loading .hero-aside {
-  width: 132px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background: var(--bg-card-hover);
-  animation: pulse-subtle 1.5s ease-in-out infinite;
 }
 
 .loading .hero-spark {
   visibility: hidden;
 }
 
-@keyframes pulse-subtle {
-  0%,
-  100% {
-    opacity: 0.6;
-  }
-
-  50% {
-    opacity: 0.3;
-  }
+.home-dashboard.loaded {
+  animation: home-fade-in 0.2s ease;
 }
 
-/* Smooth transition when data loads (the card's opacity transition lives on the
-   base .dashboard-card rule above). */
-.dashboard-card.loaded {
-  animation: fade-in 0.3s ease;
-}
-
-@keyframes fade-in {
+@keyframes home-fade-in {
   from {
-    opacity: 0.8;
+    opacity: 0.85;
   }
 
   to {
     opacity: 1;
+  }
+}
+
+@media (width <= 1100px) {
+  .portfolio-overview {
+    grid-template-columns: minmax(16rem, 0.75fr) minmax(0, 1.7fr);
+  }
+
+  .portfolio-headline {
+    padding-inline: 1rem;
+  }
+
+  .portfolio-stat {
+    padding: 0.8rem;
+  }
+
+  .home-workspace {
+    grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 1fr);
+  }
+}
+
+@media (width <= 800px) {
+  .portfolio-overview {
+    grid-template-columns: minmax(14rem, 0.8fr) minmax(0, 1.2fr);
+  }
+
+  .hero-spark {
+    display: none;
+  }
+
+  .portfolio-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portfolio-stat:nth-child(3) {
+    border-top: 1px solid var(--border-color);
+    border-left: 0;
+  }
+
+  .portfolio-stat:nth-child(4) {
+    border-top: 1px solid var(--border-color);
+  }
+
+  .home-workspace {
+    grid-template-columns: minmax(0, 1.2fr) minmax(16rem, 1fr);
+  }
+
+  .calendar-workspace,
+  .operations-section {
+    padding-inline: 0.75rem;
+  }
+
+  .pipeline-grid {
+    margin-inline: -0.75rem;
+  }
+}
+
+@media (height <= 760px) {
+  .portfolio-headline,
+  .portfolio-stat {
+    padding-block: 0.7rem;
+  }
+
+  .calendar-workspace,
+  .operations-section {
+    padding-block: 0.55rem;
+  }
+
+  .workspace-header {
+    min-height: 1.7rem;
+    padding-bottom: 0.35rem;
+  }
+
+  .pipeline-metric {
+    gap: 0.15rem;
+    padding-block: 0.4rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-dashboard.loading::after,
+  .home-dashboard.loaded {
+    animation: none;
   }
 }

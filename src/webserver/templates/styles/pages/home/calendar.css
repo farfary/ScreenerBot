@@ -1,55 +1,8 @@
-/* Home portfolio calendar + card customization (edit mode, drag reorder). */
-
-/* ===== Card header hover actions (customize / reset) ===== */
-
-/* Live inside each card title; hidden until the card is hovered so they take
-   no permanent space at the top of the dashboard. */
-.card-header-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-fast);
-}
-
-.dashboard-card:hover .card-header-actions,
-.dashboard-card:focus-within .card-header-actions,
-.home-editing .card-header-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.card-customize-trigger,
-.card-reset-trigger {
-  width: 1.6rem;
-  height: 1.6rem;
-  font-size: 0.75rem;
-}
-
-.card-customize-trigger.active {
-  background: var(--link-color);
-  color: #fff;
-}
-
-/* Reset only makes sense while editing. */
-.card-reset-trigger {
-  display: none;
-}
-
-.home-editing .card-reset-trigger {
-  display: inline-flex;
-}
+/* Home portfolio activity calendar. */
 
 /* ===== Calendar card ===== */
 .calendar-header {
   gap: 0.5rem;
-}
-
-.calendar-header-right {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
 }
 
 .calendar-nav {
@@ -73,8 +26,8 @@
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.3rem;
-  margin-bottom: 0.35rem;
+  gap: 1px;
+  margin-bottom: 1px;
   flex-shrink: 0;
 }
 
@@ -90,23 +43,23 @@
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 0.3rem;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 1px;
   flex: 1 1 auto;
+  min-height: 0;
+  background: var(--border-color);
 }
 
 .calendar-cell {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 3.4rem;
+  min-height: 0;
   padding: 0.3rem 0.4rem;
-  border-radius: var(--radius-md);
   background: var(--bg-secondary);
-  border: 1px solid rgb(255 255 255 / 0.04);
+  border: 0;
   overflow: hidden;
-  transition:
-    transform 0.12s ease,
-    border-color 0.12s ease;
+  transition: background-color var(--transition-fast);
 }
 
 /* In light theme --bg-secondary == --bg-card (both white), so give cells a
@@ -114,21 +67,15 @@
    keep their inline heatmap background, which wins over this rule. */
 [data-theme="light"] .calendar-cell {
   background: var(--bg-card-hover);
-  border-color: rgb(0 0 0 / 0.07);
 }
 
 .calendar-cell:not(.blank, .future):hover {
-  transform: translateY(-1px);
-  border-color: rgb(255 255 255 / 0.14);
+  background-color: var(--bg-card-hover);
   z-index: 1;
 }
 
-[data-theme="light"] .calendar-cell:not(.blank, .future):hover {
-  border-color: rgb(0 0 0 / 0.2);
-}
-
 .calendar-cell.blank {
-  background: transparent;
+  background: var(--bg-primary);
   border: none;
 }
 
@@ -217,19 +164,26 @@
 .calendar-summary {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.4rem;
-  margin-top: 0.5rem;
+  gap: 0;
+  margin-top: 0;
   flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
 }
 
 .calendar-summary-stat {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--row-padding);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid rgb(255 255 255 / 0.03);
+  padding: 0.55rem 0;
+}
+
+.calendar-summary-stat:first-child {
+  padding-right: 1rem;
+}
+
+.calendar-summary-stat + .calendar-summary-stat {
+  padding-left: 1rem;
+  border-left: 1px solid var(--border-color);
 }
 
 .calendar-summary-label {
@@ -344,68 +298,4 @@
 
 .cal-pop-val.loss {
   color: var(--badge-error, #f85149);
-}
-
-/* ===== Card edit controls (hidden until edit mode) ===== */
-.card-edit-controls {
-  display: none;
-  align-items: center;
-  gap: 0.5rem;
-  margin: -0.625rem -0.625rem 0.5rem;
-  padding: 0.4rem 0.625rem;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-
-.hero-card .card-edit-controls {
-  margin: 0 0 0.4rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-}
-
-.home-editing .card-edit-controls {
-  display: flex;
-}
-
-.card-drag-handle {
-  cursor: grab;
-  color: var(--text-secondary);
-  display: inline-flex;
-  align-items: center;
-}
-
-.card-drag-handle:active {
-  cursor: grabbing;
-}
-
-.card-edit-title {
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-right: auto;
-}
-
-/* ===== Edit mode container + drag states ===== */
-.home-editing .dashboard-card {
-  border: 1px dashed var(--border-color);
-}
-
-.home-editing .dashboard-card[draggable="true"] {
-  cursor: default;
-}
-
-.dashboard-card.dragging {
-  opacity: 0.55;
-  outline: 2px solid var(--link-color);
-  outline-offset: -1px;
-}
-
-/* Disabled (toggled off) cards: dimmed in edit mode, removed otherwise. */
-.dashboard-card.card-disabled.card-hidden {
-  display: none;
-}
-
-.home-editing .dashboard-card.card-disabled {
-  opacity: 0.4;
 }

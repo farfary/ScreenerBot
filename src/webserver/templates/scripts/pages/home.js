@@ -6,7 +6,6 @@ import { requestManager, createScopedFetcher } from "../core/request_manager.js"
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
 import { notifyClientReady } from "../core/client_ready.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
-import { createCustomizer } from "./home/customize.js";
 
 function createLifecycle() {
   let poller = null;
@@ -21,7 +20,6 @@ function createLifecycle() {
   // Guards against overlapping dashboard fetches (see fetchData).
   let isFetching = false;
   let calendar = null;
-  let customizer = null;
   // Animation intervals tracking
   const animationIntervals = [];
 
@@ -29,17 +27,16 @@ function createLifecycle() {
    * Clear the skeleton and fade the real data in.
    *
    * The loading state is only ever entered declaratively, via the `loading`
-   * class baked into the page template — every card (hero included) carries it
-   * at first paint. So this only ever needs to LEAVE that state; there is no
+   * class baked into the page template at first paint. This only ever needs to
+   * LEAVE that state; there is no
    * "turn loading back on" path, and there must not be one: the router caches
    * the page element, so a revisit reuses the already-populated DOM and
    * re-skeletoning it would flash the cards for no reason.
    */
   function markLoaded() {
-    document.querySelectorAll(".dashboard-card").forEach((card) => {
-      card.classList.remove("loading");
-      card.classList.add("loaded");
-    });
+    const dashboard = document.querySelector(".home-dashboard");
+    dashboard?.classList.remove("loading");
+    dashboard?.classList.add("loaded");
   }
 
   // Fetch dashboard data
@@ -90,13 +87,13 @@ function createLifecycle() {
   function updateUI(data) {
     if (!data) return;
 
-    // Wallet hero (equity headline, USD, today-change, tiles, sparkline, trader)
+    // Portfolio headline, daily change, balances and sparkline.
     updateHeroCard(data);
 
-    // Update positions snapshot
+    // Update the exposure ledger.
     updatePositionsStats(data.positions);
 
-    // Update token statistics
+    // Update the market pipeline.
     updateTokenStats(data.tokens);
   }
 
@@ -174,7 +171,7 @@ function createLifecycle() {
     svg.classList.toggle("down", !up);
   }
 
-  // Populate the portfolio hero card from the full dashboard payload.
+  // Populate the portfolio overview from the full dashboard payload.
   function updateHeroCard(data) {
     const wallet = data.wallet;
     if (!wallet) return;
@@ -202,16 +199,14 @@ function createLifecycle() {
     const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
       const cls = pnlClass(wallet.change_sol);
-      const pctSign = wallet.change_percent >= 0 ? "+" : "";
       changeEl.className = `hero-change ${cls}`;
       changeEl.innerHTML = `
         <span class="hero-change-value change-value ${cls}">${formatSignedSol(
           wallet.change_sol
         )}</span>
-        <span class="change-percent ${cls}">(${pctSign}${Utils.formatNumber(
-          wallet.change_percent,
-          2
-        )}%)</span>
+        <span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
+          decimals: 2,
+        })})</span>
       `;
     }
 
@@ -245,9 +240,9 @@ function createLifecycle() {
     if (openPnlEl && data.positions) {
       const v = data.positions.unrealized_pnl_sol || 0;
       const pct = data.positions.unrealized_pnl_percent || 0;
-      openPnlEl.innerHTML = `${signedSolHtml(v)} <span class="hero-stat-sub">${
-        pct >= 0 ? "+" : ""
-      }${Utils.formatNumber(pct, 1)}%</span>`;
+      openPnlEl.innerHTML = `${signedSolHtml(
+        v
+      )} <span class="hero-stat-sub">${Utils.formatPercent(pct, { decimals: 1 })}</span>`;
       openPnlEl.className = `hero-stat-value ${pnlClass(v)}`;
     }
 
@@ -269,8 +264,6 @@ function createLifecycle() {
 
     const countEl = document.getElementById("positionsCount");
     const investedEl = document.getElementById("positionsInvested");
-    const unrealizedPnlEl = document.getElementById("positionsUnrealizedPnl");
-    const unrealizedPercentEl = document.getElementById("positionsUnrealizedPercent");
     const avgSizeEl = document.getElementById("positionsAvgSize");
     const avgHoldEl = document.getElementById("positionsAvgHold");
     const bestEl = document.getElementById("positionsBest");
@@ -281,23 +274,6 @@ function createLifecycle() {
       investedEl.textContent = Utils.formatSol(positions.total_invested_sol, {
         decimals: 4,
       });
-    if (unrealizedPnlEl) {
-      unrealizedPnlEl.textContent = Utils.formatSol(positions.unrealized_pnl_sol, {
-        decimals: 4,
-      });
-      unrealizedPnlEl.className = `position-value ${
-        positions.unrealized_pnl_sol >= 0 ? "profit" : "loss"
-      }`;
-    }
-    if (unrealizedPercentEl) {
-      unrealizedPercentEl.textContent = `${Utils.formatNumber(
-        positions.unrealized_pnl_percent,
-        2
-      )}%`;
-      unrealizedPercentEl.className = `position-value ${
-        positions.unrealized_pnl_percent >= 0 ? "profit" : "loss"
-      }`;
-    }
     if (avgSizeEl)
       avgSizeEl.textContent = Utils.formatSol(positions.avg_position_size_sol, {
         decimals: 4,
@@ -314,11 +290,11 @@ function createLifecycle() {
     }
     if (bestEl) {
       if (positions.best_performer) {
-        bestEl.textContent = `${positions.best_performer.symbol} +${Utils.formatNumber(
-          positions.best_performer.pnl_percent,
-          1
-        )}%`;
-        bestEl.className = "position-value profit";
+        const pnl = positions.best_performer.pnl_percent || 0;
+        bestEl.textContent = `${positions.best_performer.symbol} ${Utils.formatPercent(pnl, {
+          decimals: 1,
+        })}`;
+        bestEl.className = `position-value ${pnlClass(pnl)}`;
       } else {
         bestEl.textContent = "—";
         bestEl.className = "position-value";
@@ -326,11 +302,11 @@ function createLifecycle() {
     }
     if (worstEl) {
       if (positions.worst_performer) {
-        worstEl.textContent = `${positions.worst_performer.symbol} ${Utils.formatNumber(
-          positions.worst_performer.pnl_percent,
-          1
-        )}%`;
-        worstEl.className = "position-value loss";
+        const pnl = positions.worst_performer.pnl_percent || 0;
+        worstEl.textContent = `${positions.worst_performer.symbol} ${Utils.formatPercent(pnl, {
+          decimals: 1,
+        })}`;
+        worstEl.className = `position-value ${pnlClass(pnl)}`;
       } else {
         worstEl.textContent = "—";
         worstEl.className = "position-value";
@@ -362,8 +338,10 @@ function createLifecycle() {
   function animateValue(element, targetValue) {
     if (!element) return;
 
-    const currentValue = parseInt(element.textContent) || 0;
+    const currentValue =
+      Number(element.dataset.numericValue ?? element.textContent.replaceAll(",", "")) || 0;
     if (currentValue === targetValue) return;
+    element.dataset.numericValue = String(targetValue);
 
     const duration = 500;
     const steps = 20;
@@ -378,12 +356,12 @@ function createLifecycle() {
       current += stepValue;
 
       if (step >= steps) {
-        element.textContent = targetValue;
+        element.textContent = Utils.formatNumber(targetValue, 0);
         clearInterval(interval);
         const idx = animationIntervals.indexOf(interval);
         if (idx !== -1) animationIntervals.splice(idx, 1);
       } else {
-        element.textContent = Math.round(current);
+        element.textContent = Utils.formatNumber(Math.round(current), 0);
       }
     }, stepDuration);
 
@@ -402,11 +380,9 @@ function createLifecycle() {
       // Note: Loading state is already applied via HTML classes
       // Data fetch happens in activate() to avoid double call
 
-      // Portfolio calendar + card customization
+      // Portfolio calendar.
       calendar = createCalendar(calendarFetch);
       calendar.mount();
-      customizer = createCustomizer();
-      customizer.mount();
     },
 
     activate: (ctx) => {
@@ -422,10 +398,6 @@ function createLifecycle() {
       if (!calendar) {
         calendar = createCalendar(calendarFetch);
         calendar.mount();
-      }
-      if (!customizer) {
-        customizer = createCustomizer();
-        customizer.mount();
       }
 
       // If we have cached data from a previous visit, show it immediately
@@ -476,8 +448,6 @@ function createLifecycle() {
 
       calendar?.dispose();
       calendar = null;
-      customizer?.dispose();
-      customizer = null;
 
       // Note: cachedData is deliberately kept — it lets a revisit paint real
       // numbers immediately instead of flashing the skeleton again.

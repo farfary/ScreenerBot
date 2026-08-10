@@ -153,7 +153,7 @@ export function createCalendar(fetcher) {
       }
 
       const pnlText = d.has_data
-        ? `${pnl >= 0 ? "+" : ""}${Utils.formatSol(pnl, { decimals: 3, suffix: "" })}`
+        ? `${pnl > 0 ? "+" : ""}${Utils.formatSol(pnl, { decimals: 3, suffix: "" })}`
         : "";
       const valText =
         d.portfolio_value_sol != null
@@ -179,11 +179,15 @@ export function createCalendar(fetcher) {
     const pnlEl = document.getElementById("calendarMonthPnl");
     if (pnlEl) {
       const mp = data.month_net_pnl_sol || 0;
-      pnlEl.textContent = `${mp >= 0 ? "+" : ""}${Utils.formatSol(mp, { decimals: 3, suffix: "" })}`;
-      pnlEl.className = `calendar-summary-value ${mp >= 0 ? "profit" : "loss"}`;
+      const cls = mp > 0 ? "profit" : mp < 0 ? "loss" : "flat";
+      pnlEl.textContent = `${mp > 0 ? "+" : ""}${Utils.formatSol(mp, {
+        decimals: 3,
+        suffix: "",
+      })} SOL`;
+      pnlEl.className = `calendar-summary-value ${cls}`;
     }
     const tradesEl = document.getElementById("calendarMonthTrades");
-    if (tradesEl) tradesEl.textContent = data.month_trades ?? 0;
+    if (tradesEl) tradesEl.textContent = Utils.formatNumber(data.month_trades ?? 0, 0);
   }
 
   function shiftMonth(delta) {

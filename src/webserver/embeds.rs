@@ -461,7 +461,6 @@ pub const AI_AUTOMATION_TAB: &str = include_str!("templates/scripts/pages/ai/aut
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const HOME_CALENDAR_JS: &str =
     include_str!("templates/scripts/pages/home/portfolio_calendar.js");
-pub const HOME_CUSTOMIZE_JS: &str = include_str!("templates/scripts/pages/home/customize.js");
 pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");
 pub const ABOUT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/about.js");
 pub const LOGIN_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/login.js");
