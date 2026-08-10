@@ -70,6 +70,7 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
       compact: true,
       stickyHeader: true,
       zebra: true,
+      fitToContainer: true,
       sorting: { mode: "client", column: "label", direction: "asc" },
       emptyTitle: "No watched addresses",
       emptyMessage: "Add a public wallet above to begin recording its activity.",
