@@ -13,6 +13,10 @@ use super::data::*;
 
 const DEMO_TOKEN_DECIMALS: u8 = 6;
 
+pub fn get_demo_wallet_address() -> &'static str {
+    DEMO_WALLET_ADDRESS
+}
+
 /// (mint, ui_amount, price_sol, value_sol) for each held token, derived from the
 /// open positions so token count and worth match everywhere.
 fn holdings() -> Vec<(&'static str, &'static str, &'static str, f64, f64, f64)> {

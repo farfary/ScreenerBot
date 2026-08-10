@@ -32,7 +32,7 @@ pub use dashboard::{
 pub use header::get_demo_header_metrics;
 pub use positions::{get_demo_positions, get_demo_positions_stats};
 pub use trader::get_demo_trader_stats;
-pub use wallet::{get_demo_wallet_current, get_demo_wallet_tokens};
+pub use wallet::{get_demo_wallet_address, get_demo_wallet_current, get_demo_wallet_tokens};
 
 /// Fallback SOL/USD price used only when the live price service has not yet
 /// produced a fresh quote (e.g. offline). A live value always takes precedence.

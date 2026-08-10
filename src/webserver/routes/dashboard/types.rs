@@ -167,10 +167,12 @@ pub struct TradingPeriodStats {
     pub win_rate: f64,
 }
 
-/// The home hero's wallet block. Every field comes from `wallet::get_wallet_worth()`,
+/// The home hero's wallet block. Monetary fields come from `wallet::get_wallet_worth()`,
 /// the same call the header makes — the two must never show different numbers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletAnalytics {
+    /// Public address of the active main wallet; empty in preview mode.
+    pub wallet_address: String,
     /// Free (uninvested) SOL sitting in the wallet.
     pub current_balance_sol: f64,
     /// Number of distinct fungible tokens held.

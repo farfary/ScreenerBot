@@ -52,6 +52,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
             alltime_stats_result,
         ),
         // Wallet data
+        main_wallet_address_result,
         recent_snapshots_result,
         start_of_day_balance_result,
         // Positions data
@@ -71,6 +72,8 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 positions::get_period_trading_stats(epoch_start, Some(now)),
             )
         },
+        // Main wallet public address
+        crate::wallets::get_main_address(),
         // Wallet snapshots (newest first) — [0] is the current status, the rest
         // form the balance-trend sparkline.
         crate::wallet::get_recent_wallet_snapshots(30),
@@ -122,7 +125,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     };
 
     // Wallet worth comes from the live in-memory snapshot, priced now — the SAME call
-    // the header makes, so the two cards can never disagree. The snapshot list is only
+    // the header makes, so the two surfaces can never disagree. The snapshot list is only
     // used for the trend sparkline.
     //
     // (Summing `snapshot.token_balances` here used to be the bug: `get_recent_snapshots`
@@ -153,6 +156,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         .collect();
 
     let wallet = WalletAnalytics {
+        wallet_address: main_wallet_address_result.unwrap_or_default(),
         current_balance_sol: worth.sol_balance,
         token_count: worth.token_count,
         tokens_worth_sol: worth.tokens_worth_sol,

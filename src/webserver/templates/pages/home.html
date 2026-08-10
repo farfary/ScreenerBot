@@ -3,9 +3,66 @@
     <div class="portfolio-headline">
       <div class="portfolio-primary">
         <h1 class="hero-label" id="portfolioHeading">Portfolio value</h1>
-        <div class="hero-balance" id="walletBalance">
-          0.0000<span class="hero-unit">SOL</span>
+        <div class="wallet-identity" id="homeWalletIdentity" hidden>
+          <code class="wallet-address" id="homeWalletAddress">—</code>
+          <div class="wallet-identity-actions">
+            <button
+              type="button"
+              class="wallet-identity-action"
+              id="homeWalletCopy"
+              data-copy=""
+              title="Copy wallet address"
+              aria-label="Copy wallet address"
+            >
+              <i class="icon-copy" aria-hidden="true"></i>
+            </button>
+            <button
+              type="button"
+              class="wallet-identity-action"
+              id="homeWalletQrButton"
+              title="Show wallet QR code"
+              aria-label="Show wallet QR code"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            >
+              <i class="icon-qr-code" aria-hidden="true"></i>
+            </button>
+            <div
+              class="wallet-qr-popover"
+              id="homeWalletQrPopover"
+              role="dialog"
+              aria-label="Wallet QR code"
+              hidden
+            >
+              <div class="wallet-qr-header">
+                <div>
+                  <strong>Receive</strong>
+                  <span>SOL and SPL tokens</span>
+                </div>
+                <button
+                  type="button"
+                  class="wallet-identity-action"
+                  id="homeWalletQrClose"
+                  title="Close"
+                  aria-label="Close wallet QR code"
+                >
+                  <i class="icon-x" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="wallet-qr-visual">
+                <span id="homeWalletQrStatus">Preparing QR code</span>
+                <img
+                  id="homeWalletQrImage"
+                  src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+                  alt="QR code for the main wallet address"
+                  hidden
+                />
+              </div>
+              <code class="wallet-qr-address" id="homeWalletQrAddress">—</code>
+            </div>
+          </div>
         </div>
+        <div class="hero-balance" id="walletBalance">0.0000<span class="hero-unit">SOL</span></div>
         <div class="hero-sub">
           <span class="hero-usd" id="walletUsd">&#8776; $0.00</span>
           <span class="hero-change flat" id="homeWalletChange">
@@ -31,9 +88,7 @@
     <div class="portfolio-stats">
       <div class="portfolio-stat">
         <span class="hero-stat-label">Available SOL</span>
-        <span class="hero-stat-value" id="heroCash"
-          >0.0000<span class="hero-unit">SOL</span></span
-        >
+        <span class="hero-stat-value" id="heroCash">0.0000<span class="hero-unit">SOL</span></span>
       </div>
       <div class="portfolio-stat">
         <span class="hero-stat-label">Token holdings</span>
@@ -45,8 +100,7 @@
       <div class="portfolio-stat">
         <span class="hero-stat-label">Open P&amp;L</span>
         <span class="hero-stat-value flat" id="heroOpenPnl"
-          >0.0000<span class="hero-unit">SOL</span>
-          <span class="hero-stat-sub">0.0%</span></span
+          >0.0000<span class="hero-unit">SOL</span> <span class="hero-stat-sub">0.0%</span></span
         >
       </div>
       <div class="portfolio-stat">

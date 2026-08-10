@@ -5,6 +5,7 @@ import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
 import { notifyClientReady } from "../core/client_ready.js";
+import { closeMenu, openMenu } from "../core/menu_manager.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
 
 function createLifecycle() {
@@ -20,8 +21,16 @@ function createLifecycle() {
   // Guards against overlapping dashboard fetches (see fetchData).
   let isFetching = false;
   let calendar = null;
+  let walletAddress = "";
+  let walletQrOpen = false;
+  let walletIdentityCleanup = null;
   // Animation intervals tracking
   const animationIntervals = [];
+
+  const walletQrMenu = {
+    close: () => closeWalletQr(),
+    owns: (target) => document.getElementById("homeWalletIdentity")?.contains(target) || false,
+  };
 
   /**
    * Clear the skeleton and fade the real data in.
@@ -37,6 +46,116 @@ function createLifecycle() {
     const dashboard = document.querySelector(".home-dashboard");
     dashboard?.classList.remove("loading");
     dashboard?.classList.add("loaded");
+  }
+
+  function closeWalletQr() {
+    closeMenu(walletQrMenu);
+    walletQrOpen = false;
+    const popover = document.getElementById("homeWalletQrPopover");
+    const button = document.getElementById("homeWalletQrButton");
+    if (popover) {
+      popover.classList.remove("open");
+      popover.hidden = true;
+    }
+    if (button) {
+      button.classList.remove("active");
+      button.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  async function loadWalletQr(address) {
+    const image = document.getElementById("homeWalletQrImage");
+    const status = document.getElementById("homeWalletQrStatus");
+    if (!image || !status || !address || image.dataset.address === address) return;
+
+    image.hidden = true;
+    status.hidden = false;
+    status.textContent = "Preparing QR code";
+
+    try {
+      const data = await scopedFetch(`/api/wallet/qr/${encodeURIComponent(address)}`, {
+        priority: "high",
+        cache: "no-store",
+      });
+      if (walletAddress !== address) return;
+      image.src = data.qr_data_url;
+      image.dataset.address = address;
+      image.hidden = false;
+      status.hidden = true;
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      status.textContent = "QR code unavailable";
+    }
+  }
+
+  function openWalletQr() {
+    if (!walletAddress) return;
+    const popover = document.getElementById("homeWalletQrPopover");
+    const button = document.getElementById("homeWalletQrButton");
+    if (!popover || !button) return;
+
+    openMenu(walletQrMenu);
+    walletQrOpen = true;
+    popover.hidden = false;
+    popover.classList.add("open");
+    button.classList.add("active");
+    button.setAttribute("aria-expanded", "true");
+    loadWalletQr(walletAddress);
+  }
+
+  function mountWalletIdentity() {
+    const qrButton = document.getElementById("homeWalletQrButton");
+    const closeButton = document.getElementById("homeWalletQrClose");
+    if (!qrButton || !closeButton) return;
+
+    const toggleQr = (event) => {
+      event.stopPropagation();
+      if (walletQrOpen) closeWalletQr();
+      else openWalletQr();
+    };
+    const closeQr = (event) => {
+      event.stopPropagation();
+      closeWalletQr();
+      qrButton.focus();
+    };
+
+    qrButton.addEventListener("click", toggleQr);
+    closeButton.addEventListener("click", closeQr);
+    walletIdentityCleanup = () => {
+      qrButton.removeEventListener("click", toggleQr);
+      closeButton.removeEventListener("click", closeQr);
+      closeWalletQr();
+    };
+  }
+
+  function updateWalletIdentity(address) {
+    const identity = document.getElementById("homeWalletIdentity");
+    const addressEl = document.getElementById("homeWalletAddress");
+    const qrAddress = document.getElementById("homeWalletQrAddress");
+    const copyButton = document.getElementById("homeWalletCopy");
+    const image = document.getElementById("homeWalletQrImage");
+    if (!identity || !addressEl || !qrAddress || !copyButton || !image) return;
+
+    const nextAddress = address || "";
+    const changed = nextAddress !== walletAddress;
+    walletAddress = nextAddress;
+    identity.hidden = !nextAddress;
+    if (!nextAddress) {
+      closeWalletQr();
+      return;
+    }
+
+    addressEl.textContent = Utils.formatAddressCompact(nextAddress, { start: 10, end: 10 });
+    addressEl.title = nextAddress;
+    qrAddress.textContent = nextAddress;
+    copyButton.dataset.copy = nextAddress;
+
+    if (changed) {
+      image.hidden = true;
+      image.removeAttribute("src");
+      delete image.dataset.address;
+      closeWalletQr();
+    }
   }
 
   // Fetch dashboard data
@@ -176,6 +295,8 @@ function createLifecycle() {
     const wallet = data.wallet;
     if (!wallet) return;
 
+    updateWalletIdentity(wallet.wallet_address);
+
     // Headline: total equity (cash + holdings).
     const balanceEl = document.getElementById("walletBalance");
     if (balanceEl) {
@@ -194,8 +315,7 @@ function createLifecycle() {
       }
     }
 
-    // Today change (equity vs start-of-day baseline). The container itself is a
-    // tinted pill, so it carries the profit/loss class too.
+    // Today change (equity vs start-of-day baseline).
     const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
       const cls = pnlClass(wallet.change_sol);
@@ -383,6 +503,7 @@ function createLifecycle() {
       // Portfolio calendar.
       calendar = createCalendar(calendarFetch);
       calendar.mount();
+      mountWalletIdentity();
     },
 
     activate: (ctx) => {
@@ -398,6 +519,9 @@ function createLifecycle() {
       if (!calendar) {
         calendar = createCalendar(calendarFetch);
         calendar.mount();
+      }
+      if (!walletIdentityCleanup) {
+        mountWalletIdentity();
       }
 
       // If we have cached data from a previous visit, show it immediately
@@ -448,6 +572,9 @@ function createLifecycle() {
 
       calendar?.dispose();
       calendar = null;
+      walletIdentityCleanup?.();
+      walletIdentityCleanup = null;
+      walletAddress = "";
 
       // Note: cachedData is deliberately kept — it lets a revisit paint real
       // numbers immediately instead of flashing the skeleton again.

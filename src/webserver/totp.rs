@@ -74,23 +74,31 @@ pub fn verify_totp(secret: &str, code: &str) -> Result<bool, String> {
     Ok(totp.check(code, time))
 }
 
+/// Generate an SVG QR code for an arbitrary public value.
+pub fn generate_qr_svg(value: &str) -> Result<String, String> {
+    let code = QrCode::new(value.as_bytes()).map_err(|e| format!("QR generation failed: {e}"))?;
+
+    Ok(code
+        .render()
+        .min_dimensions(200, 200)
+        .dark_color(svg::Color("#000000"))
+        .light_color(svg::Color("#ffffff"))
+        .build())
+}
+
+/// Generate a QR code data URL for an arbitrary public value.
+pub fn generate_qr_data_url_for_value(value: &str) -> Result<String, String> {
+    let svg_string = generate_qr_svg(value)?;
+    let encoded = BASE64.encode(svg_string.as_bytes());
+    Ok(format!("data:image/svg+xml;base64,{encoded}"))
+}
+
 /// Generate a QR code as a data URL (data:image/svg+xml;base64,...)
 ///
 /// The QR code encodes the otpauth:// URI for easy setup with authenticator apps.
 pub fn generate_qr_data_url(secret: &str, account: &str) -> Result<String, String> {
     let uri = get_totp_uri(secret, account)?;
-
-    let code = QrCode::new(uri.as_bytes()).map_err(|e| format!("QR generation failed: {e}"))?;
-
-    let svg_string = code
-        .render()
-        .min_dimensions(200, 200)
-        .dark_color(svg::Color("#000000"))
-        .light_color(svg::Color("#ffffff"))
-        .build();
-
-    let encoded = BASE64.encode(svg_string.as_bytes());
-    Ok(format!("data:image/svg+xml;base64,{encoded}"))
+    generate_qr_data_url_for_value(&uri)
 }
 
 #[cfg(test)]

@@ -51,6 +51,7 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
 
     let demo_equity = DEMO_SOL_BALANCE + open.current_value_sol;
     let wallet = WalletAnalytics {
+        wallet_address: DEMO_WALLET_ADDRESS.to_owned(),
         current_balance_sol: DEMO_SOL_BALANCE,
         token_count: open.count,
         tokens_worth_sol: open.current_value_sol,

@@ -10,6 +10,7 @@
 // =============================================================================
 
 pub(super) const DEMO_SOL_BALANCE: f64 = 9.847;
+pub(super) const DEMO_WALLET_ADDRESS: &str = "11111111111111111111111111111111";
 pub(super) const DEMO_SOL_LAMPORTS: u64 = 9_847_000_000;
 pub(super) const DEMO_START_BALANCE: f64 = 8.5;
 pub(super) const DEMO_MEMORY_MB: f64 = 384.5;

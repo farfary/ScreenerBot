@@ -16,6 +16,7 @@ pub use types::*;
 /// Create wallet routes
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
+        .route("/wallet/qr/:address", get(handlers::get_wallet_qr))
         .route("/wallet/current", get(handlers::get_wallet_current))
         .route("/wallet/balance", get(handlers::get_wallet_balance)) // Alias for /wallet/current
         .route("/wallet/tokens", get(handlers::get_wallet_tokens))

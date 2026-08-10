@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize)]
+pub struct WalletQrResponse {
+    pub address: String,
+    pub qr_data_url: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletCurrentResponse {
     pub sol_balance: f64,

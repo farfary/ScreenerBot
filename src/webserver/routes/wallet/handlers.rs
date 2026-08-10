@@ -1,5 +1,9 @@
-use axum::response::Json;
-use axum::Json as AxumJson;
+use axum::{
+    extract::Path,
+    http::StatusCode,
+    response::{Json, Response},
+    Json as AxumJson,
+};
 use std::collections::HashMap;
 
 use super::types::*;
@@ -9,6 +13,48 @@ use crate::wallet::{
     get_flow_cache_stats, get_snapshot_token_balances, get_wallet_dashboard_data,
     refresh_dashboard_cache,
 };
+use crate::webserver::utils::{error_response, success_response};
+
+/// Generate a QR code for the current main wallet address.
+pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
+    let current_address = if crate::webserver::demo::is_demo_mode() {
+        crate::webserver::demo::get_demo_wallet_address().to_owned()
+    } else {
+        match crate::wallets::get_main_address().await {
+            Ok(address) => address,
+            Err(err) => {
+                return error_response(
+                    StatusCode::NOT_FOUND,
+                    "WALLET_NOT_FOUND",
+                    "Main wallet is not available",
+                    Some(&err),
+                );
+            }
+        }
+    };
+
+    if address != current_address {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "WALLET_CHANGED",
+            "The main wallet changed; refresh and try again",
+            None,
+        );
+    }
+
+    match crate::webserver::totp::generate_qr_data_url_for_value(&address) {
+        Ok(qr_data_url) => success_response(WalletQrResponse {
+            address,
+            qr_data_url,
+        }),
+        Err(err) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "QR_ERROR",
+            "Could not generate the wallet QR code",
+            Some(&err),
+        ),
+    }
+}
 
 /// Get current wallet balance
 pub(super) async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
