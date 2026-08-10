@@ -15,21 +15,40 @@ export function createWalletRenderers({
   capitalizeFirst,
   handleWalletAction,
 }) {
-  // DataTable instance — created once, updated via setData() on every poll
+  // DataTable instances — created once, updated via setData() on every poll
   let tokenTable = null;
   let tokenTableClickHandler = null;
+  let secondariesTable = null;
+  let secondariesClickHandler = null;
+  let archiveTable = null;
+  let archiveClickHandler = null;
 
   // Track which wallet is currently rendered in the toolbar so we can do
   // fast in-place updates instead of rebuilding the entire info bar each poll.
   let lastRenderedWalletId = null;
 
-  // Fingerprints for secondaries/archive tables — skip re-render when data unchanged
-  let lastSecondariesHash = null;
-  let lastArchiveHash = null;
+  // Address cell shared by the Secondaries/Archive tables — same short-address +
+  // copy + Solscan-link treatment as the main wallet's token Mint column.
+  function _addressCellHtml(address) {
+    if (!address) return "—";
+    const escaped = Utils.escapeHtml(address);
+    const short = `${address.slice(0, 6)}...${address.slice(-4)}`;
+    const url = `https://solscan.io/account/${encodeURIComponent(address)}`;
+    return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-address="${escaped}" title="Copy address"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="View on Solscan"><i class="icon-external-link"></i></a></div>`;
+  }
 
-  // Build a compact fingerprint for a wallet row covering all rendered fields
-  function _walletHash(w) {
-    return `${w.id}|${w.name}|${w.address}|${w.balance}|${w.wallet_type}|${w.role}|${w.is_active}|${w.created_at}`;
+  // Delegated click handler for the address copy button — mirrors the mint-copy
+  // wiring on the tokens table (one listener per table root, not per row).
+  function _wireAddressCopy(rootEl) {
+    const handler = (e) => {
+      const btn = e.target.closest("[data-copy-address]");
+      if (!btn) return;
+      e.stopPropagation();
+      Utils.copyToClipboard(btn.dataset.copyAddress);
+      Utils.showToast("Address copied!", "success");
+    };
+    rootEl.addEventListener("click", handler);
+    return handler;
   }
 
   // Column definitions are stable across renders — define once at closure level
@@ -86,6 +105,109 @@ export function createWalletRenderers({
         const short = `${value.slice(0, 6)}...${value.slice(-4)}`;
         const url = `https://solscan.io/token/${encodeURIComponent(value)}`;
         return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" title="Copy mint"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="View on Solscan"><i class="icon-external-link"></i></a></div>`;
+      },
+    },
+  ];
+
+  // Shared column shape for Secondaries/Archive — only the trailing Actions
+  // column differs between the two tabs.
+  const WALLET_LIST_COLUMNS_BASE = [
+    {
+      id: "name",
+      label: "Name",
+      sortable: true,
+      className: "wallet-name-cell",
+      render: (value) => Utils.escapeHtml(value || "—"),
+    },
+    {
+      id: "address",
+      label: "Address",
+      sortable: false,
+      render: (value, row) => _addressCellHtml(row.address),
+    },
+    {
+      id: "balance",
+      label: "Balance (SOL)",
+      sortable: true,
+      className: "wallet-balance-cell",
+      render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
+    },
+    {
+      id: "wallet_type",
+      label: "Type",
+      sortable: true,
+      render: (value, row) =>
+        `<span class="wallet-badge ${row.wallet_type}">${capitalizeFirst(row.wallet_type)}</span>`,
+    },
+    {
+      id: "created_at",
+      label: "Created",
+      sortable: true,
+      render: (value) => (value ? Utils.formatTimestamp(value, { variant: "short" }) : "—"),
+    },
+  ];
+
+  const SECONDARY_COLUMNS = [
+    ...WALLET_LIST_COLUMNS_BASE,
+    {
+      id: "actions",
+      label: "Actions",
+      type: "actions",
+      sortable: false,
+      actions: {
+        buttons: [
+          {
+            id: "export",
+            icon: '<i class="icon-key"></i>',
+            tooltip: "Export private key",
+            size: "sm",
+            onClick: (row) => handleWalletAction("export", row.id),
+          },
+          {
+            id: "archive",
+            icon: '<i class="icon-archive"></i>',
+            tooltip: "Archive wallet",
+            size: "sm",
+            onClick: (row) => handleWalletAction("archive", row.id),
+          },
+        ],
+      },
+    },
+  ];
+
+  const ARCHIVE_COLUMNS = [
+    ...WALLET_LIST_COLUMNS_BASE,
+    {
+      id: "actions",
+      label: "Actions",
+      type: "actions",
+      sortable: false,
+      actions: {
+        buttons: [
+          {
+            id: "restore",
+            icon: '<i class="icon-archive-restore"></i>',
+            tooltip: "Restore wallet",
+            variant: "success",
+            size: "sm",
+            onClick: (row) => handleWalletAction("restore", row.id),
+          },
+          {
+            id: "export",
+            icon: '<i class="icon-key"></i>',
+            tooltip: "Export private key",
+            size: "sm",
+            onClick: (row) => handleWalletAction("export", row.id),
+          },
+          {
+            id: "delete",
+            icon: '<i class="icon-trash-2"></i>',
+            tooltip: "Delete permanently",
+            variant: "danger",
+            size: "sm",
+            onClick: (row) => handleWalletAction("delete", row.id),
+          },
+        ],
       },
     },
   ];
@@ -269,10 +391,10 @@ export function createWalletRenderers({
   }
 
   // =============================================================================
-  // Destroy token table (called from wallets.js cleanup / page dispose)
+  // Destroy tables (called from wallets.js cleanup / page dispose)
   // =============================================================================
 
-  function destroyTokenTable() {
+  function destroyTables() {
     if (tokenTable) {
       tokenTable.destroy();
       tokenTable = null;
@@ -282,9 +404,28 @@ export function createWalletRenderers({
       dtRoot.removeEventListener("click", tokenTableClickHandler);
       tokenTableClickHandler = null;
     }
+
+    if (secondariesTable) {
+      secondariesTable.destroy();
+      secondariesTable = null;
+    }
+    const secRoot = document.querySelector("#secondaries-table-container");
+    if (secRoot && secondariesClickHandler) {
+      secRoot.removeEventListener("click", secondariesClickHandler);
+      secondariesClickHandler = null;
+    }
+
+    if (archiveTable) {
+      archiveTable.destroy();
+      archiveTable = null;
+    }
+    const archRoot = document.querySelector("#archive-table-container");
+    if (archRoot && archiveClickHandler) {
+      archRoot.removeEventListener("click", archiveClickHandler);
+      archiveClickHandler = null;
+    }
+
     lastRenderedWalletId = null;
-    lastSecondariesHash = null;
-    lastArchiveHash = null;
   }
 
   // =============================================================================
@@ -298,94 +439,32 @@ export function createWalletRenderers({
     const wallets = walletsData();
     const secondaryWallets = wallets.filter((w) => w.role === "secondary" && w.is_active);
 
-    const hash = secondaryWallets.map(_walletHash).join(";");
-    if (hash === lastSecondariesHash) return;
-    lastSecondariesHash = hash;
-
-    if (secondaryWallets.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">
-            <i class="icon-wallet"></i>
-          </div>
-          <h4 class="empty-state-title">No secondary wallets</h4>
-          <p class="empty-state-description">Create additional wallets to organize your trading activities across multiple accounts</p>
-          <div class="empty-state-action">
-            <button type="button" class="btn primary" id="add-wallet-empty-btn">
-              <i class="icon-plus"></i> Add Wallet
-            </button>
-          </div>
-          <div class="empty-state-hint">
-            <i class="icon-lightbulb"></i>
-            <span>Tip: Use separate wallets for different trading strategies</span>
-          </div>
-        </div>
-      `;
-      const emptyBtn = container.querySelector("#add-wallet-empty-btn");
-      if (emptyBtn) {
-        emptyBtn.addEventListener("click", () => {
-          const modal = $("#add-wallet-modal");
-          if (modal) modal.classList.remove("hidden");
-        });
-      }
-      return;
+    if (!secondariesTable) {
+      secondariesTable = new DataTable({
+        container: "#secondaries-table-container",
+        columns: SECONDARY_COLUMNS,
+        rowIdField: "id",
+        stateKey: "wallets.secondaries-table",
+        compact: true,
+        stickyHeader: true,
+        zebra: true,
+        fitToContainer: true,
+        sorting: { mode: "client", column: "created_at", direction: "desc" },
+        emptyTitle: "No secondary wallets",
+        emptyMessage:
+          "Create additional wallets to organize your trading activities across multiple accounts.",
+        toolbar: {
+          summary: [{ id: "secondaries-count", label: "Wallets", value: "0", variant: "secondary" }],
+          search: { enabled: true, mode: "client", placeholder: "Search by name or address..." },
+        },
+      });
+      secondariesClickHandler = _wireAddressCopy(container);
     }
 
-    const rows = secondaryWallets
-      .map((wallet) => {
-        const balance =
-          wallet.balance != null ? Utils.formatSol(wallet.balance, { decimals: 4 }) : "—";
-        const shortAddress = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
-        const created = Utils.formatTimestamp(wallet.created_at, { variant: "short" });
-
-        return `
-          <tr data-id="${wallet.id}">
-            <td class="wallet-name-cell">${Utils.escapeHtml(wallet.name)}</td>
-            <td class="wallet-address-cell">
-              <code>${shortAddress}</code>
-              <button type="button" class="copy-btn-mini" data-address="${wallet.address}" title="Copy address">
-                <i class="icon-copy"></i>
-              </button>
-            </td>
-            <td class="wallet-balance-cell">${balance}</td>
-            <td class="wallet-type-cell">
-              <span class="wallet-badge ${wallet.wallet_type}">${capitalizeFirst(wallet.wallet_type)}</span>
-            </td>
-            <td class="wallet-created-cell">${created}</td>
-            <td class="wallet-actions-cell">
-              <div class="table-actions">
-                <button type="button" class="btn btn-sm" data-action="export" data-id="${wallet.id}" title="Export private key">
-                  <i class="icon-key"></i>
-                </button>
-                <button type="button" class="btn btn-sm" data-action="archive" data-id="${wallet.id}" title="Archive wallet">
-                  <i class="icon-archive"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        `;
-      })
-      .join("");
-
-    container.innerHTML = `
-      <table class="wallets-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Balance</th>
-            <th>Type</th>
-            <th>Created</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    `;
-
-    wireTableActions(container);
+    secondariesTable.setData(secondaryWallets);
+    secondariesTable.updateToolbarSummary?.([
+      { id: "secondaries-count", value: String(secondaryWallets.length) },
+    ]);
   }
 
   // =============================================================================
@@ -399,106 +478,29 @@ export function createWalletRenderers({
     const wallets = walletsData();
     const archivedWallets = wallets.filter((w) => w.role === "archive" || !w.is_active);
 
-    const hash = archivedWallets.map(_walletHash).join(";");
-    if (hash === lastArchiveHash) return;
-    lastArchiveHash = hash;
-
-    if (archivedWallets.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state-icon">
-            <i class="icon-archive"></i>
-          </div>
-          <h4 class="empty-state-title">No archived wallets</h4>
-          <p class="empty-state-description">Wallets you archive will be safely stored here for future reference</p>
-          <div class="empty-state-hint">
-            <i class="icon-info"></i>
-            <span>Archived wallets retain their keys and can be restored anytime</span>
-          </div>
-        </div>
-      `;
-      return;
+    if (!archiveTable) {
+      archiveTable = new DataTable({
+        container: "#archive-table-container",
+        columns: ARCHIVE_COLUMNS,
+        rowIdField: "id",
+        stateKey: "wallets.archive-table",
+        compact: true,
+        stickyHeader: true,
+        zebra: true,
+        fitToContainer: true,
+        sorting: { mode: "client", column: "created_at", direction: "desc" },
+        emptyTitle: "No archived wallets",
+        emptyMessage: "Wallets you archive will be safely stored here for future reference.",
+        toolbar: {
+          summary: [{ id: "archive-count", label: "Wallets", value: "0", variant: "secondary" }],
+          search: { enabled: true, mode: "client", placeholder: "Search by name or address..." },
+        },
+      });
+      archiveClickHandler = _wireAddressCopy(container);
     }
 
-    const rows = archivedWallets
-      .map((wallet) => {
-        const balance =
-          wallet.balance != null ? Utils.formatSol(wallet.balance, { decimals: 4 }) : "—";
-        const shortAddress = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
-        const created = Utils.formatTimestamp(wallet.created_at, { variant: "short" });
-
-        return `
-          <tr data-id="${wallet.id}">
-            <td class="wallet-name-cell">${Utils.escapeHtml(wallet.name)}</td>
-            <td class="wallet-address-cell">
-              <code>${shortAddress}</code>
-              <button type="button" class="copy-btn-mini" data-address="${wallet.address}" title="Copy address">
-                <i class="icon-copy"></i>
-              </button>
-            </td>
-            <td class="wallet-balance-cell">${balance}</td>
-            <td class="wallet-type-cell">
-              <span class="wallet-badge ${wallet.wallet_type}">${capitalizeFirst(wallet.wallet_type)}</span>
-            </td>
-            <td class="wallet-created-cell">${created}</td>
-            <td class="wallet-actions-cell">
-              <div class="table-actions">
-                <button type="button" class="btn btn-sm success" data-action="restore" data-id="${wallet.id}" title="Restore wallet">
-                  <i class="icon-archive-restore"></i>
-                </button>
-                <button type="button" class="btn btn-sm" data-action="export" data-id="${wallet.id}" title="Export private key">
-                  <i class="icon-key"></i>
-                </button>
-                <button type="button" class="btn btn-sm danger" data-action="delete" data-id="${wallet.id}" title="Delete permanently">
-                  <i class="icon-trash-2"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        `;
-      })
-      .join("");
-
-    container.innerHTML = `
-      <table class="wallets-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Balance</th>
-            <th>Type</th>
-            <th>Created</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    `;
-
-    wireTableActions(container);
-  }
-
-  // =============================================================================
-  // Wire Table Actions
-  // =============================================================================
-
-  function wireTableActions(container) {
-    container.querySelectorAll(".copy-btn-mini").forEach((btn) => {
-      on(btn, "click", (e) => {
-        e.stopPropagation();
-        Utils.copyToClipboard(btn.dataset.address);
-        Utils.showToast("Address copied!", "success");
-      });
-    });
-
-    container.querySelectorAll("[data-action]").forEach((btn) => {
-      on(btn, "click", (e) => {
-        e.stopPropagation();
-        handleWalletAction(btn.dataset.action, btn.dataset.id);
-      });
-    });
+    archiveTable.setData(archivedWallets);
+    archiveTable.updateToolbarSummary?.([{ id: "archive-count", value: String(archivedWallets.length) }]);
   }
 
   // =============================================================================
@@ -510,6 +512,6 @@ export function createWalletRenderers({
     renderMainWalletPanel,
     renderSecondariesPanel,
     renderArchivePanel,
-    destroyTokenTable,
+    destroyTables,
   };
 }

@@ -1,23 +1,105 @@
 /** Wallet observation UI for Wallets > Watched. */
 
+import { DataTable } from "../../ui/data_table.js";
+
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export function createWatchedWallets({ $, on, Utils, requestManager }) {
   let targets = [];
   let statuses = new Map();
-  let lastRenderKey = "";
   let loading = false;
+  let hasLoadedOnce = false;
+  let table = null;
+  let copyClickHandler = null;
+
+  const COLUMNS = [
+    {
+      id: "label",
+      label: "Wallet",
+      sortable: true,
+      render: (value, row) => {
+        const label = Utils.escapeHtml(row.label || "Unlabelled wallet");
+        const address = row.address || "";
+        const short = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "—";
+        const copyBtn = address
+          ? `<button type="button" class="copy-btn-mini" data-copy-address="${Utils.escapeHtml(address)}" title="Copy address"><i class="icon-copy"></i></button>`
+          : "";
+        return `<div class="wt-token-meta"><span class="wt-symbol">${label}</span><span class="wt-name wt-mint-cell"><span class="wt-mint-addr">${short}</span>${copyBtn}</span></div>`;
+      },
+    },
+    {
+      id: "_state",
+      label: "Status",
+      sortable: true,
+      render: (value, row) =>
+        `<span class="watched-wallet-state ${row._stateClass}"><i class="icon-activity"></i><span>${value}</span></span>`,
+    },
+    {
+      id: "_lastActivity",
+      label: "Last Sync",
+      sortable: true,
+      render: (value) => (value ? formatTime(value) : "No activity yet"),
+    },
+    {
+      id: "actions",
+      label: "",
+      sortable: false,
+      render: (value, row) => `
+        <div class="watched-wallet-actions">
+          <button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>
+          <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="Remove" aria-label="Remove ${Utils.escapeHtml(row.label || "wallet")}"><i class="icon-trash-2"></i></button>
+        </div>`,
+    },
+  ];
 
   function setup() {
     const form = $("#watched-wallet-form");
-    const root = $("#watched-wallets-root");
     if (form) on(form, "submit", addTarget);
-    if (root) on(root, "click", handleListAction);
+    ensureTable();
+  }
+
+  function ensureTable() {
+    if (table) return table;
+    const root = $("#watched-wallets-root");
+    if (!root) return null;
+    table = new DataTable({
+      container: "#watched-wallets-root",
+      columns: COLUMNS,
+      rowIdField: "id",
+      stateKey: "wallets.watched-table",
+      compact: true,
+      stickyHeader: true,
+      zebra: true,
+      sorting: { mode: "client", column: "label", direction: "asc" },
+      emptyTitle: "No watched addresses",
+      emptyMessage: "Add a public wallet above to begin recording its activity.",
+      toolbar: {
+        search: { enabled: true, mode: "client", placeholder: "Search watched wallets..." },
+      },
+    });
+    on(root, "click", handleListAction);
+    copyClickHandler = (e) => {
+      const btn = e.target.closest("[data-copy-address]");
+      if (!btn) return;
+      e.stopPropagation();
+      Utils.copyToClipboard(btn.dataset.copyAddress);
+      Utils.showToast("Address copied!", "success");
+    };
+    root.addEventListener("click", copyClickHandler);
+    return table;
   }
 
   async function load({ force = false } = {}) {
     if (loading && !force) return;
     loading = true;
+    const t = ensureTable();
+    if (!hasLoadedOnce && t?.showBlockingState) {
+      t.showBlockingState({
+        variant: "loading",
+        title: "Loading watched wallets...",
+        description: "Fetching observation targets.",
+      });
+    }
     try {
       const data = await requestManager.fetch("/api/wallets/watch/", {
         priority: force ? "high" : "normal",
@@ -35,10 +117,20 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
         })
       );
       statuses = new Map(statusEntries);
+      hasLoadedOnce = true;
+      t?.hideBlockingState?.();
       render();
     } catch (error) {
       console.error("[Wallets] Failed to load watched addresses:", error);
-      renderError("Watched addresses could not be loaded.");
+      if (!hasLoadedOnce) {
+        t?.showBlockingState?.({
+          variant: "error",
+          title: "Watched addresses could not be loaded",
+          description: "Use refresh to try again.",
+        });
+      } else {
+        Utils.showToast("Watched addresses could not be loaded", "error");
+      }
     } finally {
       loading = false;
     }
@@ -117,47 +209,29 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
   }
 
   function render() {
-    const root = $("#watched-wallets-root");
     const summary = $("#watched-wallets-summary");
-    if (!root) return;
     if (summary)
       summary.textContent = `${targets.length} ${targets.length === 1 ? "address" : "addresses"}`;
-    const key = JSON.stringify({ targets, statuses: [...statuses.entries()] });
-    if (key === lastRenderKey) return;
-    lastRenderKey = key;
-    if (targets.length === 0) {
-      root.innerHTML =
-        '<div class="watched-wallets-empty"><i class="icon-eye"></i><strong>No watched addresses</strong><span>Add a public wallet above to begin recording its activity.</span></div>';
-      return;
-    }
-    root.innerHTML = targets.map(renderTarget).join("");
-  }
 
-  function renderTarget(target) {
-    const status = statuses.get(target.id);
-    const shortAddress = `${target.address.slice(0, 6)}…${target.address.slice(-4)}`;
-    const state = !target.enabled ? "Paused" : status?.subscribed ? "Streaming" : "Polling";
-    const stateClass = !target.enabled
-      ? "is-paused"
-      : status?.subscribed
-        ? "is-streaming"
-        : "is-polling";
-    const lastActivity = status?.last_activity_at
-      ? formatTime(status.last_activity_at)
-      : "No activity yet";
-    const label = target.label || "Unlabelled wallet";
-    return `<article class="watched-wallet-row">
-      <div class="watched-wallet-identity"><strong>${Utils.escapeHtml(label)}</strong><button class="watched-wallet-address" type="button" data-copy="${Utils.escapeHtml(target.address)}" title="Copy address">${Utils.escapeHtml(shortAddress)}</button></div>
-      <div class="watched-wallet-state ${stateClass}"><i class="icon-activity"></i><span>${state}</span></div>
-      <div class="watched-wallet-last"><span>Last sync</span><strong>${Utils.escapeHtml(lastActivity)}</strong></div>
-      <div class="watched-wallet-actions"><button class="btn" type="button" data-watch-action="toggle" data-watch-id="${target.id}">${target.enabled ? "Pause" : "Enable"}</button><button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${target.id}" title="Remove" aria-label="Remove ${Utils.escapeHtml(label)}"><i class="icon-trash-2"></i></button></div>
-    </article>`;
-  }
+    const t = ensureTable();
+    if (!t) return;
 
-  function renderError(message) {
-    const root = $("#watched-wallets-root");
-    if (root)
-      root.innerHTML = `<div class="watched-wallets-empty"><i class="icon-circle-alert"></i><strong>${Utils.escapeHtml(message)}</strong><span>Use refresh to try again.</span></div>`;
+    const rows = targets.map((target) => {
+      const status = statuses.get(target.id);
+      const state = !target.enabled ? "Paused" : status?.subscribed ? "Streaming" : "Polling";
+      const stateClass = !target.enabled
+        ? "is-paused"
+        : status?.subscribed
+          ? "is-streaming"
+          : "is-polling";
+      return {
+        ...target,
+        _state: state,
+        _stateClass: stateClass,
+        _lastActivity: status?.last_activity_at || null,
+      };
+    });
+    t.setData(rows);
   }
 
   function formatTime(value) {
@@ -168,8 +242,17 @@ export function createWatchedWallets({ $, on, Utils, requestManager }) {
   function reset() {
     targets = [];
     statuses = new Map();
-    lastRenderKey = "";
     loading = false;
+    hasLoadedOnce = false;
+    if (table) {
+      table.destroy();
+      table = null;
+    }
+    const root = $("#watched-wallets-root");
+    if (root && copyClickHandler) {
+      root.removeEventListener("click", copyClickHandler);
+      copyClickHandler = null;
+    }
   }
 
   return { setup, load, reset };

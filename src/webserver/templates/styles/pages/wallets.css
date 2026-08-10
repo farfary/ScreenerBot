@@ -97,14 +97,6 @@
   display: none;
 }
 
-/* Secondaries + Archive panels scroll their own content with padding */
-#panel-secondaries,
-#panel-archive {
-  overflow-y: auto;
-  padding: var(--spacing-md) var(--spacing-lg);
-  scrollbar-gutter: stable;
-}
-
 /* =============================================================================
    Main Wallet Section - Enhanced Design
    ============================================================================= */
@@ -112,118 +104,18 @@
 /* Extracted to wallets/main_wallet.css */
 
 /* =============================================================================
-   Wallets Table (Secondaries & Archive) - Enhanced Design
+   Wallets Table (Secondaries & Archive) — DataTable cell classes
    ============================================================================= */
 
-#secondaries-table-container,
-#archive-table-container {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  min-height: 280px;
-  transition: border-color var(--transition-base);
-}
-
-#secondaries-table-container:hover,
-#archive-table-container:hover {
-  border-color: var(--primary-alpha-20);
-}
-
-.wallets-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.wallets-table th,
-.wallets-table td {
-  padding: var(--spacing-md) var(--spacing-lg);
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.wallets-table th {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-}
-
-.wallets-table td {
-  font-size: 0.875rem;
-  color: var(--text-primary);
-}
-
-.wallets-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.wallets-table tbody tr {
-  transition: background var(--transition-fast);
-}
-
-.wallets-table tbody tr:hover {
-  background: var(--hover-bg);
-}
-
-.wallets-table .wallet-name-cell {
+.wallet-name-cell {
   font-weight: 600;
 }
 
-.wallets-table .wallet-address-cell {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.wallets-table .wallet-address-cell code {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: transparent;
-}
-
-.wallets-table .wallet-balance-cell {
+.wallet-balance-cell {
   font-family: var(--font-mono);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-}
-
-.wallets-table .wallet-actions-cell {
-  width: 140px;
-}
-
-.table-actions {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.table-actions .btn {
-  padding: 6px 8px;
-  min-width: auto;
-}
-
-.table-actions .btn.success {
-  background: var(--success-alpha-10);
-  color: var(--success-color);
-  border-color: var(--success-alpha-30);
-}
-
-.table-actions .btn.success:hover {
-  background: var(--success-alpha-20);
-}
-
-.table-actions .btn.danger {
-  background: var(--danger-alpha-10);
-  color: var(--error-color);
-  border-color: var(--danger-alpha-30);
-}
-
-.table-actions .btn.danger:hover {
-  background: var(--danger-alpha-20);
 }
 
 /* =============================================================================
@@ -240,21 +132,6 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-}
-
-.wallet-badge.main {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-}
-
-.wallet-badge.secondary {
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
-}
-
-.wallet-badge.archive {
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
 }
 
 .wallet-badge.generated {
@@ -313,113 +190,6 @@
 .copy-btn-mini:hover {
   background: var(--primary-alpha-10);
   color: var(--primary-color);
-}
-
-/* =============================================================================
-   Empty State - Enhanced Design
-   ============================================================================= */
-
-.wallets-page .empty-state {
-  justify-content: center;
-  min-height: 400px;
-}
-
-.wallets-page .empty-state-icon i {
-  font-size: 1.75rem;
-  color: var(--text-secondary);
-  opacity: 0.7;
-  line-height: 1;
-  margin-bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.wallets-page .empty-state > i:not(.empty-state-icon i) {
-  font-size: 2rem;
-  color: var(--text-muted);
-  opacity: 0.5;
-}
-
-.wallets-page .empty-state-description {
-  max-width: 420px;
-}
-
-.wallets-page .empty-state p {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-
-.wallets-page .empty-state small {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.wallets-page .empty-state-action .btn {
-  min-width: 140px;
-}
-
-/* Button icon inside empty state action */
-.wallets-page .empty-state-action .btn i {
-  font-size: 1rem;
-  width: auto;
-  height: auto;
-  line-height: 1;
-  margin-bottom: 0;
-}
-
-.empty-state-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: var(--spacing-xl);
-  padding: 10px 14px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  max-width: 440px;
-}
-
-/* Hint icon - ensure proper vertical alignment with text */
-.wallets-page .empty-state-hint i {
-  font-size: 1rem;
-  line-height: 1;
-  margin-bottom: 0;
-  color: var(--text-secondary);
-  opacity: 0.8;
-  flex-shrink: 0;
-}
-
-.empty-state-hint span {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  line-height: 1;
-}
-
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xl) var(--spacing-md);
-  text-align: center;
-}
-
-.loading-state i {
-  font-size: 1.5rem;
-  color: var(--primary-color);
-  line-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-state p {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
 }
 
 /* =============================================================================

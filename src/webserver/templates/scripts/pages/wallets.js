@@ -784,7 +784,7 @@ function capitalizeFirst(str) {
 
 function cleanup() {
   if (renderers) {
-    renderers.destroyTokenTable();
+    renderers.destroyTables();
   }
   watched?.reset();
   walletsData = [];
