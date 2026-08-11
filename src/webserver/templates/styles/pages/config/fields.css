@@ -1,345 +1,211 @@
-/* Config Field Styles */
+/* Config Field Styles
+   One parameter is one ROW of a settings list, never a card inside a card.
+   Every type — boolean, number, string, array, sub-config — shares the same
+   grid, so labels, controls and the reset glyph line up down the whole page:
 
-.config-field {
+     [ label ............ ] [ control ] [ ↺ ]
+     [ error, only when there is one ...... ]
+
+   Controls sit against the right edge of a fixed control track, which is what
+   creates the vertical rhythm; wide types (textarea / sub-config) switch to
+   the --stacked variant and take the full row width instead. */
+
+.config-field,
+.config-object-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, var(--config-field-control-width));
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.15s ease;
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, var(--config-field-control-width))
+    var(--config-field-reset-size);
+  grid-template-areas: "label control reset";
+  align-items: center;
+  column-gap: 16px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-color);
+  transition: background 0.15s ease;
 }
 
-.config-field:hover {
+.config-object-field {
+  padding-inline: 12px;
+}
+
+/* Textareas and sub-configs need the whole width: label and reset keep the
+   first line, the control drops underneath. One modifier for both row types —
+   it is declared after them, so it wins at equal specificity. */
+.config-field--stacked {
+  grid-template-columns: minmax(0, 1fr) var(--config-field-reset-size);
+  grid-template-areas:
+    "label reset"
+    "control control";
+  align-items: start;
+  row-gap: 8px;
+}
+
+.config-field:hover,
+.config-object-field:hover {
   background: var(--bg-card-hover);
-  border-color: var(--text-muted);
 }
 
-.config-category-body
-  .config-field:nth-child(even):not(
-    .config-field--changed,
-    .config-field--match,
-    .config-field--error
-  ) {
-  background: var(--bg-card);
-}
-
-.config-field.config-field--changed {
-  border-color: var(--config-accent);
+/* State tints replace the old inset left bar (banned) — the row itself carries
+   the state, and each needs its own :hover so hovering cannot wash it out. */
+.config-field--changed,
+.config-object-field--changed {
   background: var(--config-accent-light);
-  box-shadow:
-    inset 4px 0 0 0 var(--config-accent),
-    0 2px 8px var(--primary-alpha-10);
 }
 
-.config-field.config-field--changed::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  left: -8px;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--config-accent);
-  animation: pulse-dot 2s infinite;
+.config-field--changed:hover,
+.config-object-field--changed:hover {
+  background: var(--config-accent-medium);
 }
 
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.5;
-    transform: scale(0.8);
-  }
-}
-
-.config-field.config-field--match {
-  border-color: var(--config-success);
-  box-shadow: 0 0 0 2px var(--config-success-light);
-}
-
-.config-field.config-field--error {
-  border-color: var(--config-error);
+/* An invalid value outranks "changed", hovered or not. */
+.config-field--error,
+.config-field--error:hover {
   background: var(--config-error-light);
 }
 
-/* Object fields need full width layout */
-.config-field:has(.config-object-wrapper) {
-  grid-template-columns: 1fr;
-  gap: 10px;
+.config-field--match,
+.config-object-field--match {
+  box-shadow: inset 0 0 0 1px var(--config-success);
 }
 
+/* Label zone: name (+ impact) / description / reference strip. Three lines at
+   most, and the strip folds key, unit and default into ONE of them. */
+
 .config-field-label {
+  grid-area: label;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
+  min-width: 0;
+}
+
+.config-field-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .config-field-name {
-  font-size: 0.925rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
-.config-field-key {
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  letter-spacing: 0.3px;
-  opacity: 0.8;
-}
-
-.config-field:hover .config-field-key {
-  opacity: 1;
-  color: var(--text-secondary);
-}
-
 .config-field-hint {
   font-size: 0.8rem;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .config-field-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
   font-size: 0.7rem;
   color: var(--text-secondary);
 }
 
-.config-field-unit {
-  font-weight: 600;
-  color: var(--text-primary);
+.config-field-meta > * + *::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--text-muted);
 }
 
-.config-field-impact {
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-size: 0.65rem;
-  background: var(--bg-card-hover);
+.config-field-key {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+
+.config-field:hover .config-field-key,
+.config-object-field:hover .config-field-key {
   color: var(--text-secondary);
-  border: 1px solid currentcolor;
-}
-
-.config-field-impact.critical {
-  background: var(--config-error-light);
-  color: var(--config-error);
-  border-color: var(--config-error);
-  animation: subtle-pulse 3s infinite;
-}
-
-@keyframes subtle-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.7;
-  }
-}
-
-.config-field-impact.high {
-  background: var(--config-warning-light);
-  color: var(--config-warning);
-  border-color: var(--config-warning);
-}
-
-.config-field-impact.medium {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-  border-color: var(--warning-color);
-}
-
-.config-field-impact.low {
-  background: var(--config-success-light);
-  color: var(--config-success);
-  border-color: var(--config-success);
-}
-
-.config-field-impact.performance {
-  background: var(--solana-alpha-20);
-  color: var(--solana-purple);
-  border-color: var(--solana-purple);
 }
 
 .config-field-default {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  overflow-wrap: break-word;
-  max-width: 100%;
+  max-width: 30ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.config-field-impact {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+}
+
+.config-field-impact.critical {
+  background: var(--config-error-light);
+  color: var(--config-error);
+}
+
+.config-field-impact.high {
+  background: var(--config-warning-light);
+  color: var(--config-warning);
+}
+
+.config-field-impact.medium {
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+}
+
+.config-field-impact.low {
+  background: var(--config-success-light);
+  color: var(--config-success);
+}
+
+/* Control zone */
+
 .config-field-control {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.config-object-wrapper {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  position: relative;
-}
-
-.config-object-wrapper.collapsed .config-object-group {
-  display: none;
-}
-
-.config-object-header {
+  grid-area: control;
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  padding: 10px 14px;
-  background: linear-gradient(135deg, var(--config-accent-light), var(--config-accent-medium));
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--config-accent);
-  cursor: pointer;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.15s ease;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
-.config-object-header:hover {
-  background: var(--config-accent-medium);
-  box-shadow: 0 2px 8px var(--primary-alpha-10);
-  transform: translateY(-1px);
+.config-field-control > * {
+  min-width: 0;
 }
 
-.config-object-header:active {
-  transform: translateY(0);
-}
-
-.config-object-chevron {
-  font-size: 1rem;
-  color: var(--config-accent);
-  transition:
-    transform 0.25s ease,
-    color 0.2s ease;
-}
-
-.config-object-wrapper.collapsed .config-object-chevron {
-  transform: rotate(-90deg);
-}
-
-.config-object-header:hover .config-object-chevron {
-  color: var(--text-primary);
-}
-
-.config-object-group {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-radius: var(--radius-xl);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  box-shadow: inset 0 1px 3px var(--shadow-sm);
-}
-
-.config-object-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, var(--config-field-control-width));
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.config-object-field:hover {
-  background: var(--config-accent-light);
-  border-color: var(--text-muted);
-}
-
-.config-object-field--changed {
-  border-color: var(--config-accent);
-  background: var(--config-accent-light);
-  box-shadow: inset 2px 0 0 0 var(--config-accent);
-}
-
-.config-object-field--match {
-  border-color: var(--config-success);
-  box-shadow: 0 0 0 1px var(--config-success-light);
-}
-
-/* Nested object fields need full width layout too */
-.config-object-field:has(.config-object-wrapper) {
-  grid-template-columns: 1fr;
-  gap: 10px;
-  background: var(--bg-card);
-  border-color: var(--border-color);
-}
-
-/* Add visual depth for multiple nesting levels */
-.config-object-group .config-object-group {
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
-  margin-left: 8px;
-}
-
-.config-object-group .config-object-group .config-object-group {
-  background: var(--bg-card-hover);
-  border-color: var(--border-color);
-  margin-left: 12px;
-}
-
-.config-object-field-label {
-  gap: 6px;
-}
-
-.config-object-field-control {
-  align-items: stretch;
+.config-field-control input[type="text"],
+.config-field-control textarea {
   width: 100%;
 }
 
-.config-object-field-control textarea,
-.config-object-field-control input[type="text"],
-.config-object-field-control input[type="number"] {
+/* A number never needs the full track: it keeps the track's right edge and
+   stays compact, so numeric columns read as one aligned stack. */
+.config-field-control input[type="number"] {
   width: 100%;
+  max-width: 150px;
+  text-align: right;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .config-field-control input[type="text"],
 .config-field-control input[type="number"],
 .config-field-control textarea {
-  width: 100%;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--input-bg);
   color: var(--text-primary);
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease,
@@ -359,24 +225,17 @@
   background: var(--danger-alpha-10);
 }
 
-.config-field-control input[type="number"] {
-  text-align: right;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-  padding-right: 14px;
-}
-
 .config-field-control textarea {
-  min-height: 100px;
+  min-height: 84px;
   font-family: var(--font-mono);
   font-size: 0.8rem;
   resize: vertical;
   line-height: 1.6;
 }
 
-.config-field-control input:focus,
+/* Scoped away from checkboxes: a bare `input` rule here matches the central
+   checkbox at equal specificity and would repaint it as a bordered box. */
+.config-field-control input:not([type="checkbox"]):focus,
 .config-field-control textarea:focus {
   outline: none;
   border-color: var(--link-color);
@@ -393,46 +252,126 @@
 }
 
 .config-field-control input[type="checkbox"] {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
+/* Reset: a bare glyph in a slot that is always reserved, so a value going back
+   to its default can never reflow the row. */
+
 .config-field-reset {
-  align-self: flex-end;
-  padding: 4px 10px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  font-weight: 500;
+  grid-area: reset;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--config-field-reset-size);
+  height: var(--config-field-reset-size);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9rem;
   cursor: pointer;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    transform 0.15s ease;
+  transition: color 0.15s ease;
 }
 
 .config-field-reset:hover {
-  background: var(--config-accent-light);
-  border-color: var(--config-accent);
   color: var(--config-accent);
-  transform: translateY(-1px);
-}
-
-.config-field-reset:active {
-  transform: translateY(0);
 }
 
 .config-field-reset:disabled {
+  visibility: hidden;
+  cursor: default;
+}
+
+/* `display:inline-flex` above outranks the bare [hidden] attribute (fields
+   with no default at all), while the empty track keeps the row aligned. */
+.config-field-reset[hidden] {
   display: none;
 }
 
+/* Auto-placed into an implicit row spanning the whole width: no declared error
+   track means no gap reserved for the error that is not there. */
 .config-field-error {
-  width: 100%;
-  text-align: right;
+  grid-column: 1 / -1;
+  padding-top: 4px;
   font-size: 0.72rem;
   color: var(--config-error);
-  min-height: 1em;
+}
+
+/* Sub-config: the row's own title is the collapse control, so the tree below
+   carries no second header repeating the same name. */
+
+.config-field-title--toggle {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.config-object-chevron {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  transition:
+    transform 0.25s ease,
+    color 0.2s ease;
+}
+
+.config-field-title--toggle:hover .config-object-chevron,
+.config-field-title--toggle:hover .config-field-name {
+  color: var(--config-accent);
+}
+
+.config-field.collapsed .config-object-chevron,
+.config-object-field.collapsed .config-object-chevron {
+  transform: rotate(-90deg);
+}
+
+.config-field--stacked.collapsed {
+  row-gap: 0;
+}
+
+.config-object-wrapper {
+  width: 100%;
+  min-width: 0;
+}
+
+.config-object-wrapper.collapsed .config-object-group {
+  display: none;
+}
+
+.config-object-group {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.config-object-group > .config-object-field:first-child {
+  border-top: none;
+}
+
+/* Narrow windows: every field stacks, the control keeps the label's left edge */
+@media (width <= 800px) {
+  .config-field,
+  .config-object-field {
+    grid-template-columns: minmax(0, 1fr) var(--config-field-reset-size);
+    grid-template-areas:
+      "label reset"
+      "control control";
+    align-items: start;
+    row-gap: 8px;
+  }
+
+  .config-field-control {
+    justify-content: flex-start;
+  }
+
+  .config-field-control input[type="number"] {
+    max-width: 100%;
+  }
 }

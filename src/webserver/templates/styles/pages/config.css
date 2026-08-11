@@ -4,13 +4,13 @@
 
 .config-page {
   --config-sidebar-width: clamp(220px, 24vw, 320px);
-  --config-field-control-width: clamp(240px, 32vw, 420px);
+
+  /* The control track every field type aligns against, plus the always-reserved
+     reset slot at its right — see pages/config/fields.css. */
+  --config-field-control-width: clamp(180px, 22vw, 300px);
+  --config-field-reset-size: 26px;
 
   /* Theme-aware config colors */
-  --config-bg-subtle: var(--bg-secondary);
-  --config-bg-elevated: var(--bg-card);
-  --config-bg-field: var(--bg-card-hover);
-  --config-border-subtle: var(--border-color);
   --config-accent: var(--primary-color);
   --config-accent-light: var(--primary-alpha-10);
   --config-accent-medium: var(--primary-alpha-20);
@@ -422,9 +422,9 @@
   background: var(--config-accent-light);
 }
 
+/* Fields are full-bleed rows separated by hairlines, so the body adds neither
+   padding nor gaps of its own — the rows carry their own inset. */
 .config-category-body {
-  padding: 8px 16px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }

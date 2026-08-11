@@ -278,7 +278,7 @@ config_struct! {
             label: "Scheduled Tasks",
             hint: "Enable automated AI tasks that run on a schedule",
             category: "Automation",
-            impact: "moderate",
+            impact: "medium",
         })]
         scheduled_tasks_enabled: bool = false,
 

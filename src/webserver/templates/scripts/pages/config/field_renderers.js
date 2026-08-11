@@ -157,7 +157,129 @@ export function toggleCategory(path, defaultOpen = false) {
 }
 
 /**
- * Render an object field with children recursively.
+ * The label block every config row shares — top-level fields and nested
+ * sub-config rows alike, so the two can never drift apart:
+ *
+ *   name (+ impact chip)
+ *   one description line
+ *   one reference strip: config key · unit · default
+ *
+ * `docs` is the field's Rust doc comment and near-duplicates `hint`, so it is
+ * only the fallback description — never a second line of its own.
+ */
+export function buildFieldLabelHtml({ label, pathLabel, metadata = {}, defaultValue }) {
+  const impact = metadata.impact
+    ? `<span class="config-field-impact ${Utils.escapeHtml(metadata.impact.toLowerCase())}">` +
+      `${Utils.escapeHtml(metadata.impact)}</span>`
+    : "";
+  // A sub-config's own title IS its collapse control — a separate header bar
+  // below it only repeated the name.
+  const grouped = isGroupField(metadata);
+  const titleTag = grouped ? "button" : "div";
+  const titleAttrs = grouped
+    ? ' type="button" class="config-field-title config-field-title--toggle"'
+    : ' class="config-field-title"';
+  const chevron = grouped
+    ? '<i class="config-object-chevron icon-chevron-down" aria-hidden="true"></i>'
+    : "";
+  const parts = [
+    `<${titleTag}${titleAttrs}>${chevron}` +
+      `<span class="config-field-name">${Utils.escapeHtml(label)}</span>${impact}</${titleTag}>`,
+  ];
+
+  const description = metadata.hint || metadata.docs;
+  if (description) {
+    parts.push(`<div class="config-field-hint">${Utils.escapeHtml(description)}</div>`);
+  }
+
+  const meta = [`<span class="config-field-key">${Utils.escapeHtml(pathLabel)}</span>`];
+  if (metadata.unit) {
+    meta.push(`<span>Unit: ${Utils.escapeHtml(metadata.unit)}</span>`);
+  }
+  if (defaultValue !== null && defaultValue !== undefined) {
+    const defaultText = Utils.escapeHtml(
+      typeof defaultValue === "object" ? JSON.stringify(defaultValue) : String(defaultValue)
+    );
+    meta.push(
+      `<span class="config-field-default" title="Default: ${defaultText}">` +
+        `Default: ${defaultText}</span>`
+    );
+  }
+  parts.push(`<div class="config-field-meta">${meta.join("")}</div>`);
+
+  return parts.join("\n");
+}
+
+/**
+ * The reset control is a bare glyph in a slot the row always reserves, so a
+ * value returning to its default cannot reflow anything. Fields with no
+ * declared default hide it outright.
+ */
+export function createResetButton(defaultValue, isAtDefault) {
+  const button = create("button", {
+    type: "button",
+    className: "config-field-reset",
+    disabled: defaultValue === undefined ? true : isAtDefault,
+    title: "Reset to default",
+  });
+  button.innerHTML = '<i class="icon-rotate-ccw" aria-hidden="true"></i>';
+  button.setAttribute("aria-label", "Reset to default");
+  if (defaultValue === undefined) {
+    button.hidden = true;
+  }
+  return button;
+}
+
+/**
+ * A field that expands into a tree of child rows rather than taking a value of
+ * its own. An object with no declared children falls back to a JSON textarea,
+ * so it is NOT a group.
+ */
+export function isGroupField(metadata = {}) {
+  return (
+    metadata.type === "object" &&
+    Boolean(metadata.children) &&
+    Object.keys(metadata.children).length > 0
+  );
+}
+
+/**
+ * Wide controls (textareas, sub-config trees) cannot live in the narrow control
+ * track: the row keeps label + reset on its first line and gives the control
+ * the full width underneath.
+ */
+export function applyStackedLayout(rowEl, control) {
+  if (control.tagName === "TEXTAREA" || control.classList.contains("config-object-wrapper")) {
+    rowEl.classList.add("config-field--stacked");
+  }
+}
+
+/**
+ * Wire a group row's title to its sub-config tree. The open/closed class lives
+ * on BOTH the wrapper (what the bulk expand/collapse control counts) and the
+ * row (which owns the chevron), and the row is seeded from the wrapper so a
+ * restored collapsed state paints correctly on first render.
+ */
+export function attachGroupToggle({ rowEl, labelEl, control, path, onCollapseChange }) {
+  const toggle = labelEl.querySelector(".config-field-title--toggle");
+  if (!toggle || !control.classList.contains("config-object-wrapper")) {
+    return;
+  }
+  rowEl.classList.toggle("collapsed", control.classList.contains("collapsed"));
+  on(toggle, "click", () => {
+    toggleObject(path);
+    const collapsed = control.classList.toggle("collapsed");
+    rowEl.classList.toggle("collapsed", collapsed);
+    if (typeof onCollapseChange === "function") {
+      onCollapseChange();
+    }
+  });
+}
+
+/**
+ * Render an object field with children recursively. The tree carries no header
+ * of its own — the owning row's title is the collapse control
+ * (`attachGroupToggle`), so the sub-config name is printed exactly once.
  * @param {Object} options - Rendering options
  * @returns {HTMLElement|null} Rendered element or null
  */
@@ -171,7 +293,6 @@ export function renderObjectWithChildren({
   searchTerm = "",
   onChange,
   onCollapseChange,
-  parentLabel = "",
 }) {
   if (!metadata.children) {
     return null;
@@ -186,22 +307,6 @@ export function renderObjectWithChildren({
   const wrapper = create("div", {
     className: startCollapsed ? "config-object-wrapper collapsed" : "config-object-wrapper",
   });
-
-  if (parentLabel) {
-    const header = create("button", {
-      type: "button",
-      className: "config-object-header",
-    });
-    header.innerHTML = `<i class="config-object-chevron icon-chevron-down"></i><span>${Utils.escapeHtml(parentLabel)}</span>`;
-    on(header, "click", () => {
-      toggleObject(path);
-      wrapper.classList.toggle("collapsed");
-      if (typeof onCollapseChange === "function") {
-        onCollapseChange();
-      }
-    });
-    wrapper.appendChild(header);
-  }
 
   const container = create("div", {
     className: "config-object-group",
@@ -236,50 +341,15 @@ export function renderObjectWithChildren({
       row.classList.add("config-object-field--match");
     }
 
-    const labelHtml = [];
-    labelHtml.push(
-      `<div class="config-field-name">${Utils.escapeHtml(childMeta.label || childKey)}</div>`
-    );
-    labelHtml.push(`<div class="config-field-key">${Utils.escapeHtml(childPathLabel)}</div>`);
-    if (childMeta.hint) {
-      labelHtml.push(`<div class="config-field-hint">${Utils.escapeHtml(childMeta.hint)}</div>`);
-    }
-
-    const metaItems = [];
-    if (childMeta.unit) {
-      metaItems.push(
-        `<span class="config-field-unit">Unit: ${Utils.escapeHtml(childMeta.unit)}</span>`
-      );
-    }
-    if (childMeta.impact) {
-      metaItems.push(
-        `<span class="config-field-impact ${Utils.escapeHtml(childMeta.impact.toLowerCase())}">` +
-          `${Utils.escapeHtml(childMeta.impact)}</span>`
-      );
-    }
-    if (childMeta.docs) {
-      metaItems.push(`<span>Docs: ${Utils.escapeHtml(childMeta.docs)}</span>`);
-    }
-    if (metaItems.length > 0) {
-      labelHtml.push(`<div class="config-field-meta">${metaItems.join(" ")}</div>`);
-    }
-
-    if (childDefault !== null && childDefault !== undefined) {
-      const defaultText =
-        typeof childDefault === "object"
-          ? Utils.escapeHtml(JSON.stringify(childDefault))
-          : Utils.escapeHtml(String(childDefault));
-      labelHtml.push(`<div class="config-field-default">Default: ${defaultText}</div>`);
-    }
-
-    const labelEl = create("div", {
-      className: "config-field-label config-object-field-label",
+    const labelEl = create("div", { className: "config-field-label" });
+    labelEl.innerHTML = buildFieldLabelHtml({
+      label: childMeta.label || childKey,
+      pathLabel: childPathLabel,
+      metadata: childMeta,
+      defaultValue: childMeta.type === "object" ? undefined : childDefault,
     });
-    labelEl.innerHTML = labelHtml.join("\n");
 
-    const controlEl = create("div", {
-      className: "config-field-control config-object-field-control",
-    });
+    const controlEl = create("div", { className: "config-field-control" });
 
     const childControl = renderFieldControl(childMeta.type, {
       fieldId: childId,
@@ -299,31 +369,31 @@ export function renderObjectWithChildren({
     });
 
     controlEl.appendChild(childControl);
+    applyStackedLayout(row, childControl);
+    attachGroupToggle({
+      rowEl: row,
+      labelEl,
+      control: childControl,
+      path: childPath,
+      onCollapseChange,
+    });
 
-    if (childDefault !== undefined) {
-      const atDefault = deepEqual(childValue, childDefault);
-      const resetBtn = create("button", {
-        type: "button",
-        className: "config-field-reset",
-        disabled: atDefault,
-      });
-      resetBtn.textContent = "Reset to default";
-      on(resetBtn, "click", () => {
-        const nextObject = deepClone(safeValue);
-        if (childDefault === null) {
-          nextObject[childKey] = null;
-        } else if (typeof childDefault === "object") {
-          nextObject[childKey] = deepClone(childDefault);
-        } else {
-          nextObject[childKey] = childDefault;
-        }
-        onChange(nextObject);
-      });
-      controlEl.appendChild(resetBtn);
-    }
+    const resetBtn = createResetButton(childDefault, deepEqual(childValue, childDefault));
+    on(resetBtn, "click", () => {
+      const nextObject = deepClone(safeValue);
+      if (childDefault === null) {
+        nextObject[childKey] = null;
+      } else if (typeof childDefault === "object") {
+        nextObject[childKey] = deepClone(childDefault);
+      } else {
+        nextObject[childKey] = childDefault;
+      }
+      onChange(nextObject);
+    });
 
     row.appendChild(labelEl);
     row.appendChild(controlEl);
+    row.appendChild(resetBtn);
     container.appendChild(row);
   }
 
@@ -414,11 +484,10 @@ export const FIELD_RENDERERS = {
     return component;
   },
   string({ fieldId, value, metadata = {}, disabled, onChange }) {
-    if (
-      metadata.docs ||
-      metadata.placeholder ||
-      (typeof value === "string" && value.length > 120)
-    ) {
+    // Only genuinely long or multi-line values earn a textarea. `docs` is the
+    // field's Rust doc comment, which nearly every field carries, so treating
+    // it as a "long text" marker turned every string into a 100px box.
+    if (typeof value === "string" && (value.length > 120 || value.includes("\n"))) {
       const textarea = create("textarea", {
         id: fieldId,
         value: value ?? "",
@@ -525,7 +594,6 @@ export const FIELD_RENDERERS = {
       searchTerm,
       onChange,
       onCollapseChange,
-      parentLabel: metadata.label || (path.length > 0 ? path[path.length - 1] : ""),
     });
     if (nested) {
       return nested;
@@ -570,13 +638,11 @@ export const FIELD_RENDERERS = {
 export function renderFieldControl(fieldType, options) {
   const renderer = FIELD_RENDERERS[fieldType];
   if (!renderer) {
-    const input = create("input", {
+    return create("input", {
       type: "text",
       value: options.value ?? "",
       disabled: true,
     });
-    input.classList.add("config-field-control-unsupported");
-    return input;
   }
   return renderer(options);
 }

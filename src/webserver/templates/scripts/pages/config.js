@@ -21,6 +21,10 @@ import {
 import {
   SECTION_ICONS,
   renderFieldControl,
+  buildFieldLabelHtml,
+  createResetButton,
+  applyStackedLayout,
+  attachGroupToggle,
   serializeOpenState,
   restoreOpenState,
   expandAllObjects,
@@ -616,59 +620,19 @@ function renderCategories(sectionId) {
       const labelEl = create("div", { className: "config-field-label" });
       const controlEl = create("div", { className: "config-field-control" });
 
-      const labelHtml = [];
-      labelHtml.push(
-        `<div class="config-field-name">${Utils.escapeHtml(fieldMeta.label || fieldKey)}</div>`
-      );
-      labelHtml.push(`<div class="config-field-key">${Utils.escapeHtml(fieldPathLabel)}</div>`);
-      if (fieldMeta.hint) {
-        labelHtml.push(`<div class="config-field-hint">${Utils.escapeHtml(fieldMeta.hint)}</div>`);
-      }
-
-      const metaItems = [];
-      if (fieldMeta.unit) {
-        metaItems.push(
-          `<span class="config-field-unit">Unit: ${Utils.escapeHtml(fieldMeta.unit)}</span>`
-        );
-      }
-      if (fieldMeta.impact) {
-        metaItems.push(
-          `<span class="config-field-impact ${Utils.escapeHtml(fieldMeta.impact.toLowerCase())}">` +
-            `${Utils.escapeHtml(fieldMeta.impact)}</span>`
-        );
-      }
-      if (fieldMeta.docs) {
-        metaItems.push(`<span>Docs: ${Utils.escapeHtml(fieldMeta.docs)}</span>`);
-      }
-      if (metaItems.length > 0) {
-        labelHtml.push(`<div class="config-field-meta">${metaItems.join(" ")}</div>`);
-      }
-
-      // Only show default value for non-object types to avoid layout issues
-      if (defaultValue !== null && defaultValue !== undefined && fieldMeta.type !== "object") {
-        const defaultText =
-          typeof defaultValue === "object"
-            ? Utils.escapeHtml(JSON.stringify(defaultValue))
-            : Utils.escapeHtml(String(defaultValue));
-        labelHtml.push(`<div class="config-field-default">Default: ${defaultText}</div>`);
-      }
-
-      labelEl.innerHTML = labelHtml.join("\n");
+      labelEl.innerHTML = buildFieldLabelHtml({
+        label: fieldMeta.label || fieldKey,
+        pathLabel: fieldPathLabel,
+        metadata: fieldMeta,
+        defaultValue: fieldMeta.type === "object" ? undefined : defaultValue,
+      });
 
       const isAtDefault = deepEqual(fieldValue, defaultValue);
 
-      const resetBtn = create("button", {
-        type: "button",
-        className: "config-field-reset",
-        disabled: defaultValue === undefined ? true : isAtDefault,
-      });
-      resetBtn.textContent = "Reset to default";
+      const resetBtn = createResetButton(defaultValue, isAtDefault);
       on(resetBtn, "click", () => {
         resetFieldToDefault(sectionId, fieldKey);
       });
-      if (defaultValue === undefined) {
-        resetBtn.hidden = true;
-      }
 
       const control = renderFieldControl(fieldMeta.type, {
         fieldId,
@@ -696,10 +660,8 @@ function renderCategories(sectionId) {
 
           // Toggle the row's --changed CSS class + reset-button enable state.
           fieldEl.classList.toggle("config-field--changed", isChanged);
-          const resetBtn = controlEl.querySelector(".config-field-reset");
-          if (resetBtn && resetBtn.hidden === false) {
-            const defaultValue = deepClone(fieldMeta.default);
-            const atDefault = deepEqual(newValue, defaultValue);
+          if (resetBtn.hidden === false) {
+            const atDefault = deepEqual(newValue, deepClone(fieldMeta.default));
             resetBtn.disabled = atDefault;
           }
 
@@ -718,18 +680,31 @@ function renderCategories(sectionId) {
       });
 
       controlEl.appendChild(control);
-      controlEl.appendChild(resetBtn);
-
-      const errorEl = create("div", { className: "config-field-error" });
-      const errorKey = `${sectionId}.${fieldKey}`;
-      if (state.errors.has(errorKey)) {
-        fieldEl.classList.add("config-field--error");
-        errorEl.textContent = state.errors.get(errorKey);
-      }
+      applyStackedLayout(fieldEl, control);
+      attachGroupToggle({
+        rowEl: fieldEl,
+        labelEl,
+        control,
+        path: fieldPath,
+        onCollapseChange: () => {
+          persistOpenedState();
+          syncExpandToggle();
+        },
+      });
 
       fieldEl.appendChild(labelEl);
       fieldEl.appendChild(controlEl);
-      fieldEl.appendChild(errorEl);
+      fieldEl.appendChild(resetBtn);
+
+      // The error line only exists while there IS an error — an always-present
+      // empty row cost every field a dead line of height.
+      const errorKey = `${sectionId}.${fieldKey}`;
+      if (state.errors.has(errorKey)) {
+        fieldEl.classList.add("config-field--error");
+        const errorEl = create("div", { className: "config-field-error" });
+        errorEl.textContent = state.errors.get(errorKey);
+        fieldEl.appendChild(errorEl);
+      }
 
       body.appendChild(fieldEl);
     }
