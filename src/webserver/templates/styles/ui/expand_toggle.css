@@ -1,0 +1,87 @@
+/* Shared expand/collapse-all control — see scripts/ui/expand_toggle.js.
+   One button, two cross-faded states. Sized to match the standard 0.8rem
+   toolbar/header action buttons so it lines up in any toolbar row. */
+
+.expand-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.expand-toggle:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.expand-toggle:active {
+  background: var(--bg-secondary);
+}
+
+/* Both states share one grid cell: the control keeps the width and height of
+   its widest state, so toggling never nudges neighbouring buttons. */
+.expand-toggle-glyphs,
+.expand-toggle-labels {
+  display: grid;
+  grid-template-areas: "state";
+  align-items: center;
+}
+
+.expand-toggle-glyphs > i,
+.expand-toggle-labels > .expand-toggle-label {
+  grid-area: state;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.expand-toggle-glyphs > i {
+  font-size: 0.95rem;
+  justify-self: center;
+}
+
+.expand-toggle-labels > .expand-toggle-label {
+  justify-self: start;
+  white-space: nowrap;
+}
+
+.expand-toggle [data-state="expanded"] {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+
+.expand-toggle [data-state="collapsed"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.expand-toggle[aria-pressed="true"] [data-state="expanded"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.expand-toggle[aria-pressed="true"] [data-state="collapsed"] {
+  opacity: 0;
+  transform: translateY(3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expand-toggle-glyphs > i,
+  .expand-toggle-labels > .expand-toggle-label {
+    transition: none;
+    transform: none;
+  }
+}

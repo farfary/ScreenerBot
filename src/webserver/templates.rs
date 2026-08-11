@@ -172,6 +172,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         DIALOG_TAB_BAR_STYLES,
         DIALOG_HEADER_ACTIONS_STYLES,
         ACTION_BAR_STYLES,
+        EXPAND_TOGGLE_STYLES,
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,
         POSITION_REMOVE_DIALOG_STYLES,

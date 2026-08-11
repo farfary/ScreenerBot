@@ -195,6 +195,12 @@
   background: linear-gradient(to right, var(--bg-secondary), var(--bg-card-hover));
 }
 
+/* The bulk expand/collapse control acts on the whole section, so it sits at
+   the far end of the toolbar, away from the section-scoped change chips. */
+.config-main-toolbar .expand-toggle {
+  margin-left: auto;
+}
+
 .config-info-chip {
   display: inline-flex;
   align-items: center;

@@ -7,6 +7,7 @@ import { requestManager } from "../core/request_manager.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "../ui/hint_popover.js";
 import { ConfigExportDialog, ConfigImportDialog } from "../ui/config_import_export_dialog.js";
+import { createExpandToggle } from "../ui/expand_toggle.js";
 import {
   deepClone,
   deepEqual,
@@ -20,22 +21,20 @@ import {
 import {
   SECTION_ICONS,
   renderFieldControl,
-  getOpenedObjects,
-  getOpenedCategories,
-  setOpenedObjects,
-  setOpenedCategories,
+  serializeOpenState,
+  restoreOpenState,
   expandAllObjects,
   collapseAllObjects,
   expandAllCategories,
   collapseAllCategories,
   isCategoryOpen,
   toggleCategory,
+  areAllExpanded,
 } from "./config/field_renderers.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
-const OPENED_OBJECTS_KEY = `${CONFIG_STATE_KEY}.openedObjects`;
-const OPENED_CATEGORIES_KEY = `${CONFIG_STATE_KEY}.openedCategories`;
+const OPENED_STATE_KEY = `${CONFIG_STATE_KEY}.openState`;
 
 function ensureActiveSectionValid() {
   const metadata = state.metadata || {};
@@ -58,22 +57,16 @@ function ensureActiveSectionValid() {
 }
 
 /**
- * Persist the current opened-objects / opened-categories sets to AppState
- * so expand/collapse state survives page reloads. Called on every toggle
- * (cheap — Sets are small + AppState uses an in-memory cache).
+ * Persist the expand/collapse state of both trees to AppState so it survives
+ * page reloads. Called on every toggle (cheap — the state is small and
+ * AppState uses an in-memory cache).
  */
 function persistOpenedState() {
-  const objArr = Array.from(getOpenedObjects());
-  const catArr = Array.from(getOpenedCategories());
-  AppState.save(OPENED_OBJECTS_KEY, objArr);
-  AppState.save(OPENED_CATEGORIES_KEY, catArr);
+  AppState.save(OPENED_STATE_KEY, serializeOpenState());
 }
 
 function loadOpenedState() {
-  const objArr = AppState.load(OPENED_OBJECTS_KEY, []);
-  const catArr = AppState.load(OPENED_CATEGORIES_KEY, []);
-  setOpenedObjects(new Set(Array.isArray(objArr) ? objArr : []));
-  setOpenedCategories(new Set(Array.isArray(catArr) ? catArr : []));
+  restoreOpenState(AppState.load(OPENED_STATE_KEY, null));
 }
 
 const state = {
@@ -296,36 +289,27 @@ function renderToolbar(sectionId) {
     toolbar.appendChild(revertBtn);
   }
 
-  // Expand all / Collapse all — applies to both top-level categories and
-  // nested object sub-configs (e.g. OHLCV > Data Sources > GeckoTerminal).
-  // Persisted via AppState so the choice survives reloads.
-  const expandAllBtn = create("button", {
-    type: "button",
-    className: "config-header-action ghost",
-    title: "Expand every section and every nested sub-config",
+  // One control for both directions — it reflects the current tree state and
+  // applies to top-level categories and nested object sub-configs alike
+  // (e.g. OHLCV > Data Sources > GeckoTerminal). Persisted via AppState so the
+  // choice survives reloads.
+  const expandToggle = createExpandToggle({
+    expanded: areAllExpanded(),
+    expandTitle: "Expand every section and every nested sub-config",
+    collapseTitle: "Collapse every section and every nested sub-config",
+    onToggle: (expanded) => {
+      if (expanded) {
+        expandAllCategories();
+        expandAllObjects();
+      } else {
+        collapseAllCategories();
+        collapseAllObjects();
+      }
+      persistOpenedState();
+      render();
+    },
   });
-  expandAllBtn.innerHTML = "<i class=\"icon-chevron-down\"></i><span>Expand all</span>";
-  on(expandAllBtn, "click", () => {
-    expandAllCategories();
-    expandAllObjects();
-    persistOpenedState();
-    render();
-  });
-  toolbar.appendChild(expandAllBtn);
-
-  const collapseAllBtn = create("button", {
-    type: "button",
-    className: "config-header-action ghost",
-    title: "Collapse every section and every nested sub-config",
-  });
-  collapseAllBtn.innerHTML = "<i class=\"icon-chevron-up\"></i><span>Collapse all</span>";
-  on(collapseAllBtn, "click", () => {
-    collapseAllCategories();
-    collapseAllObjects();
-    persistOpenedState();
-    render();
-  });
-  toolbar.appendChild(collapseAllBtn);
+  toolbar.appendChild(expandToggle.element);
 
   show(toolbar);
 }
@@ -537,11 +521,10 @@ function renderCategories(sectionId) {
     }
     lastVisibility = categoryVisibility;
 
-    // Primary visibility categories are expanded by default, UNLESS the
-    // user has explicitly opened/closed this one before (persisted).
-    const collapsedByDefault = categoryVisibility !== "primary";
-    const userOpenedCategory = isCategoryOpen([sectionId, category]);
-    const startCollapsed = collapsedByDefault && !userOpenedCategory;
+    // Primary visibility categories are expanded by default; a per-category
+    // click or a bulk expand/collapse outranks that default.
+    const openByDefault = categoryVisibility === "primary";
+    const startCollapsed = !isCategoryOpen([sectionId, category], openByDefault);
     const categoryEl = create("div", {
       className: startCollapsed ? "config-category collapsed" : "config-category",
     });
@@ -566,8 +549,9 @@ function renderCategories(sectionId) {
 
     on(header, "click", () => {
       categoryEl.classList.toggle("collapsed");
-      // Track in the persistent set so the user's choice survives reloads.
-      toggleCategory([sectionId, category]);
+      // Record the explicit choice so it survives reloads and outranks both
+      // the visibility default and the last bulk action.
+      toggleCategory([sectionId, category], openByDefault);
       persistOpenedState();
     });
 

@@ -13,44 +13,91 @@ import {
   normalizeFieldValue,
 } from "./utils.js";
 
-// Set of stable IDs (`${sectionId}::${fieldKey}::${childKey}`) for object
-// wrappers the user has explicitly opened. Members are paths with the
-// `open::` prefix; everything else (including unset) is collapsed by
-// default. Persistence is handled by the caller via AppState so the
-// expand/collapse state survives page reloads.
-let openedObjects = new Set();
-let openedCategories = new Set();
-
-export function getOpenedObjects() {
-  return new Set(openedObjects);
+/**
+ * Open/closed state of one collapsible tree (categories or nested objects).
+ *
+ * Three layers, most specific first:
+ *   1. `overrides` — per-node choice, keyed by a stable ID
+ *      (`${sectionId}::${category}` / `${sectionId}::${fieldKey}::${childKey}`).
+ *   2. `mode` — the last bulk action: `"all"` or `"none"`, `null` when none ran.
+ *   3. the node's own default (categories: `primary` visibility is open).
+ *
+ * A bulk action MUST be able to close a node that is open by default, so
+ * "collapse all" cannot be modelled as an empty opened-set — that only drops
+ * back to the defaults and leaves every primary category expanded. Hence the
+ * explicit `"none"` mode, which outranks the default but still yields to a
+ * later per-node click. Persistence is handled by the caller via AppState.
+ */
+function createTreeState() {
+  return { mode: null, overrides: new Map() };
 }
 
-export function getOpenedCategories() {
-  return new Set(openedCategories);
+let objectState = createTreeState();
+let categoryState = createTreeState();
+
+function isOpen(tree, id, defaultOpen) {
+  if (tree.overrides.has(id)) {
+    return tree.overrides.get(id);
+  }
+  if (tree.mode === "all") return true;
+  if (tree.mode === "none") return false;
+  return defaultOpen;
 }
 
-export function setOpenedObjects(set) {
-  openedObjects = set instanceof Set ? new Set(set) : new Set();
+function setBulk(tree, mode) {
+  tree.mode = mode;
+  tree.overrides.clear();
 }
 
-export function setOpenedCategories(set) {
-  openedCategories = set instanceof Set ? new Set(set) : new Set();
+function serializeTree(tree) {
+  return { mode: tree.mode, overrides: Array.from(tree.overrides.entries()) };
+}
+
+function restoreTree(data) {
+  const tree = createTreeState();
+  if (!data || typeof data !== "object") {
+    return tree;
+  }
+  tree.mode = data.mode === "all" || data.mode === "none" ? data.mode : null;
+  if (Array.isArray(data.overrides)) {
+    for (const entry of data.overrides) {
+      if (Array.isArray(entry) && typeof entry[0] === "string") {
+        tree.overrides.set(entry[0], Boolean(entry[1]));
+      }
+    }
+  }
+  return tree;
+}
+
+export function serializeOpenState() {
+  return { objects: serializeTree(objectState), categories: serializeTree(categoryState) };
+}
+
+export function restoreOpenState(data) {
+  objectState = restoreTree(data?.objects);
+  categoryState = restoreTree(data?.categories);
 }
 
 export function expandAllObjects() {
-  openedObjects = new Set(["__all__"]);
+  setBulk(objectState, "all");
 }
 
 export function collapseAllObjects() {
-  openedObjects = new Set();
+  setBulk(objectState, "none");
 }
 
 export function expandAllCategories() {
-  openedCategories = new Set(["__all__"]);
+  setBulk(categoryState, "all");
 }
 
 export function collapseAllCategories() {
-  openedCategories = new Set();
+  setBulk(categoryState, "none");
+}
+
+// True only while both trees are in the "expand everything" state, so a single
+// toggle can show which action it will perform next.
+export function areAllExpanded() {
+  return categoryState.mode === "all" && objectState.mode === "all";
 }
 
 export const SECTION_ICONS = {
@@ -95,36 +142,24 @@ function objectPathId(path) {
   return path.join("::");
 }
 
+// Nested sub-configs are collapsed by default; categories pass their own
+// default (primary categories open, everything else closed).
 export function isObjectOpen(path) {
-  if (openedObjects.has("__all__")) return true;
-  return openedObjects.has(objectPathId(path));
+  return isOpen(objectState, objectPathId(path), false);
 }
 
-export function isCategoryOpen(path) {
-  if (openedCategories.has("__all__")) return true;
-  return openedCategories.has(path.join("::"));
+export function isCategoryOpen(path, defaultOpen = false) {
+  return isOpen(categoryState, path.join("::"), defaultOpen);
 }
 
 export function toggleObject(path) {
   const id = objectPathId(path);
-  if (isObjectOpen(path)) {
-    openedObjects.delete("__all__");
-    openedObjects.delete(id);
-  } else {
-    openedObjects.delete("__all__");
-    openedObjects.add(id);
-  }
+  objectState.overrides.set(id, !isObjectOpen(path));
 }
 
-export function toggleCategory(path) {
+export function toggleCategory(path, defaultOpen = false) {
   const id = path.join("::");
-  if (isCategoryOpen(path)) {
-    openedCategories.delete("__all__");
-    openedCategories.delete(id);
-  } else {
-    openedCategories.delete("__all__");
-    openedCategories.add(id);
-  }
+  categoryState.overrides.set(id, !isCategoryOpen(path, defaultOpen));
 }
 
 /**

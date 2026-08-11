@@ -193,6 +193,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "tab_bar.js" => Some(embeds::TAB_BAR_UI),
         "dialog_tab_bar.js" => Some(embeds::DIALOG_TAB_BAR_UI),
         "action_bar.js" => Some(embeds::ACTION_BAR_UI),
+        "expand_toggle.js" => Some(embeds::EXPAND_TOGGLE_UI),
         "table_settings_dialog.js" => Some(embeds::TABLE_SETTINGS_DIALOG_UI),
         "token_details_dialog.js" => Some(embeds::TOKEN_DETAILS_DIALOG_UI),
         "image_lightbox.js" => Some(embeds::IMAGE_LIGHTBOX_UI),
