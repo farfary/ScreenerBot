@@ -94,12 +94,6 @@ export function collapseAllCategories() {
   setBulk(categoryState, "none");
 }
 
-// True only while both trees are in the "expand everything" state, so a single
-// toggle can show which action it will perform next.
-export function areAllExpanded() {
-  return categoryState.mode === "all" && objectState.mode === "all";
-}
-
 export const SECTION_ICONS = {
   rpc: "icon-satellite",
   trader: "icon-briefcase",

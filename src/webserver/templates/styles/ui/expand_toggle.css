@@ -21,6 +21,12 @@
     color 0.2s ease;
 }
 
+/* `display:inline-flex` above outranks the bare [hidden] attribute, so a
+   caller hiding the control (nothing collapsible on screen) needs this. */
+.expand-toggle[hidden] {
+  display: none;
+}
+
 .expand-toggle:hover {
   background: var(--bg-card-hover);
   border-color: var(--primary-color);

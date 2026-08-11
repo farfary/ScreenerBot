@@ -29,7 +29,6 @@ import {
   collapseAllCategories,
   isCategoryOpen,
   toggleCategory,
-  areAllExpanded,
 } from "./config/field_renderers.js";
 
 const CONFIG_STATE_KEY = "config.page";
@@ -68,6 +67,10 @@ function persistOpenedState() {
 function loadOpenedState() {
   restoreOpenState(AppState.load(OPENED_STATE_KEY, null));
 }
+
+// The live expand/collapse control of the section toolbar. Recreated by every
+// renderToolbar() call, so syncExpandToggle() always talks to the current one.
+let expandToggleControl = null;
 
 const state = {
   metadata: null,
@@ -255,6 +258,7 @@ function renderToolbar(sectionId) {
     return;
   }
   toolbar.innerHTML = "";
+  expandToggleControl = null;
 
   if (!sectionId) {
     hide(toolbar);
@@ -289,12 +293,12 @@ function renderToolbar(sectionId) {
     toolbar.appendChild(revertBtn);
   }
 
-  // One control for both directions — it reflects the current tree state and
-  // applies to top-level categories and nested object sub-configs alike
-  // (e.g. OHLCV > Data Sources > GeckoTerminal). Persisted via AppState so the
-  // choice survives reloads.
-  const expandToggle = createExpandToggle({
-    expanded: areAllExpanded(),
+  // One control for both directions — it applies to top-level categories and
+  // nested object sub-configs alike (e.g. OHLCV > Data Sources > GeckoTerminal)
+  // and is persisted via AppState so the choice survives reloads. Its state is
+  // synced from what is actually on screen by syncExpandToggle(), not from the
+  // last bulk action, so it never offers "Collapse all" with nothing expanded.
+  expandToggleControl = createExpandToggle({
     expandTitle: "Expand every section and every nested sub-config",
     collapseTitle: "Collapse every section and every nested sub-config",
     onToggle: (expanded) => {
@@ -309,9 +313,34 @@ function renderToolbar(sectionId) {
       render();
     },
   });
-  toolbar.appendChild(expandToggle.element);
+  toolbar.appendChild(expandToggleControl.element);
 
   show(toolbar);
+}
+
+/**
+ * Point the expand/collapse control at what is actually on screen: it offers
+ * "Collapse all" only while every collapsible node of the active section is
+ * open, and hides itself when the section has nothing to collapse. Derived
+ * from the rendered DOM rather than from the last bulk action, so per-category
+ * clicks, search auto-expansion and default-open categories all count.
+ */
+function syncExpandToggle() {
+  if (!expandToggleControl) {
+    return;
+  }
+  const container = $("#configCategories");
+  const nodes = container
+    ? container.querySelectorAll(".config-category, .config-object-wrapper")
+    : [];
+  let openCount = 0;
+  for (const node of nodes) {
+    if (!node.classList.contains("collapsed")) {
+      openCount += 1;
+    }
+  }
+  expandToggleControl.element.hidden = nodes.length === 0;
+  expandToggleControl.setExpanded(nodes.length > 0 && openCount === nodes.length);
 }
 
 function renderHeader(sectionId) {
@@ -553,6 +582,7 @@ function renderCategories(sectionId) {
       // the visibility default and the last bulk action.
       toggleCategory([sectionId, category], openByDefault);
       persistOpenedState();
+      syncExpandToggle();
     });
 
     let categoryHasMatch = false;
@@ -677,10 +707,14 @@ function renderCategories(sectionId) {
           pendingCount = isChanged ? pendingCount + 1 : Math.max(0, pendingCount - 1);
           updateCategoryChip(categoryEl, fieldsList.length, pendingCount);
           renderToolbar(sectionId);
+          syncExpandToggle();
           renderHeader(sectionId);
           renderSidebar();
         },
-        onCollapseChange: persistOpenedState,
+        onCollapseChange: () => {
+          persistOpenedState();
+          syncExpandToggle();
+        },
       });
 
       controlEl.appendChild(control);
@@ -743,6 +777,8 @@ function renderCategories(sectionId) {
 
   // Render section-specific actions after categories
   renderSectionActions(sectionId, container);
+
+  syncExpandToggle();
 }
 
 /**
