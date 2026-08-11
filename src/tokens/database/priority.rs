@@ -11,10 +11,7 @@ use super::TokenDatabase;
 impl TokenDatabase {
     /// Fetch token mints with the given priority level
     pub fn get_tokens_by_priority(&self, priority: i32, limit: usize) -> TokenResult<Vec<String>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -39,10 +36,7 @@ impl TokenDatabase {
     /// Get oldest non-blacklisted tokens (excludes permanently failed market data tokens)
 
     pub fn get_oldest_non_blacklisted(&self, limit: usize) -> TokenResult<Vec<String>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -77,10 +71,7 @@ impl TokenDatabase {
             )));
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "UPDATE update_tracking SET priority = ?1 WHERE mint = ?2",
@@ -106,10 +97,7 @@ impl TokenDatabase {
             )));
         }
 
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let mut conn = self.conn()?;
 
         let tx = conn
             .transaction()
@@ -148,10 +136,7 @@ impl TokenDatabase {
             return Ok(HashMap::new());
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut placeholders = String::new();
         for (idx, _) in mints.iter().enumerate() {
@@ -192,10 +177,7 @@ impl TokenDatabase {
 
     /// Get counts of tokens at each priority level
     pub fn summarize_priorities(&self) -> TokenResult<Vec<(i32, u64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -217,10 +199,7 @@ impl TokenDatabase {
 
     /// Get the current priority level for a specific token
     pub fn get_priority(&self, mint: &str) -> TokenResult<Priority> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare("SELECT priority FROM update_tracking WHERE mint = ?1")

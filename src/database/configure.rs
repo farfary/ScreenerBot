@@ -85,7 +85,7 @@ pub fn configure_connection(conn: &Connection, cfg: DbConfig) -> rusqlite::Resul
 
 // ── Per-database configurations ──────────────────────────────────────────────
 
-/// tokens.db — Hot: single Mutex connection, heavy read/write
+/// tokens.db — Hot: pooled, heavy read/write
 pub const TOKENS_DB: DbConfig = DbConfig::new(DbPreset::Hot);
 
 /// transactions.db — Hot: frequent inserts and lookups

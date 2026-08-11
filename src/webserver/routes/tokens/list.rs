@@ -69,9 +69,12 @@ pub(crate) async fn get_tokens_list(
 /// GET /api/tokens/stats
 ///
 /// Get token statistics from the filtering service
+///
+/// Non-blocking: serves the snapshot only if one already exists. Waiting for the first
+/// build here stalled the tokens tab for up to 30 seconds on a fresh launch.
 pub async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
-    match filtering::fetch_stats().await {
-        Ok(snapshot) => {
+    match filtering::try_fetch_stats().await {
+        Some(snapshot) => {
             logger::info(
                 LogTag::Webserver,
                 &format!(
@@ -94,13 +97,17 @@ pub async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> 
                 timestamp: snapshot.updated_at.to_rfc3339(),
             }))
         }
-        Err(err) => {
-            logger::info(
-                LogTag::Webserver,
-                &format!("Failed to load token stats via filtering service: {err}"),
-            );
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        // No snapshot built yet. Answer with zeros rather than an error or a wait — the
+        // tab polls, and the counts land on the next tick.
+        None => Ok(Json(TokenStatsResponse {
+            total_tokens_in_database: 0,
+            total_tokens: 0,
+            with_pool_price: 0,
+            open_positions: 0,
+            blacklisted: 0,
+            with_ohlcv: 0,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })),
     }
 }
 

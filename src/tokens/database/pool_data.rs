@@ -16,10 +16,7 @@ use super::TokenDatabase;
 impl TokenDatabase {
     /// Replace all pool records for a token with the given snapshot
     pub fn replace_token_pools(&self, snapshot: &TokenPoolsSnapshot) -> TokenResult<()> {
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let mut conn = self.conn()?;
 
         let tx = conn
             .transaction()
@@ -103,10 +100,7 @@ impl TokenDatabase {
 
     /// Load pool snapshot for a token (if any pools stored)
     pub fn get_token_pools(&self, mint: &str) -> TokenResult<Option<TokenPoolsSnapshot>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(

@@ -18,10 +18,7 @@ impl TokenDatabase {
         source: &str,
         rejected_at: i64,
     ) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "UPDATE update_tracking SET 
@@ -38,10 +35,7 @@ impl TokenDatabase {
 
     /// Clear rejection status for a token that passed filtering
     pub fn clear_rejection_status(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "UPDATE update_tracking SET 
@@ -64,10 +58,7 @@ impl TokenDatabase {
             return Ok(0);
         }
 
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let mut conn = self.conn()?;
 
         let tx = conn
             .transaction()
@@ -116,10 +107,7 @@ impl TokenDatabase {
             return Ok(0);
         }
 
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let mut conn = self.conn()?;
 
         let tx = conn
             .transaction()
@@ -166,10 +154,7 @@ impl TokenDatabase {
             return Ok(0);
         }
 
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let mut conn = self.conn()?;
 
         let tx = conn
             .transaction()
@@ -223,10 +208,7 @@ impl TokenDatabase {
         start_time: Option<i64>,
         end_time: Option<i64>,
     ) -> TokenResult<Vec<(String, String, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         // Build query with optional time filters on last_rejection_at
         let mut query = "SELECT 
@@ -296,10 +278,7 @@ impl TokenDatabase {
             Option<String>,
         )>,
     > {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let query = "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at,
                             t.symbol, t.name,
@@ -348,10 +327,7 @@ impl TokenDatabase {
         limit: usize,
         offset: usize,
     ) -> TokenResult<Vec<(String, String, String, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut query = if search_filter.is_some() {
             "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at 
@@ -447,10 +423,7 @@ impl TokenDatabase {
         source: &str,
         rejected_at: i64,
     ) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "INSERT INTO rejection_history (mint, reason, source, rejected_at) VALUES (?1, ?2, ?3, ?4)",
@@ -468,10 +441,7 @@ impl TokenDatabase {
         start_time: Option<i64>,
         end_time: Option<i64>,
     ) -> TokenResult<Vec<(String, String, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         // If no time range specified, fall back to current rejection stats (update_tracking table)
         if start_time.is_none() && end_time.is_none() {
@@ -527,10 +497,7 @@ impl TokenDatabase {
     /// This is critical for database size management - rejection history grows ~5GB/day
 
     pub fn cleanup_rejection_history(&self, hours_to_keep: i64) -> TokenResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 60 * 60);
 
@@ -555,10 +522,7 @@ impl TokenDatabase {
         source: &str,
         timestamp: i64,
     ) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         // Round timestamp to hour bucket
         let bucket_hour = (timestamp / 3600) * 3600;
@@ -583,10 +547,7 @@ impl TokenDatabase {
         start_time: Option<i64>,
         end_time: Option<i64>,
     ) -> TokenResult<Vec<(String, String, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut query =
             "SELECT reason, source, SUM(rejection_count) as total FROM rejection_stats WHERE 1=1"
@@ -635,10 +596,7 @@ impl TokenDatabase {
     /// Cleanup old aggregated rejection stats (keep last N hours)
 
     pub fn cleanup_rejection_stats(&self, hours_to_keep: i64) -> TokenResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 3600);
 

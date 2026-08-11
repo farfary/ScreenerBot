@@ -18,32 +18,35 @@ use super::types::{
 
 /// GET /api/filtering/stats
 /// Retrieve current filtering statistics including token counts and metrics
+///
+/// Reads the snapshot only if one already exists. The blocking variant waits up to 30
+/// seconds for the FIRST snapshot to be built, which is what made the filtering tab the
+/// slowest surface in the app on a fresh launch — opening it before the initial build
+/// finished held the request for the whole timeout and the tab appeared frozen. Zeroed
+/// counts for one poll are the right trade; the next poll has the real ones.
 pub async fn get_stats() -> Response {
-    match filtering::fetch_stats().await {
-        Ok(stats) => success_response(FilteringStatsResponse {
-            total_tokens: stats.total_tokens,
-            with_pool_price: stats.with_pool_price,
-            open_positions: stats.open_positions,
-            blacklisted: stats.blacklisted,
-            with_ohlcv: stats.with_ohlcv,
-            passed_filtering: stats.passed_filtering,
-            updated_at: stats.updated_at.to_rfc3339(),
-            timestamp: Utc::now().to_rfc3339(),
-        }),
-        Err(err) => {
-            logger::info(
-                LogTag::Filtering,
-                &format!("Failed to fetch filtering stats: {err}"),
-            );
+    let stats = filtering::try_fetch_stats().await;
+    let updated_at = stats
+        .as_ref()
+        .map(|s| s.updated_at.to_rfc3339())
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
 
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "STATS_FETCH_FAILED",
-                &format!("Failed to fetch filtering statistics: {err}"),
-                None,
-            )
-        }
-    }
+    success_response(FilteringStatsResponse {
+        total_tokens: stats.as_ref().map(|s| s.total_tokens).unwrap_or_default(),
+        with_pool_price: stats
+            .as_ref()
+            .map(|s| s.with_pool_price)
+            .unwrap_or_default(),
+        open_positions: stats.as_ref().map(|s| s.open_positions).unwrap_or_default(),
+        blacklisted: stats.as_ref().map(|s| s.blacklisted).unwrap_or_default(),
+        with_ohlcv: stats.as_ref().map(|s| s.with_ohlcv).unwrap_or_default(),
+        passed_filtering: stats
+            .as_ref()
+            .map(|s| s.passed_filtering)
+            .unwrap_or_default(),
+        updated_at,
+        timestamp: Utc::now().to_rfc3339(),
+    })
 }
 
 /// POST /api/filtering/refresh

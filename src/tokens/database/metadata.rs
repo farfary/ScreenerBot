@@ -22,10 +22,7 @@ impl TokenDatabase {
         name: Option<&str>,
         decimals: Option<u8>,
     ) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let now = Utc::now().timestamp();
 
@@ -63,10 +60,7 @@ impl TokenDatabase {
 
     /// Get token metadata
     pub fn get_token(&self, mint: &str) -> TokenResult<Option<TokenMetadata>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn.prepare(
             "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at FROM tokens WHERE mint = ?1"
@@ -97,10 +91,7 @@ impl TokenDatabase {
 
     /// List all tokens with limit
     pub fn list_tokens(&self, limit: usize) -> TokenResult<Vec<TokenMetadata>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -145,10 +136,7 @@ impl TokenDatabase {
         &self,
         limit: usize,
     ) -> TokenResult<Vec<(String, u8)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -202,10 +190,7 @@ impl TokenDatabase {
             return Ok(HashMap::new());
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         // Build placeholders for IN clause
         let placeholders: String = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
@@ -265,10 +250,7 @@ impl TokenDatabase {
             return Ok(HashMap::new());
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let placeholders: String = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let query = format!(
@@ -308,10 +290,7 @@ impl TokenDatabase {
             return Ok(HashMap::new());
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let placeholders: String = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
 

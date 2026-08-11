@@ -25,7 +25,8 @@ mod rejections;
 mod security;
 mod tracking;
 
-use rusqlite::Connection;
+use r2d2::{Pool, PooledConnection};
+use r2d2_sqlite::SqliteConnectionManager;
 use std::sync::{Arc, Mutex};
 
 use crate::tokens::types::{TokenError, TokenResult};
@@ -54,9 +55,20 @@ pub fn clear_global_database() {
     }
 }
 
-/// Token database with connection pool
+/// Token database.
+///
+/// A real r2d2 pool, matching every other database in the bot. It used to be a single
+/// `Mutex<Connection>` shared by the whole process, which made the token database a global
+/// serialization point: the filtering snapshot's full-corpus batch load held that one
+/// connection for seconds, and EVERY unrelated token read queued behind it — the header's
+/// counts, the wallet's balances, the positions panel. Measured against the owner's
+/// database, a bare `SELECT COUNT(*)` issued during a snapshot build took 8.9s, tracking
+/// the build's duration exactly rather than the ~20ms the query itself costs.
+///
+/// The database is in WAL mode (see `database::configure_connection`), so readers run
+/// concurrently with each other and with a writer; `busy_timeout` covers writer overlap.
 pub struct TokenDatabase {
-    pub(super) conn: Arc<Mutex<Connection>>,
+    pool: Pool<SqliteConnectionManager>,
 }
 
 /// Token-level blacklist entry with metadata for diagnostics and UI
@@ -71,20 +83,32 @@ pub struct TokenBlacklistRecord {
 impl TokenDatabase {
     /// Create new database instance
     pub fn new(path: &str) -> TokenResult<Self> {
-        let conn = Connection::open(path)
-            .map_err(|e| TokenError::Database(format!("Failed to open database: {e}")))?;
+        let manager = SqliteConnectionManager::file(path).with_init(|conn| {
+            crate::database::configure_connection(conn, crate::database::TOKENS_DB)
+        });
+
+        let pool = Pool::builder()
+            .max_size(8)
+            .idle_timeout(None)
+            .max_lifetime(None)
+            .build(manager)
+            .map_err(|e| TokenError::Database(format!("Failed to create database pool: {e}")))?;
+
+        let db = Self { pool };
 
         // Initialize schema
-        crate::tokens::schema::initialize_schema(&conn).map_err(|e| TokenError::Database(e))?;
+        let conn = db.conn()?;
+        crate::tokens::schema::initialize_schema(&conn).map_err(TokenError::Database)?;
+        drop(conn);
 
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-        })
+        Ok(db)
     }
 
-    /// Get connection for external schema operations
-    pub fn connection(&self) -> Arc<Mutex<Connection>> {
-        self.conn.clone()
+    /// Check out a connection from the pool.
+    pub(super) fn conn(&self) -> TokenResult<PooledConnection<SqliteConnectionManager>> {
+        self.pool
+            .get()
+            .map_err(|e| TokenError::Database(format!("Failed to get connection: {e}")))
     }
 }
 

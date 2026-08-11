@@ -10,10 +10,7 @@ use super::{TokenBlacklistRecord, TokenDatabase};
 impl TokenDatabase {
     /// Add a token to the blacklist with a reason and source
     pub fn add_to_blacklist(&self, mint: &str, reason: &str, source: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let now = Utc::now().timestamp();
 
@@ -29,10 +26,7 @@ impl TokenDatabase {
 
     /// List all blacklist entries with metadata for diagnostics/analytics
     pub fn list_blacklisted_tokens(&self) -> TokenResult<Vec<TokenBlacklistRecord>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -67,10 +61,7 @@ impl TokenDatabase {
 
     /// Check if token is blacklisted
     pub fn is_blacklisted(&self, mint: &str) -> TokenResult<bool> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare("SELECT 1 FROM blacklist WHERE mint = ?1")
@@ -85,10 +76,7 @@ impl TokenDatabase {
 
     /// Remove token from blacklist
     pub fn remove_from_blacklist(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute("DELETE FROM blacklist WHERE mint = ?1", params![mint])
             .map_err(|e| TokenError::Database(format!("Failed to remove from blacklist: {e}")))?;
@@ -98,10 +86,7 @@ impl TokenDatabase {
 
     /// Get blacklist reason
     pub fn get_blacklist_reason(&self, mint: &str) -> TokenResult<Option<(String, String)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare("SELECT reason, source FROM blacklist WHERE mint = ?1")

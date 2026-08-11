@@ -219,10 +219,7 @@ pub struct BlacklistSummary {
 
 /// Get blacklist summary
 pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary> {
-    let conn = db.connection();
-    let conn = conn
-        .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+    let conn = db.conn()?;
 
     let total_count: usize = conn
         .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))

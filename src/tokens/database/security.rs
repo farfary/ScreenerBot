@@ -12,10 +12,7 @@ use super::TokenDatabase;
 impl TokenDatabase {
     /// Insert or update Rugcheck security data for a token
     pub fn upsert_rugcheck_data(&self, mint: &str, data: &RugcheckData) -> TokenResult<()> {
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let mut conn = self.conn()?;
 
         let risks_json = serde_json::to_string(&data.risks)
             .map_err(|e| TokenError::Database(format!("Failed to serialize risks: {e}")))?;
@@ -156,10 +153,7 @@ impl TokenDatabase {
 
     /// Fetch Rugcheck security data for a token
     pub fn get_rugcheck_data(&self, mint: &str) -> TokenResult<Option<RugcheckData>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -254,10 +248,7 @@ impl TokenDatabase {
 
     /// Fetch token mints that have no security assessment
     pub fn get_tokens_without_security_data(&self, limit: usize) -> TokenResult<Vec<String>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let now = Utc::now().timestamp();
 
@@ -320,10 +311,7 @@ impl TokenDatabase {
         message: &str,
         error_type: &str,
     ) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let now = Utc::now().timestamp();
 
@@ -343,10 +331,7 @@ impl TokenDatabase {
 
     /// Clear security error tracking (called after successful fetch)
     pub fn clear_security_error(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "UPDATE update_tracking SET 

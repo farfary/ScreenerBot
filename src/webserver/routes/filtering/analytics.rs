@@ -26,8 +26,10 @@ use super::types::{
 /// Comprehensive filtering analytics with detailed breakdowns
 /// Supports optional time range filtering via start_time and end_time query params
 pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
-    // Fetch stats and rejection data
-    let stats_result = filtering::fetch_stats().await;
+    // Fetch stats and rejection data. Non-blocking: the analytics panel must not hold the
+    // request for up to 30 seconds waiting on the first snapshot build (the rejection
+    // breakdowns below come from the database and are useful on their own meanwhile).
+    let stats_result = filtering::try_fetch_stats().await;
 
     // Choose correct data source based on whether we want "Current State" or "Historical Data"
     let rejection_result = if query.start_time.is_some() || query.end_time.is_some() {
@@ -43,9 +45,14 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     let recent_result = get_recent_rejections_async(20).await;
 
     match (stats_result, rejection_result, recent_result) {
-        (Ok(stats), Ok(raw_stats), Ok(recent_raw)) => {
-            let total_tokens = stats.total_tokens;
-            let total_passed = stats.passed_filtering;
+        (stats, Ok(raw_stats), Ok(recent_raw)) => {
+            // Absent while the first snapshot is still building; the rejection breakdowns
+            // below are database-backed and render regardless.
+            let total_tokens = stats.as_ref().map(|s| s.total_tokens).unwrap_or_default();
+            let total_passed = stats
+                .as_ref()
+                .map(|s| s.passed_filtering)
+                .unwrap_or_default();
 
             // Calculate totals and build category/source maps
             let mut by_category_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
@@ -268,21 +275,13 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                 top_reasons,
                 recent_rejections,
                 time_range,
-                last_updated: stats.updated_at.to_rfc3339(),
+                last_updated: stats
+                    .as_ref()
+                    .map(|s| s.updated_at)
+                    .unwrap_or_else(Utc::now)
+                    .to_rfc3339(),
                 timestamp: Utc::now().to_rfc3339(),
             })
-        }
-        (Err(err), _, _) => {
-            logger::warning(
-                LogTag::Filtering,
-                &format!("Failed to fetch filtering stats for analytics: {err}"),
-            );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "ANALYTICS_FAILED",
-                &format!("Failed to fetch analytics: {err}"),
-                None,
-            )
         }
         (_, Err(err), _) => {
             logger::warning(

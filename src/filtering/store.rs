@@ -443,43 +443,43 @@ impl FilteringStore {
                 .await
                 .map_err(|e| format!("Failed to get tokens from database: {:?}", e))?;
 
-        // Get snapshot for derived flags lookup (pool price, open positions, ohlcv)
-        let snapshot = self.ensure_snapshot().await?;
+        // Derived flags (pool price, open positions, ohlcv) come from the snapshot, but the
+        // ROWS above came straight from the database — so this view has everything it needs
+        // to render without one. Waiting here is what made "All tokens" unresponsive for up
+        // to 30 seconds after launch: the page was already in hand and the request sat on a
+        // snapshot build it only wanted decoration from. Flags light up on a later poll.
+        let snapshot = self.snapshot_if_ready().await;
 
         // Build lookup sets for derived flags
         let mut priced_mints: Vec<String> = Vec::new();
         let mut open_position_mints: Vec<String> = Vec::new();
         let mut ohlcv_mints: Vec<String> = Vec::new();
 
-        for (mint, entry) in &snapshot.tokens {
-            if entry.has_pool_price {
-                priced_mints.push(mint.clone());
-            }
-            if entry.has_open_position {
-                open_position_mints.push(mint.clone());
-            }
-            if entry.has_ohlcv {
-                ohlcv_mints.push(mint.clone());
+        if let Some(snapshot) = snapshot.as_ref() {
+            for (mint, entry) in &snapshot.tokens {
+                if entry.has_pool_price {
+                    priced_mints.push(mint.clone());
+                }
+                if entry.has_open_position {
+                    open_position_mints.push(mint.clone());
+                }
+                if entry.has_ohlcv {
+                    ohlcv_mints.push(mint.clone());
+                }
             }
         }
 
         // Count totals (approximations based on snapshot)
-        let priced_total = snapshot
-            .tokens
-            .values()
-            .filter(|e| e.has_pool_price)
-            .count();
-        let positions_total = snapshot
-            .tokens
-            .values()
-            .filter(|e| e.has_open_position)
-            .count();
+        let priced_total = priced_mints.len();
+        let positions_total = open_position_mints.len();
         let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
 
         let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
-        for token in &items {
-            if let Some(sources) = snapshot.blacklist_reasons.get(token.mint.as_str()) {
-                blacklist_reasons.insert(token.mint.clone(), sources.clone());
+        if let Some(snapshot) = snapshot.as_ref() {
+            for token in &items {
+                if let Some(sources) = snapshot.blacklist_reasons.get(token.mint.as_str()) {
+                    blacklist_reasons.insert(token.mint.clone(), sources.clone());
+                }
             }
         }
 
@@ -500,7 +500,10 @@ impl FilteringStore {
             page_size: query.page_size,
             total: total_count,
             total_pages,
-            timestamp: snapshot.updated_at,
+            timestamp: snapshot
+                .as_ref()
+                .map(|s| s.updated_at)
+                .unwrap_or_else(Utc::now),
             priced_total,
             positions_total,
             blacklisted_total,
@@ -560,26 +563,33 @@ impl FilteringStore {
             .await
             .map_err(|e| format!("Failed to load no-market tokens: {:?}", e))?;
 
-        // Snapshot for timestamp and derived counts
-        let snapshot = self.ensure_snapshot().await?;
+        // Snapshot for timestamp and derived counts — read only if one already exists, for
+        // the same reason as the All view: the rows are database-backed and the snapshot
+        // contributes decoration, never the page itself.
+        let snapshot = self.snapshot_if_ready().await;
 
         let priced_total = 0; // by definition of this view (no market), keep 0 to avoid confusion
-        let positions_total = items
-            .iter()
-            .filter(|t| {
-                snapshot
-                    .tokens
-                    .get(&t.mint)
-                    .map(|e| e.has_open_position)
-                    .unwrap_or_default()
-            })
-            .count();
+        let positions_total = match snapshot.as_ref() {
+            Some(snapshot) => items
+                .iter()
+                .filter(|t| {
+                    snapshot
+                        .tokens
+                        .get(&t.mint)
+                        .map(|e| e.has_open_position)
+                        .unwrap_or_default()
+                })
+                .count(),
+            None => 0,
+        };
         let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
 
         let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
-        for token in &items {
-            if let Some(sources) = snapshot.blacklist_reasons.get(token.mint.as_str()) {
-                blacklist_reasons.insert(token.mint.clone(), sources.clone());
+        if let Some(snapshot) = snapshot.as_ref() {
+            for token in &items {
+                if let Some(sources) = snapshot.blacklist_reasons.get(token.mint.as_str()) {
+                    blacklist_reasons.insert(token.mint.clone(), sources.clone());
+                }
             }
         }
 
@@ -600,7 +610,10 @@ impl FilteringStore {
             page_size: query.page_size,
             total: total_count,
             total_pages,
-            timestamp: snapshot.updated_at,
+            timestamp: snapshot
+                .as_ref()
+                .map(|s| s.updated_at)
+                .unwrap_or_else(Utc::now),
             priced_total,
             positions_total,
             blacklisted_total,

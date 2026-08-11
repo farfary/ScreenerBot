@@ -11,10 +11,7 @@ impl TokenDatabase {
     /// Mark pool price as calculated (called after Pool Service calculation)
 
     pub fn mark_pool_price_calculated(&self, mint: &str, pool_address: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let now = Utc::now().timestamp();
 
@@ -36,10 +33,7 @@ impl TokenDatabase {
 
     /// Count total tokens in the database
     pub fn count_tokens(&self) -> TokenResult<u64> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
@@ -50,10 +44,7 @@ impl TokenDatabase {
 
     /// Count tokens currently tracked for updates
     pub fn count_tracked_tokens(&self) -> TokenResult<u64> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM update_tracking", [], |row| row.get(0))
@@ -64,10 +55,7 @@ impl TokenDatabase {
 
     /// Count blacklisted tokens
     pub fn count_blacklisted(&self) -> TokenResult<u64> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
@@ -80,10 +68,7 @@ impl TokenDatabase {
 
     /// Retrieve update tracking information for a specific token
     pub fn get_update_tracking_info(&self, mint: &str) -> TokenResult<Option<UpdateTrackingInfo>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -114,10 +99,7 @@ impl TokenDatabase {
         limit: usize,
         priority: Option<i32>,
     ) -> TokenResult<Vec<UpdateTrackingInfo>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let records = if let Some(priority) = priority {
             let mut stmt = conn

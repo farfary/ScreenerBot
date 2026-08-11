@@ -12,10 +12,7 @@ impl TokenDatabase {
     /// Load all blocked authority addresses from the database.
     /// Called on startup and periodically by the discovery task.
     pub fn load_blocked_authorities(&self) -> TokenResult<Vec<String>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare("SELECT address FROM authority_reputation WHERE is_blocked = 1")
@@ -44,10 +41,7 @@ impl TokenDatabase {
         min_tokens: u32,
         min_confidence: f64,
     ) -> TokenResult<u32> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let now = chrono::Utc::now().timestamp();
         let mut newly_blocked = 0u32;

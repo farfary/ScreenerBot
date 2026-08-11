@@ -16,10 +16,7 @@ use super::TokenDatabase;
 impl TokenDatabase {
     /// Count tokens that have no market data from any source
     pub fn count_tokens_no_market(&self) -> TokenResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let count: usize = conn
             .query_row(
@@ -43,10 +40,7 @@ impl TokenDatabase {
         sort_by: Option<&str>,
         sort_direction: Option<&str>,
     ) -> TokenResult<Vec<Token>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         // Only support sorting by metadata/security fields for this view
         let order_column = match sort_by {
@@ -234,10 +228,7 @@ impl TokenDatabase {
 
     /// Insert or update DexScreener market data for a token
     pub fn upsert_dexscreener_data(&self, mint: &str, data: &DexScreenerData) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         // Check if this is first insert (for first_fetched_at tracking)
         let is_first_insert: bool = conn
@@ -311,10 +302,7 @@ impl TokenDatabase {
 
     /// Get DexScreener market data
     pub fn get_dexscreener_data(&self, mint: &str) -> TokenResult<Option<DexScreenerData>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -399,10 +387,7 @@ impl TokenDatabase {
         mint: &str,
         data: &GeckoTerminalData,
     ) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         // Check if this is first insert (for first_fetched_at tracking)
         let is_first_insert: bool = conn
@@ -467,10 +452,7 @@ impl TokenDatabase {
 
     /// Get GeckoTerminal market data
     pub fn get_geckoterminal_data(&self, mint: &str) -> TokenResult<Option<GeckoTerminalData>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -530,10 +512,7 @@ impl TokenDatabase {
 
     /// Check if a token's market data is older than the given threshold
     pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare("SELECT market_data_last_updated_at FROM update_tracking WHERE mint = ?1")
@@ -554,10 +533,7 @@ impl TokenDatabase {
 
     /// Fetch token mints that have no market data records
     pub fn get_tokens_without_market_data(&self, limit: usize) -> TokenResult<Vec<String>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -587,10 +563,7 @@ impl TokenDatabase {
     /// Count tokens with permanent market data failure (not listed on any exchange)
     /// These tokens are excluded from market data update attempts
     pub fn count_permanent_market_failures(&self) -> TokenResult<u64> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row(
@@ -610,10 +583,7 @@ impl TokenDatabase {
         message: &str,
         error_type: &str,
     ) -> TokenResult<u32> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let now = Utc::now().timestamp();
 
@@ -645,10 +615,7 @@ impl TokenDatabase {
     /// This only updates the error_type without incrementing the error count
     /// Used when a token has hit the failure threshold and should be excluded from updates
     pub fn mark_market_permanent(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "UPDATE update_tracking SET market_error_type = 'permanent' WHERE mint = ?1",
@@ -661,10 +628,7 @@ impl TokenDatabase {
 
     /// Mark market data as updated (called after successful DexScreener or GeckoTerminal fetch)
     pub fn mark_market_data_updated(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = self.conn()?;
 
         let now = Utc::now().timestamp();
 

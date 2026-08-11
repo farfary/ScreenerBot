@@ -26,11 +26,18 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
     // Header collectors are independent. Keep the frequently-polled endpoint bounded by
     // running database/service work concurrently and reusing each result once.
+    //
+    // The filtering read is the NON-BLOCKING one, for the same reason the home dashboard's
+    // is. The header is on screen from the moment the app paints and polls about once a
+    // second; the blocking variant waits up to 30 seconds for the FIRST snapshot to be
+    // built, so on every launch this endpoint — and with it the whole top bar — stalled for
+    // that entire timeout while the initial snapshot ground through the corpus. Counts that
+    // are briefly absent cost nothing here; the very next poll picks them up.
     let store = global_store();
     let (today_stats, start_balance, filtering_stats, system) = tokio::join!(
         crate::positions::get_period_trading_stats(today_start, Some(now)),
         get_balance_at_time(today_start),
-        store.get_stats(),
+        store.stats_if_ready(),
         calculate_system_health(),
     );
 
@@ -121,13 +128,13 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     };
 
     let filtering = match filtering_stats {
-        Ok(stats) => FilteringHeaderInfo {
+        Some(stats) => FilteringHeaderInfo {
             monitoring_count: stats.total_tokens,
             passed_count: stats.passed_filtering,
             rejected_count: stats.total_tokens.saturating_sub(stats.passed_filtering),
             last_refresh: stats.updated_at.to_rfc3339(),
         },
-        Err(_) => FilteringHeaderInfo {
+        None => FilteringHeaderInfo {
             monitoring_count: 0,
             passed_count: 0,
             rejected_count: 0,

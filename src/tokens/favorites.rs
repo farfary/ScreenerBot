@@ -3,7 +3,6 @@
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 
 use crate::tokens::database::get_global_database;
 use crate::tokens::types::{TokenError, TokenResult};
@@ -48,19 +47,12 @@ pub struct UpdateFavoriteRequest {
 // =============================================================================
 
 /// Add a token to favorites
-pub fn add_favorite(
-    conn: &Mutex<Connection>,
-    request: &AddFavoriteRequest,
-) -> TokenResult<FavoriteToken> {
+pub fn add_favorite(conn: &Connection, request: &AddFavoriteRequest) -> TokenResult<FavoriteToken> {
     // Reject blank mints up front — an empty-mint favorite is unaddressable (it
     // can never map to a real token and can't be deleted by mint afterwards).
     if request.mint.trim().is_empty() {
         return Err(TokenError::InvalidMint(request.mint.clone()));
     }
-
-    let conn = conn
-        .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
 
     conn.execute(
         r#"
@@ -89,11 +81,7 @@ pub fn add_favorite(
 }
 
 /// Remove a token from favorites
-pub fn remove_favorite(conn: &Mutex<Connection>, mint: &str) -> TokenResult<bool> {
-    let conn = conn
-        .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
+pub fn remove_favorite(conn: &Connection, mint: &str) -> TokenResult<bool> {
     let rows_affected = conn
         .execute("DELETE FROM token_favorites WHERE mint = ?1", params![mint])
         .map_err(|e| TokenError::Database(format!("Failed to remove favorite: {e}")))?;
@@ -102,11 +90,7 @@ pub fn remove_favorite(conn: &Mutex<Connection>, mint: &str) -> TokenResult<bool
 }
 
 /// Get all favorites ordered by creation date (newest first)
-pub fn get_favorites(conn: &Mutex<Connection>) -> TokenResult<Vec<FavoriteToken>> {
-    let conn = conn
-        .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
+pub fn get_favorites(conn: &Connection) -> TokenResult<Vec<FavoriteToken>> {
     // Self-heal: purge any corrupt rows with a blank mint (legacy bad data that
     // can't be removed by mint and would otherwise show as an unremovable row).
     let _ = conn.execute(
@@ -177,24 +161,16 @@ fn get_favorite_internal(conn: &Connection, mint: &str) -> TokenResult<Option<Fa
 }
 
 /// Get a single favorite by mint address
-pub fn get_favorite(conn: &Mutex<Connection>, mint: &str) -> TokenResult<Option<FavoriteToken>> {
-    let conn = conn
-        .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
+pub fn get_favorite(conn: &Connection, mint: &str) -> TokenResult<Option<FavoriteToken>> {
     get_favorite_internal(&conn, mint)
 }
 
 /// Update a favorite's metadata/notes
 pub fn update_favorite(
-    conn: &Mutex<Connection>,
+    conn: &Connection,
     mint: &str,
     request: &UpdateFavoriteRequest,
 ) -> TokenResult<Option<FavoriteToken>> {
-    let conn = conn
-        .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
     // Build dynamic update query based on provided fields
     let mut updates = Vec::new();
     let mut values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -234,11 +210,7 @@ pub fn update_favorite(
 }
 
 /// Check if a token is in favorites
-pub fn is_favorite(conn: &Mutex<Connection>, mint: &str) -> bool {
-    let Ok(conn) = conn.lock() else {
-        return false;
-    };
-
+pub fn is_favorite(conn: &Connection, mint: &str) -> bool {
     conn.query_row(
         "SELECT 1 FROM token_favorites WHERE mint = ?1",
         params![mint],
@@ -248,11 +220,7 @@ pub fn is_favorite(conn: &Mutex<Connection>, mint: &str) -> bool {
 }
 
 /// Get count of favorites
-pub fn get_favorites_count(conn: &Mutex<Connection>) -> TokenResult<usize> {
-    let conn = conn
-        .lock()
-        .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
+pub fn get_favorites_count(conn: &Connection) -> TokenResult<usize> {
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM token_favorites", [], |row| row.get(0))
         .map_err(|e| TokenError::Database(format!("Failed to count favorites: {e}")))?;
@@ -269,9 +237,12 @@ pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<Favo
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
-    tokio::task::spawn_blocking(move || add_favorite(&db.connection(), &request))
-        .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    tokio::task::spawn_blocking(move || {
+        let conn = db.conn()?;
+        add_favorite(&conn, &request)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Remove a favorite (async wrapper)
@@ -279,9 +250,12 @@ pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
-    tokio::task::spawn_blocking(move || remove_favorite(&db.connection(), &mint))
-        .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    tokio::task::spawn_blocking(move || {
+        let conn = db.conn()?;
+        remove_favorite(&conn, &mint)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Get all favorites (async wrapper)
@@ -289,9 +263,12 @@ pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
-    tokio::task::spawn_blocking(move || get_favorites(&db.connection()))
-        .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    tokio::task::spawn_blocking(move || {
+        let conn = db.conn()?;
+        get_favorites(&conn)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Get a single favorite (async wrapper)
@@ -299,9 +276,12 @@ pub async fn get_favorite_async(mint: String) -> TokenResult<Option<FavoriteToke
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
-    tokio::task::spawn_blocking(move || get_favorite(&db.connection(), &mint))
-        .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    tokio::task::spawn_blocking(move || {
+        let conn = db.conn()?;
+        get_favorite(&conn, &mint)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Update a favorite (async wrapper)
@@ -312,9 +292,12 @@ pub async fn update_favorite_async(
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
-    tokio::task::spawn_blocking(move || update_favorite(&db.connection(), &mint, &request))
-        .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    tokio::task::spawn_blocking(move || {
+        let conn = db.conn()?;
+        update_favorite(&conn, &mint, &request)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }
 
 /// Check if a token is in favorites (async wrapper)
@@ -323,9 +306,12 @@ pub async fn is_favorite_async(mint: String) -> bool {
         return false;
     };
 
-    tokio::task::spawn_blocking(move || is_favorite(&db.connection(), &mint))
-        .await
-        .unwrap_or_default()
+    tokio::task::spawn_blocking(move || match db.conn() {
+        Ok(conn) => is_favorite(&conn, &mint),
+        Err(_) => false,
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Get count of favorites (async wrapper)
@@ -333,7 +319,10 @@ pub async fn get_favorites_count_async() -> TokenResult<usize> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
-    tokio::task::spawn_blocking(move || get_favorites_count(&db.connection()))
-        .await
-        .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    tokio::task::spawn_blocking(move || {
+        let conn = db.conn()?;
+        get_favorites_count(&conn)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
 }

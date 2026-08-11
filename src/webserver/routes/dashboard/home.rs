@@ -327,12 +327,17 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         services_total,
     };
 
-    // Process token statistics (filtering already fetched in parallel)
-    let db = crate::tokens::database::get_global_database();
-    let total_in_database = db
-        .as_ref()
-        .and_then(|d| d.count_tokens().ok())
-        .unwrap_or_default() as usize;
+    // Process token statistics (filtering already fetched in parallel).
+    //
+    // Via the async wrapper, which runs the query on a blocking thread. Called directly,
+    // `count_tokens()` takes the token database's connection lock ON THE ASYNC WORKER
+    // THREAD, so while a filtering snapshot held that connection this one line parked a
+    // whole tokio worker for the duration — measured at 8.9s against the owner's database.
+    // With few workers, a couple of concurrent dashboard polls doing this starved the
+    // runtime, which is why unrelated panels (wallet, positions) stalled together.
+    let total_in_database = crate::tokens::count_tokens_async()
+        .await
+        .unwrap_or_default();
 
     // Get filtering stats from the already fetched result (absent until the first
     // snapshot finishes building in the background)

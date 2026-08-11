@@ -143,10 +143,7 @@ pub async fn count_tokens_async() -> TokenResult<usize> {
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || {
-        let conn = db
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
+        let conn = db.conn()?;
 
         let count: usize = conn
             .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
