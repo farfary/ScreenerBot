@@ -1,81 +1,13 @@
 <div class="wallets-page">
-  <!-- Toolbar: wallet info inline left, tab-specific buttons right -->
-  <div class="wallets-toolbar">
-    <!-- Main wallet inline info (rendered by JS on main tab) -->
-    <div id="wt-info-inline" class="wt-info-inline"></div>
-
-    <!-- Main wallet tab actions -->
-    <div class="wallets-tab-actions" data-tab-actions="main">
-      <button
-        class="btn-icon"
-        id="refresh-wallets-btn"
-        type="button"
-        title="Refresh"
-        aria-label="Refresh"
-      >
-        <i class="icon-refresh-cw"></i>
-      </button>
-    </div>
-
-    <!-- Secondaries tab actions -->
-    <div class="wallets-tab-actions hidden" data-tab-actions="secondaries">
-      <button class="btn" id="import-wallets-btn" type="button">
-        <i class="icon-upload"></i> Import
-      </button>
-      <button class="btn" id="export-wallets-btn" type="button">
-        <i class="icon-download"></i> Export
-      </button>
-      <button class="btn primary" id="add-wallet-btn" type="button">
-        <i class="icon-plus"></i> Add Wallet
-      </button>
-      <button
-        class="btn-icon"
-        id="refresh-wallets-btn-sec"
-        type="button"
-        title="Refresh"
-        aria-label="Refresh"
-      >
-        <i class="icon-refresh-cw"></i>
-      </button>
-    </div>
-
-    <!-- Archive tab actions -->
-    <div class="wallets-tab-actions hidden" data-tab-actions="archive">
-      <button
-        class="btn-icon"
-        id="refresh-wallets-btn-arc"
-        type="button"
-        title="Refresh"
-        aria-label="Refresh"
-      >
-        <i class="icon-refresh-cw"></i>
-      </button>
-    </div>
-
-    <div class="wallets-tab-actions hidden" data-tab-actions="watched">
-      <button class="btn primary" id="add-watch-btn" type="button">
-        <i class="icon-plus"></i> Watch Wallet
-      </button>
-      <button
-        class="btn-icon"
-        id="refresh-watched-wallets-btn"
-        type="button"
-        title="Refresh"
-        aria-label="Refresh watched wallets"
-      >
-        <i class="icon-refresh-cw"></i>
-      </button>
-    </div>
-  </div>
+  <!-- Each tab's subject identity, stats, tools and actions live in its DataTable
+       toolbar — this page carries no chrome strip of its own. -->
 
   <!-- Main Content -->
   <main class="wallets-main">
     <div class="wallets-tab-panels">
       <!-- Main Wallet Tab Panel -->
       <div class="wallet-tab-panel" id="panel-main" data-panel="main">
-        <div class="wt-tokens-section">
-          <div id="tokens-datatable-root"></div>
-        </div>
+        <div id="tokens-datatable-root"></div>
       </div>
 
       <!-- Secondaries Tab Panel -->

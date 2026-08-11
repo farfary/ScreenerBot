@@ -1,221 +1,233 @@
-/* Shared toolbar and filtering styles for dashboard tabs */
+/**
+ * Table toolbar — the single chrome strip above a DataTable.
+ *
+ * Layout is one flex row split into three zones:
+ *
+ *   [ lead: identity + stats ] [ controls: search / views / filters ] [ actions ]
+ *
+ * The bar is its own container (`container-type: inline-size`), so it adapts to the
+ * width of the PANEL it sits in rather than the viewport — the same table renders
+ * correctly in a full page, a split pane or a modal. Collapse order as width drops:
+ * button labels go first, then the controls zone moves to its own line, then the
+ * lead stats wrap. Pages must never stack a second info/action band above a table.
+ */
 
-/* ===================== Data Table Toolbar ===================== */
+/* ===================== Bar ===================== */
+
 .data-table-toolbar {
+  container: table-toolbar / inline-size;
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.4375rem 1rem;
+  min-height: 46px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  position: relative; /* Required for loading indicator */
+  position: relative; /* Required for the loading indicator */
+  box-sizing: border-box;
 }
 
-.table-toolbar {
-  border-radius: 0;
-  box-shadow: none;
+/* A bar carrying a subject identity gets more vertical room for the two-line block. */
+.data-table-toolbar[data-density="default"] {
+  padding: 0.5rem 1rem;
+  min-height: 56px;
 }
 
-.table-toolbar__row {
+.table-toolbar__lead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.table-toolbar__row--controls {
-  align-items: flex-start;
-}
-
-.table-toolbar-title {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 0.875rem;
   min-width: 0;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
+  flex: 0 1 auto;
 }
 
-.table-toolbar-title__main {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.table-toolbar-title__icon {
-  font-size: 1.15rem;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  align-self: flex-start;
-}
-
-.table-toolbar-title__text-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-  align-self: flex-start;
-}
-
-.table-toolbar-title__line {
+.table-toolbar__controls {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  line-height: 1.2;
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
-.table-toolbar-title__tag {
-  padding: 0.125rem 0.5rem;
-  border-radius: var(--radius-full);
-  background: rgb(59, 130, 246, 0.12);
-  color: var(--primary-color);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.table-toolbar-meta,
-.table-toolbar-title__meta {
+.table-toolbar__actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  line-height: 1.2;
-}
-
-.table-toolbar-title .table-toolbar-meta {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.125rem;
-  font-size: 0.7rem;
-  line-height: 1.25;
-  color: var(--text-tertiary);
-}
-
-.table-toolbar-meta__item {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  line-height: 1.2;
-}
-
-.table-toolbar-meta__item[data-variant="accent"] {
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-.table-toolbar-meta__item[data-layout="stack"] {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.table-toolbar-meta__line {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  white-space: normal;
-  flex-wrap: wrap;
-}
-
-.table-toolbar-meta__line--label {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.table-toolbar-meta__line--value {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.table-toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  flex-wrap: wrap;
+  gap: 0.375rem;
+  flex: 0 0 auto;
   margin-left: auto;
 }
 
-.table-toolbar-controls {
+/* ===================== Identity ===================== */
+
+.table-toolbar-identity {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  flex: 1 1 auto;
+  gap: 0.625rem;
+  min-width: 0;
 }
 
-.table-toolbar-controls > .table-toolbar-search {
-  flex: 1 1 250px;
-  min-width: 200px;
-  max-width: 400px;
+/* Bare glyph — never a tile, ring or glow behind a toolbar icon. */
+.table-toolbar-identity__icon {
+  display: flex;
+  align-items: center;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
-.table-toolbar-controls > .table-toolbar-field {
-  flex: 0 0 auto;
+.table-toolbar-identity__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
 }
+
+.table-toolbar-identity__line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.table-toolbar-identity__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-toolbar-identity__tag {
+  padding: 0.0625rem 0.4375rem;
+  border-radius: var(--radius-full);
+  background: rgb(59, 130, 246, 0.12);
+  color: var(--primary-color);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.table-toolbar-identity__tag[data-variant="success"] {
+  background: rgb(34, 197, 94, 0.14);
+  color: var(--success-color, #16a34a);
+}
+
+.table-toolbar-identity__tag[data-variant="warning"] {
+  background: rgb(250, 204, 21, 0.16);
+  color: var(--warning-color, #ca8a04);
+}
+
+.table-toolbar-identity__tag[data-variant="muted"] {
+  background: rgb(148, 163, 184, 0.16);
+  color: var(--text-tertiary);
+}
+
+.table-toolbar-identity__sub {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  color: var(--text-tertiary);
+}
+
+.table-toolbar-identity__subtitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-toolbar-identity__address-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1875rem;
+  min-width: 0;
+}
+
+.table-toolbar-identity__address {
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 22ch;
+}
+
+/* Ghost icon affordance — transparent at rest so the glyph reads as a glyph. */
+.table-toolbar-identity__act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color var(--transition-base);
+  flex-shrink: 0;
+}
+
+.table-toolbar-identity__act:hover {
+  color: var(--text-primary);
+}
+
+/* ===================== Stats ===================== */
 
 .table-toolbar-summary {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.875rem;
   flex-wrap: wrap;
-  justify-content: flex-end;
   min-width: 0;
-  margin-left: auto;
-  font-size: 0.85rem;
+}
+
+/* Hairline between adjacent stats instead of a glyph separator. */
+.data-table-toolbar[data-has-identity="true"] .table-toolbar-summary {
+  padding-left: 0.875rem;
+  border-left: 1px solid var(--border-color);
 }
 
 .table-toolbar-chip {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.375rem;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  border: none;
   color: var(--text-primary);
-  font-size: 0.85rem;
-  font-weight: 500;
-  letter-spacing: 0;
-  position: relative;
+  white-space: nowrap;
 }
 
-/* Separator between chips */
-.table-toolbar-chip:not(:last-child)::after {
-  content: "|";
-  position: absolute;
-  right: -0.5rem;
-  opacity: 0.3;
-  font-weight: 400;
+.table-toolbar-chip[hidden] {
+  display: none;
 }
 
 .table-toolbar-chip__icon {
-  font-size: 0.85em;
+  font-size: 0.8em;
+  color: var(--text-tertiary);
 }
 
 .table-toolbar-chip__label {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   color: var(--text-tertiary);
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .table-toolbar-chip__value {
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
@@ -224,7 +236,6 @@
     "zero" 1;
 }
 
-/* Variant colors - subtle, no backgrounds */
 .table-toolbar-chip[data-variant="success"] .table-toolbar-chip__value {
   color: #4ade80;
 }
@@ -241,91 +252,275 @@
   color: #60a5fa;
 }
 
-.table-toolbar-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 160px;
-  flex: 0 1 auto;
-  align-self: center;
+.table-toolbar-chip[data-variant="secondary"] .table-toolbar-chip__value {
+  color: var(--text-secondary);
 }
 
-.table-toolbar-field--switch {
+/* ===================== Inline text ===================== */
+
+.table-toolbar-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.table-toolbar-text[hidden] {
+  display: none;
+}
+
+.table-toolbar-text__label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.table-toolbar-text[data-variant="accent"] .table-toolbar-text__value {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+/* ===================== Structure helpers ===================== */
+
+.table-toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 20px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.table-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.table-toolbar-slot {
+  display: contents;
+}
+
+/* A cluster groups related controls so many tools read as few objects. */
+.table-toolbar-cluster {
   display: flex;
-  flex-direction: row;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 0.375rem;
   min-width: 0;
-  padding: 10px 14px;
-  border-radius: var(--radius-xl);
-  border: 1px solid rgb(148, 163, 184, 0.22);
-  background: rgb(30, 41, 59, 0.45);
+}
+
+.table-toolbar-cluster[hidden] {
+  display: none;
+}
+
+.table-toolbar-cluster__label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Attached: members share edges and read as one control. */
+.table-toolbar-cluster--attached {
+  gap: 0;
+}
+
+.table-toolbar-cluster--attached > .table-toolbar-field:not(:first-child) .table-toolbar-select,
+.table-toolbar-cluster--attached > .table-toolbar-btn:not(:first-child),
+.table-toolbar-cluster--attached > .table-toolbar-field:not(:first-child) .table-toolbar-input {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: -1px;
+}
+
+.table-toolbar-cluster--attached > .table-toolbar-field:not(:last-child) .table-toolbar-select,
+.table-toolbar-cluster--attached > .table-toolbar-btn:not(:last-child),
+.table-toolbar-cluster--attached > .table-toolbar-field:not(:last-child) .table-toolbar-input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.table-toolbar-cluster--attached > .table-toolbar-btn:hover {
+  z-index: 1;
+}
+
+.table-toolbar-custom {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.table-toolbar-custom[hidden] {
+  display: none;
+}
+
+/* ===================== Fields ===================== */
+
+.table-toolbar-field {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.table-toolbar-field[hidden] {
+  display: none;
+}
+
+/* Labels are screen-reader only — the control's own text carries the meaning. */
+.table-toolbar-field__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* `background-color` (not the `background` shorthand) so the global select arrow survives. */
+.table-toolbar-input,
+.table-toolbar-select,
+.dt-filter,
+.dt-search-input {
+  padding: 0 0.6875rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  height: 32px;
+  box-sizing: border-box;
   transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+/* Select-specific styles. The chevron arrow comes from the single global
+   `select {}` rule in form_controls.css — never re-declare background-image
+   here (that is what produced duplicate/again-broken arrows historically). */
+.table-toolbar-select,
+.dt-filter {
+  padding-right: 1.75rem;
+  min-width: 120px;
+  cursor: pointer;
+  background-position: right 7px center;
+}
+
+.table-toolbar-input:hover,
+.table-toolbar-select:hover,
+.dt-filter:hover,
+.dt-search-input:hover {
+  border-color: var(--border-strong, var(--text-muted));
+}
+
+.table-toolbar-input:focus,
+.table-toolbar-select:focus,
+.dt-filter:focus,
+.dt-search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgb(59, 130, 246, 0.1);
+}
+
+/* ===================== Search ===================== */
+
+.table-toolbar-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 220px;
+  min-width: 130px;
+  max-width: 340px;
+}
+
+.table-toolbar-search[data-grow="false"],
+.table-toolbar-search--inline {
+  flex: 0 1 auto;
+}
+
+.table-toolbar-search .dt-search-input,
+.table-toolbar-search .table-toolbar-input--text {
+  width: 100%;
+  min-width: 0;
+  padding-left: 1.875rem;
+  padding-right: 1.625rem;
+}
+
+.table-toolbar-search__icon {
+  position: absolute;
+  left: 0.625rem;
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.table-toolbar-search__clear,
+.table-toolbar-input__clear {
+  position: absolute;
+  right: 0.375rem;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color var(--transition-base);
+}
+
+/* The explicit `display` above beats the UA `[hidden]` rule, and both buttons are
+   toggled via `el.hidden` as the field empties — restore the attribute's effect. */
+.table-toolbar-search__clear[hidden],
+.table-toolbar-input__clear[hidden] {
+  display: none;
+}
+
+.table-toolbar-search__clear:hover,
+.table-toolbar-input__clear:hover {
+  color: var(--text-primary);
+}
+
+.table-toolbar-search[data-control-wrapper] {
+  width: 100%;
+}
+
+/* ===================== Switch ===================== */
+
+.table-toolbar-field--switch {
+  gap: 0.5rem;
+  padding: 0 0.625rem;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  box-sizing: border-box;
+  transition: border-color var(--transition-base);
 }
 
 .table-toolbar-field--switch:not(.is-disabled):hover {
-  border-color: var(--primary-color);
-  background: rgb(59, 130, 246, 0.08);
-}
-
-.table-toolbar-field--switch .table-toolbar-field__label {
-  margin: 0;
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
+  border-color: var(--border-strong, var(--text-muted));
 }
 
 .table-toolbar-field--switch.is-disabled {
   opacity: 0.55;
-  border-color: rgb(148, 163, 184, 0.18);
-}
-
-.table-toolbar-field--switch .table-toolbar-switch {
-  gap: 10px;
-}
-
-.table-toolbar-field--switch .table-toolbar-switch__status {
-  min-width: 36px;
-}
-
-.table-toolbar-controls .table-toolbar-field[data-filter-id="rejection_reason"] {
-  margin-left: auto;
-  min-width: 210px;
-}
-
-@media (width <= 900px) {
-  .table-toolbar-controls {
-    align-items: stretch;
-    gap: 14px;
-  }
-
-  .table-toolbar-controls > .table-toolbar-search {
-    flex: 1 1 100%;
-    min-width: 100%;
-  }
-
-  .table-toolbar-controls .table-toolbar-field[data-filter-id="rejection_reason"] {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .table-toolbar-field--switch {
-    width: 100%;
-  }
-
-  .table-toolbar-field--switch .table-toolbar-switch {
-    margin-left: auto;
-  }
 }
 
 .table-toolbar-switch {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   cursor: pointer;
 }
 
@@ -338,24 +533,27 @@
 
 .table-toolbar-switch__slider {
   position: relative;
-  width: 42px;
-  height: 22px;
+  width: 32px;
+  height: 18px;
   border-radius: var(--radius-full);
   background: var(--border-color);
   border: 1px solid var(--border-color);
-  transition: all var(--transition-base);
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base);
+  flex-shrink: 0;
 }
 
 .table-toolbar-switch__slider::before {
   content: "";
   position: absolute;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   top: 1px;
   left: 1px;
   background: var(--bg-primary);
   border-radius: var(--radius-full);
-  box-shadow: 0 1px 3px rgb(15, 23, 42, 0.25);
+  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.25);
   transition: transform var(--transition-base);
 }
 
@@ -365,14 +563,15 @@
 }
 
 .table-toolbar-switch__input:checked + .table-toolbar-switch__slider::before {
-  transform: translateX(20px);
+  transform: translateX(14px);
 }
 
 .table-toolbar-switch__status {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
+  letter-spacing: 0.06em;
   color: var(--text-secondary);
-  min-width: 28px;
+  min-width: 24px;
   text-transform: uppercase;
 }
 
@@ -384,146 +583,104 @@
   color: var(--text-muted);
 }
 
-.table-toolbar-field__label {
-  /* Visually hidden but accessible to screen readers */
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
+/* ===================== Segmented view switcher ===================== */
 
-.table-toolbar-input,
-.table-toolbar-select,
-.dt-filter,
-.dt-search-input {
-  padding: 8px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  /* background-color (not the `background` shorthand) so the global select arrow survives. */
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  line-height: 1.5;
-  height: 38px;
-  box-sizing: border-box;
-  transition: all var(--transition-base);
-}
-
-/* Select-specific styles. The chevron arrow comes from the single global
-   `select {}` rule in form_controls.css — never re-declare background-image
-   here (that is what produced duplicate/again-broken arrows historically). */
-.table-toolbar-select,
-.dt-filter {
-  padding-right: 32px;
-  cursor: pointer;
-}
-
-.table-toolbar-input:focus,
-.table-toolbar-select:focus,
-.dt-filter:focus,
-.dt-search-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgb(59, 130, 246, 0.1);
-}
-
-.table-toolbar-input:hover,
-.table-toolbar-select:hover,
-.dt-filter:hover,
-.dt-search-input:hover {
-  border-color: var(--primary-color);
-}
-
-.table-toolbar-search {
-  position: relative;
+.table-toolbar-seg-wrap {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
-.table-toolbar-search--inline {
-  width: auto;
+.table-toolbar-seg-wrap[hidden] {
+  display: none;
 }
 
-.table-toolbar-search .dt-search-input {
-  padding-left: 36px;
-  padding-right: 30px;
-  min-width: 220px;
-  width: 100%;
-}
-
-.table-toolbar-search__icon {
-  position: absolute;
-  left: 12px;
-  font-size: 0.9rem;
-  color: var(--text-tertiary);
-  pointer-events: none;
-}
-
-.table-toolbar-search__clear,
-.table-toolbar-input__clear {
-  position: absolute;
-  right: 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
+.table-toolbar-seg {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0;
-  width: 18px;
-  height: 18px;
-  font-size: 0.85em;
+  padding: 2px;
+  gap: 2px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  box-sizing: border-box;
+}
+
+.table-toolbar-seg__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  height: 26px;
+  padding: 0 0.625rem;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
-  transition: color var(--transition-base);
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
 }
 
-.table-toolbar-input__clear {
-  right: 6px;
-}
-
-.table-toolbar-search__clear:hover,
-.table-toolbar-search__clear:focus,
-.table-toolbar-input__clear:hover,
-.table-toolbar-input__clear:focus {
+.table-toolbar-seg__btn:hover:not(.active) {
   color: var(--text-primary);
-  outline: none;
+  background: var(--bg-hover);
 }
 
-.table-toolbar-search[data-control-wrapper] {
-  width: 100%;
+.table-toolbar-seg__btn.active {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.08);
 }
 
-.table-toolbar-input--text {
-  min-width: 200px;
-  padding-right: 30px;
+.table-toolbar-seg__icon {
+  display: flex;
+  align-items: center;
+  font-size: 0.85em;
 }
 
-.table-toolbar-select {
-  min-width: 160px;
+.table-toolbar-seg__count {
+  font-family: var(--font-data);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  font-feature-settings: "tnum" 1;
 }
+
+.table-toolbar-seg__btn.active .table-toolbar-seg__count {
+  color: var(--primary-color);
+}
+
+/* ===================== Buttons ===================== */
 
 .table-toolbar-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0 0.75rem;
+  height: 32px;
   border-radius: var(--radius-md);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-weight: 500;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  height: 38px;
+  font-size: 0.8125rem;
+  line-height: 1;
   box-sizing: border-box;
   cursor: pointer;
   border: 1px solid var(--border-color);
-  transition: all var(--transition-base);
+  text-decoration: none;
   white-space: nowrap;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    color var(--transition-base);
 }
 
 /* The explicit `display: inline-flex` above overrides the browser's `[hidden]`
@@ -534,24 +691,21 @@
   display: none;
 }
 
-.table-toolbar-btn:hover {
+.table-toolbar-btn:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--primary-color);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.1);
+  border-color: var(--border-strong, var(--text-muted));
 }
 
-.table-toolbar-btn:active {
-  transform: translateY(0);
-  box-shadow: none;
+.table-toolbar-btn:disabled,
+.table-toolbar-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .table-toolbar-btn--icon {
-  padding: 8px;
-  justify-content: center;
-  width: 38px;
-  min-width: 38px;
-  height: 38px;
+  padding: 0;
+  width: 32px;
+  min-width: 32px;
 }
 
 .table-toolbar-btn--primary {
@@ -560,492 +714,226 @@
   color: #fff;
 }
 
+.table-toolbar-btn--primary:hover:not(:disabled) {
+  background: var(--primary-hover, var(--primary-color));
+  border-color: var(--primary-hover, var(--primary-color));
+  color: #fff;
+}
+
 .table-toolbar-btn--danger {
-  background: var(--danger-bg, rgb(248, 113, 113, 0.2));
-  border-color: rgb(248, 113, 113, 0.35);
+  background: transparent;
+  border-color: rgb(248, 113, 113, 0.4);
   color: var(--danger-color, #f87171);
+}
+
+.table-toolbar-btn--danger:hover:not(:disabled) {
+  background: rgb(248, 113, 113, 0.12);
+  border-color: var(--danger-color, #f87171);
+}
+
+.table-toolbar-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.table-toolbar-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+.table-toolbar-btn .dt-btn-icon {
+  display: flex;
+  align-items: center;
+  font-size: 0.9em;
+}
+
+/* Busy: the button is running its action. Communicates real state, so it animates,
+   but degrades to a static dimmed state under reduced motion. */
+.table-toolbar-btn.is-busy {
+  position: relative;
+  color: transparent;
+}
+
+.table-toolbar-btn.is-busy .dt-btn-icon,
+.table-toolbar-btn.is-busy .dt-btn-label {
+  visibility: hidden;
+}
+
+.table-toolbar-btn.is-busy::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentcolor;
+  border-top-color: transparent;
+  color: var(--text-secondary);
+  animation: table-toolbar-spin 0.7s linear infinite;
+}
+
+.table-toolbar-btn--primary.is-busy::after {
+  color: #fff;
+}
+
+@keyframes table-toolbar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-toolbar-btn.is-busy::after {
+    animation: none;
+    border-top-color: currentcolor;
+    opacity: 0.4;
+  }
+}
+
+/* ===================== Overflow menu ===================== */
+
+.table-toolbar-overflow {
+  position: relative;
+  display: inline-flex;
+}
+
+.table-toolbar-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  min-width: 180px;
+  padding: 0.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+.table-toolbar-menu[hidden] {
+  display: none;
+}
+
+.table-toolbar-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-base);
+}
+
+.table-toolbar-menu__item[hidden] {
+  display: none;
+}
+
+.table-toolbar-menu__item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.table-toolbar-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.table-toolbar-menu__item[data-variant="danger"] {
+  color: var(--danger-color, #f87171);
+}
+
+.table-toolbar-menu__icon {
+  display: flex;
+  align-items: center;
+  font-size: 0.85em;
+  color: var(--text-tertiary);
+}
+
+.table-toolbar-menu__item[data-variant="danger"] .table-toolbar-menu__icon {
+  color: inherit;
 }
 
 .table-toolbar-settings {
   position: relative;
 }
 
-/* ===================== Compact (no-title) layout ===================== */
+/* ===================== Adaptive collapse =====================
+   Driven by the toolbar's own inline size, not the viewport, so a table inside a
+   narrow pane collapses even on a wide screen. */
 
-/* Single-row toolbar: [search + filters] [summary chips] [actions]     */
-.table-toolbar--compact {
-  padding: 0.375rem 1rem;
-}
-
-.table-toolbar--compact .table-toolbar__row--main {
-  gap: 0.5rem;
-  flex-wrap: nowrap;
-}
-
-.table-toolbar--compact .table-toolbar-controls {
-  flex: 0 1 auto;
-  gap: 0.375rem;
-  flex-wrap: nowrap;
-}
-
-.table-toolbar--compact .table-toolbar-controls > .table-toolbar-search {
-  flex: 0 1 180px;
-  min-width: 110px;
-  max-width: 240px;
-}
-
-/* Filter field: no forced minimum — size to select content */
-.table-toolbar--compact .table-toolbar-field {
-  min-width: 0;
-}
-
-/* Compact inputs and selects: reduced height and font */
-.table-toolbar--compact .table-toolbar-input,
-.table-toolbar--compact .table-toolbar-select,
-.table-toolbar--compact .dt-filter,
-.table-toolbar--compact .dt-search-input {
-  height: 32px;
-  padding: 5px 10px;
-  font-size: 0.8rem;
-}
-
-/* Select arrow repositioned for the smaller height */
-.table-toolbar--compact .table-toolbar-select,
-.table-toolbar--compact .dt-filter {
-  padding-right: 26px;
-  min-width: 0;
-  background-position: right 7px center;
-}
-
-/* Search input: maintain icon and clear-button spacing */
-.table-toolbar--compact .table-toolbar-search .dt-search-input {
-  padding-left: 30px;
-  padding-right: 28px;
-  min-width: 0;
-}
-
-.table-toolbar--compact .table-toolbar-search__icon {
-  left: 10px;
-  font-size: 0.8rem;
-}
-
-/* Compact toolbar buttons */
-.table-toolbar--compact .table-toolbar-btn {
-  height: 32px;
-  padding: 5px 10px;
-  font-size: 0.8rem;
-}
-
-.table-toolbar--compact .table-toolbar-btn--icon {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  padding: 5px;
-}
-
-/* Compact chip label/value sizing */
-.table-toolbar--compact .table-toolbar-chip__label {
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-}
-
-.table-toolbar--compact .table-toolbar-chip__value {
-  font-size: 0.8rem;
-}
-
-.table-toolbar--compact .table-toolbar-summary {
-  gap: 0.5rem;
-  margin-left: auto;
-  flex-shrink: 0;
-  flex-wrap: nowrap;
-}
-
-.table-toolbar--compact .table-toolbar-actions {
-  flex-shrink: 0;
-  flex-wrap: nowrap;
-  gap: 0.375rem;
-}
-
-@media (width <= 960px) {
-  .table-toolbar__row {
-    gap: 10px;
+/* 1. Labelled buttons shed their text before anything reflows. */
+@container table-toolbar (width < 1000px) {
+  .table-toolbar-btn--collapsible {
+    padding: 0;
+    width: 32px;
+    min-width: 32px;
+    gap: 0;
   }
 
-  .table-toolbar-controls {
-    flex-direction: column;
-    align-items: stretch;
+  .table-toolbar-btn--collapsible .dt-btn-label {
+    display: none;
   }
 
-  .table-toolbar-summary {
-    width: 100%;
-    justify-content: flex-start;
+  .table-toolbar-seg__btn .table-toolbar-seg__label {
+    display: none;
   }
 
-  .table-toolbar-controls > .table-toolbar-search {
+  .table-toolbar-seg__btn {
+    padding: 0 0.5rem;
+  }
+}
+
+/* 2. The controls zone drops to its own line under the lead/actions row. */
+@container table-toolbar (width < 780px) {
+  .table-toolbar__controls {
     flex: 1 1 100%;
-    min-width: 100%;
+    order: 3;
+  }
+
+  .table-toolbar__lead {
+    flex: 1 1 auto;
+  }
+
+  .table-toolbar-search {
     max-width: none;
   }
+}
 
-  .table-toolbar-controls .table-toolbar-field[data-filter-id="rejection_reason"] {
-    margin-left: 0;
+/* 3. Identity and stats stack; every control spans the bar. */
+@container table-toolbar (width < 520px) {
+  .table-toolbar__lead {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .data-table-toolbar[data-has-identity="true"] .table-toolbar-summary {
+    padding-left: 0;
+    border-left: none;
     width: 100%;
   }
 
-  .table-toolbar-field--switch {
-    width: 100%;
+  .table-toolbar-identity__address {
+    max-width: 14ch;
   }
 
-  .table-toolbar-field--switch .table-toolbar-switch {
-    margin-left: auto;
-  }
-
-  /* Compact: graceful wrap on narrow screens */
-  .table-toolbar--compact .table-toolbar__row--main {
+  .table-toolbar__controls {
     flex-wrap: wrap;
   }
 
-  .table-toolbar--compact .table-toolbar-controls {
+  .table-toolbar-search {
     flex: 1 1 100%;
-    flex-flow: row wrap;
-    align-items: center;
   }
 
-  .table-toolbar--compact .table-toolbar-controls > .table-toolbar-search {
+  .table-toolbar-field,
+  .table-toolbar-select,
+  .dt-filter {
     flex: 1 1 auto;
     min-width: 0;
-    max-width: none;
-  }
-}
-
-@media (width <= 720px) {
-  .data-table-toolbar {
-    padding: 10px 12px;
-  }
-
-  .table-toolbar-search .dt-search-input {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .table-toolbar-field {
-    width: 100%;
-    min-width: 0;
-  }
-}
-
-.toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 14px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
-  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.12);
-}
-
-.toolbar--dense {
-  gap: 8px;
-  padding: 8px 12px;
-}
-
-.toolbar-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 12px;
-}
-
-.toolbar-row--head {
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.toolbar-row--filters {
-  align-items: flex-end;
-  gap: 10px 12px;
-}
-
-.toolbar-row--split {
-  justify-content: space-between;
-}
-
-.toolbar-title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 180px;
-}
-
-.toolbar-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.2;
-  font-size: 0.95em;
-}
-
-.toolbar-meta,
-.toolbar-subtitle {
-  font-size: 0.8em;
-  color: var(--text-muted);
-  line-height: 1.3;
-}
-
-.toolbar-meta[data-variant="accent"] {
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.toolbar-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.toolbar-actions .btn {
-  white-space: nowrap;
-}
-
-.toolbar-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1 1 200px;
-  min-width: 180px;
-}
-
-.toolbar-field--grow {
-  flex: 1 1 280px;
-  min-width: 220px;
-}
-
-.toolbar-field--compact {
-  flex: 0 0 auto;
-  min-width: 140px;
-}
-
-.toolbar-field--inline {
-  flex-direction: row;
-  align-items: center;
-}
-
-.toolbar-label {
-  font-size: 0.7em;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  line-height: 1.2;
-}
-
-.toolbar-input,
-.toolbar-select {
-  width: 100%;
-  padding: 5px 9px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  /* background-color (not the `background` shorthand) so the global select arrow survives. */
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 0.9em;
-  line-height: 1.4;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    background 0.2s ease;
-}
-
-.toolbar-input::placeholder {
-  color: var(--text-secondary);
-  opacity: 0.85;
-}
-
-.toolbar-input:focus,
-.toolbar-select:focus {
-  border-color: var(--link-color);
-  box-shadow: 0 0 0 2px rgb(59, 130, 246, 0.18);
-  outline: none;
-}
-
-.toolbar-select {
-  /* Arrow inherited from global `select {}` (form_controls.css). */
-  min-width: 140px;
-  cursor: pointer;
-  padding-right: 28px;
-}
-
-.toolbar-select::-ms-expand {
-  display: none;
-}
-
-.toolbar-select[multiple] {
-  background-image: none;
-  padding-right: 10px;
-}
-
-.toolbar-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.toolbar-search .toolbar-input {
-  padding-left: 28px;
-  padding-right: 28px;
-}
-
-.toolbar-search__icon {
-  position: absolute;
-  left: 9px;
-  font-size: 0.9em;
-  color: var(--text-secondary);
-  pointer-events: none;
-}
-
-.toolbar-search__clear {
-  position: absolute;
-  right: 5px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  width: 18px;
-  height: 18px;
-  font-size: 0.85em;
-  cursor: pointer;
-  transition: color var(--transition-base);
-}
-
-.toolbar-search__clear:hover,
-.toolbar-search__clear:focus {
-  color: var(--text-primary);
-  outline: none;
-}
-
-.filter-chip-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.filter-chip {
-  padding: 4px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  font-size: 0.75em;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    color 0.2s ease;
-}
-
-.filter-chip:hover:not(.active),
-.filter-chip:focus-visible:not(.active) {
-  border-color: var(--link-color);
-  color: var(--link-color);
-  outline: none;
-}
-
-.filter-chip.active {
-  background: var(--link-color);
-  border-color: var(--link-color);
-  color: #fff;
-}
-
-.toolbar-quick-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.toolbar-metric-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.toolbar-metric {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  background: rgb(148, 163, 184, 0.12);
-  color: var(--text-secondary);
-  font-size: 0.78em;
-  font-weight: 600;
-}
-
-.toolbar-metric[data-variant="success"] {
-  background: rgb(34, 197, 94, 0.16);
-  color: #4ade80;
-}
-
-.toolbar-metric[data-variant="warn"] {
-  background: rgb(250, 204, 21, 0.16);
-  color: #facc15;
-}
-
-.toolbar-metric[data-variant="error"] {
-  background: rgb(248, 113, 113, 0.16);
-  color: #f87171;
-}
-
-.toolbar-quick-label {
-  font-size: 0.72em;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.toolbar-divider {
-  width: 1px;
-  height: 32px;
-  background: var(--border-color);
-}
-
-.toolbar-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85em;
-  color: var(--text-secondary);
-}
-
-@media (width <= 1024px) {
-  .toolbar-actions {
-    margin-left: 0;
-    width: 100%;
-    justify-content: flex-start;
-  }
-}
-
-@media (width <= 720px) {
-  .toolbar {
-    padding: 10px 12px;
-    gap: 10px;
-  }
-
-  .toolbar-row {
-    gap: 10px 12px;
-  }
-
-  .toolbar-field {
-    min-width: 160px;
   }
 }

@@ -24,45 +24,6 @@
 }
 
 /* =============================================================================
-   Toolbar (first row inside page — tab-contextual actions)
-   ============================================================================= */
-
-.wallets-toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: 6px var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-  min-height: 42px;
-}
-
-/* Inline wallet info — fills available toolbar width, action buttons sit right */
-.wt-info-inline {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.wt-no-wallet {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.wallets-tab-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.wallets-tab-actions.hidden {
-  display: none;
-}
-
-/* =============================================================================
    Main Content Area — no padding, panels own their spacing
    ============================================================================= */
 
@@ -213,14 +174,6 @@
 /* =============================================================================
    Responsive Design
    ============================================================================= */
-
-@media (width <= 900px) {
-  .wallets-toolbar {
-    flex-wrap: wrap;
-    gap: var(--spacing-xs);
-    padding: 8px var(--spacing-md);
-  }
-}
 
 @media (width <= 600px) {
   .wallets-main {

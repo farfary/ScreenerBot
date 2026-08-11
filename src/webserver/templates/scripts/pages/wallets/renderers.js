@@ -11,9 +11,12 @@ export function createWalletRenderers({
   currentTab,
   $,
   Utils,
-  on,
   capitalizeFirst,
   handleWalletAction,
+  onRefresh,
+  onAddWallet,
+  onImportWallets,
+  onExportWallets,
 }) {
   // DataTable instances — created once, updated via setData() on every poll
   let tokenTable = null;
@@ -23,9 +26,13 @@ export function createWalletRenderers({
   let archiveTable = null;
   let archiveClickHandler = null;
 
-  // Track which wallet is currently rendered in the toolbar so we can do
-  // fast in-place updates instead of rebuilding the entire info bar each poll.
-  let lastRenderedWalletId = null;
+  function mainWallet() {
+    return walletsData().find((w) => w.role === "main") || null;
+  }
+
+  function solscanAccountUrl(address) {
+    return address ? `https://solscan.io/account/${encodeURIComponent(address)}` : "";
+  }
 
   // Address cell shared by the Secondaries/Archive tables — same short-address +
   // copy + Solscan-link treatment as the main wallet's token Mint column.
@@ -86,8 +93,8 @@ export function createWalletRenderers({
       value: (row) => (row.is_token_2022 ? "Token-2022" : "SPL"),
       render: (value, row) =>
         row.is_token_2022
-          ? "<span class=\"wt-type-badge token2022\">Token-2022</span>"
-          : "<span class=\"wt-type-badge spl\">SPL</span>",
+          ? '<span class="wt-type-badge token2022">Token-2022</span>'
+          : '<span class="wt-type-badge spl">SPL</span>',
     },
     {
       id: "decimals",
@@ -218,114 +225,19 @@ export function createWalletRenderers({
 
   function renderCurrentPanel() {
     const tab = currentTab();
-    if (tab === "main") {
-      renderMainWalletPanel();
-    } else {
-      // Clear toolbar inline slot and reset tracked wallet so the next visit
-      // to the main tab performs a full structural render.
-      const inline = document.querySelector("#wt-info-inline");
-      if (inline) inline.innerHTML = "";
-      lastRenderedWalletId = null;
-      if (tab === "secondaries") renderSecondariesPanel();
-      else if (tab === "archive") renderArchivePanel();
-    }
+    if (tab === "main") renderMainWalletPanel();
+    else if (tab === "secondaries") renderSecondariesPanel();
+    else if (tab === "archive") renderArchivePanel();
   }
 
   // =============================================================================
   // Main Wallet Panel
   // =============================================================================
 
+  // The main wallet IS the subject of its token-holdings table, so its name,
+  // address, balances and actions live in that table's toolbar identity/stats —
+  // there is no separate wallet info bar above the table.
   function renderMainWalletPanel() {
-    const wallets = walletsData();
-    const mainWallet = wallets.find((w) => w.role === "main");
-    const container = document.querySelector("#wt-info-inline");
-
-    if (!container) return;
-
-    if (!mainWallet) {
-      if (lastRenderedWalletId !== null) {
-        container.innerHTML = "<span class=\"wt-no-wallet\">No main wallet configured</span>";
-        lastRenderedWalletId = null;
-      }
-      renderTokenHoldingsTable();
-      return;
-    }
-
-    const balance =
-      mainWallet.balance != null ? Utils.formatSol(mainWallet.balance, { decimals: 4 }) : "—";
-    const lastUsed = mainWallet.last_used_at
-      ? Utils.formatTimestamp(mainWallet.last_used_at, { variant: "relative" })
-      : "Never";
-
-    if (lastRenderedWalletId === mainWallet.id) {
-      // Silent in-place update — only values that can change between polls
-      const balanceEl = document.querySelector("#wt-balance-value");
-      if (balanceEl) balanceEl.textContent = balance;
-      const lastUsedEl = document.querySelector("#wt-last-used-value");
-      if (lastUsedEl) lastUsedEl.textContent = lastUsed;
-      // Token count is updated by renderTokenHoldingsTable via #wt-token-count
-      renderTokenHoldingsTable();
-      return;
-    }
-
-    // Full structural render — first time or wallet changed
-    lastRenderedWalletId = mainWallet.id;
-
-    const fullAddress = mainWallet.address || "—";
-    const solscanUrl = mainWallet.address
-      ? `https://solscan.io/account/${encodeURIComponent(mainWallet.address)}`
-      : "#";
-
-    container.innerHTML = `
-      <div class="wt-info-identity">
-        <span class="wt-info-name">${Utils.escapeHtml(mainWallet.name)}</span>
-      </div>
-      <div class="wt-info-divider"></div>
-      <div class="wt-info-address-group">
-        <code class="wt-info-address">${Utils.escapeHtml(fullAddress)}</code>
-        <button type="button" class="copy-btn" data-address="${mainWallet.address}" title="Copy address">
-          <i class="icon-copy"></i>
-        </button>
-        <a class="copy-btn" href="${solscanUrl}" target="_blank" rel="noopener" title="View on Solscan">
-          <i class="icon-external-link"></i>
-        </a>
-      </div>
-      <div class="wt-info-divider"></div>
-      <div class="wt-info-stat">
-        <span class="label">SOL Balance</span>
-        <span class="value" id="wt-balance-value">${balance}</span>
-      </div>
-      <div class="wt-info-stat">
-        <span class="label">Tokens</span>
-        <span class="value" id="wt-token-count">—</span>
-      </div>
-      <div class="wt-info-stat">
-        <span class="label">Last Used</span>
-        <span class="value" id="wt-last-used-value">${lastUsed}</span>
-      </div>
-      <div class="wt-info-actions">
-        <button type="button" class="btn" data-action="export" data-id="${mainWallet.id}">
-          <i class="icon-key"></i> Export Key
-        </button>
-      </div>
-    `;
-
-    // Wire copy button on address (scope to data-address so the adjacent
-    // Solscan link — which also carries .copy-btn for styling — is skipped).
-    container.querySelectorAll(".copy-btn[data-address]").forEach((btn) => {
-      on(btn, "click", (e) => {
-        e.stopPropagation();
-        Utils.copyToClipboard(btn.dataset.address);
-        Utils.showToast("Address copied!", "success");
-      });
-    });
-
-    // Wire export key action
-    container.querySelectorAll("[data-action='export']").forEach((btn) => {
-      on(btn, "click", () => handleWalletAction("export", btn.dataset.id));
-    });
-
-    // Render the DataTable for token holdings (first time creates it)
     renderTokenHoldingsTable();
   }
 
@@ -333,20 +245,49 @@ export function createWalletRenderers({
   // Token Holdings DataTable
   // =============================================================================
 
+  // In-place toolbar refresh on every poll — identity and stats only, so an open
+  // search box, menu or settings dialog is never torn down.
+  function syncMainWalletToolbar(tokens) {
+    if (!tokenTable) return;
+    const wallet = mainWallet();
+
+    tokenTable.setToolbarIdentity({
+      title: wallet?.name || "No main wallet",
+      tag: wallet ? "Main" : "",
+      address: {
+        value: wallet?.address || "—",
+        href: solscanAccountUrl(wallet?.address) || "#",
+      },
+    });
+
+    tokenTable.updateToolbarSummary([
+      {
+        id: "wt-sol-balance",
+        value: wallet?.balance != null ? Utils.formatSol(wallet.balance, { decimals: 4 }) : "—",
+      },
+      { id: "wt-tokens-count", value: String(tokens.length) },
+      {
+        id: "wt-last-used",
+        value: wallet?.last_used_at
+          ? Utils.formatTimestamp(wallet.last_used_at, { variant: "relative" })
+          : "Never",
+      },
+    ]);
+
+    tokenTable.setToolbarItem("wt-export-key", { hidden: !wallet });
+  }
+
   function renderTokenHoldingsTable() {
     const dtRoot = document.querySelector("#tokens-datatable-root");
     if (!dtRoot) return;
 
     const tokens = tokenHoldings();
-
-    // Update token count in the info bar
-    const countEl = document.querySelector("#wt-token-count");
-    if (countEl) countEl.textContent = tokens.length;
+    const wallet = mainWallet();
 
     if (tokenTable) {
       // Silent data refresh — no DOM teardown, no visual flash, settings dialog stays open
       tokenTable.setData(tokens);
-      tokenTable.updateToolbarSummary?.([{ id: "wt-tokens-count", value: String(tokens.length) }]);
+      syncMainWalletToolbar(tokens);
       return;
     }
 
@@ -365,18 +306,54 @@ export function createWalletRenderers({
         column: "ui_amount",
         direction: "desc",
       },
+      emptyTitle: "No token holdings",
+      emptyMessage: "Tokens held by this wallet will appear here.",
       toolbar: {
-        summary: [{ id: "wt-tokens-count", label: "Tokens", value: "0", variant: "secondary" }],
+        // Identity nodes are always rendered (even before the wallet loads) so
+        // `setToolbarIdentity` can fill them in place on the first poll.
+        identity: {
+          icon: "icon-wallet",
+          title: wallet?.name || "Main Wallet",
+          tag: "Main",
+          address: {
+            value: wallet?.address || "—",
+            href: solscanAccountUrl(wallet?.address) || "#",
+            linkTooltip: "View on Solscan",
+          },
+        },
+        summary: [
+          { id: "wt-sol-balance", label: "SOL", value: "—" },
+          { id: "wt-tokens-count", label: "Tokens", value: "0", variant: "secondary" },
+          { id: "wt-last-used", label: "Last used", value: "—", variant: "secondary" },
+        ],
         search: {
           enabled: true,
           mode: "client",
           placeholder: "Search by symbol or mint...",
         },
+        buttons: [
+          {
+            id: "wt-export-key",
+            label: "Export Key",
+            icon: "icon-key",
+            tooltip: "Export this wallet's private key",
+            onClick: () => {
+              const current = mainWallet();
+              if (current) handleWalletAction("export", current.id);
+            },
+          },
+          {
+            id: "wt-refresh",
+            icon: "icon-refresh-cw",
+            tooltip: "Refresh",
+            onClick: (btn) => onRefresh?.(btn),
+          },
+        ],
       },
     });
 
     tokenTable.setData(tokens);
-    tokenTable.updateToolbarSummary?.([{ id: "wt-tokens-count", value: String(tokens.length) }]);
+    syncMainWalletToolbar(tokens);
 
     // Event delegation for copy buttons inside DataTable cells — wired once
     tokenTableClickHandler = (e) => {
@@ -424,8 +401,6 @@ export function createWalletRenderers({
       archRoot.removeEventListener("click", archiveClickHandler);
       archiveClickHandler = null;
     }
-
-    lastRenderedWalletId = null;
   }
 
   // =============================================================================
@@ -454,8 +429,41 @@ export function createWalletRenderers({
         emptyMessage:
           "Create additional wallets to organize your trading activities across multiple accounts.",
         toolbar: {
-          summary: [{ id: "secondaries-count", label: "Wallets", value: "0", variant: "secondary" }],
+          summary: [
+            { id: "secondaries-count", label: "Wallets", value: "0", variant: "secondary" },
+          ],
           search: { enabled: true, mode: "client", placeholder: "Search by name or address..." },
+          buttons: [
+            {
+              id: "secondaries-add",
+              label: "Add Wallet",
+              icon: "icon-plus",
+              variant: "primary",
+              onClick: () => onAddWallet?.(),
+            },
+            // Bulk transfers are secondary to the primary create action, so they
+            // collapse into the overflow menu rather than widening the bar.
+            {
+              id: "secondaries-import",
+              label: "Import",
+              icon: "icon-upload",
+              overflow: true,
+              onClick: () => onImportWallets?.(),
+            },
+            {
+              id: "secondaries-export",
+              label: "Export",
+              icon: "icon-download",
+              overflow: true,
+              onClick: () => onExportWallets?.(),
+            },
+            {
+              id: "secondaries-refresh",
+              icon: "icon-refresh-cw",
+              tooltip: "Refresh",
+              onClick: (btn) => onRefresh?.(btn),
+            },
+          ],
         },
       });
       secondariesClickHandler = _wireAddressCopy(container);
@@ -494,13 +502,23 @@ export function createWalletRenderers({
         toolbar: {
           summary: [{ id: "archive-count", label: "Wallets", value: "0", variant: "secondary" }],
           search: { enabled: true, mode: "client", placeholder: "Search by name or address..." },
+          buttons: [
+            {
+              id: "archive-refresh",
+              icon: "icon-refresh-cw",
+              tooltip: "Refresh",
+              onClick: (btn) => onRefresh?.(btn),
+            },
+          ],
         },
       });
       archiveClickHandler = _wireAddressCopy(container);
     }
 
     archiveTable.setData(archivedWallets);
-    archiveTable.updateToolbarSummary?.([{ id: "archive-count", value: String(archivedWallets.length) }]);
+    archiveTable.updateToolbarSummary?.([
+      { id: "archive-count", value: String(archivedWallets.length) },
+    ]);
   }
 
   // =============================================================================

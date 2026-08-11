@@ -4,6 +4,7 @@
  */
 
 import { openMenu, closeMenu } from "../../core/menu_manager.js";
+import { copyToClipboard, showToast } from "../../core/utils.js";
 
 export function applyEventHandlersMixin(DataTable) {
   const proto = DataTable.prototype;
@@ -124,7 +125,9 @@ export function applyEventHandlersMixin(DataTable) {
             status.textContent = value ? onLabel : offLabel;
           }
         }
-        const filterConfig = this.options.toolbar.filters?.find((filter) => filter.id === filterId);
+        // Look the item up through the toolbar's flat index — a filter may live in
+        // `filters`, in `controls`, or nested inside a group.
+        const filterConfig = this.toolbarView?.getItem(filterId);
 
         const autoApply = filterConfig?.autoApply !== false;
         if (autoApply) {
@@ -148,9 +151,7 @@ export function applyEventHandlersMixin(DataTable) {
         return;
       }
 
-      const controlConfig = this.options.toolbar.customControls?.find(
-        (control) => control.id === controlId
-      );
+      const controlConfig = this.toolbarView?.getItem(controlId);
 
       if (!(controlId in this.state.customControls)) {
         this.state.customControls[controlId] = input.value ?? "";
@@ -213,18 +214,25 @@ export function applyEventHandlersMixin(DataTable) {
       }
     });
 
-    // Toolbar buttons
-    const buttons = toolbarRoot?.querySelectorAll(".table-toolbar-btn[data-btn-id]") || [];
+    // Toolbar buttons — matched on `data-btn-id` alone so a button behaves the same
+    // whether it sits in the visible strip or inside the overflow menu.
+    const buttons = toolbarRoot?.querySelectorAll("[data-btn-id]") || [];
     buttons.forEach((btn) => {
       const handler = () => {
-        const btnId = btn.dataset.btnId;
-        const btnConfig = this.options.toolbar.buttons?.find((b) => b.id === btnId);
+        const btnConfig = this.toolbarView?.getItem(btn.dataset.btnId);
         if (typeof btnConfig?.onClick === "function") {
           btnConfig.onClick(btn, this);
+        }
+        if (btn.closest(".table-toolbar-menu")) {
+          this._closeToolbarOverflow?.();
         }
       };
       this._addEventListener(btn, "click", handler);
     });
+
+    this._attachToolbarSegmentedEvents(toolbarRoot);
+    this._attachToolbarOverflowEvents(toolbarRoot);
+    this._attachToolbarIdentityEvents(toolbarRoot);
 
     // Column visibility toggle - NEW: Using settings dialog instead of dropdown
     const columnBtn = toolbarRoot?.querySelector(".dt-btn-columns");
@@ -745,5 +753,103 @@ export function applyEventHandlersMixin(DataTable) {
     // Attach hybrid pagination mode toggle and server pagination events
     this._attachModeToggleEvents();
     this._attachServerPaginationEvents();
+  };
+
+  /**
+   * Segmented view switchers in the toolbar.
+   * The active value is owned by the page (via `onChange`), not by table state —
+   * a view switch usually changes the query, which the page must drive itself.
+   */
+  proto._attachToolbarSegmentedEvents = function (toolbarRoot) {
+    const segments = toolbarRoot?.querySelectorAll(".table-toolbar-seg") || [];
+    segments.forEach((seg) => {
+      const segId = seg.dataset.segId;
+      if (!segId) {
+        return;
+      }
+      seg.querySelectorAll(".table-toolbar-seg__btn").forEach((btn) => {
+        const handler = () => {
+          const value = btn.dataset.segValue;
+          const config = this.toolbarView?.getItem(segId);
+          if (config?.value === value) {
+            return;
+          }
+          this.setToolbarSegmentValue(segId, value);
+          if (typeof config?.onChange === "function") {
+            config.onChange(value, btn, this);
+          }
+        };
+        this._addEventListener(btn, "click", handler);
+      });
+    });
+  };
+
+  /**
+   * The "More actions" overflow menu. Registered with the global menu manager so it
+   * obeys the single-open rule and the Escape stack like every other dashboard menu.
+   */
+  proto._attachToolbarOverflowEvents = function (toolbarRoot) {
+    const overflow = toolbarRoot?.querySelector(".table-toolbar-overflow");
+    if (!overflow) {
+      this._toolbarOverflowHandle = null;
+      this._closeToolbarOverflow = null;
+      return;
+    }
+
+    const trigger = overflow.querySelector(".table-toolbar-overflow__trigger");
+    const menu = overflow.querySelector(".table-toolbar-menu");
+    if (!trigger || !menu) {
+      return;
+    }
+
+    const close = () => {
+      menu.hidden = true;
+      menu.classList.remove("open");
+      trigger.classList.remove("active");
+      trigger.setAttribute("aria-expanded", "false");
+      closeMenu(this._toolbarOverflowHandle);
+    };
+
+    this._toolbarOverflowHandle = {
+      close,
+      owns: (t) => !!(t && t.closest && t.closest(".table-toolbar-overflow")),
+    };
+    this._closeToolbarOverflow = close;
+
+    const toggleHandler = (e) => {
+      e.stopPropagation();
+      if (menu.hidden) {
+        openMenu(this._toolbarOverflowHandle);
+        menu.hidden = false;
+        menu.classList.add("open");
+        trigger.classList.add("active");
+        trigger.setAttribute("aria-expanded", "true");
+        menu.querySelector(".table-toolbar-menu__item:not(:disabled)")?.focus();
+      } else {
+        close();
+      }
+    };
+    this._addEventListener(trigger, "click", toggleHandler);
+  };
+
+  /**
+   * Copy affordance on the toolbar identity address.
+   */
+  proto._attachToolbarIdentityEvents = function (toolbarRoot) {
+    const copyBtn = toolbarRoot?.querySelector("[data-toolbar-copy]");
+    if (!copyBtn) {
+      return;
+    }
+    const handler = (e) => {
+      e.stopPropagation();
+      const value = copyBtn.dataset.toolbarCopy;
+      if (!value) {
+        return;
+      }
+      copyToClipboard(value)
+        .then(() => showToast({ type: "success", title: "Address copied to clipboard" }))
+        .catch(() => showToast({ type: "error", title: "Failed to copy address" }));
+    };
+    this._addEventListener(copyBtn, "click", handler);
   };
 }

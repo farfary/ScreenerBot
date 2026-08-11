@@ -197,48 +197,65 @@
 
 /* ==================== Pagination Mode Toggle ==================== */
 
+/* Sits in the toolbar's actions zone — matches `.table-toolbar-seg` so the two
+   segmented controls read as one family. Spacing comes from the zone's gap. */
 .dt-pagination-mode-toggle {
   display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  height: 32px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  overflow: hidden;
-  margin-left: 8px;
+  background: var(--bg-primary);
+  box-sizing: border-box;
 }
 
 .dt-pagination-mode-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
-  height: 36px;
-  background: var(--bg-secondary);
+  padding: 0 10px;
+  height: 26px;
+  background: transparent;
   border: none;
-  border-right: 1px solid var(--border-color);
+  border-radius: calc(var(--radius-md) - 2px);
   color: var(--text-secondary);
   font-size: 0.8125rem;
   font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background 150ms ease,
     color 150ms ease;
 }
 
-.dt-pagination-mode-btn:last-child {
-  border-right: none;
-}
-
 .dt-pagination-mode-btn:hover:not(.active) {
-  background: var(--bg-card-hover);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .dt-pagination-mode-btn.active {
-  background: var(--primary-color);
-  color: white;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.08);
 }
 
 .dt-pagination-mode-btn i {
   font-size: 0.875rem;
+}
+
+/* Narrow toolbars drop the mode labels alongside the other collapsible controls. */
+@container table-toolbar (width < 1000px) {
+  .dt-pagination-mode-btn span {
+    display: none;
+  }
+
+  .dt-pagination-mode-btn {
+    padding: 0 8px;
+  }
 }
 
 /* ==================== Server Pagination Bar (Pages Mode) ==================== */
@@ -426,11 +443,6 @@
     height: 36px;
     padding: 6px 28px 6px 10px;
   }
-
-  .dt-pagination-mode-toggle {
-    margin-left: 0;
-    margin-top: 8px;
-  }
 }
 
 @media (width <= 480px) {
@@ -450,4 +462,3 @@
     padding: 6px 10px;
   }
 }
-

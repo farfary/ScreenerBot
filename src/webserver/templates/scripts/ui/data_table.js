@@ -140,6 +140,10 @@ import { applyEventHandlersMixin } from "./data_table/event_handlers.js";
 // mode-switch, manual, …) still cancels and restarts, because its answer would differ.
 const BACKGROUND_RELOAD_REASONS = new Set(["poll", "init", "initial", "refresh"]);
 
+// Stable marker the toolbar renders inside its actions zone; the hybrid
+// pagination-mode toggle is substituted into it when those modes are enabled.
+const PAGINATION_MODE_SLOT = '<span class="table-toolbar-slot" data-slot="pagination-mode"></span>';
+
 const BLOCKING_STATE_VARIANTS = ["loading", "info", "warning", "error"];
 const BLOCKING_STATE_DEFAULT_ICONS = {
   loading: "icon-loader",
@@ -590,7 +594,8 @@ export class DataTable {
     // Apply stored table width to BOTH header and body tables
     if (typeof this.state.tableWidth === "number") {
       if (this.elements.table) this.elements.table.style.width = `${this.state.tableWidth}px`;
-      if (this.elements.headerTable) this.elements.headerTable.style.width = `${this.state.tableWidth}px`;
+      if (this.elements.headerTable)
+        this.elements.headerTable.style.width = `${this.state.tableWidth}px`;
     }
 
     // Snapshot natural widths on first paint so later resizes don't cause other columns to stretch
@@ -718,18 +723,11 @@ export class DataTable {
 
     let toolbarHtml = this.toolbarView.render(toolbarState);
 
-    // Inject pagination mode toggle into toolbar if hybrid modes are enabled
+    // The toolbar always renders a stable slot marker in its actions zone, so the
+    // hybrid pagination toggle lands in one deterministic place (the old regex
+    // insertion depended on the settings button existing and on markup nesting).
     if (this._hasHybridPaginationModes()) {
-      const modeToggleHtml = this._renderPaginationModeToggle();
-      // Insert before the settings button (.dt-column-toggle) or at end of .table-toolbar-actions
-      toolbarHtml = toolbarHtml.replace(/(<div class="dt-column-toggle)/, `${modeToggleHtml}$1`);
-      // Fallback if no settings button: insert before closing of .table-toolbar-actions
-      if (!toolbarHtml.includes("dt-pagination-mode-toggle")) {
-        toolbarHtml = toolbarHtml.replace(
-          /(<\/div>\s*<\/div>\s*<\/div>\s*$)/,
-          `${modeToggleHtml}$1`
-        );
-      }
+      toolbarHtml = toolbarHtml.replace(PAGINATION_MODE_SLOT, this._renderPaginationModeToggle());
     }
 
     return toolbarHtml;
@@ -743,9 +741,7 @@ export class DataTable {
       ? [...this.options.columns]
       : this.options.columns.filter((col) => this._isColumnVisible(col.id));
 
-    const floatingIds = Array.isArray(this.state.floatingColumns)
-      ? this.state.floatingColumns
-      : [];
+    const floatingIds = Array.isArray(this.state.floatingColumns) ? this.state.floatingColumns : [];
 
     // Resolve the non-floating columns first using the existing columnOrder logic,
     // so behaviour is byte-for-byte identical when no columns are floating.
@@ -834,9 +830,7 @@ export class DataTable {
    * @returns {number} number of leading floating columns
    */
   _getFloatingColumnCount(orderedColumns) {
-    const floatingIds = Array.isArray(this.state.floatingColumns)
-      ? this.state.floatingColumns
-      : [];
+    const floatingIds = Array.isArray(this.state.floatingColumns) ? this.state.floatingColumns : [];
     if (floatingIds.length === 0) {
       return 0;
     }
@@ -973,9 +967,7 @@ export class DataTable {
         const isSelected = this.state.selectedRows.has(rowId);
         const customClass = this._computeRowClass(row);
         const customAttributes = this._computeRowAttributes(row);
-        const rowClass = [isSelected ? "selected" : "", customClass]
-          .filter(Boolean)
-          .join(" ");
+        const rowClass = [isSelected ? "selected" : "", customClass].filter(Boolean).join(" ");
 
         return `
         <tr
@@ -1622,7 +1614,6 @@ export class DataTable {
       handler,
     });
   }
-
 
   /**
    * Persist column order changes from the column menu
@@ -2384,7 +2375,11 @@ export class DataTable {
     const normalized = Boolean(value);
     const subtle = Boolean(options.subtle);
 
-    if (this.state.isLoading === normalized && this.state.isLoadingSubtle === subtle && !options.force) {
+    if (
+      this.state.isLoading === normalized &&
+      this.state.isLoadingSubtle === subtle &&
+      !options.force
+    ) {
       return;
     }
     this.state.isLoading = normalized;
@@ -2605,23 +2600,24 @@ export class DataTable {
       }
     }
 
-    // Restore server-side filters
-    if (this.options.toolbar?.filters) {
-      Object.entries(this.state.filters).forEach(([filterId, value]) => {
-        const filterConfig = this.options.toolbar.filters.find((f) => f.id === filterId);
-        if (filterConfig && this._isServerFilter(filterConfig)) {
-          if (typeof filterConfig.onChange === "function") {
-            queueMicrotask(() => {
-              filterConfig.onChange(value, null, { restored: true });
-            });
-            this._log("info", "Server-side filter state restored", {
-              filterId,
-              value,
-            });
-          }
-        }
-      });
-    }
+    // Restore server-side filters. Resolved through the toolbar's flat index so a
+    // server select declared in `controls` (or inside a group) restores exactly
+    // like one declared in `filters`.
+    Object.entries(this.state.filters).forEach(([filterId, value]) => {
+      const filterConfig = this.toolbarView?.getItem(filterId);
+      if (!filterConfig || !this._isServerFilter(filterConfig)) {
+        return;
+      }
+      if (typeof filterConfig.onChange === "function") {
+        queueMicrotask(() => {
+          filterConfig.onChange(value, null, { restored: true });
+        });
+        this._log("info", "Server-side filter state restored", {
+          filterId,
+          value,
+        });
+      }
+    });
   }
 
   /**
@@ -2801,9 +2797,7 @@ export class DataTable {
     // re-render + recompute sticky offsets.
     if (Array.isArray(settings.floatingColumns)) {
       const validColumnIds = new Set(this.options.columns.map((col) => col.id));
-      const validFloating = settings.floatingColumns.filter((colId) =>
-        validColumnIds.has(colId)
-      );
+      const validFloating = settings.floatingColumns.filter((colId) => validColumnIds.has(colId));
       if (!this._arraysEqual(validFloating, this.state.floatingColumns)) {
         this.state.floatingColumns = validFloating;
         hasChanges = true;
@@ -2852,9 +2846,7 @@ export class DataTable {
    * @returns {boolean}
    */
   isColumnFloating(colId) {
-    return (
-      Array.isArray(this.state.floatingColumns) && this.state.floatingColumns.includes(colId)
-    );
+    return Array.isArray(this.state.floatingColumns) && this.state.floatingColumns.includes(colId);
   }
 
   /**
@@ -3391,11 +3383,76 @@ export class DataTable {
     TableToolbarView.updateSummary(this.elements.toolbar, summaryItems);
   }
 
-  updateToolbarMeta(metaItems = []) {
+  /**
+   * Patch one addressable toolbar item in place — no toolbar re-render, so a
+   * polling table never loses focus or an open menu.
+   * Accepts: { hidden, disabled, busy, label, tooltip, variant }.
+   *
+   * This is how a page drives a per-view toolset from a single table (show the
+   * archive-only "Delete all", disable an action while its request is running)
+   * instead of stacking a second action band above the table.
+   */
+  setToolbarItem(id, patch = {}) {
+    if (!this.elements.toolbar || !id) {
+      return;
+    }
+    const item = this.toolbarView?.getItem(id);
+    if (item) {
+      // Keep the config in sync so a later full toolbar render preserves the state.
+      Object.assign(item, patch);
+    }
+    TableToolbarView.updateItem(this.elements.toolbar, id, patch);
+  }
+
+  /** Update the subject identity block (title, tag, subtitle, address). */
+  setToolbarIdentity(identity = {}) {
     if (!this.elements.toolbar) {
       return;
     }
-    TableToolbarView.updateMeta(this.elements.toolbar, metaItems);
+    const current = this.options.toolbar?.identity;
+    if (current) {
+      Object.assign(current, identity);
+    }
+    TableToolbarView.updateIdentity(this.elements.toolbar, identity);
+  }
+
+  /**
+   * Replace a select control's option list after render — for lists the page can
+   * only know once loaded (wallets, strategies, providers). The enhanced custom
+   * select observes the underlying native element and re-syncs itself, so
+   * rewriting the options here is enough.
+   */
+  setToolbarSelectOptions(selectId, options = [], value) {
+    if (!this.elements.toolbar || !selectId) {
+      return;
+    }
+    const item = this.toolbarView?.getItem(selectId);
+    if (item) {
+      item.options = options;
+    }
+    const nextValue = value ?? this.state.filters[selectId] ?? options[0]?.value ?? "";
+    TableToolbarView.setSelectOptions(this.elements.toolbar, selectId, options, nextValue);
+    this.state.filters[selectId] = nextValue;
+  }
+
+  /** Move a segmented view switcher to `value` without re-rendering the bar. */
+  setToolbarSegmentValue(segId, value) {
+    if (!this.elements.toolbar) {
+      return;
+    }
+    const item = this.toolbarView?.getItem(segId);
+    if (item) {
+      item.value = value;
+    }
+    TableToolbarView.setSegmentValue(this.elements.toolbar, segId, value);
+  }
+
+  /** Set per-option counts on a segmented view switcher, e.g. { open: 12, closed: 3 }. */
+  setToolbarSegmentCounts(segId, counts = {}) {
+    if (!this.elements.toolbar) {
+      return;
+    }
+    TableToolbarView.setSegmentCounts(this.elements.toolbar, segId, counts);
   }
 
   setToolbarSearchValue(value, options = {}) {

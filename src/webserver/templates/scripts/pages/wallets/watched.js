@@ -4,7 +4,15 @@ import { DataTable } from "../../ui/data_table.js";
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-export function createWatchedWallets({ $, on, Utils, requestManager, showModal, hideModal }) {
+export function createWatchedWallets({
+  $,
+  on,
+  Utils,
+  requestManager,
+  showModal,
+  hideModal,
+  onRefresh,
+}) {
   let targets = [];
   let statuses = new Map();
   let loading = false;
@@ -114,7 +122,23 @@ export function createWatchedWallets({ $, on, Utils, requestManager, showModal, 
       emptyTitle: "No watched addresses",
       emptyMessage: "Use Watch Wallet to record a public wallet's on-chain activity.",
       toolbar: {
+        summary: [{ id: "watched-count", label: "Watched", value: "0", variant: "secondary" }],
         search: { enabled: true, mode: "client", placeholder: "Search watched wallets..." },
+        buttons: [
+          {
+            id: "watched-add",
+            label: "Watch Wallet",
+            icon: "icon-plus",
+            variant: "primary",
+            onClick: () => showAddModal(),
+          },
+          {
+            id: "watched-refresh",
+            icon: "icon-refresh-cw",
+            tooltip: "Refresh watched wallets",
+            onClick: (btn) => onRefresh?.(btn),
+          },
+        ],
       },
     });
     on(root, "click", handleListAction);
@@ -266,6 +290,7 @@ export function createWatchedWallets({ $, on, Utils, requestManager, showModal, 
       };
     });
     t.setData(rows);
+    t.updateToolbarSummary([{ id: "watched-count", value: String(rows.length) }]);
   }
 
   function formatTime(value) {

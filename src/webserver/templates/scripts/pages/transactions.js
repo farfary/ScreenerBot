@@ -523,11 +523,41 @@ function createLifecycle() {
           onPageLoaded: handlePageLoaded,
         },
         toolbar: {
+          identity: {
+            icon: "icon-arrow-left-right",
+            title: "Transaction history",
+          },
           summary: [
             { id: "tx-total", label: "Total", value: "—" },
             { id: "tx-estimate", label: "Estimate", value: "—" },
             { id: "tx-success", label: "Success", value: "—", variant: "secondary" },
             { id: "tx-failed", label: "Failed", value: "—", variant: "success" },
+          ],
+          // Which wallet's history is shown — the table's subject, so it leads the
+          // controls zone. Options are filled in by `setupSubjectSelector()`.
+          controls: [
+            {
+              id: "subject",
+              type: "select",
+              label: "Wallet",
+              mode: "server",
+              autoApply: false,
+              minWidth: "170px",
+              options: [{ value: "", label: "Main wallet" }],
+              onChange: (value, el, options) => {
+                state.subject = value || "";
+                state.summary = null;
+                state.totalEstimate = null;
+                // State restoration only syncs `state.subject`; init loads the data.
+                if (options?.restored) {
+                  return;
+                }
+                Promise.all([
+                  fetchSummary({}),
+                  requestReload("subject", { silent: false, resetScroll: true }),
+                ]).catch(() => {});
+              },
+            },
           ],
           search: {
             enabled: true,
@@ -651,6 +681,9 @@ function createLifecycle() {
       if (serverState.filters.status) {
         state.filters.status = serverState.filters.status;
       }
+      if (serverState.filters.subject) {
+        state.subject = serverState.filters.subject;
+      }
 
       table.setToolbarSearchValue(state.signature, { apply: false });
       table.setToolbarFilterValue("type", state.filters.type, {
@@ -715,38 +748,26 @@ function createLifecycle() {
     },
   };
 
+  // Fills the toolbar's subject selector with the watched wallets. The change
+  // handler is declared with the control itself in the toolbar config.
   async function setupSubjectSelector() {
-    const select = document.querySelector("#transaction-subject-select");
-    const note = document.querySelector("#transaction-subject-note");
-    if (!select) return;
+    if (!table) return;
 
+    const options = [{ value: "", label: "Main wallet" }];
     try {
       const data = await requestManager.fetch("/api/wallets/watch/", { priority: "normal" });
       for (const target of data.targets || []) {
-        const option = document.createElement("option");
-        option.value = target.address;
         const short = `${target.address.slice(0, 6)}…${target.address.slice(-4)}`;
-        option.textContent = target.label ? `${target.label} · ${short}` : short;
-        select.append(option);
+        options.push({
+          value: target.address,
+          label: target.label ? `${target.label} · ${short}` : short,
+        });
       }
     } catch (error) {
       console.warn("[Transactions] Failed to load watched-wallet subjects:", error);
     }
 
-    select.addEventListener("change", () => {
-      state.subject = select.value;
-      state.summary = null;
-      state.totalEstimate = null;
-      if (note) {
-        note.textContent = state.subject
-          ? "Observed activity for this watched wallet"
-          : "Your own wallet activity";
-      }
-      Promise.all([
-        fetchSummary({}),
-        requestReload("subject", { silent: false, resetScroll: true }),
-      ]).catch(() => {});
-    });
+    table.setToolbarSelectOptions("subject", options, state.subject);
   }
 }
 

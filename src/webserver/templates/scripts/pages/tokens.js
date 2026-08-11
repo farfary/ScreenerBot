@@ -213,20 +213,9 @@ function createLifecycle() {
     return fallback;
   };
 
+  // The reject-reason filter only makes sense in the "rejected" view.
   const updateFilterVisibility = () => {
-    if (!table?.elements?.toolbar) {
-      return;
-    }
-    const toolbar = table.elements.toolbar;
-
-    // Only show rejection_reason filter in "rejected" tab
-    const reasonField = toolbar.querySelector(
-      '.table-toolbar-field[data-filter-id="rejection_reason"]'
-    );
-    if (reasonField) {
-      const shouldShow = state.view === "rejected";
-      reasonField.style.display = shouldShow ? "" : "none";
-    }
+    table?.setToolbarItem("rejection_reason", { hidden: state.view !== "rejected" });
   };
 
   const updateRejectionReasonOptions = () => {

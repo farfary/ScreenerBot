@@ -76,9 +76,12 @@ function createLifecycle() {
         currentTab: () => currentTab,
         $,
         Utils,
-        on,
         capitalizeFirst,
         handleWalletAction,
+        onRefresh: handleRefresh,
+        onAddWallet: () => showModal("add-wallet-modal"),
+        onImportWallets: () => bulk.showBulkImportModal(),
+        onExportWallets: () => bulk.showBulkExportModal(),
       });
 
       watched = createWatchedWallets({
@@ -88,6 +91,7 @@ function createLifecycle() {
         requestManager,
         showModal,
         hideModal,
+        onRefresh: handleRefresh,
       });
 
       // Initialize tab bar
@@ -114,9 +118,7 @@ function createLifecycle() {
       // Load initial data
       await loadActiveTab();
 
-      // Update panel visibility and tab-specific toolbar buttons
       updatePanelVisibility();
-      updateToolbarActions();
     },
 
     activate(ctx) {
@@ -159,7 +161,6 @@ function switchTab(tabId) {
 
   currentTab = tabId;
   updatePanelVisibility();
-  updateToolbarActions();
 
   void loadActiveTab();
 }
@@ -176,54 +177,13 @@ function updatePanelVisibility() {
   });
 }
 
-function updateToolbarActions() {
-  document.querySelectorAll(".wallets-tab-actions").forEach((group) => {
-    const tab = group.dataset.tabActions;
-    if (tab === currentTab) {
-      group.classList.remove("hidden");
-    } else {
-      group.classList.add("hidden");
-    }
-  });
-}
-
 // =============================================================================
 // Event Handlers Setup
 // =============================================================================
 
+// Per-tab actions (refresh, Add Wallet, Import/Export, Watch Wallet) are declared
+// in each tab table's own toolbar config — this page owns only modals and forms.
 function setupEventHandlers() {
-  // Refresh buttons (one per tab, all call the same handler)
-  [
-    "#refresh-wallets-btn",
-    "#refresh-wallets-btn-sec",
-    "#refresh-wallets-btn-arc",
-    "#refresh-watched-wallets-btn",
-  ].forEach((sel) => {
-    const btn = $(sel);
-    if (btn) on(btn, "click", handleRefresh);
-  });
-
-  // Secondaries-tab buttons
-  const addBtn = $("#add-wallet-btn");
-  const importBtn = $("#import-wallets-btn");
-  const exportBtn = $("#export-wallets-btn");
-
-  if (addBtn) {
-    on(addBtn, "click", () => showModal("add-wallet-modal"));
-  }
-  if (importBtn) {
-    on(importBtn, "click", () => bulk.showBulkImportModal());
-  }
-  if (exportBtn) {
-    on(exportBtn, "click", () => bulk.showBulkExportModal());
-  }
-
-  // Watched-tab buttons
-  const addWatchBtn = $("#add-watch-btn");
-  if (addWatchBtn) {
-    on(addWatchBtn, "click", () => watched?.showAddModal());
-  }
-
   // Keyboard support for closing modals
   on(document, "keydown", (e) => {
     if (e.key === "Escape") {
@@ -476,8 +436,9 @@ async function fetchMainWalletBalance() {
 // Action Handlers
 // =============================================================================
 
-async function handleRefresh(e) {
-  const btn = e?.currentTarget ?? $("#refresh-wallets-btn");
+// Called from each tab table's toolbar refresh button, which passes its own
+// element so the spinner lands on the button the user actually pressed.
+async function handleRefresh(btn) {
   if (!btn) return;
 
   const icon = btn.querySelector("i");

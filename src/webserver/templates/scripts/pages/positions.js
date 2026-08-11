@@ -745,11 +745,10 @@ function createLifecycle() {
   };
 
   // Show the "Delete all archived" toolbar button only in the archived view.
+  // "Delete all" only applies to the Archived view — the toolbar owns the item's
+  // visibility, so no page-level markup or selector is involved.
   const syncArchivedTools = () => {
-    const btn = document.querySelector(
-      '#positions-root .table-toolbar-btn[data-btn-id="delete-all-archived"]'
-    );
-    if (btn) btn.hidden = state.view !== "archived";
+    table?.setToolbarItem("delete-all-archived", { hidden: state.view !== "archived" });
   };
 
   const switchView = (view) => {
