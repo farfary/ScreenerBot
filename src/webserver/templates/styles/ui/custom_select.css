@@ -65,19 +65,15 @@ select.cs-enhanced-source {
   box-shadow: none;
 }
 
-.custom-select.open:not(.dropdown-above) .cs-trigger {
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-
-.custom-select.open.dropdown-above .cs-trigger {
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-}
-
+.custom-select.open:not(.dropdown-above) .cs-trigger,
 .custom-select.closing:not(.dropdown-above) .cs-trigger {
+  border-bottom-color: transparent;
   border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
+.custom-select.open.dropdown-above .cs-trigger,
 .custom-select.closing.dropdown-above .cs-trigger {
+  border-top-color: transparent;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
@@ -160,7 +156,6 @@ select.cs-enhanced-source {
 }
 
 .cs-dropdown.cs-portal.is-open {
-  border-color: var(--primary-color);
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -217,16 +212,16 @@ select.cs-enhanced-source {
 }
 
 .cs-dropdown.cs-portal.cs-dropdown--above.is-open {
-  border-color: var(--primary-color);
-  border-bottom: 0;
   transform: translateY(0) scaleY(1);
 }
 
-/* Portal mode - dropdown appended to body with fixed positioning */
+/* A portal exists only while its trigger is opening or closing. Keep its outline
+   active for that full lifecycle so the joined control never flashes gray. */
 .cs-dropdown.cs-portal {
   position: fixed;
   z-index: var(--z-select-portal);
   margin-top: 0;
+  border-color: var(--primary-color);
 }
 
 /* Options are edge-to-edge rows; inset pills would make the menu look unrelated. */
