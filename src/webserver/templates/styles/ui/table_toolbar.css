@@ -485,27 +485,8 @@
   background: var(--bg-card-hover);
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
-  > .table-toolbar-field:not([hidden])
-  > .custom-select-host
-  > .custom-select:active
-  .cs-trigger {
-  background: var(--primary-alpha-10);
-}
-
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
-  > .table-toolbar-field:not([hidden])
-  > .custom-select-host
-  > .custom-select.open
-  .cs-trigger {
-  background: var(--primary-alpha-10);
-}
-
-.table-toolbar-select-group:has(
+html[data-input="keyboard"]
+  .table-toolbar-select-group:has(
     > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
   )
   > .table-toolbar-field:not([hidden])
