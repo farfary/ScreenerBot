@@ -160,6 +160,7 @@ select.cs-enhanced-source {
 }
 
 .cs-dropdown.cs-portal.is-open {
+  border-color: var(--primary-color);
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -216,6 +217,8 @@ select.cs-enhanced-source {
 }
 
 .cs-dropdown.cs-portal.cs-dropdown--above.is-open {
+  border-color: var(--primary-color);
+  border-bottom: 0;
   transform: translateY(0) scaleY(1);
 }
 
