@@ -254,15 +254,14 @@ export class DataTable {
     this.toolbarView = null;
     this.resizing = null;
     this._pendingRAF = null;
-    this.documentClickHandler = null;
     this.scrollThrottle = null;
     this.eventHandlers = new Map(); // Store all event handlers for cleanup
-    this._pendingColumnMenuOpen = false;
     this._pagination = this._initializePagination(this.options.pagination);
     this._paginationScrollRAF = null;
     this._pendingRenderOptions = null;
     this._serverStateRestored = false; // Track if server state has been restored
     this._settingsDialog = null; // NEW: Table settings dialog instance
+    this._toolbarOverflowCloseTimer = null;
     this._blockingState = null; // Overlay for full-table loading/error states
     // Client pagination active state (can be toggled by user)
     this._clientPaginationActive = this.options.clientPagination?.enabled ?? false;
@@ -1581,6 +1580,16 @@ export class DataTable {
    * Remove all attached event listeners
    */
   _removeEventListeners() {
+    this._actionDropdownHandle?.close("superseded");
+    this._actionDropdownHandle = null;
+    this._toolbarOverflowHandle?.close("superseded");
+    this._toolbarOverflowHandle = null;
+    this._closeToolbarOverflow = null;
+    if (this._toolbarOverflowCloseTimer !== null) {
+      clearTimeout(this._toolbarOverflowCloseTimer);
+      this._toolbarOverflowCloseTimer = null;
+    }
+
     // Remove all stored event handlers. Pass the capture flag through so
     // capture-phase listeners (e.g. the header context menu) are actually
     // removed — removeEventListener must match the phase used at registration.
@@ -1588,12 +1597,6 @@ export class DataTable {
       element.removeEventListener(event, handler, capture === true);
     });
     this.eventHandlers.clear();
-
-    // Remove document click handler
-    if (this.documentClickHandler) {
-      document.removeEventListener("click", this.documentClickHandler);
-      this.documentClickHandler = null;
-    }
 
     // Always remove resize handlers to prevent accumulation
     // The handlers will be re-added in the resize start handler if needed
@@ -1615,66 +1618,6 @@ export class DataTable {
       element,
       event,
       handler,
-    });
-  }
-
-  /**
-   * Persist column order changes from the column menu
-   * @param {HTMLElement} columnMenu
-   */
-  _updateColumnOrderFromMenu(columnMenu) {
-    if (!columnMenu) {
-      return;
-    }
-
-    const orderedIds = Array.from(columnMenu.querySelectorAll(".dt-column-menu-item"))
-      .map((item) => item.dataset.columnId)
-      .filter(Boolean);
-
-    if (orderedIds.length === 0) {
-      return;
-    }
-
-    // Group-aware reorder: the menu presents a single combined list, but floating
-    // (pinned-left) columns reorder only among themselves and non-floating only
-    // among themselves. Derive each group's new order by filtering the combined
-    // list down to its current membership; columns never cross groups here.
-    const floatingSet = new Set(
-      Array.isArray(this.state.floatingColumns) ? this.state.floatingColumns : []
-    );
-    const nextFloating = orderedIds.filter((id) => floatingSet.has(id));
-    const nextOrder = orderedIds.filter((id) => !floatingSet.has(id));
-
-    const floatingChanged =
-      floatingSet.size > 0 && !this._arraysEqual(nextFloating, this.state.floatingColumns);
-    const orderChanged = !this._arraysEqual(nextOrder, this.state.columnOrder);
-
-    if (!floatingChanged && !orderChanged) {
-      return;
-    }
-
-    const existingMenu = this.elements.container
-      ? this.elements.container.querySelector(".dt-column-menu")
-      : null;
-    const shouldReopen = existingMenu?.style.display === "block";
-
-    if (floatingChanged) {
-      this.state.floatingColumns = nextFloating;
-    }
-    this.state.columnOrder = nextOrder;
-    this._invalidateRenderedCells();
-    this._saveState();
-    this._pendingColumnMenuOpen = shouldReopen;
-    // `force` is required: we just emptied the tbody, but the column menu is open
-    // (and being interacted with), so the interaction guard would otherwise skip
-    // the render and leave the body blank until the next unrelated render.
-    this._renderTable({ force: true });
-    this._updateStickyOffsets();
-
-    this._log("info", "Column order updated", {
-      via: "column-menu",
-      order: nextOrder,
-      floating: nextFloating,
     });
   }
 
@@ -1829,11 +1772,6 @@ export class DataTable {
     // accident, because its trigger button held focus (see above). Now that a focused button
     // no longer blocks, it has to be detected for real.
     if (container.querySelector(".dt-actions-dropdown-menu.open")) {
-      return true;
-    }
-
-    const columnMenu = container.querySelector(".dt-column-menu");
-    if (columnMenu && columnMenu.style.display === "block") {
       return true;
     }
 

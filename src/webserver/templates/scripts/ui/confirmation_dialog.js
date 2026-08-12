@@ -30,7 +30,7 @@ class ConfirmationDialog {
    */
   static async show(config) {
     // A dialog takes over the viewport — dismiss any open dropdown/menu underneath.
-    closeAllMenus();
+    closeAllMenus("dialog-open");
 
     // Close any existing dialog
     if (ConfirmationDialog.activeDialog) {

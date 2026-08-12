@@ -1,6 +1,6 @@
 /* =============================================================================
-   Custom Select Component - Modern Design
-   Beautiful, sleek dropdown with smooth animations
+   Custom Select Component
+   The trigger and menu form one continuous control in every dashboard surface.
    ============================================================================= */
 
 /* The native <select> that was enhanced into a CustomSelect. Hard-hidden so it can
@@ -43,7 +43,9 @@ select.cs-enhanced-source {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color var(--transition-base),
+    border-color var(--transition-base);
 }
 
 .custom-select:hover .cs-trigger {
@@ -51,11 +53,32 @@ select.cs-enhanced-source {
   border-color: var(--text-muted);
 }
 
-.custom-select:focus .cs-trigger,
 .custom-select.open .cs-trigger {
   background: var(--bg-card-hover);
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 var(--input-focus-ring-width, 3px) var(--input-focus-ring-color, var(--primary-alpha-10));
+  box-shadow: none;
+}
+
+.custom-select.closing .cs-trigger {
+  background: var(--bg-card-hover);
+  border-color: var(--primary-color);
+  box-shadow: none;
+}
+
+.custom-select.open:not(.dropdown-above) .cs-trigger {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.custom-select.open.dropdown-above .cs-trigger {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.custom-select.closing:not(.dropdown-above) .cs-trigger {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.custom-select.closing.dropdown-above .cs-trigger {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
 /* Value display */
@@ -80,8 +103,8 @@ select.cs-enhanced-source {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   color: var(--text-secondary);
   transition:
     transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
@@ -89,8 +112,8 @@ select.cs-enhanced-source {
 }
 
 .cs-arrow svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 .custom-select:hover .cs-arrow {
@@ -102,24 +125,33 @@ select.cs-enhanced-source {
   color: var(--primary-color);
 }
 
-/* Dropdown container - Uses global floating system */
+.custom-select.closing .cs-arrow {
+  transform: rotate(180deg);
+  color: var(--primary-color);
+}
+
+/* Dropdown container — visually continues the trigger instead of floating. */
 .cs-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
   z-index: var(--z-select);
-  margin-top: 6px;
+  margin-top: 0;
   max-height: var(--floating-panel-max-height);
   overflow: hidden auto;
-  background: var(--floating-bg);
-  border: 1px solid var(--floating-border);
-  border-radius: var(--floating-panel-radius);
-  box-shadow: var(--shadow-floating-lg);
-  backdrop-filter: var(--floating-blur-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: var(--shadow-floating-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-8px) scale(0.98);
+  pointer-events: none;
+  transform: translateY(-4px) scaleY(0.985);
   transform-origin: top center;
   transition:
     opacity var(--floating-duration) var(--floating-easing),
@@ -127,18 +159,11 @@ select.cs-enhanced-source {
     visibility var(--floating-duration);
 }
 
-[data-theme="dark"] .cs-dropdown {
-  background: var(--floating-bg-blur);
-}
-
-[data-theme="light"] .cs-dropdown {
-  background: rgb(255, 255, 255, 0.95);
-}
-
-.custom-select.open .cs-dropdown {
+.cs-dropdown.cs-portal.is-open {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0) scale(1);
+  pointer-events: auto;
+  transform: translateY(0) scaleY(1);
 }
 
 /* Search container */
@@ -148,7 +173,6 @@ select.cs-enhanced-source {
   background: var(--bg-secondary);
   position: sticky;
   top: 0;
-  z-index: 10;
 }
 
 .cs-search-input {
@@ -181,18 +205,18 @@ select.cs-enhanced-source {
   font-size: 0.8125rem;
 }
 
-/* Dropdown opens above */
-.custom-select.dropdown-above .cs-dropdown {
-  top: auto;
-  bottom: 100%;
-  margin-top: 0;
-  margin-bottom: 6px;
-  transform: translateY(8px) scale(0.98);
+/* A portaled menu cannot match ancestor state, so opening direction lives on
+   the menu itself. */
+.cs-dropdown.cs-portal.cs-dropdown--above {
+  border-top: 1px solid var(--border-color);
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  transform: translateY(4px) scaleY(0.985);
   transform-origin: bottom center;
 }
 
-.custom-select.dropdown-above.open .cs-dropdown {
-  transform: translateY(0) scale(1);
+.cs-dropdown.cs-portal.cs-dropdown--above.is-open {
+  transform: translateY(0) scaleY(1);
 }
 
 /* Portal mode - dropdown appended to body with fixed positioning */
@@ -200,95 +224,38 @@ select.cs-enhanced-source {
   position: fixed;
   z-index: var(--z-select-portal);
   margin-top: 0;
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0) scale(1);
 }
 
-/* Toolbar menus are an extension of their trigger, not a separate floating card. */
-.cs-dropdown.cs-portal.cs-dropdown--toolbar {
-  margin: 0;
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
-  border-top: 0;
-  border-radius: 0 0 var(--radius-md) var(--radius-md);
-  box-shadow: 0 8px 18px var(--shadow-sm);
-  backdrop-filter: none;
-  font-family: var(--font-mono);
-}
-
-.cs-dropdown.cs-portal.cs-dropdown--toolbar.cs-dropdown--above {
-  border-top: 1px solid var(--border-color);
-  border-bottom: 0;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-
-.cs-dropdown--toolbar .cs-options-container {
-  padding: 0;
-}
-
-.cs-dropdown--toolbar .cs-option,
-.cs-dropdown--toolbar .cs-option:first-child,
-.cs-dropdown--toolbar .cs-option:last-child {
-  display: flex;
-  align-items: center;
-  min-height: var(--table-toolbar-control-height, 32px);
-  margin: 0;
-  padding-block: 0;
-  padding-inline: 0.6875rem 2rem;
-  border-radius: 0;
-}
-
-.cs-dropdown--toolbar .cs-option + .cs-option {
-  border-top: 1px solid var(--border-color);
-}
-
-.cs-dropdown--toolbar .cs-option:hover,
-.cs-dropdown--toolbar .cs-option.focused,
-.cs-dropdown--toolbar .cs-option.selected,
-.cs-dropdown--toolbar .cs-option.selected.focused {
-  background: var(--bg-card-hover);
-}
-
-/* Option items - Uses floating item pattern.
-   Single-line (block + nowrap) so the dropdown's `width: max-content` sizes to the
-   widest full label instead of the longest word. Long labels ellipsize as a
-   fallback once the panel is capped to the viewport width (a title tooltip on each
-   option preserves the full text). */
+/* Options are edge-to-edge rows; inset pills would make the menu look unrelated. */
 .cs-option {
   position: relative;
-  display: block;
-  padding: var(--floating-item-padding);
-  padding-right: 36px;
+  display: flex;
+  align-items: center;
+  min-height: var(--cs-control-height, 36px);
+  padding: 0.375rem 2rem 0.375rem 0.75rem;
   color: var(--text-primary);
   font-size: 0.8125rem;
   font-weight: 450;
   line-height: 1.4;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  margin: 2px 4px;
-  border-radius: var(--floating-item-radius);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+  margin: 0;
+  border-radius: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.cs-option:first-child {
-  margin-top: 4px;
-}
-
-.cs-option:last-child {
-  margin-bottom: 4px;
-}
-
 .cs-option:hover {
-  background: var(--floating-item-hover-bg);
-  color: var(--primary-color);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 /* Keyboard focused option */
 .cs-option.focused {
-  background: var(--primary-alpha-10);
+  background: var(--bg-card-hover);
   color: var(--primary-color);
 }
 
@@ -296,20 +263,19 @@ select.cs-enhanced-source {
 .cs-option.selected {
   color: var(--primary-color);
   font-weight: 600;
-  background: var(--primary-alpha-5);
+  background: var(--bg-card-hover);
 }
 
 .cs-option.selected::after {
   content: "";
   position: absolute;
-  right: 14px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
   width: 16px;
   height: 16px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
-  background-size: contain;
-  background-repeat: no-repeat;
+  background-color: var(--primary-color);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") no-repeat center / contain;
   animation: cs-check-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -326,7 +292,7 @@ select.cs-enhanced-source {
 }
 
 .cs-option.selected.focused {
-  background: var(--primary-alpha-20);
+  background: var(--bg-card-hover);
 }
 
 /* Disabled option */
@@ -404,7 +370,7 @@ select.cs-enhanced-source {
 }
 
 /* Focus visible for keyboard users */
-.custom-select:focus-visible .cs-trigger {
+html[data-input="keyboard"] .custom-select:focus-visible .cs-trigger {
   outline: none !important;
   box-shadow:
     0 0 0 var(--input-focus-ring-width, 3px) var(--input-focus-ring-color, var(--primary-alpha-10)),

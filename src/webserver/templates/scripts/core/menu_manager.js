@@ -21,7 +21,7 @@
  * the interaction from the coordinator.
  *
  * A "menu" is any object shaped like:
- *   { close(): void, owns(target: EventTarget): boolean }
+ *   { close(reason?: string): void, owns(target: EventTarget): boolean }
  * `owns` must return true for the trigger AND the menu surface (including a
  * portaled dropdown rendered elsewhere in the DOM), so interactions inside the
  * menu itself don't dismiss it.
@@ -39,22 +39,22 @@ function owns(menu, target) {
   }
 }
 
-function dismiss(menu) {
+function dismiss(menu, reason = "dismiss") {
   // Remove first so a re-entrant close() (which also calls closeMenu) is a no-op
   // and we never recurse or double-fire.
   openMenus.delete(menu);
   try {
-    menu.close();
+    menu.close(reason);
   } catch {
     /* a broken close() must not wedge the coordinator */
   }
 }
 
-function closeMenusNotOwning(target) {
+function closeMenusNotOwning(target, reason) {
   if (openMenus.size === 0) return;
   for (const menu of [...openMenus]) {
     if (!owns(menu, target)) {
-      dismiss(menu);
+      dismiss(menu, reason);
     }
   }
 }
@@ -66,7 +66,7 @@ function attachGlobalListeners() {
   // Outside pointer — capture phase so a trigger's stopPropagation can't hide it.
   document.addEventListener(
     "pointerdown",
-    (e) => closeMenusNotOwning(e.target),
+    (e) => closeMenusNotOwning(e.target, "outside-pointer"),
     true
   );
 
@@ -74,7 +74,7 @@ function attachGlobalListeners() {
   // a programmatic focus, etc.).
   document.addEventListener(
     "focusin",
-    (e) => closeMenusNotOwning(e.target),
+    (e) => closeMenusNotOwning(e.target, "focus-left"),
     true
   );
 
@@ -83,7 +83,8 @@ function attachGlobalListeners() {
     "keydown",
     (e) => {
       if (e.key === "Escape" && openMenus.size > 0) {
-        closeAllMenus();
+        e.preventDefault();
+        closeAllMenus("escape");
       }
     },
     true
@@ -91,20 +92,20 @@ function attachGlobalListeners() {
 
   // Hard reset on tab hide so menus never linger across a return to the tab.
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) closeAllMenus();
+    if (document.hidden) closeAllMenus("document-hidden");
   });
 }
 
 /**
  * Register a menu as open. Enforces the single-open policy by closing every other
  * currently-open menu first. Safe to call again for an already-open menu.
- * @param {{close: () => void, owns: (t: EventTarget) => boolean}} menu
+ * @param {{close: (reason?: string) => void, owns: (t: EventTarget) => boolean}} menu
  */
 export function openMenu(menu) {
   if (!menu || typeof menu.close !== "function") return;
   attachGlobalListeners();
   for (const other of [...openMenus]) {
-    if (other !== menu) dismiss(other);
+    if (other !== menu) dismiss(other, "superseded");
   }
   openMenus.add(menu);
 }
@@ -119,10 +120,72 @@ export function closeMenu(menu) {
 }
 
 /** Close and unregister every open menu. Used on route change / dialog open. */
-export function closeAllMenus() {
+export function closeAllMenus(reason = "dismiss") {
   for (const menu of [...openMenus]) {
-    dismiss(menu);
+    dismiss(menu, reason);
   }
+}
+
+/**
+ * Keep a body-portaled menu attached to a moving trigger. The returned cleanup
+ * stops the animation-frame loop. Placement only writes when geometry changes.
+ */
+export function trackAnchoredMenu({
+  trigger,
+  menu,
+  align = "start",
+  viewportMargin = 8,
+  overlap = 1,
+  onDetach,
+}) {
+  let animationFrame = null;
+  let lastSignature = "";
+
+  const update = () => {
+    animationFrame = null;
+    if (!trigger?.isConnected || !menu?.isConnected) {
+      onDetach?.();
+      return;
+    }
+
+    const triggerRect = trigger.getBoundingClientRect();
+    menu.style.maxHeight = `${Math.max(0, window.innerHeight - viewportMargin * 2)}px`;
+    menu.style.overflowY = "auto";
+    const menuRect = menu.getBoundingClientRect();
+    const availableBelow = window.innerHeight - triggerRect.bottom - viewportMargin;
+    const availableAbove = triggerRect.top - viewportMargin;
+    const openAbove = availableBelow < menuRect.height && availableAbove > availableBelow;
+    const preferredLeft = align === "end" ? triggerRect.right - menuRect.width : triggerRect.left;
+    const left = Math.max(
+      viewportMargin,
+      Math.min(preferredLeft, window.innerWidth - menuRect.width - viewportMargin)
+    );
+    const preferredTop = openAbove
+      ? triggerRect.top - menuRect.height + overlap
+      : triggerRect.bottom - overlap;
+    const top = Math.max(
+      viewportMargin,
+      Math.min(preferredTop, window.innerHeight - menuRect.height - viewportMargin)
+    );
+    const signature = `${left}:${top}:${menuRect.width}:${menuRect.height}:${openAbove}`;
+
+    if (signature !== lastSignature) {
+      lastSignature = signature;
+      menu.style.position = "fixed";
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+      menu.classList.toggle("menu-above", openAbove);
+      trigger.classList.toggle("menu-above", openAbove);
+    }
+
+    animationFrame = requestAnimationFrame(update);
+  };
+
+  update();
+  return () => {
+    if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+  };
 }
 
 /** Number of currently-open registered menus (mainly for tests/debugging). */

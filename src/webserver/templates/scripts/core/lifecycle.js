@@ -274,7 +274,7 @@ export const PageLifecycleRegistry = {
       return;
     }
     // Leaving a page must never leave a stray dropdown/menu floating over the next.
-    closeAllMenus();
+    closeAllMenus("navigation");
     try {
       await runHook("deactivate", pageName, lifecycle.deactivate, context);
     } finally {

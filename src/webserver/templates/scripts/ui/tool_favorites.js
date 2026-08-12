@@ -5,6 +5,7 @@
 
 import { $, on } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import { openMenu, closeMenu } from "../core/menu_manager.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { InputDialog } from "./input_dialog.js";
 
@@ -16,6 +17,24 @@ export class ToolFavorites {
     this.getConfig = options.getConfig || (() => ({})); // Get current form config
     this.favorites = [];
     this.isOpen = false;
+    this._closeTimer = null;
+    this._menuHandle = {
+      close: (reason) =>
+        this.closeDropdown({
+          restoreFocus: reason === "escape",
+          immediate: [
+            "superseded",
+            "outside-pointer",
+            "focus-left",
+            "document-hidden",
+            "navigation",
+            "dialog-open",
+          ].includes(reason),
+        }),
+      owns: (target) =>
+        (this.triggerBtn && this.triggerBtn.contains(target)) ||
+        (this.dropdown && this.dropdown.contains(target)),
+    };
 
     this.init();
   }
@@ -32,16 +51,16 @@ export class ToolFavorites {
 
     containerEl.innerHTML = `
       <div class="tool-favorites">
-        <button class="tool-favorites-trigger" type="button">
+        <button class="tool-favorites-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
           <i class="icon-star"></i>
           <span>Favorites</span>
           <span class="favorites-count" style="display: none;">0</span>
           <i class="icon-chevron-down"></i>
         </button>
-        <div class="tool-favorites-dropdown" style="display: none;">
+        <div class="tool-favorites-dropdown" role="menu" hidden>
           <div class="favorites-header">
             <span>Saved Favorites</span>
-            <button class="btn btn-xs" id="favorites-save-btn" type="button">
+            <button class="btn btn-xs" id="favorites-save-btn" type="button" role="menuitem">
               <i class="icon-plus"></i> Save Current
             </button>
           </div>
@@ -74,13 +93,29 @@ export class ToolFavorites {
       });
     }
 
-    // Close dropdown when clicking outside
-    this._outsideClickHandler = (e) => {
-      if (this.isOpen && !e.target.closest(".tool-favorites")) {
-        this.closeDropdown();
+    this._keyHandler = (event) => {
+      if (!this.isOpen) return;
+      const items = Array.from(this.dropdown?.querySelectorAll("[role='menuitem']") || []).filter(
+        (item) => !item.disabled
+      );
+      const index = items.indexOf(document.activeElement);
+
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        const nextIndex =
+          index < 0
+            ? direction > 0
+              ? 0
+              : items.length - 1
+            : (index + direction + items.length) % items.length;
+        items[nextIndex]?.focus();
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        items[event.key === "Home" ? 0 : items.length - 1]?.focus();
       }
     };
-    document.addEventListener("click", this._outsideClickHandler);
+    this.dropdown?.addEventListener("keydown", this._keyHandler);
   }
 
   toggleDropdown() {
@@ -89,15 +124,39 @@ export class ToolFavorites {
 
   openDropdown() {
     if (this.dropdown) {
-      this.dropdown.style.display = "block";
+      if (this._closeTimer !== null) {
+        clearTimeout(this._closeTimer);
+        this._closeTimer = null;
+      }
+      openMenu(this._menuHandle);
+      this.dropdown.hidden = false;
       this.isOpen = true;
+      this.triggerBtn?.classList.add("active");
+      this.triggerBtn?.setAttribute("aria-expanded", "true");
+      requestAnimationFrame(() => {
+        if (!this.isOpen) return;
+        this.dropdown.classList.add("open");
+        this.saveBtn?.focus({ preventScroll: true });
+      });
     }
   }
 
-  closeDropdown() {
+  closeDropdown({ restoreFocus = false, immediate = false } = {}) {
     if (this.dropdown) {
-      this.dropdown.style.display = "none";
+      closeMenu(this._menuHandle);
+      this.dropdown.classList.remove("open");
       this.isOpen = false;
+      this.triggerBtn?.setAttribute("aria-expanded", "false");
+      if (restoreFocus) this.triggerBtn?.focus({ preventScroll: true });
+      if (this._closeTimer !== null) clearTimeout(this._closeTimer);
+      const finish = () => {
+        this._closeTimer = null;
+        if (this.isOpen) return;
+        this.dropdown.hidden = true;
+        this.triggerBtn?.classList.remove("active");
+      };
+      if (immediate) finish();
+      else this._closeTimer = setTimeout(finish, 220);
     }
   }
 
@@ -134,15 +193,15 @@ export class ToolFavorites {
       .map(
         (fav) => `
       <div class="favorite-item" data-id="${fav.id}">
-        <div class="favorite-info" data-action="select">
+        <button class="favorite-info" data-action="select" type="button" role="menuitem">
           <div class="favorite-token">
             ${fav.logo_url ? `<img src="${fav.logo_url}" class="favorite-logo" alt="">` : '<i class="icon-circle"></i>'}
             <span class="favorite-symbol token-symbol-type">${fav.symbol || fav.mint.slice(0, 6)}</span>
           </div>
           <div class="favorite-label">${fav.label || "No label"}</div>
           ${fav.use_count > 0 ? `<span class="favorite-uses">${fav.use_count}x</span>` : ""}
-        </div>
-        <button class="favorite-delete-btn" data-action="delete" type="button" title="Remove">
+        </button>
+        <button class="favorite-delete-btn" data-action="delete" type="button" role="menuitem" title="Remove">
           <i class="icon-x"></i>
         </button>
       </div>
@@ -260,9 +319,15 @@ export class ToolFavorites {
   }
 
   dispose() {
-    if (this._outsideClickHandler) {
-      document.removeEventListener("click", this._outsideClickHandler);
+    this.closeDropdown();
+    if (this._closeTimer !== null) {
+      clearTimeout(this._closeTimer);
+      this._closeTimer = null;
+      this.dropdown.hidden = true;
+      this.triggerBtn?.classList.remove("active");
     }
+    this.dropdown?.removeEventListener("keydown", this._keyHandler);
+    this._keyHandler = null;
   }
 }
 

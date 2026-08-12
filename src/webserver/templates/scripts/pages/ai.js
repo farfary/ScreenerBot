@@ -776,6 +776,7 @@ function createLifecycle() {
   api.editAutomationTask = automationTab.editAutomationTask;
   api.viewAutomationRun = automationTab.viewAutomationRun;
   api.viewAutomationTaskRuns = automationTab.viewAutomationTaskRuns;
+  api.showAutomationMenu = automationTab.showAutomationMenu;
 
   // History Tab API
   api.loadHistory = loadHistory;

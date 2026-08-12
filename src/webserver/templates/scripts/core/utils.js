@@ -5,13 +5,6 @@
     toastManager = module.toastManager;
   });
 
-  // Global menu coordinator (single-open + auto-dismiss). Loaded the same dynamic
-  // way as the toast manager so this IIFE stays a plain script.
-  let menuManager = null;
-  import("./menu_manager.js").then((module) => {
-    menuManager = module;
-  });
-
   function coerceNumber(value) {
     if (value === null || value === undefined || value === "") {
       return Number.NaN;
@@ -515,70 +508,6 @@
     }
     return el;
   }
-
-  // Tracks the trigger of the currently-open generic dropdown so the coordinator
-  // can tell whether an interaction happened inside it.
-  let currentDropdownBtn = null;
-  const dropdownMenuHandle = {
-    owns: (t) =>
-      !!(t && t.closest && t.closest(".dropdown-menu.show")) ||
-      !!(currentDropdownBtn && currentDropdownBtn.contains(t)),
-    close: () => closeDropdownMenus(),
-  };
-
-  function closeDropdownMenus() {
-    document.querySelectorAll(".dropdown-menu.show").forEach((menu) => {
-      menu.classList.remove("show");
-      menu.style.position = "";
-      menu.style.top = "";
-      menu.style.left = "";
-      menu.style.right = "";
-      menu.style.width = "";
-    });
-    currentDropdownBtn = null;
-    if (menuManager) menuManager.closeMenu(dropdownMenuHandle);
-  }
-
-  function toggleDropdown(event) {
-    event.stopPropagation();
-    const btn = event.currentTarget;
-    if (!btn) return;
-    const menu = btn.nextElementSibling;
-    if (!menu) return;
-
-    const isOpen = menu.classList.contains("show");
-    closeDropdownMenus();
-    if (isOpen) {
-      return;
-    }
-
-    const rect = btn.getBoundingClientRect();
-    const menuWidth = Math.max(200, menu.offsetWidth || 200);
-    const viewportWidth = window.innerWidth;
-    const rightSpace = viewportWidth - rect.right;
-
-    menu.classList.add("show");
-    menu.style.position = "fixed";
-    menu.style.top = `${Math.round(rect.bottom + 4)}px`;
-    if (rightSpace < menuWidth) {
-      menu.style.left = `${Math.max(8, Math.round(rect.right - menuWidth))}px`;
-      menu.style.right = "";
-    } else {
-      menu.style.left = `${Math.round(rect.left)}px`;
-      menu.style.right = "";
-    }
-    menu.style.width = `${menuWidth}px`;
-
-    // Register so opening any other menu / clicking an input / changing page
-    // dismisses this dropdown too.
-    currentDropdownBtn = btn;
-    if (menuManager) menuManager.openMenu(dropdownMenuHandle);
-  }
-
-  document.addEventListener("click", closeDropdownMenus);
-  ["scroll", "resize"].forEach((evt) => {
-    window.addEventListener(evt, closeDropdownMenus, { passive: true });
-  });
 
   // Global external link handler for Electron
   // Intercepts clicks on external links (http/https) and routes through backend API
@@ -1472,8 +1401,6 @@
     textFromInput,
     numberFromInput,
     toSlug,
-    toggleDropdown,
-    closeDropdownMenus,
     freezeTableLayout,
     preserveScrollPosition,
     showToast,
@@ -1538,8 +1465,6 @@ export const {
   textFromInput,
   numberFromInput,
   toSlug,
-  toggleDropdown,
-  closeDropdownMenus,
   freezeTableLayout,
   preserveScrollPosition,
   showToast,

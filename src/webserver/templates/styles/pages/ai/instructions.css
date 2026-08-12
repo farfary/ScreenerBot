@@ -222,6 +222,16 @@
   color: var(--text-primary);
 }
 
+.instruction-menu-btn.active {
+  background: var(--hover-bg);
+  color: var(--primary-color);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.instruction-menu-btn.active.menu-above {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
 /* Empty State */
 .empty-icon {
   width: 48px;
@@ -330,38 +340,79 @@
 
 /* Instruction Context Menu */
 .instruction-context-menu {
+  position: fixed;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.15);
+  border-top-width: 0;
+  border-radius: var(--radius-lg) 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--shadow-floating-sm);
   overflow: hidden;
   min-width: 150px;
+  z-index: var(--z-dropdown);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px) scaleY(0.985);
+  transform-origin: top right;
+  transition:
+    opacity var(--floating-duration) var(--floating-easing),
+    transform var(--floating-duration) var(--floating-easing),
+    visibility var(--floating-duration);
 }
 
-.context-menu-item {
+.instruction-context-menu.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scaleY(1);
+}
+
+.instruction-context-menu.menu-above {
+  border-top-width: 1px;
+  border-bottom-width: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
+  transform: translateY(4px) scaleY(0.985);
+  transform-origin: bottom right;
+}
+
+.instruction-context-menu.menu-above.open {
+  transform: translateY(0) scaleY(1);
+}
+
+.instruction-context-menu .context-menu-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  min-height: 34px;
   padding: 10px 16px;
   cursor: pointer;
   color: var(--text-primary);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--font-mono);
   font-size: 13px;
+  text-align: left;
   transition: background var(--transition-fast);
 }
 
-.context-menu-item:hover {
+.instruction-context-menu .context-menu-item:hover,
+.instruction-context-menu .context-menu-item:focus-visible {
   background: var(--hover-bg);
+  outline: none;
 }
 
-.context-menu-item.danger {
+.instruction-context-menu .context-menu-item.danger {
   color: var(--danger);
 }
 
-.context-menu-item.danger:hover {
+.instruction-context-menu .context-menu-item.danger:hover,
+.instruction-context-menu .context-menu-item.danger:focus-visible {
   background: var(--danger-alpha-10);
 }
 
-.context-menu-item i {
+.instruction-context-menu .context-menu-item i {
   font-size: 14px;
 }
 

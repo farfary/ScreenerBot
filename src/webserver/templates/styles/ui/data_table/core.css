@@ -79,34 +79,6 @@
   position: relative;
 }
 
-.dt-column-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  padding: 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.2);
-  z-index: var(--z-header);
-  min-width: 220px;
-  max-height: 420px;
-  overflow-y: auto;
-  animation: dt-slideDown 0.2s ease;
-}
-
-@keyframes dt-slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 /* Fixed header container — sits above the scroll container, never scrolls vertically.
    overflow: hidden clips the header table when the body scrolls horizontally (synced via JS). */
 .data-table-header-container {
@@ -398,32 +370,6 @@ body.dt-column-resizing * {
 
 .dt-column-drag-handle:active {
   cursor: grabbing;
-}
-
-.dt-column-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
-  user-select: none;
-  box-sizing: border-box;
-}
-
-.dt-column-menu-item:hover {
-  background: var(--bg-hover);
-  transform: translateX(2px);
-}
-
-.dt-column-menu-item.dragging {
-  opacity: 0.6;
-}
-
-.dt-column-menu-item.drag-over {
-  background: rgb(59, 130, 246, 0.1);
-  border: 1px dashed var(--primary-color);
 }
 
 .dt-column-label {
@@ -779,12 +725,6 @@ body.dt-column-resizing * {
 [data-theme="dark"] .data-table-toolbar {
   background: var(--bg-secondary);
   border-bottom-color: var(--border-color);
-}
-
-[data-theme="dark"] .dt-column-menu {
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.5);
 }
 
 /* ==================== Reduced Motion ==================== */

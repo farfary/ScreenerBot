@@ -688,7 +688,6 @@ export function createWalletCopy({ $, Utils, requestManager, ConfirmationDialog 
     const select = $(selector);
     if (!select) return;
     select.value = value;
-    select._customSelectInstance?.setValue(String(value));
   }
 
   function number(value) {

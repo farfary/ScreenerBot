@@ -242,7 +242,7 @@
   --z-onboarding: 50000;
   --z-splash: 99000;
   --z-lockscreen: 100000; /* Highest - security lockscreen above everything */
-  --z-select-portal: 100000; /* Custom select portal mode */
+  --z-select-portal: 10008;
 
   /* Typography System */
   --font-sans: "Inter", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;

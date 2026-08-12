@@ -3,7 +3,7 @@
  * Handles all event listener attachments for the DataTable component
  */
 
-import { openMenu, closeMenu } from "../../core/menu_manager.js";
+import { openMenu, closeMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 import { copyToClipboard, showToast } from "../../core/utils.js";
 
 export function applyEventHandlersMixin(DataTable) {
@@ -434,7 +434,16 @@ export function applyEventHandlersMixin(DataTable) {
     // Shared descriptor so the global menu coordinator treats this table's open
     // row-action dropdown like any other dropdown: opening a select/menu anywhere
     // (or clicking an input/checkbox, changing page, etc.) auto-closes it.
-    const closeAllActionDropdowns = () => {
+    const closeAllActionDropdowns = (reason) => {
+      const activeMenu = this._activeActionDropdown?.menu;
+      const activeDropdown = this._activeActionDropdown?.dropdown;
+      const activeTrigger = this._activeActionDropdown?.trigger;
+      this._stopActionDropdownTracking?.();
+      this._stopActionDropdownTracking = null;
+      activeMenu?.classList.remove("open");
+      activeMenu?.setAttribute("aria-hidden", "true");
+      activeTrigger?.setAttribute("aria-expanded", "false");
+
       const allMenus = this.elements.tbody?.querySelectorAll(".dt-actions-dropdown-menu") || [];
       const allTriggers =
         this.elements.tbody?.querySelectorAll(".dt-actions-dropdown-trigger") || [];
@@ -447,11 +456,53 @@ export function applyEventHandlersMixin(DataTable) {
         t.classList.remove("active");
         t.setAttribute("aria-expanded", "false");
       });
+      this._activeActionDropdown = null;
       closeMenu(this._actionDropdownHandle);
+      if (reason === "escape") {
+        activeTrigger?.focus({ preventScroll: true });
+      }
+
+      const finish = () => {
+        if (activeMenu && activeDropdown?.isConnected) {
+          activeDropdown.appendChild(activeMenu);
+        } else {
+          activeMenu?.remove();
+        }
+        activeMenu?.classList.remove("is-portaled", "menu-above");
+        activeTrigger?.classList.remove("active", "menu-above");
+        if (activeMenu) {
+          activeMenu.style.display = "none";
+          activeMenu.style.position = "";
+          activeMenu.style.left = "";
+          activeMenu.style.top = "";
+          activeMenu.style.maxHeight = "";
+          activeMenu.style.overflowY = "";
+        }
+      };
+      if (
+        !activeMenu ||
+        [
+          "superseded",
+          "outside-pointer",
+          "focus-left",
+          "document-hidden",
+          "navigation",
+          "dialog-open",
+        ].includes(reason)
+      ) {
+        finish();
+      } else {
+        setTimeout(finish, 140);
+      }
     };
     this._actionDropdownHandle = {
       close: closeAllActionDropdowns,
-      owns: (t) => !!(t && t.closest && t.closest(".dt-actions-dropdown")),
+      owns: (target) =>
+        !!(
+          target &&
+          (this._activeActionDropdown?.menu?.contains(target) ||
+            this._activeActionDropdown?.trigger?.contains(target))
+        ),
     };
 
     const dropdownTriggers = this.elements.tbody.querySelectorAll(
@@ -461,7 +512,14 @@ export function applyEventHandlersMixin(DataTable) {
       const handler = (e) => {
         e.stopPropagation(); // Prevent row click
         const dropdown = trigger.closest(".dt-actions-dropdown");
-        const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
+        const menu =
+          this._activeActionDropdown?.trigger === trigger
+            ? this._activeActionDropdown.menu
+            : dropdown.querySelector(".dt-actions-dropdown-menu");
+
+        if (this._activeActionDropdown?.trigger !== trigger) {
+          closeAllActionDropdowns("superseded");
+        }
 
         // Close all other dropdowns first
         const allMenus = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-menu");
@@ -481,20 +539,26 @@ export function applyEventHandlersMixin(DataTable) {
         if (menu) {
           const isOpen = menu.classList.contains("open") || menu.style.display === "block";
           if (isOpen) {
-            menu.style.display = "none";
-            menu.classList.remove("open");
-            menu.setAttribute("aria-hidden", "true");
-            trigger.classList.remove("active");
-            trigger.setAttribute("aria-expanded", "false");
-            closeMenu(this._actionDropdownHandle);
+            closeAllActionDropdowns();
           } else {
             // Register first so any other open menu elsewhere is dismissed.
             openMenu(this._actionDropdownHandle);
+            document.body.appendChild(menu);
             menu.style.display = "block";
-            menu.classList.add("open");
+            menu.classList.add("is-portaled");
             menu.setAttribute("aria-hidden", "false");
             trigger.classList.add("active");
             trigger.setAttribute("aria-expanded", "true");
+            this._activeActionDropdown = { dropdown, menu, trigger };
+            this._stopActionDropdownTracking = trackAnchoredMenu({
+              trigger,
+              menu,
+              align: menu.classList.contains("menu-left") ? "start" : "end",
+              onDetach: () => closeAllActionDropdowns(),
+            });
+            requestAnimationFrame(() => {
+              if (this._activeActionDropdown?.menu === menu) menu.classList.add("open");
+            });
 
             // Focus first interactive item for keyboard users
             const items = Array.from(
@@ -525,15 +589,11 @@ export function applyEventHandlersMixin(DataTable) {
           return;
         }
         if (e.key === "Escape") {
-          const dropdown = trigger.closest(".dt-actions-dropdown");
-          const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
+          const menu = this._activeActionDropdown?.trigger === trigger
+            ? this._activeActionDropdown.menu
+            : null;
           if (menu && menu.classList.contains("open")) {
-            menu.style.display = "none";
-            menu.classList.remove("open");
-            menu.setAttribute("aria-hidden", "true");
-            trigger.classList.remove("active");
-            trigger.setAttribute("aria-expanded", "false");
-            trigger.focus();
+            closeAllActionDropdowns("escape");
           }
         }
       };
@@ -548,7 +608,7 @@ export function applyEventHandlersMixin(DataTable) {
       const handler = (e) => {
         e.stopPropagation(); // Prevent row click
         const actionId = item.dataset.actionId;
-        const dropdown = item.closest(".dt-actions-dropdown");
+        const dropdown = item.closest(".dt-actions-dropdown") || this._activeActionDropdown?.dropdown;
         const rowId = dropdown?.dataset.rowId;
 
         if (rowId) {
@@ -566,18 +626,9 @@ export function applyEventHandlersMixin(DataTable) {
                   action.onClick(row, e);
 
                   // Close dropdown after action
-                  const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
-                  const trigger = dropdown.querySelector(".dt-actions-dropdown-trigger");
-                  if (menu) {
-                    menu.style.display = "none";
-                    menu.classList.remove("open");
-                    menu.setAttribute("aria-hidden", "true");
-                  }
-                  if (trigger) {
-                    trigger.classList.remove("active");
-                    trigger.setAttribute("aria-expanded", "false");
-                    trigger.focus();
-                  }
+                  const trigger = this._activeActionDropdown?.trigger;
+                  closeAllActionDropdowns();
+                  trigger?.focus({ preventScroll: true });
                 } catch (error) {
                   this._log(
                     "error",
@@ -644,42 +695,11 @@ export function applyEventHandlersMixin(DataTable) {
         }
         if (e.key === "Escape") {
           e.preventDefault();
-          const dropdown = item.closest(".dt-actions-dropdown");
-          const trigger = dropdown.querySelector(".dt-actions-dropdown-trigger");
-          const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
-          if (menu) {
-            menu.style.display = "none";
-            menu.classList.remove("open");
-            menu.setAttribute("aria-hidden", "true");
-          }
-          if (trigger) {
-            trigger.classList.remove("active");
-            trigger.setAttribute("aria-expanded", "false");
-            trigger.focus();
-          }
+          closeAllActionDropdowns("escape");
         }
       };
       this._addEventListener(item, "keydown", itemKeyHandler);
     });
-
-    // Close dropdowns when clicking outside
-    const closeDropdownsHandler = (e) => {
-      if (!e.target.closest(".dt-actions-dropdown")) {
-        const allMenus = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-menu");
-        const allTriggers = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-trigger");
-        allMenus.forEach((menu) => {
-          menu.style.display = "none";
-          menu.classList.remove("open");
-          menu.setAttribute("aria-hidden", "true");
-        });
-        allTriggers.forEach((trigger) => {
-          trigger.classList.remove("active");
-          trigger.setAttribute("aria-expanded", "false");
-        });
-        closeMenu(this._actionDropdownHandle);
-      }
-    };
-    this._addEventListener(document, "click", closeDropdownsHandler);
 
     // Row click
     if (this.options.onRowClick) {
@@ -799,6 +819,10 @@ export function applyEventHandlersMixin(DataTable) {
     if (!overflow) {
       this._toolbarOverflowHandle = null;
       this._closeToolbarOverflow = null;
+      if (this._toolbarOverflowCloseTimer !== null) {
+        clearTimeout(this._toolbarOverflowCloseTimer);
+        this._toolbarOverflowCloseTimer = null;
+      }
       return;
     }
 
@@ -808,12 +832,37 @@ export function applyEventHandlersMixin(DataTable) {
       return;
     }
 
-    const close = () => {
-      menu.hidden = true;
+    let isOpen = false;
+    const close = (reason) => {
+      isOpen = false;
       menu.classList.remove("open");
-      trigger.classList.remove("active");
       trigger.setAttribute("aria-expanded", "false");
       closeMenu(this._toolbarOverflowHandle);
+      if (reason === "escape") trigger.focus({ preventScroll: true });
+
+      if (this._toolbarOverflowCloseTimer !== null) {
+        clearTimeout(this._toolbarOverflowCloseTimer);
+      }
+      const finish = () => {
+        this._toolbarOverflowCloseTimer = null;
+        if (menu.classList.contains("open")) return;
+        menu.hidden = true;
+        trigger.classList.remove("active");
+      };
+      if (
+        [
+          "superseded",
+          "outside-pointer",
+          "focus-left",
+          "document-hidden",
+          "navigation",
+          "dialog-open",
+        ].includes(reason)
+      ) {
+        finish();
+      } else {
+        this._toolbarOverflowCloseTimer = setTimeout(finish, 220);
+      }
     };
 
     this._toolbarOverflowHandle = {
@@ -824,18 +873,46 @@ export function applyEventHandlersMixin(DataTable) {
 
     const toggleHandler = (e) => {
       e.stopPropagation();
-      if (menu.hidden) {
+      if (!isOpen) {
+        isOpen = true;
+        if (this._toolbarOverflowCloseTimer !== null) {
+          clearTimeout(this._toolbarOverflowCloseTimer);
+          this._toolbarOverflowCloseTimer = null;
+        }
         openMenu(this._toolbarOverflowHandle);
         menu.hidden = false;
-        menu.classList.add("open");
         trigger.classList.add("active");
         trigger.setAttribute("aria-expanded", "true");
-        menu.querySelector(".table-toolbar-menu__item:not(:disabled)")?.focus();
+        requestAnimationFrame(() => {
+          if (!isOpen || menu.hidden) return;
+          menu.classList.add("open");
+          menu.querySelector(".table-toolbar-menu__item:not(:disabled)")?.focus();
+        });
       } else {
         close();
       }
     };
     this._addEventListener(trigger, "click", toggleHandler);
+
+    const menuKeyHandler = (event) => {
+      const items = Array.from(menu.querySelectorAll(".table-toolbar-menu__item:not(:disabled)"));
+      const index = items.indexOf(document.activeElement);
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        const nextIndex =
+          index < 0
+            ? direction > 0
+              ? 0
+              : items.length - 1
+            : (index + direction + items.length) % items.length;
+        items[nextIndex]?.focus();
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault();
+        items[event.key === "Home" ? 0 : items.length - 1]?.focus();
+      }
+    };
+    this._addEventListener(menu, "keydown", menuKeyHandler);
   };
 
   /**

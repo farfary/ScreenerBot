@@ -943,7 +943,6 @@ export class PositionDetailsDialog {
     const select = this.dialogEl?.querySelector("#pddManagementSelect");
     if (select) {
       select.value = this.positionData.management;
-      select._customSelectInstance?.setValue(this.positionData.management);
     }
   }
 

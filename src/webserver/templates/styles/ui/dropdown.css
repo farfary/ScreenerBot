@@ -1,31 +1,8 @@
 /* =============================================================================
-   Dropdown Component
-   Uses global floating UI system from floating.css
+   Action menu primitives
+   Uses global floating UI system from floating.css. Select menus are owned by
+   custom_select.css; this file owns button-driven action menus only.
    ============================================================================= */
-
-.dropdown-container {
-  position: relative;
-  display: inline-block;
-}
-
-.dropdown-btn {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: 1.2em;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color var(--transition-base),
-    background-color var(--transition-base);
-}
-
-.dropdown-btn:hover {
-  border-color: var(--link-color);
-  background: var(--bg-card-hover);
-}
 
 .dropdown-menu {
   position: absolute;
@@ -68,6 +45,44 @@
 
 .dropdown-menu[data-align="right"] {
   right: 0;
+}
+
+/* Table link actions are portaled to the body. Keep the surface visibly attached
+   to its trigger while retaining the wider action-menu footprint. */
+.links-dropdown-menu {
+  min-width: 200px;
+  max-width: min(240px, calc(100vw - 16px));
+  padding: 0;
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  border-top-width: 0;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--shadow-floating-sm);
+  backdrop-filter: none;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  transform: translateY(-4px) scaleY(0.985);
+  transform-origin: top left;
+}
+
+.links-dropdown-menu.menu-above {
+  border-top-width: 1px;
+  border-bottom-width: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 0;
+  transform: translateY(4px) scaleY(0.985);
+  transform-origin: bottom left;
+}
+
+.links-dropdown-menu.open,
+.links-dropdown-menu.menu-above.open {
+  transform: translateY(0) scaleY(1);
+}
+
+.links-dropdown-menu .dropdown-item {
+  width: 100%;
+  min-height: 34px;
+  margin: 0;
+  border-radius: 0;
 }
 
 /* Dropdown items inherit from floating-item pattern */
@@ -121,36 +136,6 @@
   text-overflow: ellipsis;
 }
 
-.dropdown-item .badge {
-  flex-shrink: 0;
-  font-size: 0.7rem;
-  padding: 2px 6px;
-  border-radius: var(--radius-xl);
-  font-weight: 600;
-  background: var(--badge-bg, #e0e0e0);
-  color: var(--badge-color, #333);
-}
-
-.dropdown-item .badge[data-variant="success"] {
-  --badge-bg: var(--success-color-light);
-  --badge-color: var(--success-color-dark);
-}
-
-.dropdown-item .badge[data-variant="warning"] {
-  --badge-bg: var(--warning-color-light);
-  --badge-color: var(--warning-color-dark);
-}
-
-.dropdown-item .badge[data-variant="error"] {
-  --badge-bg: var(--error-color-light);
-  --badge-color: var(--error-color-dark);
-}
-
-.dropdown-item .badge[data-variant="info"] {
-  --badge-bg: var(--primary-color-light);
-  --badge-color: var(--primary-color-dark);
-}
-
 .dropdown-item.disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -171,42 +156,6 @@
   margin: 4px 0;
 }
 
-/* Dropdown arrow indicator on trigger buttons */
-.dropdown-arrow {
-  font-size: 0.7rem;
-  margin-left: 2px;
-  opacity: 0.7;
-  transition: transform var(--floating-duration) ease;
-}
-
-.control-btn:hover .dropdown-arrow {
-  opacity: 1;
-}
-
-/* Power button specific styles */
-.power-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Notification badge styles */
-.notification-badge {
-  position: absolute;
-  top: -6px;
-  right: -8px;
-  background: var(--error-color);
-  color: white;
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 2px 5px;
-  border-radius: var(--radius-xl);
-  min-width: 16px;
-  text-align: center;
-  line-height: 1;
-  box-shadow: var(--shadow-floating-sm);
-}
-
 /* Enhanced badge styles */
 .badge-secondary {
   background: var(--secondary-bg, #757575) !important;
@@ -222,36 +171,15 @@
   box-shadow: var(--shadow-floating-md);
 }
 
-[data-theme="dark"] .dropdown-item .badge {
-  --badge-bg: #424242;
-  --badge-color: #e0e0e0;
-}
-
-[data-theme="dark"] .dropdown-item .badge[data-variant="success"] {
-  --badge-bg: #1b5e20;
-  --badge-color: #a5d6a7;
-}
-
-[data-theme="dark"] .dropdown-item .badge[data-variant="warning"] {
-  --badge-bg: #e65100;
-  --badge-color: #ffcc80;
-}
-
-[data-theme="dark"] .dropdown-item .badge[data-variant="error"] {
-  --badge-bg: #b71c1c;
-  --badge-color: #ef9a9a;
-}
-
-[data-theme="dark"] .dropdown-item .badge[data-variant="info"] {
-  --badge-bg: #0d47a1;
-  --badge-color: #90caf9;
+[data-theme="dark"] .links-dropdown-menu,
+[data-theme="light"] .links-dropdown-menu {
+  background: var(--bg-secondary);
 }
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .dropdown-menu,
-  .dropdown-item,
-  .dropdown-arrow {
+  .dropdown-item {
     transition: none;
   }
 }

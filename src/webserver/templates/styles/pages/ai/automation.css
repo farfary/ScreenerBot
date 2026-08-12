@@ -182,16 +182,56 @@
   color: var(--text-primary);
 }
 
+.automation-menu-btn.active {
+  background: var(--hover-bg);
+  color: var(--primary-color);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.automation-menu-btn.active.menu-above {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
 /* Context Menu */
 .automation-context-menu {
   position: fixed;
-  background: var(--card-bg);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-floating-md);
-  padding: 4px;
-  z-index: var(--z-context-menu);
+  border-top-width: 0;
+  border-radius: var(--radius-lg) 0 var(--radius-lg) var(--radius-lg);
+  box-shadow: var(--shadow-floating-sm);
+  padding: 0;
+  z-index: var(--z-dropdown);
   min-width: 150px;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px) scaleY(0.985);
+  transform-origin: top right;
+  transition:
+    opacity var(--floating-duration) var(--floating-easing),
+    transform var(--floating-duration) var(--floating-easing),
+    visibility var(--floating-duration);
+}
+
+.automation-context-menu.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scaleY(1);
+}
+
+.automation-context-menu.menu-above {
+  border-top-width: 1px;
+  border-bottom-width: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
+  transform: translateY(4px) scaleY(0.985);
+  transform-origin: bottom right;
+}
+
+.automation-context-menu.menu-above.open {
+  transform: translateY(0) scaleY(1);
 }
 
 .automation-context-menu button {
@@ -199,25 +239,30 @@
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-height: 34px;
   padding: 8px 12px;
   border: none;
   background: transparent;
   color: var(--text-primary);
   font-size: 13px;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
+  font-family: var(--font-mono);
 }
 
-.automation-context-menu button:hover {
+.automation-context-menu button:hover,
+.automation-context-menu button:focus-visible {
   background: var(--hover-bg);
+  outline: none;
 }
 
 .automation-context-menu button.danger {
   color: var(--danger);
 }
 
-.automation-context-menu button.danger:hover {
+.automation-context-menu button.danger:hover,
+.automation-context-menu button.danger:focus-visible {
   background: var(--danger-alpha-10);
 }
 

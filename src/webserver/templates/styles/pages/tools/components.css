@@ -40,6 +40,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
+  font-family: var(--font-mono);
 }
 
 /* =============================================================================
@@ -59,6 +60,7 @@
   text-align: center;
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
+  font-family: var(--font-mono);
 }
 
 .tools-page .empty-state i,
@@ -322,6 +324,7 @@
   font-weight: 500;
   white-space: nowrap;
   opacity: 0;
+  pointer-events: none;
   visibility: hidden;
   transition: all var(--transition-fast);
   pointer-events: none;
@@ -491,6 +494,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-secondary);
+  font-family: var(--font-mono);
   cursor: pointer;
   font-size: 0.875rem;
   transition: all var(--transition-base);
@@ -500,6 +504,21 @@
   background: var(--bg-card-hover);
   color: var(--text-primary);
   border-color: var(--link-color);
+}
+
+.tool-favorites-trigger.active {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.tool-favorites-trigger .icon-chevron-down {
+  transition: transform var(--floating-duration) var(--floating-easing);
+}
+
+.tool-favorites-trigger.active .icon-chevron-down {
+  transform: rotate(180deg);
 }
 
 .tool-favorites-trigger .icon-star {
@@ -517,15 +536,32 @@
 
 .tool-favorites-dropdown {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% - 1px);
   left: 0;
-  z-index: 100;
+  z-index: var(--z-dropdown);
   min-width: 280px;
   max-width: 320px;
   background: var(--bg-secondary);
+  font-family: var(--font-mono);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px var(--shadow-md);
+  border-radius: 0 var(--radius-md) var(--radius-md);
+  box-shadow: var(--shadow-floating-md);
+  opacity: 0;
+  transform: translateY(-4px) scaleY(0.985);
+  transform-origin: top left;
+  transition:
+    opacity var(--floating-duration) var(--floating-easing),
+    transform var(--floating-duration) var(--floating-easing);
+}
+
+.tool-favorites-dropdown[hidden] {
+  display: none;
+}
+
+.tool-favorites-dropdown.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scaleY(1);
 }
 
 .favorites-header {
@@ -576,6 +612,14 @@
   align-items: center;
   gap: var(--spacing-sm);
   flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .favorite-token {

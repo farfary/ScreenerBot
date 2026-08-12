@@ -181,8 +181,6 @@ export function createTraderConfigCards({ saveConfig }) {
       const saved = card.saved[f.id];
       if (el.type === "checkbox") {
         el.checked = saved === "true";
-      } else if (el._customSelectInstance) {
-        el._customSelectInstance.setValue(saved);
       } else {
         el.value = saved;
       }

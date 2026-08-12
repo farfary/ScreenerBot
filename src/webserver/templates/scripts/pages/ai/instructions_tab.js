@@ -1,8 +1,10 @@
 import { $, $$ } from "../../core/dom.js";
+import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 
 export function createInstructionsTab({ state, _eventCleanups }) {
+let activeInstructionMenu = null;
 // Instructions Tab
 // ============================================================================
 
@@ -44,6 +46,7 @@ async function loadTemplates() {
  * Render instructions list
  */
 function renderInstructionsList(instructions) {
+  activeInstructionMenu?.close("superseded");
   const container = $("#instructions-list");
   if (!container) return;
 
@@ -80,7 +83,7 @@ function renderInstructionsList(instructions) {
                  onchange="window.aiPage.toggleInstruction('${inst.id}', this.checked)">
           <span class="toggle-track"></span>
         </label>
-        <button class="instruction-menu-btn" onclick="window.aiPage.showInstructionMenu(event, '${inst.id}')">⋮</button>
+        <button class="instruction-menu-btn" type="button" aria-label="Instruction actions" aria-haspopup="menu" aria-expanded="false" onclick="window.aiPage.showInstructionMenu(event, '${inst.id}')">⋮</button>
       </div>
     </div>
   `
@@ -145,47 +148,119 @@ function filterInstructions() {
  * Show instruction menu (edit, duplicate, delete)
  */
 function showInstructionMenu(event, id) {
+  event.preventDefault();
   event.stopPropagation();
 
-  // Create a simple context menu
-  const existingMenu = $(".instruction-context-menu");
-  if (existingMenu) {
-    existingMenu.remove();
+  const trigger = event.currentTarget;
+  if (activeInstructionMenu?.trigger === trigger) {
+    activeInstructionMenu.close();
+    return;
   }
+  activeInstructionMenu?.close("superseded");
 
   const menu = document.createElement("div");
   menu.className = "instruction-context-menu";
-  menu.style.position = "fixed";
-  menu.style.zIndex = "10000";
+  menu.setAttribute("role", "menu");
   menu.innerHTML = `
-    <div class="context-menu-item" onclick="window.aiPage.editInstruction('${id}'); this.parentElement.remove();">
+    <button class="context-menu-item" type="button" role="menuitem" data-action="edit">
       <i class="icon-square-pen"></i> Edit
-    </div>
-    <div class="context-menu-item" onclick="window.aiPage.duplicateInstruction('${id}'); this.parentElement.remove();">
+    </button>
+    <button class="context-menu-item" type="button" role="menuitem" data-action="duplicate">
       <i class="icon-copy"></i> Duplicate
-    </div>
-    <div class="context-menu-item danger" onclick="window.aiPage.deleteInstruction('${id}'); this.parentElement.remove();">
+    </button>
+    <button class="context-menu-item danger" type="button" role="menuitem" data-action="delete">
       <i class="icon-trash"></i> Delete
-    </div>
+    </button>
   `;
-
-  // Position menu near the button
-  const rect = event.target.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 5}px`;
-  menu.style.left = `${rect.left - 120}px`;
-
   document.body.appendChild(menu);
 
-  // Close menu on outside click
-  setTimeout(() => {
-    const closeMenu = (e) => {
-      if (!menu.contains(e.target)) {
+  let stopPositionTracking = null;
+  let closeTimer = null;
+  const handle = {
+    trigger,
+    owns: (target) => menu.contains(target) || trigger.contains(target),
+    close: (reason) => {
+      if (activeInstructionMenu === handle) activeInstructionMenu = null;
+      stopPositionTracking?.();
+      stopPositionTracking = null;
+      trigger.setAttribute("aria-expanded", "false");
+      menu.removeEventListener("click", onClick);
+      menu.removeEventListener("keydown", onKeyDown);
+      closeMenu(handle);
+      menu.classList.remove("open");
+      if (reason === "escape") trigger.focus({ preventScroll: true });
+
+      const finish = () => {
+        if (closeTimer !== null) clearTimeout(closeTimer);
+        closeTimer = null;
+        if (activeInstructionMenu?.trigger !== trigger) {
+          trigger.classList.remove("active", "menu-above");
+        }
         menu.remove();
-        document.removeEventListener("click", closeMenu);
+      };
+      if (
+        [
+          "superseded",
+          "outside-pointer",
+          "focus-left",
+          "document-hidden",
+          "navigation",
+          "dialog-open",
+        ].includes(reason)
+      ) {
+        finish();
+      } else {
+        closeTimer = setTimeout(finish, 220);
       }
-    };
-    document.addEventListener("click", closeMenu);
-  }, 10);
+    },
+  };
+
+  const onClick = (clickEvent) => {
+    const action = clickEvent.target.closest("[data-action]")?.dataset.action;
+    if (!action) return;
+    handle.close();
+    if (action === "edit") editInstruction(id);
+    else if (action === "duplicate") duplicateInstruction(id);
+    else if (action === "delete") deleteInstruction(id);
+  };
+  const onKeyDown = (keyEvent) => {
+    const items = Array.from(menu.querySelectorAll("[role='menuitem']"));
+    const index = items.indexOf(document.activeElement);
+    if (keyEvent.key === "ArrowDown" || keyEvent.key === "ArrowUp") {
+      keyEvent.preventDefault();
+      const direction = keyEvent.key === "ArrowDown" ? 1 : -1;
+      const nextIndex =
+        index < 0
+          ? direction > 0
+            ? 0
+            : items.length - 1
+          : (index + direction + items.length) % items.length;
+      items[nextIndex]?.focus();
+    } else if (keyEvent.key === "Home" || keyEvent.key === "End") {
+      keyEvent.preventDefault();
+      items[keyEvent.key === "Home" ? 0 : items.length - 1]?.focus();
+    }
+  };
+
+  activeInstructionMenu = handle;
+  openMenu(handle);
+  trigger.classList.add("active");
+  trigger.setAttribute("aria-haspopup", "menu");
+  trigger.setAttribute("aria-expanded", "true");
+  menu.addEventListener("click", onClick);
+  menu.addEventListener("keydown", onKeyDown);
+  stopPositionTracking = trackAnchoredMenu({
+    trigger,
+    menu,
+    align: "end",
+    onDetach: () => handle.close(),
+  });
+  requestAnimationFrame(() => {
+    if (activeInstructionMenu === handle) {
+      menu.classList.add("open");
+      menu.querySelector("[role='menuitem']")?.focus({ preventScroll: true });
+    }
+  });
 }
 
 /**

@@ -315,7 +315,6 @@ pub const DATA_TABLE_SERVER_PAGINATION: &str =
     include_str!("templates/scripts/ui/data_table/server_pagination.js");
 pub const DATA_TABLE_EVENT_HANDLERS: &str =
     include_str!("templates/scripts/ui/data_table/event_handlers.js");
-pub const DROPDOWN_UI: &str = include_str!("templates/scripts/ui/dropdown.js");
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 pub const TOAST_UI: &str = include_str!("templates/scripts/ui/toast.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");

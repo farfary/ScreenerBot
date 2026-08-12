@@ -12,6 +12,11 @@
 
 import { openMenu, closeMenu } from "../core/menu_manager.js";
 
+const MAX_DROPDOWN_HEIGHT = 280;
+const VIEWPORT_MARGIN = 8;
+const CLOSE_ANIMATION_MS = 220;
+let customSelectId = 0;
+
 export class CustomSelect {
   /**
    * @param {Object} options Configuration options
@@ -33,6 +38,8 @@ export class CustomSelect {
     this.name = options.name || null;
     this.disabled = options.disabled || false;
     this.className = options.className || "";
+    this.ariaLabel = options.ariaLabel || "";
+    this.ariaLabelledBy = options.ariaLabelledBy || "";
 
     // State
     this.isOpen = false;
@@ -40,6 +47,12 @@ export class CustomSelect {
     this.selectedValue = null;
     this.searchString = "";
     this.searchTimeout = null;
+    this._isClosing = false;
+    this._openAnimationFrame = null;
+    this._positionAnimationFrame = null;
+    this._closeAnimationTimer = null;
+    this._lastPositionSignature = "";
+    this._labelListeners = [];
 
     // DOM elements
     this.el = null;
@@ -55,16 +68,25 @@ export class CustomSelect {
     // Bound handlers for cleanup
     this._handleTriggerClick = this._handleTriggerClick.bind(this);
     this._handleKeyDown = this._handleKeyDown.bind(this);
-    this._handleDocumentClick = this._handleDocumentClick.bind(this);
     this._handleOptionClick = this._handleOptionClick.bind(this);
-    this._handleScrollResize = this._handleScrollResize.bind(this);
     this._handleSearchInput = this._handleSearchInput.bind(this);
 
     // Stable descriptor for the global menu coordinator. `owns` must also cover
     // the portaled dropdown (rendered in document.body), so clicks/focus inside
     // the option list don't dismiss it.
     this._menuHandle = {
-      close: () => this.close(),
+      close: (reason) =>
+        this.close({
+          restoreFocus: reason === "escape",
+          immediate: [
+            "superseded",
+            "outside-pointer",
+            "focus-left",
+            "document-hidden",
+            "navigation",
+            "dialog-open",
+          ].includes(reason),
+        }),
       owns: (t) =>
         (this.el && this.el.contains(t)) || (this.dropdownEl && this.dropdownEl.contains(t)),
     };
@@ -95,10 +117,31 @@ export class CustomSelect {
     // Extract options from native select
     const options = Array.from(selectElement.options).map((opt) => ({
       value: opt.value,
-      label: opt.textContent,
+      label: opt.textContent?.trim() || "",
       selected: opt.selected,
       disabled: opt.disabled,
     }));
+    const associatedLabels = new Set(Array.from(selectElement.labels || []));
+    const wrappingLabel = selectElement.closest("label");
+    const fieldLabel = selectElement.parentElement?.querySelector(":scope > label");
+    if (wrappingLabel) associatedLabels.add(wrappingLabel);
+    if (fieldLabel) associatedLabels.add(fieldLabel);
+    const sourceDisplay = selectElement.style.display;
+    const sourceClassName = selectElement.className;
+    const valueDescriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+    const selectedIndexDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLSelectElement.prototype,
+      "selectedIndex"
+    );
+    const disabledDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLSelectElement.prototype,
+      "disabled"
+    );
+    const getLabelText = (label) => {
+      const clone = label.cloneNode(true);
+      clone.querySelectorAll("select, .custom-select-host").forEach((control) => control.remove());
+      return clone.textContent?.trim() || "";
+    };
 
     // Create wrapper container
     const container = document.createElement("div");
@@ -116,25 +159,115 @@ export class CustomSelect {
     selectElement.style.display = "none";
 
     // Create custom select
+    const explicitLabelledBy = selectElement.getAttribute("aria-labelledby") || "";
+    const labelledByElements = explicitLabelledBy
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+    const resolvedAriaLabel =
+      selectElement.getAttribute("aria-label") ||
+      labelledByElements.map((label) => label.textContent?.trim()).find(Boolean) ||
+      Array.from(associatedLabels)
+        .map(getLabelText)
+        .find(Boolean) ||
+      "";
+
     const customSelect = new CustomSelect({
       container,
       options,
       placeholder:
         selectElement.dataset.placeholder || selectElement.options[0]?.textContent || "Select...",
       id: selectElement.id ? `${selectElement.id}-custom` : null,
-      name: selectElement.name,
+      // The native source remains the successful form control; giving the
+      // helper input the same name would submit the value twice.
+      name: null,
       disabled: selectElement.disabled,
-      className: selectElement.className,
+      className: sourceClassName,
+      ariaLabel: resolvedAriaLabel,
+      ariaLabelledBy: explicitLabelledBy,
+      ...extraOptions,
       onChange: (value) => {
         // Sync value back to original select for form compatibility
-        selectElement.value = value;
+        valueDescriptor?.set.call(selectElement, value);
         selectElement.dispatchEvent(new Event("change", { bubbles: true }));
+        extraOptions.onChange?.(value, selectElement);
       },
-      ...extraOptions,
     });
 
     // Store reference to original select
     customSelect._originalSelect = selectElement;
+    customSelect._sourceDisplay = sourceDisplay;
+    customSelect._sourcePropertyNames = [];
+    const syncSourceValue = () => {
+      const index = selectedIndexDescriptor?.get.call(selectElement) ?? selectElement.selectedIndex;
+      const value = index < 0 ? null : valueDescriptor.get.call(selectElement);
+      customSelect.setValue(value, { emitChange: false });
+    };
+
+    // Property assignments do not produce DOM mutations. Bridge the two native
+    // properties pages change after enhancement so the visible control cannot
+    // lag behind its source select.
+    if (valueDescriptor?.get && valueDescriptor?.set) {
+      Object.defineProperty(selectElement, "value", {
+        configurable: true,
+        enumerable: valueDescriptor.enumerable,
+        get: () => valueDescriptor.get.call(selectElement),
+        set: (value) => {
+          valueDescriptor.set.call(selectElement, value);
+          syncSourceValue();
+        },
+      });
+      customSelect._sourcePropertyNames.push("value");
+    }
+    if (selectedIndexDescriptor?.get && selectedIndexDescriptor?.set) {
+      Object.defineProperty(selectElement, "selectedIndex", {
+        configurable: true,
+        enumerable: selectedIndexDescriptor.enumerable,
+        get: () => selectedIndexDescriptor.get.call(selectElement),
+        set: (index) => {
+          selectedIndexDescriptor.set.call(selectElement, index);
+          syncSourceValue();
+        },
+      });
+      customSelect._sourcePropertyNames.push("selectedIndex");
+    }
+    if (disabledDescriptor?.get && disabledDescriptor?.set) {
+      Object.defineProperty(selectElement, "disabled", {
+        configurable: true,
+        enumerable: disabledDescriptor.enumerable,
+        get: () => disabledDescriptor.get.call(selectElement),
+        set: (disabled) => {
+          disabledDescriptor.set.call(selectElement, disabled);
+          customSelect.setDisabled(disabledDescriptor.get.call(selectElement));
+        },
+      });
+      customSelect._sourcePropertyNames.push("disabled");
+    }
+
+    // A native label still targets the hidden source select. Forward label
+    // activation to the visible combobox so mouse and keyboard focus agree.
+    associatedLabels.forEach((label) => {
+      const handler = (event) => {
+        if (customSelect.el?.contains(event.target)) return;
+        event.preventDefault();
+        customSelect.focus();
+      };
+      label.addEventListener("click", handler);
+      customSelect._labelListeners.push({ label, handler });
+    });
+
+    const syncFromSource = () => {
+      syncSourceValue();
+      customSelect.setDisabled(disabledDescriptor.get.call(selectElement));
+    };
+    customSelect._sourceChangeHandler = syncFromSource;
+    selectElement.addEventListener("change", syncFromSource);
+    if (selectElement.form) {
+      customSelect._sourceForm = selectElement.form;
+      customSelect._sourceResetHandler = () => requestAnimationFrame(syncFromSource);
+      customSelect._sourceForm.addEventListener("reset", customSelect._sourceResetHandler);
+    }
 
     // Store reference to CustomSelect instance on original select for later access
     selectElement._customSelectInstance = customSelect;
@@ -148,13 +281,20 @@ export class CustomSelect {
       const optionObserver = new MutationObserver(() => {
         const opts = Array.from(selectElement.options).map((opt) => ({
           value: opt.value,
-          label: opt.textContent,
+          label: opt.textContent?.trim() || "",
           selected: opt.selected,
           disabled: opt.disabled,
         }));
         customSelect.setOptions(opts);
+        syncSourceValue();
+        customSelect.setDisabled(selectElement.disabled);
       });
-      optionObserver.observe(selectElement, { childList: true, subtree: true });
+      optionObserver.observe(selectElement, {
+        attributes: true,
+        attributeFilter: ["disabled", "label", "selected", "value"],
+        childList: true,
+        subtree: true,
+      });
       customSelect._optionObserver = optionObserver;
     }
 
@@ -162,6 +302,9 @@ export class CustomSelect {
   }
 
   _render() {
+    const componentId = this.id || `custom-select-${++customSelectId}`;
+    const listboxId = `${componentId}-listbox`;
+
     // Create wrapper
     this.el = document.createElement("div");
     this.el.className = `custom-select${this.className ? ` ${this.className}` : ""}`;
@@ -169,11 +312,16 @@ export class CustomSelect {
     this.el.setAttribute("role", "combobox");
     this.el.setAttribute("aria-haspopup", "listbox");
     this.el.setAttribute("aria-expanded", "false");
-    if (this.id) {
-      this.el.id = this.id;
+    this.el.setAttribute("aria-controls", listboxId);
+    this.el.id = componentId;
+    if (this.ariaLabelledBy) {
+      this.el.setAttribute("aria-labelledby", this.ariaLabelledBy);
+    } else if (this.ariaLabel) {
+      this.el.setAttribute("aria-label", this.ariaLabel);
     }
     if (this.disabled) {
       this.el.classList.add("disabled");
+      this.el.setAttribute("aria-disabled", "true");
     }
 
     // Create trigger
@@ -197,7 +345,7 @@ export class CustomSelect {
     // Create dropdown (will be appended to body when opened - portal pattern)
     this.dropdownEl = document.createElement("div");
     this.dropdownEl.className = "cs-dropdown";
-    this.dropdownEl.setAttribute("role", "listbox");
+    this.dropdownEl.id = `${componentId}-popup`;
 
     // Create search container (only shown if many options)
     this.searchContainerEl = document.createElement("div");
@@ -207,11 +355,15 @@ export class CustomSelect {
     this.searchInputEl.className = "cs-search-input";
     this.searchInputEl.placeholder = "Search...";
     this.searchInputEl.autocomplete = "off";
+    this.searchInputEl.setAttribute("aria-label", "Filter options");
+    this.searchInputEl.setAttribute("aria-controls", listboxId);
     this.searchContainerEl.appendChild(this.searchInputEl);
 
     // Create options container
     this.optionsContainerEl = document.createElement("div");
     this.optionsContainerEl.className = "cs-options-container";
+    this.optionsContainerEl.id = listboxId;
+    this.optionsContainerEl.setAttribute("role", "listbox");
 
     // Create no results message
     this.noResultsEl = document.createElement("div");
@@ -261,11 +413,13 @@ export class CustomSelect {
     this.options.forEach((opt, index) => {
       const optionEl = document.createElement("div");
       optionEl.className = "cs-option";
+      optionEl.id = `${this.optionsContainerEl.id}-option-${index}`;
       optionEl.dataset.value = opt.value;
       optionEl.dataset.index = index;
       optionEl.textContent = opt.label;
       optionEl.title = opt.label; // full text on hover when a long label is ellipsized
       optionEl.setAttribute("role", "option");
+      optionEl.setAttribute("aria-selected", "false");
 
       if (opt.value === this.selectedValue) {
         optionEl.classList.add("selected");
@@ -297,24 +451,17 @@ export class CustomSelect {
   _attachEvents() {
     this.triggerEl.addEventListener("click", this._handleTriggerClick);
     this.el.addEventListener("keydown", this._handleKeyDown);
+    this.dropdownEl.addEventListener("keydown", this._handleKeyDown);
     this.optionsContainerEl.addEventListener("click", this._handleOptionClick);
     this.searchInputEl.addEventListener("input", this._handleSearchInput);
-    this.searchInputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape") {
-        // Let the main keydown handler handle these
-        return;
-      }
-      e.stopPropagation();
-    });
-    document.addEventListener("click", this._handleDocumentClick);
   }
 
   _detachEvents() {
     this.triggerEl.removeEventListener("click", this._handleTriggerClick);
     this.el.removeEventListener("keydown", this._handleKeyDown);
+    this.dropdownEl.removeEventListener("keydown", this._handleKeyDown);
     this.optionsContainerEl.removeEventListener("click", this._handleOptionClick);
     this.searchInputEl.removeEventListener("input", this._handleSearchInput);
-    document.removeEventListener("click", this._handleDocumentClick);
   }
 
   _handleSearchInput(e) {
@@ -347,14 +494,8 @@ export class CustomSelect {
   _handleTriggerClick(e) {
     e.stopPropagation();
     if (this.disabled) return;
+    this.el.focus({ preventScroll: true });
     this.toggle();
-  }
-
-  _handleDocumentClick(e) {
-    // Check both the main element and the portal dropdown (which is in body)
-    if (this.isOpen && !this.el.contains(e.target) && !this.dropdownEl.contains(e.target)) {
-      this.close();
-    }
   }
 
   _handleOptionClick(e) {
@@ -363,11 +504,20 @@ export class CustomSelect {
 
     const value = optionEl.dataset.value;
     this._selectValue(value);
-    this.close();
+    this.close({ restoreFocus: true });
   }
 
   _handleKeyDown(e) {
     if (this.disabled) return;
+
+    // Printable keys, Space, Home and End belong to the search field itself.
+    // Navigation keys still control the portaled listbox.
+    if (
+      e.target === this.searchInputEl &&
+      !["Enter", "Escape", "ArrowDown", "ArrowUp", "Tab"].includes(e.key)
+    ) {
+      return;
+    }
 
     switch (e.key) {
       case "Enter":
@@ -380,7 +530,7 @@ export class CustomSelect {
               this._selectValue(opt.value);
             }
           }
-          this.close();
+          this.close({ restoreFocus: true });
         } else {
           this.open();
         }
@@ -389,7 +539,7 @@ export class CustomSelect {
       case "Escape":
         if (this.isOpen) {
           e.preventDefault();
-          this.close();
+          this.close({ restoreFocus: true });
         }
         break;
 
@@ -499,18 +649,22 @@ export class CustomSelect {
     }
 
     this.focusedIndex = index;
+    this.el.removeAttribute("aria-activedescendant");
+    this.searchInputEl.removeAttribute("aria-activedescendant");
 
     if (index >= 0 && index < this.options.length) {
       const optionEl = this.optionsContainerEl.querySelector(`.cs-option[data-index="${index}"]`);
       if (optionEl) {
         optionEl.classList.add("focused");
+        this.el.setAttribute("aria-activedescendant", optionEl.id);
+        this.searchInputEl.setAttribute("aria-activedescendant", optionEl.id);
         // Scroll into view
         optionEl.scrollIntoView({ block: "nearest" });
       }
     }
   }
 
-  _selectValue(value) {
+  _selectValue(value, { emitChange = true } = {}) {
     const prevValue = this.selectedValue;
     this.selectedValue = value;
 
@@ -531,13 +685,17 @@ export class CustomSelect {
     });
 
     // Fire change callback if value actually changed
-    if (value !== prevValue) {
+    if (emitChange && value !== prevValue) {
       this.onChange(value);
     }
   }
 
   open() {
     if (this.disabled || this.isOpen) return;
+
+    this._cancelCloseAnimation();
+    this._isClosing = false;
+    this.el.classList.remove("closing");
 
     // Register first so any other open menu is dismissed before this one shows.
     openMenu(this._menuHandle);
@@ -558,23 +716,33 @@ export class CustomSelect {
 
     // Position dropdown with fixed positioning
     this._positionDropdown();
+    this._startPositionTracking();
 
-    // Add scroll/resize listeners to reposition dropdown
-    this._addScrollResizeListeners();
+    // The menu is portaled, so descendant `.open` selectors cannot animate it.
+    // Start from its own hidden portal state and promote it on the next frame.
+    this.dropdownEl.classList.remove("is-open");
+    this._openAnimationFrame = requestAnimationFrame(() => {
+      this._openAnimationFrame = null;
+      if (this.isOpen) this.dropdownEl.classList.add("is-open");
+    });
 
     // Focus search input if visible
     if (this.options.length > 10) {
-      setTimeout(() => this.searchInputEl.focus(), 50);
+      this.searchInputEl.focus({ preventScroll: true });
     }
   }
 
-  close() {
-    if (!this.isOpen) return;
+  close({ restoreFocus = false, immediate = false } = {}) {
+    if (!this.isOpen && !this._isClosing) return;
 
     closeMenu(this._menuHandle);
     this.isOpen = false;
+    this._isClosing = !immediate;
     this.el.classList.remove("open");
+    this.el.classList.toggle("closing", this._isClosing);
     this.el.setAttribute("aria-expanded", "false");
+    this.el.removeAttribute("aria-activedescendant");
+    this.searchInputEl.removeAttribute("aria-activedescendant");
     this.focusedIndex = -1;
 
     // Remove focus styling
@@ -583,19 +751,36 @@ export class CustomSelect {
       focused.classList.remove("focused");
     }
 
-    // Remove scroll/resize listeners
-    this._removeScrollResizeListeners();
-
-    // Portal pattern: remove dropdown from body
-    this._removeDropdownFromBody();
-
     // Clear search
     this.searchInputEl.value = "";
-    this._handleSearchInput({ target: this.searchInputEl });
+    this.optionsContainerEl.querySelectorAll(".cs-option").forEach((option) => {
+      option.style.display = "";
+    });
+    this.noResultsEl.style.display = "none";
+    this._setFocusIndex(-1);
     this.searchString = "";
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout);
+      this.searchTimeout = null;
     }
+
+    if (restoreFocus && this.el.isConnected) {
+      this.el.focus({ preventScroll: true });
+    }
+
+    if (this._openAnimationFrame !== null) {
+      cancelAnimationFrame(this._openAnimationFrame);
+      this._openAnimationFrame = null;
+    }
+
+    this.dropdownEl.classList.remove("is-open");
+    if (immediate || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      this._finishClose();
+      return;
+    }
+
+    this._cancelCloseAnimation();
+    this._closeAnimationTimer = setTimeout(() => this._finishClose(), CLOSE_ANIMATION_MS);
   }
 
   toggle() {
@@ -606,52 +791,60 @@ export class CustomSelect {
     }
   }
 
-  _positionDropdown() {
-    const MARGIN = 8; // keep this gap from every viewport edge
-    const triggerRect = this.triggerEl.getBoundingClientRect();
+  _positionDropdown(triggerRect = this.triggerEl?.getBoundingClientRect()) {
+    if (!triggerRect || !this.dropdownEl?.isConnected) return;
+
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const style = this.dropdownEl.style;
-    const isToolbarSelect = Boolean(this.el.closest(".table-toolbar-field"));
-
-    this.dropdownEl.classList.toggle("cs-dropdown--toolbar", isToolbarSelect);
-
     style.position = "fixed";
     style.right = "auto"; // JS owns horizontal placement; clear the base `right: 0`
 
-    // --- WIDTH: at least the trigger width, grow to fit the widest option,
-    //     but never wider than the viewport (responsive on small screens). ---
-    const maxWidth = Math.max(triggerRect.width, viewportWidth - MARGIN * 2);
-    style.minWidth = `${Math.min(triggerRect.width, maxWidth)}px`;
-    style.maxWidth = `${maxWidth}px`;
-    style.width = isToolbarSelect ? `${triggerRect.width}px` : "max-content";
+    // The menu is the lower/upper half of the control, so it must keep the
+    // trigger's exact width instead of presenting as an independent floating card.
+    const dropdownWidth = Math.max(
+      0,
+      Math.min(triggerRect.width, viewportWidth - VIEWPORT_MARGIN * 2)
+    );
+    style.minWidth = `${dropdownWidth}px`;
+    style.maxWidth = `${dropdownWidth}px`;
+    style.width = `${dropdownWidth}px`;
+    style.setProperty("--cs-control-height", `${triggerRect.height}px`);
 
     // Measure the resolved size after the width constraints are applied.
     const dropdownRect = this.dropdownEl.getBoundingClientRect();
-    const dropdownWidth = dropdownRect.width;
-    const dropdownHeight = this.dropdownEl.offsetHeight || 240;
+    const resolvedDropdownWidth = dropdownRect.width;
+    const dropdownHeight = Math.min(
+      this.dropdownEl.scrollHeight || MAX_DROPDOWN_HEIGHT,
+      MAX_DROPDOWN_HEIGHT
+    );
 
     // --- HORIZONTAL: align to the trigger, then clamp fully into the viewport. ---
     let left = triggerRect.left;
-    if (left + dropdownWidth > viewportWidth - MARGIN) {
+    if (left + resolvedDropdownWidth > viewportWidth - VIEWPORT_MARGIN) {
       // Prefer right-aligning to the trigger when it would overflow the right edge.
-      left = triggerRect.right - dropdownWidth;
+      left = triggerRect.right - resolvedDropdownWidth;
     }
-    left = Math.max(MARGIN, Math.min(left, viewportWidth - dropdownWidth - MARGIN));
+    left = Math.max(
+      VIEWPORT_MARGIN,
+      Math.min(left, viewportWidth - resolvedDropdownWidth - VIEWPORT_MARGIN)
+    );
     style.left = `${left}px`;
 
     // --- VERTICAL: open below by default, flip above when there is more room. ---
-    const spaceBelow = viewportHeight - triggerRect.bottom - MARGIN;
-    const spaceAbove = triggerRect.top - MARGIN;
-    style.maxHeight = `${Math.min(280, Math.max(spaceBelow, spaceAbove))}px`;
+    const spaceBelow = Math.max(0, viewportHeight - triggerRect.bottom - VIEWPORT_MARGIN);
+    const spaceAbove = Math.max(0, triggerRect.top - VIEWPORT_MARGIN);
+    const openAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+    const availableHeight = openAbove ? spaceAbove : spaceBelow;
+    style.maxHeight = `${Math.max(0, Math.min(MAX_DROPDOWN_HEIGHT, availableHeight))}px`;
 
-    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+    if (openAbove) {
       style.top = "auto";
-      style.bottom = `${viewportHeight - triggerRect.top + (isToolbarSelect ? -1 : 4)}px`;
+      style.bottom = `${viewportHeight - triggerRect.top - 1}px`;
       this.el.classList.add("dropdown-above");
       this.dropdownEl.classList.add("cs-dropdown--above");
     } else {
-      style.top = `${triggerRect.bottom + (isToolbarSelect ? -1 : 4)}px`;
+      style.top = `${triggerRect.bottom - 1}px`;
       style.bottom = "auto";
       this.el.classList.remove("dropdown-above");
       this.dropdownEl.classList.remove("cs-dropdown--above");
@@ -667,25 +860,67 @@ export class CustomSelect {
 
   _removeDropdownFromBody() {
     if (this.dropdownEl && this.dropdownEl.parentNode === document.body) {
+      this.dropdownEl.classList.remove("is-open", "cs-dropdown--above");
       this.dropdownEl.classList.remove("cs-portal");
       document.body.removeChild(this.dropdownEl);
     }
   }
 
-  _addScrollResizeListeners() {
-    window.addEventListener("scroll", this._handleScrollResize, true);
-    window.addEventListener("resize", this._handleScrollResize);
+  _startPositionTracking() {
+    if (this._positionAnimationFrame !== null) return;
+
+    const update = () => {
+      this._positionAnimationFrame = null;
+      if (!this.isOpen && !this._isClosing) return;
+      if (!this.triggerEl?.isConnected || !this.dropdownEl?.isConnected) {
+        this.close({ immediate: true });
+        return;
+      }
+
+      const rect = this.triggerEl.getBoundingClientRect();
+      const signature = [
+        rect.left,
+        rect.top,
+        rect.right,
+        rect.bottom,
+        rect.width,
+        rect.height,
+        window.innerWidth,
+        window.innerHeight,
+        this.dropdownEl.scrollHeight,
+      ].join(":");
+      if (signature !== this._lastPositionSignature) {
+        this._lastPositionSignature = signature;
+        this._positionDropdown(rect);
+      }
+      this._positionAnimationFrame = requestAnimationFrame(update);
+    };
+
+    this._lastPositionSignature = "";
+    this._positionAnimationFrame = requestAnimationFrame(update);
   }
 
-  _removeScrollResizeListeners() {
-    window.removeEventListener("scroll", this._handleScrollResize, true);
-    window.removeEventListener("resize", this._handleScrollResize);
-  }
-
-  _handleScrollResize() {
-    if (this.isOpen) {
-      this._positionDropdown();
+  _stopPositionTracking() {
+    if (this._positionAnimationFrame !== null) {
+      cancelAnimationFrame(this._positionAnimationFrame);
+      this._positionAnimationFrame = null;
     }
+    this._lastPositionSignature = "";
+  }
+
+  _cancelCloseAnimation() {
+    if (this._closeAnimationTimer !== null) {
+      clearTimeout(this._closeAnimationTimer);
+      this._closeAnimationTimer = null;
+    }
+  }
+
+  _finishClose() {
+    this._cancelCloseAnimation();
+    this._isClosing = false;
+    this.el?.classList.remove("closing", "dropdown-above");
+    this._stopPositionTracking();
+    this._removeDropdownFromBody();
   }
 
   // Public API
@@ -702,11 +937,23 @@ export class CustomSelect {
    * Set the selected value
    * @param {string} value The value to select
    */
-  setValue(value) {
+  setValue(value, { emitChange = true } = {}) {
     const opt = this.options.find((o) => o.value === value);
     if (opt) {
-      this._selectValue(value);
+      this._selectValue(value, { emitChange });
+      return;
     }
+
+    const previousValue = this.selectedValue;
+    this.selectedValue = null;
+    this.hiddenInput.value = "";
+    delete this.el.dataset.value;
+    this._updateDisplayValue();
+    this.optionsContainerEl.querySelectorAll(".cs-option").forEach((optionEl) => {
+      optionEl.classList.remove("selected");
+      optionEl.setAttribute("aria-selected", "false");
+    });
+    if (emitChange && previousValue !== null) this.onChange("");
   }
 
   /**
@@ -716,18 +963,22 @@ export class CustomSelect {
   setOptions(newOptions) {
     this.options = newOptions;
 
-    // Check if current selection is still valid
+    // A selected option from the source select is authoritative even when the
+    // previous value still exists (async option refreshes commonly change it).
+    const selectedOption = this.options.find((o) => o.selected);
     const stillValid = this.options.find((o) => o.value === this.selectedValue);
-    if (!stillValid) {
-      // Select first selected option or clear selection
-      const newSelected = this.options.find((o) => o.selected);
-      this.selectedValue = newSelected ? newSelected.value : null;
+    if (selectedOption || !stillValid) {
+      this.selectedValue = selectedOption ? selectedOption.value : null;
       this.hiddenInput.value = this.selectedValue || "";
-      this.el.dataset.value = this.selectedValue || "";
+      if (this.selectedValue === null) delete this.el.dataset.value;
+      else this.el.dataset.value = this.selectedValue;
     }
 
     this._renderOptions();
     this._updateDisplayValue();
+    if (this.isOpen) {
+      this._lastPositionSignature = "";
+    }
   }
 
   /**
@@ -737,6 +988,7 @@ export class CustomSelect {
     this.disabled = false;
     this.el.classList.remove("disabled");
     this.el.tabIndex = 0;
+    this.el.removeAttribute("aria-disabled");
   }
 
   /**
@@ -746,7 +998,13 @@ export class CustomSelect {
     this.disabled = true;
     this.el.classList.add("disabled");
     this.el.tabIndex = -1;
+    this.el.setAttribute("aria-disabled", "true");
     this.close();
+  }
+
+  setDisabled(disabled) {
+    if (disabled) this.disable();
+    else this.enable();
   }
 
   /**
@@ -760,8 +1018,9 @@ export class CustomSelect {
    * Destroy the component and clean up
    */
   destroy() {
-    // Close first (removes scroll/resize listeners and dropdown from body)
-    this.close();
+    // Close first and bypass the exit animation because the owner is leaving.
+    this.close({ immediate: true });
+    this._finishClose();
     this._detachEvents();
 
     // Stop syncing from the original <select> (enhanced instances only).
@@ -770,18 +1029,29 @@ export class CustomSelect {
       this._optionObserver = null;
     }
 
+    this._labelListeners.forEach(({ label, handler }) => label.removeEventListener("click", handler));
+    this._labelListeners = [];
+
     // Ensure dropdown is removed from body if still attached
     this._removeDropdownFromBody();
 
     // Restore original select if enhanced
     if (this._originalSelect) {
+      this._originalSelect.removeEventListener("change", this._sourceChangeHandler);
+      this._sourceForm?.removeEventListener("reset", this._sourceResetHandler);
+      this._sourcePropertyNames.forEach((property) => delete this._originalSelect[property]);
       this._originalSelect.classList.remove("cs-enhanced-source");
-      this._originalSelect.style.display = "";
+      this._originalSelect.style.display = this._sourceDisplay || "";
+      this._originalSelect.removeAttribute("data-enhanced");
+      delete this._originalSelect._customSelectInstance;
     }
 
     // Remove from DOM
     if (this.el && this.el.parentNode) {
       this.el.parentNode.removeChild(this.el);
+    }
+    if (this.container?.classList.contains("custom-select-host")) {
+      this.container.remove();
     }
 
     // Clear references
@@ -793,6 +1063,12 @@ export class CustomSelect {
     this.container = null;
     this.options = null;
     this.onChange = null;
+    this._originalSelect = null;
+    this._sourcePropertyNames = null;
+    this._sourceDisplay = null;
+    this._sourceChangeHandler = null;
+    this._sourceResetHandler = null;
+    this._sourceForm = null;
   }
 }
 
@@ -852,6 +1128,13 @@ export function installGlobalSelectEnhancer() {
     }
   };
 
+  const destroyWithin = (root) => {
+    if (!root || root.nodeType !== 1) return;
+    const destroySelect = (select) => select._customSelectInstance?.destroy();
+    if (root.matches?.("select[data-enhanced='true']")) destroySelect(root);
+    root.querySelectorAll?.("select[data-enhanced='true']").forEach(destroySelect);
+  };
+
   const initialSweep = () => enhanceWithin(document.body || document.documentElement);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initialSweep, { once: true });
@@ -863,8 +1146,8 @@ export function installGlobalSelectEnhancer() {
   // stays cheap even while live tables re-render constantly.
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
-      if (!m.addedNodes || m.addedNodes.length === 0) continue;
-      m.addedNodes.forEach(enhanceWithin);
+      m.removedNodes?.forEach(destroyWithin);
+      m.addedNodes?.forEach(enhanceWithin);
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });

@@ -1,8 +1,10 @@
 import { $ } from "../../core/dom.js";
+import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 
 export function createAutomationTab({ state, _eventCleanups, addTrackedListener }) {
+let activeAutomationMenu = null;
 // Hash guards — skip re-render when polled data is unchanged
 let _lastTasksKey = null;
 let _lastRunsKey = null;
@@ -58,6 +60,7 @@ function renderAutomationStats(stats) {
 }
 
 function renderAutomationList(tasks) {
+  activeAutomationMenu?.close("superseded");
   const key = JSON.stringify(tasks);
   if (key === _lastTasksKey) return;
   _lastTasksKey = key;
@@ -109,7 +112,7 @@ function renderAutomationList(tasks) {
           <button class="btn btn-sm btn-secondary" onclick="window.aiPage.runAutomationTask(${task.id})" title="Run Now">
             <i class="icon-play"></i>
           </button>
-          <button class="automation-menu-btn" onclick="window.aiPage.showAutomationMenu(event, ${task.id})">⋮</button>
+          <button class="automation-menu-btn" type="button" aria-label="Automation actions" aria-haspopup="menu" aria-expanded="false" onclick="window.aiPage.showAutomationMenu(event, ${task.id})">⋮</button>
         </div>
       </div>
     `;
@@ -569,38 +572,119 @@ async function viewAutomationRun(runId) {
 }
 
 function showAutomationMenu(event, id) {
+  event.preventDefault();
   event.stopPropagation();
-  // Remove existing menus
-  document.querySelectorAll(".automation-context-menu").forEach(m => m.remove());
 
   const btn = event.currentTarget;
-  const rect = btn.getBoundingClientRect();
+  if (activeAutomationMenu?.trigger === btn) {
+    activeAutomationMenu.close();
+    return;
+  }
+  activeAutomationMenu?.close("superseded");
 
   const menu = document.createElement("div");
   menu.className = "automation-context-menu";
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${rect.left - 120}px`;
+  menu.setAttribute("role", "menu");
   menu.innerHTML = `
-    <button onclick="window.aiPage.editAutomationTask(${id}); this.closest('.automation-context-menu').remove();">
+    <button type="button" role="menuitem" data-action="edit">
       <i class="icon-square-pen"></i> Edit
     </button>
-    <button onclick="window.aiPage.viewAutomationTaskRuns(${id}); this.closest('.automation-context-menu').remove();">
+    <button type="button" role="menuitem" data-action="runs">
       <i class="icon-clock"></i> View Runs
     </button>
     <hr>
-    <button class="danger" onclick="window.aiPage.deleteAutomationTask(${id}); this.closest('.automation-context-menu').remove();">
+    <button class="danger" type="button" role="menuitem" data-action="delete">
       <i class="icon-trash"></i> Delete
     </button>
   `;
   document.body.appendChild(menu);
 
-  const closeMenu = (e) => {
-    if (!menu.contains(e.target)) {
-      menu.remove();
-      document.removeEventListener("click", closeMenu);
+  let stopPositionTracking = null;
+  let closeTimer = null;
+  const handle = {
+    trigger: btn,
+    owns: (target) => menu.contains(target) || btn.contains(target),
+    close: (reason) => {
+      if (activeAutomationMenu === handle) activeAutomationMenu = null;
+      stopPositionTracking?.();
+      stopPositionTracking = null;
+      btn.setAttribute("aria-expanded", "false");
+      menu.removeEventListener("click", onClick);
+      menu.removeEventListener("keydown", onKeyDown);
+      closeMenu(handle);
+      menu.classList.remove("open");
+      if (reason === "escape") btn.focus({ preventScroll: true });
+
+      const finish = () => {
+        if (closeTimer !== null) clearTimeout(closeTimer);
+        closeTimer = null;
+        if (activeAutomationMenu?.trigger !== btn) {
+          btn.classList.remove("active", "menu-above");
+        }
+        menu.remove();
+      };
+      if (
+        [
+          "superseded",
+          "outside-pointer",
+          "focus-left",
+          "document-hidden",
+          "navigation",
+          "dialog-open",
+        ].includes(reason)
+      ) {
+        finish();
+      } else {
+        closeTimer = setTimeout(finish, 220);
+      }
+    },
+  };
+  const onClick = (clickEvent) => {
+    const action = clickEvent.target.closest("[data-action]")?.dataset.action;
+    if (!action) return;
+    handle.close();
+    if (action === "edit") editAutomationTask(id);
+    else if (action === "runs") viewAutomationTaskRuns(id);
+    else if (action === "delete") deleteAutomationTask(id);
+  };
+  const onKeyDown = (keyEvent) => {
+    const items = Array.from(menu.querySelectorAll("[role='menuitem']"));
+    const index = items.indexOf(document.activeElement);
+    if (keyEvent.key === "ArrowDown" || keyEvent.key === "ArrowUp") {
+      keyEvent.preventDefault();
+      const direction = keyEvent.key === "ArrowDown" ? 1 : -1;
+      const nextIndex =
+        index < 0
+          ? direction > 0
+            ? 0
+            : items.length - 1
+          : (index + direction + items.length) % items.length;
+      items[nextIndex]?.focus();
+    } else if (keyEvent.key === "Home" || keyEvent.key === "End") {
+      keyEvent.preventDefault();
+      items[keyEvent.key === "Home" ? 0 : items.length - 1]?.focus();
     }
   };
-  setTimeout(() => document.addEventListener("click", closeMenu), 10);
+
+  activeAutomationMenu = handle;
+  openMenu(handle);
+  btn.classList.add("active");
+  btn.setAttribute("aria-haspopup", "menu");
+  btn.setAttribute("aria-expanded", "true");
+  menu.addEventListener("click", onClick);
+  menu.addEventListener("keydown", onKeyDown);
+  stopPositionTracking = trackAnchoredMenu({
+    trigger: btn,
+    menu,
+    align: "end",
+    onDetach: () => handle.close(),
+  });
+  requestAnimationFrame(() => {
+    if (activeAutomationMenu === handle) {
+      menu.classList.add("open");
+      menu.querySelector("[role='menuitem']")?.focus({ preventScroll: true });
+    }
+  });
 }
 
 async function viewAutomationTaskRuns(id) {
@@ -681,6 +765,7 @@ function setupAutomationHandlers() {
     runAutomationTask,
     viewAutomationRun,
     viewAutomationTaskRuns,
+    showAutomationMenu,
     setupAutomationHandlers,
   };
 }

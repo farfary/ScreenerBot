@@ -791,7 +791,6 @@ export class TableToolbarView {
           )}" aria-label="${escapeHtml(settings.tooltip)}">
             ${renderIconMarkup(settings.icon, "dt-btn-icon")}
           </button>
-          <div class="dt-column-menu" style="display:none;"></div>
         </div>
       `
       : "";

@@ -57,7 +57,8 @@
   --z-onboarding: 50000;
   --z-splash: 99000;
   --z-lockscreen: 100000;
-  --z-select-portal: 100000; /* Custom select portal mode */
+  /* Above dialogs/context menus, below toasts, app tooltips, setup and lockscreen. */
+  --z-select-portal: 10008;
 
   /* ==========================================================================
      Overlay Background

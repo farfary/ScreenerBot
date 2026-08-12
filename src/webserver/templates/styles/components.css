@@ -327,6 +327,14 @@
   transform: translateY(0);
 }
 
+.links-dropdown-trigger.active {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.links-dropdown-trigger.active.menu-above {
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
 .links-dropdown-trigger:disabled {
   opacity: 0.5;
   cursor: not-allowed;

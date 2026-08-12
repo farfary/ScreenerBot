@@ -1,5 +1,5 @@
 import { registerPage } from "../core/lifecycle.js";
-import { openMenu, closeMenu } from "../core/menu_manager.js";
+import { openMenu, closeMenu, trackAnchoredMenu } from "../core/menu_manager.js";
 import { Poller, getInterval as getGlobalPollInterval } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
@@ -251,38 +251,21 @@ function createLifecycle() {
 
     const currentValue = state.filters.rejection_reason || "all";
 
-    // Build options array for CustomSelect with human-readable labels
-    const newOptions = [
-      { value: "all", label: "All" },
-      ...reasons.map((reason) => ({
-        value: reason,
-        label: getRejectionDisplayLabel(reason) || reason,
-      })),
-    ];
+    // Keep the native select authoritative. CustomSelect observes its option tree
+    // and bridges its value property, so page code never reaches into enhancer internals.
+    const optionMarkup = [
+      '<option value="all">All</option>',
+      ...reasons.map((reason) => {
+        const escaped = Utils.escapeHtml(reason);
+        const label = Utils.escapeHtml(getRejectionDisplayLabel(reason) || reason);
+        return `<option value="${escaped}">${label}</option>`;
+      }),
+    ].join("");
 
-    // Check if the select has a CustomSelect instance attached
-    if (
-      select._customSelectInstance &&
-      typeof select._customSelectInstance.setOptions === "function"
-    ) {
-      select._customSelectInstance.setOptions(newOptions);
-      select._customSelectInstance.setValue(currentValue);
-    } else {
-      // Fallback: update native select options
-      const optionMarkup = [
-        '<option value="all">All</option>',
-        ...reasons.map((reason) => {
-          const escaped = Utils.escapeHtml(reason);
-          const label = Utils.escapeHtml(getRejectionDisplayLabel(reason) || reason);
-          return `<option value="${escaped}">${label}</option>`;
-        }),
-      ].join("");
-
-      if (select.innerHTML !== optionMarkup) {
-        select.innerHTML = optionMarkup;
-      }
-      select.value = currentValue;
+    if (select.innerHTML !== optionMarkup) {
+      select.innerHTML = optionMarkup;
     }
+    select.value = currentValue;
 
     const normalizedCurrent = reasons.some((reason) => reason === currentValue)
       ? currentValue
@@ -407,6 +390,7 @@ function createLifecycle() {
   // If poll fires during a user-triggered load, it can repeatedly abort and re-queue
   // requests, making even small page sizes feel "stuck".
   let lastUserReloadAt = 0;
+  let activeLinksMenu = null;
 
   const shouldSkipPollReload = () => {
     if (!table) return false;
@@ -464,8 +448,7 @@ function createLifecycle() {
     }
 
     // Skip if links dropdown menu is open
-    const linksDropdown = document.querySelector(".links-dropdown-menu");
-    if (linksDropdown) {
+    if (activeLinksMenu) {
       return true;
     }
 
@@ -1328,70 +1311,109 @@ function createLifecycle() {
       const mint = trigger.dataset.mint;
       if (!mint) return;
 
-      // Close any existing dropdown
-      const existingMenu = document.querySelector(".links-dropdown-menu.open");
-      if (existingMenu) {
-        existingMenu.remove();
+      if (activeLinksMenu?.trigger === trigger) {
+        activeLinksMenu.close();
+        return;
       }
+      activeLinksMenu?.close("superseded");
 
       // Create dropdown menu
       const menu = document.createElement("div");
-      menu.className = "links-dropdown-menu dropdown-menu open";
+      menu.className = "links-dropdown-menu dropdown-menu";
       menu.setAttribute("data-align", "left");
+      menu.setAttribute("role", "menu");
       menu.innerHTML = `
-        <button class="dropdown-item" data-action="dexscreener" type="button">
+        <button class="dropdown-item" data-action="dexscreener" type="button" role="menuitem">
           <i class="icon-chart-bar"></i>
           <span class="label">DexScreener</span>
         </button>
-        <button class="dropdown-item" data-action="gmgn" type="button">
+        <button class="dropdown-item" data-action="gmgn" type="button" role="menuitem">
           <i class="icon-trending-up"></i>
           <span class="label">GMGN</span>
         </button>
-        <button class="dropdown-item" data-action="solscan" type="button">
+        <button class="dropdown-item" data-action="solscan" type="button" role="menuitem">
           <i class="icon-search"></i>
           <span class="label">Solscan</span>
         </button>
-        <button class="dropdown-item" data-action="birdeye" type="button">
+        <button class="dropdown-item" data-action="birdeye" type="button" role="menuitem">
           <span class="icon"><i class="icon-chart-bar"></i></span>
           <span class="label">Birdeye</span>
         </button>
-        <button class="dropdown-item" data-action="rugcheck" type="button">
+        <button class="dropdown-item" data-action="rugcheck" type="button" role="menuitem">
           <span class="icon"><i class="icon-shield"></i></span>
           <span class="label">RugCheck</span>
         </button>
-        <button class="dropdown-item" data-action="pumpfun" type="button">
+        <button class="dropdown-item" data-action="pumpfun" type="button" role="menuitem">
           <span class="icon"><i class="icon-rocket"></i></span>
           <span class="label">Pump.fun</span>
         </button>
         <div class="dropdown-divider"></div>
-        <button class="dropdown-item" data-action="copy" type="button">
+        <button class="dropdown-item" data-action="copy" type="button" role="menuitem">
           <span class="icon"><i class="icon-copy"></i></span>
           <span class="label">Copy Mint</span>
         </button>
       `;
 
-      // Position menu relative to trigger
-      const rect = trigger.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      menu.style.position = "absolute";
-      menu.style.top = `${rect.bottom - containerRect.top + container.scrollTop + 6}px`;
-      menu.style.left = `${rect.left - containerRect.left + container.scrollLeft}px`;
-      menu.style.zIndex = "9999";
+      // Mount outside the table scroll container so overflow cannot clip it.
+      document.body.appendChild(menu);
 
-      container.appendChild(menu);
+      let stopPositionTracking = null;
+      let closeTimer = null;
 
       // Register with the global menu coordinator so opening any other menu, or
       // clicking an input/checkbox, or changing page auto-dismisses this one too.
       const menuHandle = {
+        trigger,
         owns: (t) => menu.contains(t) || (trigger && trigger.contains(t)),
-        close: () => {
-          menu.remove();
-          document.removeEventListener("click", closeHandler);
-          document.removeEventListener("keydown", escapeHandler);
+        close: (reason) => {
+          if (activeLinksMenu === menuHandle) activeLinksMenu = null;
+          stopPositionTracking?.();
+          stopPositionTracking = null;
+          trigger.setAttribute("aria-expanded", "false");
+          menu.removeEventListener("click", menuClickHandler);
+          menu.removeEventListener("keydown", menuKeyHandler);
           closeMenu(menuHandle);
+          menu.classList.remove("open");
+          if (reason === "escape") trigger.focus({ preventScroll: true });
+
+          const finish = () => {
+            if (closeTimer !== null) clearTimeout(closeTimer);
+            closeTimer = null;
+            if (activeLinksMenu?.trigger !== trigger) {
+              trigger.classList.remove("active");
+              trigger.classList.remove("menu-above");
+            }
+            menu.remove();
+          };
+          if (
+            [
+              "superseded",
+              "outside-pointer",
+              "focus-left",
+              "document-hidden",
+              "navigation",
+              "dialog-open",
+            ].includes(reason)
+          ) {
+            finish();
+          } else {
+            closeTimer = setTimeout(finish, 220);
+          }
         },
       };
+      activeLinksMenu = menuHandle;
       openMenu(menuHandle);
+      trigger.classList.add("active");
+      trigger.setAttribute("aria-haspopup", "menu");
+      trigger.setAttribute("aria-expanded", "true");
+      stopPositionTracking = trackAnchoredMenu({
+        trigger,
+        menu,
+        onDetach: () => menuHandle.close(),
+      });
+      requestAnimationFrame(() => {
+        if (activeLinksMenu === menuHandle) menu.classList.add("open");
+      });
 
       // Handle menu item clicks
       const menuClickHandler = (e) => {
@@ -1406,21 +1428,27 @@ function createLifecycle() {
       };
       menu.addEventListener("click", menuClickHandler);
 
-      // Close on outside click (coordinator also covers this; kept as a fallback).
-      const closeHandler = (e) => {
-        if (!menu.contains(e.target) && e.target !== trigger) {
-          menuHandle.close();
+      const menuKeyHandler = (event) => {
+        const items = Array.from(menu.querySelectorAll("[role='menuitem']"));
+        const index = items.indexOf(document.activeElement);
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          const nextIndex =
+            index < 0
+              ? direction > 0
+                ? 0
+                : items.length - 1
+              : (index + direction + items.length) % items.length;
+          items[nextIndex]?.focus();
+        } else if (event.key === "Home" || event.key === "End") {
+          event.preventDefault();
+          items[event.key === "Home" ? 0 : items.length - 1]?.focus();
         }
       };
-      setTimeout(() => document.addEventListener("click", closeHandler), 0);
+      menu.addEventListener("keydown", menuKeyHandler);
 
-      // Close on escape
-      const escapeHandler = (e) => {
-        if (e.key === "Escape") {
-          menuHandle.close();
-        }
-      };
-      document.addEventListener("keydown", escapeHandler);
+      menu.querySelector(".dropdown-item")?.focus({ preventScroll: true });
     };
 
     container._linksClickHandler = clickHandler;
@@ -1917,10 +1945,7 @@ function createLifecycle() {
 
       // Lifecycle automatically cleans up managed pollers
       // Clean up any open dropdown menus
-      const existingMenu = document.querySelector(".links-dropdown-menu");
-      if (existingMenu) {
-        existingMenu.remove();
-      }
+      activeLinksMenu?.close();
       // Clean up any open image lightbox
       const existingLightbox = document.querySelector(".image-lightbox");
       if (existingLightbox) {
