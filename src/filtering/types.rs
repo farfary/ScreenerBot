@@ -11,6 +11,34 @@ use crate::tokens::types::Token;
 /// Maximum number of historical decisions to keep in memory per category
 pub const MAX_DECISION_HISTORY: usize = 1000;
 
+/// Whether the filtering snapshot a surface derives its numbers from exists yet.
+///
+/// Every dashboard surface that shows filtering counts — the header, the home hero, the
+/// tokens tab, the filtering tab — reads the snapshot without waiting for it, because
+/// waiting is what froze the app for the whole first build. That leaves those surfaces with
+/// nothing to show for a moment, and "nothing" must be transmitted as nothing: a zero is a
+/// measurement, and rendering an unbuilt snapshot as `0 tokens, 0.0% passed, refreshed just
+/// now` states a fact that is false. Responses carry this state alongside NULL counts, and
+/// the dashboard's formatters already render null as `—`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapshotState {
+    /// A snapshot exists; the accompanying numbers are real.
+    Ready,
+    /// The first snapshot is still being built; the accompanying numbers are absent.
+    Building,
+}
+
+impl SnapshotState {
+    /// The state implied by a snapshot-derived value being present or absent.
+    pub fn of<T>(value: &Option<T>) -> Self {
+        match value {
+            Some(_) => Self::Ready,
+            None => Self::Building,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PassedToken {
     pub mint: String,

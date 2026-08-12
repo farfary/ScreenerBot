@@ -11,7 +11,8 @@ pub mod types;
 pub use engine::apply_all_filters as evaluate_token;
 pub use types::{
     BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
-    FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection, TokenSortKey,
+    FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SnapshotState,
+    SortDirection, TokenSortKey,
 };
 
 /// Obtain filtered token mint list for trading and pool services

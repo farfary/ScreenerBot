@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::filtering::SnapshotState;
+
 // ============================================================================
 // Portfolio Calendar Types
 // ============================================================================
@@ -234,12 +236,15 @@ pub struct SystemMetrics {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenStatistics {
+    /// Whether the filtering snapshot the counts below it come from exists yet. The two
+    /// database-backed totals (`total_in_database`, `found_all_time`) are always real.
+    pub snapshot_state: SnapshotState,
     pub total_in_database: usize,
-    pub with_prices: usize,
-    pub passed_filters: usize,
-    pub rejected_filters: usize,
-    pub blacklisted: usize,
-    pub with_ohlcv: usize,
+    pub with_prices: Option<usize>,
+    pub passed_filters: Option<usize>,
+    pub rejected_filters: Option<usize>,
+    pub blacklisted: Option<usize>,
+    pub with_ohlcv: Option<usize>,
     pub found_today: usize,
     pub found_this_week: usize,
     pub found_this_month: usize,

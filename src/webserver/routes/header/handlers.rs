@@ -2,7 +2,7 @@ use axum::response::Json;
 
 use crate::config::with_config;
 use crate::connectivity::state::are_critical_endpoints_healthy;
-use crate::filtering::global_store;
+use crate::filtering::{global_store, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::get_global_rpc_stats;
 use crate::services::{get_service_manager, ServiceHealth};
@@ -127,19 +127,18 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         }
     };
 
-    let filtering = match filtering_stats {
-        Some(stats) => FilteringHeaderInfo {
-            monitoring_count: stats.total_tokens,
-            passed_count: stats.passed_filtering,
-            rejected_count: stats.total_tokens.saturating_sub(stats.passed_filtering),
-            last_refresh: stats.updated_at.to_rfc3339(),
-        },
-        None => FilteringHeaderInfo {
-            monitoring_count: 0,
-            passed_count: 0,
-            rejected_count: 0,
-            last_refresh: now.to_rfc3339(),
-        },
+    // Absent, not zeroed, while the first snapshot builds: a top bar reading "0 monitored,
+    // 0 passed, refreshed just now" is a wrong answer, where "—" is an honest one.
+    let filtering = FilteringHeaderInfo {
+        snapshot_state: SnapshotState::of(&filtering_stats),
+        monitoring_count: filtering_stats.as_ref().map(|stats| stats.total_tokens),
+        passed_count: filtering_stats.as_ref().map(|stats| stats.passed_filtering),
+        rejected_count: filtering_stats
+            .as_ref()
+            .map(|stats| stats.total_tokens.saturating_sub(stats.passed_filtering)),
+        last_refresh: filtering_stats
+            .as_ref()
+            .map(|stats| stats.updated_at.to_rfc3339()),
     };
 
     // SOL/USD price for the header price card.

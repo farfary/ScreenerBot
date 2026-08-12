@@ -285,6 +285,19 @@ function updateConfigPanels(options = {}) {
   }
 }
 
+// Repaint the status tab, but only when its numbers actually changed. The poller runs
+// every 5 s and `updateConfigPanels` replaces the panel's innerHTML, so an unguarded
+// repaint would fight the user's scroll position and any focused input.
+function updateStatusPanel() {
+  if (state.activeTab !== "status") return;
+
+  const statusKey = JSON.stringify({ s: state.stats, r: state.rejectionStats });
+  if (statusKey === _lastStatusKey) return;
+  _lastStatusKey = statusKey;
+
+  updateConfigPanels({ preserveScroll: true });
+}
+
 function updateStatusMessage() {
   const statusEl = $("#filtering-status-message");
   if (statusEl) {
@@ -536,23 +549,31 @@ async function loadConfig() {
   }
 }
 
+// The three reads behind this page's live numbers, each repainting only what it owns.
+//
+// They are deliberately NOT collected into one `Promise.all` whose result is rendered at
+// the end: they have very different costs — the snapshot counters answer instantly, the
+// rejection breakdown groups the whole rejection corpus, analytics reads it again with the
+// recent list — so joining them makes every panel as slow as the slowest one.
 async function loadStats() {
-  try {
-    const [statsResponse, rejectionStatsResponse] = await Promise.all([
-      fetchStats(),
-      fetchRejectionStats(),
-    ]);
-    state.stats = statsResponse.data || statsResponse;
-    state.rejectionStats = rejectionStatsResponse.data || rejectionStatsResponse;
+  const statsLoad = fetchStats()
+    .then((response) => {
+      state.stats = response.data || response;
+      updateInfoBar();
+      updateStatusPanel();
+    })
+    .catch((error) => console.error("Failed to load filtering stats:", error));
 
-    // Also load analytics if on analytics tab
-    if (state.activeTab === "analytics") {
-      await loadAnalytics();
-    }
-  } catch (error) {
-    console.error("Failed to load stats:", error);
-    // Don't show toast for stats errors (non-critical)
-  }
+  const rejectionLoad = fetchRejectionStats()
+    .then((response) => {
+      state.rejectionStats = response.data || response;
+      updateStatusPanel();
+    })
+    .catch((error) => console.error("Failed to load rejection stats:", error));
+
+  const analyticsLoad = state.activeTab === "analytics" ? loadAnalytics() : null;
+
+  await Promise.all([statsLoad, rejectionLoad, analyticsLoad]);
 }
 
 async function loadAnalytics() {
@@ -584,14 +605,16 @@ async function loadAnalytics() {
 }
 
 async function loadData() {
-  await Promise.all([loadConfig(), loadStats()]);
+  // Config and stats travel independently: the settings tabs are usable the moment the
+  // config lands, without waiting on the rejection-corpus reads behind the info bar.
+  const configLoad = loadConfig().then(() => render());
+  const statsLoad = loadStats();
 
-  // If active tab is analytics or explorer, load analytics data
-  if (state.activeTab === "analytics" || state.activeTab === "explorer") {
-    await loadAnalytics();
-  }
+  // The explorer tree is built from the analytics payload; the analytics tab loads its own
+  // copy through `loadStats`.
+  const analyticsLoad = state.activeTab === "explorer" ? loadAnalytics() : null;
 
-  render();
+  await Promise.all([configLoad, statsLoad, analyticsLoad]);
 }
 
 // ============================================================================
@@ -626,7 +649,15 @@ export function createLifecycle() {
         AppState.save("filtering_timeRangeEnd", null);
       }
 
-      await loadData();
+      // Paint before fetching, never after. `init` is awaited by the router, and
+      // `activate` — which shows the sub-tab bar and starts the poller — only runs once it
+      // resolves, so every millisecond awaited here is a millisecond the tab spends as a
+      // blank panel with no tabs on it. This page's data comes from five endpoints, and on
+      // a mature database the slowest of them reads the whole rejection corpus; awaiting
+      // them all was the filtering tab's "nothing happens for seconds" symptom. The shell
+      // renders its own loading states and each loader repaints its own panel.
+      render();
+      void loadData();
     },
 
     activate(ctx) {
@@ -640,17 +671,20 @@ export function createLifecycle() {
           defaultTab: state.activeTab,
           stateKey: TABBAR_STATE_KEY,
           pageName: "filtering",
-          onChange: async (tabId) => {
+          onChange: (tabId) => {
             state.activeTab = tabId;
             AppState.save("filtering_activeTab", tabId);
             updateSearchBar();
 
-            // Load analytics data if switching to analytics or explorer tab
-            if ((tabId === "analytics" || tabId === "explorer") && !state.analytics) {
-              await loadAnalytics();
-            }
-
+            // Switch the panel FIRST. Analytics and Explorer both render from the
+            // analytics payload, and awaiting that fetch before repainting left the
+            // previous tab's content on screen for its duration — the click looked like it
+            // had done nothing. The new panel renders its own loading state.
             updateConfigPanels({ scrollTop: 0 });
+
+            if ((tabId === "analytics" || tabId === "explorer") && !state.analytics) {
+              void loadAnalytics();
+            }
           },
         });
         TabBarManager.register("filtering", tabBar);
@@ -678,21 +712,10 @@ export function createLifecycle() {
 
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(
-            async () => {
-              await loadStats();
-              updateInfoBar();
-              // Keep the status tab live — only re-render when data actually changed
-              if (state.activeTab === "status") {
-                const statusKey = JSON.stringify({ s: state.stats, r: state.rejectionStats });
-                if (statusKey !== _lastStatusKey) {
-                  _lastStatusKey = statusKey;
-                  updateConfigPanels({ preserveScroll: true });
-                }
-              }
-            },
-            { label: "Filtering Stats", intervalMs: 5000 }
-          )
+          new Poller(async () => await loadStats(), {
+            label: "Filtering Stats",
+            intervalMs: 5000,
+          })
         );
       }
 

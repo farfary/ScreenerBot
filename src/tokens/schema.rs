@@ -281,6 +281,19 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority_calc ON update_tracking(priority DESC, pool_price_last_calculated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_error_type ON update_tracking(market_error_type)",
 
+    // Rejection indexes — every filtering-tab surface reads `update_tracking` through the
+    // rejection columns, and without these each read is a full scan plus a temp b-tree sort
+    // of the whole table (453k rows on the owner's database). All three are PARTIAL on
+    // `last_rejection_reason IS NOT NULL`, which is the predicate every one of those queries
+    // already carries, so they never index the passing tokens.
+    //   * `_reason` covers the stats GROUP BY (Status tab, polled every 5s): 366ms -> 42ms.
+    //   * `_at` drives the unfiltered "most recently rejected" reads (Analytics' recent
+    //     rejections, unfiltered Explore paging): 1104ms -> <1ms.
+    //   * `_reason_at` drives Explore, which always pages within one reason: 41ms -> <1ms.
+    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_reason ON update_tracking(last_rejection_reason, last_rejection_source) WHERE last_rejection_reason IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_at ON update_tracking(last_rejection_at DESC) WHERE last_rejection_reason IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_reason_at ON update_tracking(last_rejection_reason, last_rejection_at DESC) WHERE last_rejection_reason IS NOT NULL",
+
     // Composite indexes for common sorting patterns
     "CREATE INDEX IF NOT EXISTS idx_tokens_discovery_mint ON tokens(first_discovered_at DESC, mint)",
 

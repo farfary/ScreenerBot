@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 use crate::{
-    filtering,
+    filtering::{self, SnapshotState},
     logger::{self, LogTag},
     tokens::{
         get_recent_rejections_async, get_rejection_stats_aggregated_async,
@@ -48,11 +48,8 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
         (stats, Ok(raw_stats), Ok(recent_raw)) => {
             // Absent while the first snapshot is still building; the rejection breakdowns
             // below are database-backed and render regardless.
-            let total_tokens = stats.as_ref().map(|s| s.total_tokens).unwrap_or_default();
-            let total_passed = stats
-                .as_ref()
-                .map(|s| s.passed_filtering)
-                .unwrap_or_default();
+            let total_tokens = stats.as_ref().map(|s| s.total_tokens);
+            let total_passed = stats.as_ref().map(|s| s.passed_filtering);
 
             // Calculate totals and build category/source maps
             let mut by_category_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
@@ -243,14 +240,17 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                 )
                 .collect();
 
-            // Calculate rates
-            let pass_rate = if total_tokens > 0 {
-                (total_passed as f64 / total_tokens as f64) * 100.0
-            } else {
-                0.0
+            // Rates are only meaningful against a corpus size the snapshot has counted, so
+            // they stay absent while it is building rather than resolving to a flat 0%.
+            let pass_rate = match (total_tokens, total_passed) {
+                (Some(total), Some(passed)) if total > 0 => {
+                    Some(((passed as f64 / total as f64) * 1000.0).round() / 10.0)
+                }
+                (Some(_), Some(_)) => Some(0.0),
+                _ => None,
             };
 
-            let rejection_rate = 100.0 - pass_rate;
+            let rejection_rate = pass_rate.map(|rate| ((100.0 - rate) * 10.0).round() / 10.0);
 
             // Build time range info if filtering was applied
             let time_range = if query.start_time.is_some() || query.end_time.is_some() {
@@ -264,22 +264,19 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
             };
 
             success_response(AnalyticsResponse {
+                snapshot_state: SnapshotState::of(&stats),
                 total_tokens,
                 total_rejected,
                 total_passed,
-                pass_rate: (pass_rate * 10.0).round() / 10.0,
-                rejection_rate: (rejection_rate * 10.0).round() / 10.0,
+                pass_rate,
+                rejection_rate,
                 by_category,
                 by_source,
                 data_quality,
                 top_reasons,
                 recent_rejections,
                 time_range,
-                last_updated: stats
-                    .as_ref()
-                    .map(|s| s.updated_at)
-                    .unwrap_or_else(Utc::now)
-                    .to_rfc3339(),
+                last_updated: stats.as_ref().map(|s| s.updated_at.to_rfc3339()),
                 timestamp: Utc::now().to_rfc3339(),
             })
         }

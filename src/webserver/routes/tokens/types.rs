@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use crate::{
     filtering::{
-        BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringView, SortDirection,
-        TokenSortKey,
+        BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringView, SnapshotState,
+        SortDirection, TokenSortKey,
     },
     logger::{self, LogTag},
     tokens::SecurityRisk,
@@ -343,14 +343,16 @@ pub struct AnalysisPoolInfo {
 /// Token statistics response
 #[derive(Debug, Serialize)]
 pub struct TokenStatsResponse {
+    /// Whether the filtering snapshot every count below comes from exists yet.
+    pub snapshot_state: SnapshotState,
     /// Total tokens in database (all tokens, including those without market data)
-    pub total_tokens_in_database: usize,
+    pub total_tokens_in_database: Option<usize>,
     /// Tokens with market data loaded in filtering snapshot
-    pub total_tokens: usize,
-    pub with_pool_price: usize,
-    pub open_positions: usize,
-    pub blacklisted: usize,
-    pub with_ohlcv: usize,
+    pub total_tokens: Option<usize>,
+    pub with_pool_price: Option<usize>,
+    pub open_positions: Option<usize>,
+    pub blacklisted: Option<usize>,
+    pub with_ohlcv: Option<usize>,
     pub timestamp: String,
 }
 

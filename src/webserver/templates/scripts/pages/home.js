@@ -458,6 +458,16 @@ function createLifecycle() {
   function animateValue(element, targetValue) {
     if (!element) return;
 
+    // A null target is a value the backend does not have yet — the filtering counters are
+    // null until the first snapshot exists. There is nothing to count towards, so show the
+    // absent marker and leave no stale numeric value behind for the next animation to
+    // interpolate from.
+    if (targetValue === null || targetValue === undefined || !Number.isFinite(targetValue)) {
+      delete element.dataset.numericValue;
+      element.textContent = Utils.formatNumber(targetValue, 0);
+      return;
+    }
+
     const currentValue =
       Number(element.dataset.numericValue ?? element.textContent.replaceAll(",", "")) || 0;
     if (currentValue === targetValue) return;

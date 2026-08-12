@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+use crate::filtering::SnapshotState;
+
 #[derive(Debug, Serialize)]
 pub struct HeaderMetricsResponse {
     pub trader: TraderHeaderInfo,
@@ -63,12 +65,16 @@ pub struct RpcHeaderInfo {
     pub healthy: bool,
 }
 
+/// The header's filtering counters, all of them snapshot-derived and therefore NULL with
+/// `snapshot_state: "building"` until the first snapshot exists — see
+/// [`crate::filtering::SnapshotState`].
 #[derive(Debug, Serialize)]
 pub struct FilteringHeaderInfo {
-    pub monitoring_count: usize,
-    pub passed_count: usize,
-    pub rejected_count: usize,
-    pub last_refresh: String,
+    pub snapshot_state: SnapshotState,
+    pub monitoring_count: Option<usize>,
+    pub passed_count: Option<usize>,
+    pub rejected_count: Option<usize>,
+    pub last_refresh: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

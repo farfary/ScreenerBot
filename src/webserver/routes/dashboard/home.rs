@@ -3,6 +3,7 @@
 use axum::{extract::State, response::Json};
 use std::sync::Arc;
 
+use crate::filtering::SnapshotState;
 use crate::global::{
     POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
 };
@@ -339,35 +340,28 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         .await
         .unwrap_or_default();
 
-    // Get filtering stats from the already fetched result (absent until the first
-    // snapshot finishes building in the background)
+    // Get filtering stats from the already fetched result (absent until the first snapshot
+    // finishes building in the background). Absent stays absent all the way to the hero:
+    // zeroing these would have the panel state that nothing passed and nothing is priced,
+    // which is a different claim from "not counted yet".
     let filtering_stats = filtering_stats_result;
 
-    let passed_filters = filtering_stats
-        .as_ref()
-        .map(|s| s.passed_filtering)
-        .unwrap_or_default();
-    let with_prices = filtering_stats
-        .as_ref()
-        .map(|s| s.with_pool_price)
-        .unwrap_or_default();
-    let blacklisted = filtering_stats
-        .as_ref()
-        .map(|s| s.blacklisted)
-        .unwrap_or_default();
-    let with_ohlcv = filtering_stats
-        .as_ref()
-        .map(|s| s.with_ohlcv)
-        .unwrap_or_default();
+    let passed_filters = filtering_stats.as_ref().map(|s| s.passed_filtering);
+    let with_prices = filtering_stats.as_ref().map(|s| s.with_pool_price);
+    let blacklisted = filtering_stats.as_ref().map(|s| s.blacklisted);
+    let with_ohlcv = filtering_stats.as_ref().map(|s| s.with_ohlcv);
 
     // Calculate rejected as total - passed - blacklisted
-    let rejected_filters = if total_in_database > passed_filters + blacklisted {
-        total_in_database - passed_filters - blacklisted
-    } else {
-        0
-    };
+    let rejected_filters = passed_filters
+        .zip(blacklisted)
+        .map(|(passed, blacklisted)| {
+            total_in_database
+                .saturating_sub(passed)
+                .saturating_sub(blacklisted)
+        });
 
     let tokens = TokenStatistics {
+        snapshot_state: SnapshotState::of(&filtering_stats),
         total_in_database,
         with_prices,
         passed_filters,

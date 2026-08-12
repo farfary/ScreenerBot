@@ -3,6 +3,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::filtering::SnapshotState;
+
 // ============================================================================
 // RESPONSE TYPES
 // ============================================================================
@@ -13,15 +15,19 @@ pub struct RefreshResponse {
     pub timestamp: String,
 }
 
+/// Every count here comes from the filtering snapshot, so every one of them is NULL while
+/// the first snapshot is still building — see [`SnapshotState`]. Zero would claim the
+/// corpus is empty; null says the answer is not in yet, and the dashboard renders it as `—`.
 #[derive(Debug, Serialize)]
 pub struct FilteringStatsResponse {
-    pub total_tokens: usize,
-    pub with_pool_price: usize,
-    pub open_positions: usize,
-    pub blacklisted: usize,
-    pub with_ohlcv: usize,
-    pub passed_filtering: usize,
-    pub updated_at: String,
+    pub snapshot_state: SnapshotState,
+    pub total_tokens: Option<usize>,
+    pub with_pool_price: Option<usize>,
+    pub open_positions: Option<usize>,
+    pub blacklisted: Option<usize>,
+    pub with_ohlcv: Option<usize>,
+    pub passed_filtering: Option<usize>,
+    pub updated_at: Option<String>,
     pub timestamp: String,
 }
 
@@ -82,12 +88,15 @@ pub struct DataQualityMetric {
 
 #[derive(Debug, Serialize)]
 pub struct AnalyticsResponse {
-    // Overview
-    pub total_tokens: usize,
+    // Overview. The rejection breakdowns below are database-backed and always real; the
+    // corpus-wide totals and the rates derived from them come from the filtering snapshot
+    // and are NULL until it exists (see `SnapshotState`).
+    pub snapshot_state: SnapshotState,
+    pub total_tokens: Option<usize>,
     pub total_rejected: i64,
-    pub total_passed: usize,
-    pub pass_rate: f64,
-    pub rejection_rate: f64,
+    pub total_passed: Option<usize>,
+    pub pass_rate: Option<f64>,
+    pub rejection_rate: Option<f64>,
 
     // Category breakdown
     pub by_category: Vec<CategoryBreakdown>,
@@ -108,7 +117,7 @@ pub struct AnalyticsResponse {
     pub time_range: Option<TimeRangeInfo>,
 
     // Metadata
-    pub last_updated: String,
+    pub last_updated: Option<String>,
     pub timestamp: String,
 }
 

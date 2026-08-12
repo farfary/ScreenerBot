@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
 
+use crate::filtering::SnapshotState;
 use crate::webserver::routes::dashboard::{
     BlacklistInfo, CalendarDay, DashboardOverview, HomeDashboardResponse, MonitoringInfo,
     OpenPositionDetail, PortfolioCalendarResponse, PositionPerformer, PositionsSnapshot,
@@ -106,12 +107,13 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
     };
 
     let tokens = TokenStatistics {
+        snapshot_state: SnapshotState::Ready,
         total_in_database: 12847,
-        with_prices: 8923,
-        passed_filters: 347,
-        rejected_filters: 8576,
-        blacklisted: DEMO_BLACKLISTED,
-        with_ohlcv: 2847,
+        with_prices: Some(8923),
+        passed_filters: Some(347),
+        rejected_filters: Some(8576),
+        blacklisted: Some(DEMO_BLACKLISTED),
+        with_ohlcv: Some(2847),
         found_today: 234,
         found_this_week: 1523,
         found_this_month: 4892,

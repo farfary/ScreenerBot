@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use super::types::*;
 use crate::{
-    filtering::{self, FilteringView},
+    filtering::{self, FilteringView, SnapshotState},
     logger::{self, LogTag},
 };
 
@@ -71,44 +71,39 @@ pub(crate) async fn get_tokens_list(
 /// Get token statistics from the filtering service
 ///
 /// Non-blocking: serves the snapshot only if one already exists. Waiting for the first
-/// build here stalled the tokens tab for up to 30 seconds on a fresh launch.
+/// build here stalled the tokens tab for up to 30 seconds on a fresh launch. While it is
+/// building the counts are reported absent with `snapshot_state: "building"`, never as
+/// zeros — the tab polls, and the real counts land on the next tick.
 pub async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
-    match filtering::try_fetch_stats().await {
-        Some(snapshot) => {
-            logger::info(
-                LogTag::Webserver,
-                &format!(
-                    "db_total={} snapshot={} pool={} open={} blacklist={}",
-                    snapshot.total_tokens_in_database,
-                    snapshot.total_tokens,
-                    snapshot.with_pool_price,
-                    snapshot.open_positions,
-                    snapshot.blacklisted
-                ),
-            );
+    let snapshot = filtering::try_fetch_stats().await;
 
-            Ok(Json(TokenStatsResponse {
-                total_tokens_in_database: snapshot.total_tokens_in_database,
-                total_tokens: snapshot.total_tokens,
-                with_pool_price: snapshot.with_pool_price,
-                open_positions: snapshot.open_positions,
-                blacklisted: snapshot.blacklisted,
-                with_ohlcv: snapshot.with_ohlcv,
-                timestamp: snapshot.updated_at.to_rfc3339(),
-            }))
-        }
-        // No snapshot built yet. Answer with zeros rather than an error or a wait — the
-        // tab polls, and the counts land on the next tick.
-        None => Ok(Json(TokenStatsResponse {
-            total_tokens_in_database: 0,
-            total_tokens: 0,
-            with_pool_price: 0,
-            open_positions: 0,
-            blacklisted: 0,
-            with_ohlcv: 0,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        })),
+    if let Some(snapshot) = snapshot.as_ref() {
+        logger::info(
+            LogTag::Webserver,
+            &format!(
+                "db_total={} snapshot={} pool={} open={} blacklist={}",
+                snapshot.total_tokens_in_database,
+                snapshot.total_tokens,
+                snapshot.with_pool_price,
+                snapshot.open_positions,
+                snapshot.blacklisted
+            ),
+        );
     }
+
+    Ok(Json(TokenStatsResponse {
+        snapshot_state: SnapshotState::of(&snapshot),
+        total_tokens_in_database: snapshot.as_ref().map(|s| s.total_tokens_in_database),
+        total_tokens: snapshot.as_ref().map(|s| s.total_tokens),
+        with_pool_price: snapshot.as_ref().map(|s| s.with_pool_price),
+        open_positions: snapshot.as_ref().map(|s| s.open_positions),
+        blacklisted: snapshot.as_ref().map(|s| s.blacklisted),
+        with_ohlcv: snapshot.as_ref().map(|s| s.with_ohlcv),
+        timestamp: snapshot
+            .as_ref()
+            .map(|s| s.updated_at.to_rfc3339())
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+    }))
 }
 
 /// POST /api/tokens/filter

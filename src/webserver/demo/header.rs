@@ -2,6 +2,7 @@
 
 use chrono::Utc;
 
+use crate::filtering::SnapshotState;
 use crate::webserver::routes::header::{
     FilteringHeaderInfo, HeaderMetricsResponse, RpcHeaderInfo, SolHeaderInfo, SystemHeaderInfo,
     TraderHeaderInfo, TraderHeaderState, WalletHeaderInfo,
@@ -60,10 +61,11 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
     };
 
     let filtering = FilteringHeaderInfo {
-        monitoring_count: DEMO_TOKENS_TRACKED,
-        passed_count: 347,
-        rejected_count: 2500,
-        last_refresh: now.to_rfc3339(),
+        snapshot_state: SnapshotState::Ready,
+        monitoring_count: Some(DEMO_TOKENS_TRACKED),
+        passed_count: Some(347),
+        rejected_count: Some(2500),
+        last_refresh: Some(now.to_rfc3339()),
     };
 
     let system = SystemHeaderInfo {

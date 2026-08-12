@@ -19,6 +19,30 @@ import {
  * Create filtering renderers with access to state and dependencies
  */
 export function createFilteringRenderers({ state, $: _$, Utils, requestManager: _requestManager }) {
+  // A share of a snapshot-derived count, or `null` when the snapshot has not produced one
+  // yet. Every count on this page is absent until the first snapshot exists (the API sends
+  // null with `snapshot_state: "building"`), and `0 / null` would quietly become a
+  // confident "0.0%". Null keeps the formatters on "—".
+  function percentOf(part, total) {
+    if (part === null || part === undefined || total === null || total === undefined) {
+      return null;
+    }
+    const partNum = Number(part);
+    const totalNum = Number(total);
+    if (!Number.isFinite(partNum) || !Number.isFinite(totalNum) || totalNum <= 0) {
+      return null;
+    }
+    return (partNum / totalNum) * 100;
+  }
+
+  // What to show where a timestamp belongs while the snapshot behind it is still building.
+  // `new Date(null)` is the epoch and `new Date(undefined)` is Invalid Date, so neither can
+  // be handed to a time formatter — the state has to be read, not inferred.
+  function refreshedLabel(updatedAt, snapshotState = state.stats?.snapshot_state) {
+    if (updatedAt) return Utils.formatTimeAgo(new Date(updatedAt));
+    return snapshotState === "building" ? "Building…" : "Never";
+  }
+
   function renderInfoBar() {
     if (!state.stats) return "";
 
@@ -31,9 +55,9 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       updated_at,
     } = state.stats;
 
-    const priceRate = total_tokens > 0 ? (with_pool_price / total_tokens) * 100 : 0;
-    const passedRate = total_tokens > 0 ? (passed_filtering / total_tokens) * 100 : 0;
-    const cacheAge = updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never";
+    const priceRate = percentOf(with_pool_price, total_tokens);
+    const passedRate = percentOf(passed_filtering, total_tokens);
+    const cacheAge = refreshedLabel(updated_at);
 
     return `
       <div class="info-item highlight">
@@ -76,15 +100,22 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       updated_at,
     } = state.stats;
 
-    const priceRate = total_tokens > 0 ? (with_pool_price / total_tokens) * 100 : 0;
-    const passedRate = total_tokens > 0 ? (passed_filtering / total_tokens) * 100 : 0;
+    const priceRate = percentOf(with_pool_price, total_tokens);
+    const passedRate = percentOf(passed_filtering, total_tokens);
+    const building = state.stats.snapshot_state === "building";
+
+    // While the snapshot builds, every metric card below shows "—" (its value is null) and
+    // this line says why, instead of the cards asserting a corpus of zero tokens.
+    const cacheDetail = building
+      ? "Snapshot building — counts land on the next refresh"
+      : "In filtering cache";
 
     const metricsHtml = `
       <div class="status-view">
         <div class="metric-card" data-accent="primary">
           <span class="metric-label">Total Tokens</span>
           <span class="metric-value">${Utils.formatNumber(total_tokens, 0)}</span>
-          <span class="metric-detail">In filtering cache</span>
+          <span class="metric-detail">${Utils.escapeHtml(cacheDetail)}</span>
         </div>
         <div class="metric-card">
           <span class="metric-label">With Price</span>
@@ -113,8 +144,8 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         </div>
         <div class="metric-card">
           <span class="metric-label">Last Refresh</span>
-          <span class="metric-value">${updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never"}</span>
-          <span class="metric-detail">${updated_at ? new Date(updated_at).toLocaleString() : "No refresh yet"}</span>
+          <span class="metric-value">${Utils.escapeHtml(refreshedLabel(updated_at))}</span>
+          <span class="metric-detail">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : building ? "First snapshot in progress" : "No refresh yet"}</span>
         </div>
       </div>
     `;
@@ -213,7 +244,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <span class="kpi-label">Total Scanned</span>
           <span class="kpi-value">${Utils.formatNumber(data.total_tokens, 0)}</span>
           <span class="kpi-subtext">
-            <i class="icon-clock"></i> Updated ${Utils.formatTimeAgo(new Date(data.last_updated))}
+            <i class="icon-clock"></i> Updated ${Utils.escapeHtml(refreshedLabel(data.last_updated, data.snapshot_state))}
           </span>
         </div>
         <i class="icon-database kpi-icon"></i>
@@ -230,7 +261,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         </div>
         <i class="icon-circle-check kpi-icon text-success" style="opacity: 0.2"></i>
         <div class="pass-rate-visual">
-          <div class="pass-rate-segment passed" style="width: ${data.pass_rate}%"></div>
+          <div class="pass-rate-segment passed" style="width: ${Number.isFinite(data.pass_rate) ? data.pass_rate : 0}%"></div>
         </div>
       </div>
 
