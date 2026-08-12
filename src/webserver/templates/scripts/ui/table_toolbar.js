@@ -628,7 +628,7 @@ function renderItem(item, state) {
 }
 
 function renderGroup(group, state) {
-  const inner = group.items.map((child) => renderItem(child, state)).join("");
+  const inner = renderItems(group.items, state, true);
   const label = group.label
     ? `<span class="table-toolbar-cluster__label">${escapeHtml(group.label)}</span>`
     : "";
@@ -637,8 +637,33 @@ function renderGroup(group, state) {
   return `<div class="table-toolbar-cluster${attached}"${id}${group.hidden ? " hidden" : ""}>${label}${inner}</div>`;
 }
 
+function renderItems(items, state, groupAdjacentSelects = false) {
+  const markup = [];
+
+  for (let index = 0; index < items.length; index += 1) {
+    if (!groupAdjacentSelects || items[index].type !== "select") {
+      markup.push(renderItem(items[index], state));
+      continue;
+    }
+
+    const selectRun = [];
+    while (index < items.length && items[index].type === "select") {
+      selectRun.push(items[index]);
+      index += 1;
+    }
+    index -= 1;
+
+    const selects = selectRun.map((item) => renderItem(item, state)).join("");
+    markup.push(
+      selectRun.length > 1 ? `<div class="table-toolbar-select-group">${selects}</div>` : selects
+    );
+  }
+
+  return markup.join("");
+}
+
 function renderZone(items, state, zoneClass) {
-  const inner = items.map((item) => renderItem(item, state)).join("");
+  const inner = renderItems(items, state, true);
   if (!inner) {
     return "";
   }
