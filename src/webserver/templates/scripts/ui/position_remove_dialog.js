@@ -15,6 +15,7 @@
  */
 
 import { playPanelOpen, playPanelClose, playSuccess } from "../core/sounds.js";
+import { pushEscapeHandler } from "../core/escape_stack.js";
 
 const escapeHTML = (str) => {
   const div = document.createElement("div");
@@ -94,25 +95,25 @@ class PositionRemoveDialog {
 
       ${openWarning}
 
-      <div class="position-remove-choices" role="radiogroup" aria-label="Removal mode">
-        <button type="button" class="position-remove-choice" data-mode="archive" role="radio" aria-checked="true">
+      <fieldset class="position-remove-choices" aria-label="Removal mode">
+        <label class="position-remove-choice" data-mode="archive">
+          <input type="radio" name="position-remove-mode" value="archive" checked>
           <span class="position-remove-choice-icon"><i class="icon-archive" aria-hidden="true"></i></span>
           <span class="position-remove-choice-body">
             <span class="position-remove-choice-title">Archive <span class="position-remove-badge">Recommended</span></span>
             <span class="position-remove-choice-desc">Hide it into the Archived tab. Reversible anytime — nothing is sold and all trades stay on record.</span>
           </span>
-          <span class="position-remove-choice-check" aria-hidden="true"><i class="icon-check"></i></span>
-        </button>
+        </label>
 
-        <button type="button" class="position-remove-choice" data-mode="delete" role="radio" aria-checked="false">
+        <label class="position-remove-choice" data-mode="delete">
+          <input type="radio" name="position-remove-mode" value="delete">
           <span class="position-remove-choice-icon"><i class="icon-trash-2" aria-hidden="true"></i></span>
           <span class="position-remove-choice-body">
             <span class="position-remove-choice-title">Delete permanently</span>
             <span class="position-remove-choice-desc">Erase this position and its full history from the database.</span>
           </span>
-          <span class="position-remove-choice-check" aria-hidden="true"><i class="icon-check"></i></span>
-        </button>
-      </div>
+        </label>
+      </fieldset>
 
       <div class="position-remove-danger" data-visible="false" role="alert">
         <i class="icon-triangle-alert" aria-hidden="true"></i>
@@ -148,12 +149,6 @@ class PositionRemoveDialog {
 
   _attachEventListeners() {
     this._clickHandler = (e) => {
-      const choice = e.target.closest(".position-remove-choice");
-      if (choice) {
-        this.mode = choice.dataset.mode === "delete" ? "delete" : "archive";
-        this._syncMode();
-        return;
-      }
       const actionBtn = e.target.closest("[data-action]");
       if (actionBtn) {
         if (actionBtn.dataset.action === "confirm") this._handleConfirm();
@@ -162,19 +157,17 @@ class PositionRemoveDialog {
     };
     this.element.addEventListener("click", this._clickHandler);
 
+    this._changeHandler = (e) => {
+      const choice = e.target.closest('input[name="position-remove-mode"]');
+      if (!choice) return;
+      this.mode = choice.value === "delete" ? "delete" : "archive";
+      this._syncMode();
+    };
+    this.element.addEventListener("change", this._changeHandler);
+
     this._backdropHandler = () => this._handleCancel();
     this.backdrop.addEventListener("click", this._backdropHandler);
-
-    this._keydownHandler = (e) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        this._handleCancel();
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        this._handleConfirm();
-      }
-    };
-    document.addEventListener("keydown", this._keydownHandler);
+    this._releaseEscape = pushEscapeHandler(() => this._handleCancel());
   }
 
   /** Reflect the selected mode in the choices, danger banner, and confirm button. */
@@ -182,10 +175,8 @@ class PositionRemoveDialog {
     if (!this.element) return;
     this.element.dataset.mode = this.mode;
 
-    this.element.querySelectorAll(".position-remove-choice").forEach((el) => {
-      const active = el.dataset.mode === this.mode;
-      el.classList.toggle("is-selected", active);
-      el.setAttribute("aria-checked", active ? "true" : "false");
+    this.element.querySelectorAll('input[name="position-remove-mode"]').forEach((input) => {
+      input.checked = input.value === this.mode;
     });
 
     const danger = this.element.querySelector(".position-remove-danger");
@@ -223,13 +214,15 @@ class PositionRemoveDialog {
     // Resolve as cancelled if still pending (closed without an explicit action).
     this._resolve({ confirmed: false, mode: this.mode, cancelled: true });
 
-    if (this._keydownHandler) {
-      document.removeEventListener("keydown", this._keydownHandler);
-      this._keydownHandler = null;
-    }
+    this._releaseEscape?.();
+    this._releaseEscape = null;
     if (this._clickHandler && this.element) {
       this.element.removeEventListener("click", this._clickHandler);
       this._clickHandler = null;
+    }
+    if (this._changeHandler && this.element) {
+      this.element.removeEventListener("change", this._changeHandler);
+      this._changeHandler = null;
     }
     if (this._backdropHandler && this.backdrop) {
       this.backdrop.removeEventListener("click", this._backdropHandler);

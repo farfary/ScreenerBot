@@ -18,7 +18,7 @@
   gap: var(--spacing-sm);
 }
 
-.ta-input-group input {
+.ta-input-group input[type="text"] {
   flex: 1;
   padding: 12px 16px;
   border: 1px solid var(--border-color);
@@ -32,13 +32,13 @@
     box-shadow 0.2s ease;
 }
 
-.ta-input-group input:focus {
+.ta-input-group input[type="text"]:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px var(--primary-alpha-20);
 }
 
-.ta-input-group input::placeholder {
+.ta-input-group input[type="text"]::placeholder {
   color: var(--text-muted);
   font-family: var(--font-sans);
 }

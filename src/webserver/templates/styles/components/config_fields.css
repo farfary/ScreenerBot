@@ -272,7 +272,7 @@
 
 /* Scoped away from checkboxes: a bare `input` rule here matches the central
    checkbox at equal specificity and would repaint it as a bordered box. */
-.config-field-control input:not([type="checkbox"]):focus,
+.config-field-control input:not([type="checkbox"], [type="radio"]):focus,
 .config-field-control textarea:focus {
   outline: none;
   border-color: var(--link-color);

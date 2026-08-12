@@ -65,9 +65,28 @@ function selectorsIn(css) {
   while ((match = ruleStart.exec(withoutComments))) {
     const candidate = match[1].slice(match[1].lastIndexOf(";") + 1).trim();
     if (!candidate || candidate.startsWith("@")) continue;
-    selectors.push(...candidate.split(",").map((selector) => selector.trim()));
+    selectors.push(...splitSelectorList(candidate));
   }
   return selectors;
+}
+
+function splitSelectorList(value) {
+  const selectors = [];
+  let start = 0;
+  let depth = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "(" || char === "[") depth += 1;
+    else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
+    else if (char === "," && depth === 0) {
+      selectors.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+
+  selectors.push(value.slice(start).trim());
+  return selectors.filter(Boolean);
 }
 
 /* Selector + declaration body per rule, so a check can look at what a rule
@@ -80,9 +99,36 @@ function rulesIn(css) {
   while ((match = pattern.exec(withoutComments))) {
     const selector = match[1].slice(match[1].lastIndexOf(";") + 1).trim();
     if (!selector || selector.startsWith("@")) continue;
-    rules.push([selector, match[2]]);
+    splitSelectorList(selector).forEach((part) => rules.push([part, match[2]]));
   }
   return rules;
+}
+
+const controlSkinDeclaration =
+  /^\s*(width|height|min-width|max-width|min-height|max-height|padding(?:-[a-z-]+)?|background(?:-color)?|border(?:-[a-z-]+)?|border-radius|box-shadow|outline|appearance|accent-color)\s*:/m;
+
+function inputMayBeChoiceControl(selector) {
+  let depth = 0;
+  let compoundStart = 0;
+  for (let index = 0; index < selector.length; index += 1) {
+    const char = selector[index];
+    if (char === "(" || char === "[") depth += 1;
+    else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && /[\s>+~]/.test(char)) compoundStart = index + 1;
+  }
+
+  const target = selector.slice(compoundStart).trim();
+  const inputTarget = target.match(/^input(?=$|[:.#]|\[)(.*)$/i);
+  if (!inputTarget) return false;
+
+  const tail = inputTarget[1];
+  const exactType = tail.match(/^\s*\[\s*type\s*=\s*["']?([\w-]+)["']?\s*\]/i);
+  if (exactType) return /^(?:checkbox|radio)$/i.test(exactType[1]);
+
+  const exclusions = tail.match(/^\s*:not\(([^)]*)\)/i)?.[1] || "";
+  const excludesCheckbox = /\[\s*type\s*=\s*["']?checkbox["']?\s*\]/i.test(exclusions);
+  const excludesRadio = /\[\s*type\s*=\s*["']?radio["']?\s*\]/i.test(exclusions);
+  return !excludesCheckbox || !excludesRadio;
 }
 
 const errors = [];
@@ -94,6 +140,17 @@ function auditSelectContract(file, source) {
     const line = source.slice(0, match.index).split("\n").length;
     errors.push(
       `${relative(root, file)}:${line}: native select is forbidden; add data-custom-select`
+    );
+  }
+}
+
+function auditNativeChoiceContract(file, source) {
+  for (const match of source.matchAll(
+    /<[^>]+\brole\s*=\s*["'](?:switch|checkbox|radio)["'][^>]*>/gi
+  )) {
+    const line = source.slice(0, match.index).split("\n").length;
+    errors.push(
+      `${relative(root, file)}:${line}: simulated choice control is forbidden; use a native checkbox/radio and the shared control family`
     );
   }
 }
@@ -110,6 +167,9 @@ for (const file of cssFiles) {
     if (/\.(?:source|category)-switch\b|\.slider\b|-switch__/.test(selector)) {
       errors.push(`${path}: custom switch selector ${selector}; use .toggle`);
     }
+    if (/(?:^|[\s>+~,])\.[\w-]+-radio\b/.test(selector)) {
+      errors.push(`${path}: custom radio selector ${selector}; use input[type="radio"]`);
+    }
   }
 
   /* The control family (switch, checkbox, radio) has one skin. A page may place
@@ -117,10 +177,8 @@ for (const file of cssFiles) {
      how four different switches and five checkbox sizes grew in the first place. */
   if (path !== "components/form_controls.css") {
     for (const [selector, body] of rulesIn(css)) {
-      if (!/input\[type="(?:checkbox|radio)"\]/.test(selector)) continue;
-      const skin = body.match(
-        /^\s*(width|height|background|background-color|border|border-radius|box-shadow|appearance|accent-color)\s*:/m
-      );
+      if (!inputMayBeChoiceControl(selector)) continue;
+      const skin = body.match(controlSkinDeclaration);
       if (skin) {
         errors.push(
           `${path}: ${selector} sets ${skin[1]}; the control skin is owned by components/form_controls.css`
@@ -148,6 +206,7 @@ for (const file of await walk(scriptsRoot)) {
     errors.push(`${relative(root, file)}: runtime or embedded CSS is forbidden; use styles/`);
   }
   if (!file.endsWith("custom_select.js")) auditSelectContract(file, source);
+  auditNativeChoiceContract(file, source);
 }
 
 for (const file of await walk(pagesRoot)) {
@@ -157,6 +216,7 @@ for (const file of await walk(pagesRoot)) {
     errors.push(`${relative(root, file)}: page templates must not contain <style>`);
   }
   auditSelectContract(file, source);
+  auditNativeChoiceContract(file, source);
 }
 
 const templatesSource = await readFile(resolve(root, "src/webserver/templates.rs"), "utf8");

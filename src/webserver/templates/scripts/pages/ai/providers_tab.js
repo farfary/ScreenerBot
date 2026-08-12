@@ -83,10 +83,13 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         const isConfigured = provider.enabled && provider.api_key && provider.model;
 
         return `
-          <div class="provider-item ${isDefault ? "is-default" : ""} ${isConfigured ? "is-configured" : ""}" data-provider="${providerId}">
-            <div class="provider-select" onclick="window.aiPage.setDefaultProvider('${providerId}')" title="Set as default">
-              <div class="provider-radio"></div>
-            </div>
+          <div class="provider-item ${isDefault ? "is-default" : ""}" data-provider="${providerId}">
+            <label class="provider-select" title="Set as default">
+              <input type="radio" name="default-provider" value="${providerId}"
+                     aria-label="Use ${name} as the default provider"
+                     ${isDefault ? "checked" : ""}
+                     onchange="window.aiPage.setDefaultProvider('${providerId}')">
+            </label>
             
             <div class="provider-logo">
               <img src="/assets/providers/${providerId}.png" alt="${name}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
@@ -139,6 +142,10 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       await loadProviders();
     } catch (error) {
       console.error("[AI] Error setting default provider:", error);
+      // A native radio updates immediately. Restore the persisted selection if
+      // the mutation fails instead of leaving the failed choice checked.
+      _lastProvidersKey = null;
+      renderProviders(state.providers);
       Utils.showToast({
         type: "error",
         title: "Error",

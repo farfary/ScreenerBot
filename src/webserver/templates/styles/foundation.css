@@ -813,7 +813,7 @@ select,
   z-index: 1;
 }
 
-.search-wrapper input {
+.search-wrapper input:not([type="checkbox"], [type="radio"]) {
   width: 100%;
   padding-left: 36px;
 }

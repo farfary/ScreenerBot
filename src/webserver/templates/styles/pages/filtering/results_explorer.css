@@ -222,7 +222,7 @@
   pointer-events: none;
 }
 
-.explorer-search-input-wrapper input {
+.explorer-search-input-wrapper input[type="text"] {
   width: 100%;
   padding-block: 6px;
   padding-inline: 28px 10px;
@@ -234,13 +234,13 @@
   transition: all var(--transition-fast);
 }
 
-.explorer-search-input-wrapper input:focus {
+.explorer-search-input-wrapper input[type="text"]:focus {
   border-color: var(--link-color);
   outline: none;
   box-shadow: 0 0 0 2px var(--primary-alpha-10);
 }
 
-.explorer-search-input-wrapper input::placeholder {
+.explorer-search-input-wrapper input[type="text"]::placeholder {
   color: var(--text-muted);
   font-size: 0.75rem;
 }

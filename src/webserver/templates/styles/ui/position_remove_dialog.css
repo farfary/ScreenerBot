@@ -1,8 +1,8 @@
 /**
  * Position Remove Dialog Styles
  *
- * Glassmorphic modal matching confirmation/trade dialogs. Two-choice removal
- * (Archive default / Permanent delete) with a danger banner for delete mode.
+ * Two-choice removal (Archive default / Permanent delete) with a danger banner
+ * for delete mode.
  */
 
 /* ============================================
@@ -34,13 +34,10 @@
   transform: translate(-50%, -50%) scale(0.94);
   width: 92%;
   max-width: 480px;
-  background: rgb(18, 24, 39, 0.96);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgb(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  box-shadow:
-    0 20px 60px rgb(0, 0, 0, 0.5),
-    0 0 0 1px rgb(255, 255, 255, 0.05) inset;
+  box-shadow: var(--shadow-floating-lg);
   z-index: var(--z-confirmation-dialog);
   padding: 22px;
   opacity: 0;
@@ -67,20 +64,20 @@
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  color: rgb(255, 255, 255, 0.96);
+  color: var(--text-primary);
 }
 
 .position-remove-subtitle {
   margin: 4px 0 0;
   font-size: 13px;
   font-weight: 600;
-  color: rgb(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 .position-remove-mint {
   font-family: var(--font-mono, monospace);
   font-weight: 500;
-  color: rgb(255, 255, 255, 0.45);
+  color: var(--text-muted);
   margin-left: 4px;
 }
 
@@ -96,16 +93,16 @@
   padding: 12px 14px;
   font-size: 12.5px;
   line-height: 1.5;
-  color: rgb(255, 255, 255, 0.82);
-  background: rgb(210, 153, 34, 0.1);
-  border: 1px solid rgb(210, 153, 34, 0.32);
+  color: var(--semantic-warning-text);
+  background: var(--warning-alpha-10);
+  border: 1px solid var(--warning-alpha-30);
   border-radius: var(--radius-lg);
 }
 
 .position-remove-open-warning i {
   flex-shrink: 0;
   margin-top: 1px;
-  color: #d29922;
+  color: var(--semantic-warning-text);
 }
 
 /* ============================================
@@ -116,6 +113,10 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .position-remove-choice {
@@ -125,8 +126,8 @@
   width: 100%;
   padding: 13px 14px;
   text-align: left;
-  background: rgb(255, 255, 255, 0.03);
-  border: 1px solid rgb(255, 255, 255, 0.08);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   cursor: pointer;
   transition:
@@ -135,41 +136,31 @@
 }
 
 .position-remove-choice:hover {
-  background: rgb(255, 255, 255, 0.05);
-  border-color: rgb(255, 255, 255, 0.16);
+  background: var(--bg-card-hover);
+  border-color: var(--control-ring-hover);
 }
 
-.position-remove-choice.is-selected {
-  background: rgb(88, 166, 255, 0.1);
-  border-color: rgb(88, 166, 255, 0.55);
-}
-
-.position-remove-choice[data-mode="delete"].is-selected {
-  background: rgb(248, 81, 73, 0.1);
-  border-color: rgb(248, 81, 73, 0.55);
+.position-remove-choice:has(> input:checked) {
+  background: var(--primary-alpha-10);
+  border-color: var(--control-accent);
 }
 
 .position-remove-choice-icon {
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 17px;
-  border-radius: var(--radius-md);
-  background: rgb(255, 255, 255, 0.06);
-  color: rgb(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
-.position-remove-choice.is-selected .position-remove-choice-icon {
-  color: #58a6ff;
-  background: rgb(88, 166, 255, 0.16);
+.position-remove-choice:has(> input:checked) .position-remove-choice-icon {
+  color: var(--control-accent);
 }
 
-.position-remove-choice[data-mode="delete"].is-selected .position-remove-choice-icon {
-  color: #f85149;
-  background: rgb(248, 81, 73, 0.16);
+.position-remove-choice[data-mode="delete"] .position-remove-choice-icon {
+  color: var(--error-color);
 }
 
 .position-remove-choice-body {
@@ -185,7 +176,7 @@
   gap: 8px;
   font-size: 14px;
   font-weight: 700;
-  color: rgb(255, 255, 255, 0.92);
+  color: var(--text-primary);
 }
 
 .position-remove-badge {
@@ -195,31 +186,14 @@
   text-transform: uppercase;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  color: #58a6ff;
-  background: rgb(88, 166, 255, 0.16);
+  color: var(--primary-color);
+  background: var(--primary-alpha-15);
 }
 
 .position-remove-choice-desc {
   font-size: 12px;
   line-height: 1.5;
-  color: rgb(255, 255, 255, 0.6);
-}
-
-.position-remove-choice-check {
-  flex-shrink: 0;
-  align-self: center;
-  font-size: 15px;
-  color: #58a6ff;
-  opacity: 0;
-  transition: opacity var(--transition-base);
-}
-
-.position-remove-choice[data-mode="delete"] .position-remove-choice-check {
-  color: #f85149;
-}
-
-.position-remove-choice.is-selected .position-remove-choice-check {
-  opacity: 1;
+  color: var(--text-secondary);
 }
 
 /* ============================================
@@ -234,9 +208,9 @@
   padding: 12px 14px;
   font-size: 12.5px;
   line-height: 1.5;
-  color: rgb(255, 255, 255, 0.85);
-  background: rgb(248, 81, 73, 0.1);
-  border: 1px solid rgb(248, 81, 73, 0.4);
+  color: var(--semantic-error-text);
+  background: var(--danger-alpha-10);
+  border: 1px solid var(--danger-alpha-30);
   border-radius: var(--radius-lg);
 }
 
@@ -247,7 +221,7 @@
 .position-remove-danger i {
   flex-shrink: 0;
   margin-top: 1px;
-  color: #f85149;
+  color: var(--semantic-error-text);
 }
 
 /* ============================================
@@ -268,45 +242,45 @@
   border: none;
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition:
+    background-color var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    filter var(--transition-base),
+    transform var(--transition-base);
   min-width: 110px;
 }
 
 .position-remove-btn--cancel {
-  background: rgb(255, 255, 255, 0.08);
-  color: rgb(255, 255, 255, 0.9);
-  border: 1px solid rgb(255, 255, 255, 0.15);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
 }
 
 .position-remove-btn--cancel:hover {
-  background: rgb(255, 255, 255, 0.12);
-  border-color: rgb(255, 255, 255, 0.25);
+  background: var(--bg-tertiary);
+  border-color: var(--control-ring-hover);
 }
 
 .position-remove-btn--confirm {
-  background: #58a6ff;
-  color: #04101f;
+  background: var(--primary-color);
+  color: var(--control-mark);
 }
 
 .position-remove-btn--confirm.is-danger {
-  background: #f85149;
-  color: #fff;
+  background: var(--error-color);
+  color: var(--control-mark);
 }
 
 .position-remove-btn--confirm:hover {
   filter: brightness(1.08);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px var(--shadow-md);
 }
 
 .position-remove-btn--confirm:active {
   transform: translateY(0);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.3);
-}
-
-.position-remove-btn:focus-visible {
-  outline: 2px solid rgb(255, 255, 255, 0.5);
-  outline-offset: 2px;
+  box-shadow: 0 2px 6px var(--shadow-md);
 }
 
 /* ============================================
@@ -343,132 +317,4 @@
   .position-remove-dialog--visible {
     transform: translate(-50%, -50%);
   }
-}
-
-/* ============================================
-   LIGHT THEME
-   ============================================ */
-
-[data-theme="light"] .position-remove-dialog {
-  background: rgb(255, 255, 255, 0.98);
-  border-color: rgb(0, 0, 0, 0.15);
-  box-shadow:
-    0 20px 60px rgb(0, 0, 0, 0.2),
-    0 0 0 1px rgb(0, 0, 0, 0.05) inset;
-}
-
-[data-theme="light"] .position-remove-title {
-  color: rgb(0, 0, 0, 0.95);
-}
-
-[data-theme="light"] .position-remove-subtitle {
-  color: rgb(0, 0, 0, 0.7);
-}
-
-[data-theme="light"] .position-remove-mint {
-  color: rgb(0, 0, 0, 0.46);
-}
-
-[data-theme="light"] .position-remove-open-warning {
-  color: rgb(91, 59, 0, 0.9);
-  background: rgb(245, 158, 11, 0.12);
-  border-color: rgb(217, 119, 6, 0.34);
-}
-
-[data-theme="light"] .position-remove-open-warning strong {
-  color: rgb(66, 43, 0, 0.98);
-}
-
-[data-theme="light"] .position-remove-open-warning i {
-  color: var(--warning-color-dark);
-}
-
-[data-theme="light"] .position-remove-choice {
-  background: rgb(0, 0, 0, 0.03);
-  border-color: rgb(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .position-remove-choice:hover {
-  background: rgb(0, 0, 0, 0.05);
-  border-color: rgb(0, 0, 0, 0.16);
-}
-
-[data-theme="light"] .position-remove-choice.is-selected {
-  background: var(--primary-alpha-10);
-  border-color: var(--primary-alpha-40);
-}
-
-[data-theme="light"] .position-remove-choice[data-mode="delete"].is-selected {
-  background: var(--danger-alpha-10);
-  border-color: var(--danger-alpha-40);
-}
-
-[data-theme="light"] .position-remove-choice-icon {
-  color: rgb(31, 41, 55, 0.72);
-  background: rgb(21, 101, 192, 0.08);
-}
-
-[data-theme="light"] .position-remove-choice[data-mode="delete"] .position-remove-choice-icon {
-  color: rgb(127, 29, 29, 0.72);
-  background: rgb(239, 68, 68, 0.08);
-}
-
-[data-theme="light"] .position-remove-choice.is-selected .position-remove-choice-icon {
-  color: var(--primary-color);
-  background: var(--primary-alpha-15);
-}
-
-[data-theme="light"] .position-remove-choice[data-mode="delete"].is-selected .position-remove-choice-icon {
-  color: var(--error-color-dark);
-  background: var(--danger-alpha-15);
-}
-
-[data-theme="light"] .position-remove-choice-title {
-  color: rgb(0, 0, 0, 0.9);
-}
-
-[data-theme="light"] .position-remove-choice-desc {
-  color: rgb(0, 0, 0, 0.6);
-}
-
-[data-theme="light"] .position-remove-badge {
-  color: var(--primary-color);
-  background: var(--primary-alpha-15);
-}
-
-[data-theme="light"] .position-remove-choice-check {
-  color: var(--primary-color);
-}
-
-[data-theme="light"] .position-remove-choice[data-mode="delete"] .position-remove-choice-check {
-  color: var(--error-color-dark);
-}
-
-[data-theme="light"] .position-remove-danger {
-  color: rgb(127, 29, 29, 0.9);
-  background: var(--danger-alpha-10);
-  border-color: var(--danger-alpha-30);
-}
-
-[data-theme="light"] .position-remove-danger strong {
-  color: rgb(127, 29, 29, 0.98);
-}
-
-[data-theme="light"] .position-remove-danger i {
-  color: var(--error-color-dark);
-}
-
-[data-theme="light"] .position-remove-btn--cancel {
-  background: rgb(0, 0, 0, 0.06);
-  color: rgb(0, 0, 0, 0.9);
-  border-color: rgb(0, 0, 0, 0.15);
-}
-
-[data-theme="light"] .position-remove-btn--cancel:hover {
-  background: rgb(0, 0, 0, 0.1);
-  border-color: rgb(0, 0, 0, 0.2);
-}
-
-[data-theme="light"] .position-remove-btn:focus-visible {
-  outline-color: rgb(21, 101, 192, 0.5);
 }

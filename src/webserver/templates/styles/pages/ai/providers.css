@@ -1,15 +1,3 @@
-/* ============================================================================
-   Providers Section
-   ============================================================================ */
-
-.providers-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--ai-card-radius);
-  padding: var(--ai-card-padding);
-}
-
-/* ===== PROVIDERS LIST VIEW ===== */
 .providers-list-container {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -27,8 +15,8 @@
   align-items: center;
   padding: 14px 20px;
   gap: var(--spacing-md);
-  border-bottom: 1px solid rgb(255 255 255 / 0.05);
-  transition: all var(--transition-fast)-out;
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color var(--transition-fast);
 }
 
 .provider-item:last-child {
@@ -36,18 +24,13 @@
 }
 
 .provider-item:hover {
-  background: rgb(255 255 255 / 0.02);
+  background: var(--bg-card-hover);
 }
 
 .provider-item.is-default {
-  background: rgb(59 130 246 / 0.06);
+  background: var(--primary-alpha-5);
 }
 
-.provider-item.is-configured {
-  border-left: 3px solid var(--success, #22c55e);
-}
-
-/* Provider Selection Area */
 .provider-select {
   display: flex;
   align-items: center;
@@ -58,37 +41,6 @@
   flex-shrink: 0;
 }
 
-.provider-radio {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--border-color);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.provider-select:hover .provider-radio {
-  border-color: var(--primary, #3b82f6);
-  background: var(--primary-alpha-10);
-}
-
-.provider-item.is-default .provider-radio {
-  border-color: var(--primary, #3b82f6);
-  background: var(--primary, #3b82f6);
-}
-
-.provider-item.is-default .provider-radio::after {
-  content: "";
-  width: 6px;
-  height: 6px;
-  background: white;
-  border-radius: var(--radius-full);
-}
-
-/* Provider Logo */
 .provider-logo {
   width: 36px;
   height: 36px;
@@ -96,10 +48,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: var(--radius-full);
   overflow: hidden;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
 }
 
 .provider-logo img {
@@ -117,10 +66,8 @@
   font-size: 16px;
   font-weight: 600;
   color: var(--text-muted);
-  background: var(--bg-tertiary);
 }
 
-/* Provider Info */
 .provider-info {
   flex: 1;
   min-width: 0;
@@ -142,7 +89,6 @@
   text-overflow: ellipsis;
 }
 
-/* Provider Status Badge */
 .provider-status {
   display: flex;
   align-items: center;
@@ -167,17 +113,17 @@
 }
 
 .status-badge.configured {
-  background: rgb(34 197 94 / 0.12);
+  background: rgb(34, 197, 94, 0.12);
   color: var(--success, #22c55e);
 }
 
 .status-badge.not-configured {
-  background: rgb(100 116 139 / 0.15);
+  background: rgb(100, 116, 139, 0.15);
   color: var(--text-muted);
 }
 
 .status-badge.default {
-  background: rgb(59 130 246 / 0.15);
+  background: rgb(59, 130, 246, 0.15);
   color: var(--primary, #3b82f6);
 }
 
@@ -201,7 +147,10 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast)-out;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .provider-btn i {
@@ -299,7 +248,8 @@
   gap: var(--spacing-xs);
 }
 
-.api-key-input-wrapper input {
+.api-key-input-wrapper input[type="password"],
+.api-key-input-wrapper input[type="text"] {
   flex: 1;
   padding-inline-end: 40px;
 }
@@ -315,7 +265,7 @@
   cursor: pointer;
   padding: 4px;
   border-radius: var(--radius-sm);
-  transition: all var(--transition-fast);
+  transition: color var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -408,43 +358,6 @@
 
 .model-input-wrapper input {
   flex: 1;
-}
-
-.btn-fetch-models {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.model-suggestions {
-  display: none;
-  margin-top: var(--spacing-xs);
-  padding: var(--spacing-xs);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-.model-suggestions.visible {
-  display: block;
-}
-
-.model-suggestion {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: 0.8rem;
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: background var(--transition-fast);
-}
-
-.model-suggestion:hover {
-  background: var(--hover-bg);
-}
-
-.model-suggestion.selected {
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
 }
 
 /* Modal Footer with split buttons */
@@ -673,26 +586,6 @@
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-}
-
-.preview-category.badge-filtering {
-  background: var(--primary-alpha-15);
-  color: var(--primary);
-}
-
-.preview-category.badge-trading {
-  background: var(--success-alpha-15);
-  color: var(--success);
-}
-
-.preview-category.badge-analysis {
-  background: var(--warning-alpha-15);
-  color: var(--warning);
-}
-
-.preview-category.badge-general {
-  background: var(--info-alpha-15);
-  color: var(--info);
 }
 
 .preview-content {

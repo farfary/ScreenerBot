@@ -134,7 +134,9 @@
 html[data-input="keyboard"] .setup-screen button:focus-visible,
 html[data-input="keyboard"] .setup-screen a:focus-visible,
 html[data-input="keyboard"] .setup-screen textarea:focus-visible,
-html[data-input="keyboard"] .setup-screen input:focus-visible,
+html[data-input="keyboard"]
+  .setup-screen
+  input:not([type="checkbox"], [type="radio"]):focus-visible,
 html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
@@ -185,7 +187,6 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
     justify-content: flex-start;
     margin-top: 3px;
   }
-
 }
 
 @media (max-height: 720px) {

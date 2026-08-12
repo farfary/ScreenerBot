@@ -24,16 +24,15 @@
   --input-focus-ring-color: var(--primary-alpha-10);
 
   /* Control family (switch, checkbox, radio) - shared skin. One surface, one
-     ring, one accent pair and one motion curve for every on/off control in the
+     ring, one accent and one motion curve for every binary/choice control in the
      dashboard; see the Control Family section below. */
   --control-motion: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --control-surface: var(--bg-tertiary);
   --control-ring: var(--border-color);
   --control-ring-hover: var(--input-border-hover);
   --control-knob: var(--text-muted);
-  --control-knob-on: #fff;
-  --control-on: var(--success-color);
-  --control-select: var(--primary-color);
+  --control-accent: var(--primary-color);
+  --control-mark: var(--bg-primary);
 
   /* Switch geometry - default (unlevelled) size. Radius is ~1/3 of the height:
      a soft rounded rect, never a pill. */
@@ -358,9 +357,9 @@ select.select-lg {
    reads as a bare form checkbox). The radio stays round because roundness is
    what tells a user only one option can win.
 
-   Accents are semantic, not decorative: a switch fills with --control-on
-   (success) because it reports a thing being live, a checkbox and a radio fill
-   with --control-select (primary) because they report a choice.
+   Active state always uses --control-accent. Success, warning and danger belong
+   to adjacent status text, never to the control's selection skin; otherwise a
+   mixed settings view looks like unrelated green and blue component libraries.
 
    HIERARCHY. A switch declares its depth with data-level, never with a size
    class and never with a different colour, so a master switch, its groups and
@@ -436,8 +435,8 @@ select.select-lg {
 }
 
 .toggle > input:checked + .toggle-track {
-  background: var(--control-on);
-  box-shadow: inset 0 0 0 1px var(--control-on);
+  background: var(--control-accent);
+  box-shadow: inset 0 0 0 1px var(--control-accent);
 }
 
 .toggle > input:checked + .toggle-track::after {
@@ -445,7 +444,7 @@ select.select-lg {
     var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-knob-offset) * 2
   );
 
-  background: var(--control-knob-on);
+  background: var(--control-mark);
 }
 
 /* Press feedback: the knob compresses. A click feels physical without changing
@@ -464,7 +463,7 @@ select.select-lg {
 
 .toggle > input:checked:focus-visible + .toggle-track {
   box-shadow:
-    inset 0 0 0 1px var(--control-on),
+    inset 0 0 0 1px var(--control-accent),
     0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
 }
 
@@ -504,7 +503,7 @@ select.select-lg {
 }
 
 .toggle > input:checked ~ .toggle-state {
-  color: var(--control-on);
+  color: var(--control-accent);
 }
 
 .toggle > input:disabled ~ .toggle-label,
@@ -581,8 +580,8 @@ input[type="checkbox"]:hover:not(:disabled, :checked) {
 }
 
 input[type="checkbox"]:checked {
-  background: var(--control-select);
-  box-shadow: inset 0 0 0 1px var(--control-select);
+  background: var(--control-accent);
+  box-shadow: inset 0 0 0 1px var(--control-accent);
 }
 
 /* Checkmark: an SVG mask on inset:0 at a percentage size, so every size variant
@@ -591,7 +590,7 @@ input[type="checkbox"]::after {
   content: "";
   position: absolute;
   inset: 0;
-  background-color: var(--control-knob-on);
+  background-color: var(--control-mark);
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E")
     center / 64% no-repeat;
   transform: scale(0);
@@ -608,9 +607,15 @@ input[type="checkbox"]:active:not(:disabled) {
 
 input[type="checkbox"]:focus-visible {
   box-shadow:
-    inset 0 0 0 1px var(--control-select),
+    inset 0 0 0 1px var(--control-ring),
     0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
   outline: none;
+}
+
+input[type="checkbox"]:checked:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--control-accent),
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
 }
 
 input[type="checkbox"]:disabled {
@@ -642,7 +647,8 @@ input[type="radio"] {
   cursor: pointer;
   transition:
     background-color var(--control-motion),
-    box-shadow var(--control-motion);
+    box-shadow var(--control-motion),
+    transform var(--control-motion);
 }
 
 input[type="radio"]:hover:not(:disabled, :checked) {
@@ -650,8 +656,8 @@ input[type="radio"]:hover:not(:disabled, :checked) {
 }
 
 input[type="radio"]:checked {
-  background: var(--control-select);
-  box-shadow: inset 0 0 0 1px var(--control-select);
+  background: var(--control-accent);
+  box-shadow: inset 0 0 0 1px var(--control-accent);
 }
 
 /* Dot, grown in on the same curve as the checkmark. */
@@ -662,7 +668,7 @@ input[type="radio"]::after {
   margin: auto;
   width: 40%;
   height: 40%;
-  background: var(--control-knob-on);
+  background: var(--control-mark);
   border-radius: var(--radius-full);
   transform: scale(0);
   transition: transform var(--control-motion);
@@ -672,11 +678,21 @@ input[type="radio"]:checked::after {
   transform: scale(1);
 }
 
+input[type="radio"]:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
 input[type="radio"]:focus-visible {
   box-shadow:
-    inset 0 0 0 1px var(--control-select),
+    inset 0 0 0 1px var(--control-ring),
     0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
   outline: none;
+}
+
+input[type="radio"]:checked:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--control-accent),
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
 }
 
 input[type="radio"]:disabled {

@@ -138,7 +138,7 @@
     flex-shrink: 0;
   }
 
-  .sessions-search input {
+  .sessions-search input[type="text"] {
     flex: 1;
     height: auto;
     padding: 0;
@@ -153,15 +153,15 @@
 
   /* Override the global input[type="text"]:hover/:focus chrome so it never draws
    a second border or box-shadow inside the wrapper. */
-  .sessions-search input:hover,
-  .sessions-search input:focus {
+  .sessions-search input[type="text"]:hover,
+  .sessions-search input[type="text"]:focus {
     border: none;
     box-shadow: none;
     outline: none;
     background: transparent;
   }
 
-  .sessions-search input::placeholder {
+  .sessions-search input[type="text"]::placeholder {
     color: var(--text-muted);
   }
 

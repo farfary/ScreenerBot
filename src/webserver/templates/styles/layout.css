@@ -31,12 +31,6 @@
   gap: var(--spacing-sm);
 }
 
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
 /* Control Buttons */
 .control-btn {
   background: rgb(255, 255, 255, 0.2);
