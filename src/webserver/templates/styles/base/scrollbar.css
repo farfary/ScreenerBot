@@ -537,8 +537,8 @@
 .notification-tabs,
 .header-row-2,
 .filtering-info-bar,
-.billboard-cat-tokens,
-.billboard-row-tokens,
+.featured-cat-tokens,
+.featured-row-tokens,
 .toast-container {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -549,8 +549,8 @@
 .notification-tabs::-webkit-scrollbar,
 .header-row-2::-webkit-scrollbar,
 .filtering-info-bar::-webkit-scrollbar,
-.billboard-cat-tokens::-webkit-scrollbar,
-.billboard-row-tokens::-webkit-scrollbar,
+.featured-cat-tokens::-webkit-scrollbar,
+.featured-row-tokens::-webkit-scrollbar,
 .toast-container::-webkit-scrollbar {
   display: none;
   width: 0;

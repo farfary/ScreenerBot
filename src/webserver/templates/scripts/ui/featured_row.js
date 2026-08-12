@@ -1,28 +1,36 @@
 /**
- * Billboard Row - Horizontal scrollable promotional row
+ * Featured Row - the horizontal discovery strip above the status bar.
  *
- * Shows featured tokens from the billboard API in a compact
- * horizontal scrolling row at the bottom of specific pages.
+ * Two bands, in this order and never mixed:
+ *   1. BOOSTED - tokens whose teams paid to promote them on screenerbot.io. They
+ *      lead the row, carry the gold treatment and print their active boost count.
+ *   2. DISCOVERY - Jupiter top-organic/top-traded and DexScreener trending, in
+ *      that order, deduped against the boosted band and against each other.
  *
- * Visibility: Only on Home and Tokens pages (when enabled in settings)
+ * Boosted tokens lead here rather than being spread through the row (which is what
+ * the website does on a page of dozens of rows): this strip shows a handful of
+ * cards at a time, so a spread promotion would simply scroll out of sight.
+ *
+ * Visibility: Home and Tokens pages, when enabled in settings.
  */
 
 import { $ } from "../core/dom.js";
 import { resolveTokenLogoUrl } from "../core/utils.js";
-import { openBillboard } from "./billboard_dialog.js";
+import { openFeaturedDialog } from "./featured_dialog.js";
+import { boostTier, formatBoostCount } from "../core/boosts.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
-// window listener. The billboard row appears on pages (e.g. Home) that do not
+// window listener. The featured row appears on pages (e.g. Home) that do not
 // otherwise load the token details dialog module, so without this the
 // open-token-details event a card click dispatches would have no listener.
 import "./token_details_dialog.js";
 
-const CONTAINER_ID = "billboard-row";
+const CONTAINER_ID = "featured-row";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_DISPLAY_LENGTH = 14; // name or symbol, prefer symbol for density
 
-// Cache for billboard data
+// Cache for featured data
 let cachedTokens = null;
 let cacheTimestamp = 0;
 
@@ -32,9 +40,9 @@ let configCheckTimestamp = 0;
 const CONFIG_CHECK_TTL_MS = 30 * 1000; // 30 seconds
 
 /**
- * Check if billboard is enabled in config
+ * Check if the featured row is enabled in config
  */
-async function isBillboardEnabled() {
+async function isFeaturedRowEnabled() {
   const now = Date.now();
 
   // Return cached value if still valid
@@ -47,7 +55,7 @@ async function isBillboardEnabled() {
     if (response.ok) {
       const result = await response.json();
       const config = result.data?.data || result.data || result;
-      configEnabled = config?.dashboard?.interface?.show_billboard !== false;
+      configEnabled = config?.dashboard?.interface?.show_featured_row !== false;
     } else {
       configEnabled = true; // Default to showing on error
     }
@@ -62,7 +70,7 @@ async function isBillboardEnabled() {
 /**
  * Reset config cache (call when settings change)
  */
-export function resetBillboardConfigCache() {
+export function resetFeaturedRowConfigCache() {
   configEnabled = null;
   configCheckTimestamp = 0;
 }
@@ -79,22 +87,22 @@ function truncateForDisplay(name, symbol, maxLength = MAX_DISPLAY_LENGTH) {
 }
 
 /**
- * Billboard Row Manager
+ * Featured Row Manager
  */
-class BillboardRow {
+class FeaturedRow {
   constructor() {
     this.containerEl = null;
     this.isVisible = false;
   }
 
   /**
-   * Create and show the billboard row
+   * Create and show the featured row
    */
   async show() {
     if (this.isVisible) return;
 
-    // Check if billboard is enabled in settings
-    const enabled = await isBillboardEnabled();
+    // Check if the row is enabled in settings
+    const enabled = await isFeaturedRowEnabled();
     if (!enabled) {
       return;
     }
@@ -102,10 +110,10 @@ class BillboardRow {
     this._createContainer();
     this.isVisible = true;
 
-    // Add padding class to content to make room for billboard
+    // Add padding class to content to make room for the row
     const content = $(".content");
     if (content) {
-      content.classList.add("has-billboard");
+      content.classList.add("has-featured-row");
     }
 
     // Show loading state
@@ -120,13 +128,13 @@ class BillboardRow {
         this._showEmpty();
       }
     } catch (e) {
-      console.warn("[BillboardRow] Failed to load:", e.message);
+      console.warn("[FeaturedRow] Failed to load:", e.message);
       this._showEmpty();
     }
   }
 
   /**
-   * Hide and remove the billboard row
+   * Hide and remove the featured row
    */
   hide() {
     if (!this.isVisible) return;
@@ -140,7 +148,7 @@ class BillboardRow {
     // Remove padding class from content
     const content = $(".content");
     if (content) {
-      content.classList.remove("has-billboard");
+      content.classList.remove("has-featured-row");
     }
   }
 
@@ -154,29 +162,29 @@ class BillboardRow {
 
     const container = document.createElement("div");
     container.id = CONTAINER_ID;
-    container.className = "billboard-row";
+    container.className = "featured-row";
     container.innerHTML = `
-      <div class="billboard-row-inner">
-        <div class="billboard-row-header">
-          <span class="billboard-row-label">Featured</span>
-          <button class="billboard-row-view-all" title="View All Listings">
+      <div class="featured-row-inner">
+        <div class="featured-row-header">
+          <span class="featured-row-label">Featured</span>
+          <button class="featured-row-view-all" title="Open the full Featured view">
             <span>All</span>
             <i class="icon-chevron-right"></i>
           </button>
         </div>
-        <div class="billboard-row-scroll">
-          <button class="billboard-row-arrow billboard-row-arrow-left" aria-label="Scroll left">
+        <div class="featured-row-scroll">
+          <button class="featured-row-arrow featured-row-arrow-left" aria-label="Scroll left">
             <i class="icon-chevron-left"></i>
           </button>
-          <div class="billboard-row-tokens" id="billboard-row-tokens"></div>
-          <button class="billboard-row-arrow billboard-row-arrow-right" aria-label="Scroll right">
+          <div class="featured-row-tokens" id="featured-row-tokens"></div>
+          <button class="featured-row-arrow featured-row-arrow-right" aria-label="Scroll right">
             <i class="icon-chevron-right"></i>
           </button>
         </div>
       </div>
     `;
 
-    // Append to body (billboard is fixed positioned above status bar)
+    // Append to body (the row is fixed positioned above the status bar)
     document.body.appendChild(container);
 
     this.containerEl = container;
@@ -195,16 +203,16 @@ class BillboardRow {
     await Hints.init();
     if (!Hints.isEnabled()) return;
 
-    const hint = Hints.getHint("ui.billboard");
+    const hint = Hints.getHint("ui.featured");
     if (!hint || Hints.isDismissed(hint.id)) return;
 
-    const header = this.containerEl?.querySelector(".billboard-row-header");
+    const header = this.containerEl?.querySelector(".featured-row-header");
     if (!header) return;
 
     // Insert hint trigger after the label
-    const label = header.querySelector(".billboard-row-label");
+    const label = header.querySelector(".featured-row-label");
     if (label) {
-      HintTrigger.attach(label.parentNode, hint, "ui.billboard", {
+      HintTrigger.attach(label.parentNode, hint, "ui.featured", {
         size: "sm",
         position: "bottom",
       });
@@ -218,16 +226,16 @@ class BillboardRow {
   _setupEventListeners() {
     if (!this.containerEl) return;
 
-    // View All button - opens the full billboard dialog
-    const viewAllBtn = this.containerEl.querySelector(".billboard-row-view-all");
+    // View All button - opens the full featured dialog
+    const viewAllBtn = this.containerEl.querySelector(".featured-row-view-all");
     if (viewAllBtn) {
-      viewAllBtn.addEventListener("click", () => openBillboard());
+      viewAllBtn.addEventListener("click", () => openFeaturedDialog());
     }
 
     // Scroll arrows
-    const scrollContainer = this.containerEl.querySelector(".billboard-row-tokens");
-    const leftArrow = this.containerEl.querySelector(".billboard-row-arrow-left");
-    const rightArrow = this.containerEl.querySelector(".billboard-row-arrow-right");
+    const scrollContainer = this.containerEl.querySelector(".featured-row-tokens");
+    const leftArrow = this.containerEl.querySelector(".featured-row-arrow-left");
+    const rightArrow = this.containerEl.querySelector(".featured-row-arrow-right");
 
     if (scrollContainer && leftArrow && rightArrow) {
       const scrollAmount = 200;
@@ -254,12 +262,11 @@ class BillboardRow {
   }
 
   /**
-   * Fetch tokens from API with caching.
+   * Fetch tokens from the API with caching.
    *
-   * Pulls from ALL billboard sources (our featured tokens plus Jupiter and
-   * DexScreener trending) and merges them — featured first, then the trending
-   * sources — deduped by mint. This way the row still fills with trending
-   * tokens when our own featured list is empty, instead of showing nothing.
+   * Pulls every featured source in one request and merges them boosted-first,
+   * deduped by mint, so the row still fills with discovery tokens when nobody is
+   * currently boosting instead of showing nothing.
    */
   async _fetchTokens() {
     const now = Date.now();
@@ -269,7 +276,7 @@ class BillboardRow {
       return cachedTokens;
     }
 
-    const response = await fetch("/api/billboard/all");
+    const response = await fetch("/api/featured/all");
     const data = await response.json();
 
     if (!data || data.success === false) {
@@ -280,14 +287,14 @@ class BillboardRow {
     const seen = new Set();
     const add = (list) => {
       (list || []).forEach((token) => {
-        const mint = token.mint || token.id;
+        const mint = token.mint;
         if (!mint || seen.has(mint)) return;
         seen.add(mint);
         merged.push(token);
       });
     };
 
-    add(data.featured);
+    add(data.boosted);
     add(data.jupiter_organic);
     add(data.jupiter_traded);
     add(data.dexscreener_trending);
@@ -301,16 +308,16 @@ class BillboardRow {
    * Show loading state with skeleton cards
    */
   _showLoading() {
-    const container = this.containerEl?.querySelector("#billboard-row-tokens");
+    const container = this.containerEl?.querySelector("#featured-row-tokens");
     if (container) {
       // Show 5 skeleton cards
       const skeletons = Array(5)
         .fill(0)
         .map(
           () => `
-        <div class="billboard-row-card billboard-row-skeleton">
-          <div class="billboard-row-card-logo-placeholder skeleton-pulse"></div>
-          <span class="billboard-row-card-name skeleton-pulse"></span>
+        <div class="featured-row-card featured-row-skeleton">
+          <div class="featured-row-card-logo-placeholder skeleton-pulse"></div>
+          <span class="featured-row-card-name skeleton-pulse"></span>
         </div>
       `
         )
@@ -323,47 +330,46 @@ class BillboardRow {
    * Show empty state with placeholder cards
    */
   _showEmpty() {
-    const container = this.containerEl?.querySelector("#billboard-row-tokens");
+    const container = this.containerEl?.querySelector("#featured-row-tokens");
     if (container) {
-      container.innerHTML = `
-        <div class="billboard-row-empty">
-          <div class="billboard-row-empty-cards">
-            <div class="billboard-row-card billboard-row-card-placeholder">
-              <div class="billboard-row-card-logo-placeholder">
-                <i class="icon-coins"></i>
-              </div>
-              <span class="billboard-row-card-name">—</span>
-            </div>
-            <div class="billboard-row-card billboard-row-card-placeholder">
-              <div class="billboard-row-card-logo-placeholder">
-                <i class="icon-coins"></i>
-              </div>
-              <span class="billboard-row-card-name">—</span>
-            </div>
-            <div class="billboard-row-card billboard-row-card-placeholder">
-              <div class="billboard-row-card-logo-placeholder">
-                <i class="icon-coins"></i>
-              </div>
-              <span class="billboard-row-card-name">—</span>
-            </div>
+      const placeholder = `
+        <div class="featured-row-card featured-row-card-placeholder">
+          <div class="featured-row-card-logo-placeholder">
+            <i class="icon-coins"></i>
           </div>
-          <span class="billboard-row-empty-text">No featured tokens</span>
+          <span class="featured-row-card-name">—</span>
+        </div>`;
+      container.innerHTML = `
+        <div class="featured-row-empty">
+          <div class="featured-row-empty-cards">${placeholder.repeat(3)}</div>
+          <span class="featured-row-empty-text">No featured tokens</span>
         </div>
       `;
     }
   }
 
   /**
-   * Render token cards
+   * Render token cards, boosted band first with a rule closing it off.
    */
   _renderTokens(tokens) {
-    const container = this.containerEl?.querySelector("#billboard-row-tokens");
+    const container = this.containerEl?.querySelector("#featured-row-tokens");
     if (!container) return;
 
-    container.innerHTML = tokens.map((token) => this._renderTokenCard(token)).join("");
+    const boosted = tokens.filter((token) => boostTier(token) !== null);
+    const organic = tokens.filter((token) => boostTier(token) === null);
+    // Only draw the rule when it actually separates two bands.
+    const divider =
+      boosted.length > 0 && organic.length > 0
+        ? '<span class="featured-row-divider" aria-hidden="true"></span>'
+        : "";
+
+    container.innerHTML =
+      boosted.map((token) => this._renderTokenCard(token)).join("") +
+      divider +
+      organic.map((token) => this._renderTokenCard(token)).join("");
 
     // Clicking a token card opens its full details dialog.
-    container.querySelectorAll(".billboard-row-card").forEach((card) => {
+    container.querySelectorAll(".featured-row-card").forEach((card) => {
       const mint = card.dataset.mint;
       if (!mint) return;
       card.addEventListener("click", () => {
@@ -377,8 +383,8 @@ class BillboardRow {
 
     // Update arrow visibility after render
     requestAnimationFrame(() => {
-      const leftArrow = this.containerEl?.querySelector(".billboard-row-arrow-left");
-      const rightArrow = this.containerEl?.querySelector(".billboard-row-arrow-right");
+      const leftArrow = this.containerEl?.querySelector(".featured-row-arrow-left");
+      const rightArrow = this.containerEl?.querySelector(".featured-row-arrow-right");
       if (leftArrow && rightArrow) {
         const { scrollLeft, scrollWidth, clientWidth } = container;
         leftArrow.classList.toggle("hidden", scrollLeft <= 0);
@@ -388,39 +394,48 @@ class BillboardRow {
   }
 
   /**
-   * Render a single compact token card (logo + name only)
+   * Render a single compact token card (logo + name + one metric).
    */
   _renderTokenCard(token) {
     const logoUrl = resolveTokenLogoUrl(token);
-    const featuredClass = token.featured ? "featured" : "";
+    const tier = boostTier(token);
     const symbol = (token.symbol || "???").toUpperCase();
     const name = token.name || symbol;
-    const mint = token.mint || token.id || "";
+    const mint = token.mint || "";
     const display = truncateForDisplay(name, symbol);
-    const fullTitle = `${name} (${symbol})`;
+    const boostCount = formatBoostCount(token.boosts);
+    const fullTitle = tier
+      ? `${name} (${symbol}) — boosted ${boostCount}`
+      : `${name} (${symbol})`;
 
-    // Small inline metric for row (price or 24h change if present)
-    let metric = '';
-    const ch = token.price_change_24h ?? token.price_change_h24;
-    if (ch != null) {
-      const cls = ch >= 0 ? 'pos' : 'neg';
-      metric = `<span class="row-metric ${cls}">${ch > 0 ? '+' : ''}${ch.toFixed(0)}%</span>`;
-    } else if (token.price_usd != null) {
-      const p = token.price_usd;
-      const ps = p < 0.01 ? p.toFixed(4) : p.toFixed(2);
-      metric = `<span class="row-metric">$${ps}</span>`;
+    // A boosted card prints its boost count instead of a market metric: the count
+    // is the reason the card is at the front, and one number per card is the
+    // whole density budget at 28px tall.
+    let metric = "";
+    if (tier) {
+      metric = `<span class="featured-row-boost">${this._escapeHtml(boostCount)}</span>`;
+    } else {
+      const change = token.price_change_24h;
+      if (change != null) {
+        const cls = change >= 0 ? "pos" : "neg";
+        metric = `<span class="row-metric ${cls}">${change > 0 ? "+" : ""}${change.toFixed(0)}%</span>`;
+      } else if (token.price_usd != null) {
+        const price = token.price_usd;
+        const shown = price < 0.01 ? price.toFixed(4) : price.toFixed(2);
+        metric = `<span class="row-metric">$${shown}</span>`;
+      }
     }
 
     const logoHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="billboard-row-card-logo" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/><div class="billboard-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
-      : `<div class="billboard-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="featured-row-card-logo" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/><div class="featured-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
+      : `<div class="featured-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
 
     return `
-      <div class="billboard-row-card ${featuredClass}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(fullTitle)}">
+      <div class="featured-row-card${tier ? ` boosted ${tier}` : ""}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(fullTitle)}">
         ${logoHtml}
-        <span class="billboard-row-card-name">${this._escapeHtml(display)}</span>
+        <span class="featured-row-card-name">${this._escapeHtml(display)}</span>
         ${metric}
-        ${token.featured ? '<i class="icon-star billboard-row-card-star"></i>' : ""}
+        ${tier ? '<i class="icon-zap featured-row-card-boost-mark" aria-hidden="true"></i>' : ""}
       </div>
     `;
   }
@@ -434,29 +449,28 @@ class BillboardRow {
     div.textContent = text;
     return div.innerHTML;
   }
-
 }
 
 // Singleton instance
-const billboardRow = new BillboardRow();
+const featuredRow = new FeaturedRow();
 
 /**
- * Show the billboard row
+ * Show the featured row
  */
-export function showBillboardRow() {
-  billboardRow.show();
+export function showFeaturedRow() {
+  featuredRow.show();
 }
 
 /**
- * Hide the billboard row
+ * Hide the featured row
  */
-export function hideBillboardRow() {
-  billboardRow.hide();
+export function hideFeaturedRow() {
+  featuredRow.hide();
 }
 
 /**
- * Check if billboard row is currently visible
+ * Check if the featured row is currently visible
  */
-export function isBillboardRowVisible() {
-  return billboardRow.isVisible;
+export function isFeaturedRowVisible() {
+  return featuredRow.isVisible;
 }

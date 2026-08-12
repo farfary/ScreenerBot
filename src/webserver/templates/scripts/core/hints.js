@@ -1053,22 +1053,25 @@ The Pool Service calculates prices from the highest-liquidity SOL pair.`,
   // UI COMPONENTS
   // ═══════════════════════════════════════════════════════════════════════════
   ui: {
-    billboard: {
-      id: "ui.billboard",
-      title: "Billboard",
-      content: `Billboard showcases **featured tokens** and trending projects from the community.
+    featured: {
+      id: "ui.featured",
+      title: "Featured",
+      content: `Boosted tokens first, then trending projects from Jupiter and DexScreener.
 
 **What you'll see:**
-• Promoted tokens with verified listings
-• Featured projects highlighted with ⭐
-• Token logos and names for quick recognition
+• Boosted tokens — their teams paid to promote them — pinned to the front, marked in gold
+• Trending tokens from the discovery boards after them
+• Click any token to open its full details
 
-**Submitting your token:**
-Want your token featured? Visit **screenerbot.io/submit-token** to apply for a listing.
+**Boosting a token:**
+A boost buys visibility, never a recommendation. Boosted rows are marked in gold everywhere
+they appear, including your token table, so you always know which is which. Boost a token at
+**screenerbot.io/boost**.
 
-**Disabling Billboard:**
-If you prefer a cleaner interface, you can hide this row in **Settings → Interface → Show Billboard**.`,
-      learnMoreUrl: "https://screenerbot.io/docs/dashboard/billboard",
+**Disabling the row:**
+Hide it under **Settings → Interface → Show Featured Row**. The header action still opens the
+full Featured view.`,
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/featured",
     },
   },
 };

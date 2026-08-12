@@ -1,5 +1,5 @@
 /**
- * Billboard Row Styles
+ * Featured Row Styles
  *
  * Clean, minimal horizontal row for featured + trending tokens.
  * Blends with the dashboard; text + logo focused; no heavy chrome.
@@ -10,12 +10,12 @@
    CONTAINER
    ============================================ */
 
-.billboard-row {
+.featured-row {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 26px;
-  z-index: var(--z-billboard-row);
+  z-index: var(--z-featured-row);
   width: 100%;
   height: 48px;
   background: var(--bg-secondary);
@@ -26,7 +26,7 @@
   box-sizing: border-box;
 }
 
-.billboard-row-inner {
+.featured-row-inner {
   width: 100%;
   padding: 0 var(--spacing-md);
   display: flex;
@@ -38,14 +38,14 @@
    HEADER (inline with cards)
    ============================================ */
 
-.billboard-row-header {
+.featured-row-header {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
   flex-shrink: 0;
 }
 
-.billboard-row-label {
+.featured-row-label {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   font-weight: 600;
@@ -55,7 +55,7 @@
   white-space: nowrap;
 }
 
-.billboard-row-view-all {
+.featured-row-view-all {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -73,12 +73,12 @@
   height: 22px;
 }
 
-.billboard-row-view-all:hover {
+.featured-row-view-all:hover {
   background: var(--bg-card-hover);
   border-color: var(--link-color);
 }
 
-.billboard-row-view-all i {
+.featured-row-view-all i {
   font-size: 0.625rem;
 }
 
@@ -86,7 +86,7 @@
    SCROLL CONTAINER + ARROWS (minimal, clean)
    ============================================ */
 
-.billboard-row-scroll {
+.featured-row-scroll {
   position: relative;
   display: flex;
   align-items: center;
@@ -94,7 +94,7 @@
   min-width: 0;
 }
 
-.billboard-row-tokens {
+.featured-row-tokens {
   display: flex;
   gap: var(--spacing-xs);
   overflow: hidden auto;
@@ -107,7 +107,7 @@
 /* Use global hidden scrollbar from scrollbar.css */
 
 /* Scroll arrows - subtle */
-.billboard-row-arrow {
+.featured-row-arrow {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -125,26 +125,26 @@
   transition: all var(--transition-fast);
 }
 
-.billboard-row-arrow:hover {
+.featured-row-arrow:hover {
   background: var(--bg-card-hover);
   color: var(--text-primary);
   border-color: var(--link-color);
 }
 
-.billboard-row-arrow-left {
+.featured-row-arrow-left {
   left: 0;
 }
 
-.billboard-row-arrow-right {
+.featured-row-arrow-right {
   right: 0;
 }
 
-.billboard-row-arrow.hidden {
+.featured-row-arrow.hidden {
   opacity: 0;
   pointer-events: none;
 }
 
-.billboard-row-arrow i {
+.featured-row-arrow i {
   font-size: 0.625rem;
 }
 
@@ -153,7 +153,7 @@
    Logo + name; featured gets subtle treatment (no accent bar)
    ============================================ */
 
-.billboard-row-card {
+.featured-row-card {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -168,24 +168,45 @@
   min-height: 28px;
 }
 
-.billboard-row-card:hover {
+.featured-row-card:hover {
   border-color: var(--link-color);
   background: var(--bg-card-hover);
   transform: translateY(-1px);
 }
 
-/* Featured: subtle border + star, no heavy treatment */
-.billboard-row-card.featured {
-  border-color: var(--warning-color);
-  background: linear-gradient(90deg, rgba(245,158,11,0.06), var(--bg-primary));
+/* Boosted: gold edge and a faint wash. The band leads the row, so the treatment
+   only has to say "paid", not shout -- the position already did that. */
+.featured-row-card.boosted {
+  border-color: var(--boost-edge);
+  background-image: linear-gradient(var(--boost-wash), var(--boost-wash));
 }
 
-.billboard-row-card.featured:hover {
-  border-color: var(--warning-color);
+.featured-row-card.boosted:hover {
+  border-color: var(--boost-gold);
+}
+
+.featured-row-card.boosted.golden {
+  border-color: var(--boost-edge-golden);
+  background-image: linear-gradient(var(--boost-wash-golden), var(--boost-wash-golden));
+}
+
+.featured-row-card.boosted.golden:hover {
+  border-color: var(--boost-gold-bright);
+}
+
+/* Closes off the boosted band. A rule, not a gap: a gap in a scroller reads as a
+   loading hole, and a label would cost more width than the cards it introduces. */
+.featured-row-divider {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--spacing-xs);
+  background: var(--border-color);
 }
 
 /* Logo */
-.billboard-row-card-logo {
+.featured-row-card-logo {
   width: 22px;
   height: 22px;
   border-radius: var(--token-logo-radius, 3px);
@@ -196,7 +217,7 @@
 }
 
 /* Logo placeholder */
-.billboard-row-card-logo-placeholder {
+.featured-row-card-logo-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -208,7 +229,7 @@
   flex-shrink: 0;
 }
 
-.billboard-row-card-logo-placeholder span {
+.featured-row-card-logo-placeholder span {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   font-weight: 600;
@@ -216,14 +237,14 @@
   text-transform: uppercase;
 }
 
-.billboard-row-card-logo-placeholder i {
+.featured-row-card-logo-placeholder i {
   font-size: 0.625rem;
   color: var(--text-secondary);
   opacity: 0.6;
 }
 
 /* Token name - mono, compact */
-.billboard-row-card-name {
+.featured-row-card-name {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   font-weight: 500;
@@ -248,10 +269,26 @@
 .row-metric.pos { color: var(--success-color, #10b981); }
 .row-metric.neg { color: var(--error-color, #ef4444); }
 
-/* Featured star - small, subtle */
-.billboard-row-card-star {
-  font-size: 0.5rem;
-  color: var(--warning-color);
+/* Active boost count, in place of the market metric an organic card shows. */
+.featured-row-boost {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 600;
+  margin-left: 4px;
+  color: var(--boost-gold);
+  font-feature-settings: "tnum";
+  line-height: 1;
+}
+
+.featured-row-card.golden .featured-row-boost,
+.featured-row-card.golden .featured-row-card-boost-mark {
+  color: var(--boost-gold-bright);
+}
+
+/* Bare gold glyph. No tile, no ring, no glow -- house rule. */
+.featured-row-card-boost-mark {
+  font-size: 0.5625rem;
+  color: var(--boost-gold);
   flex-shrink: 0;
   margin-left: 2px;
 }
@@ -260,7 +297,7 @@
    EMPTY STATE + SKELETON (minimal, integrated)
    ============================================ */
 
-.billboard-row-empty {
+.featured-row-empty {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -268,12 +305,12 @@
   padding-left: var(--spacing-xs);
 }
 
-.billboard-row-empty-cards {
+.featured-row-empty-cards {
   display: flex;
   gap: var(--spacing-xs);
 }
 
-.billboard-row-card-placeholder {
+.featured-row-card-placeholder {
   opacity: 0.35;
   cursor: default;
   pointer-events: none;
@@ -281,13 +318,13 @@
   border-color: var(--border-color);
 }
 
-.billboard-row-card-placeholder:hover {
+.featured-row-card-placeholder:hover {
   transform: none;
   border-color: var(--border-color);
   background: transparent;
 }
 
-.billboard-row-empty-text {
+.featured-row-empty-text {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   color: var(--text-secondary);
@@ -296,16 +333,16 @@
 }
 
 /* Skeleton */
-.billboard-row-skeleton {
+.featured-row-skeleton {
   pointer-events: none;
 }
 
-.billboard-row-skeleton .billboard-row-card-logo-placeholder {
+.featured-row-skeleton .featured-row-card-logo-placeholder {
   background: var(--bg-secondary);
   border-color: transparent;
 }
 
-.billboard-row-skeleton .billboard-row-card-name {
+.featured-row-skeleton .featured-row-card-name {
   width: 42px;
   height: 9px;
   background: var(--bg-secondary);
@@ -321,6 +358,7 @@
   100% {
     opacity: 0.35;
   }
+
   50% {
     opacity: 0.75;
   }
@@ -331,67 +369,67 @@
    ============================================ */
 
 @media (width <= 768px) {
-  .billboard-row-inner {
+  .featured-row-inner {
     padding: 0 var(--spacing-sm);
     gap: var(--spacing-xs);
   }
 
-  .billboard-row-label {
+  .featured-row-label {
     font-size: 0.5625rem;
   }
 
-  .billboard-row-view-all span {
+  .featured-row-view-all span {
     display: none;
   }
 
-  .billboard-row-view-all {
+  .featured-row-view-all {
     padding: 2px;
     min-width: 18px;
     min-height: 18px;
     justify-content: center;
   }
 
-  .billboard-row-view-all i {
+  .featured-row-view-all i {
     font-size: 0.625rem;
   }
 
-  .billboard-row-arrow {
+  .featured-row-arrow {
     width: 18px;
     height: 18px;
   }
 }
 
 @media (width <= 480px) {
-  .billboard-row {
+  .featured-row {
     height: 42px;
   }
 
-  .billboard-row-card {
+  .featured-row-card {
     padding: 3px 8px 3px 3px;
     gap: 4px;
     min-height: 28px;
   }
 
-  .billboard-row-card-logo,
-  .billboard-row-card-logo-placeholder {
+  .featured-row-card-logo,
+  .featured-row-card-logo-placeholder {
     width: 18px;
     height: 18px;
   }
 
-  .billboard-row-card-name {
+  .featured-row-card-name {
     font-size: 0.625rem;
   }
 
-  .billboard-row-empty-text {
+  .featured-row-empty-text {
     display: none;
   }
 }
 
-.billboard-row-header .hint-trigger {
+.featured-row-header .hint-trigger {
   margin-left: var(--spacing-xs);
   opacity: 0.65;
 }
 
-.billboard-row-header .hint-trigger:hover {
+.featured-row-header .hint-trigger:hover {
   opacity: 1;
 }

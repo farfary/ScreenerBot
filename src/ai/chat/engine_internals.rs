@@ -791,7 +791,11 @@ I'll fetch that information now.
 
         let formatted = engine.format_tool_results(&results);
         assert!(formatted.contains("get_balance"));
-        assert!(formatted.contains("✅"));
-        assert!(formatted.contains("❌"));
+        assert!(formatted.contains("invalid_tool"));
+        // Outcome is stated in words, never a glyph: this string is fed back to the
+        // LLM, and the formatter dropped its emoji when the no-emoji rule landed —
+        // the assertions did not, leaving the suite permanently red.
+        assert!(formatted.contains("Success"));
+        assert!(formatted.contains("Failed"));
     }
 }

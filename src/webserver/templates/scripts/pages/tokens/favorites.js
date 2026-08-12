@@ -8,6 +8,8 @@
  * details dialog — identical to the main list.
  */
 
+import { boostRowClass } from "../../core/boosts.js";
+
 /**
  * Create Favorites module with access to page state and dependencies
  * @param {Object} deps - Dependencies and state
@@ -85,7 +87,7 @@ export function createFavoritesModule(deps) {
       emptyState.className = "empty-state";
       emptyState.style.display = "none";
       emptyState.innerHTML = `
-        <div class="empty-state-icon">⭐</div>
+        <div class="empty-state-icon"><i class="icon-star"></i></div>
         <h3 class="empty-state-title">No Favorites Yet</h3>
         <p class="empty-state-description">
           Use the search (<kbd>⌘K</kbd>) to find tokens and add them to your favorites.
@@ -101,6 +103,9 @@ export function createFavoritesModule(deps) {
       rowIdField: "mint",
       stateKey: "favorites-table",
       enableLogging: false,
+      // Same gold mark as the main token list -- a boosted token must not read
+      // differently depending on which tab the user is standing on.
+      rowClass: (row) => boostRowClass(row?.mint),
       sorting: {
         mode: "client",
         column: "liquidity_usd",

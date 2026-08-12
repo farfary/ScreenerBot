@@ -7,7 +7,8 @@ import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { manualTrade } from "../ui/manual_trade.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
-import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
+import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
+import { BOOSTS_CHANGED_EVENT, boostRowClass, ensureBoosts } from "../core/boosts.js";
 import { showImageLightbox } from "../ui/image_lightbox.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { InputDialog } from "../ui/input_dialog.js";
@@ -54,6 +55,13 @@ function createLifecycle() {
 
   // Event cleanup tracking
   const eventCleanups = [];
+
+  // Boosts arrive on their own schedule, so both token tables re-mark their rows
+  // when the shared feed changes instead of waiting for the next data poll.
+  const onBoostsChanged = () => {
+    table?.repaintRows();
+    deps.favoritesTable?.repaintRows();
+  };
 
   const priceHistory = new Map();
   let priceBaselineReady = false;
@@ -1563,6 +1571,13 @@ function createLifecycle() {
       // Initialize token details dialog
       tokenDetailsDialog = new TokenDetailsDialog();
 
+      // Registered ONCE per page instance, not per activate: the boost feed is
+      // global and a second listener would repaint every row twice per change.
+      window.addEventListener(BOOSTS_CHANGED_EVENT, onBoostsChanged);
+      eventCleanups.push(() =>
+        window.removeEventListener(BOOSTS_CHANGED_EVENT, onBoostsChanged)
+      );
+
       // Initialize tab bar for tokens page
       tabBar = new TabBar({
         container: "#subTabsContainer",
@@ -1620,6 +1635,9 @@ function createLifecycle() {
         rowIdField: "mint",
         stateKey: tableStateKey,
         enableLogging: false,
+        // Gold-mark the tokens whose owners paid to boost them. Purely a mark:
+        // the row keeps the position the user's own sort gave it.
+        rowClass: (row) => boostRowClass(row?.mint),
         sorting: {
           mode: "server",
           column: initialSortColumn,
@@ -1874,13 +1892,17 @@ function createLifecycle() {
         requestReload("initial", { silent: false, resetScroll: true }).catch(() => {});
       }
 
-      // Show billboard promotional row on tokens page
-      showBillboardRow();
+      // The boost feed decides which rows read gold. Kick it off without
+      // awaiting -- the table paints from its own data and re-marks on the event.
+      ensureBoosts();
+
+      // Show the featured row on the tokens page
+      showFeaturedRow();
     },
 
     deactivate() {
-      // Hide billboard row when leaving page
-      hideBillboardRow();
+      // Hide featured row when leaving page
+      hideFeaturedRow();
 
       table?.cancelPendingLoad();
       // Lifecycle automatically stops managed pollers

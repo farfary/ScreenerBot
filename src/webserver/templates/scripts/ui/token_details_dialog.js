@@ -1000,7 +1000,7 @@ export class TokenDetailsDialog {
 
   _updateHeader(token) {
     // Update symbol / name / logo from the latest data. The header markup is
-    // built once from the seed token (which, when opened from the billboard or
+    // built once from the seed token (which, when opened from the featured or
     // search, only carries {mint, symbol}); without refreshing here the name
     // stays "Unknown Token" and the logo a placeholder even after full data loads.
     const symbolEl = this.dialogEl.querySelector(".title-main");
@@ -1335,7 +1335,7 @@ export class TokenDetailsDialog {
     backdrop.addEventListener("click", this._backdropHandler);
 
     // Escape is owned by the shared stack: this dialog can be stacked on top of
-    // another overlay (the billboard dialog), and only the topmost may react.
+    // another overlay (the featured dialog), and only the topmost may react.
     this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Trade action buttons
@@ -1558,7 +1558,7 @@ applyPositionsTabMixin(TokenDetailsDialog);
 // This module can be reached through cache-busted and non-cache-busted import
 // graphs. ES modules treat those URLs as different modules, so module-local
 // state is not global enough: each copy used to install a window listener and
-// one billboard click could create two identical dialogs. Store the coordinator
+// one featured click could create two identical dialogs. Store the coordinator
 // on window so every module instance shares one listener and one dialog.
 const coordinatorKey = Symbol.for("screenerbot.token-details-dialog");
 const globalCoordinator = window[coordinatorKey] || {

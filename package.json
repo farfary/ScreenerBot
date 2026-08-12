@@ -20,6 +20,7 @@
     "lint:css": "stylelint 'src/webserver/templates/**/*.css'",
     "lint:html": "html-validate 'src/webserver/templates/**/*.html'",
     "lint:ui-contract": "node tools/dashboard-ui-audit.mjs",
+    "test:js": "node --test tools/tests/*.test.mjs",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:html && npm run lint:ui-contract",
     "format:js": "prettier --write 'src/webserver/templates/**/*.js'",
     "format:css": "prettier --write 'src/webserver/templates/**/*.css'",
@@ -32,6 +33,6 @@
     "format:frontend": "npm run format:js && npm run format:css && npm run format:html",
     "format:docs": "npm run format:json && npm run format:md && npm run format:toml",
     "format": "npm run format:frontend && npm run format:docs && npm run format:sh && npm run format:rust",
-    "check": "npm run lint"
+    "check": "npm run lint && npm run test:js"
   }
 }

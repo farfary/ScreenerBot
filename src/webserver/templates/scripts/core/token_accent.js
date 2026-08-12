@@ -1,5 +1,5 @@
 /**
- * Token Accent - derive a per-token accent hue used to tint billboard cards.
+ * Token Accent - derive a per-token accent hue used to tint featured cards.
  *
  * Two sources, in order:
  *

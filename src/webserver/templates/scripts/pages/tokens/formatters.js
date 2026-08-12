@@ -4,6 +4,7 @@
  */
 
 import * as Utils from "../../core/utils.js";
+import { boostTierForMint, boostCountForMint, formatBoostCount } from "../../core/boosts.js";
 import * as AppState from "../../core/app_state.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
@@ -87,6 +88,14 @@ export function tokenCell(row) {
     : '<span class="token-logo">N/A</span>';
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
+  // A boosted token's owner paid for visibility, so the mark rides beside the
+  // ticker where the eye already is. Bare gold glyph plus the active count -- it
+  // adds information (how strongly), never a second badge saying the same thing.
+  const tier = boostTierForMint(row.mint);
+  const boostCount = formatBoostCount(boostCountForMint(row.mint));
+  const boostMark = tier
+    ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="Boosted ${boostCount} on screenerbot.io"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${boostCount}</span></span>`
+    : "";
   const mint = Utils.escapeHtml(row.mint || "");
   const disabledAttr = row.blacklisted ? ' disabled aria-disabled="true"' : "";
   const tradeActions = row.has_open_position
@@ -99,7 +108,7 @@ export function tokenCell(row) {
   return `<div class="token-cell token-cell--actions-${actionCount}">
     <div class="token-cell__identity">
       ${logo}
-      <div class="token-cell__meta"><div class="token-symbol">${sym}</div>${name}</div>
+      <div class="token-cell__meta"><div class="token-cell__symbol-line"><div class="token-symbol">${sym}</div>${boostMark}</div>${name}</div>
     </div>
     <div class="row-actions token-cell__actions">
       ${tradeActions}

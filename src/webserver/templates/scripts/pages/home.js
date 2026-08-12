@@ -3,7 +3,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
-import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
+import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
 import { notifyClientReady } from "../core/client_ready.js";
 import { closeMenu, openMenu } from "../core/menu_manager.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
@@ -559,15 +559,15 @@ function createLifecycle() {
       poller.start({ silent: true });
       fetchData();
 
-      // Show billboard promotional row
-      showBillboardRow();
+      // Show featured promotional row
+      showFeaturedRow();
     },
 
     deactivate: () => {
       console.log("[Home] Deactivating dashboard");
 
-      // Hide billboard row when leaving page
-      hideBillboardRow();
+      // Hide featured row when leaving page
+      hideFeaturedRow();
 
       if (poller) {
         poller.stop({ silent: true });

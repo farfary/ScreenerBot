@@ -23,18 +23,18 @@
   --z-tooltip: 1500;
   --z-popover: 2000;
 
-  /* Featured/billboard row is dashboard chrome: above page content but BELOW
+  /* The featured row is dashboard chrome: above page content but BELOW
      every overlay (notification panel, dialogs, menus) so it never covers them.
      Only the bottom status bar (--z-status-bar) stays above it. */
-  --z-billboard-row: 800;
+  --z-featured-row: 800;
   --z-notification-panel: 9000;
 
-  /* The billboard DIALOG is a full-screen view, not a modal on top of one: token
+  /* The featured DIALOG is a full-screen view, not a modal on top of one: token
      details (and every other dialog) open FROM it and must stack ABOVE it, so it
      sits at the bottom of the dialog stack -- below --z-dialog-overlay. Raising it
      above --z-dialog would force it to be destroyed before a dialog could show,
      which is why closing token details used to dump the user on the page below. */
-  --z-billboard-dialog: 9500;
+  --z-featured-dialog: 9500;
   --z-dialog: 10000;
   --z-dialog-overlay: 9999;
   --z-trade-dialog: 10001;

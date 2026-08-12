@@ -3,7 +3,7 @@
  *
  * This flow (open TradeActionDialog -> POST the manual endpoint -> toast) was
  * copy-pasted into the context menu, the token details dialog, the tokens page and
- * the billboard. The copies had already drifted apart, in ways that were silent and
+ * the featured dialog. The copies had already drifted apart, in ways that were silent and
  * wrong:
  *
  *   - Only the tokens page forwarded the position ownership choice from the dialog's

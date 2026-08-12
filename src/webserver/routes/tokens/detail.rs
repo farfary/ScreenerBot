@@ -25,7 +25,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let snapshot = match crate::tokens::get_full_token_async(&mint).await {
         Ok(Some(snap)) => Some(snap),
         // Not in our DB yet — fetch from external APIs (DexScreener/Jupiter) and
-        // add it, so opening a token we have not tracked (e.g. from the billboard
+        // add it, so opening a token we have not tracked (e.g. from the featured
         // or search) shows real data instead of an empty NOT_FOUND stub. Mirrors
         // get_token_analysis.
         Ok(None) => fetch_and_add_token_from_external(&mint).await,
@@ -228,7 +228,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
 
     // Fallback pool entry: the on-chain pool analyzer registry only knows pools
     // for tokens it has actively discovered, and it ONLY registers SOL pairs — so
-    // a token opened from the billboard/search (enriched purely from external
+    // a token opened from a featured surface or search (enriched purely from external
     // APIs), OR a token whose only pool is USD-quoted (the analyzer rejects it),
     // has an empty pools[]. When the registry has nothing, synthesize a single
     // descriptor from the pool the price calculator used, the last-used pool, or

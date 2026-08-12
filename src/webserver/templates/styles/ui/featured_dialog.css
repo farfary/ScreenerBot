@@ -1,5 +1,5 @@
 /**
- * Billboard Dialog - Full featured + trending view
+ * Featured Dialog - Full featured + trending view
  *
  * Clean desktop-app fullscreen dialog.
  * Categories with horizontal cards.
@@ -10,10 +10,10 @@
    BASE
    ============================================================================= */
 
-.billboard-dialog {
+.featured-dialog {
   position: fixed;
   inset: 0;
-  z-index: var(--z-billboard-dialog);
+  z-index: var(--z-featured-dialog);
   display: flex;
   flex-direction: column;
   opacity: 0;
@@ -21,13 +21,13 @@
   pointer-events: none;
 }
 
-.billboard-dialog.active {
+.featured-dialog.active {
   opacity: 1;
   pointer-events: auto;
 }
 
 /* macOS titlebar spacer */
-.billboard-dialog::before {
+.featured-dialog::before {
   content: "";
   position: absolute;
   top: 0;
@@ -39,23 +39,23 @@
   transition: height 0.15s ease;
 }
 
-.electron-macos .billboard-dialog::before {
+.electron-macos .featured-dialog::before {
   height: 28px;
 }
 
-.billboard-backdrop {
+.featured-backdrop {
   position: absolute;
   inset: 0 0 24px;
   background: transparent;
   cursor: default;
 }
 
-.electron-macos .billboard-backdrop {
+.electron-macos .featured-backdrop {
   top: 28px;
 }
 
 /* Container */
-.billboard-container {
+.featured-container {
   position: relative;
   margin-top: 0;
   margin-bottom: 24px;
@@ -71,7 +71,7 @@
   z-index: 2;
 }
 
-.electron-macos .billboard-container {
+.electron-macos .featured-container {
   margin-top: 28px;
 }
 
@@ -79,11 +79,11 @@
    HEADER — same skin as the other full-screen dialogs (token/position details)
    ============================================================================= */
 
-/* Paints --bg-secondary, identical to the .billboard-dialog::before title-bar
+/* Paints --bg-secondary, identical to the .featured-dialog::before title-bar
    strip above it, so the macOS traffic-light area and the header are one
    continuous surface with no tonal step. Do NOT make this transparent: the
    container below is --bg-primary and the strip would show as a seam. */
-.billboard-header {
+.featured-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -95,14 +95,14 @@
   flex-shrink: 0;
 }
 
-.billboard-title-group {
+.featured-title-group {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.billboard-title {
+.featured-title {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 800;
@@ -111,21 +111,21 @@
   line-height: 1.2;
 }
 
-.billboard-subtitle {
+.featured-subtitle {
   margin: 0;
   font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 400;
 }
 
-.billboard-actions {
+.featured-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
 }
 
-.billboard-submit-btn {
+.featured-boost-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -143,7 +143,7 @@
   white-space: nowrap;
 }
 
-.billboard-submit-btn:hover {
+.featured-boost-btn:hover {
   background: var(--bg-card-hover);
   border-color: var(--primary-color);
   color: var(--primary-color);
@@ -153,34 +153,34 @@
    BODY + CATEGORIES
    ============================================================================= */
 
-.billboard-body {
+.featured-body {
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-md, 16px);
   scrollbar-gutter: stable;
 }
 
-.billboard-categories {
+.featured-categories {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg, 24px);
 }
 
-.billboard-category {
+.featured-category {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm, 8px);
 }
 
 /* Category header - compact */
-.billboard-cat-header {
+.featured-cat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 var(--spacing-xs, 4px);
 }
 
-.billboard-cat-title {
+.featured-cat-title {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs, 4px);
@@ -190,12 +190,12 @@
   color: var(--text-primary);
 }
 
-.billboard-cat-title i {
+.featured-cat-title i {
   font-size: 0.875rem;
   color: var(--link-color);
 }
 
-.billboard-cat-source {
+.featured-cat-source {
   font-size: 0.625rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -206,7 +206,7 @@
   letter-spacing: 0.04em;
 }
 
-.billboard-cat-count {
+.featured-cat-count {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   color: var(--text-secondary);
@@ -219,7 +219,7 @@
    horizontally-scrolling row, hiding most of its tokens behind arrows.)
    ============================================================================= */
 
-.billboard-cat-grid {
+.featured-cat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-md, 16px);
@@ -231,16 +231,16 @@
    Banner across the top (rounded on its top corners only, square at the bottom),
    circular avatar straddling the banner's lower edge, identity + stats beneath.
 
-   Each card carries --bb-hue / --bb-sat, derived from the token's logo (or, when
+   Each card carries --feat-hue / --feat-sat, derived from the token's logo (or, when
    it has none, a stable hash of its mint). Every tint below is an ALPHA wash built
    from those, so it layers over the theme's own surfaces and stays readable in
    both light and dark rather than baking in a fixed colour.
    ============================================================================= */
 
-.bb-card {
-  --bb-hue: 210;
-  --bb-sat: 55%;
-  --bb-tint: hsl(var(--bb-hue), var(--bb-sat), 50%);
+.feat-card {
+  --feat-hue: 210;
+  --feat-sat: 55%;
+  --bb-tint: hsl(var(--feat-hue), var(--feat-sat), 50%);
 
   position: relative;
   display: flex;
@@ -258,7 +258,7 @@
 
 /* The wash: strong enough to read as "this token's colour", light enough that the
    text tokens above it keep their contrast in both themes. */
-.bb-card::before {
+.feat-card::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -267,25 +267,41 @@
   pointer-events: none;
 }
 
-[data-theme="dark"] .bb-card::before {
+[data-theme="dark"] .feat-card::before {
   opacity: 0.08;
 }
 
-.bb-card:hover {
-  border-color: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.55);
+.feat-card:hover {
+  border-color: hsl(var(--feat-hue), var(--feat-sat), 50%, 0.55);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px hsl(var(--bb-hue), var(--bb-sat), 30%, 0.18);
+  box-shadow: 0 6px 20px hsl(var(--feat-hue), var(--feat-sat), 30%, 0.18);
 }
 
-.bb-card.featured {
-  border-color: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.4);
+/* A boosted card is the same card with a gold edge -- the paid signal lives on
+   the frame, never on the token's numbers. Golden gets the brighter edge and a
+   faint gold wash; neither ever adds a glow or a tile behind an icon. */
+.feat-card.boosted {
+  border-color: var(--boost-edge);
+}
+
+.feat-card.boosted:hover {
+  border-color: var(--boost-gold);
+}
+
+.feat-card.boosted.golden {
+  border-color: var(--boost-edge-golden);
+  background-image: linear-gradient(var(--boost-wash), transparent 60%);
+}
+
+.feat-card.boosted.golden:hover {
+  border-color: var(--boost-gold-bright);
 }
 
 /* --- Banner ---------------------------------------------------------------- */
 
 /* Fixed 3:1 box. The image is object-fit: cover, so banners of any source width
    fill it edge to edge with no letterboxing -- they are cropped, never padded. */
-.bb-card-banner {
+.feat-card-banner {
   position: relative;
   width: 100%;
   aspect-ratio: 3 / 1;
@@ -295,14 +311,14 @@
   background:
     linear-gradient(
       135deg,
-      hsl(var(--bb-hue), var(--bb-sat), 55%, 0.55) 0%,
-      hsl(calc(var(--bb-hue) + 40), var(--bb-sat), 45%, 0.35) 100%
+      hsl(var(--feat-hue), var(--feat-sat), 55%, 0.55) 0%,
+      hsl(calc(var(--feat-hue) + 40), var(--feat-sat), 45%, 0.35) 100%
     ),
     var(--bg-card-hover);
   overflow: hidden;
 }
 
-.bb-card-banner-img {
+.feat-card-banner-img {
   display: block;
   width: 100%;
   height: 100%;
@@ -311,7 +327,7 @@
 
 /* --- Head: avatar straddling the banner's lower edge ----------------------- */
 
-.bb-card-head {
+.feat-card-head {
   display: flex;
   align-items: flex-end;
   padding: 0 12px;
@@ -321,7 +337,7 @@
   margin-top: -26px;
 }
 
-.bb-card-avatar {
+.feat-card-avatar {
   position: relative;
   display: flex;
   align-items: center;
@@ -334,17 +350,17 @@
   /* Ring in the CARD's background, not a colour, so the avatar reads as cut out
      of the banner in either theme. */
   border: 3px solid var(--bg-card);
-  background: hsl(var(--bb-hue), var(--bb-sat), 50%);
+  background: hsl(var(--feat-hue), var(--feat-sat), 50%);
   overflow: hidden;
 }
 
-.bb-card-avatar-img {
+.feat-card-avatar-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.bb-card-avatar-initial {
+.feat-card-avatar-initial {
   font-family: var(--font-mono);
   font-size: 1.25rem;
   font-weight: 700;
@@ -354,7 +370,7 @@
 
 /* --- Actions footer -------------------------------------------------------- */
 
-.bb-card-actions {
+.feat-card-actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -366,7 +382,7 @@
 
 /* Socials (only when the token has them) + the always-present shortcuts, which
    need nothing but the mint. */
-.bb-card-links {
+.feat-card-links {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -374,8 +390,8 @@
   min-width: 0;
 }
 
-.bb-card-social,
-.bb-card-link {
+.feat-card-social,
+.feat-card-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -390,21 +406,21 @@
   transition: all var(--transition-fast);
 }
 
-.bb-card-social:hover,
-.bb-card-link:hover {
-  color: hsl(var(--bb-hue), var(--bb-sat), 45%);
-  background: hsl(var(--bb-hue), var(--bb-sat), 50%, 0.12);
+.feat-card-social:hover,
+.feat-card-link:hover {
+  color: hsl(var(--feat-hue), var(--feat-sat), 45%);
+  background: hsl(var(--feat-hue), var(--feat-sat), 50%, 0.12);
 }
 
-[data-theme="dark"] .bb-card-social:hover,
-[data-theme="dark"] .bb-card-link:hover {
-  color: hsl(var(--bb-hue), var(--bb-sat), 70%);
+[data-theme="dark"] .feat-card-social:hover,
+[data-theme="dark"] .feat-card-link:hover {
+  color: hsl(var(--feat-hue), var(--feat-sat), 70%);
 }
 
 /* The one primary action on the card. Deliberately the success/buy green rather
    than the token accent: it must read as the same "buy" control everywhere,
    not change colour per token. */
-.bb-card-buy {
+.feat-card-buy {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -425,19 +441,19 @@
   transition: all var(--transition-fast);
 }
 
-.bb-card-buy:hover {
+.feat-card-buy:hover {
   color: #fff;
   background: var(--success-color);
   border-color: var(--success-color);
 }
 
-.bb-card-buy i {
+.feat-card-buy i {
   font-size: 0.75rem;
 }
 
 /* --- Identity: price/change sit beside the name and symbol they describe ---- */
 
-.bb-card-identity {
+.feat-card-identity {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -445,14 +461,14 @@
   min-width: 0;
 }
 
-.bb-card-row {
+.feat-card-row {
   display: flex;
   align-items: baseline;
   gap: 6px;
   min-width: 0;
 }
 
-.bb-card-name {
+.feat-card-name {
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -461,13 +477,15 @@
   text-overflow: ellipsis;
 }
 
-.bb-card-featured {
-  flex-shrink: 0;
-  font-size: 0.75rem;
-  color: var(--warning-color, #d29922);
+/* Category note - one line of plain text saying what a paid category is. */
+.featured-cat-note {
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+  opacity: 0.75;
+  white-space: nowrap;
 }
 
-.bb-card-symbol {
+.feat-card-symbol {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 600;
@@ -477,7 +495,7 @@
   text-overflow: ellipsis;
 }
 
-.bb-card-security {
+.feat-card-security {
   flex-shrink: 0;
   padding: 1px 7px;
   border-radius: var(--radius-sm);
@@ -487,47 +505,47 @@
   letter-spacing: 0.04em;
 }
 
-.bb-card-security.good {
+.feat-card-security.good {
   color: var(--success-color);
   background: var(--success-alpha-10);
 }
 
-.bb-card-security.mid {
+.feat-card-security.mid {
   color: var(--warning-color, #d29922);
   background: var(--warning-alpha-10, rgb(210, 153, 34, 0.12));
 }
 
-.bb-card-security.bad {
+.feat-card-security.bad {
   color: var(--error-color);
   background: var(--danger-alpha-10);
 }
 
 /* `margin-left: auto` pins these to the right edge of their own row, so price
    lines up with the name and change lines up with the symbol. */
-.bb-card-price,
-.bb-card-change {
+.feat-card-price,
+.feat-card-change {
   margin-left: auto;
   flex-shrink: 0;
   font-family: var(--font-mono);
   font-feature-settings: "tnum";
 }
 
-.bb-card-price {
+.feat-card-price {
   font-size: 0.8125rem;
   font-weight: 700;
   color: var(--text-primary);
 }
 
-.bb-card-change {
+.feat-card-change {
   font-size: 0.75rem;
   font-weight: 600;
 }
 
-.bb-card-change.pos {
+.feat-card-change.pos {
   color: var(--success-color);
 }
 
-.bb-card-change.neg {
+.feat-card-change.neg {
   color: var(--error-color);
 }
 
@@ -536,14 +554,14 @@
 /* Flex-wrap, not a fixed grid: with 5 stats a 3-column grid leaves a visible
    empty cell on the last row. Wrapping lets the final row's cells grow to fill
    the width whatever the stat count (a token missing one simply shows fewer). */
-.bb-card-stats {
+.feat-card-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   padding: 12px;
 }
 
-.bb-card-stat {
+.feat-card-stat {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -554,7 +572,7 @@
   min-width: 0;
 }
 
-.bb-card-stat-label {
+.feat-card-stat-label {
   font-size: 0.5625rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -563,7 +581,7 @@
   white-space: nowrap;
 }
 
-.bb-card-stat-value {
+.feat-card-stat-value {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 700;
@@ -578,7 +596,7 @@
    STATES + RESPONSIVE
    ============================================================================= */
 
-.billboard-state {
+.featured-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -588,58 +606,58 @@
   text-align: center;
 }
 
-.billboard-state i {
+.featured-state i {
   font-size: 2rem;
   opacity: 0.6;
 }
 
-.billboard-state span {
+.featured-state span {
   font-size: 0.875rem;
 }
 
-.billboard-loading i {
+.featured-loading i {
   color: var(--link-color);
   opacity: 1;
 }
 
-.billboard-error i {
+.featured-error i {
   color: var(--error-color);
   opacity: 1;
 }
 
 .spin {
-  animation: billboard-spin 1s linear infinite;
+  animation: featured-spin 1s linear infinite;
 }
 
-@keyframes billboard-spin {
+@keyframes featured-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
 
 @media (width <= 1100px) {
-  .billboard-cat-grid {
+  .featured-cat-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (width <= 768px) {
-  .billboard-body {
+  .featured-body {
     padding: var(--spacing-sm, 12px);
   }
 
-  .billboard-categories {
+  .featured-categories {
     gap: var(--spacing-md, 16px);
   }
 
-  .billboard-cat-grid {
+  .featured-cat-grid {
     grid-template-columns: 1fr;
   }
 
-  .bb-card-stats {
+  .feat-card-stats {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .billboard-submit-btn {
+  .featured-boost-btn {
     padding: 0 10px;
     font-size: 0.75rem;
   }

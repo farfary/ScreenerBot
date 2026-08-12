@@ -114,9 +114,9 @@
   padding-bottom: 26px; /* Height of .status-bar */
 }
 
-/* When billboard row is visible, add extra padding to content */
-.content.has-billboard {
-  padding-bottom: 74px; /* 26px status bar + 48px billboard row */
+/* When featured row is visible, add extra padding to content */
+.content.has-featured-row {
+  padding-bottom: 74px; /* 26px status bar + 48px featured row */
 }
 
 /* Light theme adjustments */

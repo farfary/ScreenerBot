@@ -4,6 +4,7 @@
  */
 import { enhanceAllSelects } from "../custom_select.js";
 import { setSoundsEnabled } from "../../core/sounds.js";
+import { resetFeaturedRowConfigCache } from "../featured_row.js";
 
 /**
  * Build Interface tab HTML
@@ -159,12 +160,12 @@ export function buildInterfaceTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Show Billboard Row</label>
+            <label>Show Featured Row</label>
             <span class="settings-field-hint">Display featured tokens row on Home and Tokens pages</span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">
-              <input type="checkbox" id="settingShowBillboard" ${iface.show_billboard !== false ? "checked" : ""}>
+              <input type="checkbox" id="settingShowFeaturedRow" ${iface.show_featured_row !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
           </div>
@@ -206,7 +207,7 @@ export function attachInterfaceHandlers(dialog, content) {
     pageSize: content.querySelector("#settingPageSize"),
     autoExpand: content.querySelector("#settingAutoExpand"),
     showHints: content.querySelector("#settingShowHints"),
-    showBillboard: content.querySelector("#settingShowBillboard"),
+    showFeaturedRow: content.querySelector("#settingShowFeaturedRow"),
     soundsEnabled: content.querySelector("#settingSoundsEnabled"),
   };
 
@@ -260,10 +261,14 @@ export function attachInterfaceHandlers(dialog, content) {
       updateSetting("show_hints", e.target.checked)
     );
   }
-  if (fields.showBillboard) {
-    fields.showBillboard.addEventListener("change", (e) =>
-      updateSetting("show_billboard", e.target.checked)
-    );
+  if (fields.showFeaturedRow) {
+    fields.showFeaturedRow.addEventListener("change", (e) => {
+      updateSetting("show_featured_row", e.target.checked);
+      // The row caches this flag for 30s to keep every page entry from hitting
+      // /api/config/gui. Without this drop, toggling the setting appears to do
+      // nothing for up to half a minute.
+      resetFeaturedRowConfigCache();
+    });
   }
   if (fields.soundsEnabled) {
     fields.soundsEnabled.addEventListener("change", (e) => {

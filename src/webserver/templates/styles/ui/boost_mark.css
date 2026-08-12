@@ -1,0 +1,107 @@
+/**
+ * Boost mark - how a PAID promotion reads inside ordinary dashboard surfaces.
+ *
+ * A boost buys visibility, not authority, so the treatment is deliberately a mark
+ * on a normal row: a gold wash and a bare gold glyph. It never restyles a value,
+ * never adds weight to a number, and never survives into a column the user sorts
+ * by - the row keeps its place in whatever order was asked for.
+ *
+ * Two tiers, from `core/boosts.js`:
+ *   .boosted-row              - any active boost, a faint wash
+ *   .boosted-row.golden-row   - the Golden tier, the same gold, stronger
+ *
+ * The gold is applied as an OVERLAY gradient over the row's own background rather
+ * than a flat colour, so the zebra stripe, the hover surface and both themes keep
+ * showing through and every value stays legible. No left accent bar (house rule),
+ * no background behind the glyph (house rule) - the glyph is bare gold.
+ */
+
+:root {
+  /* One gold, two strengths. Defined once so the row wash, the glyph and the
+     featured surfaces cannot drift into three different golds. */
+  --boost-gold: #d9a520;
+  --boost-gold-bright: #f3c34e;
+  --boost-wash: rgb(217, 165, 32, 0.07);
+  --boost-wash-strong: rgb(217, 165, 32, 0.11);
+  --boost-wash-golden: rgb(243, 195, 78, 0.16);
+  --boost-wash-golden-strong: rgb(243, 195, 78, 0.22);
+  --boost-edge: rgb(217, 165, 32, 0.26);
+  --boost-edge-golden: rgb(243, 195, 78, 0.45);
+}
+
+[data-theme="light"] {
+  /* The light theme sits on white, where the same alphas read as a dirty smudge
+     rather than gold. Deeper pigment, lower alpha. */
+  --boost-gold: #a97706;
+  --boost-gold-bright: #c98f12;
+  --boost-wash: rgb(169, 119, 6, 0.06);
+  --boost-wash-strong: rgb(169, 119, 6, 0.1);
+  --boost-wash-golden: rgb(169, 119, 6, 0.12);
+  --boost-wash-golden-strong: rgb(169, 119, 6, 0.18);
+  --boost-edge: rgb(169, 119, 6, 0.24);
+  --boost-edge-golden: rgb(169, 119, 6, 0.42);
+}
+
+/* ============================================
+   TABLE ROWS
+   ============================================ */
+
+.data-table tbody tr.boosted-row {
+  background-image: linear-gradient(var(--boost-wash), var(--boost-wash));
+  border-bottom-color: var(--boost-edge);
+}
+
+.data-table tbody tr.boosted-row:hover {
+  background-image: linear-gradient(var(--boost-wash-strong), var(--boost-wash-strong));
+}
+
+.data-table tbody tr.boosted-row.golden-row {
+  background-image: linear-gradient(var(--boost-wash-golden), var(--boost-wash-golden));
+  border-bottom-color: var(--boost-edge-golden);
+}
+
+.data-table tbody tr.boosted-row.golden-row:hover {
+  background-image: linear-gradient(
+    var(--boost-wash-golden-strong),
+    var(--boost-wash-golden-strong)
+  );
+}
+
+/* A selected row must keep reading as selected - selection is the user's own
+   action and outranks a purchased mark. */
+.data-table tbody tr.boosted-row.selected {
+  background-image: none;
+}
+
+/* ============================================
+   INLINE MARK
+   Bare gold glyph beside a token's symbol. No tile, no ring, no glow.
+   ============================================ */
+
+.boost-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: 5px;
+  vertical-align: baseline;
+  color: var(--boost-gold);
+  line-height: 1;
+}
+
+.golden-row .boost-mark,
+.boost-mark.golden {
+  color: var(--boost-gold-bright);
+}
+
+.boost-mark i {
+  font-size: 0.6875rem;
+}
+
+.boost-mark-count {
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-feature-settings: "tnum";
+}

@@ -1587,8 +1587,8 @@ export function normalizeImageUrl(raw) {
 /**
  * Resolve a token's displayable logo URL, or null when there is none to show.
  *
- * Accepts whichever field the source used (`logo_url` on billboard/featured
- * tokens, `logo` on external ones, `icon` straight from a provider).
+ * Accepts whichever field the source used (`logo` on featured cards, `icon`
+ * straight from a provider, `image_url` on our own token rows).
  */
 export function resolveTokenLogoUrl(token) {
   if (!token) return null;
@@ -1602,7 +1602,7 @@ export function resolveTokenLogoUrl(token) {
  */
 export function resolveTokenBannerUrl(token) {
   if (!token) return null;
-  // `banner` is the billboard card's field; `header_image_url` is the token detail
+  // `banner` is the featured card's field; `header_image_url` is the token detail
   // API's. Both must be accepted -- matching only one silently renders every card
   // bannerless (it falls through to the accent gradient, so it LOOKS designed).
   return normalizeImageUrl(token.banner || token.header_image_url || token.header);

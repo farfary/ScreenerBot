@@ -1,8 +1,12 @@
 /**
- * Billboard Dialog - Shows featured tokens and external sources
+ * Featured Dialog - the full discovery view behind the featured row.
  *
- * Displays community-submitted tokens plus Jupiter and DexScreener trending tokens
- * as profile-style cards in a responsive grid: the whole page scrolls, so every
+ * BOOSTED comes first and is the only paid category: those teams bought
+ * visibility on screenerbot.io, so their cards lead the view and carry the gold
+ * treatment plus their active boost count. Everything below it is third-party
+ * discovery (Jupiter, DexScreener) and is never gold.
+ *
+ * Cards are profile-style in a responsive grid; the whole page scrolls, so every
  * token in a category is reachable without a per-row horizontal scroll.
  */
 
@@ -18,21 +22,25 @@ import {
   resolveTokenBannerUrl,
 } from "../core/utils.js";
 import { manualTrade } from "./manual_trade.js";
+import { boostTier, formatBoostCount } from "../core/boosts.js";
 import { getTokenAccent, fallbackAccent } from "../core/token_accent.js";
 // Side-effect import: registers the global "screenerbot:open-token-details"
-// window listener so cards open the token details dialog even when the billboard
+// window listener so cards open the token details dialog even when the featured
 // dialog is opened from a page (e.g. Home) that doesn't otherwise load it.
 import "./token_details_dialog.js";
 
-const DIALOG_ID = "billboard-dialog";
+const DIALOG_ID = "featured-dialog";
 
 // Category definitions with metadata
 const CATEGORIES = [
   {
-    id: "featured",
-    title: "Featured Tokens",
-    icon: "icon-star",
-    key: "featured",
+    id: "boosted",
+    title: "Boosted",
+    icon: "icon-zap",
+    key: "boosted",
+    // The one paid category. Its own note explains what a boost buys, so a user
+    // never has to guess why these tokens are at the top.
+    note: "Promoted by their teams",
   },
   {
     id: "jupiter-organic",
@@ -57,7 +65,7 @@ const CATEGORIES = [
   },
 ];
 
-class BillboardDialog {
+class FeaturedDialog {
   constructor() {
     this.isOpen = false;
     this.data = null;
@@ -72,14 +80,14 @@ class BillboardDialog {
     this._showLoading();
 
     try {
-      const response = await fetch("/api/billboard/all");
+      const response = await fetch("/api/featured/all");
       const data = await response.json();
 
       if (data.success) {
         this.data = data;
         this._renderCategories();
       } else {
-        this._showError(data.error || "Failed to load billboard");
+        this._showError(data.error || "Failed to load featured");
       }
     } catch (e) {
       this._showError("Network error: " + e.message);
@@ -110,26 +118,26 @@ class BillboardDialog {
 
     const dialog = document.createElement("div");
     dialog.id = DIALOG_ID;
-    dialog.className = "billboard-dialog";
+    dialog.className = "featured-dialog";
     dialog.innerHTML = `
-      <div class="billboard-backdrop"></div>
-      <div class="billboard-container">
-        <div class="billboard-header">
-          <div class="billboard-title-group">
-            <h1 class="billboard-title">Billboard</h1>
-            <p class="billboard-subtitle">Curated tokens &amp; trending across Solana</p>
+      <div class="featured-backdrop"></div>
+      <div class="featured-container">
+        <div class="featured-header">
+          <div class="featured-title-group">
+            <h1 class="featured-title">Featured</h1>
+            <p class="featured-subtitle">Boosted tokens first, then trending across Solana</p>
           </div>
-          <div class="billboard-actions">
-            <button type="button" class="billboard-submit-btn" data-external-url="https://screenerbot.io/submit-token">
-              Submit Token
+          <div class="featured-actions">
+            <button type="button" class="featured-boost-btn" data-external-url="https://screenerbot.io/boost">
+              Boost a Token
             </button>
             <button class="dialog-close" type="button" title="Close (ESC)">
               <i class="icon-x"></i>
             </button>
           </div>
         </div>
-        <div class="billboard-body">
-          <div class="billboard-categories" id="billboard-categories"></div>
+        <div class="featured-body">
+          <div class="featured-categories" id="featured-categories"></div>
         </div>
       </div>
     `;
@@ -143,17 +151,17 @@ class BillboardDialog {
       closeBtn.addEventListener("click", () => this.close());
     }
 
-    // Submit Token button - opens external URL
-    const submitBtn = dialog.querySelector(".billboard-submit-btn");
-    if (submitBtn) {
-      submitBtn.addEventListener("click", () => {
-        const url = submitBtn.dataset.externalUrl;
+    // Boost button - opens the public boost page in the user's browser
+    const boostBtn = dialog.querySelector(".featured-boost-btn");
+    if (boostBtn) {
+      boostBtn.addEventListener("click", () => {
+        const url = boostBtn.dataset.externalUrl;
         if (url) openExternal(url);
       });
     }
 
     // Escape is owned by the shared stack, so while token details is open on top
-    // of the billboard a single Escape closes only the details dialog.
+    // of the featured a single Escape closes only the details dialog.
     this._releaseEscape = pushEscapeHandler(() => this.close());
 
     // Animate in
@@ -163,10 +171,10 @@ class BillboardDialog {
   }
 
   _showLoading() {
-    const container = $("#billboard-categories");
+    const container = $("#featured-categories");
     if (container) {
       container.innerHTML = `
-        <div class="billboard-state billboard-loading">
+        <div class="featured-state featured-loading">
           <i class="icon-loader spin"></i>
           <span>Loading featured &amp; trending...</span>
         </div>
@@ -175,10 +183,10 @@ class BillboardDialog {
   }
 
   _showError(message) {
-    const container = $("#billboard-categories");
+    const container = $("#featured-categories");
     if (container) {
       container.innerHTML = `
-        <div class="billboard-state billboard-error">
+        <div class="featured-state featured-error">
           <i class="icon-circle-alert"></i>
           <span>${this._escapeHtml(message)}</span>
           <span style="font-size:0.75rem;opacity:0.6">Check connection or try again</span>
@@ -188,14 +196,14 @@ class BillboardDialog {
   }
 
   _renderCategories() {
-    const container = $("#billboard-categories");
+    const container = $("#featured-categories");
     if (!container || !this.data) return;
 
     const visible = CATEGORIES.filter((cat) => (this.data[cat.key] || []).length > 0);
 
     if (visible.length === 0) {
       container.innerHTML = `
-        <div class="billboard-state billboard-empty">
+        <div class="featured-state featured-empty">
           <i class="icon-inbox"></i>
           <span>No tokens available right now</span>
         </div>
@@ -206,10 +214,10 @@ class BillboardDialog {
     container.innerHTML = visible.map((cat) => this._renderCategory(cat)).join("");
 
     // Clicking a card (outside its action buttons/links) opens token details.
-    // The billboard stays open UNDERNEATH (--z-billboard-dialog sits below
-    // --z-dialog), so closing the details dialog reveals the billboard again
+    // The featured stays open UNDERNEATH (--z-featured-dialog sits below
+    // --z-dialog), so closing the details dialog reveals the featured again
     // instead of the page below it.
-    container.querySelectorAll(".bb-card").forEach((card) => {
+    container.querySelectorAll(".feat-card").forEach((card) => {
       const mint = card.dataset.mint;
       if (!mint) return;
       card.addEventListener("click", (e) => {
@@ -230,7 +238,7 @@ class BillboardDialog {
         e.preventDefault();
         e.stopPropagation();
 
-        const card = btn.closest(".bb-card");
+        const card = btn.closest(".feat-card");
         const mint = btn.dataset.mint || card?.dataset.mint;
         if (!mint) return;
 
@@ -279,20 +287,24 @@ class BillboardDialog {
     const tokenCards = tokens.map((token) => this._renderTokenCard(token)).join("");
 
     const sourceTag = category.source
-      ? `<span class="billboard-cat-source">${category.source}</span>`
+      ? `<span class="featured-cat-source">${category.source}</span>`
+      : "";
+    const note = category.note
+      ? `<span class="featured-cat-note">${category.note}</span>`
       : "";
 
     return `
-      <div class="billboard-category" data-category="${category.id}">
-        <div class="billboard-cat-header">
-          <div class="billboard-cat-title">
+      <div class="featured-category${category.key === "boosted" ? " boosted" : ""}" data-category="${category.id}">
+        <div class="featured-cat-header">
+          <div class="featured-cat-title">
             <i class="${category.icon}"></i>
             <span>${category.title}</span>
             ${sourceTag}
+            ${note}
           </div>
-          <span class="billboard-cat-count">${tokens.length} tokens</span>
+          <span class="featured-cat-count">${tokens.length} tokens</span>
         </div>
-        <div class="billboard-cat-grid" id="billboard-cat-${category.id}">
+        <div class="featured-cat-grid" id="featured-cat-${category.id}">
           ${tokenCards}
         </div>
       </div>
@@ -307,6 +319,8 @@ class BillboardDialog {
    * so a token we do not track simply shows fewer cells rather than "-" filler.
    */
   _renderTokenCard(token) {
+    const tier = boostTier(token);
+    const boostCount = formatBoostCount(token.boosts);
     const logoUrl = resolveTokenLogoUrl(token);
     const bannerUrl = resolveTokenBannerUrl(token);
     const name = token.name || "Unknown";
@@ -327,22 +341,22 @@ class BillboardDialog {
     // A missing banner falls back to a gradient built from the accent, so the top
     // of the card is never dead white space.
     const bannerHtml = bannerUrl
-      ? `<img src="${this._escapeHtml(bannerUrl)}" alt="" class="bb-card-banner-img" loading="lazy" onerror="this.remove()"/>`
+      ? `<img src="${this._escapeHtml(bannerUrl)}" alt="" class="feat-card-banner-img" loading="lazy" onerror="this.remove()"/>`
       : "";
 
     const avatarHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="bb-card-avatar-img" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'bb-card-avatar-initial',textContent:'${initial}'}))"/>`
-      : `<span class="bb-card-avatar-initial">${initial}</span>`;
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="feat-card-avatar-img" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'feat-card-avatar-initial',textContent:'${initial}'}))"/>`
+      : `<span class="feat-card-avatar-initial">${initial}</span>`;
 
     const change = token.price_change_24h;
     const changeHtml =
       change != null
-        ? `<span class="bb-card-change ${change >= 0 ? "pos" : "neg"}">${change > 0 ? "+" : ""}${change.toFixed(1)}%</span>`
+        ? `<span class="feat-card-change ${change >= 0 ? "pos" : "neg"}">${change > 0 ? "+" : ""}${change.toFixed(1)}%</span>`
         : "";
 
     const priceHtml =
       token.price_usd != null
-        ? `<span class="bb-card-price">${Utils.formatCurrencyUSD(token.price_usd)}</span>`
+        ? `<span class="feat-card-price">${Utils.formatCurrencyUSD(token.price_usd)}</span>`
         : "";
 
     const txns =
@@ -360,9 +374,9 @@ class BillboardDialog {
       .filter(([, value]) => value != null)
       .map(
         ([label, value, kind]) => `
-          <div class="bb-card-stat">
-            <span class="bb-card-stat-label">${label}</span>
-            <span class="bb-card-stat-value">${
+          <div class="feat-card-stat">
+            <span class="feat-card-stat-label">${label}</span>
+            <span class="feat-card-stat-value">${
               kind === "compact"
                 ? Utils.formatCompactNumber(value, { prefix: "$" })
                 : Utils.formatCompactNumber(value)
@@ -372,39 +386,43 @@ class BillboardDialog {
       .join("");
 
     return `
-      <article class="bb-card${token.featured ? " featured" : ""}"
+      <article class="feat-card${tier ? ` boosted ${tier}` : ""}"
         data-mint="${this._escapeHtml(mint)}"
         data-symbol="${this._escapeHtml(symbol)}"
-        style="--bb-hue:${accent.hue};--bb-sat:${accent.saturation}%"
+        style="--feat-hue:${accent.hue};--feat-sat:${accent.saturation}%"
         title="${this._escapeHtml(name)} (${this._escapeHtml(symbol)})">
 
-        <div class="bb-card-banner">${bannerHtml}</div>
+        <div class="feat-card-banner">${bannerHtml}</div>
 
-        <div class="bb-card-head">
-          <div class="bb-card-avatar">${avatarHtml}</div>
+        <div class="feat-card-head">
+          <div class="feat-card-avatar">${avatarHtml}</div>
         </div>
 
-        <div class="bb-card-identity">
-          <div class="bb-card-row">
-            <span class="bb-card-name">${this._escapeHtml(name)}</span>
-            ${token.featured ? '<i class="icon-star bb-card-featured" title="Featured"></i>' : ""}
+        <div class="feat-card-identity">
+          <div class="feat-card-row">
+            <span class="feat-card-name">${this._escapeHtml(name)}</span>
+            ${
+              tier
+                ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="Boosted ${this._escapeHtml(boostCount)} on screenerbot.io"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${this._escapeHtml(boostCount)}</span></span>`
+                : ""
+            }
             ${priceHtml}
           </div>
-          <div class="bb-card-row">
-            <span class="bb-card-symbol">${this._escapeHtml(symbol)}</span>
+          <div class="feat-card-row">
+            <span class="feat-card-symbol">${this._escapeHtml(symbol)}</span>
             ${this._renderSecurity(token.security_score)}
             ${changeHtml}
           </div>
         </div>
 
-        ${stats ? `<div class="bb-card-stats">${stats}</div>` : ""}
+        ${stats ? `<div class="feat-card-stats">${stats}</div>` : ""}
 
-        <div class="bb-card-actions">
-          <div class="bb-card-links">
+        <div class="feat-card-actions">
+          <div class="feat-card-links">
             ${this._buildSocialIcons(token)}
             ${this._buildShortcuts(mint)}
           </div>
-          <button class="bb-card-buy" data-action="buy" title="Buy ${this._escapeHtml(symbol)}">
+          <button class="feat-card-buy" data-action="buy" title="Buy ${this._escapeHtml(symbol)}">
             <i class="icon-zap"></i>
             <span>Buy</span>
           </button>
@@ -420,16 +438,16 @@ class BillboardDialog {
   _buildShortcuts(mint) {
     const safeMint = this._escapeHtml(mint);
     return `
-      <button class="bb-card-link" data-action="dexscreener" data-mint="${safeMint}" title="DexScreener">
+      <button class="feat-card-link" data-action="dexscreener" data-mint="${safeMint}" title="DexScreener">
         <i class="icon-chart-candlestick"></i>
       </button>
-      <button class="bb-card-link" data-action="gmgn" data-mint="${safeMint}" title="GMGN">
+      <button class="feat-card-link" data-action="gmgn" data-mint="${safeMint}" title="GMGN">
         <i class="icon-trending-up"></i>
       </button>
-      <button class="bb-card-link" data-action="solscan" data-mint="${safeMint}" title="Solscan">
+      <button class="feat-card-link" data-action="solscan" data-mint="${safeMint}" title="Solscan">
         <i class="icon-search"></i>
       </button>
-      <button class="bb-card-link bb-card-copy" data-action="copy" data-mint="${safeMint}" title="Copy mint">
+      <button class="feat-card-link feat-card-copy" data-action="copy" data-mint="${safeMint}" title="Copy mint">
         <i class="icon-copy"></i>
       </button>
     `;
@@ -444,7 +462,7 @@ class BillboardDialog {
     const level = score >= 70 ? "good" : score >= 40 ? "mid" : "bad";
     const label = score >= 70 ? "Safe" : score >= 40 ? "Caution" : "Risky";
 
-    return `<span class="bb-card-security ${level}" title="Security score: ${score}/100">${label}</span>`;
+    return `<span class="feat-card-security ${level}" title="Security score: ${score}/100">${label}</span>`;
   }
 
   /**
@@ -454,10 +472,10 @@ class BillboardDialog {
   _applyAccent(mint, accent) {
     if (!accent || !this.dialogEl) return;
 
-    const selector = `.bb-card[data-mint="${CSS.escape(mint)}"]`;
+    const selector = `.feat-card[data-mint="${CSS.escape(mint)}"]`;
     this.dialogEl.querySelectorAll(selector).forEach((card) => {
-      card.style.setProperty("--bb-hue", accent.hue);
-      card.style.setProperty("--bb-sat", `${accent.saturation}%`);
+      card.style.setProperty("--feat-hue", accent.hue);
+      card.style.setProperty("--feat-sat", `${accent.saturation}%`);
     });
   }
 
@@ -465,22 +483,22 @@ class BillboardDialog {
     const icons = [];
     if (token.website) {
       icons.push(
-        `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Website"><i class="icon-globe"></i></a>`
+        `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Website"><i class="icon-globe"></i></a>`
       );
     }
     if (token.twitter) {
       icons.push(
-        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Twitter"><i class="icon-twitter"></i></a>`
+        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Twitter"><i class="icon-twitter"></i></a>`
       );
     }
     if (token.telegram) {
       icons.push(
-        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Telegram"><i class="icon-send"></i></a>`
+        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Telegram"><i class="icon-send"></i></a>`
       );
     }
     if (token.discord) {
       icons.push(
-        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="bb-card-social" title="Discord"><i class="icon-message-circle"></i></a>`
+        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Discord"><i class="icon-message-circle"></i></a>`
       );
     }
     return icons.join("");
@@ -497,28 +515,28 @@ class BillboardDialog {
 }
 
 // Singleton instance
-const billboardDialog = new BillboardDialog();
+const featuredDialog = new FeaturedDialog();
 
 /**
- * Open the billboard dialog
+ * Open the featured dialog
  */
-export function openBillboard() {
-  billboardDialog.open();
+export function openFeaturedDialog() {
+  featuredDialog.open();
 }
 
 /**
- * Close the billboard dialog
+ * Close the featured dialog
  */
-export function closeBillboard() {
-  billboardDialog.close();
+export function closeFeaturedDialog() {
+  featuredDialog.close();
 }
 
 /**
- * Initialize billboard button handler
+ * Initialize featured button handler
  */
-export function initBillboard() {
-  const btn = $("#billboard-btn");
+export function initFeaturedDialog() {
+  const btn = $("#featured-btn");
   if (btn) {
-    btn.addEventListener("click", () => openBillboard());
+    btn.addEventListener("click", () => openFeaturedDialog());
   }
 }

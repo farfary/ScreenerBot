@@ -14,13 +14,14 @@ pub mod actions;
 pub mod ai;
 pub mod asset_serving;
 pub mod auth;
-pub mod billboard;
 pub mod blacklist;
+pub mod boosts;
 pub mod config;
 pub mod connectivity;
 pub mod copy_trading;
 pub mod dashboard;
 pub mod events;
+pub mod featured;
 pub mod features;
 pub mod filtering;
 pub mod header;
@@ -198,7 +199,8 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(actions::routes())
         .merge(header::routes())
         .merge(ui_state::routes())
-        .merge(billboard::routes())
+        .merge(boosts::routes())
+        .merge(featured::routes())
         .nest("/connectivity", connectivity::routes())
         .nest("/copy-trading", copy_trading::routes())
         .nest("/features", features::routes())

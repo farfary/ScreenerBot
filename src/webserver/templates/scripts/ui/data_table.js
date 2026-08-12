@@ -3321,6 +3321,27 @@ export class DataTable {
   }
 
   /**
+   * Repaint every rendered row from the data the table ALREADY holds.
+   *
+   * For presentation that depends on state the table does not own: the boost feed
+   * is the case that forced this -- rows paint, the feed lands a moment later, and
+   * both the row class and the token cell must follow. `refresh()` would refetch a
+   * paginated page and yank the user's scroll to restyle rows whose data did not
+   * change; this reuses the exact per-row update the live poll runs, so cells,
+   * classes and attributes all stay in step and the scroll position is untouched.
+   */
+  repaintRows() {
+    const tbody = this.elements?.tbody;
+    if (!tbody) return;
+    const visibleColumns = this._getOrderedColumns();
+    this._getClientPaginatedData().forEach((row, index) => {
+      const rowId = this._getRowId(row, index);
+      const tr = tbody.querySelector(`tr[data-row-id="${CSS.escape(String(rowId))}"]`);
+      if (tr) this._updateRowCells(tr, row, visibleColumns, rowId);
+    });
+  }
+
+  /**
    * Refresh table (re-render)
    */
   refresh(request = {}) {

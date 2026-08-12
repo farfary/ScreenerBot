@@ -66,7 +66,17 @@
   overflow: hidden;
 }
 
+/* Ticker line: the ticker itself shrinks and ellipses, anything beside it (the
+   boost mark) never does. Without the flex row the mark rides inside the
+   truncated ticker and a long symbol clips it away entirely. */
+.token-cell__symbol-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .token-cell .token-symbol {
+  min-width: 0;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;

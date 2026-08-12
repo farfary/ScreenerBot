@@ -257,9 +257,10 @@ pub async fn start_server(
     // the running instance without manual configuration
     write_mcp_connection_file(port, is_gui);
 
-    // Warm the billboard cache in the background so the first dashboard load
-    // serves the featured row instantly instead of blocking on the remote fetch.
-    crate::webserver::routes::billboard::prewarm();
+    // Warm the boost feed in the background so the first dashboard paint already
+    // knows which tokens are boosted, instead of blocking on the remote fetch and
+    // then re-marking the token table gold a moment later.
+    crate::webserver::routes::boosts::prewarm();
 
     // Run the server with graceful shutdown
     let shutdown_signal = async {

@@ -3,7 +3,7 @@
  *
  * Overlays used to each bind their own `document` keydown listener, which is
  * correct only while exactly one is open: with two stacked (token details opened
- * from the billboard dialog) a single Escape reached BOTH listeners and closed
+ * from the featured dialog) a single Escape reached BOTH listeners and closed
  * both at once. Event propagation cannot arbitrate that -- both are bound on
  * `document`, so they fire in registration order, not stacking order.
  *

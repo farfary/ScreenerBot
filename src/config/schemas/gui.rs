@@ -86,8 +86,8 @@ config_struct! {
         /// Show contextual help hints throughout the dashboard
         show_hints: bool = true,
 
-        /// Show billboard row featuring promoted tokens on Home and Tokens pages
-        show_billboard: bool = true,
+        /// Show the featured row (boosted and trending tokens) on Home and Tokens
+        show_featured_row: bool = true,
 
         /// Enable sound effects throughout the dashboard
         sounds_enabled: bool = true,
