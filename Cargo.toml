@@ -1,6 +1,6 @@
 [package]
 name = "screenerbot"
-version = "0.1.120"
+version = "0.1.121"
 edition = "2021"
 license = "BUSL-1.1"
 default-run = "screenerbot"
