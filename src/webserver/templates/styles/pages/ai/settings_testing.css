@@ -170,26 +170,6 @@
   color: var(--text-muted);
 }
 
-/* Number input with unit */
-.input-with-unit {
-  display: flex;
-  align-items: center;
-}
-
-.input-with-unit input {
-  border-radius: var(--radius-lg) 0 0 8px;
-  border-inline-end: none;
-}
-
-.input-with-unit .unit {
-  padding: 10px 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 0 8px 8px 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
 /* Cache Stats */
 .cache-stats {
   display: flex;

@@ -34,6 +34,11 @@ const canonicalOwners = new Map([
   [".input-group", "components/form_controls.css"],
   [".toggle", "components/form_controls.css"],
   [".toggle-track", "components/form_controls.css"],
+  [".number-field", "components/form_controls.css"],
+  [".number-field-suffix", "components/form_controls.css"],
+  [".number-field-spin", "components/form_controls.css"],
+  [".number-field-step", "components/form_controls.css"],
+  [".input-unit", "components/form_controls.css"],
   [".sub-tabs-container", "ui/tab_bar.css"],
   [".sub-tab", "ui/tab_bar.css"],
 ]);
@@ -94,6 +99,10 @@ for (const file of cssFiles) {
     /\.sub-tabs-container[^{]*\{[^}]*display\s*:[^;}]*!important/is.test(css)
   ) {
     errors.push(`${path}: shared subtab visibility must be controlled by TabBar`);
+  }
+
+  if (path !== "components/form_controls.css" && /-webkit-(?:inner|outer)-spin-button/.test(css)) {
+    errors.push(`${path}: the number stepper is owned by components/form_controls.css`);
   }
 }
 

@@ -319,17 +319,15 @@ export function createConditionEditor({
     const step = spec.step !== undefined ? `step="${spec.step}"` : "";
 
     switch (spec.type) {
+      // A unit is written straight after its input — `ui/number_field.js` builds
+      // the numeric shell around both, so no wrapper of our own is needed here.
       case "percent": {
-        return `<div class="input-with-unit">
-          <input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
-          <span class="input-unit">%</span>
-        </div>`;
+        return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
+          <span class="input-unit">%</span>`;
       }
       case "sol": {
-        return `<div class="input-with-unit">
-          <input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
-          <span class="input-unit">SOL</span>
-        </div>`;
+        return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
+          <span class="input-unit">SOL</span>`;
       }
       case "number": {
         // Check if we should add a unit based on the name
@@ -340,10 +338,8 @@ export function createConditionEditor({
         else if (name.includes("multiplier")) unit = "×";
 
         if (unit) {
-          return `<div class="input-with-unit">
-            <input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
-            <span class="input-unit">${unit}</span>
-          </div>`;
+          return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
+            <span class="input-unit">${unit}</span>`;
         }
         return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">`;
       }

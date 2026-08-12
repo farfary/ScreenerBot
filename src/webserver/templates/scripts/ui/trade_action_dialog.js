@@ -184,7 +184,9 @@ export class TradeActionDialog {
           <div class="trade-action-input-section">
             <label class="trade-action-input-label" for="trade-action-input"></label>
             <div class="trade-action-input-wrapper">
-              <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" inputmode="decimal" />
+              <!-- data-stepper="off": MAX and the percentage slider already own
+                   this field's gutter, and an amount is chosen, not incremented. -->
+              <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" inputmode="decimal" data-stepper="off" />
               <span class="trade-action-input-suffix">SOL</span>
               <button type="button" class="trade-action-input-max" data-action="max" aria-label="Use maximum">MAX</button>
             </div>

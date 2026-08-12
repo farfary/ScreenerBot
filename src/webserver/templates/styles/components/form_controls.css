@@ -646,58 +646,140 @@ input[type="radio"]:disabled {
 }
 
 /* =============================================================================
-   Input With Unit Suffix
-   ============================================================================= */
+   Numeric Field — the one shell every <input type="number"> gets
+   =============================================================================
+   `ui/number_field.js` wraps EVERY number input in the dashboard in
+   `.number-field`, so a number reads and behaves the same on every page. Markup
+   writes the input and, when the value has one, an `.input-unit` right after it —
+   no wrapper class of its own; the enhancer builds the shell and pulls a short
+   suffix into the box (a word-length one stays in the page's own row).
 
-.input-with-unit {
+   The shell holds two things inside the field's own box, at its inline end: a
+   symbol-length unit suffix and our stepper. The room they need is reserved by
+   the shell's gutter, which the enhancer applies as an INLINE declaration
+   pointing back at `--number-field-gutter`. It has to be inline: any page rule
+   that sets the `padding` shorthand on its own inputs (`.input-large`,
+   `.trade-action-input`, `.config-field-control input[type="number"]`, …)
+   outranks a stylesheet reserve and erases it — which is how a right-aligned
+   "50" ended up printed on top of its own "USD" suffix. The measurements
+   themselves stay here; JavaScript passes no numbers of its own except the
+   unit's length in characters. */
+
+.number-field {
+  --number-field-spin-width: 18px;
+  --number-field-unit-space: 0px;
+  --number-field-gutter: calc(
+    var(--number-field-unit-space) + var(--number-field-spin-width) + 10px
+  );
+
   position: relative;
   display: flex;
   align-items: center;
+  min-width: 0;
+
+  /* The shell IS the field, so it takes the width an input takes by default and
+     a page that wants a narrower number sizes the shell, never the input — the
+     stepper and suffix anchor to the shell's inline end. */
+  width: 100%;
 }
 
-.input-with-unit input {
-  padding-right: 48px;
+/* The input fills the shell, so the shell's inline end IS the field's inline
+   end and the suffix can anchor to it. A page that caps a number input's width
+   caps `.number-field` instead (see config_fields.css, config_components.css). */
+.number-field > input[type="number"] {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.input-with-unit .input-unit {
+/* One character of the input's own data font per unit character, plus the gap
+   to the stepper. Slightly generous — the suffix renders a size smaller — and
+   generous is the safe direction: it can only leave air, never overlap. Only a
+   suffix that sits INSIDE the box is reserved for — a word-length unit stays
+   outside the shell and takes its own room (see UNIT_INSIDE_MAX_CHARS). */
+.number-field:has(.number-field-suffix > .input-unit) {
+  --number-field-unit-space: calc(var(--number-field-unit-len, 3) * 1ch + 6px);
+}
+
+.number-field-suffix {
   position: absolute;
-  right: 12px;
+  inset-inline-end: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  /* The suffix must never eat a click meant for the field; the stepper's own
+     buttons take their events back below. */
+  pointer-events: none;
+}
+
+.input-unit {
   font-family: var(--font-data);
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-muted);
-  pointer-events: none;
+  white-space: nowrap;
   user-select: none;
 }
 
-/* Wide unit support */
-.input-with-unit.unit-wide input {
-  padding-right: 64px;
+/* Stepper: bare chevrons, never a tile or ring behind them. Idle they stay out
+   of the way and only the value is legible; hover or focus brings them up. The
+   column keeps its width at all times, so nothing reflows when they appear. */
+.number-field-spin {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: var(--number-field-spin-width);
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
 
-/* =============================================================================
-   Input With Prefix
-   ============================================================================= */
+.number-field:hover .number-field-spin,
+.number-field:focus-within .number-field-spin {
+  opacity: 1;
+}
 
-.input-with-prefix {
-  position: relative;
+.number-field-step {
   display: flex;
   align-items: center;
-}
-
-.input-with-prefix input {
-  padding-left: 32px;
-}
-
-.input-with-prefix .input-prefix {
-  position: absolute;
-  left: 12px;
-  font-family: var(--font-data);
-  font-size: 0.875rem;
-  font-weight: 500;
+  justify-content: center;
+  width: 100%;
+  height: 11px;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--text-muted);
-  pointer-events: none;
-  user-select: none;
+  font-size: 0.6rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.number-field-step:hover {
+  color: var(--primary-color);
+}
+
+.number-field-step:active {
+  color: var(--primary-hover);
+}
+
+/* A value that cannot be edited cannot be stepped either. */
+.number-field:has(> input:disabled) .number-field-spin,
+.number-field:has(> input:read-only) .number-field-spin {
+  visibility: hidden;
+}
+
+/* The browser's own spin buttons are replaced everywhere, not merely hidden on
+   the pages that noticed them: they overlap right-aligned values, ignore our
+   type scale and appear on hover with no relation to the field's design. */
+input[type="number"] {
+  appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 /* =============================================================================

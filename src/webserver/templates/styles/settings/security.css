@@ -139,17 +139,6 @@
   min-width: 200px;
 }
 
-/* Telegram PIN Field with Button */
-.telegram-pin-field {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.telegram-pin-field .settings-input {
-  width: 120px;
-}
-
 /* Settings Input */
 .settings-input {
   padding: 10px 14px;

@@ -738,8 +738,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     if (field.type === "boolean") {
       return renderBooleanInput(field, source);
     }
+    // The unit is written straight after the input; `ui/number_field.js` builds
+    // the shell around both and decides whether the suffix belongs inside the
+    // field's box or beside it.
     if (row.unit) {
-      return `<span class="input-with-unit">${renderNumberInput(field, source)}<span class="input-unit">${Utils.escapeHtml(row.unit)}</span></span>`;
+      return `${renderNumberInput(field, source)}<span class="input-unit">${Utils.escapeHtml(row.unit)}</span>`;
     }
     return renderNumberInput(field, source);
   }

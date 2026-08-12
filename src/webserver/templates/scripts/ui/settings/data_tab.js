@@ -81,7 +81,7 @@ export function buildDataTab() {
             </div>
             <div class="settings-field-control data-action-group">
               <input type="number" id="cleanupHours" class="settings-input small" value="24" min="1" max="720" />
-              <span class="input-suffix">hours</span>
+              <span class="input-unit">hours</span>
               <button id="cleanupOhlcvBtn" class="btn btn-warning btn-sm">
                 <i class="icon-trash-2"></i>
                 Cleanup OHLCV

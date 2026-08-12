@@ -1475,8 +1475,12 @@ body.trade-action-dialog-open {
   border-color: var(--primary-color);
 }
 
-.trade-action-slippage-input {
+/* The numeric shell carries the width, so the stepper sits at the field's edge. */
+.number-field:has(> .trade-action-slippage-input) {
   width: 84px;
+}
+
+.trade-action-slippage-input {
   padding: 5px 8px;
   font-family: var(--font-mono);
   font-size: 0.75rem;

@@ -197,8 +197,14 @@
   gap: 0.5rem;
 }
 
-.input-large {
+/* The numeric shell is the flex item here, so it — not the input — carries the
+   row's share of the width and the compact cap. */
+.input-group-enhanced .number-field {
   flex: 1;
+  max-width: 120px;
+}
+
+.input-large {
   padding: 0.5rem 0.75rem;
   font-size: 1rem;
   font-weight: 600;
@@ -207,20 +213,12 @@
   background: var(--background-secondary);
   color: var(--text-primary);
   transition: all var(--transition-base);
-  max-width: 120px;
 }
 
 .input-large:focus {
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-alpha-10);
-}
-
-.input-unit {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 24px;
 }
 
 .input-text-compact {

@@ -383,6 +383,13 @@ export function initRouter() {
     .then((m) => m.installGlobalSelectEnhancer && m.installGlobalSelectEnhancer())
     .catch((err) => console.error("[Router] select enhancer install failed", err));
 
+  // Same contract for numbers: every `<input type="number">` becomes a
+  // `.number-field` with our stepper and its unit suffix, wherever it is
+  // rendered, so no page carries its own numeric-input styling or behaviour.
+  import(`../ui/number_field.js${assetQuery}`)
+    .then((m) => m.installGlobalNumberFieldEnhancer && m.installGlobalNumberFieldEnhancer())
+    .catch((err) => console.error("[Router] number field enhancer install failed", err));
+
   // Handle navigation links (main nav tabs)
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[data-page]");

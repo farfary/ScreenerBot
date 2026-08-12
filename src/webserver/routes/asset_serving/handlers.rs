@@ -238,6 +238,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "hint_popover.js" => Some(embeds::HINT_POPOVER_UI),
         "search_dialog.js" => Some(embeds::SEARCH_DIALOG_UI),
         "custom_select.js" => Some(embeds::CUSTOM_SELECT_UI),
+        "number_field.js" => Some(embeds::NUMBER_FIELD_UI),
         "featured_dialog.js" => Some(embeds::FEATURED_DIALOG_UI),
         "featured_row.js" => Some(embeds::FEATURED_ROW_UI),
         "pool_selector.js" => Some(embeds::POOL_SELECTOR_UI),

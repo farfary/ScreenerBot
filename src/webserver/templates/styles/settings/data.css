@@ -257,12 +257,9 @@
   gap: 8px;
 }
 
-.settings-input.small {
+/* A compact number: the numeric shell is what gets sized, so its stepper stays
+   at the field's own edge (components/form_controls.css). */
+.number-field:has(> .settings-input.small) {
   width: 70px;
-}
-
-.input-suffix {
-  color: var(--text-muted);
-  font-size: 0.8125rem;
 }
 

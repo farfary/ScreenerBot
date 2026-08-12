@@ -650,7 +650,8 @@
   justify-self: end;
 }
 
-.wallet-copy-settings-form .form-input {
+/* The numeric shell carries the width; its stepper anchors to the field's edge. */
+.wallet-copy-settings-form .number-field {
   width: 180px;
 }
 
@@ -795,7 +796,7 @@
     justify-self: stretch;
   }
 
-  .wallet-copy-settings-form .form-input {
+  .wallet-copy-settings-form .number-field {
     width: 100%;
   }
 }

@@ -200,6 +200,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+
+  /* A word-length unit ("seconds", "requests/min") stays beside the field rather
+     than inside its box, and needs its own air. */
+  gap: 8px;
   min-width: 0;
 }
 
@@ -213,10 +217,16 @@
 }
 
 /* A number never needs the full track: it keeps the track's right edge and
-   stays compact, so numeric columns read as one aligned stack. */
-.config-field-control input[type="number"] {
+   stays compact, so numeric columns read as one aligned stack. The cap belongs
+   to `.number-field`, not to the input — the shell has to end where the field
+   ends for its unit and stepper to sit inside the box. */
+.config-field-control .number-field {
   width: 100%;
   max-width: 150px;
+}
+
+.config-field-control input[type="number"] {
+  width: 100%;
   text-align: right;
   font-family: var(--font-data);
   font-feature-settings:
@@ -313,7 +323,10 @@
   color: var(--text-muted);
 }
 
-.config-field-range .config-field-bound input[type="number"] {
+/* Both bounds share the track equally, so the shell — not the input — is what
+   grows, and it drops the single-value cap. */
+.config-field-range .config-field-bound .number-field {
+  flex: 1 1 0;
   max-width: none;
 }
 
@@ -324,7 +337,8 @@
 
 /* The unit belongs to the parameter, not to each bound, so a range row prints it
    once at the end of the track. Single-value rows carry it inside the input
-   (`.input-with-unit`), and both read as the same muted suffix next to a number. */
+   (`.number-field`, form_controls.css), and both read as the same muted suffix
+   next to a number. */
 .config-field-range .config-field-range-unit {
   flex-shrink: 0;
   font-family: var(--font-data);

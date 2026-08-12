@@ -406,6 +406,7 @@ pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notif
 pub const HINT_POPOVER_UI: &str = include_str!("templates/scripts/ui/hint_popover.js");
 pub const SEARCH_DIALOG_UI: &str = include_str!("templates/scripts/ui/search_dialog.js");
 pub const CUSTOM_SELECT_UI: &str = include_str!("templates/scripts/ui/custom_select.js");
+pub const NUMBER_FIELD_UI: &str = include_str!("templates/scripts/ui/number_field.js");
 pub const FEATURED_DIALOG_UI: &str = include_str!("templates/scripts/ui/featured_dialog.js");
 pub const FEATURED_ROW_UI: &str = include_str!("templates/scripts/ui/featured_row.js");
 pub const POOL_SELECTOR_UI: &str = include_str!("templates/scripts/ui/pool_selector.js");
