@@ -387,10 +387,7 @@
   align-items: stretch;
   min-width: 0;
   flex: 0 0 auto;
-  overflow: hidden;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  overflow: visible;
 }
 
 .table-toolbar-select-group:not(:has(> .table-toolbar-field:not([hidden]))) {
@@ -403,6 +400,11 @@
   flex: 0 0 clamp(8rem, calc(var(--table-toolbar-select-label-width, 5rem) + 3.5rem), 12rem);
   width: clamp(8rem, calc(var(--table-toolbar-select-label-width, 5rem) + 3.5rem), 12rem);
   min-width: 0;
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-child(n + 2 of .table-toolbar-field:not([hidden])) {
+  margin-left: -1px;
 }
 
 .table-toolbar-select-group > .table-toolbar-field:not([hidden]) > .custom-select-host {
@@ -422,10 +424,30 @@
 .table-toolbar-select-group > .table-toolbar-field:not([hidden]) > .table-toolbar-select {
   width: 100%;
   min-width: 0;
-  border: 0;
+  border: 1px solid var(--border-color);
   border-radius: 0;
-  background: transparent;
+  background: var(--bg-secondary);
   box-shadow: none;
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-child(1 of .table-toolbar-field:not([hidden]))
+  .cs-trigger,
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-child(1 of .table-toolbar-field:not([hidden]))
+  > .table-toolbar-select {
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-last-child(1 of .table-toolbar-field:not([hidden]))
+  .cs-trigger,
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-last-child(1 of .table-toolbar-field:not([hidden]))
+  > .table-toolbar-select {
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
 }
 
 .table-toolbar-select-group > .table-toolbar-field:not([hidden]) .cs-trigger {
@@ -452,8 +474,16 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .custom-select-host
-  > .custom-select:is(:focus, :focus-visible, .open)
+  > .custom-select:is(.open, .closing) {
+  z-index: 1;
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
+  > .custom-select:is(.open, .closing)
   .cs-trigger {
+  border-color: var(--primary-color);
   border-radius: 0;
   background: var(--bg-card-hover);
   box-shadow: none;
@@ -461,8 +491,50 @@
 
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
-  ~ .table-toolbar-field:not([hidden]) {
-  border-left: 1px solid var(--border-color);
+  > .custom-select-host
+  > .custom-select:is(.open, .closing):not(.dropdown-above)
+  .cs-trigger {
+  border-bottom-color: transparent;
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
+  > .custom-select:is(.open, .closing).dropdown-above
+  .cs-trigger {
+  border-top-color: transparent;
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-child(1 of .table-toolbar-field:not([hidden]))
+  > .custom-select-host
+  > .custom-select:is(.open, .closing):not(.dropdown-above)
+  .cs-trigger {
+  border-top-left-radius: var(--radius-md);
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-last-child(1 of .table-toolbar-field:not([hidden]))
+  > .custom-select-host
+  > .custom-select:is(.open, .closing):not(.dropdown-above)
+  .cs-trigger {
+  border-top-right-radius: var(--radius-md);
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-child(1 of .table-toolbar-field:not([hidden]))
+  > .custom-select-host
+  > .custom-select:is(.open, .closing).dropdown-above
+  .cs-trigger {
+  border-bottom-left-radius: var(--radius-md);
+}
+
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden]):nth-last-child(1 of .table-toolbar-field:not([hidden]))
+  > .custom-select-host
+  > .custom-select:is(.open, .closing).dropdown-above
+  .cs-trigger {
+  border-bottom-right-radius: var(--radius-md);
 }
 
 .table-toolbar-custom {
