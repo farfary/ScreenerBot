@@ -380,15 +380,9 @@
   z-index: 1;
 }
 
-/* Adjacent dropdowns form one segmented field. A run with only one visible
-   member falls back to normal standalone-select styling automatically. */
+/* Adjacent dropdowns form one stable segmented field. Structural ownership,
+   rather than transient field visibility, controls the attached appearance. */
 .table-toolbar-select-group {
-  display: contents;
-}
-
-.table-toolbar-select-group:has(
-  > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-) {
   display: inline-flex;
   align-items: stretch;
   min-width: 0;
@@ -399,10 +393,11 @@
   border-radius: var(--radius-md);
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
-  > .table-toolbar-field:not([hidden]) {
+.table-toolbar-select-group:not(:has(> .table-toolbar-field:not([hidden]))) {
+  display: none;
+}
+
+.table-toolbar-select-group > .table-toolbar-field:not([hidden]) {
   flex: 0 0
     clamp(
       6.25rem,
@@ -417,18 +412,14 @@
   min-width: 0;
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .custom-select-host {
   width: 100%;
   min-width: 0;
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .custom-select-host
   > .custom-select {
@@ -436,14 +427,10 @@
   min-width: 0;
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   .cs-trigger,
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .table-toolbar-select {
   width: 100%;
@@ -454,9 +441,7 @@
   box-shadow: none;
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   .cs-trigger {
   gap: 0.25rem;
@@ -466,18 +451,14 @@
   box-sizing: border-box;
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   .cs-arrow {
   width: 0.875rem;
   height: 0.875rem;
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .custom-select-host
   > .custom-select:hover
@@ -485,20 +466,17 @@
   background: var(--bg-card-hover);
 }
 
-html[data-input="keyboard"]
-  .table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .custom-select-host
-  > .custom-select:focus-visible
+  > .custom-select:is(:focus, :focus-visible, .open)
   .cs-trigger {
-  background: var(--primary-alpha-10);
+  border-radius: 0;
+  background: var(--bg-card-hover);
+  box-shadow: none;
 }
 
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  )
+.table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   ~ .table-toolbar-field:not([hidden]) {
   border-left: 1px solid var(--border-color);
@@ -1058,47 +1036,6 @@ html[data-input="keyboard"]
     flex: 1 1 100%;
     max-width: 100%;
     overflow-x: auto;
-  }
-
-  /* The data-heavy query layout trades horizontal scrolling for a readable 2×2
-     facet grid. Each select becomes a complete field at this size. */
-  .data-table-toolbar[data-layout="query-row"]
-    .table-toolbar-select-group:has(
-      > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-    ) {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
-    width: 100%;
-    overflow: visible;
-    border: 0;
-    background: transparent;
-  }
-
-  .data-table-toolbar[data-layout="query-row"]
-    .table-toolbar-select-group:has(
-      > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-    )
-    > .table-toolbar-field:not([hidden]) {
-    width: auto;
-    border-left: 0;
-  }
-
-  .data-table-toolbar[data-layout="query-row"]
-    .table-toolbar-select-group:has(
-      > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-    )
-    > .table-toolbar-field:not([hidden])
-    .cs-trigger,
-  .data-table-toolbar[data-layout="query-row"]
-    .table-toolbar-select-group:has(
-      > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-    )
-    > .table-toolbar-field:not([hidden])
-    > .table-toolbar-select {
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    background: var(--bg-primary);
   }
 
   .table-toolbar-search {
