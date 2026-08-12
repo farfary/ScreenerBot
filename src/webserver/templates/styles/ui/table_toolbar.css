@@ -352,7 +352,11 @@
 .table-toolbar-select-group:has(
   > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
 ) {
-  display: inline-flex;
+  --table-toolbar-select-segment-width: 9.25rem;
+
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--table-toolbar-select-segment-width);
   align-items: stretch;
   min-width: 0;
   flex: 0 0 auto;
@@ -360,13 +364,6 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  transition: border-color var(--transition-base);
-}
-
-.table-toolbar-select-group:has(
-    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  ):hover {
-  border-color: var(--border-strong, var(--text-muted));
 }
 
 .table-toolbar-select-group:has(
@@ -380,8 +377,7 @@
     > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
   )
   > .table-toolbar-field:not([hidden]) {
-  flex: 0 0 auto;
-  min-width: max-content;
+  min-width: 0;
 }
 
 .table-toolbar-select-group:has(
@@ -390,7 +386,7 @@
   > .table-toolbar-field:not([hidden])
   > .custom-select-host {
   width: 100%;
-  min-width: 100%;
+  min-width: 0;
 }
 
 .table-toolbar-select-group:has(
@@ -400,7 +396,7 @@
   > .custom-select-host
   > .custom-select {
   width: 100%;
-  min-width: 100%;
+  min-width: 0;
 }
 
 .table-toolbar-select-group:has(
@@ -413,6 +409,8 @@
   )
   > .table-toolbar-field:not([hidden])
   > .table-toolbar-select {
+  width: 100%;
+  min-width: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -424,7 +422,17 @@
   )
   > .table-toolbar-field:not([hidden])
   .cs-trigger {
-  min-width: max-content;
+  gap: 0.3125rem;
+  padding-inline: 0.5625rem;
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  .cs-arrow {
+  width: 1rem;
+  height: 1rem;
 }
 
 .table-toolbar-select-group:has(
@@ -442,9 +450,19 @@
   )
   > .table-toolbar-field:not([hidden])
   > .custom-select-host
+  > .custom-select:active
+  .cs-trigger {
+  background: var(--primary-alpha-10);
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
   > .custom-select.open
   .cs-trigger {
-  background: var(--primary-alpha-5);
+  background: var(--primary-alpha-10);
 }
 
 .table-toolbar-select-group:has(
@@ -480,13 +498,14 @@
 .table-toolbar-field {
   display: flex;
   align-items: center;
-  min-width: 0;
+  min-width: var(--table-toolbar-field-min-width, 0);
   flex: 0 1 auto;
 }
 
 .table-toolbar-field > .custom-select-host {
   display: flex;
-  min-width: 100%;
+  width: 100%;
+  min-width: 0;
 }
 
 .table-toolbar-field > .custom-select-host > .custom-select {

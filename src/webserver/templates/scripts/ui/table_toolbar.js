@@ -369,7 +369,9 @@ function renderSelect(item, stateFilters = {}) {
       )}</label>`
     : "";
 
-  const widthStyle = item.minWidth ? ` style="min-width:${escapeHtml(item.minWidth)};"` : "";
+  const widthStyle = item.minWidth
+    ? ` style="--table-toolbar-field-min-width:${escapeHtml(item.minWidth)};"`
+    : "";
   const dataAttrs = [`data-filter-id="${escapeHtml(item.id)}"`];
   if (item.autoApply === false) {
     dataAttrs.push('data-auto-apply="false"');
@@ -398,7 +400,9 @@ function renderInput(item, stateControls = {}) {
       )}</label>`
     : "";
   const placeholder = item.placeholder ? escapeHtml(item.placeholder) : "";
-  const widthStyle = item.minWidth ? ` style="min-width:${escapeHtml(item.minWidth)};"` : "";
+  const widthStyle = item.minWidth
+    ? ` style="--table-toolbar-field-min-width:${escapeHtml(item.minWidth)};"`
+    : "";
   const dataAttrs = [`data-control-id="${escapeHtml(item.id)}"`];
   if (item.defaultValue !== undefined) {
     dataAttrs.push(`data-default-value="${escapeHtml(item.defaultValue)}"`);

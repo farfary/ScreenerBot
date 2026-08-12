@@ -56,3 +56,13 @@ test("keeps hidden dropdowns inside the run so visibility can change without rer
   assert.match(html, /data-filter-id="status"[^>]*hidden/);
   assert.match(html, /data-filter-id="wallet"/);
 });
+
+test("stores a requested standalone width without hard-wiring grouped field geometry", () => {
+  const html = new TableToolbarView({
+    settings: false,
+    controls: [{ ...select("wallet"), minWidth: "170px" }],
+  }).render();
+
+  assert.match(html, /style="--table-toolbar-field-min-width:170px;"/);
+  assert.doesNotMatch(html, /style="min-width:170px;"/);
+});

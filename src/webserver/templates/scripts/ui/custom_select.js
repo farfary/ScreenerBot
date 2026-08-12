@@ -285,9 +285,11 @@ export class CustomSelect {
     const selectedOpt = this.options.find((o) => o.value === this.selectedValue);
     if (selectedOpt) {
       this.valueEl.textContent = selectedOpt.label;
+      this.valueEl.title = selectedOpt.label;
       this.valueEl.classList.remove("placeholder");
     } else {
       this.valueEl.textContent = this.placeholder;
+      this.valueEl.removeAttribute("title");
       this.valueEl.classList.add("placeholder");
     }
   }
