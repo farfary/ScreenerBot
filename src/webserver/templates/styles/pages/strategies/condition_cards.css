@@ -168,49 +168,6 @@
   align-items: center;
 }
 
-.status-toggle {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 22px;
-  cursor: pointer;
-}
-
-.status-toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.status-indicator {
-  position: absolute;
-  inset: 0;
-  background-color: var(--border-color);
-  border-radius: var(--radius-full);
-  transition: all var(--transition-normal);
-}
-
-.status-indicator::before {
-  content: "";
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  border-radius: var(--radius-full);
-  transition: transform var(--transition-normal);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
-}
-
-.status-toggle input:checked + .status-indicator {
-  background-color: var(--success-color, #10b981);
-}
-
-.status-toggle input:checked + .status-indicator::before {
-  transform: translateX(18px);
-}
-
 /* Expand Indicator */
 .expand-indicator {
   font-size: 1rem;
@@ -332,11 +289,6 @@
   font-weight: 500;
   color: var(--text-muted);
 }
-
-/*
- * Toggle switch for boolean fields - Now uses centralized .toggle from form_controls.css
- * Migrated: Use <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label>
- */
 
 /* Select field styling — arrow inherited from global `select {}` (form_controls.css). */
 .select-field {

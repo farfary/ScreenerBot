@@ -295,11 +295,6 @@
   cursor: pointer;
 }
 
-.config-import-section-header input[type="checkbox"]:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .config-import-section-content {
   display: flex;
   align-items: center;

@@ -516,70 +516,12 @@
   opacity: 0.55;
 }
 
-.table-toolbar-switch {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.table-toolbar-switch__input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.table-toolbar-switch__slider {
-  position: relative;
-  width: 32px;
-  height: 18px;
-  border-radius: var(--radius-full);
-  background: var(--border-color);
-  border: 1px solid var(--border-color);
-  transition:
-    background var(--transition-base),
-    border-color var(--transition-base);
-  flex-shrink: 0;
-}
-
-.table-toolbar-switch__slider::before {
-  content: "";
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  top: 1px;
-  left: 1px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-full);
-  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.25);
-  transition: transform var(--transition-base);
-}
-
-.table-toolbar-switch__input:checked + .table-toolbar-switch__slider {
-  background: var(--primary-color);
-  border-color: var(--primary-color);
-}
-
-.table-toolbar-switch__input:checked + .table-toolbar-switch__slider::before {
-  transform: translateX(14px);
-}
-
-.table-toolbar-switch__status {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
+/* Reserve the state word so ON -> ALL cannot reflow the toolbar row. */
+.table-toolbar-field--switch .toggle-state {
   min-width: 24px;
-  text-transform: uppercase;
 }
 
-.table-toolbar-field--switch.is-disabled .table-toolbar-switch {
-  cursor: not-allowed;
-}
-
-.table-toolbar-field--switch.is-disabled .table-toolbar-switch__status {
+.table-toolbar-field--switch.is-disabled .toggle-state {
   color: var(--text-muted);
 }
 

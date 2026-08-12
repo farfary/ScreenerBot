@@ -171,19 +171,6 @@
   color: var(--success);
 }
 
-.ai-page .status-bar-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.toggle-status-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-inline-start: 8px;
-}
-
 /* ============================================================================
    Stats Section
    ============================================================================ */

@@ -94,7 +94,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Enable Telegram bot integration</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="root">
               <input type="checkbox" id="tgEnabled" ${settings.enabled ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -274,7 +274,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify when a new position is opened</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyOpened" ${settings.notifications?.position_opened !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -287,7 +287,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify when a position is closed</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyClosed" ${settings.notifications?.position_closed !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -300,7 +300,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify on partial position exits</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyPartial" ${settings.notifications?.partial_exit !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -313,7 +313,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify when DCA orders are executed</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyDca" ${settings.notifications?.dca_executed !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -326,7 +326,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify on errors and failures</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyError" ${settings.notifications?.errors !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -339,7 +339,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify when bot starts or stops</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyStartup" ${settings.notifications?.startup_shutdown !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -352,7 +352,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify when new tokens pass filtering criteria</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyFiltering" ${settings.notifications?.filtering_alerts !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -365,7 +365,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Notify on significant trades for watched tokens</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyTradeAlerts" ${settings.notifications?.trade_alerts !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -378,7 +378,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Receive daily trading activity and P&L summary</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgNotifyDailySummary" ${settings.notifications?.daily_summary === true ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -404,7 +404,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Allow controlling the bot via Telegram commands</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="group">
               <input type="checkbox" id="tgCommandsEnabled" ${settings.commands_enabled !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -417,7 +417,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">When sessions expire, require 2FA code to reactivate. Uses lockscreen 2FA.</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgRequire2fa" ${settings.commands_require_2fa !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>
@@ -430,7 +430,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint">Show action buttons in notification messages</span>
           </div>
           <div class="settings-field-control">
-            <label class="toggle">
+            <label class="toggle" data-level="item">
               <input type="checkbox" id="tgInlineActions" ${settings.inline_actions !== false ? "checked" : ""}>
               <span class="toggle-track"></span>
             </label>

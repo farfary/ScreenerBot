@@ -577,29 +577,6 @@ button.link-button:hover {
   margin-top: 1px;
 }
 
-/* Checkbox Form Group */
-.form-group-checkbox {
-  margin-top: var(--spacing-xs, 4px);
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-sm, 8px);
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  line-height: 1.4;
-}
-
-.checkbox-label input[type="checkbox"] {
-  margin-top: 1px;
-}
-
-.checkbox-label span {
-  flex: 1;
-}
-
 /* =============================================================================
    TELEGRAM CHAT DISCOVERY
    ============================================================================= */

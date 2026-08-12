@@ -333,17 +333,17 @@ function renderSwitch(item, stateFilters = {}) {
   return `
     <div class="table-toolbar-field table-toolbar-field--switch" data-filter-id="${escapeHtml(item.id)}" ${commonAttrs(item)}>
       ${label}
-      <label class="table-toolbar-switch">
+      <label class="toggle toggle-sm">
         <input
           type="checkbox"
-          class="dt-filter table-toolbar-switch__input"
+          class="dt-filter"
           id="tt-filter-${escapeHtml(item.id)}"
           data-filter-id="${escapeHtml(item.id)}"
           data-filter-kind="switch"
           ${checked ? "checked" : ""}
         />
-        <span class="table-toolbar-switch__slider" aria-hidden="true"></span>
-        <span class="table-toolbar-switch__status" data-on-label="${escapeHtml(onLabel)}" data-off-label="${escapeHtml(offLabel)}">${escapeHtml(
+        <span class="toggle-track" aria-hidden="true"></span>
+        <span class="toggle-state" data-on-label="${escapeHtml(onLabel)}" data-off-label="${escapeHtml(offLabel)}">${escapeHtml(
           checked ? onLabel : offLabel
         )}</span>
       </label>
@@ -947,9 +947,7 @@ export class TableToolbarView {
       if (select.type === "checkbox") {
         const checked = Boolean(value);
         select.checked = checked;
-        const status = select
-          .closest(".table-toolbar-switch")
-          ?.querySelector(".table-toolbar-switch__status");
+        const status = select.closest(".toggle")?.querySelector(".toggle-state");
         if (status) {
           const onLabel = status.dataset.onLabel || "On";
           const offLabel = status.dataset.offLabel || "All";

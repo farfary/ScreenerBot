@@ -116,9 +116,7 @@ export function applyEventHandlersMixin(DataTable) {
         const value = isSwitch ? input.checked : input.value;
         this.state.filters[filterId] = value;
         if (isSwitch) {
-          const status = input
-            .closest(".table-toolbar-switch")
-            ?.querySelector(".table-toolbar-switch__status");
+          const status = input.closest(".toggle")?.querySelector(".toggle-state");
           if (status) {
             const onLabel = status.dataset.onLabel || "On";
             const offLabel = status.dataset.offLabel || "All";

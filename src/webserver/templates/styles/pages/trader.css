@@ -191,39 +191,6 @@
   color: var(--danger-color);
 }
 
-.status-bar-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* Trader Toggle - Use standard .toggle from form_controls.css */
-.status-bar-toggle .toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.trader-toggle-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  min-width: 24px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.toggle input:checked ~ .trader-toggle-label {
-  color: var(--success-color);
-}
-
-.toggle input:disabled ~ .trader-toggle-label {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 /* ============================================================================
    Trader Action Bar - Sticky Actions at Top
    ============================================================================ */
@@ -629,13 +596,9 @@
   margin-top: 0.1rem;
 }
 
-.strategy-control-item .toggle-label {
+/* Reserve the state word's width so ENABLED -> DISABLED cannot shift the row. */
+.strategy-control-item .toggle-state {
   min-width: 3.5rem;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
 }
 
 .strategy-list-state {

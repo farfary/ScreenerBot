@@ -83,7 +83,7 @@ function buildSecurityTab(status) {
               <span class="settings-field-hint">Protect your dashboard with password authentication</span>
             </div>
             <div class="settings-field-control">
-              <label class="toggle">
+              <label class="toggle" data-level="root">
                 <input type="checkbox" id="securityEnableLockscreen" ${isEnabled ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
                 <span class="toggle-track"></span>
               </label>
@@ -143,7 +143,7 @@ function buildSecurityTab(status) {
               <span class="settings-field-hint">Automatically lock when you switch to another application</span>
             </div>
             <div class="settings-field-control">
-              <label class="toggle">
+              <label class="toggle" data-level="item">
                 <input type="checkbox" id="securityLockOnBlur" ${lockOnBlur ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
                 <span class="toggle-track"></span>
               </label>

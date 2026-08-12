@@ -247,7 +247,7 @@ export class HintPopover {
             : "<span></span>"
         }
         <label class="hint-popover__dismiss">
-          <input type="checkbox" class="hint-popover__dismiss-checkbox">
+          <input type="checkbox" class="hint-popover__dismiss-checkbox checkbox-sm">
           <span>Don't show again</span>
         </label>
       </div>

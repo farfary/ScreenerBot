@@ -596,7 +596,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   function renderBooleanInput(field, source) {
     const value = getConfigValue(state.draft, source, field.key);
     return `
-      <label class="toggle toggle-sm" aria-label="${Utils.escapeHtml(field.label)}">
+      <label class="toggle" data-level="item" aria-label="${Utils.escapeHtml(field.label)}">
         <input
           type="checkbox"
           id="field-${source}-${field.key}"
@@ -753,7 +753,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const enableToggle = group.enableKey
       ? `
-        <label class="toggle toggle-sm" ${group.enableHint ? `title="${Utils.escapeHtml(group.enableHint)}"` : ""} aria-label="Enable ${Utils.escapeHtml(group.title)} checks">
+        <label class="toggle" data-level="group" ${group.enableHint ? `title="${Utils.escapeHtml(group.enableHint)}"` : ""} aria-label="Enable ${Utils.escapeHtml(group.title)} checks">
           <input
             type="checkbox"
             data-category-toggle="${Utils.escapeHtml(group.source)}"
@@ -828,10 +828,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const enabled = getSourceEnabled(state.draft, state.activeTab);
     const masterHtml = master
       ? `
-        <label class="toggle filtering-source-switch" ${master.hint ? `title="${Utils.escapeHtml(master.hint)}"` : ""}>
+        <label class="toggle filtering-source-switch" data-level="root" ${master.hint ? `title="${Utils.escapeHtml(master.hint)}"` : ""}>
           <input type="checkbox" data-source-toggle="${Utils.escapeHtml(state.activeTab)}" ${enabled ? "checked" : ""} />
           <span class="toggle-track"></span>
-          <span class="toggle-label" id="filtering-source-state">${enabled ? "Enabled" : "Disabled"}</span>
+          <span class="toggle-state" id="filtering-source-state">${enabled ? "Enabled" : "Disabled"}</span>
         </label>`
       : "";
 

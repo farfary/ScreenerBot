@@ -133,12 +133,6 @@
   border-color: rgb(255, 255, 255, 0.12);
 }
 
-.confirmation-dialog__checkbox input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-}
-
 .confirmation-dialog__checkbox span {
   font-size: 13px;
   color: rgb(255, 255, 255, 0.8);

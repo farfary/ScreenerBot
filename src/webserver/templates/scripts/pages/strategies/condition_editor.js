@@ -148,9 +148,9 @@ export function createConditionEditor({
           </div>
           <div class="card-header-right">
             <div class="condition-status">
-              <label class="status-toggle" title="${c.enabled ? "Enabled" : "Disabled"}">
+              <label class="toggle" data-level="item" title="${c.enabled ? "Enabled" : "Disabled"}">
                 <input type="checkbox" class="toggle-enabled" ${c.enabled ? "checked" : ""}/>
-                <span class="status-indicator"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
             <div class="condition-actions">

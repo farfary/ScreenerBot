@@ -504,13 +504,9 @@ body.trade-action-dialog-open {
   display: none;
 }
 
+/* Top-aligned against a two-line description. */
 .trade-action-manage-checkbox {
-  width: 16px;
-  height: 16px;
   margin-top: 2px;
-  flex-shrink: 0;
-  accent-color: var(--primary-color);
-  cursor: pointer;
 }
 
 .trade-action-manage-copy {

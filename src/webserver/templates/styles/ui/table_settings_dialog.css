@@ -207,10 +207,6 @@
   color: var(--text-primary);
 }
 
-.tsd-column-item input[type="checkbox"] {
-  margin: 0;
-}
-
 .table-settings-column-label.is-locked {
   color: var(--text-muted);
 }
@@ -379,11 +375,6 @@ body.table-settings-open {
   font-size: 0.925rem;
   font-weight: 500;
   color: var(--text-primary);
-}
-
-.table-settings-pagination-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
 }
 
 .table-settings-pagination-text {

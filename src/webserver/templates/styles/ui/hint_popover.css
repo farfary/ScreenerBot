@@ -359,13 +359,6 @@
   color: var(--text-secondary);
 }
 
-.hint-popover__dismiss-checkbox {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  cursor: pointer;
-}
-
 /* =============================================================================
    Animations
    ============================================================================= */

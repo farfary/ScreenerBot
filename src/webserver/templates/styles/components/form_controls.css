@@ -23,16 +23,31 @@
   --input-focus-ring-width: 3px;
   --input-focus-ring-color: var(--primary-alpha-10);
 
-  /* Toggle dimensions */
+  /* Control family (switch, checkbox, radio) - shared skin. One surface, one
+     ring, one accent pair and one motion curve for every on/off control in the
+     dashboard; see the Control Family section below. */
+  --control-motion: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --control-surface: var(--bg-tertiary);
+  --control-ring: var(--border-color);
+  --control-ring-hover: var(--input-border-hover);
+  --control-knob: var(--text-muted);
+  --control-knob-on: #fff;
+  --control-on: var(--success-color);
+  --control-select: var(--primary-color);
+
+  /* Switch geometry - default (unlevelled) size. Radius is ~1/3 of the height:
+     a soft rounded rect, never a pill. */
   --toggle-width: 40px;
   --toggle-height: 22px;
+  --toggle-radius: 7px;
   --toggle-knob-size: 16px;
+  --toggle-knob-radius: 5px;
   --toggle-knob-offset: 3px;
 
-  /* Checkbox dimensions */
+  /* Checkbox geometry - same radius ratio as the switch track. */
   --checkbox-size: 16px;
-  --checkbox-size-lg: 20px;
   --checkbox-size-sm: 14px;
+  --checkbox-radius: 5px;
 
   /* Select arrow */
   --select-arrow-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
@@ -332,142 +347,34 @@ select.select-lg {
 }
 
 /* =============================================================================
-   Checkbox
+   Control Family - Switch, Checkbox, Radio
+   =============================================================================
+   Everything in the dashboard that turns something on or off is one of three
+   shapes drawn from ONE token set (--control-*): the switch, the checkbox and
+   the radio. They share the resting surface, the 1px inset ring, the accent
+   fill and the motion curve, so a panel that mixes them still reads as one
+   system. The shape language is a soft ROUNDED RECT: never a pill with a
+   circular knob (that reads as a phone setting), never a hard square (that
+   reads as a bare form checkbox). The radio stays round because roundness is
+   what tells a user only one option can win.
+
+   Accents are semantic, not decorative: a switch fills with --control-on
+   (success) because it reports a thing being live, a checkbox and a radio fill
+   with --control-select (primary) because they report a choice.
+
+   HIERARCHY. A switch declares its depth with data-level, never with a size
+   class and never with a different colour, so a master switch, its groups and
+   their rules keep one identity and only their scale changes:
+     data-level="root"   the master over a whole source/section
+     data-level="group"  a group of rules inside that section
+     data-level="item"   a single rule/row inside a group
+   The bare sizes (.toggle-sm) stay for compact standalone switches - toolbar
+   chips, list rows - that are not part of a hierarchy.
    ============================================================================= */
 
-/* Square neumorphic checkbox — single source of truth for the whole dashboard.
-   Rounded-square (NOT circle — a circle reads as a radio button) with the same
-   raised/inset shadow aesthetic as the radio; checkmark indicator scales in.
-   Toggle switches (label.toggle > input) are unaffected: their input is hidden
-   via width:0/height:0/opacity:0 and the visual comes from .toggle-track. */
-input[type="checkbox"] {
-  appearance: none;
-  width: var(--checkbox-size);
-  height: var(--checkbox-size);
-  flex-shrink: 0;
-  background: var(--bg-tertiary);
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow:
-    0 2px 5px rgb(0, 0, 0, 0.2),
-    inset 0 2px 4px rgb(255, 255, 255, 0.25);
-  transition:
-    background-color 0.3s ease,
-    box-shadow 0.3s ease;
-}
-
-input[type="checkbox"]:hover:not(:disabled) {
-  background: var(--bg-secondary);
-}
-
-input[type="checkbox"]:checked {
-  background: var(--primary-color);
-  box-shadow:
-    inset 0 3px 8px rgb(0, 0, 0, 0.25),
-    0 2px 5px rgb(0, 0, 0, 0.15);
-}
-
-/* Checked + hover must stay blue (lighter), never wash to the light unchecked
-   hover background — :checked:hover outranks the plain :hover rule above. */
-input[type="checkbox"]:checked:hover:not(:disabled) {
-  background: var(--primary-hover);
-}
-
-/* White checkmark indicator — SVG mask scales with the box (inset:0 + % size),
-   so size variants need no extra rules. Scales in on check. */
-input[type="checkbox"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-color: white;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E") center / 64% no-repeat;
-  transform: scale(0);
-  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-input[type="checkbox"]:checked::after {
-  transform: scale(1);
-}
-
-input[type="checkbox"]:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-input[type="checkbox"]:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* Checkbox size variants */
-input[type="checkbox"].checkbox-sm {
-  width: var(--checkbox-size-sm);
-  height: var(--checkbox-size-sm);
-}
-
-input[type="checkbox"].checkbox-lg {
-  width: var(--checkbox-size-lg);
-  height: var(--checkbox-size-lg);
-}
-
-/* =============================================================================
-   Radio Button
-   ============================================================================= */
-
-input[type="radio"] {
-  appearance: none;
-  width: var(--checkbox-size);
-  height: var(--checkbox-size);
-  flex-shrink: 0;
-  background: var(--input-bg);
-  border: var(--input-border-width) solid var(--input-border-default);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  position: relative;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-input[type="radio"]:hover:not(:disabled) {
-  border-color: var(--input-border-hover);
-}
-
-input[type="radio"]:checked {
-  border-color: var(--primary-color);
-}
-
-/* Radio dot */
-input[type="radio"]:checked::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  background: var(--primary-color);
-  border-radius: var(--radius-full);
-  transform: translate(-50%, -50%);
-}
-
-input[type="radio"]:focus-visible {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-}
-
-input[type="radio"]:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* =============================================================================
-   Toggle Switch
-   ============================================================================= */
+/* -----------------------------------------------------------------------------
+   Switch
+   -------------------------------------------------------------------------- */
 
 .toggle {
   position: relative;
@@ -478,114 +385,347 @@ input[type="radio"]:disabled {
   cursor: pointer;
 }
 
-/* Hidden checkbox input */
-.toggle input {
+/* The input stays in the DOM and in the tab order (never display:none) so the
+   control keeps its keyboard and form semantics; .toggle-track is the visual.
+   Typed to beat the global input[type="checkbox"] box regardless of file order. */
+.toggle > input[type="checkbox"] {
   position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
+  margin: 0;
 }
 
-/* Track — a fixed-size switch that lives inline next to an optional label, so
-   the same markup works switch-only or with a label sibling. */
 .toggle-track {
   position: relative;
   flex-shrink: 0;
   width: var(--toggle-width);
   height: var(--toggle-height);
-  background: var(--border-color);
-  border-radius: calc(var(--toggle-height) / 2);
+  background: var(--control-surface);
+  border-radius: var(--toggle-radius);
+  box-shadow: inset 0 0 0 1px var(--control-ring);
   transition:
-    background-color 0.2s ease,
-    box-shadow 0.15s ease;
+    background-color var(--control-motion),
+    box-shadow var(--control-motion);
 }
 
-/* Knob */
+/* Knob: a rounded square that travels the track. Travel and press-squash both
+   compose into ONE transform, so each is a custom property instead of a second
+   transform declaration that would overwrite the first. */
 .toggle-track::after {
   content: "";
   position: absolute;
+  top: var(--toggle-knob-offset);
+  left: var(--toggle-knob-offset);
   width: var(--toggle-knob-size);
   height: var(--toggle-knob-size);
-  left: var(--toggle-knob-offset);
-  top: var(--toggle-knob-offset);
-  background: white;
-  border-radius: var(--radius-full);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
-  transition: transform var(--transition-base);
+  background: var(--control-knob);
+  border-radius: var(--toggle-knob-radius);
+  transform: translateX(var(--toggle-knob-travel, 0)) scale(var(--toggle-knob-squash, 1));
+  transition:
+    transform var(--control-motion),
+    background-color var(--control-motion);
 }
 
-/* Checked state */
-.toggle input:checked + .toggle-track {
-  background: var(--success-color);
+.toggle:hover > input:not(:checked, :disabled) + .toggle-track {
+  box-shadow: inset 0 0 0 1px var(--control-ring-hover);
 }
 
-.toggle input:checked + .toggle-track::after {
-  transform: translateX(
-    calc(var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-knob-offset) * 2)
+.toggle:hover > input:not(:checked, :disabled) + .toggle-track::after {
+  background: var(--text-secondary);
+}
+
+.toggle > input:checked + .toggle-track {
+  background: var(--control-on);
+  box-shadow: inset 0 0 0 1px var(--control-on);
+}
+
+.toggle > input:checked + .toggle-track::after {
+  --toggle-knob-travel: calc(
+    var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-knob-offset) * 2
   );
+
+  background: var(--control-knob-on);
 }
 
-/* Focus-visible for keyboard navigation */
-.toggle input:focus-visible + .toggle-track {
-  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
+/* Press feedback: the knob compresses. A click feels physical without changing
+   colour or growing a ring. */
+.toggle:active > input:not(:disabled) + .toggle-track::after {
+  --toggle-knob-squash: 0.88;
 }
 
-/* Disabled state */
-.toggle input:disabled + .toggle-track {
-  opacity: 0.5;
+/* The input carries focus but cannot paint it (it is 0x0 and transparent), so
+   the track projects the keyboard ring. :focus-visible is the modality gate. */
+.toggle > input:focus-visible + .toggle-track {
+  box-shadow:
+    inset 0 0 0 1px var(--control-ring),
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+}
+
+.toggle > input:checked:focus-visible + .toggle-track {
+  box-shadow:
+    inset 0 0 0 1px var(--control-on),
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+}
+
+.toggle:has(> input:disabled) {
   cursor: not-allowed;
 }
 
-.toggle input:disabled ~ * {
-  cursor: not-allowed;
+.toggle > input:disabled + .toggle-track {
+  opacity: 0.45;
 }
 
-/* Toggle with label (spacing handled by .toggle gap) */
+/* Sentence-case label beside the switch. */
 .toggle-label {
   font-size: var(--input-font-size);
   color: var(--text-secondary);
-  cursor: pointer;
+  cursor: inherit;
   user-select: none;
-  transition: color var(--transition-fast);
+  transition: color var(--control-motion);
 }
 
-.toggle input:checked ~ .toggle-label {
+.toggle > input:checked ~ .toggle-label {
   color: var(--text-primary);
 }
 
-.toggle input:disabled ~ .toggle-label {
-  opacity: 0.5;
-  cursor: not-allowed;
+/* Micro state word (ON/OFF, ALL/…) for switches that must state their state in
+   text as well as colour - toolbars, status bars, dense rows. */
+.toggle-state {
+  font-family: var(--font-data);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: inherit;
+  user-select: none;
+  transition: color var(--control-motion);
 }
 
-/* Toggle size variants */
+.toggle > input:checked ~ .toggle-state {
+  color: var(--control-on);
+}
+
+.toggle > input:disabled ~ .toggle-label,
+.toggle > input:disabled ~ .toggle-state {
+  opacity: 0.45;
+}
+
+/* Hierarchy levels - scale only, one identity. */
+.toggle[data-level="root"] {
+  --toggle-width: 44px;
+  --toggle-height: 24px;
+  --toggle-radius: 8px;
+  --toggle-knob-size: 18px;
+  --toggle-knob-radius: 6px;
+}
+
+.toggle[data-level="group"] {
+  --toggle-width: 36px;
+  --toggle-height: 20px;
+  --toggle-radius: 7px;
+  --toggle-knob-size: 14px;
+  --toggle-knob-radius: 5px;
+}
+
+.toggle[data-level="item"] {
+  --toggle-width: 30px;
+  --toggle-height: 18px;
+  --toggle-radius: 6px;
+  --toggle-knob-size: 12px;
+  --toggle-knob-radius: 4px;
+}
+
+/* Compact standalone size (not a hierarchy level). */
 .toggle-sm {
   --toggle-width: 32px;
   --toggle-height: 18px;
+  --toggle-radius: 6px;
   --toggle-knob-size: 12px;
-  --toggle-knob-offset: 3px;
+  --toggle-knob-radius: 4px;
 }
 
-.toggle-lg {
-  --toggle-width: 48px;
-  --toggle-height: 26px;
-  --toggle-knob-size: 20px;
-  --toggle-knob-offset: 3px;
+/* -----------------------------------------------------------------------------
+   Checkbox
+   -------------------------------------------------------------------------- */
+
+/* Same surface, ring, radius ratio and motion as the switch; the fill is the
+   selection accent. Switch inputs are excluded by .toggle > input above. */
+input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  background: var(--control-surface);
+  border: none;
+  border-radius: var(--checkbox-radius);
+  box-shadow: inset 0 0 0 1px var(--control-ring);
+
+  /* The control owns its box: the UA margin on a checkbox/radio would silently
+     add to every flex gap it sits in. */
+  margin: 0;
+  cursor: pointer;
+  transition:
+    background-color var(--control-motion),
+    box-shadow var(--control-motion),
+    transform var(--control-motion);
 }
 
-/* Toggle color variants */
-.toggle-primary input:checked + .toggle-track {
-  background: var(--primary-color);
+input[type="checkbox"]:hover:not(:disabled, :checked) {
+  box-shadow: inset 0 0 0 1px var(--control-ring-hover);
 }
 
-.toggle-warning input:checked + .toggle-track {
-  background: var(--warning-color);
+input[type="checkbox"]:checked {
+  background: var(--control-select);
+  box-shadow: inset 0 0 0 1px var(--control-select);
 }
 
-.toggle-danger input:checked + .toggle-track {
-  background: var(--error-color);
+/* Checkmark: an SVG mask on inset:0 at a percentage size, so every size variant
+   scales for free. It grows in from the centre. */
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--control-knob-on);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E")
+    center / 64% no-repeat;
+  transform: scale(0);
+  transition: transform var(--control-motion);
+}
+
+input[type="checkbox"]:checked::after {
+  transform: scale(1);
+}
+
+input[type="checkbox"]:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+input[type="checkbox"]:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--control-select),
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+  outline: none;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+input[type="checkbox"].checkbox-sm {
+  width: var(--checkbox-size-sm);
+  height: var(--checkbox-size-sm);
+  border-radius: var(--radius-sm);
+}
+
+/* -----------------------------------------------------------------------------
+   Radio
+   -------------------------------------------------------------------------- */
+
+input[type="radio"] {
+  appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  background: var(--control-surface);
+  border: none;
+  border-radius: var(--radius-full);
+  box-shadow: inset 0 0 0 1px var(--control-ring);
+  margin: 0;
+  cursor: pointer;
+  transition:
+    background-color var(--control-motion),
+    box-shadow var(--control-motion);
+}
+
+input[type="radio"]:hover:not(:disabled, :checked) {
+  box-shadow: inset 0 0 0 1px var(--control-ring-hover);
+}
+
+input[type="radio"]:checked {
+  background: var(--control-select);
+  box-shadow: inset 0 0 0 1px var(--control-select);
+}
+
+/* Dot, grown in on the same curve as the checkmark. */
+input[type="radio"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 40%;
+  height: 40%;
+  background: var(--control-knob-on);
+  border-radius: var(--radius-full);
+  transform: scale(0);
+  transition: transform var(--control-motion);
+}
+
+input[type="radio"]:checked::after {
+  transform: scale(1);
+}
+
+input[type="radio"]:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px var(--control-select),
+    0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+  outline: none;
+}
+
+input[type="radio"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* -----------------------------------------------------------------------------
+   Label rows
+   -------------------------------------------------------------------------- */
+
+/* A checkbox or radio with text beside it. Top-aligned because these labels
+   wrap into sentences far more often than they stay on one line. */
+.checkbox-label {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  font-size: var(--input-font-size);
+  color: var(--text-secondary);
+  line-height: 1.45;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label > input {
+  margin-top: 0.15em;
+}
+
+.checkbox-label span {
+  min-width: 0;
+}
+
+.checkbox-label:has(> input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Reduced motion keeps the state change, drops the travel. */
+@media (prefers-reduced-motion: reduce) {
+  .toggle-track,
+  .toggle-track::after,
+  .toggle-label,
+  .toggle-state,
+  input[type="checkbox"],
+  input[type="checkbox"]::after,
+  input[type="radio"],
+  input[type="radio"]::after {
+    transition: none;
+  }
 }
 
 /* =============================================================================
@@ -849,31 +989,6 @@ input[type="number"]::-webkit-inner-spin-button {
 .form-inline select {
   flex: 1;
   min-width: 0;
-}
-
-/* =============================================================================
-   Checkbox/Radio Label Pattern
-   ============================================================================= */
-
-.checkbox-label,
-.radio-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  cursor: pointer;
-  user-select: none;
-}
-
-.checkbox-label span,
-.radio-label span {
-  font-size: var(--input-font-size);
-  color: var(--text-primary);
-}
-
-.checkbox-label input:disabled ~ span,
-.radio-label input:disabled ~ span {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* =============================================================================

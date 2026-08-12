@@ -426,10 +426,6 @@ body.dt-column-resizing * {
   border: 1px dashed var(--primary-color);
 }
 
-.dt-column-menu-item input[type="checkbox"] {
-  margin: 0;
-}
-
 .dt-column-label {
   font-size: 0.875rem;
   font-weight: 500;

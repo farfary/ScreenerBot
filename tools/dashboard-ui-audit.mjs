@@ -34,6 +34,9 @@ const canonicalOwners = new Map([
   [".input-group", "components/form_controls.css"],
   [".toggle", "components/form_controls.css"],
   [".toggle-track", "components/form_controls.css"],
+  [".toggle-label", "components/form_controls.css"],
+  [".toggle-state", "components/form_controls.css"],
+  [".checkbox-label", "components/form_controls.css"],
   [".number-field", "components/form_controls.css"],
   [".number-field-suffix", "components/form_controls.css"],
   [".number-field-spin", "components/form_controls.css"],
@@ -67,6 +70,21 @@ function selectorsIn(css) {
   return selectors;
 }
 
+/* Selector + declaration body per rule, so a check can look at what a rule
+   actually draws and not only at what it targets. */
+function rulesIn(css) {
+  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [];
+  const pattern = /([^{}]+)\{([^{}]*)\}/g;
+  let match;
+  while ((match = pattern.exec(withoutComments))) {
+    const selector = match[1].slice(match[1].lastIndexOf(";") + 1).trim();
+    if (!selector || selector.startsWith("@")) continue;
+    rules.push([selector, match[2]]);
+  }
+  return rules;
+}
+
 const errors = [];
 const cssFiles = (await walk(stylesRoot)).filter((file) => file.endsWith(".css"));
 
@@ -89,8 +107,25 @@ for (const file of cssFiles) {
     if (owner && path !== owner) {
       errors.push(`${path}: ${selector} is owned by ${owner}`);
     }
-    if (/\.(?:source|category)-switch\b|\.slider\b/.test(selector)) {
+    if (/\.(?:source|category)-switch\b|\.slider\b|-switch__/.test(selector)) {
       errors.push(`${path}: custom switch selector ${selector}; use .toggle`);
+    }
+  }
+
+  /* The control family (switch, checkbox, radio) has one skin. A page may place
+     a control - margins, order, alignment - but never re-draw its box, which is
+     how four different switches and five checkbox sizes grew in the first place. */
+  if (path !== "components/form_controls.css") {
+    for (const [selector, body] of rulesIn(css)) {
+      if (!/input\[type="(?:checkbox|radio)"\]/.test(selector)) continue;
+      const skin = body.match(
+        /^\s*(width|height|background|background-color|border|border-radius|box-shadow|appearance|accent-color)\s*:/m
+      );
+      if (skin) {
+        errors.push(
+          `${path}: ${selector} sets ${skin[1]}; the control skin is owned by components/form_controls.css`
+        );
+      }
     }
   }
 

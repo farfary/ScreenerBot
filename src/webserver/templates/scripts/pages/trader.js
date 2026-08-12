@@ -975,7 +975,7 @@ function createLifecycle() {
                 ${strategy.enabled ? "checked" : ""}
               />
               <span class="toggle-track"></span>
-              <span class="toggle-label">${statusLabel}</span>
+              <span class="toggle-state">${statusLabel}</span>
             </label>
           </div>
           <div class="strategy-control-meta">
