@@ -26,7 +26,9 @@ select.cs-enhanced-source {
   background-image: none !important;
   padding: 0 !important;
   border: none !important;
+  border-radius: 0 !important;
   background-color: transparent !important;
+  box-shadow: none !important;
 }
 
 /* Trigger area - sleek minimal design */
@@ -201,6 +203,51 @@ select.cs-enhanced-source {
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);
+}
+
+/* Toolbar menus are an extension of their trigger, not a separate floating card. */
+.cs-dropdown.cs-portal.cs-dropdown--toolbar {
+  margin: 0;
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: 0 8px 18px var(--shadow-sm);
+  backdrop-filter: none;
+  font-family: var(--font-mono);
+}
+
+.cs-dropdown.cs-portal.cs-dropdown--toolbar.cs-dropdown--above {
+  border-top: 1px solid var(--border-color);
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.cs-dropdown--toolbar .cs-options-container {
+  padding: 0;
+}
+
+.cs-dropdown--toolbar .cs-option,
+.cs-dropdown--toolbar .cs-option:first-child,
+.cs-dropdown--toolbar .cs-option:last-child {
+  display: flex;
+  align-items: center;
+  min-height: var(--table-toolbar-control-height, 32px);
+  margin: 0;
+  padding-block: 0;
+  padding-inline: 0.6875rem 2rem;
+  border-radius: 0;
+}
+
+.cs-dropdown--toolbar .cs-option + .cs-option {
+  border-top: 1px solid var(--border-color);
+}
+
+.cs-dropdown--toolbar .cs-option:hover,
+.cs-dropdown--toolbar .cs-option.focused,
+.cs-dropdown--toolbar .cs-option.selected,
+.cs-dropdown--toolbar .cs-option.selected.focused {
+  background: var(--bg-card-hover);
 }
 
 /* Option items - Uses floating item pattern.

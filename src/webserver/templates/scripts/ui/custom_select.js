@@ -612,6 +612,9 @@ export class CustomSelect {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const style = this.dropdownEl.style;
+    const isToolbarSelect = Boolean(this.el.closest(".table-toolbar-field"));
+
+    this.dropdownEl.classList.toggle("cs-dropdown--toolbar", isToolbarSelect);
 
     style.position = "fixed";
     style.right = "auto"; // JS owns horizontal placement; clear the base `right: 0`
@@ -621,7 +624,7 @@ export class CustomSelect {
     const maxWidth = Math.max(triggerRect.width, viewportWidth - MARGIN * 2);
     style.minWidth = `${Math.min(triggerRect.width, maxWidth)}px`;
     style.maxWidth = `${maxWidth}px`;
-    style.width = "max-content";
+    style.width = isToolbarSelect ? `${triggerRect.width}px` : "max-content";
 
     // Measure the resolved size after the width constraints are applied.
     const dropdownRect = this.dropdownEl.getBoundingClientRect();
@@ -644,12 +647,14 @@ export class CustomSelect {
 
     if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
       style.top = "auto";
-      style.bottom = `${viewportHeight - triggerRect.top + 4}px`;
+      style.bottom = `${viewportHeight - triggerRect.top + (isToolbarSelect ? -1 : 4)}px`;
       this.el.classList.add("dropdown-above");
+      this.dropdownEl.classList.add("cs-dropdown--above");
     } else {
-      style.top = `${triggerRect.bottom + 4}px`;
+      style.top = `${triggerRect.bottom + (isToolbarSelect ? -1 : 4)}px`;
       style.bottom = "auto";
       this.el.classList.remove("dropdown-above");
+      this.dropdownEl.classList.remove("cs-dropdown--above");
     }
   }
 
