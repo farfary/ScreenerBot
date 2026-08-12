@@ -21,6 +21,9 @@ pub fn page_styles(page: &str) -> Option<String> {
         "tokens" => TOKENS_PAGE_STYLES.to_string(),
         "positions" => POSITIONS_PAGE_STYLES.to_string(),
         "filtering" => [
+            // The source sub-tabs render the same settings rows as the
+            // Configuration page, from the same stylesheet.
+            CONFIG_FIELDS_STYLES,
             FILTERING_BASE_STYLES,
             FILTERING_RESULTS_STYLES,
             FILTERING_RESULTS_EXPLORER_STYLES,

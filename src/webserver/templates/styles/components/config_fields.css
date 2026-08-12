@@ -1,4 +1,8 @@
-/* Config Field Styles
+/* Settings Field System — shared by every surface that edits config
+   (the Configuration page and the Filtering page's source sub-tabs), which is
+   why it is a component and not a page stylesheet. Both include this file, so
+   one parameter looks and behaves the same wherever it is edited.
+
    One parameter is one ROW of a settings list, never a card inside a card.
    Every type — boolean, number, string, array, sub-config — shares the same
    grid, so labels, controls and the reset glyph line up down the whole page:
@@ -9,6 +13,29 @@
    Controls sit against the right edge of a fixed control track, which is what
    creates the vertical rhythm; wide types (textarea / sub-config) switch to
    the --stacked variant and take the full row width instead. */
+
+/* The field system's own tokens. They live at the root, not on `.config-page`,
+   because more than one page renders these rows — a page-scoped definition made
+   every row outside that page fall back to an unset track width. A page may
+   still override any of them on its own container (the Filtering page widens
+   the track for range rows). */
+:root {
+  /* The control track every field type aligns against, plus the always-reserved
+     reset slot at its right. */
+  --config-field-control-width: clamp(180px, 22vw, 300px);
+  --config-field-reset-size: 26px;
+
+  /* Theme-aware semantic colors for settings rows and their chips. */
+  --config-accent: var(--primary-color);
+  --config-accent-light: var(--primary-alpha-10);
+  --config-accent-medium: var(--primary-alpha-20);
+  --config-success: var(--success-color);
+  --config-success-light: var(--success-alpha-10);
+  --config-error: var(--error-color);
+  --config-error-light: var(--danger-alpha-10);
+  --config-warning: var(--warning-color);
+  --config-warning-light: var(--warning-alpha-10);
+}
 
 .config-field,
 .config-object-field {
@@ -251,9 +278,67 @@
   font-style: italic;
 }
 
-.config-field-control input[type="checkbox"] {
+/* Direct child only: a `.toggle` switch in the control track hides its own
+   checkbox (width/height 0) and paints `.toggle-track` instead, and a bare
+   `input[type=checkbox]` rule here outranks that and repaints the hidden box. */
+.config-field-control > input[type="checkbox"] {
   width: 20px;
   height: 20px;
+}
+
+/* Range row: a `min_x` / `max_x` pair is ONE parameter with two bounds, so it
+   is one row with two inputs — never two rows repeating the same subject. The
+   inputs share the track equally and drop the single-value max-width. */
+.config-field-range {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.config-field-range .config-field-bound {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.config-field-range .config-field-bound-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.config-field-range .config-field-bound input[type="number"] {
+  max-width: none;
+}
+
+.config-field-range .config-field-range-sep {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* The unit belongs to the parameter, not to each bound, so a range row prints it
+   once at the end of the track. Single-value rows carry it inside the input
+   (`.input-with-unit`), and both read as the same muted suffix next to a number. */
+.config-field-range .config-field-range-unit {
+  flex-shrink: 0;
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* A row whose group or source master switch is off: muted, but fully editable —
+   the value is still what the rule will use the moment the switch goes back on.
+   Never `pointer-events: none`, which blocks the mouse while leaving the field
+   reachable by keyboard. */
+.config-field--inactive .config-field-label {
+  opacity: 0.55;
 }
 
 /* Reset: a bare glyph in a slot that is always reserved, so a value going back

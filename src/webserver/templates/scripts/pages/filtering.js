@@ -10,7 +10,7 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
-import { $, $$ } from "../core/dom.js";
+import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
@@ -18,6 +18,8 @@ import {
   FILTER_TABS,
   TIME_RANGE_PRESETS,
   setConfigValue,
+  getFieldDefault,
+  getSourceEnabled,
   setSourceEnabled,
   setCategoryEnabled,
   deepMerge,
@@ -194,30 +196,64 @@ function bindGlobalHandlers() {
   if (exportBtn) addTrackedListener(exportBtn, "click", handleExportConfig);
   if (importBtn) addTrackedListener(importBtn, "click", handleImportConfig);
 
+  bindDelegatedHandlers();
+
   globalHandlersBound = true;
 }
 
-function bindSourceToggleHandlers() {
-  $$("[data-source-toggle]").forEach((input) => {
-    addTrackedListener(input, "change", handleSourceToggle);
+/**
+ * Every control inside the toolbar and the panel area is reached by delegation
+ * from the two shell containers, which outlive their own innerHTML.
+ *
+ * Per-control binding after each repaint was a leak with a visible cost: one
+ * keystroke in the filter box rebuilt the panel and pushed a fresh listener for
+ * every input into `eventCleanups`, which is only drained on dispose, so the
+ * array grew for the whole life of the page.
+ */
+function bindDelegatedHandlers() {
+  const panels = $("#filtering-config-panels");
+  if (panels) {
+    // `input` covers checkboxes as well as number fields, so a switch inside the
+    // panel needs no second `change` listener of its own.
+    addTrackedListener(panels, "input", (event) => {
+      if (event.target.matches("[data-field]")) handleFieldChange(event);
+    });
+    addTrackedListener(panels, "change", (event) => {
+      if (event.target.matches("[data-category-toggle]")) handleCategoryToggle(event);
+    });
+    addTrackedListener(panels, "click", (event) => {
+      const reset = event.target.closest("[data-reset-keys]");
+      if (reset) handleFieldReset(reset);
+    });
+  }
+
+  const toolbar = $("#filtering-toolbar");
+  if (!toolbar) return;
+
+  addTrackedListener(toolbar, "change", (event) => {
+    if (event.target.matches("[data-source-toggle]")) handleSourceToggle(event);
+  });
+  addTrackedListener(toolbar, "input", (event) => {
+    if (event.target.id === "filtering-search") applySearchQuery(event.target.value);
+  });
+  addTrackedListener(toolbar, "click", (event) => {
+    if (!event.target.closest("#filtering-search-clear")) return;
+    const input = $("#filtering-search");
+    if (input) input.value = "";
+    applySearchQuery("");
+    input?.focus();
   });
 }
 
-function bindConfigHandlers() {
-  const container = $("#filtering-config-panels");
-  if (!container) return;
-
-  container.querySelectorAll("[data-field]").forEach((input) => {
-    addTrackedListener(input, "input", handleFieldChange);
-    if (input.type === "checkbox") {
-      addTrackedListener(input, "change", handleFieldChange);
-    }
-  });
-
-  container.querySelectorAll("[data-category-toggle]").forEach((input) => {
-    addTrackedListener(input, "change", handleCategoryToggle);
-  });
-}
+// Repainting every row on every keystroke is wasted work on a source with 30+
+// parameters, so the query is applied on a trailing edge. The input itself is
+// never re-rendered from state, so the caret cannot jump.
+const applySearchQuery = Utils.debounce((raw) => {
+  state.searchQuery = (raw || "").toLowerCase();
+  AppState.save("filtering_searchQuery", state.searchQuery);
+  updateConfigPanels({ scrollTop: 0 });
+  updateParamCount();
+}, 150);
 
 function updateInfoBar() {
   const key = JSON.stringify(state.stats);
@@ -229,31 +265,39 @@ function updateInfoBar() {
   }
 }
 
-function updateSearchBar() {
-  const container = $("#filtering-search-bar");
-  if (!container) return;
-
-  const html = renderers.renderSearchBar();
-  container.innerHTML = html;
-
-  // Hide the container if no content
-  container.style.display = html ? "" : "none";
-
-  if (html) {
-    bindSearchHandler();
-    bindSourceToggleHandlers();
-  }
+/**
+ * What the toolbar's own markup depends on: which sub-tab it belongs to and the
+ * position of that source's master switch. Deliberately NOT the search query —
+ * the toolbar owns the box the user is typing in.
+ */
+function toolbarKey() {
+  const enabled = state.draft ? getSourceEnabled(state.draft, state.activeTab) : null;
+  return `${state.activeTab}:${enabled}`;
 }
 
-function bindSearchHandler() {
-  const searchInput = $("#filtering-search");
-  if (searchInput) {
-    addTrackedListener(searchInput, "input", (event) => {
-      state.searchQuery = (event.target.value || "").toLowerCase();
-      AppState.save("filtering_searchQuery", state.searchQuery);
-      updateConfigPanels({ scrollTop: 0 });
-    });
+/**
+ * Rebuild the toolbar only when that signature changes, so a 5 s stats poll or a
+ * keystroke cannot throw away the caret — while Reset and Import, which replace
+ * the whole draft, still repaint the switch they moved.
+ */
+function updateToolbar() {
+  const container = $("#filtering-toolbar");
+  if (!container) return;
+
+  if (toolbarKey() === _lastToolbarKey) {
+    updateParamCount();
+    return;
   }
+
+  const html = renderers.renderToolbar();
+  container.innerHTML = html;
+  container.hidden = !html;
+  _lastToolbarKey = toolbarKey();
+}
+
+function updateParamCount() {
+  const el = $("#filtering-param-count");
+  if (el) el.textContent = renderers.renderParamCount();
 }
 
 function updateConfigPanels(options = {}) {
@@ -270,7 +314,6 @@ function updateConfigPanels(options = {}) {
   const prevRightScroll = container.querySelector(".status-rejection-section")?.scrollTop ?? 0;
 
   container.innerHTML = renderers.renderConfigPanels();
-  bindConfigHandlers();
 
   const nextScrollEl =
     container.querySelector(".config-scroll-area, .analytics-scroll-area") || container;
@@ -323,7 +366,7 @@ function render() {
   }
 
   updateInfoBar();
-  updateSearchBar();
+  updateToolbar();
   updateConfigPanels({ preserveScroll: true });
   updateStatusMessage();
   updateActionButtons();
@@ -355,25 +398,56 @@ function handleFieldChange(event) {
   updateStatusMessage();
 }
 
+// Put one parameter back to the schema default. A range row hands over both of
+// its bounds, so a subject returns to its shipped window in one click.
+function handleFieldReset(button) {
+  const source = button.dataset.resetSource;
+  const keys = (button.dataset.resetKeys || "").split(",").filter(Boolean);
+  if (!source || keys.length === 0) return;
+
+  for (const key of keys) {
+    const value = getFieldDefault(state.metadata, source, key);
+    if (value === undefined) continue;
+    setConfigValue(state.draft, source, key, value);
+  }
+
+  checkForChanges();
+  updateConfigPanels({ preserveScroll: true });
+  updateStatusMessage();
+  updateActionButtons();
+}
+
+// Both masters repaint the panel — every row below them changes between active
+// and inert — but never the toolbar that owns the switch the user just clicked.
 function handleSourceToggle(event) {
   const input = event.target;
-  const source = input.dataset.sourceToggle;
-  const enabled = input.checked;
-
-  setSourceEnabled(state.draft, source, enabled);
+  setSourceEnabled(state.draft, input.dataset.sourceToggle, input.checked);
   checkForChanges();
-  render(); // Need full re-render to update disabled states
+
+  // The switch and its word are already correct in the DOM — record that, so the
+  // next full render leaves the control the user is still holding focus on alone.
+  const stateLabel = $("#filtering-source-state");
+  if (stateLabel) stateLabel.textContent = input.checked ? "Enabled" : "Disabled";
+  _lastToolbarKey = toolbarKey();
+
+  updateConfigPanels({ preserveScroll: true });
+  updateStatusMessage();
+  updateActionButtons();
 }
 
 function handleCategoryToggle(event) {
   const input = event.target;
-  const source = input.dataset.categoryToggle;
-  const enableKey = input.dataset.enableKey;
-  const enabled = input.checked;
-
-  setCategoryEnabled(state.draft, source, enableKey, enabled);
+  setCategoryEnabled(
+    state.draft,
+    input.dataset.categoryToggle,
+    input.dataset.enableKey,
+    input.checked
+  );
   checkForChanges();
-  render(); // Need full re-render to update disabled states
+
+  updateConfigPanels({ preserveScroll: true });
+  updateStatusMessage();
+  updateActionButtons();
 }
 
 function updateActionButtons() {
@@ -624,6 +698,7 @@ async function loadData() {
 let poller = null;
 // Hash guards — prevent DOM rebuilds when polled data is unchanged
 let _lastInfoBarKey = null;
+let _lastToolbarKey = null;
 let _lastAnalyticsKey = null;
 let _lastStatusKey = null;
 
@@ -674,7 +749,7 @@ export function createLifecycle() {
           onChange: (tabId) => {
             state.activeTab = tabId;
             AppState.save("filtering_activeTab", tabId);
-            updateSearchBar();
+            updateToolbar();
 
             // Switch the panel FIRST. Analytics and Explorer both render from the
             // analytics payload, and awaiting that fetch before repainting left the
@@ -745,6 +820,7 @@ export function createLifecycle() {
       state.initialized = false;
       globalHandlersBound = false;
       _lastInfoBarKey = null;
+      _lastToolbarKey = null;
       _lastAnalyticsKey = null;
       _lastStatusKey = null;
     },

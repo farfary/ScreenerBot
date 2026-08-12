@@ -77,8 +77,15 @@
   color: var(--error-color);
 }
 
-/* Search Bar */
-.filtering-search-bar {
+/* =============================================================================
+   Settings sub-tab toolbar
+   Filter-by-name, how much of the source is on screen, and the source master
+   switch at the far end. The read-only tabs (Status / Analytics / Explorer) get
+   no toolbar at all, and the strip is `hidden` rather than emptied so it cannot
+   leave a bordered band behind.
+   ============================================================================= */
+
+.filtering-toolbar {
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -88,45 +95,28 @@
   gap: var(--spacing-md);
 }
 
-.filtering-search-bar input {
-  flex: 1;
+/* `display: flex` above outranks the bare [hidden] attribute. */
+.filtering-toolbar[hidden] {
+  display: none;
+}
+
+.filtering-toolbar-search {
+  flex: 1 1 260px;
   max-width: 320px;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: 0.875rem;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
 }
 
-.filtering-search-bar input::placeholder {
-  color: var(--text-muted);
+.filtering-toolbar-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  white-space: nowrap;
 }
 
-.filtering-search-bar input:focus {
-  outline: none;
-  border-color: var(--link-color);
-  box-shadow: 0 0 0 3px var(--primary-alpha-10);
-}
-
-/* Source Toggle */
-.source-toggle-wrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-md);
-  background: var(--primary-alpha-10);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--primary-alpha-20);
-}
-
-.source-toggle-wrapper .label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
+.filtering-source-switch {
+  margin-inline-start: auto;
 }
 
 /* =============================================================================
@@ -237,22 +227,24 @@
     "zero" 1;
 }
 
+/* Theme tokens, never literal rgb(): the hardcoded dark-theme blues and greens
+   these carried stayed dark in the light theme. */
 .rej-source-pill.dexscreener {
-  background: rgb(88 166 255 / 0.1);
+  background: var(--primary-alpha-10);
   color: var(--link-color);
-  border-color: rgb(88 166 255 / 0.25);
+  border-color: var(--primary-alpha-30);
 }
 
 .rej-source-pill.geckoterminal {
-  background: rgb(63 185 80 / 0.1);
+  background: var(--success-alpha-10);
   color: var(--success-color);
-  border-color: rgb(63 185 80 / 0.25);
+  border-color: var(--success-alpha-30);
 }
 
 .rej-source-pill.rugcheck {
-  background: rgb(248 81 73 / 0.1);
+  background: var(--danger-alpha-10);
   color: var(--error-color);
-  border-color: rgb(248 81 73 / 0.25);
+  border-color: var(--danger-alpha-30);
 }
 
 /* Rejection list */
@@ -313,17 +305,17 @@
 }
 
 .rej-source-tag.dexscreener {
-  background: rgb(88 166 255 / 0.15);
+  background: var(--primary-alpha-15);
   color: var(--link-color);
 }
 
 .rej-source-tag.geckoterminal {
-  background: rgb(63 185 80 / 0.15);
+  background: var(--success-alpha-15);
   color: var(--success-color);
 }
 
 .rej-source-tag.rugcheck {
-  background: rgb(248 81 73 / 0.15);
+  background: var(--danger-alpha-15);
   color: var(--error-color);
 }
 
@@ -342,7 +334,15 @@
 }
 
 /* =============================================================================
-   Config Tabs — cards inside their own scroll area
+   Settings sub-tabs — one scrolling list of parameter groups
+   The rows themselves come from components/config_fields.css, the same system
+   the Configuration page uses.
+
+   This list is deliberately NOT a grid of cards. Grid rows equalise their
+   items' heights, so a two-parameter group placed beside an eight-parameter one
+   grew a card's worth of blank space to match it — the taller the widest group,
+   the emptier its neighbours. A single flow of full-width groups cannot express
+   that bug, and it gives every label and hint room to read on one line.
    ============================================================================= */
 
 .config-scroll-area {
@@ -353,197 +353,72 @@
   overscroll-behavior: contain;
 }
 
-.cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+.filtering-config-list {
+  /* Range rows put two inputs in the control track, so it is wider here than
+     the Configuration page's single-value default. */
+  --config-field-control-width: clamp(240px, 26vw, 380px);
+
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-md);
-  width: 100%;
   padding: var(--spacing-md);
 }
 
-.filter-card {
+.filtering-source-off {
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--warning-alpha-30);
+  border-radius: var(--radius-lg);
+  background: var(--warning-alpha-10);
+  color: var(--warning-color);
+  font-size: 0.8rem;
+}
+
+.filtering-group {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
   min-width: 0;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
 }
 
-.filter-card:hover {
-  border-color: var(--primary-alpha-30);
-}
-
-.filter-card .card-body.disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.filter-card .card-header {
+.filtering-group-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
 
-.filter-card .card-header h3 {
+.filtering-group-title {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.filter-card .card-body {
-  padding: var(--spacing-md) var(--spacing-md) var(--spacing-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* =============================================================================
-   Config Fields
-   ============================================================================= */
-
-.filtering-config-field {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-xs);
-  border-radius: var(--radius-md);
-  background: transparent;
-  transition: background var(--transition-fast);
-  min-width: 0;
-}
-
-.filtering-config-field:hover {
-  background: var(--primary-alpha-5);
-}
-
-.filtering-config-field.changed {
-  background: var(--primary-alpha-10);
-  box-shadow: inset 0 0 0 1px var(--primary-alpha-30);
-}
-
-.filtering-config-field label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  padding-top: 2px;
-}
-
-.filtering-config-field .field-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.filtering-config-field .field-hint {
+.filtering-group-count {
   font-size: 0.7rem;
   color: var(--text-muted);
-  line-height: 1.4;
-  overflow-wrap: break-word;
-}
-
-.filtering-config-field > div:last-child {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--spacing-xs);
-  flex-shrink: 0;
-}
-
-.filtering-config-field input[type="number"],
-.filtering-config-field input[type="text"] {
-  width: 110px;
-  min-width: 90px;
-  max-width: 130px;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.8rem;
   font-family: var(--font-data);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  text-align: end;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
 }
 
-.filtering-config-field input[type="number"]:focus,
-.filtering-config-field input[type="text"]:focus {
-  outline: none;
-  border-color: var(--link-color);
-  box-shadow: 0 0 0 3px var(--primary-alpha-10);
+.filtering-group-header .toggle {
+  margin-inline-start: auto;
 }
 
-.filtering-config-field input::placeholder {
-  color: var(--text-muted);
-}
-
-.filtering-config-field input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-}
-
-.filtering-config-field .field-meta {
+/* Rows carry their own hairline separators (`border-top`), so the body adds
+   neither padding nor gaps. */
+.filtering-group-body {
   display: flex;
-  gap: var(--spacing-xs);
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: nowrap;
+  flex-direction: column;
 }
 
-.filtering-config-field .field-unit {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.filtering-config-field .field-impact {
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.filtering-config-field .field-impact.critical {
-  background: var(--danger-alpha-20);
-  color: var(--error-color);
-}
-
-.filtering-config-field .field-impact.high {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-}
-
-.filtering-config-field .field-impact.medium {
-  background: var(--primary-alpha-20);
-  color: var(--link-color);
-}
-
-.filtering-config-field .field-impact.low {
-  background: var(--bg-card-hover);
-  color: var(--text-secondary);
+.filtering-group-body > .config-field:first-child {
+  border-top: none;
 }
 
 /* =============================================================================
@@ -569,43 +444,43 @@
 .text-success {
   color: var(--success-color) !important;
 }
+
 .text-error {
   color: var(--error-color) !important;
 }
-.text-warning {
-  color: var(--warning-color) !important;
-}
+
 .text-end {
   text-align: end !important;
 }
+
 .font-medium {
   font-weight: 500 !important;
 }
+
 .font-data {
   font-family: var(--font-data) !important;
 }
+
 .font-bold {
   font-weight: 600 !important;
 }
+
 .span-2 {
   grid-column: span 2 !important;
 }
-.min-w-0 {
-  min-width: 0 !important;
-}
+
 .w-auto {
   width: auto !important;
 }
+
 .text-center {
   text-align: center !important;
 }
-.text-xs {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-}
+
 .p-lg {
   padding: var(--spacing-lg) !important;
 }
+
 .p-20 {
   padding: 20px !important;
 }
@@ -696,14 +571,6 @@
    Empty / loading states
    ============================================================================= */
 
-.no-matches {
-  padding: var(--spacing-md);
-  text-align: center;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
 .filtering-config-empty {
   flex: 1;
   min-height: 160px;
@@ -737,28 +604,18 @@
 }
 
 @media (width <= 1024px) {
-  .cards-grid {
-    grid-template-columns: 1fr;
-  }
-
   .status-view {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }
 
 @media (width <= 720px) {
-  .filtering-search-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--spacing-sm);
+  .filtering-toolbar {
+    flex-wrap: wrap;
   }
 
-  .filtering-search-bar input {
+  .filtering-toolbar-search {
     max-width: none;
-  }
-
-  .source-toggle-wrapper {
-    justify-content: space-between;
   }
 
   .filtering-footer {

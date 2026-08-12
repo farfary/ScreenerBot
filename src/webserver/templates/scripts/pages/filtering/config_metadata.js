@@ -25,7 +25,7 @@ export const TIME_RANGE_PRESETS = {
   all: { label: "All", seconds: null },
 };
 
-const SOURCE_LABELS = {
+export const SOURCE_LABELS = {
   meta: "Core",
   onchain: "On-Chain",
   dexscreener: "DexScreener",
@@ -33,53 +33,178 @@ const SOURCE_LABELS = {
   rugcheck: "RugCheck",
 };
 
-function groupFields(source, fields) {
-  const groups = new Map();
+/** The sub-tabs that edit configuration; the rest read filtering results. */
+export const SETTINGS_TABS = Object.keys(SOURCE_LABELS);
 
-  for (const [key, metadata] of Object.entries(fields || {})) {
-    if (source !== "meta" && key === "enabled") continue;
-    const category = metadata.category || "General";
-    if (!groups.has(category)) groups.set(category, []);
-    groups.get(category).push({ key, ...metadata });
-  }
+const IMPACT_WEIGHT = { critical: 4, high: 3, medium: 2, low: 1 };
 
-  return Array.from(groups, ([category, categoryFields]) => {
-    const enableField = categoryFields.find(
-      (field) => field.type === "boolean" && field.key.endsWith("_enabled")
-    );
-    const visibleFields = enableField
-      ? categoryFields.filter((field) => field.key !== enableField.key)
-      : categoryFields;
+// Windows read in the order a trader thinks about them. `/api/config/metadata`
+// is a BTreeMap keyed by field name, so the payload arrives in ALPHABETICAL key
+// order — which puts every `max_*` before every `min_*` and sorts 24h ahead of
+// 5m. Presentation order therefore has to be derived here.
+const TIMEFRAME_RANK = {
+  "1m": 1,
+  "5m": 2,
+  "5min": 2,
+  "15m": 3,
+  "30m": 4,
+  "1h": 5,
+  "2h": 6,
+  "6h": 7,
+  "12h": 8,
+  "24h": 9,
+  "7d": 10,
+};
 
-    return [
-      `${SOURCE_LABELS[source] || source} — ${category}`,
-      {
-        source,
-        enableKey: enableField?.key,
-        fields: visibleFields,
-      },
-    ];
-  }).filter(([, group]) => group.fields.length > 0);
+function boundOf(key) {
+  const match = /^(min|max)_(.+)$/.exec(key);
+  return match ? { bound: match[1], subject: match[2] } : null;
+}
+
+/** "Min Liquidity" and "Max Liquidity" are the same subject: "Liquidity". */
+function subjectLabel(label) {
+  return String(label || "")
+    .replace(/^(min|max|minimum|maximum)\s+/i, "")
+    .trim();
+}
+
+function timeframeRank(subject) {
+  const match = /_(\d+(?:m|min|h|d))$/.exec(subject || "");
+  return match ? (TIMEFRAME_RANK[match[1]] ?? 0) : 0;
+}
+
+function strongerImpact(a, b) {
+  return (IMPACT_WEIGHT[b] ?? 0) > (IMPACT_WEIGHT[a] ?? 0) ? b : a;
 }
 
 /**
- * Convert authoritative FilteringConfig metadata into the card groups used by
- * this page. Labels, hints, types, constraints, units and impact levels stay
+ * Fold a category's fields into display rows: a `min_x` / `max_x` pair becomes
+ * ONE range row, everything else stays a single row.
+ *
+ * A bound pair is one parameter with two ends, and rendering it as two rows was
+ * what made a two-bound group (FDV, Liquidity, Market Cap) print the same
+ * subject, hint and unit twice while an eight-field group towered beside it.
+ */
+function buildRows(fields) {
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+  const consumed = new Set();
+  const rows = [];
+
+  for (const field of fields) {
+    if (consumed.has(field.key)) continue;
+
+    const bound = boundOf(field.key);
+    const partner = bound
+      ? byKey.get(`${bound.bound === "min" ? "max" : "min"}_${bound.subject}`)
+      : undefined;
+    const pairable =
+      bound &&
+      partner &&
+      partner.type === field.type &&
+      field.type !== "boolean" &&
+      subjectLabel(field.label) === subjectLabel(partner.label);
+
+    if (pairable) {
+      const [min, max] = bound.bound === "min" ? [field, partner] : [partner, field];
+      consumed.add(min.key);
+      consumed.add(max.key);
+      rows.push({
+        kind: "range",
+        key: `${min.key}+${max.key}`,
+        subject: bound.subject,
+        label: subjectLabel(min.label),
+        hint: min.hint || max.hint,
+        unit: min.unit || max.unit,
+        impact: strongerImpact(min.impact, max.impact),
+        fields: [min, max],
+      });
+      continue;
+    }
+
+    consumed.add(field.key);
+    rows.push({
+      kind: "field",
+      key: field.key,
+      subject: bound?.subject || field.key,
+      label: field.label,
+      hint: field.hint,
+      unit: field.unit,
+      impact: field.impact,
+      fields: [field],
+    });
+  }
+
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort(
+      (a, b) => timeframeRank(a.row.subject) - timeframeRank(b.row.subject) || a.index - b.index
+    )
+    .map((entry) => entry.row);
+}
+
+function groupFields(source, fields) {
+  const categories = new Map();
+
+  for (const [key, metadata] of Object.entries(fields || {})) {
+    // A source's own master switch is not one of its parameters — it is the
+    // sub-tab's master control (see `getSourceMasterField`).
+    if (source !== "meta" && key === "enabled") continue;
+    const category = metadata.category || "General";
+    if (!categories.has(category)) categories.set(category, []);
+    categories.get(category).push({ key, ...metadata });
+  }
+
+  return Array.from(categories, ([category, categoryFields]) => {
+    const enableField = categoryFields.find(
+      (field) => field.type === "boolean" && field.key.endsWith("_enabled")
+    );
+    const valueFields = enableField
+      ? categoryFields.filter((field) => field.key !== enableField.key)
+      : categoryFields;
+
+    return {
+      // Categories repeat across sources ("Liquidity", "Volume", "General"), so
+      // the identity has to carry the source — a bare category name silently
+      // collided and dropped groups when they were keyed by title.
+      id: `${source}:${category}`,
+      title: category,
+      source,
+      enableKey: enableField?.key,
+      enableHint: enableField?.hint,
+      rows: buildRows(valueFields),
+    };
+  }).filter((group) => group.rows.length > 0);
+}
+
+/**
+ * Convert authoritative FilteringConfig metadata into the ordered groups this
+ * page renders. Labels, hints, types, constraints, units and impact levels stay
  * identical to the main Configuration tab because both consume the same API.
  */
-export function buildConfigCategories(filteringMetadata = {}) {
-  const entries = [];
+export function buildConfigGroups(filteringMetadata = {}) {
+  const nested = [];
   const directFields = {};
 
   for (const [key, metadata] of Object.entries(filteringMetadata)) {
     if (metadata?.type === "object" && metadata.children) {
-      entries.push(...groupFields(key, metadata.children));
+      nested.push(...groupFields(key, metadata.children));
     } else {
       directFields[key] = metadata;
     }
   }
 
-  return Object.fromEntries([...groupFields("meta", directFields), ...entries]);
+  return [...groupFields("meta", directFields), ...nested];
+}
+
+/**
+ * The `enabled` field of a source, i.e. its master switch. Read from the
+ * metadata rather than a hardcoded list, so a new source cannot ship with an
+ * unreachable master switch — which is exactly how On-Chain lost its own.
+ */
+export function getSourceMasterField(filteringMetadata, source) {
+  if (source === "meta") return null;
+  const field = filteringMetadata?.[source]?.children?.enabled;
+  return field && field.type === "boolean" ? { key: "enabled", ...field } : null;
 }
 
 export function formatTimestampForInput(timestamp) {
@@ -106,6 +231,13 @@ export function getStatusMessage({ isSaving, isRefreshing, hasChanges, lastSaved
   if (hasChanges) return "Unsaved changes pending";
   if (lastSaved) return `Last saved ${Utils.formatTimeAgo(lastSaved)}`;
   return "Configuration in sync";
+}
+
+/** The schema's declared default for one field, or `undefined` if it has none. */
+export function getFieldDefault(filteringMetadata, source, key) {
+  const field =
+    source === "meta" ? filteringMetadata?.[key] : filteringMetadata?.[source]?.children?.[key];
+  return field?.default;
 }
 
 export function getConfigValue(config, source, key) {

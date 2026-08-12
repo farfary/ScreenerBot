@@ -1,175 +1,41 @@
-/* Rejection Breakdown Section */
-.rejection-breakdown {
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
-  height: fit-content;
-}
-
-.rejection-breakdown h4 {
-  margin-block-end: var(--spacing-md);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.rejection-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
-}
-
+/* Source tag on a rejected-token row (Explorer table).
+   A tinted text chip, never a left accent bar — those are banned on rows and
+   cards alike, and the same source colours are already spoken as tints by
+   `.rej-source-tag` in base.css. */
 .source-badge {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-card-hover);
-  border-radius: var(--radius-md);
-  font-size: 0.75rem;
-}
-
-.source-badge.core {
-  border-inline-start: 3px solid var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .source-badge.dexscreener {
-  border-inline-start: 3px solid var(--link-color);
-}
-
-.source-badge.geckoterminal {
-  border-inline-start: 3px solid var(--solana-purple);
-}
-
-.source-badge.rugcheck {
-  border-inline-start: 3px solid var(--error-color);
-}
-
-.source-badge .source-name {
-  color: var(--text-secondary);
-  text-transform: capitalize;
-}
-
-.source-badge .source-count {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-}
-
-.rejection-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.rejection-item {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-primary);
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-}
-
-.rejection-item:hover {
-  background: var(--bg-card-hover);
-}
-
-.rejection-reason {
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rejection-source {
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.65rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.rejection-source.core {
-  background: rgb(139, 148, 158, 0.2);
-  color: var(--text-secondary);
-}
-
-.rejection-source.dexscreener {
-  background: var(--primary-alpha-20);
+  background: var(--primary-alpha-15);
   color: var(--link-color);
 }
 
-.rejection-source.geckoterminal {
-  background: var(--solana-alpha-20);
-  color: var(--solana-purple);
+.source-badge.geckoterminal {
+  background: var(--success-alpha-15);
+  color: var(--success-color);
 }
 
-.rejection-source.rugcheck {
-  background: var(--danger-alpha-20);
+.source-badge.rugcheck {
+  background: var(--danger-alpha-15);
   color: var(--error-color);
-}
-
-.rejection-count {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  min-width: 50px;
-  text-align: end;
-}
-
-.rejection-more {
-  padding: var(--spacing-sm);
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-style: italic;
 }
 
 /* ============================================
    Analytics Tab - Advanced Filtering Analysis
+   The view's own layout, padding and scrolling belong to
+   pages/filtering/base.css (`.analytics-scroll-area` scrolls, the view does
+   not); this file owns the cards and charts inside it.
    ============================================ */
-
-.analytics-view {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-lg);
-  padding: var(--spacing-md);
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  background: var(--bg-primary);
-}
-
-.analytics-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-xs);
-}
-
-.analytics-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.analytics-subtitle {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
 
 /* KPI Grid */
 .kpi-grid {
@@ -354,17 +220,6 @@
   color: var(--text-muted);
 }
 
-.bar-value-col {
-  width: 60px;
-  text-align: end;
-  font-family: var(--font-data);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 0.85rem;
-}
-
-/* Data Quality Grid - defined later with compact styles */
-
 /* Top Reasons Table - .reasons-table defined later with compact styles */
 .reasons-table-container {
   overflow-x: auto;
@@ -380,11 +235,6 @@
   background: var(--bg-secondary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
-}
-
-.reason-count {
-  font-family: var(--font-data);
-  font-weight: 600;
 }
 
 .reason-bar-cell {
@@ -406,6 +256,17 @@
   border-radius: var(--radius-xs);
 }
 
+/* The pass-rate bar sits along the bottom edge of its KPI card. The track was
+   never declared, so the segment's `height: 100%` resolved against an auto-height
+   static box and the bar was invisible at every pass rate. */
+.pass-rate-visual {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--bg-tertiary);
+}
+
 .pass-rate-segment {
   height: 100%;
   transition: width 0.5s ease;
@@ -415,213 +276,14 @@
   background: var(--success-color);
 }
 
-.pass-rate-segment.rejected {
-  background: var(--error-color);
-}
-
-.data-quality-value {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-}
-
-/* Top Reasons Table */
-.top-reasons-table-container {
-  overflow-x: auto;
-}
-
-.top-reasons-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-
-.top-reasons-table th {
-  padding: var(--spacing-sm) var(--spacing-md);
-  text-align: start;
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.top-reasons-table th:last-child,
-.top-reasons-table td:last-child {
-  text-align: end;
-}
-
-.top-reasons-table td {
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-primary);
-}
-
-.top-reasons-table tr:hover td {
-  background: var(--bg-card-hover);
-}
-
-.top-reasons-table .rank {
-  width: 40px;
-  font-weight: 700;
-  font-family: var(--font-data);
-  color: var(--text-secondary);
-}
-
-.top-reasons-table .reason-text {
-  font-weight: 500;
-}
-
-.top-reasons-table .source-badge {
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.6rem;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.top-reasons-table .source-badge.core {
-  background: rgb(139, 148, 158, 0.2);
-  color: var(--text-secondary);
-}
-
-.top-reasons-table .source-badge.dexscreener {
-  background: var(--primary-alpha-20);
-  color: var(--link-color);
-}
-
-.top-reasons-table .source-badge.geckoterminal {
-  background: var(--solana-alpha-20);
-  color: var(--solana-purple);
-}
-
-.top-reasons-table .source-badge.rugcheck {
-  background: var(--danger-alpha-20);
-  color: var(--error-color);
-}
-
-.top-reasons-table .category-badge {
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.6rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  background: rgb(88, 166, 255, 0.15);
-  color: var(--text-secondary);
-}
-
-.top-reasons-table .count-cell {
-  font-weight: 700;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.top-reasons-table .percent-cell {
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-}
-
 /* Analytics loading uses the centralized .loading-spinner (components.css) */
 
 /* Analytics empty state */
 .analytics-empty {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: var(--spacing-xl) var(--spacing-md);
   text-align: center;
   color: var(--text-secondary);
-}
-
-.analytics-empty .empty-icon {
-  font-size: 2.5rem;
-  opacity: 0.4;
-  margin-bottom: var(--spacing-sm);
-}
-
-.analytics-empty .empty-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-xs);
-}
-
-.analytics-empty .empty-message {
-  font-size: 0.8rem;
-}
-
-/* Data Quality Grid */
-.dq-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: var(--spacing-md);
-  margin-top: var(--spacing-md);
-}
-
-.dq-card {
-  display: flex;
-  align-items: flex-start;
-  padding: var(--spacing-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  transition: all var(--transition-base);
-}
-
-.dq-card:hover {
-  background: var(--bg-card-hover);
-  transform: translateY(-1px);
-}
-
-.dq-card.critical {
-  border-inline-start: 3px solid var(--error-color);
-}
-
-.dq-card.warning {
-  border-inline-start: 3px solid var(--warning-color);
-}
-
-.dq-card.info {
-  border-inline-start: 3px solid var(--link-color);
-}
-
-.dq-icon {
-  font-size: 1.2rem;
-  margin-inline-end: var(--spacing-md);
-  margin-top: 2px;
-}
-
-.dq-card.critical .dq-icon {
-  color: var(--error-color);
-}
-
-.dq-card.warning .dq-icon {
-  color: var(--warning-color);
-}
-
-.dq-card.info .dq-icon {
-  color: var(--link-color);
-}
-
-.dq-content {
-  flex: 1;
-}
-
-.dq-label {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.dq-stats {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
 }

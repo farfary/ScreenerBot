@@ -73,6 +73,13 @@
      `background: var(--bg-hover)` (no fallback) collapsed to `transparent`,
      which made hovered pinned/floating cells see-through during scroll. */
   --bg-hover: var(--bg-card-hover);
+
+  /* Recessed surface for chips, tags and tracks sitting ON a card. Same story
+     as --bg-hover above: ~20 `var(--bg-tertiary)` usages had no definition at
+     all, so every one of them was invalid at computed-value time and painted
+     nothing. In light mode it is the card-hover grey; the dark value is the one
+     the few fallback-carrying usages already hardcoded. */
+  --bg-tertiary: var(--bg-card-hover);
   --text-primary: #1f2937;
   --text-secondary: #6b7280;
   --text-muted: #9ca3af;
@@ -267,6 +274,7 @@
   --bg-card: #161b22;
   --bg-card-hover: #1c2128;
   --bg-hover: var(--bg-card-hover);
+  --bg-tertiary: #21262d;
   --text-primary: #e6edf3;
   --text-secondary: #8b949e;
   --text-muted: #6e7681;
@@ -448,7 +456,8 @@
    (native desktop-app behaviour - no lingering highlight after click).
    Keyboard navigation (Tab/arrows) re-enables custom effects via data-input.
    Text inputs/textareas always receive our custom focus effect when focused. */
-html[data-input="mouse"] :focus-visible:not(input):not(textarea):not(select):not([contenteditable="true"]) {
+html[data-input="mouse"]
+  :focus-visible:not(input):not(textarea):not(select):not([contenteditable="true"]) {
   box-shadow: none;
 }
 

@@ -93,7 +93,7 @@
 
 .setup-dialog-close:hover {
   color: var(--text-primary, #e6edf3);
-  background: var(--bg-tertiary, #21262d);
+  background: var(--bg-tertiary);
 }
 
 .setup-dialog-body {
@@ -215,7 +215,7 @@
 }
 
 .setup-dialog-btn.secondary {
-  background: var(--bg-tertiary, #21262d);
+  background: var(--bg-tertiary);
   color: var(--text-primary, #e6edf3);
   border-color: var(--border-color, #30363d);
 }

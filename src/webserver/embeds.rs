@@ -27,6 +27,10 @@ pub(super) const FORM_CONTROLS_STYLES: &str =
 pub(super) const NOTIFICATION_STYLES: &str =
     include_str!("templates/styles/components/notifications.css");
 pub(super) const TOAST_STYLES: &str = include_str!("templates/styles/components/toast.css");
+/// The settings-field row system. Shared by the Configuration page and the
+/// Filtering page's source sub-tabs, so both bundles include it.
+pub(super) const CONFIG_FIELDS_STYLES: &str =
+    include_str!("templates/styles/components/config_fields.css");
 
 // CSS Styles - Page-specific
 pub(super) const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
@@ -44,8 +48,6 @@ pub(super) const FILTERING_RESULTS_EXPLORER_STYLES: &str =
 pub(super) const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
 pub(super) const CONFIG_SIDEBAR_STYLES: &str =
     include_str!("templates/styles/pages/config/sidebar.css");
-pub(super) const CONFIG_FIELDS_STYLES: &str =
-    include_str!("templates/styles/pages/config/fields.css");
 pub(super) const CONFIG_RESPONSIVE_STYLES: &str =
     include_str!("templates/styles/pages/config/responsive.css");
 pub(super) const STRATEGIES_PAGE_STYLES: &str =

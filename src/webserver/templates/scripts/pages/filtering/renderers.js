@@ -6,13 +6,17 @@
  */
 
 import {
-  buildConfigCategories,
+  buildConfigGroups,
   formatTimestampForInput,
   getTimeRangeLabel,
   getStatusMessage,
   getConfigValue,
   getCategoryEnabled,
   getSourceEnabled,
+  getSourceMasterField,
+  getFieldDefault,
+  SETTINGS_TABS,
+  SOURCE_LABELS,
 } from "./config_metadata.js";
 
 /**
@@ -566,120 +570,211 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   `;
   }
 
-  function renderConfigField(field, source) {
+  // A number input, sized and aligned by the shared settings-field system. The
+  // metadata's constraints are only emitted when the schema declares them —
+  // `min="undefined"` is not a constraint, it is an attribute the browser
+  // silently ignores while making the markup invalid.
+  function renderNumberInput(field, source, ariaLabel = "") {
     const value = getConfigValue(state.draft, source, field.key);
-    const originalValue = getConfigValue(state.config, source, field.key);
-    const isChanged = state.config && value !== originalValue;
-    const fieldClass = isChanged ? "filtering-config-field changed" : "filtering-config-field";
-    const fieldId = `field-${source}-${field.key}`;
+    const attrs = [
+      `id="field-${source}-${field.key}"`,
+      `data-field="${Utils.escapeHtml(field.key)}"`,
+      `data-source="${Utils.escapeHtml(source)}"`,
+      `value="${Utils.escapeHtml(value ?? "")}"`,
+    ];
+    if (Number.isFinite(field.min)) attrs.push(`min="${field.min}"`);
+    if (Number.isFinite(field.max)) attrs.push(`max="${field.max}"`);
+    if (Number.isFinite(field.step)) attrs.push(`step="${field.step}"`);
+    if (ariaLabel) attrs.push(`aria-label="${Utils.escapeHtml(ariaLabel)}"`);
+    if (field.hint) attrs.push(`title="${Utils.escapeHtml(field.hint)}"`);
 
-    if (field.type === "boolean") {
+    return `<input type="number" ${attrs.join(" ")} />`;
+  }
+
+  // A rule is on or off, so it gets the app's switch — the same control as the
+  // group and source masters right above it, never a bare checkbox.
+  function renderBooleanInput(field, source) {
+    const value = getConfigValue(state.draft, source, field.key);
+    return `
+      <label class="toggle toggle-sm" aria-label="${Utils.escapeHtml(field.label)}">
+        <input
+          type="checkbox"
+          id="field-${source}-${field.key}"
+          data-field="${Utils.escapeHtml(field.key)}"
+          data-source="${Utils.escapeHtml(source)}"
+          ${value ? "checked" : ""}
+        />
+        <span class="toggle-track"></span>
+      </label>`;
+  }
+
+  function groupsFor(source) {
+    return buildConfigGroups(state.metadata).filter((group) => group.source === source);
+  }
+
+  function rowMatchesSearch(row, group) {
+    const query = state.searchQuery;
+    if (!query) return true;
+    if (group.title.toLowerCase().includes(query)) return true;
+    if (
+      String(row.label || "")
+        .toLowerCase()
+        .includes(query)
+    )
+      return true;
+    return row.fields.some(
+      (field) =>
+        field.key.toLowerCase().includes(query) ||
+        String(field.label || "")
+          .toLowerCase()
+          .includes(query)
+    );
+  }
+
+  /**
+   * Whether the pipeline evaluates this group at all — its source master switch
+   * or its own group switch is off.
+   *
+   * An inactive row is muted, never disabled: turning a source off to retune it
+   * and back on is a normal workflow, and the previous card body blocked exactly
+   * that with `pointer-events: none` while still letting the keyboard tab into
+   * the fields it had just made unclickable.
+   */
+  function isRowInactive(group) {
+    if (group.source !== "meta" && !getSourceEnabled(state.draft, group.source)) return true;
+    return (
+      Boolean(group.enableKey) && !getCategoryEnabled(state.draft, group.source, group.enableKey)
+    );
+  }
+
+  function renderRow(row, group) {
+    const changed = row.fields.some((field) => {
+      if (!state.config) return false;
+      return (
+        getConfigValue(state.draft, group.source, field.key) !==
+        getConfigValue(state.config, group.source, field.key)
+      );
+    });
+
+    const inactive = isRowInactive(group);
+    const classes = ["config-field"];
+    if (changed) classes.push("config-field--changed");
+    if (inactive) classes.push("config-field--inactive");
+
+    const impact = row.impact
+      ? `<span class="config-field-impact ${Utils.escapeHtml(row.impact)}">${Utils.escapeHtml(row.impact)}</span>`
+      : "";
+    const hint = row.hint
+      ? `<div class="config-field-hint">${Utils.escapeHtml(row.hint)}</div>`
+      : "";
+
+    return `
+      <div class="${classes.join(" ")}" data-row="${Utils.escapeHtml(row.key)}">
+        <div class="config-field-label">
+          <div class="config-field-title">
+            <span class="config-field-name">${Utils.escapeHtml(row.label)}</span>
+            ${impact}
+          </div>
+          ${hint}
+        </div>
+        <div class="config-field-control">${renderRowControl(row, group.source)}</div>
+        ${renderRowReset(row, group.source)}
+      </div>`;
+  }
+
+  /**
+   * Reset this parameter to the schema default — the row anatomy's third track,
+   * which the settings-field grid always reserves. A range row resets both of its
+   * bounds at once, because they are two ends of one parameter.
+   *
+   * This is not the footer's Reset: that one reverts unsaved edits to the last
+   * saved config, this one goes back to what ScreenerBot ships.
+   */
+  function renderRowReset(row, source) {
+    const defaults = row.fields.map((field) => getFieldDefault(state.metadata, source, field.key));
+    if (defaults.some((value) => value === undefined || value === null)) {
+      return '<button type="button" class="config-field-reset" hidden></button>';
+    }
+
+    const atDefault = row.fields.every(
+      (field, index) => getConfigValue(state.draft, source, field.key) === defaults[index]
+    );
+    const keys = row.fields.map((field) => field.key).join(",");
+
+    return `
+      <button
+        type="button"
+        class="config-field-reset"
+        data-reset-keys="${Utils.escapeHtml(keys)}"
+        data-reset-source="${Utils.escapeHtml(source)}"
+        title="Reset to default (${Utils.escapeHtml(defaults.join(" – "))})"
+        aria-label="Reset ${Utils.escapeHtml(row.label)} to default"
+        ${atDefault ? "disabled" : ""}
+      ><i class="icon-rotate-ccw" aria-hidden="true"></i></button>`;
+  }
+
+  function renderRowControl(row, source) {
+    if (row.kind === "range") {
+      const [min, max] = row.fields;
+      const unit = row.unit
+        ? `<span class="config-field-range-unit">${Utils.escapeHtml(row.unit)}</span>`
+        : "";
       return `
-      <div class="${fieldClass}">
-        <label>
-          <span class="field-label">${Utils.escapeHtml(field.label)}</span>
-          <span class="field-hint">${Utils.escapeHtml(field.hint)}</span>
-        </label>
-        <div>
+        <div class="config-field-range">
+          <span class="config-field-bound">
+            <span class="config-field-bound-label">Min</span>
+            ${renderNumberInput(min, source, `Minimum ${row.label}`)}
+          </span>
+          <span class="config-field-range-sep" aria-hidden="true">–</span>
+          <span class="config-field-bound">
+            <span class="config-field-bound-label">Max</span>
+            ${renderNumberInput(max, source, `Maximum ${row.label}`)}
+          </span>
+          ${unit}
+        </div>`;
+    }
+
+    const [field] = row.fields;
+    if (field.type === "boolean") {
+      return renderBooleanInput(field, source);
+    }
+    if (row.unit) {
+      return `<span class="input-with-unit">${renderNumberInput(field, source)}<span class="input-unit">${Utils.escapeHtml(row.unit)}</span></span>`;
+    }
+    return renderNumberInput(field, source);
+  }
+
+  function renderGroup(group) {
+    const rows = group.rows.filter((row) => rowMatchesSearch(row, group));
+    if (rows.length === 0) return "";
+
+    const enableToggle = group.enableKey
+      ? `
+        <label class="toggle toggle-sm" ${group.enableHint ? `title="${Utils.escapeHtml(group.enableHint)}"` : ""} aria-label="Enable ${Utils.escapeHtml(group.title)} checks">
           <input
             type="checkbox"
-            id="${fieldId}"
-            data-field="${field.key}"
-            data-source="${source}"
-            ${value ? "checked" : ""}
+            data-category-toggle="${Utils.escapeHtml(group.source)}"
+            data-enable-key="${Utils.escapeHtml(group.enableKey)}"
+            ${getCategoryEnabled(state.draft, group.source, group.enableKey) ? "checked" : ""}
           />
-          <div class="field-meta">
-            <span class="field-impact ${field.impact}">${field.impact}</span>
-          </div>
+          <span class="toggle-track"></span>
+        </label>`
+      : "";
+
+    return `
+      <section class="filtering-group" data-group="${Utils.escapeHtml(group.id)}">
+        <div class="filtering-group-header">
+          <h3 class="filtering-group-title">${Utils.escapeHtml(group.title)}</h3>
+          <span class="filtering-group-count">${rows.length} ${rows.length === 1 ? "parameter" : "parameters"}</span>
+          ${enableToggle}
         </div>
-      </div>
-    `;
-    }
-
-    return `
-    <div class="${fieldClass}">
-      <label>
-        <span class="field-label">${Utils.escapeHtml(field.label)}</span>
-        <span class="field-hint">${Utils.escapeHtml(field.hint)}</span>
-      </label>
-      <div>
-        <input
-          type="number"
-          id="${fieldId}"
-          data-field="${field.key}"
-          data-source="${source}"
-          value="${value}"
-          min="${field.min}"
-          max="${field.max}"
-          step="${field.step}"
-        />
-        <div class="field-meta">
-          <span class="field-unit">${Utils.escapeHtml(field.unit)}</span>
-          <span class="field-impact ${field.impact}">${field.impact}</span>
-        </div>
-      </div>
-    </div>
-  `;
-  }
-
-  function renderCategoryToggle(source, enableKey, _categoryName) {
-    if (!enableKey) return "";
-
-    const enabled = getCategoryEnabled(state.draft, source, enableKey);
-    const toggleId = `category-toggle-${source}-${enableKey}`;
-
-    return `
-    <label class="toggle toggle-sm" aria-label="Toggle ${Utils.escapeHtml(_categoryName)}">
-      <input
-        type="checkbox"
-        id="${toggleId}"
-        data-category-toggle="${source}"
-        data-enable-key="${enableKey}"
-        ${enabled ? "checked" : ""}
-      />
-      <span class="toggle-track"></span>
-    </label>
-  `;
-  }
-
-  function renderConfigCategory(categoryName, categoryData) {
-    const { source, enableKey, fields } = categoryData;
-    const sourceEnabled = getSourceEnabled(state.draft, source);
-    const categoryEnabled = getCategoryEnabled(state.draft, source, enableKey);
-    // Only disable the card body (fields) if source is disabled OR category is disabled
-    // Keep header interactive so users can toggle categories on/off
-    const isDisabled = (source !== "meta" && !sourceEnabled) || (enableKey && !categoryEnabled);
-    const matchesSearch = (field) =>
-      !state.searchQuery ||
-      field.label.toLowerCase().includes(state.searchQuery) ||
-      field.key.toLowerCase().includes(state.searchQuery);
-
-    const disabledClass = isDisabled ? "disabled" : "";
-    const visibleFields = fields.filter(matchesSearch);
-
-    if (state.searchQuery && visibleFields.length === 0) {
-      return "";
-    }
-
-    return `
-    <div class="filter-card" data-source="${source}" data-category="${Utils.escapeHtml(categoryName)}">
-      <div class="card-header">
-        <h3>${Utils.escapeHtml(categoryName)}</h3>
-        ${renderCategoryToggle(source, enableKey, categoryName)}
-      </div>
-      <div class="card-body ${disabledClass}">
-        ${
-          visibleFields.map((field) => renderConfigField(field, source)).join("") ||
-          '<div class="no-matches">No fields match</div>'
-        }
-      </div>
-    </div>
-  `;
+        <div class="filtering-group-body">${rows.map((row) => renderRow(row, group)).join("")}</div>
+      </section>`;
   }
 
   function renderConfigPanels() {
     if (!state.draft) {
-      return '<div class="filtering-config-empty">Loading configuration...</div>';
+      return '<div class="filtering-config-empty">Loading configuration…</div>';
     }
 
     // Status tab shows overview
@@ -697,76 +792,78 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       return renderExplorerView();
     }
 
-    const targetSource = state.activeTab || "meta";
-    const categories = Object.entries(buildConfigCategories(state.metadata)).filter(([, data]) => {
-      if (targetSource === "meta") return data.source === "meta";
-      return data.source === targetSource;
-    });
+    const source = state.activeTab || "meta";
+    const groups = groupsFor(source).map(renderGroup).join("");
 
-    const cards = categories
-      .map(([name, data]) => renderConfigCategory(name, data))
-      .filter((html) => html && html.trim().length > 0)
-      .join("");
-
-    if (!cards) {
-      return '<div class="filtering-config-empty">No settings match your search</div>';
+    if (!groups) {
+      const reason = state.searchQuery
+        ? `No parameter matches “${Utils.escapeHtml(state.searchQuery)}”`
+        : "This source exposes no parameters";
+      return `<div class="filtering-config-empty">${reason}</div>`;
     }
 
-    return `<div class="config-scroll-area"><div class="cards-grid">${cards}</div></div>`;
+    // One line of prose instead of a page of silently dimmed controls: a source
+    // whose master switch is off evaluates none of these parameters.
+    const sourceOff =
+      source !== "meta" && !getSourceEnabled(state.draft, source)
+        ? `<p class="filtering-source-off">${Utils.escapeHtml(SOURCE_LABELS[source] || source)} filtering is off — these parameters are not evaluated.</p>`
+        : "";
+
+    return `<div class="config-scroll-area"><div class="filtering-config-list">${sourceOff}${groups}</div></div>`;
   }
 
-  function renderSourceToggle(source) {
-    if (!state.draft) return "";
-
-    const enabled = getSourceEnabled(state.draft, source);
-    const sourceLabelMap = {
-      dexscreener: "DexScreener Enabled",
-      geckoterminal: "GeckoTerminal Enabled",
-      rugcheck: "RugCheck Enabled",
-    };
-    const sourceLabel = sourceLabelMap[source] || "Source Enabled";
-    const toggleId = `source-toggle-${source}`;
-
-    return `
-    <div class="source-toggle-wrapper">
-      <span class="label">${sourceLabel}</span>
-      <label class="toggle" aria-label="${Utils.escapeHtml(sourceLabel)}">
-        <input
-          type="checkbox"
-          id="${toggleId}"
-          data-source-toggle="${source}"
-          ${enabled ? "checked" : ""}
-        />
-        <span class="toggle-track"></span>
-      </label>
-    </div>
-  `;
-  }
-
-  function renderSearchBar() {
-    // Only show search bar on settings tabs (not status/analytics/explorer)
-    const isSettingsTab = ["meta", "dexscreener", "geckoterminal", "rugcheck"].includes(
-      state.activeTab
-    );
-    if (!isSettingsTab) {
+  /**
+   * The sub-tab's own control strip: filter-by-name on the left, how much of the
+   * source is showing, and the source master switch at the far end.
+   */
+  function renderToolbar() {
+    if (!SETTINGS_TABS.includes(state.activeTab) || !state.draft) {
       return "";
     }
 
-    const showSourceToggle =
-      state.activeTab === "dexscreener" ||
-      state.activeTab === "geckoterminal" ||
-      state.activeTab === "rugcheck";
-    const sourceToggle = showSourceToggle ? renderSourceToggle(state.activeTab) : "";
+    const master = getSourceMasterField(state.metadata, state.activeTab);
+    const enabled = getSourceEnabled(state.draft, state.activeTab);
+    const masterHtml = master
+      ? `
+        <label class="toggle filtering-source-switch" ${master.hint ? `title="${Utils.escapeHtml(master.hint)}"` : ""}>
+          <input type="checkbox" data-source-toggle="${Utils.escapeHtml(state.activeTab)}" ${enabled ? "checked" : ""} />
+          <span class="toggle-track"></span>
+          <span class="toggle-label" id="filtering-source-state">${enabled ? "Enabled" : "Disabled"}</span>
+        </label>`
+      : "";
 
     return `
-      <input
-        type="text"
-        id="filtering-search"
-        placeholder="Search settings..."
-        value="${Utils.escapeHtml(state.searchQuery)}"
-      />
-      ${sourceToggle}
-  `;
+      <div class="search-wrapper filtering-toolbar-search">
+        <input
+          type="text"
+          id="filtering-search"
+          placeholder="Filter parameters"
+          value="${Utils.escapeHtml(state.searchQuery)}"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Filter parameters"
+        />
+        <i class="icon-search search-icon" aria-hidden="true"></i>
+        <button type="button" class="search-clear" id="filtering-search-clear" aria-label="Clear filter">
+          <i class="icon-x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <span class="filtering-toolbar-count" id="filtering-param-count">${Utils.escapeHtml(renderParamCount())}</span>
+      ${masterHtml}`;
+  }
+
+  function renderParamCount() {
+    const groups = groupsFor(state.activeTab || "meta");
+    let total = 0;
+    let visible = 0;
+    for (const group of groups) {
+      for (const row of group.rows) {
+        total += row.fields.length;
+        if (rowMatchesSearch(row, group)) visible += row.fields.length;
+      }
+    }
+    if (state.searchQuery) return `${visible} of ${total} parameters`;
+    return `${total} ${total === 1 ? "parameter" : "parameters"}`;
   }
 
   function renderShell() {
@@ -782,7 +879,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     <div class="filtering-page">
       <div class="filtering-shell">
         <div class="filtering-info-bar" id="filtering-info-bar">${renderInfoBar()}</div>
-        <div class="filtering-search-bar" id="filtering-search-bar">${renderSearchBar()}</div>
+        <div class="filtering-toolbar" id="filtering-toolbar">${renderToolbar()}</div>
         <div class="filtering-content" id="filtering-config-panels">
           ${renderConfigPanels()}
         </div>
@@ -810,12 +907,9 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     renderAnalyticsView,
     renderExplorerDashboard,
     renderExplorerView,
-    renderConfigField,
-    renderCategoryToggle,
-    renderConfigCategory,
     renderConfigPanels,
-    renderSourceToggle,
-    renderSearchBar,
+    renderParamCount,
+    renderToolbar,
     renderShell,
   };
 }
