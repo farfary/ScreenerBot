@@ -22,7 +22,7 @@ export function applyEventHandlersMixin(DataTable) {
     const searchInput = toolbarRoot?.querySelector(".dt-search-input");
     const searchClear = toolbarRoot?.querySelector(".table-toolbar-search__clear");
     if (searchInput) {
-      const searchConfig = this.options.toolbar?.search || {};
+      const searchConfig = this.toolbarView?.getItem("search") || {};
 
       const handler = (e) => {
         this.state.searchQuery = e.target.value;
@@ -55,12 +55,17 @@ export function applyEventHandlersMixin(DataTable) {
           if (typeof searchConfig.onChange === "function") {
             searchConfig.onChange("", searchInput);
           }
+          if (typeof searchConfig.onSubmit === "function") {
+            searchConfig.onSubmit("", searchInput);
+          }
 
           // Only apply filters if not using custom onChange
           if (!searchConfig.onChange) {
             this._applyFilters();
           }
           this._saveState();
+        } else if (e.key === "Escape") {
+          searchInput.blur();
         } else if (e.key === "Enter") {
           // Call custom onSubmit if provided
           if (typeof searchConfig.onSubmit === "function") {
@@ -72,7 +77,7 @@ export function applyEventHandlersMixin(DataTable) {
     }
 
     if (searchClear) {
-      const searchConfig = this.options.toolbar?.search || {};
+      const searchConfig = this.toolbarView?.getItem("search") || {};
       searchClear.hidden = !(this.state.searchQuery || "").length;
       const clearHandler = () => {
         if (searchInput) {
@@ -85,6 +90,9 @@ export function applyEventHandlersMixin(DataTable) {
         // Call custom onChange if provided
         if (typeof searchConfig.onChange === "function") {
           searchConfig.onChange("", searchInput);
+        }
+        if (typeof searchConfig.onSubmit === "function") {
+          searchConfig.onSubmit("", searchInput);
         }
 
         // Only apply filters if not using custom onChange

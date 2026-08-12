@@ -523,6 +523,7 @@ function createLifecycle() {
           onPageLoaded: handlePageLoaded,
         },
         toolbar: {
+          layout: "query-row",
           identity: {
             icon: "icon-arrow-left-right",
             title: "Transaction history",
@@ -533,9 +534,28 @@ function createLifecycle() {
             { id: "tx-success", label: "Success", value: "—", variant: "secondary" },
             { id: "tx-failed", label: "Failed", value: "—", variant: "success" },
           ],
-          // Which wallet's history is shown — the table's subject, so it leads the
-          // controls zone. Options are filled in by `setupSubjectSelector()`.
           controls: [
+            {
+              id: "search",
+              type: "search",
+              mode: "server",
+              placeholder: "Search signatures…",
+              ariaLabel: "Search transaction signatures",
+              onChange: (value, el, options) => {
+                state.signature = (value || "").trim();
+                if (options?.restored) {
+                  return;
+                }
+              },
+              onSubmit: () => {
+                requestReload("search", {
+                  silent: false,
+                  resetScroll: true,
+                }).catch(() => {});
+              },
+            },
+            // Which wallet's history is shown. Options are filled in by
+            // `setupSubjectSelector()` and stay first in the filter group.
             {
               id: "subject",
               type: "select",
@@ -558,28 +578,9 @@ function createLifecycle() {
                 ]).catch(() => {});
               },
             },
-          ],
-          search: {
-            enabled: true,
-            mode: "server",
-            placeholder: "Search by signature…",
-            onChange: (value, el, options) => {
-              state.signature = (value || "").trim();
-              // Skip if this is state restoration
-              if (options?.restored) {
-                return;
-              }
-            },
-            onSubmit: () => {
-              requestReload("search", {
-                silent: false,
-                resetScroll: true,
-              }).catch(() => {});
-            },
-          },
-          filters: [
             {
               id: "type",
+              type: "select",
               label: "Type",
               mode: "server",
               defaultValue: state.filters.type,
@@ -608,6 +609,7 @@ function createLifecycle() {
             },
             {
               id: "direction",
+              type: "select",
               label: "Direction",
               mode: "server",
               defaultValue: state.filters.direction,
@@ -633,6 +635,7 @@ function createLifecycle() {
             },
             {
               id: "status",
+              type: "select",
               label: "Status",
               mode: "server",
               defaultValue: state.filters.status,
@@ -661,6 +664,7 @@ function createLifecycle() {
             {
               id: "reset",
               label: "Reset",
+              icon: "icon-rotate-ccw",
               onClick: () => resetFilters(),
             },
           ],
@@ -755,7 +759,7 @@ function createLifecycle() {
 
     const options = [{ value: "", label: "Main wallet" }];
     try {
-      const data = await requestManager.fetch("/api/wallets/watch/", { priority: "normal" });
+      const data = await requestManager.fetch("/api/wallets/watch", { priority: "normal" });
       for (const target of data.targets || []) {
         const short = `${target.address.slice(0, 6)}…${target.address.slice(-4)}`;
         options.push({

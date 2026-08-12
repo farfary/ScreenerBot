@@ -63,6 +63,50 @@ test("stores a requested standalone width without hard-wiring grouped field geom
     controls: [{ ...select("wallet"), minWidth: "170px" }],
   }).render();
 
-  assert.match(html, /style="--table-toolbar-field-min-width:170px;"/);
+  assert.match(html, /--table-toolbar-select-label-width:3.5rem/);
+  assert.match(html, /--table-toolbar-field-min-width:170px/);
   assert.doesNotMatch(html, /style="min-width:170px;"/);
+});
+
+test("sizes grouped dropdowns from their longest option instead of one equal track", () => {
+  const html = new TableToolbarView({
+    settings: false,
+    controls: [
+      { ...select("type"), options: [{ value: "all", label: "All Types" }] },
+      {
+        ...select("direction"),
+        options: [{ value: "all", label: "All Directions" }],
+      },
+    ],
+  }).render();
+
+  assert.match(html, /--table-toolbar-select-label-width:4.5rem[^>]*data-filter-id="type"/);
+  assert.match(
+    html,
+    /--table-toolbar-select-label-width:7rem[^>]*data-filter-id="direction"/
+  );
+});
+
+test("keeps typed search controls addressable in the flat toolbar index", () => {
+  const view = new TableToolbarView({
+    settings: false,
+    controls: [{ id: "search", type: "search", placeholder: "Signature…" }],
+  });
+
+  assert.equal(view.getItem("search")?.placeholder, "Signature…");
+});
+
+test("renders an explicit query row without changing control semantics", () => {
+  const html = new TableToolbarView({
+    layout: "query-row",
+    settings: false,
+    controls: [
+      { id: "search", type: "search", placeholder: "Search signatures…" },
+      select("status"),
+    ],
+  }).render();
+
+  assert.match(html, /data-layout="query-row"/);
+  assert.match(html, /placeholder="Search signatures…"/);
+  assert.doesNotMatch(html, /data-collapsible/);
 });

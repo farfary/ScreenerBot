@@ -1,11 +1,11 @@
 /**
  * Table toolbar — the single chrome strip above a DataTable.
  *
- * One bar, three zones, laid out by the content it is given:
+ * One band, three zones, laid out by the content it is given:
  *
  *   [ lead: identity + stats ]  [ controls: search / views / filters ]  [ actions ]
  *
- * The bar is the ONLY row a table page may put above its rows: subject identity,
+ * The bar is the ONLY band a table page may put above its rows: subject identity,
  * dataset stats, query controls and actions all live here, so pages never stack a
  * hand-rolled info/action band on top of the table.
  *
@@ -26,6 +26,7 @@
  *     controls: [ item | { type: "group", items: [item, ...] } ],
  *     actions:  [ item | { type: "group", items: [item, ...] } ],
  *     settings: false | { icon, tooltip },
+ *     layout: "inline" | "query-row",
  *   }
  *
  * `filters`/`customControls`/`buttons`/`views` are sugar that normalizes into the
@@ -256,7 +257,18 @@ function normalizeConfig(config = {}) {
   indexItems(controls, index);
   indexItems(actions, index);
 
-  return { identity, stats, controls, actions, settings, index, density: cfg.density || "auto" };
+  const layout = cfg.layout === "query-row" ? "query-row" : "inline";
+
+  return {
+    identity,
+    stats,
+    controls,
+    actions,
+    settings,
+    index,
+    density: cfg.density || "auto",
+    layout,
+  };
 }
 
 // =============================================================================
@@ -301,14 +313,21 @@ function renderSearch(item, state = {}) {
   const placeholder = item.placeholder ? escapeHtml(item.placeholder) : "Search table...";
   const value = state.searchQuery ? escapeHtml(state.searchQuery) : "";
   const grow = item.grow === false ? ' data-grow="false"' : "";
+  const ariaLabel = item.ariaLabel
+    ? ` aria-label="${escapeHtml(item.ariaLabel)}"`
+    : "";
+  const widthStyle = item.minWidth
+    ? ` style="--table-toolbar-search-min-width:${escapeHtml(item.minWidth)};"`
+    : "";
 
   return `
-    <div class="table-toolbar-search dt-search"${grow} ${commonAttrs(item)}>
+    <div class="table-toolbar-search dt-search"${grow}${widthStyle} ${commonAttrs(item)}>
       <span class="table-toolbar-search__icon" aria-hidden="true"><i class="icon-search"></i></span>
       <input
         type="text"
         class="dt-search-input table-toolbar-input"
         placeholder="${placeholder}"
+        ${ariaLabel}
         value="${value}"
         autocomplete="off"
         spellcheck="false"
@@ -318,6 +337,15 @@ function renderSearch(item, state = {}) {
       </button>
     </div>
   `;
+}
+
+function selectLabelWidth(options = []) {
+  const longest = options.reduce((max, option) => {
+    const label = option?.label ?? option?.value ?? "";
+    return Math.max(max, Array.from(String(label)).length);
+  }, 0);
+  const characters = Math.max(7, Math.min(longest || 7, 16));
+  return `${characters * 0.5}rem`;
 }
 
 function renderSwitch(item, stateFilters = {}) {
@@ -369,9 +397,13 @@ function renderSelect(item, stateFilters = {}) {
       )}</label>`
     : "";
 
-  const widthStyle = item.minWidth
-    ? ` style="--table-toolbar-field-min-width:${escapeHtml(item.minWidth)};"`
-    : "";
+  const widthTokens = [
+    `--table-toolbar-select-label-width:${selectLabelWidth(item.options)}`,
+  ];
+  if (item.minWidth) {
+    widthTokens.push(`--table-toolbar-field-min-width:${escapeHtml(item.minWidth)}`);
+  }
+  const widthStyle = ` style="${widthTokens.join(";")};"`;
   const dataAttrs = [`data-filter-id="${escapeHtml(item.id)}"`];
   if (item.autoApply === false) {
     dataAttrs.push('data-auto-apply="false"');
@@ -711,7 +743,7 @@ export class TableToolbarView {
   }
 
   render(state = {}) {
-    const { identity, stats, controls, actions, settings } = this.model;
+    const { identity, stats, controls, actions, settings, layout } = this.model;
 
     if (this.isEmpty()) {
       return "";
@@ -778,7 +810,9 @@ export class TableToolbarView {
       this.model.density === "auto" ? (identity ? "default" : "compact") : this.model.density;
 
     return `
-      <div class="data-table-toolbar table-toolbar" data-density="${escapeHtml(density)}"${
+      <div class="data-table-toolbar table-toolbar" data-density="${escapeHtml(
+        density
+      )}" data-layout="${escapeHtml(layout)}"${
         identity ? ' data-has-identity="true"' : ""
       }>
         ${leadZone}
@@ -1003,6 +1037,9 @@ export class TableToolbarView {
       })
       .join("");
     select.value = value ?? "";
+    select
+      .closest(".table-toolbar-field")
+      ?.style.setProperty("--table-toolbar-select-label-width", selectLabelWidth(options));
   }
 
   static setCustomControlValue(root, controlId, value) {
