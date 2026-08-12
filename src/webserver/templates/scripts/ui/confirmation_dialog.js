@@ -11,7 +11,7 @@
  * - Sound feedback on actions
  */
 
-import { playPanelOpen, playPanelClose, playSuccess } from "../core/sounds.js";
+import { playClick } from "../core/sounds.js";
 import { closeAllMenus } from "../core/menu_manager.js";
 
 class ConfirmationDialog {
@@ -139,7 +139,6 @@ class ConfirmationDialog {
     requestAnimationFrame(() => {
       this.backdrop.classList.add("confirmation-dialog-backdrop--visible");
       this.element.classList.add("confirmation-dialog--visible");
-      playPanelOpen();
     });
 
     // Focus confirm button by default
@@ -196,7 +195,7 @@ class ConfirmationDialog {
   }
 
   _handleConfirm() {
-    playSuccess();
+    playClick();
     if (this.resolver) {
       this.resolver({
         confirmed: true,
@@ -208,7 +207,7 @@ class ConfirmationDialog {
   }
 
   _handleCancel() {
-    playPanelClose();
+    playClick();
     if (this.resolver) {
       this.resolver({
         confirmed: false,

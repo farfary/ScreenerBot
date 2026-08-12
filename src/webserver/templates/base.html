@@ -706,7 +706,7 @@
     <!-- Global keyboard shortcuts for Quick Buy/Sell -->
     <script type="module">
       import { TradeActionDialog } from "/scripts/ui/trade_action_dialog.js?v={{ASSET_VERSION}}";
-      import { playSuccess, playError } from "/scripts/core/sounds.js?v={{ASSET_VERSION}}";
+      import { playAcknowledge, playError } from "/scripts/core/sounds.js?v={{ASSET_VERSION}}";
       import { showToast } from "/scripts/core/toast.js?v={{ASSET_VERSION}}";
       import { hasOpenOverlay } from "/scripts/core/escape_stack.js?v={{ASSET_VERSION}}";
 
@@ -802,7 +802,7 @@
           }
 
           const symbol = globalTradeDialog.currentContext?.symbol || mint.slice(0, 6) + "...";
-          playSuccess();
+          playAcknowledge();
           showToast(
             `${action === "sell" ? "Sell" : "Buy"} order submitted for ${symbol}`,
             "success"

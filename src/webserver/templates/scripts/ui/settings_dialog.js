@@ -9,7 +9,7 @@ import { getCurrentPage } from "../core/router.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
-import { playPanelOpen, playPanelClose, playTabSwitch } from "../core/sounds.js";
+import { playTabSwitch } from "../core/sounds.js";
 import { loadSecurityTab } from "./settings/security_tab.js";
 import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
 import { buildUpdatesTab, attachUpdatesHandlers } from "./settings/updates_tab.js";
@@ -72,8 +72,6 @@ export class SettingsDialog {
     requestAnimationFrame(() => {
       if (this.dialogEl) {
         this.dialogEl.classList.add("active");
-        // Play panel open sound
-        playPanelOpen();
         // Add ARIA attributes for accessibility
         const container = this.dialogEl.querySelector(".settings-container");
         if (container) {
@@ -245,9 +243,6 @@ export class SettingsDialog {
    */
   close() {
     if (!this.dialogEl) return;
-
-    // Play panel close sound
-    playPanelClose();
 
     // Deactivate focus trap
     if (this._focusTrap) {
@@ -446,7 +441,11 @@ export class SettingsDialog {
     if (iface.theme) {
       document.documentElement.setAttribute("data-theme", iface.theme);
       // Keep localStorage in sync for FOUC prevention
-      try { localStorage.setItem("theme", iface.theme); } catch { /* storage unavailable */ }
+      try {
+        localStorage.setItem("theme", iface.theme);
+      } catch {
+        /* storage unavailable */
+      }
       // Save theme to server
       fetch("/api/ui-state/save", {
         method: "POST",
@@ -456,7 +455,8 @@ export class SettingsDialog {
       // Sync header toggle icon: dark → show sun (to switch to light); light → show moon
       const themeIcon = document.getElementById("themeIcon");
       if (themeIcon) {
-        themeIcon.className = iface.theme === "dark" ? "action-icon icon-sun" : "action-icon icon-moon";
+        themeIcon.className =
+          iface.theme === "dark" ? "action-icon icon-sun" : "action-icon icon-moon";
       }
     }
 
@@ -757,7 +757,7 @@ export class SettingsDialog {
           globalUpdateState,
           () => this._updateUpdatesTabUI(),
           () => this._startDownloadPoller(),
-          () => this._updateUpdatesBadge(),
+          () => this._updateUpdatesBadge()
         );
         break;
       case "licenses":
@@ -1171,7 +1171,7 @@ export class SettingsDialog {
         globalUpdateState,
         () => this._updateUpdatesTabUI(),
         () => this._startDownloadPoller(),
-        () => this._updateUpdatesBadge(),
+        () => this._updateUpdatesBadge()
       );
     }
   }
@@ -1396,7 +1396,6 @@ export class SettingsDialog {
     }
   }
 
-
   /**
    * Build About tab content
    */
@@ -1476,7 +1475,6 @@ export class SettingsDialog {
       </div>
     `;
   }
-
 
   /**
    * Check if settings have changed from original
@@ -1620,7 +1618,6 @@ export class SettingsDialog {
   // ===========================================================================
   // TELEGRAM TAB
   // ===========================================================================
-
 
   /**
    * Switch to a specific tab

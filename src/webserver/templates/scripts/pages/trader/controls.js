@@ -319,14 +319,16 @@ export function createTraderControls({
           });
           if (res.ok) {
             Utils.showToast("Force stop activated", "warning");
-            playError();
+            playToggleOff();
             await loadControlsStatus();
           } else {
             const data = await res.json().catch(() => null);
             Utils.showToast(data?.error?.message || "Failed to activate force stop", "error");
+            playError();
           }
         } catch {
           Utils.showToast("Failed to activate force stop", "error");
+          playError();
         }
       });
     }
@@ -344,9 +346,11 @@ export function createTraderControls({
           } else {
             const data = await res.json().catch(() => null);
             Utils.showToast(data?.error?.message || "Failed to resume trading", "error");
+            playError();
           }
         } catch {
           Utils.showToast("Failed to resume trading", "error");
+          playError();
         }
       });
     }
@@ -365,12 +369,14 @@ export function createTraderControls({
             e.target.checked = !e.target.checked; // Revert
             const data = await res.json().catch(() => null);
             Utils.showToast(data?.error?.message || "Failed to toggle entry monitor", "error");
+            playError();
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
         } catch {
           e.target.checked = !e.target.checked;
           Utils.showToast("Failed to toggle entry monitor", "error");
+          playError();
         }
       });
     }
@@ -389,12 +395,14 @@ export function createTraderControls({
             e.target.checked = !e.target.checked; // Revert
             const data = await res.json().catch(() => null);
             Utils.showToast(data?.error?.message || "Failed to toggle exit monitor", "error");
+            playError();
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
         } catch {
           e.target.checked = !e.target.checked;
           Utils.showToast("Failed to toggle exit monitor", "error");
+          playError();
         }
       });
     }

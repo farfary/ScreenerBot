@@ -7,7 +7,7 @@
  */
 import * as Utils from "./utils.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { playToggleOn, playError } from "./sounds.js";
+import { playSuccess, playError } from "./sounds.js";
 
 export class ChatWidget {
   /**
@@ -305,7 +305,6 @@ export class ChatWidget {
   async createSession() {
     if (this.state.isLoading) this.cancelRequest();
     this._showDraft();
-    playToggleOn();
     this.$(".cw-chat-input")?.focus();
   }
 
@@ -343,7 +342,7 @@ export class ChatWidget {
       const response = await fetch(`/api/ai/chat/sessions/${sessionId}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Failed to delete session");
 
-      playToggleOn();
+      playSuccess();
 
       if (this.state.currentSession === Number(sessionId)) {
         this.state.currentSession = null;
@@ -631,7 +630,7 @@ export class ChatWidget {
       const data = await response.json();
 
       if (approved) {
-        playToggleOn();
+        playSuccess();
         Utils.showToast({
           type: "success",
           title: "Success",

@@ -11,7 +11,7 @@
 
 import { on, create, show, hide } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
-import { playPanelOpen, playPanelClose, playSuccess, playError } from "../core/sounds.js";
+import { playClick, playSuccess, playError } from "../core/sounds.js";
 import { requestManager } from "../core/request_manager.js";
 
 // ============================================================================
@@ -156,7 +156,6 @@ export class ConfigExportDialog {
     requestAnimationFrame(() => {
       this.backdrop.classList.add("visible");
       this.element.classList.add("visible");
-      playPanelOpen();
     });
   }
 
@@ -315,7 +314,7 @@ export class ConfigExportDialog {
   }
 
   _handleCancel() {
-    playPanelClose();
+    playClick();
     this.destroy();
     this.resolver({ exported: false });
   }
@@ -392,7 +391,6 @@ export class ConfigImportDialog {
     requestAnimationFrame(() => {
       this.backdrop.classList.add("visible");
       this.element.classList.add("visible");
-      playPanelOpen();
     });
   }
 
@@ -880,7 +878,7 @@ export class ConfigImportDialog {
   }
 
   _handleCancel() {
-    playPanelClose();
+    playClick();
     this.destroy();
     this.resolver({ imported: false });
   }

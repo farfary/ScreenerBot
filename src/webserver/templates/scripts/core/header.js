@@ -8,7 +8,7 @@ import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
 import { createHeaderMetrics } from "./header_metrics.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
-import { playToggleOn, playToggleOff } from "./sounds.js";
+import { playToggleOn, playToggleOff, playError } from "./sounds.js";
 // Side-effect import: registers the `screenerbot:open-token-details` window
 // listener so the SOL price card (and any header control) can open the dialog.
 // Without this the event fires into the void on pages that don't load the dialog.
@@ -162,6 +162,7 @@ async function controlTrader(action) {
     Utils.showToast(`Trader ${action === "start" ? "started" : "stopped"}`, "success");
   } catch (err) {
     console.error("[TraderHeader] Control action failed", err);
+    playError();
     Utils.showToast(err.message || "Trader control failed", "error");
     setAvailability(false);
   } finally {

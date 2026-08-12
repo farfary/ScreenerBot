@@ -4,7 +4,7 @@ import { toastManager } from "../core/toast.js";
 import * as Utils from "../core/utils.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
-import { playPanelOpen, playPanelClose, playTabSwitch } from "../core/sounds.js";
+import { playTabSwitch } from "../core/sounds.js";
 
 let currentTab = "all";
 let isInitialized = false;
@@ -86,9 +86,6 @@ export function open() {
   resetScrollState();
   renderNotifications();
 
-  // Play panel open sound
-  playPanelOpen();
-
   // Notify toast manager about drawer state
   toastManager.onDrawerStateChange(true);
 
@@ -111,9 +108,6 @@ export function close() {
   drawer.setAttribute("data-state", "closed");
   drawer.setAttribute("aria-hidden", "true");
   document.body.classList.remove("notification-drawer-open");
-
-  // Play panel close sound
-  playPanelClose();
 
   // Notify toast manager about drawer state
   toastManager.onDrawerStateChange(false);
@@ -610,9 +604,7 @@ async function loadMoreNotifications() {
           itemsToAppend = itemsToAppend.filter((n) => !n.dismissed);
         }
 
-        const newHtml = itemsToAppend
-          .map((n) => renderNotification(n))
-          .join("");
+        const newHtml = itemsToAppend.map((n) => renderNotification(n)).join("");
         list.insertAdjacentHTML("beforeend", newHtml);
       }
     } else {

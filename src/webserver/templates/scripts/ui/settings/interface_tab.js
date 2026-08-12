@@ -179,7 +179,7 @@ export function buildInterfaceTab(settings) {
         <div class="settings-field">
           <div class="settings-field-info">
             <label>Enable Sounds</label>
-            <span class="settings-field-hint">Subtle audio feedback for button clicks and actions</span>
+            <span class="settings-field-hint">Tactile cues for navigation, state changes, and outcomes</span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">

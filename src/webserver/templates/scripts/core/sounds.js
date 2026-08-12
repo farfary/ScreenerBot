@@ -1,420 +1,417 @@
 /**
- * Sound Effects System
- * Provides subtle audio feedback for dashboard interactions using Web Audio API
- * Generates tones programmatically - no external audio files needed
+ * Dashboard sound feedback.
  *
- * Sound Types:
- * - playClick: Button clicks (1200Hz, 30ms)
- * - playTabSwitch: Tab/navigation switching (higher pitch, subtle)
- * - playToggleOn: Toggle activated (ascending sweep)
- * - playToggleOff: Toggle deactivated (descending sweep)
- * - playSuccess: Success confirmation (two-tone chime)
- * - playError: Error feedback (low warning tone)
- * - playPanelOpen: Panel/dialog opening (soft whoosh up)
- * - playPanelClose: Panel/dialog closing (soft whoosh down)
+ * Cues are synthesized through one restrained output chain so they remain
+ * consistent, quiet, and free of abrupt oscillator clicks. Requests made in
+ * the same interaction are coalesced by priority: a meaningful result cue
+ * replaces the generic button tick instead of playing over it.
  */
 
 /* global performance */
 
-// Sound configuration state
+const MASTER_VOLUME = 0.16;
+const SILENCE = 0.0001;
+
 const state = {
-  enabled: true, // Default enabled, will be overridden by config on load
-  volume: 0.04, // Ultra-low volume for Apple-inspired minimal sounds
-  initialized: false,
+  enabled: true,
+  preferenceLoaded: false,
   context: null,
-  lastPlayTime: {}, // Throttle tracking per sound type
+  master: null,
+  noiseBuffer: null,
+  resumePromise: null,
+  pendingCue: null,
+  deferredCue: null,
+  flushQueued: false,
+  clickTimer: null,
+  lastPlayedAt: new Map(),
 };
 
-// Throttle intervals (ms) per sound type to prevent spam
-const THROTTLE_MS = {
-  click: 30, // Very short for rapid button clicks
-  tabSwitch: 100, // Slightly longer for tab switches
-  toggle: 150, // Longer for toggle sounds
-  panel: 200, // Panel sounds shouldn't overlap
-  feedback: 100, // Success/error feedback
+const CUES = {
+  click: { priority: 10, throttleMs: 45, family: "click", render: renderClick },
+  tab: { priority: 20, throttleMs: 80, family: "tab", render: renderTab },
+  toggleOn: { priority: 30, throttleMs: 100, family: "toggle", render: renderToggleOn },
+  toggleOff: { priority: 30, throttleMs: 100, family: "toggle", render: renderToggleOff },
+  acknowledge: {
+    priority: 40,
+    throttleMs: 140,
+    family: "acknowledge",
+    render: renderAcknowledge,
+  },
+  success: { priority: 50, throttleMs: 180, family: "success", render: renderSuccess },
+  error: { priority: 60, throttleMs: 180, family: "error", render: renderError },
 };
 
-/**
- * Initialize the audio context (must be called after user interaction)
- */
 function initAudioContext() {
-  if (state.initialized && state.context) {
-    return true;
-  }
+  if (state.context && state.context.state !== "closed") return state.context;
 
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) {
-      console.warn("[Sounds] Web Audio API not supported");
-      return false;
-    }
+    if (!AudioContext) return null;
 
-    state.context = new AudioContext();
-    state.initialized = true;
+    const context = new AudioContext();
+    const master = context.createGain();
+    const limiter = context.createDynamicsCompressor();
 
-    if (state.context.state === "suspended") {
-      state.context.resume();
-    }
+    master.gain.value = MASTER_VOLUME;
+    limiter.threshold.value = -24;
+    limiter.knee.value = 18;
+    limiter.ratio.value = 6;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.12;
 
-    return true;
-  } catch (err) {
-    console.error("[Sounds] Failed to initialize audio context:", err);
-    return false;
+    master.connect(limiter);
+    limiter.connect(context.destination);
+
+    state.context = context;
+    state.master = master;
+    state.noiseBuffer = createNoiseBuffer(context);
+    return context;
+  } catch (error) {
+    console.warn("[Sounds] Audio feedback unavailable:", error);
+    return null;
   }
 }
 
-/**
- * Ensure context is ready (resume if suspended)
- */
-function ensureContext() {
-  if (!state.context) {
-    initAudioContext();
+function createNoiseBuffer(context) {
+  const frameCount = Math.ceil(context.sampleRate * 0.08);
+  const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+  const channel = buffer.getChannelData(0);
+
+  for (let index = 0; index < frameCount; index += 1) {
+    channel[index] = Math.random() * 2 - 1;
   }
-  if (state.context && state.context.state === "suspended") {
-    state.context.resume();
-  }
-  return state.context !== null;
+
+  return buffer;
 }
 
-/**
- * Throttle check - returns true if sound can play
- * @param {string} soundType - Type identifier for throttle tracking
- * @param {number} throttleMs - Minimum time between plays
- */
-function canPlaySound(soundType, throttleMs) {
+function resumeContext() {
+  const context = initAudioContext();
+  if (!context) return Promise.resolve(false);
+  if (context.state === "running") return Promise.resolve(true);
+  if (state.resumePromise) return state.resumePromise;
+
+  state.resumePromise = context
+    .resume()
+    .then(() => context.state === "running")
+    .catch(() => false)
+    .finally(() => {
+      state.resumePromise = null;
+    });
+
+  return state.resumePromise;
+}
+
+function applyEnvelope(gainParam, start, attack, duration, peak) {
+  const releaseStart = Math.min(start + attack, start + duration * 0.45);
+  gainParam.cancelScheduledValues(start);
+  gainParam.setValueAtTime(SILENCE, start);
+  gainParam.exponentialRampToValueAtTime(Math.max(peak, SILENCE), releaseStart);
+  gainParam.exponentialRampToValueAtTime(SILENCE, start + duration);
+}
+
+function tone({
+  start,
+  duration,
+  frequency,
+  endFrequency = frequency,
+  peak,
+  type = "triangle",
+  attack = 0.004,
+  filterFrequency = 1800,
+}) {
+  const context = state.context;
+  if (!context || !state.master) return;
+
+  const oscillator = context.createOscillator();
+  const filter = context.createBiquadFilter();
+  const gain = context.createGain();
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, start);
+  oscillator.frequency.exponentialRampToValueAtTime(endFrequency, start + duration);
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(filterFrequency, start);
+  filter.Q.value = 0.7;
+
+  applyEnvelope(gain.gain, start, attack, duration, peak);
+
+  oscillator.connect(filter);
+  filter.connect(gain);
+  gain.connect(state.master);
+  oscillator.start(start);
+  oscillator.stop(start + duration + 0.01);
+}
+
+function transient({ start, duration = 0.018, peak = 0.08, frequency = 850, attack = 0.002 }) {
+  const context = state.context;
+  if (!context || !state.master || !state.noiseBuffer) return;
+
+  const source = context.createBufferSource();
+  const filter = context.createBiquadFilter();
+  const gain = context.createGain();
+
+  source.buffer = state.noiseBuffer;
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(frequency, start);
+  filter.Q.value = 0.9;
+  applyEnvelope(gain.gain, start, attack, duration, peak);
+
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(state.master);
+  source.start(start, 0, duration);
+}
+
+function renderClick(start) {
+  transient({ start, duration: 0.016, peak: 0.08, frequency: 760 });
+  tone({
+    start,
+    duration: 0.028,
+    frequency: 430,
+    endFrequency: 350,
+    peak: 0.13,
+    filterFrequency: 1150,
+  });
+}
+
+function renderTab(start) {
+  transient({ start, duration: 0.014, peak: 0.055, frequency: 980 });
+  tone({
+    start,
+    duration: 0.042,
+    frequency: 540,
+    endFrequency: 455,
+    peak: 0.12,
+    filterFrequency: 1350,
+  });
+}
+
+function renderToggleOn(start) {
+  transient({ start, duration: 0.013, peak: 0.045, frequency: 820 });
+  tone({ start, duration: 0.055, frequency: 350, peak: 0.1, filterFrequency: 1200 });
+  tone({
+    start: start + 0.018,
+    duration: 0.06,
+    frequency: 470,
+    peak: 0.105,
+    filterFrequency: 1400,
+  });
+}
+
+function renderToggleOff(start) {
+  transient({ start, duration: 0.013, peak: 0.04, frequency: 720 });
+  tone({ start, duration: 0.052, frequency: 470, peak: 0.09, filterFrequency: 1350 });
+  tone({
+    start: start + 0.018,
+    duration: 0.058,
+    frequency: 350,
+    peak: 0.095,
+    filterFrequency: 1150,
+  });
+}
+
+function renderAcknowledge(start) {
+  transient({ start, duration: 0.018, peak: 0.05, frequency: 700 });
+  tone({
+    start,
+    duration: 0.075,
+    frequency: 380,
+    endFrequency: 420,
+    peak: 0.13,
+    filterFrequency: 1250,
+  });
+}
+
+function renderSuccess(start) {
+  transient({ start, duration: 0.02, peak: 0.035, frequency: 920 });
+  tone({
+    start,
+    duration: 0.12,
+    frequency: 392,
+    peak: 0.12,
+    type: "sine",
+    filterFrequency: 1500,
+  });
+  tone({
+    start: start + 0.05,
+    duration: 0.14,
+    frequency: 587,
+    peak: 0.13,
+    type: "sine",
+    filterFrequency: 1700,
+  });
+}
+
+function renderError(start) {
+  transient({ start, duration: 0.024, peak: 0.045, frequency: 430 });
+  tone({
+    start,
+    duration: 0.14,
+    frequency: 233,
+    endFrequency: 196,
+    peak: 0.13,
+    filterFrequency: 850,
+  });
+  tone({
+    start: start + 0.018,
+    duration: 0.13,
+    frequency: 277,
+    endFrequency: 220,
+    peak: 0.075,
+    type: "sine",
+    filterFrequency: 900,
+  });
+}
+
+function canRender(cue) {
   const now = performance.now();
-  const lastTime = state.lastPlayTime[soundType] || 0;
-
-  if (now - lastTime < throttleMs) {
-    return false;
-  }
-
-  state.lastPlayTime[soundType] = now;
+  const previous = state.lastPlayedAt.get(cue.family) || 0;
+  if (now - previous < cue.throttleMs) return false;
+  state.lastPlayedAt.set(cue.family, now);
   return true;
 }
 
-/**
- * Play a subtle click sound for buttons (Apple-inspired)
- * Pure sine wave, ultra-short duration
- */
+function renderCue(cue) {
+  if (!state.enabled || !state.preferenceLoaded) return;
+
+  const context = initAudioContext();
+  if (!context) return;
+
+  if (context.state !== "running") {
+    if (!state.deferredCue || cue.priority >= state.deferredCue.priority) {
+      state.deferredCue = cue;
+    }
+    void resumeContext().then((ready) => {
+      const deferred = state.deferredCue;
+      state.deferredCue = null;
+      if (ready && deferred && state.enabled && canRender(deferred)) {
+        deferred.render(context.currentTime + 0.004);
+      }
+    });
+    return;
+  }
+
+  if (canRender(cue)) {
+    cue.render(context.currentTime + 0.004);
+  }
+}
+
+function flushPendingCue() {
+  if (state.clickTimer !== null) {
+    clearTimeout(state.clickTimer);
+    state.clickTimer = null;
+  }
+  state.flushQueued = false;
+  const cue = state.pendingCue;
+  state.pendingCue = null;
+  if (cue) renderCue(cue);
+}
+
+function requestCue(name) {
+  if (!state.enabled || !state.preferenceLoaded) return;
+  const cue = CUES[name];
+  if (!cue) return;
+
+  if (!state.pendingCue || cue.priority >= state.pendingCue.priority) {
+    state.pendingCue = cue;
+  }
+
+  if (name === "click") {
+    if (state.clickTimer === null && !state.flushQueued) {
+      // Leave a short arbitration window for async tab guards and component
+      // handlers to replace the generic tick with a more meaningful cue.
+      state.clickTimer = window.setTimeout(flushPendingCue, 24);
+    }
+  } else if (!state.flushQueued) {
+    if (state.clickTimer !== null) {
+      clearTimeout(state.clickTimer);
+      state.clickTimer = null;
+    }
+    state.flushQueued = true;
+    void Promise.resolve().then(flushPendingCue);
+  }
+}
+
 export function playClick() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("click", THROTTLE_MS.click)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    // Clean, pure tone - Apple style
-    osc.frequency.setValueAtTime(1200, now);
-
-    gain.gain.setValueAtTime(state.volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.03);
-  } catch {
-    // Silent fail
-  }
+  requestCue("click");
 }
 
-/**
- * Play a subtle tab switch sound (distinct from button click)
- * Slightly higher pitch, even shorter - for navigation
- */
 export function playTabSwitch() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("tabSwitch", THROTTLE_MS.tabSwitch)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    // Higher, crisper tone for navigation
-    osc.frequency.setValueAtTime(1500, now);
-    osc.frequency.exponentialRampToValueAtTime(1400, now + 0.02);
-
-    gain.gain.setValueAtTime(state.volume * 0.8, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.035);
-  } catch {
-    // Silent fail
-  }
+  requestCue("tab");
 }
 
-/**
- * Play toggle on sound - gentle ascending (Apple-inspired)
- */
 export function playToggleOn() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("toggle", THROTTLE_MS.toggle)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(900, now);
-    osc.frequency.exponentialRampToValueAtTime(1300, now + 0.05);
-
-    gain.gain.setValueAtTime(state.volume * 1.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.07);
-  } catch {
-    // Silent fail
-  }
+  requestCue("toggleOn");
 }
 
-/**
- * Play toggle off sound - gentle descending (Apple-inspired)
- */
 export function playToggleOff() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("toggle", THROTTLE_MS.toggle)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(1100, now);
-    osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
-
-    gain.gain.setValueAtTime(state.volume * 1.25, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.07);
-  } catch {
-    // Silent fail
-  }
+  requestCue("toggleOff");
 }
 
-/**
- * Play panel/dialog open sound - soft ascending whoosh
- */
-export function playPanelOpen() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("panel", THROTTLE_MS.panel)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(600, now);
-    osc.frequency.exponentialRampToValueAtTime(1000, now + 0.06);
-
-    gain.gain.setValueAtTime(state.volume * 0.8, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.1);
-  } catch {
-    // Silent fail
-  }
+export function playAcknowledge() {
+  requestCue("acknowledge");
 }
 
-/**
- * Play panel/dialog close sound - soft descending whoosh
- */
-export function playPanelClose() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("panel", THROTTLE_MS.panel)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(900, now);
-    osc.frequency.exponentialRampToValueAtTime(500, now + 0.06);
-
-    gain.gain.setValueAtTime(state.volume * 0.6, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.09);
-  } catch {
-    // Silent fail
-  }
-}
-
-/**
- * Play success sound - gentle two-tone (Apple-inspired)
- */
 export function playSuccess() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("feedback", THROTTLE_MS.feedback)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    // First tone - lower
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = "sine";
-    osc1.frequency.setValueAtTime(1000, now);
-    gain1.gain.setValueAtTime(state.volume * 1.5, now);
-    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.1);
-
-    // Second tone - higher (subtle overlap)
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = "sine";
-    osc2.frequency.setValueAtTime(1300, now);
-    gain2.gain.setValueAtTime(0, now);
-    gain2.gain.setValueAtTime(state.volume * 1.5, now + 0.05);
-    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.05);
-    osc2.stop(now + 0.15);
-  } catch {
-    // Silent fail
-  }
+  requestCue("success");
 }
 
-/**
- * Play error sound - subtle low tone (Apple-inspired)
- */
 export function playError() {
-  if (!state.enabled || !ensureContext()) return;
-  if (!canPlaySound("feedback", THROTTLE_MS.feedback)) return;
-
-  try {
-    const ctx = state.context;
-    const now = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(300, now);
-    osc.frequency.exponentialRampToValueAtTime(250, now + 0.12);
-
-    gain.gain.setValueAtTime(state.volume * 2, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.18);
-  } catch {
-    // Silent fail
-  }
+  requestCue("error");
 }
 
-/**
- * Play a sound by type name (for compatibility)
- * @param {string} soundType - click, tab_switch, toggle_on, toggle_off, success, error, panel_open, panel_close
- */
 export function playSound(soundType) {
-  switch (soundType) {
-    case "click":
-      playClick();
-      break;
-    case "tab_switch":
-    case "tabSwitch":
-      playTabSwitch();
-      break;
-    case "toggle_on":
-      playToggleOn();
-      break;
-    case "toggle_off":
-      playToggleOff();
-      break;
-    case "success":
-      playSuccess();
-      break;
-    case "error":
-      playError();
-      break;
-    case "panel_open":
-    case "panelOpen":
-      playPanelOpen();
-      break;
-    case "panel_close":
-    case "panelClose":
-      playPanelClose();
-      break;
-    default:
-      playClick();
-  }
+  const cueNames = {
+    click: "click",
+    tab_switch: "tab",
+    tabSwitch: "tab",
+    toggle_on: "toggleOn",
+    toggle_off: "toggleOff",
+    acknowledge: "acknowledge",
+    submitted: "acknowledge",
+    success: "success",
+    error: "error",
+  };
+  requestCue(cueNames[soundType]);
 }
 
-/**
- * Enable or disable sounds globally
- */
 export function setSoundsEnabled(enabled) {
-  state.enabled = Boolean(enabled);
-
-  if (state.enabled) {
-    initAudioContext();
+  const nextEnabled = Boolean(enabled);
+  const context = state.context;
+  if (
+    !nextEnabled &&
+    state.enabled &&
+    state.preferenceLoaded &&
+    context?.state === "running" &&
+    canRender(CUES.toggleOff)
+  ) {
+    CUES.toggleOff.render(context.currentTime + 0.004);
   }
 
-  saveSoundPreference();
+  state.enabled = nextEnabled;
+  state.preferenceLoaded = true;
+  if (!state.enabled) {
+    state.pendingCue = null;
+    state.deferredCue = null;
+    if (state.clickTimer !== null) {
+      clearTimeout(state.clickTimer);
+      state.clickTimer = null;
+    }
+  } else {
+    void resumeContext().then((ready) => {
+      if (ready && state.enabled) requestCue("toggleOn");
+    });
+  }
+
+  void saveSoundPreference();
   return state.enabled;
 }
 
-/**
- * Check if sounds are enabled
- */
 export function isSoundsEnabled() {
   return state.enabled;
 }
 
-/**
- * Save sound preference to config
- */
 async function saveSoundPreference() {
   try {
     await fetch("/api/config/gui", {
@@ -429,44 +426,38 @@ async function saveSoundPreference() {
       }),
     });
   } catch {
-    // Silent fail
+    // Sound preference failure must not interrupt the dashboard.
   }
 }
 
-/**
- * Load sound preference from config
- */
 export async function loadSoundPreference() {
   try {
     const response = await fetch("/api/config/gui");
     if (response.ok) {
       const result = await response.json();
-      const config = result.data?.dashboard?.interface;
-      if (config && typeof config.sounds_enabled === "boolean") {
-        state.enabled = config.sounds_enabled;
-      } else {
-        // Default to enabled if not found
-        state.enabled = true;
-      }
+      const guiConfig = result.data?.data || result.data || result;
+      const config = guiConfig?.dashboard?.interface;
+      state.enabled = config?.sounds_enabled !== false;
     }
   } catch {
-    // Silent fail - default to enabled
     state.enabled = true;
+  } finally {
+    state.preferenceLoaded = true;
   }
 }
 
-// Initialize on first user interaction (lazy init for browser autoplay policy)
 function initOnInteraction() {
   const handler = () => {
-    initAudioContext();
-    // { once: true } handles cleanup automatically
+    document.removeEventListener("click", handler);
+    document.removeEventListener("keydown", handler);
+    if (state.enabled) void resumeContext();
   };
-  document.addEventListener("click", handler, { once: true });
-  document.addEventListener("keydown", handler, { once: true });
+
+  document.addEventListener("click", handler);
+  document.addEventListener("keydown", handler);
 }
 
-// Load preferences on module load
-loadSoundPreference();
+void loadSoundPreference();
 initOnInteraction();
 
 export default {
@@ -475,10 +466,9 @@ export default {
   playTabSwitch,
   playToggleOn,
   playToggleOff,
+  playAcknowledge,
   playSuccess,
   playError,
-  playPanelOpen,
-  playPanelClose,
   setSoundsEnabled,
   isSoundsEnabled,
   loadSoundPreference,

@@ -4,7 +4,7 @@ import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { playToggleOn, playError } from "../core/sounds.js";
+import { playToggleOn, playToggleOff, playSuccess, playError } from "../core/sounds.js";
 import { ChatWidget } from "../core/chat_widget.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 
@@ -314,7 +314,7 @@ function createLifecycle() {
 
       if (!response.ok) throw new Error("Failed to update AI status");
 
-      playToggleOn();
+      enabled ? playToggleOn() : playToggleOff();
       Utils.showToast({
         type: "success",
         title: enabled ? "Assistant Enabled" : "Assistant Disabled",
@@ -445,7 +445,7 @@ function createLifecycle() {
       const response = await fetch("/api/ai/cache/clear", { method: "POST" });
       if (!response.ok) throw new Error("Failed to clear cache");
 
-      playToggleOn();
+      playSuccess();
       Utils.showToast({
         type: "success",
         title: "Cache Cleared",
@@ -503,7 +503,7 @@ function createLifecycle() {
 
           if (!response.ok) throw new Error("Failed to save configuration");
 
-          playToggleOn();
+          playSuccess();
           Utils.showToast({
             type: "success",
             title: "Saved",

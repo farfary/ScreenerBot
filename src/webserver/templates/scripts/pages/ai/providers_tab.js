@@ -1,6 +1,6 @@
 import { $ } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
-import { playToggleOn, playError } from "../../core/sounds.js";
+import { playSuccess, playError } from "../../core/sounds.js";
 
 // Provider names mapping
 const PROVIDER_NAMES = {
@@ -358,7 +358,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
             <dt>Latency:</dt><dd>${Math.round(data.latency_ms || 0)}ms</dd>
             <dt>Tokens:</dt><dd>${parseInt(data.tokens_used) || 0}</dd>
           `;
-          playToggleOn();
+          playSuccess();
         } else {
           throw new Error(data.error?.message || "Test failed");
         }

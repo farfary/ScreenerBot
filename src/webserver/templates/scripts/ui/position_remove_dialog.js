@@ -14,7 +14,7 @@
  * "archive" | "delete". Cancel/backdrop/Esc resolve { confirmed: false }.
  */
 
-import { playPanelOpen, playPanelClose, playSuccess } from "../core/sounds.js";
+import { playClick } from "../core/sounds.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 
 const escapeHTML = (str) => {
@@ -136,7 +136,6 @@ class PositionRemoveDialog {
     requestAnimationFrame(() => {
       this.backdrop.classList.add("position-remove-backdrop--visible");
       this.element.classList.add("position-remove-dialog--visible");
-      playPanelOpen();
     });
 
     setTimeout(() => {
@@ -192,13 +191,13 @@ class PositionRemoveDialog {
   }
 
   _handleConfirm() {
-    playSuccess();
+    playClick();
     this._resolve({ confirmed: true, mode: this.mode });
     this.destroy();
   }
 
   _handleCancel() {
-    playPanelClose();
+    playClick();
     this._resolve({ confirmed: false, mode: this.mode });
     this.destroy();
   }

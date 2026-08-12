@@ -4,7 +4,6 @@
  */
 import { ChatWidget } from "./chat_widget.js";
 import { pushEscapeHandler } from "./escape_stack.js";
-import { playPanelOpen, playPanelClose } from "./sounds.js";
 
 class GlobalChat {
   constructor() {
@@ -105,8 +104,6 @@ class GlobalChat {
     this._widget.loadSessions();
     this._widget.startPolling(5000);
 
-    playPanelOpen();
-
     // Focus the input after animation
     setTimeout(() => {
       const input = this._widget.$(".cw-chat-input");
@@ -130,8 +127,6 @@ class GlobalChat {
 
     this._previousFocus?.focus?.();
     this._previousFocus = null;
-
-    playPanelClose();
   }
 
   _updateVisibility() {

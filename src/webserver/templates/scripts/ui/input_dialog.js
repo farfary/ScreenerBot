@@ -12,7 +12,7 @@
  * - Sound feedback on actions
  */
 
-import { playPanelOpen, playPanelClose, playSuccess } from "../core/sounds.js";
+import { playClick, playError } from "../core/sounds.js";
 
 class InputDialog {
   static activeDialog = null;
@@ -163,7 +163,6 @@ class InputDialog {
     requestAnimationFrame(() => {
       this.backdrop.classList.add("input-dialog-backdrop--visible");
       this.element.classList.add("input-dialog--visible");
-      playPanelOpen();
     });
 
     // Focus input after animation
@@ -473,6 +472,7 @@ class InputDialog {
 
   _handleConfirm() {
     if (!this._validateInput()) {
+      playError();
       // Shake the input on validation error
       this.inputElement.style.animation = "none";
       void this.inputElement.offsetHeight; // Trigger reflow
@@ -480,7 +480,7 @@ class InputDialog {
       return;
     }
 
-    playSuccess();
+    playClick();
 
     let value = this.inputElement ? this.inputElement.value : "";
 
@@ -497,7 +497,7 @@ class InputDialog {
   }
 
   _handleCancel() {
-    playPanelClose();
+    playClick();
     if (this.resolver) {
       this.resolver(null);
       this.resolver = null;
