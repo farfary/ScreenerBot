@@ -102,6 +102,7 @@ export class CustomSelect {
 
     // Create wrapper container
     const container = document.createElement("div");
+    container.className = "custom-select-host";
     selectElement.parentNode.insertBefore(container, selectElement);
 
     // Hide the original select. A bare inline `display:none` is NOT enough: page

@@ -355,13 +355,12 @@
   display: inline-flex;
   align-items: stretch;
   min-width: 0;
+  flex: 0 0 auto;
   overflow: hidden;
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  transition:
-    border-color var(--transition-base),
-    box-shadow var(--transition-base);
+  transition: border-color var(--transition-base);
 }
 
 .table-toolbar-select-group:has(
@@ -372,9 +371,36 @@
 
 .table-toolbar-select-group:has(
     > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
-  ):has(.custom-select:focus, .custom-select.open) {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgb(59, 130, 246, 0.1);
+  ):has(.custom-select:focus-visible) {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden]) {
+  flex: 0 0 auto;
+  min-width: max-content;
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host {
+  width: 100%;
+  min-width: 100%;
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
+  > .custom-select {
+  width: 100%;
+  min-width: 100%;
 }
 
 .table-toolbar-select-group:has(
@@ -389,7 +415,46 @@
   > .table-toolbar-select {
   border: 0;
   border-radius: 0;
+  background: transparent;
   box-shadow: none;
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  .cs-trigger {
+  min-width: max-content;
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
+  > .custom-select:hover
+  .cs-trigger {
+  background: var(--bg-card-hover);
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
+  > .custom-select.open
+  .cs-trigger {
+  background: var(--primary-alpha-5);
+}
+
+.table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  )
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
+  > .custom-select:focus-visible
+  .cs-trigger {
+  background: var(--primary-alpha-10);
 }
 
 .table-toolbar-select-group:has(
@@ -417,6 +482,15 @@
   align-items: center;
   min-width: 0;
   flex: 0 1 auto;
+}
+
+.table-toolbar-field > .custom-select-host {
+  display: flex;
+  min-width: 100%;
+}
+
+.table-toolbar-field > .custom-select-host > .custom-select {
+  width: 100%;
 }
 
 .table-toolbar-field[hidden] {
@@ -921,6 +995,14 @@
 
   .table-toolbar__controls {
     flex-wrap: wrap;
+  }
+
+  .table-toolbar-select-group:has(
+    > .table-toolbar-field:not([hidden]) ~ .table-toolbar-field:not([hidden])
+  ) {
+    flex: 1 1 100%;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .table-toolbar-search {

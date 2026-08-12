@@ -44,3 +44,15 @@ test("does not group dropdowns separated by another control", () => {
 
   assert.doesNotMatch(html, /table-toolbar-select-group/);
 });
+
+test("keeps hidden dropdowns inside the run so visibility can change without rerendering", () => {
+  const hiddenSelect = { ...select("status"), hidden: true };
+  const html = new TableToolbarView({
+    settings: false,
+    controls: [select("type"), hiddenSelect, select("wallet")],
+  }).render();
+
+  assert.match(html, /class="table-toolbar-select-group"/);
+  assert.match(html, /data-filter-id="status"[^>]*hidden/);
+  assert.match(html, /data-filter-id="wallet"/);
+});
