@@ -1,7 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
-import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
 import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
@@ -11,19 +10,6 @@ const DEFAULT_FILTERS = {
   type: "all",
   direction: "all",
   status: "all",
-};
-
-const TRANSACTIONS_STATE_KEY = "transactions-table";
-const normalizeSortDirection = (direction) => (direction === "desc" ? "desc" : "asc");
-const loadPersistedSort = (stateKey) => {
-  const saved = AppState.load(stateKey);
-  if (saved && typeof saved === "object" && saved.sortColumn) {
-    return {
-      column: saved.sortColumn,
-      direction: normalizeSortDirection(saved.sortDirection),
-    };
-  }
-  return null;
 };
 
 function formatTimestamp(value) {
@@ -124,6 +110,8 @@ function createLifecycle() {
   };
 
   let lastUserReloadAt = 0;
+  const isScrolledAwayFromTop = () =>
+    (table?.elements?.scrollContainer?.scrollTop ?? 0) > 1;
 
   const buildFiltersPayload = () => {
     const filters = {};
@@ -258,6 +246,13 @@ function createLifecycle() {
         state.totalEstimate = data.total_estimate;
       }
 
+      // Close the race between the poll guard and the response: the user may
+      // start scrolling while the first-page request is in flight. Keeping the
+      // accumulated rows turns that late poll into a value-only no-op.
+      if (reason === "poll" && isScrolledAwayFromTop()) {
+        return { rows: table?.getData?.() ?? [] };
+      }
+
       // For initial/reload direction, return all items without dedup.
       // _replaceData._isDataUnchanged() handles skip-if-same optimization.
       // Dedup is only needed for prev direction (prepending new transactions).
@@ -371,6 +366,11 @@ function createLifecycle() {
     // DataTable already updates values in place under the cursor without moving anything.
     const container = table?.elements?.container;
     if (container) {
+      // A poll reload replaces the accumulated infinite-scroll window with the
+      // first server page. Only do that at the top; otherwise the shorter row set
+      // clamps scrollTop onto unrelated records and the visible history jumps.
+      if (isScrolledAwayFromTop()) return true;
+
       const focusedElement = document.activeElement;
       if (focusedElement && container.contains(focusedElement)) {
         const tagName = focusedElement.tagName?.toLowerCase();
@@ -420,17 +420,11 @@ function createLifecycle() {
 
   return {
     async init(_ctx) {
-      const initialSort = loadPersistedSort(TRANSACTIONS_STATE_KEY) || {
-        column: "timestamp",
-        direction: "desc",
-      };
-
       const columns = [
         {
           id: "timestamp",
           label: "Time",
           minWidth: 160,
-          sortable: true,
           floating: true,
           render: (value) => formatTimestamp(value),
         },
@@ -462,14 +456,12 @@ function createLifecycle() {
           id: "sol_delta",
           label: "Δ SOL",
           minWidth: 140,
-          sortable: true,
           render: (value) => Utils.formatPnL(value, { decimals: 6, fallback: "—" }),
         },
         {
           id: "fee_sol",
           label: "Fees (SOL)",
           minWidth: 130,
-          sortable: true,
           render: (value) => Utils.formatSol(value, { decimals: 6, fallback: "—" }),
         },
         {
@@ -488,7 +480,6 @@ function createLifecycle() {
           id: "instructions_count",
           label: "Instr.",
           minWidth: 90,
-          sortable: true,
           render: (value) => Utils.formatNumber(value, { decimals: 0, fallback: "—" }),
         },
       ];
@@ -509,10 +500,6 @@ function createLifecycle() {
             }
             txDialog.show({ ...row, subject: state.subject });
           }
-        },
-        sorting: {
-          column: initialSort.column,
-          direction: initialSort.direction,
         },
         pagination: {
           threshold: 320,
@@ -670,6 +657,11 @@ function createLifecycle() {
           ],
         },
       });
+
+      // The cursor API is strictly timestamp-descending. Client-sorting only the
+      // loaded window makes later pages reorder above the viewport and presents a
+      // false global sort, so retain the server's stable cursor order.
+      table.setSortState(null, "desc", { render: true });
 
       // Sync state from DataTable's restored server state
       const serverState = table.getServerState();

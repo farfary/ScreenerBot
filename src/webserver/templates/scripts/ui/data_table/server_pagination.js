@@ -1210,25 +1210,25 @@ export function applyServerPaginationMixin(DataTable) {
 
     const pagination = this._pagination;
 
-    if (Object.prototype.hasOwnProperty.call(meta, "cursorNext")) {
-      pagination.cursorNext = meta.cursorNext ?? null;
+    if (meta.cursorNext !== undefined) {
+      pagination.cursorNext = meta.cursorNext;
       pagination.hasMoreNext =
         meta.hasMoreNext !== undefined
           ? Boolean(meta.hasMoreNext)
           : pagination.cursorNext !== null && pagination.cursorNext !== undefined;
-    } else if (Object.prototype.hasOwnProperty.call(meta, "hasMoreNext")) {
+    } else if (meta.hasMoreNext !== undefined) {
       pagination.hasMoreNext = Boolean(meta.hasMoreNext);
     } else if (options.replace) {
       pagination.cursorNext = pagination.cursorNext ?? null;
     }
 
-    if (Object.prototype.hasOwnProperty.call(meta, "cursorPrev")) {
-      pagination.cursorPrev = meta.cursorPrev ?? null;
+    if (meta.cursorPrev !== undefined) {
+      pagination.cursorPrev = meta.cursorPrev;
       pagination.hasMorePrev =
         meta.hasMorePrev !== undefined
           ? Boolean(meta.hasMorePrev)
           : pagination.cursorPrev !== null && pagination.cursorPrev !== undefined;
-    } else if (Object.prototype.hasOwnProperty.call(meta, "hasMorePrev")) {
+    } else if (meta.hasMorePrev !== undefined) {
       pagination.hasMorePrev = Boolean(meta.hasMorePrev);
     } else if (options.replace) {
       pagination.cursorPrev = pagination.cursorPrev ?? null;

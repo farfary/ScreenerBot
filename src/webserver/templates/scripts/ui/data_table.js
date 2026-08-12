@@ -293,9 +293,11 @@ export class DataTable {
     this._handleResizeEnd = this._handleResizeEnd.bind(this);
 
     this._loadState();
-    this._restoreServerState(); // NEW: Restore server-side state after loading
     this._loadServerPaginationMode(); // Load hybrid pagination mode preference
     this._init();
+    // Rendering creates the normalized toolbar index used by typed controls.
+    // Restore only after `_init` so controls declared outside legacy sugar are visible.
+    this._restoreServerState();
   }
 
   _initializePagination(paginationOptions) {
@@ -403,7 +405,8 @@ export class DataTable {
   }
 
   _getSearchMode() {
-    const searchConfig = this.options?.toolbar?.search || {};
+    const searchConfig =
+      this.toolbarView?.getItem("search") || this.options?.toolbar?.search || {};
     return searchConfig.mode === "server" ? "server" : "client";
   }
 
@@ -1701,20 +1704,21 @@ export class DataTable {
       });
     }
 
-    // Apply custom filters
-    if (this.options.toolbar.filters) {
-      this.options.toolbar.filters.forEach((filter) => {
-        const filterValue = this.state.filters[filter.id];
-        if (
-          filterValue &&
-          filterValue !== "all" &&
-          filter.filterFn &&
-          !this._isServerFilter(filter)
-        ) {
-          data = data.filter((row) => filter.filterFn(row, filterValue));
-        }
-      });
-    }
+    // Apply client filters through the normalized toolbar index. Typed controls
+    // and legacy `filters` sugar must resolve identically.
+    Object.entries(this.state.filters).forEach(([filterId, filterValue]) => {
+      const filter =
+        this.toolbarView?.getItem(filterId) ||
+        this.options.toolbar?.filters?.find((item) => item?.id === filterId);
+      if (
+        filterValue &&
+        filterValue !== "all" &&
+        filter?.filterFn &&
+        !this._isServerFilter(filter)
+      ) {
+        data = data.filter((row) => filter.filterFn(row, filterValue));
+      }
+    });
 
     this.state.filteredData = data;
     this._applySort();
@@ -2589,7 +2593,8 @@ export class DataTable {
 
     // Restore server-side search
     if (this._getSearchMode() === "server" && this.state.searchQuery) {
-      const searchConfig = this.options.toolbar?.search || {};
+      const searchConfig =
+        this.toolbarView?.getItem("search") || this.options.toolbar?.search || {};
       if (typeof searchConfig.onChange === "function") {
         queueMicrotask(() => {
           searchConfig.onChange(this.state.searchQuery, null, { restored: true });
