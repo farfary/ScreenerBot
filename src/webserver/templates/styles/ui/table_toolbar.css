@@ -398,8 +398,10 @@
 }
 
 .table-toolbar-select-group > .table-toolbar-field:not([hidden]) {
-  flex: 0 0 clamp(6.25rem, calc(var(--table-toolbar-select-label-width, 5rem) + 2rem), 9rem);
-  width: clamp(6.25rem, calc(var(--table-toolbar-select-label-width, 5rem) + 2rem), 9rem);
+  /* Label + trigger chevron + menu checkmark column. The old 2rem allowance
+     forced common labels to collide with the selected icon or ellipsize. */
+  flex: 0 0 clamp(8rem, calc(var(--table-toolbar-select-label-width, 5rem) + 3.5rem), 12rem);
+  width: clamp(8rem, calc(var(--table-toolbar-select-label-width, 5rem) + 3.5rem), 12rem);
   min-width: 0;
 }
 

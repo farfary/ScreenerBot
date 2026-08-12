@@ -231,8 +231,11 @@ select.cs-enhanced-source {
   position: relative;
   display: flex;
   align-items: center;
+  box-sizing: border-box;
+  width: 100%;
   min-height: var(--cs-control-height, 36px);
-  padding: 0.375rem 2rem 0.375rem 0.75rem;
+  /* Keep a dedicated trailing column for the selected checkmark. */
+  padding: 0.375rem 2.5rem 0.375rem 0.75rem;
   color: var(--text-primary);
   font-size: 0.8125rem;
   font-weight: 450;
@@ -330,7 +333,7 @@ select.cs-enhanced-source {
 
 .custom-select.cs-sm .cs-option {
   padding: 8px 12px;
-  padding-right: 30px;
+  padding-right: 40px;
 }
 
 .custom-select.cs-sm .cs-arrow svg {
