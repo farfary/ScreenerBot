@@ -33,12 +33,26 @@ impl Service for WebserverService {
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
-        // Enable demo mode if --dashboard-demo flag is present
-        if crate::arguments::is_dashboard_demo_enabled() {
+        // Enable demo mode if --dashboard-demo flag is present. --demo-capture
+        // implies it: the capture runtime only ever drives showcase data, never
+        // a real wallet.
+        let capture = crate::arguments::is_demo_capture_enabled();
+        if crate::arguments::is_dashboard_demo_enabled() || capture {
             crate::webserver::demo::enable_demo_mode();
             logger::info(
                 LogTag::Webserver,
                 "Dashboard demo mode enabled for screenshots",
+            );
+        }
+        if capture {
+            crate::webserver::demo::enable_demo_capture();
+            logger::info(LogTag::Webserver, "Demo capture runtime enabled");
+        }
+        if crate::arguments::is_demo_freeze_enabled() {
+            crate::webserver::demo::enable_demo_freeze();
+            logger::info(
+                LogTag::Webserver,
+                "Demo freeze enabled — live values pinned to demo constants",
             );
         }
         Ok(())

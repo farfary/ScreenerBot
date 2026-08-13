@@ -41,6 +41,12 @@ const CONFIG = {
 // the backend child (and can still stop it when the desktop app quits).
 const BACKEND_RESTART_EXIT_CODE = 75;
 
+// Demo capture: the studio driver sets this before launching the app. Nothing
+// about the capture bridge is loaded, listening or reachable without it.
+const DEMO_CONTROL = process.env.SCREENERBOT_DEMO_CONTROL === '1';
+const demoBridge = DEMO_CONTROL ? require('./demo_bridge') : null;
+let demoBridgePort = null;
+
 let mainWindow = null;
 let backendProcess = null;
 let isQuitting = false;
@@ -846,6 +852,14 @@ function createWindow() {
 
   mainWindow.webContents.on('did-finish-load', () => {
     dashboardLoaded = isDashboardUrl(mainWindow.webContents.getURL());
+
+    // Tell the capture runtime where its scene media is served from. Re-applied
+    // on every dashboard load so a reload mid-scene keeps working.
+    if (dashboardLoaded && demoBridgePort) {
+      mainWindow.webContents
+        .executeJavaScript(`window.__SB_DEMO_MEDIA_BASE__ = "http://127.0.0.1:${demoBridgePort}/media";`)
+        .catch(err => console.error('[Electron] Failed to publish demo media base:', err.message));
+    }
   });
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
@@ -1304,7 +1318,21 @@ async function initialize() {
   
   // Create window first
   createWindow();
-  
+
+  // Bring the capture bridge up before the backend: the driver polls it for
+  // readiness, so it must be able to connect while the app is still booting.
+  if (demoBridge) {
+    try {
+      demoBridgePort = await demoBridge.startDemoBridge(mainWindow, {
+        port: Number(process.env.SCREENERBOT_DEMO_PORT || 0),
+        mediaDir: process.env.SCREENERBOT_DEMO_MEDIA || null
+      });
+      console.log('[Electron] Demo capture bridge listening on port', demoBridgePort);
+    } catch (err) {
+      console.error('[Electron] Demo capture bridge failed to start:', err.message);
+    }
+  }
+
   // Create application menu with keyboard shortcuts
   createApplicationMenu();
   
@@ -1391,7 +1419,11 @@ app.on('will-quit', (event) => {
     tray.destroy();
     tray = null;
   }
-  
+
+  if (demoBridge) {
+    demoBridge.stopDemoBridge();
+  }
+
   if (backendProcess) {
     console.log('[Electron] Will quit - stopping backend');
     event.preventDefault();

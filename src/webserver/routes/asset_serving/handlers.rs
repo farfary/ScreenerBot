@@ -116,6 +116,29 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
     }
 }
 
+/// Serve the demo capture runtime modules.
+///
+/// Refuses to serve anything unless the binary was started with `--demo-capture`,
+/// so a normal install never exposes the automation surface even though the code
+/// ships in the same binary.
+pub async fn get_demo_script(Path(file): Path<String>) -> Response {
+    if !crate::webserver::demo::is_demo_capture() {
+        return (StatusCode::NOT_FOUND, "Script not found").into_response();
+    }
+
+    let content = match file.as_str() {
+        "runtime.js" => Some(embeds::DEMO_RUNTIME),
+        "overlay.js" => Some(embeds::DEMO_OVERLAY),
+        "audio.js" => Some(embeds::DEMO_AUDIO),
+        _ => None,
+    };
+
+    match content {
+        Some(js) => serve_js(js),
+        None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
+    }
+}
+
 /// Serve page JavaScript modules
 pub async fn get_page_script(Path(file): Path<String>) -> Response {
     let file = file.strip_prefix('/').unwrap_or(&file);

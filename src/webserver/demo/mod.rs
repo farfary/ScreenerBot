@@ -41,12 +41,41 @@ pub(crate) const DEMO_SOL_PRICE_FALLBACK: f64 = 176.42;
 /// Global flag for demo mode - set at startup based on --dashboard-demo argument.
 pub static DEMO_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 
+/// Demo capture runtime — the dashboard loads its capture layer (overlays,
+/// narration, quiescence reporting) so an external driver can produce
+/// screenshots and recordings without guessing at timings.
+pub static DEMO_CAPTURE_ENABLED: AtomicBool = AtomicBool::new(false);
+
+/// Demo freeze — every remaining live value is pinned to its demo constant so
+/// repeated capture runs render identical frames.
+pub static DEMO_FREEZE_ENABLED: AtomicBool = AtomicBool::new(false);
+
 /// Check if demo mode is active.
 pub fn is_demo_mode() -> bool {
     DEMO_MODE_ENABLED.load(Ordering::Relaxed)
 }
 
+/// Check if the dashboard should serve and load the demo capture runtime.
+pub fn is_demo_capture() -> bool {
+    DEMO_CAPTURE_ENABLED.load(Ordering::Relaxed)
+}
+
+/// Check if live values must be pinned to their demo constants.
+pub fn is_demo_frozen() -> bool {
+    DEMO_FREEZE_ENABLED.load(Ordering::Relaxed)
+}
+
 /// Enable demo mode (called at startup if --dashboard-demo flag is present).
 pub fn enable_demo_mode() {
     DEMO_MODE_ENABLED.store(true, Ordering::SeqCst);
+}
+
+/// Enable the demo capture runtime (called at startup for --demo-capture).
+pub fn enable_demo_capture() {
+    DEMO_CAPTURE_ENABLED.store(true, Ordering::SeqCst);
+}
+
+/// Enable demo freeze (called at startup for --demo-freeze).
+pub fn enable_demo_freeze() {
+    DEMO_FREEZE_ENABLED.store(true, Ordering::SeqCst);
 }

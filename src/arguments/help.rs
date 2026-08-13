@@ -26,6 +26,10 @@ pub fn print_help() {
         "                                Without --gui, runs headless with webserver on port 8080"
     );
     println!("    --dashboard-demo            Show hardcoded demo data for screenshots/marketing");
+    println!("    --demo-capture              Load the demo capture runtime (overlays, narration,");
+    println!("                                quiescence reporting). Implies --dashboard-demo");
+    println!("    --demo-freeze               Pin live values to demo constants for reproducible");
+    println!("                                frames (use with --demo-capture)");
     println!(
         "    --dashboard-onboarding      Force show onboarding screens (resets onboarding state)"
     );
@@ -128,6 +132,12 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     }
     if is_dashboard_demo_enabled() {
         modes.push("dashboard-demo".to_owned());
+    }
+    if is_demo_capture_enabled() {
+        modes.push("demo-capture".to_owned());
+    }
+    if is_demo_freeze_enabled() {
+        modes.push("demo-freeze".to_owned());
     }
     if is_force_enabled() {
         modes.push("force".to_owned());

@@ -58,7 +58,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Platform info
   platform: process.platform,
-  
+
   // Check if running in Electron
   isElectron: true
 });
+
+/**
+ * Demo capture channel — exposed only when the app was launched by the demo
+ * studio driver. A normal session never has `window.demoAPI`, so the dashboard's
+ * capture runtime cannot be driven from a real install.
+ */
+if (process.env.SCREENERBOT_DEMO_CONTROL === '1') {
+  contextBridge.exposeInMainWorld('demoAPI', {
+    onCommand: (callback) => {
+      const handler = (event, payload) => callback(payload);
+      ipcRenderer.on('demo:command', handler);
+      return () => ipcRenderer.removeListener('demo:command', handler);
+    },
+    sendResult: (payload) => ipcRenderer.send('demo:result', payload)
+  });
+}

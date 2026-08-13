@@ -7,8 +7,6 @@
  * replaces the generic button tick instead of playing over it.
  */
 
-/* global performance */
-
 const MASTER_VOLUME = 0.16;
 const SILENCE = 0.0001;
 
@@ -17,6 +15,7 @@ const state = {
   preferenceLoaded: false,
   context: null,
   master: null,
+  outputBus: null,
   noiseBuffer: null,
   resumePromise: null,
   pendingCue: null,
@@ -50,20 +49,28 @@ function initAudioContext() {
 
     const context = new AudioContext();
     const master = context.createGain();
+    const outputBus = context.createGain();
     const limiter = context.createDynamicsCompressor();
 
     master.gain.value = MASTER_VOLUME;
+    outputBus.gain.value = 1;
     limiter.threshold.value = -24;
     limiter.knee.value = 18;
     limiter.ratio.value = 6;
     limiter.attack.value = 0.003;
     limiter.release.value = 0.12;
 
-    master.connect(limiter);
+    // `master` is the interaction-cue level; `outputBus` is everything the app
+    // emits. Keeping them separate means another source (demo capture music and
+    // narration) can join the same graph — mixed through the same limiter, and
+    // tappable as one stream for a recording — without borrowing the cue level.
+    master.connect(outputBus);
+    outputBus.connect(limiter);
     limiter.connect(context.destination);
 
     state.context = context;
     state.master = master;
+    state.outputBus = outputBus;
     state.noiseBuffer = createNoiseBuffer(context);
     return context;
   } catch (error) {
@@ -412,6 +419,40 @@ export function isSoundsEnabled() {
   return state.enabled;
 }
 
+/**
+ * The shared audio graph, created on demand.
+ *
+ * Returned so another part of the app can play through the SAME context and
+ * limiter instead of opening a second one — two AudioContexts cannot share
+ * nodes, so a second context could never be mixed or captured together with
+ * this one. Used by the demo capture runtime for music and narration.
+ */
+export function ensureAudioGraph() {
+  const context = initAudioContext();
+  if (!context) return null;
+  return { context, master: state.master, outputBus: state.outputBus };
+}
+
+/** Resume the shared context (autoplay policy) — resolves true once running. */
+export function resumeAudio() {
+  return resumeContext();
+}
+
+/**
+ * Level of the interaction cues alone, as a multiple of their normal volume.
+ * Ramped rather than stepped so a change mid-recording does not click.
+ */
+export function setCueVolume(multiplier, rampMs = 0) {
+  const graph = ensureAudioGraph();
+  if (!graph) return 0;
+  const target = Math.max(0, Number(multiplier) || 0) * MASTER_VOLUME;
+  const { context, master } = graph;
+  master.gain.cancelScheduledValues(context.currentTime);
+  master.gain.setValueAtTime(master.gain.value, context.currentTime);
+  master.gain.linearRampToValueAtTime(target, context.currentTime + Math.max(0, rampMs) / 1000);
+  return target;
+}
+
 async function saveSoundPreference() {
   try {
     await fetch("/api/config/gui", {
@@ -472,4 +513,7 @@ export default {
   setSoundsEnabled,
   isSoundsEnabled,
   loadSoundPreference,
+  ensureAudioGraph,
+  resumeAudio,
+  setCueVolume,
 };

@@ -4,6 +4,10 @@ import * as AppState from "./app_state.js";
 const _state = {
   interval: null,
   listeners: [],
+  // Live Poller instances, added on construction and removed by cleanup().
+  // Registration is what makes it possible to quiet the whole dashboard at once
+  // (demo capture) and to see what is actually polling.
+  instances: new Set(),
 };
 
 const DEFAULT_INTERVAL = 1000;
@@ -76,6 +80,30 @@ export function removeListener(callback) {
   }
 }
 
+/** Every live poller with its label and current state, for diagnostics. */
+export function listPollers() {
+  return Array.from(_state.instances, (poller) => ({
+    label: poller.label,
+    active: poller.active,
+    paused: poller.isPaused,
+  }));
+}
+
+/**
+ * Pause every poller in the dashboard at once. Used by demo capture so a
+ * screenshot cannot be taken across a refresh, and available for any future
+ * "hold the world still" need.
+ */
+export function pauseAllPollers() {
+  _state.instances.forEach((poller) => poller.pause());
+  return _state.instances.size;
+}
+
+export function resumeAllPollers() {
+  _state.instances.forEach((poller) => poller.resume());
+  return _state.instances.size;
+}
+
 // Poller class - per-page polling lifecycle
 export class Poller {
   /**
@@ -110,6 +138,8 @@ export class Poller {
     if (typeof onPoll !== "function") {
       throw new Error(`[Poller:${this.label}] onPoll callback is required`);
     }
+
+    _state.instances.add(this);
   }
 
   _logPrefix() {
@@ -265,6 +295,7 @@ export class Poller {
       removeListener(this.listener);
     }
     this.listener = null;
+    _state.instances.delete(this);
   }
 
   pause() {

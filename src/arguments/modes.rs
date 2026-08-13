@@ -21,6 +21,20 @@ pub fn is_dashboard_demo_enabled() -> bool {
     has_arg("--dashboard-demo")
 }
 
+/// Demo capture mode — load the dashboard's demo capture runtime (overlays,
+/// narration, quiescence reporting) so an external driver can produce
+/// screenshots and promotional recordings deterministically. Implies demo data.
+pub fn is_demo_capture_enabled() -> bool {
+    has_arg("--demo-capture")
+}
+
+/// Demo freeze — pin every remaining live value (SOL price above all) to its
+/// deterministic demo constant so two capture runs render byte-identical
+/// frames. Only meaningful together with demo mode.
+pub fn is_demo_freeze_enabled() -> bool {
+    has_arg("--demo-freeze")
+}
+
 /// Force onboarding display — show onboarding even if already completed.
 pub fn is_dashboard_onboarding_forced() -> bool {
     has_arg("--dashboard-onboarding")

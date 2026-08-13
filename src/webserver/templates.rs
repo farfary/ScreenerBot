@@ -232,13 +232,33 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         // Status bar (always visible at bottom)
         STATUS_BAR_STYLES,
     ];
-    html = html.replace("/*__GLOBAL_STYLES__*/", &combined_styles.join("\n"));
+    // The demo capture layer is appended to the global bundle, and its module is
+    // the last script in the document — both only under --demo-capture, so a
+    // normal session ships neither the styles nor the runtime.
+    let demo_capture = super::demo::is_demo_capture();
+    let global_styles = if demo_capture {
+        [combined_styles.join("\n"), DEMO_CAPTURE_STYLES.to_string()].join("\n")
+    } else {
+        combined_styles.join("\n")
+    };
+    html = html.replace("/*__GLOBAL_STYLES__*/", &global_styles);
     html = html.replace(
         "/*__INITIAL_PAGE_STYLES__*/",
         &page_styles(active_tab).unwrap_or_default(),
     );
     html = html.replace("{{ACTIVE_TAB}}", active_tab);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
+    html = html.replace(
+        "<!--__DEMO_CAPTURE_SCRIPTS__-->",
+        &if demo_capture {
+            format!(
+                "<script type=\"module\" src=\"/scripts/demo/runtime.js?v={}\"></script>",
+                asset_version
+            )
+        } else {
+            String::new()
+        },
+    );
     html
 }
 

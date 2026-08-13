@@ -14,7 +14,13 @@ use super::DEMO_SOL_PRICE_FALLBACK;
 
 /// Live SOL/USD price if the price service has a fresh quote, else the fallback.
 /// Demo mode starts a lightweight SOL price service so this is real when online.
+/// Under demo freeze the constant always wins: a capture run must render the same
+/// header in every frame and on every rerun, and this is the one demo value that
+/// otherwise moves between two screenshots taken a minute apart.
 fn live_sol_price() -> f64 {
+    if super::is_demo_frozen() {
+        return DEMO_SOL_PRICE_FALLBACK;
+    }
     let live = crate::sol_price::get_sol_price();
     if live > 0.0 {
         live
@@ -82,7 +88,11 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
         system,
         sol: SolHeaderInfo {
             price_usd: live_sol_price(),
-            change_24h_percent: crate::ohlcvs::sol_usd_chart::change_24h_percent().or(Some(2.3)),
+            change_24h_percent: if super::is_demo_frozen() {
+                Some(2.3)
+            } else {
+                crate::ohlcvs::sol_usd_chart::change_24h_percent().or(Some(2.3))
+            },
         },
         timestamp: now.to_rfc3339(),
     }
