@@ -22,7 +22,7 @@
 const http = require('http');
 const fsp = require('fs/promises');
 const path = require('path');
-const { app, ipcMain } = require('electron');
+const { app, ipcMain, screen } = require('electron');
 
 const HOST = '127.0.0.1';
 const RENDERER_TIMEOUT_MS = 60000;
@@ -72,35 +72,117 @@ ipcMain.on('demo:result', (_event, { id, ok, result, error }) => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Largest CONTENT size that still leaves the whole window frame inside the
+ * display's work area (the screen minus the menu bar and Dock).
+ *
+ * `screencapture -l` composites the window layer, so a window hanging off the
+ * screen edge is captured as a cropped or blank strip — and the operator cannot
+ * see what is being captured either. The chrome delta is measured from the live
+ * window rather than assumed, because the title bar height depends on
+ * titleBarStyle and on the OS version.
+ */
+function maxContentSize() {
+  const { workArea } = screen.getDisplayMatching(mainWindow.getBounds());
+  const [contentWidth, contentHeight] = mainWindow.getContentSize();
+  const bounds = mainWindow.getBounds();
+  return {
+    width: workArea.width - (bounds.width - contentWidth),
+    height: workArea.height - (bounds.height - contentHeight),
+    workArea,
+  };
+}
+
+/** Zoom levels tried by `zoom: 'fit'`, in order. -1 is roughly 83%. */
+const FIT_ZOOM_STEPS = [0, -1, -2];
+
+/**
+ * Choose the largest zoom level at which the app's chrome is not clipped.
+ *
+ * The main nav is a single non-wrapping row of tabs that needs more width than a
+ * laptop display has, so at zoom 0 the last tabs are cut off and every
+ * screenshot looks like the product is broken. Rather than hardcode a zoom that
+ * happens to suit one Mac, each step is applied and then MEASURED in the page —
+ * the same "resolve on an observed signal" rule the rest of the runtime follows.
+ */
+async function fitZoom() {
+  let last = null;
+
+  for (const level of FIT_ZOOM_STEPS) {
+    mainWindow.webContents.setZoomLevel(level);
+    await callRenderer('wait.viewport', {});
+    last = await callRenderer('demo.measureChrome', {});
+    if (!last.clipped) return level;
+  }
+
+  // Nothing fit. Keep the smallest zoom rather than failing the run: a slightly
+  // clipped nav is still a usable capture, and the state is reported either way.
+  return FIT_ZOOM_STEPS[FIT_ZOOM_STEPS.length - 1];
+}
+
+/**
  * Put the window in an exactly known state: CONTENT size (not frame size, which
  * varies with the title bar) and zoom level. A capture run that does not pin
  * both produces frames that differ between machines.
+ *
+ * The requested size is clamped to the display and the window is centred in it,
+ * so a scene written for a large screen still produces a whole, visible window on
+ * a smaller one. Pass width/height 0 (or omit them) to ask for the largest window
+ * this display can show. The applied size and the clamp are reported back, so the
+ * run's manifest records what was really captured rather than what was asked for.
  */
-async function configureWindow({ width, height, zoom = 0 }) {
+async function configureWindow({ width = 0, height = 0, zoom = 0 }) {
   if (!mainWindow) throw new Error('No dashboard window');
 
   mainWindow.setFullScreen(false);
   mainWindow.unmaximize();
   mainWindow.setResizable(true);
 
-  if (width && height) {
-    const [currentWidth, currentHeight] = mainWindow.getContentSize();
-    if (currentWidth !== width || currentHeight !== height) {
-      const resized = new Promise((resolve) => mainWindow.once('resize', resolve));
-      mainWindow.setContentSize(Math.round(width), Math.round(height));
-      await Promise.race([resized, new Promise((resolve) => setTimeout(resolve, 2000))]);
-    }
+  const limit = maxContentSize();
+  const requested = {
+    width: Math.round(width) || limit.width,
+    height: Math.round(height) || limit.height,
+  };
+  const target = {
+    width: Math.min(requested.width, limit.width),
+    height: Math.min(requested.height, limit.height),
+  };
+
+  const [currentWidth, currentHeight] = mainWindow.getContentSize();
+  if (currentWidth !== target.width || currentHeight !== target.height) {
+    const resized = new Promise((resolve) => mainWindow.once('resize', resolve));
+    mainWindow.setContentSize(target.width, target.height);
+    await Promise.race([resized, new Promise((resolve) => setTimeout(resolve, 2000))]);
   }
 
-  mainWindow.webContents.setZoomLevel(zoom);
+  // Centre the frame in the work area. Read the bounds back first: the window's
+  // own minimum size can refuse part of the resize above, and centring the size
+  // we asked for rather than the size we got would push it off the screen again.
+  const bounds = mainWindow.getBounds();
+  mainWindow.setPosition(
+    Math.round(limit.workArea.x + (limit.workArea.width - bounds.width) / 2),
+    Math.round(limit.workArea.y + (limit.workArea.height - bounds.height) / 2)
+  );
+
+  mainWindow.webContents.setZoomLevel(zoom === 'fit' ? 0 : zoom);
   mainWindow.show();
   mainWindow.focus();
 
-  // One presented frame with the new geometry before anything is measured.
+  // Wait for the new geometry to reach the renderer and stop moving — not for
+  // full quiescence. Configure runs during app boot, when the dashboard is still
+  // loading and every poller is live, so a "nothing in flight" bar here is one
+  // the app may never clear. The scene's freeze() is what settles the page.
   await new Promise((resolve) => setImmediate(resolve));
-  await callRenderer('wait.stable', {});
+  await callRenderer('wait.viewport', {});
 
-  return windowState();
+  if (zoom === 'fit') await fitZoom();
+
+  const state = windowState();
+  return {
+    ...state,
+    requested,
+    clamped: state.content.width !== requested.width || state.content.height !== requested.height,
+    displayLimit: { width: limit.width, height: limit.height },
+  };
 }
 
 function windowState() {
@@ -142,8 +224,63 @@ async function focusWindow() {
   return windowIdentity();
 }
 
+/**
+ * Resolve as soon as the window is not the focused window any more.
+ *
+ * Starting `screencapture -v` activates the recorder and leaves the app's title
+ * bar drawn in its INACTIVE state — grey traffic lights for the length of the
+ * clip. There is no signal from screencapture itself that recording has begun,
+ * but losing focus IS observable from in here, and it is precisely the thing
+ * that has to be corrected. The driver waits for it and then re-focuses.
+ *
+ * Bounded, and returns what actually happened: if focus was never taken, the
+ * caller re-focuses anyway and nothing is harmed.
+ */
+async function awaitBlur({ timeout = 4000 } = {}) {
+  if (!mainWindow) throw new Error('No dashboard window');
+  if (!mainWindow.isFocused()) return { blurred: true, waited: false };
+
+  return new Promise((resolve) => {
+    const finish = (blurred) => {
+      clearTimeout(timer);
+      mainWindow.removeListener('blur', onBlur);
+      resolve({ blurred, waited: true });
+    };
+    const onBlur = () => finish(true);
+    const timer = setTimeout(() => finish(false), timeout);
+    mainWindow.once('blur', onBlur);
+  });
+}
+
+/**
+ * The window's rectangle in PHYSICAL pixels, relative to its display's origin.
+ *
+ * This is what lets a full-display recording be cut down to exactly the window:
+ * the numbers come from the window and the display, never from measuring the
+ * screen, so the crop is as window-targeted as `-l` is. `isPrimary` matters
+ * because `screencapture -D 1` records the primary display.
+ */
+function captureRect() {
+  if (!mainWindow) throw new Error('No dashboard window');
+
+  const display = screen.getDisplayMatching(mainWindow.getBounds());
+  const bounds = mainWindow.getBounds();
+  const scale = display.scaleFactor;
+
+  return {
+    x: Math.round((bounds.x - display.bounds.x) * scale),
+    y: Math.round((bounds.y - display.bounds.y) * scale),
+    width: Math.round(bounds.width * scale),
+    height: Math.round(bounds.height * scale),
+    scaleFactor: scale,
+    isPrimary: display.id === screen.getPrimaryDisplay().id,
+  };
+}
+
 const WINDOW_COMMANDS = {
   'window.configure': configureWindow,
+  'window.awaitBlur': awaitBlur,
+  'window.captureRect': async () => captureRect(),
   'window.state': async () => windowState(),
   'window.identity': async () => windowIdentity(),
   'window.focus': focusWindow,

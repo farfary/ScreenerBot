@@ -25,6 +25,9 @@ const { pauseAllPollers, resumeAllPollers, listPollers } = await import(
 /** Longest any single command may wait for its completion signal. */
 const DEFAULT_TIMEOUT_MS = 20000;
 
+/** Ceiling for the one settle that has to absorb app boot — see freeze(). */
+const FREEZE_SETTLE_TIMEOUT_MS = 60000;
+
 /**
  * Consecutive animation frames the DOM, the network and the animation engine
  * must all be quiet for before the page counts as settled. Frames, not
@@ -76,8 +79,37 @@ function animationsBusy() {
   });
 }
 
-/** True while any request the dashboard's own manager knows about is in flight. */
+/**
+ * In-flight `fetch` calls, counted by wrapping fetch itself.
+ *
+ * `window.__requestManager` only knows about requests routed through it, and most
+ * of the dashboard does not route through it — the featured row, the boosts
+ * loader and hundreds of other call sites call `fetch` directly. Trusting the
+ * manager alone therefore reports "network idle" while a panel is still loading,
+ * and the capture photographs empty placeholder cards. Wrapping fetch is one
+ * signal that covers every call site without touching any of them.
+ *
+ * The wrapper settles when the response headers arrive, not when the body has
+ * been parsed and rendered; the DOM mutations that follow are what the mutation
+ * check and the quiet-frame requirement are for.
+ */
+let inFlightFetches = 0;
+
+function installFetchTracking() {
+  if (window.__SB_DEMO_FETCH_PATCHED__) return;
+  const original = window.fetch;
+  window.fetch = function trackedFetch(...args) {
+    inFlightFetches += 1;
+    return original.apply(this, args).finally(() => {
+      inFlightFetches -= 1;
+    });
+  };
+  window.__SB_DEMO_FETCH_PATCHED__ = true;
+}
+
+/** True while any request the page has issued is still outstanding. */
 function networkBusy() {
+  if (inFlightFetches > 0) return true;
   const manager = window.__requestManager;
   if (!manager) return false;
   const stats = manager.getStats();
@@ -98,9 +130,53 @@ function loadingVisible() {
   );
 }
 
-/** True until every image that is meant to paint has decoded. */
+/**
+ * How long a single image may hold up a capture before the runtime gives up on
+ * it. The dashboard's token logos are third-party URLs — Arweave, IPFS gateways,
+ * exchange CDNs — and a meaningful share of them never answer at all, so an
+ * unbounded "wait for every image" is a wait that never ends.
+ */
+const IMAGE_BUDGET_MS = 4000;
+
+/** Per-image deadline. Weak so a re-rendered table does not leak its old rows. */
+const imageDeadlines = new WeakMap();
+const imagesGivenUp = new WeakSet();
+let imagesAbandoned = 0;
+
+/**
+ * True until every image that is meant to paint has decoded, or has used up its
+ * budget. Giving up is sticky per element, so a logo that has already blown its
+ * budget cannot re-block a later `waitStable` — the page renders its fallback and
+ * the capture proceeds.
+ *
+ * Every image is examined on every pass rather than short-circuiting on the first
+ * pending one: `.some()` would only start the second image's clock once the first
+ * had resolved, so twenty dead logos would serialise into twenty budgets. Here
+ * they all start their budget on the same pass and expire together.
+ */
 function imagesPending() {
-  return Array.from(document.images).some((img) => !img.complete && img.src);
+  const now = performance.now();
+  let pending = false;
+
+  for (const img of document.images) {
+    if (img.complete || !img.src || imagesGivenUp.has(img)) continue;
+
+    let deadline = imageDeadlines.get(img);
+    if (deadline === undefined) {
+      deadline = now + IMAGE_BUDGET_MS;
+      imageDeadlines.set(img, deadline);
+    }
+
+    if (now < deadline) {
+      pending = true;
+      continue;
+    }
+
+    imagesGivenUp.add(img);
+    imagesAbandoned += 1;
+  }
+
+  return pending;
 }
 
 function nextFrame() {
@@ -152,6 +228,76 @@ export async function waitStable({
   }
 
   throw new Error(`waitStable timed out after ${timeout}ms (still busy: ${lastReason})`);
+}
+
+/**
+ * Resolve once the window geometry has reached the renderer and stopped moving.
+ *
+ * This is what `window.configure` waits on, and it is deliberately NOT full
+ * quiescence: configure runs while the app is still booting, when every page's
+ * pollers are live and the dashboard is fetching its first payloads, so a
+ * "zero requests in flight" bar there is one the app may never clear. Settling
+ * is the screenshot's bar — and by the time a shot is taken the scene has frozen
+ * the dashboard, which makes that bar reachable.
+ */
+export async function waitViewport({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
+  const deadline = performance.now() + timeout;
+  let last = "";
+  let steady = 0;
+
+  while (performance.now() < deadline) {
+    await nextFrame();
+    const current = `${window.innerWidth}x${window.innerHeight}@${window.devicePixelRatio}`;
+    steady = current === last ? steady + 1 : 0;
+    last = current;
+    if (steady >= 3) return { viewport: current };
+  }
+
+  throw new Error(`waitViewport timed out after ${timeout}ms`);
+}
+
+/**
+ * Elements that must not be cut off in a capture. The main nav is the one that
+ * bites: it is a single non-wrapping row of tabs, so on a laptop display the
+ * last tabs sit outside the viewport and every screenshot looks like the product
+ * is broken. `#navTabs` scrolls, so the page itself never reports overflow —
+ * the element has to be measured directly.
+ */
+const CHROME_SELECTORS = ["#navTabs"];
+
+/**
+ * Report whether any of the chrome elements is clipped, and by how much. The
+ * driver uses this to choose a zoom level by measurement rather than by a
+ * hardcoded guess that would be wrong on the next display.
+ */
+export function measureChrome() {
+  const viewport = document.documentElement.clientWidth;
+
+  const overflow = CHROME_SELECTORS.map((selector) => {
+    const el = document.querySelector(selector);
+    if (!el) return { selector, found: false, overflowBy: 0 };
+
+    const rect = el.getBoundingClientRect();
+
+    // Three ways the same element can be cut off, and the nav uses the one a
+    // naive check misses: `#navTabs` is `overflow: visible` and simply wider
+    // than the window (1516 in a 1344 viewport, positioned at left -140), so
+    // scrollWidth EQUALS clientWidth and an overflow-based test sees nothing.
+    // What actually matters is how much of it lies outside the viewport.
+    const overflowBy = Math.max(
+      el.scrollWidth - el.clientWidth,
+      el.scrollWidth - viewport,
+      Math.max(0, -rect.left) + Math.max(0, rect.right - viewport)
+    );
+
+    // Sub-pixel layout rounding can leave a harmless 1px, so require more.
+    return { selector, found: true, overflowBy: Math.max(0, overflowBy) };
+  });
+
+  return {
+    overflow,
+    clipped: overflow.some((entry) => entry.overflowBy > 1),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +520,11 @@ export async function freeze() {
   window.StatusBar?.pausePolling();
   document.documentElement.classList.add("demo-frozen");
   state.frozen = true;
-  await waitStable();
+  // Freeze is where a run absorbs the app's whole boot: it is the first point at
+  // which requests can actually drain, because nothing is refetching any more.
+  // That legitimately takes longer than a mid-scene settle, so it gets its own
+  // ceiling rather than the per-command default.
+  await waitStable({ timeout: FREEZE_SETTLE_TIMEOUT_MS });
   return { frozen: true, pollers: listPollers().length };
 }
 
@@ -403,6 +553,8 @@ export function setMotionScale({ scale = 1 } = {}) {
 
 const COMMANDS = {
   "wait.stable": waitStable,
+  "wait.viewport": waitViewport,
+  "demo.measureChrome": measureChrome,
   "wait.for": waitFor,
   "wait.beat": beat,
   "nav.goto": goto,
@@ -418,6 +570,9 @@ const COMMANDS = {
     frozen: state.frozen,
     motionScale: state.motionScale,
     pollers: listPollers(),
+    // Third-party logo URLs that never answered and were captured as fallbacks.
+    imagesAbandoned,
+    inFlightFetches,
     network: window.__requestManager ? window.__requestManager.getStats() : null,
     viewport: { width: window.innerWidth, height: window.innerHeight },
     devicePixelRatio: window.devicePixelRatio,
@@ -466,12 +621,15 @@ if (window.demoAPI && typeof window.demoAPI.onCommand === "function") {
   });
 }
 
+installFetchTracking();
 installActivityTracking();
 setMotionScale({ scale: 1 });
 
 window.__SB_DEMO__ = {
   runCommand,
   waitStable,
+  waitViewport,
+  measureChrome,
   waitFor,
   goto,
   click,

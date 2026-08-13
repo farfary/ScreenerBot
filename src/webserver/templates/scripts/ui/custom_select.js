@@ -108,7 +108,6 @@ export class CustomSelect {
    * @returns {CustomSelect} The created CustomSelect instance
    */
   static enhance(selectElement, extraOptions = {}) {
-    // eslint-disable-next-line no-undef
     if (!(selectElement instanceof HTMLSelectElement)) {
       console.warn("CustomSelect.enhance requires a <select> element");
       return null;
