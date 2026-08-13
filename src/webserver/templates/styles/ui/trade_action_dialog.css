@@ -1415,10 +1415,9 @@ body.trade-action-dialog-open {
    ============================================================================= */
 
 .trade-action-slippage {
-  /* One height for the whole row. The presets and the custom field are the same
-     control, so they must sit on the same baseline — the custom field's stepper
-     column (22px) otherwise makes it visibly taller than padded preset buttons. */
-  --slippage-control-h: 30px;
+  /* One height for the whole row: the app's compact control height, so the presets
+     and the custom field are the same control and sit on the same baseline. */
+  --slippage-control-h: var(--input-height-sm);
 
   display: flex;
   flex-direction: column;
@@ -1496,15 +1495,20 @@ body.trade-action-dialog-open {
 }
 
 /* The numeric shell carries the width and the height, so the stepper sits at the
-   field's edge and the field ends level with the preset track. */
-.number-field:has(> .trade-action-slippage-input) {
-  width: 92px;
+   field's edge and the field ends level with the preset track.
+   Everything the field overrides is scoped through `.trade-action-slippage-options`
+   on purpose: the global control rule is `input[type="number"]` (0,1,1 — a type
+   selector counts), so a bare class here loses the height, padding and font to it
+   however late it is declared, which is what left this field 38px beside a 32px
+   track. */
+.trade-action-slippage-options .number-field:has(> .trade-action-slippage-input) {
+  width: 96px;
   height: var(--slippage-control-h);
   flex: 0 0 auto;
 }
 
-.trade-action-slippage-input {
-  height: 100%;
+.trade-action-slippage-options .trade-action-slippage-input {
+  height: var(--slippage-control-h);
   padding: 0 8px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -1515,7 +1519,7 @@ body.trade-action-dialog-open {
 }
 
 /* A custom value is the active choice just as a preset is, and says so the same way. */
-.trade-action-slippage-input.active {
+.trade-action-slippage-options .trade-action-slippage-input.active {
   color: var(--primary-color);
   border-color: var(--primary-color);
   background: var(--primary-alpha-10);
