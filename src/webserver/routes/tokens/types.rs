@@ -116,6 +116,9 @@ pub struct TokenDetailResponse {
     pub symbol: String,
     pub name: Option<String>,
     pub description: Option<String>,
+    /// Paid, moderated presentation content from screenerbot.io. This marker is
+    /// deliberately separate from Rugcheck-derived risk fields.
+    pub profile: Option<crate::webserver::routes::token_profiles::PublishedTokenProfile>,
     pub decimals: Option<u8>,
 
     // Visuals / Media

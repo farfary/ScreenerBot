@@ -236,9 +236,11 @@ function buildTokenReferenceSection(token, mint, options = {}) {
           </div>
         </div>
         ${token.data_source ? renderLinkFact("Data source", escapeHtml(token.data_source)) : ""}
-        ${token.verified ? renderLinkFact("Status", "Verified", "verified") : ""}
+        ${token.profile ? renderLinkFact("Profile", "Published profile", "verified") : ""}
+        ${token.verified ? renderLinkFact("Security", "Low risk", "verified") : ""}
       </div>
     </section>
+    ${token.profile ? `<section class="links-profile-notice"><div><i class="icon-badge-check" aria-hidden="true"></i><strong>Published profile content</strong></div><p>Profile media, description, and official links were paid for and reviewed before publication. This is not ownership verification, endorsement, or a security audit.</p><button type="button" data-profile-mint="${safeMint}">Update profile</button></section>` : ""}
   `;
 }
 

@@ -34,6 +34,7 @@ pub mod status;
 pub mod strategies;
 pub mod system;
 pub mod telegram;
+pub mod token_profiles;
 pub mod tokens;
 pub mod tools;
 pub mod trader;
@@ -187,6 +188,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(header::routes())
         .merge(ui_state::routes())
         .merge(boosts::routes())
+        .merge(token_profiles::routes())
         .merge(featured::routes())
         .nest("/connectivity", connectivity::routes())
         .nest("/copy-trading", copy_trading::routes())

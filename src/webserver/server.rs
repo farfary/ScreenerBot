@@ -261,6 +261,7 @@ pub async fn start_server(
     // knows which tokens are boosted, instead of blocking on the remote fetch and
     // then re-marking the token table gold a moment later.
     crate::webserver::routes::boosts::prewarm();
+    crate::webserver::routes::token_profiles::prewarm();
 
     // Run the server with graceful shutdown
     let shutdown_signal = async {

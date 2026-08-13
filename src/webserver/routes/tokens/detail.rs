@@ -17,6 +17,7 @@ use crate::{
 /// Get detailed information about a specific token
 pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {
     let request_start = std::time::Instant::now();
+    let published_profile = crate::webserver::routes::token_profiles::get(&mint).await;
 
     logger::debug(LogTag::Webserver, &format!("mint={mint}"));
 
@@ -48,6 +49,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 symbol: "NOT_FOUND".to_owned(),
                 name: Some("Token not in cache".to_owned()),
                 description: None,
+                profile: published_profile,
                 logo_url: None,
                 header_image_url: None,
                 open_graph_image: None,
@@ -558,7 +560,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         .collect();
 
     // Build socials from token.socials vec
-    let socials: Vec<TokenSocialLink> = token
+    let mut socials: Vec<TokenSocialLink> = token
         .socials
         .iter()
         .filter(|s| !s.url.trim().is_empty())
@@ -571,7 +573,42 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Tags - unified token doesn't have separate tags/labels, use empty vec
     let combined_tags: Vec<String> = Vec::new();
 
-    let logo_url = token.image_url.clone();
+    if let Some(profile) = published_profile.as_ref() {
+        if let Some(url) = profile.links.get("website") {
+            websites.retain(|link| link.url != *url);
+            websites.insert(
+                0,
+                TokenWebsiteLink {
+                    label: Some("Profile website".to_owned()),
+                    url: url.clone(),
+                },
+            );
+        }
+        for (platform, url) in &profile.links {
+            if platform == "website" || platform == "docs" {
+                continue;
+            }
+            socials.retain(|link| !link.platform.eq_ignore_ascii_case(platform));
+            socials.insert(
+                0,
+                TokenSocialLink {
+                    platform: platform.clone(),
+                    url: url.clone(),
+                },
+            );
+        }
+        if let Some(url) = profile.links.get("docs") {
+            websites.push(TokenWebsiteLink {
+                label: Some("Docs".to_owned()),
+                url: url.clone(),
+            });
+        }
+    }
+
+    let logo_url = published_profile
+        .as_ref()
+        .and_then(|profile| profile.icon_url.clone())
+        .or_else(|| token.image_url.clone());
     let primary_website = websites.first().map(|link| link.url.clone());
 
     // Security summary based on normalized score (0-100, LOWER = SAFER in Rugcheck)
@@ -619,8 +656,14 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     };
 
     // Media fields
-    let header_image_url = token.header_image_url.clone();
-    let description = normalize_optional_text(token.description.clone());
+    let header_image_url = published_profile
+        .as_ref()
+        .and_then(|profile| profile.banner_url.clone())
+        .or_else(|| token.header_image_url.clone());
+    let description = published_profile
+        .as_ref()
+        .and_then(|profile| normalize_optional_text(profile.description.clone()))
+        .or_else(|| normalize_optional_text(token.description.clone()));
 
     // Data source as string
     let data_source = Some(format!("{:?}", token.data_source));
@@ -654,6 +697,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         symbol: token.symbol.clone(),
         name: Some(token.name.clone()),
         description,
+        profile: published_profile,
         logo_url,
         header_image_url,
         open_graph_image: None, // Not currently stored in Token struct

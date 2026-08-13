@@ -205,7 +205,8 @@ function buildTokenInfoSection(token, options) {
       <div class="overview-section-header">
         <span class="overview-section-title">Token Info</span>
         <div class="overview-section-actions">
-          ${token.verified ? '<span class="overview-verified"><i class="icon-check"></i> Verified</span>' : ""}
+          ${token.profile ? '<span class="overview-verified"><i class="icon-badge-check"></i> Published profile</span>' : ""}
+          ${token.verified ? '<span class="overview-verified"><i class="icon-shield-check"></i> Low risk</span>' : ""}
           ${renderHintTrigger("tokenDetails.tokenInfo")}
         </div>
       </div>

@@ -900,6 +900,10 @@ export class TokenDetailsDialog {
                 </button>
               </div>
               <div class="dialog-header-actions">
+                <button class="dialog-header-profile-action" id="tokenProfileBtn" title="Update this token profile on screenerbot.io" type="button">
+                  <i class="icon-badge-plus"></i>
+                  <span>Update profile</span>
+                </button>
                 <button class="dialog-header-action favorite-btn" id="favoriteBtn" title="Add to Favorites" aria-label="Add to Favorites" type="button">
                   <i class="icon-star"></i>
                 </button>
@@ -1039,7 +1043,8 @@ export class TokenDetailsDialog {
         );
       }
 
-      if (token.verified) badges.push('<span class="badge badge-success">Verified</span>');
+      if (token.profile) badges.push('<span class="badge badge-profile" title="Paid profile content reviewed for publication; not an audit or ownership verification."><i class="icon-badge-check"></i> Published profile</span>');
+      if (token.verified) badges.push('<span class="badge badge-success" title="Low risk according to the current Rugcheck score; not identity verification.">Low risk</span>');
 
       // Mutable/Immutable badge
       if (token.is_mutable === false) {
@@ -1135,6 +1140,14 @@ export class TokenDetailsDialog {
       favBtn.addEventListener("click", () => this._toggleFavorite());
       // Check initial favorite state once
       this._checkFavoriteState();
+    }
+
+    const profileBtn = this.dialogEl.querySelector("#tokenProfileBtn");
+    if (profileBtn && !profileBtn._hasListener) {
+      profileBtn._hasListener = true;
+      profileBtn.addEventListener("click", () => {
+        Utils.openExternal(`https://screenerbot.io/token-profile/${encodeURIComponent(token.mint)}`);
+      });
     }
   }
 
@@ -1372,6 +1385,14 @@ export class TokenDetailsDialog {
     // the stable dialog body instead of binding to the current image element.
     const body = this.dialogEl.querySelector(".dialog-body");
     if (body) {
+      this._profileLinkHandler = (event) => {
+        const button = event.target.closest("[data-profile-mint]");
+        if (!button) return;
+        event.preventDefault();
+        Utils.openExternal(`https://screenerbot.io/token-profile/${encodeURIComponent(button.dataset.profileMint)}`);
+      };
+      body.addEventListener("click", this._profileLinkHandler);
+
       const openBanner = (banner) => {
         const url = banner.querySelector("img")?.getAttribute("src");
         if (!url) return;

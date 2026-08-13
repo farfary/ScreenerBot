@@ -968,3 +968,28 @@
 .token-details-dialog .tdd-connection-chip[data-state="offline"] {
   color: var(--semantic-error-text);
 }
+.dialog-header-profile-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 38%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  color: var(--accent-primary);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dialog-header-profile-action:hover {
+  background: color-mix(in srgb, var(--accent-primary) 16%, transparent);
+}
+
+.badge-profile {
+  border-color: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+  color: var(--accent-primary);
+}
