@@ -182,8 +182,6 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "ai/providers_tab.js" => Some(embeds::AI_PROVIDERS_TAB),
         "ai/instructions_tab.js" => Some(embeds::AI_INSTRUCTIONS_TAB),
         "ai/automation_tab.js" => Some(embeds::AI_AUTOMATION_TAB),
-        "updates.js" => Some(embeds::UPDATES_PAGE_SCRIPT),
-        "about.js" => Some(embeds::ABOUT_PAGE_SCRIPT),
         "login.js" => Some(embeds::LOGIN_PAGE_SCRIPT),
         _ => None,
     };

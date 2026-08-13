@@ -64,8 +64,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/trader", get(trader_page))
         .route("/initialization", get(initialization_page))
         .route("/oauth/callback", get(account::handlers::oauth_callback))
-        .route("/updates", get(updates_page))
-        .route("/about", get(about_page))
         .route("/scripts/core/:file", get(get_core_script))
         .route("/scripts/demo/:file", get(get_demo_script))
         .route("/scripts/pages/*file", get(get_page_script))
@@ -165,18 +163,6 @@ async fn initialization_page() -> Html<String> {
     ))
 }
 
-/// Updates page handler
-async fn updates_page() -> Html<String> {
-    let content = templates::updates_content();
-    Html(templates::base_template("Updates", "updates", &content))
-}
-
-/// About page handler
-async fn about_page() -> Html<String> {
-    let content = templates::about_content();
-    Html(templates::base_template("About", "about", &content))
-}
-
 /// Login page handler
 async fn login_page() -> Html<String> {
     let content = templates::login_content();
@@ -237,8 +223,6 @@ async fn get_page_content(AxumPath(page): AxumPath<String>) -> Html<String> {
         "config" => templates::config_content(),
         "trader" => templates::trader_content(),
         "initialization" => templates::initialization_content(),
-        "updates" => templates::updates_content(),
-        "about" => templates::about_content(),
         "ai" => templates::ai_content(),
         _ => {
             // Escape page name to prevent XSS

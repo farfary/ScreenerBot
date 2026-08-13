@@ -21,8 +21,6 @@ const PAGE_TITLES = Object.freeze({
   ai: "AI",
   config: "Configuration",
   trader: "Auto Trader",
-  updates: "Updates",
-  about: "About",
 });
 
 // Import TabBarManager for coordinated tab bar management

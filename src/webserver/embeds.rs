@@ -107,8 +107,6 @@ pub(super) const AI_AUTOMATION_STYLES: &str =
 pub(super) const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 pub(super) const HOME_CALENDAR_STYLES: &str =
     include_str!("templates/styles/pages/home/calendar.css");
-pub(super) const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
-pub(super) const ABOUT_PAGE_STYLES: &str = include_str!("templates/styles/pages/about.css");
 pub(super) const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
 pub(super) const ONBOARDING_PAGE_STYLES: &str =
     include_str!("templates/styles/pages/onboarding.css");
@@ -474,8 +472,6 @@ pub const AI_AUTOMATION_TAB: &str = include_str!("templates/scripts/pages/ai/aut
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const HOME_CALENDAR_JS: &str =
     include_str!("templates/scripts/pages/home/portfolio_calendar.js");
-pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");
-pub const ABOUT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/about.js");
 pub const LOGIN_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/login.js");
 
 // HTML Page Templates
@@ -492,8 +488,6 @@ pub(super) const WALLETS_PAGE: &str = include_str!("templates/pages/wallets.html
 pub(super) const TOOLS_PAGE: &str = include_str!("templates/pages/tools.html");
 pub(super) const AI_PAGE: &str = include_str!("templates/pages/ai.html");
 pub(super) const HOME_PAGE: &str = include_str!("templates/pages/home.html");
-pub(super) const UPDATES_PAGE: &str = include_str!("templates/pages/updates.html");
-pub(super) const ABOUT_PAGE: &str = include_str!("templates/pages/about.html");
 pub(super) const SPLASH_PAGE: &str = include_str!("templates/pages/splash.html");
 pub(super) const ONBOARDING_PAGE: &str = include_str!("templates/pages/onboarding.html");
 pub(super) const SETUP_PAGE: &str = include_str!("templates/pages/setup.html");

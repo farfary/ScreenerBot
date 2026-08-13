@@ -75,8 +75,6 @@ pub fn page_styles(page: &str) -> Option<String> {
         ]
         .join("\n"),
         "home" => [HOME_PAGE_STYLES, HOME_CALENDAR_STYLES].join("\n"),
-        "updates" => UPDATES_PAGE_STYLES.to_string(),
-        "about" => ABOUT_PAGE_STYLES.to_string(),
         "initialization" => String::new(),
         _ => return None,
     };
@@ -366,14 +364,6 @@ pub fn initialization_content() -> String {
     render_page(SETUP_PAGE)
 }
 
-pub fn updates_content() -> String {
-    render_page(UPDATES_PAGE)
-}
-
-pub fn about_content() -> String {
-    render_page(ABOUT_PAGE)
-}
-
 pub fn home_content() -> String {
     render_page(HOME_PAGE)
 }
@@ -439,8 +429,6 @@ mod tests {
             "wallets",
             "tools",
             "ai",
-            "updates",
-            "about",
             "initialization",
         ];
 
