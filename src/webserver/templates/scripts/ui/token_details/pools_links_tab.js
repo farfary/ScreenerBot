@@ -236,11 +236,38 @@ function buildTokenReferenceSection(token, mint, options = {}) {
           </div>
         </div>
         ${token.data_source ? renderLinkFact("Data source", escapeHtml(token.data_source)) : ""}
-        ${token.profile ? renderLinkFact("Profile", "Published profile", "verified") : ""}
         ${token.verified ? renderLinkFact("Security", "Low risk", "verified") : ""}
       </div>
     </section>
-    ${token.profile ? `<section class="links-profile-notice"><div><i class="icon-badge-check" aria-hidden="true"></i><strong>Published profile content</strong></div><p>Profile media, description, and official links were paid for and reviewed before publication. This is not ownership verification, endorsement, or a security audit.</p><button type="button" data-profile-mint="${safeMint}">Update profile</button></section>` : ""}
+    ${buildProfileSection(token, safeMint)}
+  `;
+}
+
+function buildProfileSection(token, safeMint) {
+  const isPublished = Boolean(token.profile);
+  return `
+    <section class="links-sheet-section links-profile-section">
+      <div class="links-section-title">
+        <i class="${isPublished ? "icon-badge-check" : "icon-badge-plus"}" aria-hidden="true"></i>
+        ${isPublished ? "Published profile content" : "Token profile"}
+      </div>
+      <p>
+        ${
+          isPublished
+            ? "Media, description, and official links are paid profile content reviewed before publication. This does not verify ownership or token safety."
+            : "Add a reviewed logo, project description, and official links to this token's public profile."
+        }
+      </p>
+      <button
+        class="links-profile-action"
+        type="button"
+        data-profile-mint="${safeMint}"
+        title="${isPublished ? "Update this token profile" : "Create a token profile"} on screenerbot.io"
+      >
+        <span>${isPublished ? "Update profile" : "Create profile"}</span>
+        <i class="icon-external-link" aria-hidden="true"></i>
+      </button>
+    </section>
   `;
 }
 

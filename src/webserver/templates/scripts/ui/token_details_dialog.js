@@ -900,10 +900,6 @@ export class TokenDetailsDialog {
                 </button>
               </div>
               <div class="dialog-header-actions">
-                <button class="dialog-header-profile-action" id="tokenProfileBtn" title="Update this token profile on screenerbot.io" type="button">
-                  <i class="icon-badge-plus"></i>
-                  <span>Update profile</span>
-                </button>
                 <button class="dialog-header-action favorite-btn" id="favoriteBtn" title="Add to Favorites" aria-label="Add to Favorites" type="button">
                   <i class="icon-star"></i>
                 </button>
@@ -1140,14 +1136,6 @@ export class TokenDetailsDialog {
       favBtn.addEventListener("click", () => this._toggleFavorite());
       // Check initial favorite state once
       this._checkFavoriteState();
-    }
-
-    const profileBtn = this.dialogEl.querySelector("#tokenProfileBtn");
-    if (profileBtn && !profileBtn._hasListener) {
-      profileBtn._hasListener = true;
-      profileBtn.addEventListener("click", () => {
-        Utils.openExternal(`https://screenerbot.io/token-profile/${encodeURIComponent(token.mint)}`);
-      });
     }
   }
 
