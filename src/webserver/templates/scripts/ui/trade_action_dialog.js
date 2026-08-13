@@ -217,10 +217,12 @@ export class TradeActionDialog {
               <span class="trade-action-slippage-note"></span>
             </div>
             <div class="trade-action-slippage-options">
-              <button type="button" class="trade-action-slippage-btn" data-slippage="auto">Auto</button>
-              <button type="button" class="trade-action-slippage-btn" data-slippage="1">1%</button>
-              <button type="button" class="trade-action-slippage-btn" data-slippage="5">5%</button>
-              <button type="button" class="trade-action-slippage-btn" data-slippage="15">15%</button>
+              <div class="trade-action-slippage-presets" role="group" aria-label="Slippage preset">
+                <button type="button" class="trade-action-slippage-btn" data-slippage="auto">Auto</button>
+                <button type="button" class="trade-action-slippage-btn" data-slippage="1">1%</button>
+                <button type="button" class="trade-action-slippage-btn" data-slippage="5">5%</button>
+                <button type="button" class="trade-action-slippage-btn" data-slippage="15">15%</button>
+              </div>
               <input
                 type="number"
                 class="trade-action-slippage-input"
@@ -814,13 +816,21 @@ export class TradeActionDialog {
    */
   _syncSlippageUi() {
     const active = this._slippagePct;
+    let matchedPreset = false;
 
     this.slippageBtns.forEach((btn) => {
       const value = btn.dataset.slippage;
       const isActive =
         value === "auto" ? active == null : active != null && Number(value) === active;
+      if (isActive) matchedPreset = true;
       btn.classList.toggle("active", isActive);
     });
+
+    // A value no preset covers lives in the custom field — mark the field itself,
+    // so the control always shows exactly one active choice.
+    if (this.slippageInputEl) {
+      this.slippageInputEl.classList.toggle("active", active != null && !matchedPreset);
+    }
 
     if (this.slippageNoteEl) {
       this.slippageNoteEl.textContent =
@@ -861,6 +871,9 @@ export class TradeActionDialog {
 
   _handleSlippageBtnClick(e) {
     const btn = e.currentTarget;
+    // A preset supersedes whatever was typed: a stale custom number left in the
+    // field would claim a slippage the trade is not using.
+    if (this.slippageInputEl) this.slippageInputEl.value = "";
     this._handleSlippageChange(btn.dataset.slippage);
   }
 

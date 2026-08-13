@@ -1415,6 +1415,11 @@ body.trade-action-dialog-open {
    ============================================================================= */
 
 .trade-action-slippage {
+  /* One height for the whole row. The presets and the custom field are the same
+     control, so they must sit on the same baseline — the custom field's stepper
+     column (22px) otherwise makes it visibly taller than padded preset buttons. */
+  --slippage-control-h: 30px;
+
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1442,42 +1447,65 @@ body.trade-action-dialog-open {
 
 .trade-action-slippage-options {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
+/* The four presets are one fixed choice set, so they read as a single segmented
+   track — one outline around the group instead of four competing ones. */
+.trade-action-slippage-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--slippage-control-h);
+  padding: 2px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
 .trade-action-slippage-btn {
-  padding: 5px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 100%;
+  padding: 0 10px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-secondary);
-  background: var(--bg-card-hover);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .trade-action-slippage-btn:hover {
   color: var(--text-primary);
-  border-color: var(--text-muted);
+  background: var(--bg-card-hover);
 }
 
 .trade-action-slippage-btn.active {
   color: var(--primary-color);
   background: var(--primary-alpha-10);
-  border-color: var(--primary-color);
 }
 
-/* The numeric shell carries the width, so the stepper sits at the field's edge. */
+/* The numeric shell carries the width and the height, so the stepper sits at the
+   field's edge and the field ends level with the preset track. */
 .number-field:has(> .trade-action-slippage-input) {
-  width: 84px;
+  width: 92px;
+  height: var(--slippage-control-h);
+  flex: 0 0 auto;
 }
 
 .trade-action-slippage-input {
-  padding: 5px 8px;
+  height: 100%;
+  padding: 0 8px;
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-primary);
@@ -1486,11 +1514,18 @@ body.trade-action-dialog-open {
   border-radius: var(--radius-md);
 }
 
+/* A custom value is the active choice just as a preset is, and says so the same way. */
+.trade-action-slippage-input.active {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  background: var(--primary-alpha-10);
+}
+
 /* Shown only for a deliberately high override — losing 15% to a sandwich bot is a
    real outcome, so it is stated plainly rather than left implicit. */
 .trade-action-slippage-warning {
   font-size: 0.6875rem;
-  color: var(--warning-color, #d29922);
+  color: var(--warning-color);
 }
 
 .trade-action-slippage-warning[data-visible="false"] {
