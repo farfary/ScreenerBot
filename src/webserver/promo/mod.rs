@@ -10,6 +10,7 @@
 //! Affected endpoints:
 //! - /api/dashboard/home, /api/dashboard/overview, /api/dashboard/portfolio-calendar
 //! - /api/positions, /api/positions/stats
+//! - /api/copy-trading/overview
 //! - /api/events/head
 //! - /api/wallet/current, /api/wallet/tokens
 //! - /api/trader/stats
@@ -19,6 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 mod aggregates;
 mod ai;
+mod copy_trading;
 mod dashboard;
 mod data;
 mod events;
@@ -28,6 +30,7 @@ mod trader;
 mod wallet;
 
 pub use ai::get_promo_ai_status;
+pub use copy_trading::get_promo_copy_trading_overview;
 pub use dashboard::{
     get_promo_dashboard_overview, get_promo_home_dashboard, get_promo_portfolio_calendar,
 };

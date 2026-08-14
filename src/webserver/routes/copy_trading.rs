@@ -39,35 +39,37 @@ struct TaskResponse {
     task: CopyTask,
 }
 
+// The overview shapes are `pub(crate)` so the promo fixtures can build the exact
+// payload this route serves instead of a parallel copy that could drift from it.
 #[derive(Clone, Serialize)]
-struct StatusResponse {
-    enabled: bool,
-    live_available: bool,
-    blocked_reason: Option<&'static str>,
-    default_mode: String,
-    default_slippage_pct: f64,
-    force_stop_blocks: bool,
-    total_tasks: usize,
-    active_tasks: usize,
-    paper_tasks: usize,
-    live_tasks: usize,
+pub(crate) struct StatusResponse {
+    pub(crate) enabled: bool,
+    pub(crate) live_available: bool,
+    pub(crate) blocked_reason: Option<&'static str>,
+    pub(crate) default_mode: String,
+    pub(crate) default_slippage_pct: f64,
+    pub(crate) force_stop_blocks: bool,
+    pub(crate) total_tasks: usize,
+    pub(crate) active_tasks: usize,
+    pub(crate) paper_tasks: usize,
+    pub(crate) live_tasks: usize,
 }
 
 #[derive(Serialize)]
-struct TaskSummary {
+pub(crate) struct TaskSummary {
     #[serde(flatten)]
-    task: CopyTask,
-    stats: crate::trader::copy::CopyTaskStats,
-    spent_sol: f64,
-    remaining_budget_sol: f64,
-    effective_state: &'static str,
+    pub(crate) task: CopyTask,
+    pub(crate) stats: crate::trader::copy::CopyTaskStats,
+    pub(crate) spent_sol: f64,
+    pub(crate) remaining_budget_sol: f64,
+    pub(crate) effective_state: &'static str,
 }
 
 #[derive(Serialize)]
-struct OverviewResponse {
-    status: StatusResponse,
-    tasks: Vec<TaskSummary>,
-    activity: Vec<crate::trader::copy::CopyActivityRow>,
+pub(crate) struct OverviewResponse {
+    pub(crate) status: StatusResponse,
+    pub(crate) tasks: Vec<TaskSummary>,
+    pub(crate) activity: Vec<crate::trader::copy::CopyActivityRow>,
 }
 
 #[derive(Deserialize)]
@@ -103,6 +105,11 @@ async fn status() -> Response {
 }
 
 async fn overview() -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_copy_trading_overview());
+    }
+
     let db = match open_database().await {
         Ok(db) => db,
         Err(error) => return internal_error(error),
