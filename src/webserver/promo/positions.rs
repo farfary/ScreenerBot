@@ -7,7 +7,10 @@ use crate::webserver::routes::positions::types::{PositionResponse, PositionsStat
 use super::aggregates::{self, closed_exit_offset_hours};
 use super::data::*;
 
-/// Generate promo positions list (open, closed, or both).
+/// Generate promo positions list (open, closed, archived, or the working set).
+///
+/// Archived positions are served ONLY for `status=archived`, mirroring the real
+/// route: `all` deliberately excludes them so they appear in one tab only.
 pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
     let now = Utc::now();
     let mut positions = Vec::new();
@@ -15,6 +18,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
 
     let include_open = status.is_none() || status == Some("open") || status == Some("all");
     let include_closed = status.is_none() || status == Some("closed") || status == Some("all");
+    let include_archived = status == Some("archived");
 
     if include_open {
         for (symbol, name, mint, logo, entry, current, size, hold_min) in PROMO_OPEN_TOKENS.iter() {
@@ -133,6 +137,72 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 token_decimals: Some(9),
                 archived: false,
                 archived_at: None,
+                origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
+                management: crate::positions::PositionManagement::AutoTrader,
+            });
+            id_counter += 1;
+        }
+    }
+
+    if include_archived {
+        // Archived trades are older than every closed one, so their retirement
+        // reads as history rather than as something the trader just did.
+        for (i, (symbol, name, mint, entry, exit, size, reason)) in
+            PROMO_ARCHIVED_TOKENS.iter().enumerate()
+        {
+            let exit_time = now - Duration::days(9 + i as i64 * 3);
+            let entry_time = exit_time - Duration::minutes(120 + (i as i64 % 4) * 60);
+            let archived_at = exit_time + Duration::hours(6);
+            let pnl = (exit - entry) / entry * size;
+            let pnl_pct = (exit - entry) / entry * 100.0;
+            let token_amount = (size / entry * 1e9) as u64;
+
+            positions.push(PositionResponse {
+                id: Some(id_counter),
+                mint: mint.to_string(),
+                symbol: symbol.to_string(),
+                name: name.to_string(),
+                logo_url: None,
+                entry_price: *entry,
+                entry_time: entry_time.timestamp(),
+                exit_price: Some(*exit),
+                exit_time: Some(exit_time.timestamp()),
+                position_type: "long".to_owned(),
+                entry_size_sol: *size,
+                total_size_sol: *size,
+                price_highest: exit.max(*entry) * 1.02,
+                price_lowest: exit.min(*entry) * 0.97,
+                entry_transaction_signature: Some(format!("promo_entry_sig_{id_counter}")),
+                exit_transaction_signature: Some(format!("promo_exit_sig_{id_counter}")),
+                token_amount: Some(token_amount),
+                effective_entry_price: Some(*entry),
+                effective_exit_price: Some(*exit),
+                sol_received: Some(size + pnl),
+                profit_target_min: Some(15.0),
+                profit_target_max: Some(50.0),
+                liquidity_tier: Some("high".to_owned()),
+                transaction_entry_verified: true,
+                transaction_exit_verified: true,
+                entry_fee_lamports: Some(5000),
+                exit_fee_lamports: Some(5000),
+                current_price: None,
+                current_price_updated: None,
+                phantom_confirmations: 0,
+                synthetic_exit: false,
+                closed_reason: Some(reason.to_string()),
+                pnl: Some(pnl),
+                pnl_percent: Some(pnl_pct),
+                unrealized_pnl: None,
+                unrealized_pnl_percent: None,
+                dca_count: 0,
+                average_entry_price: *entry,
+                partial_exit_count: 0,
+                average_exit_price: Some(*exit),
+                remaining_token_amount: None,
+                total_exited_amount: token_amount,
+                token_decimals: Some(9),
+                archived: true,
+                archived_at: Some(archived_at.timestamp()),
                 origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
                 management: crate::positions::PositionManagement::AutoTrader,
             });

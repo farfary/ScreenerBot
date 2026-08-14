@@ -10,6 +10,7 @@
 //! Affected endpoints:
 //! - /api/dashboard/home, /api/dashboard/overview, /api/dashboard/portfolio-calendar
 //! - /api/positions, /api/positions/stats
+//! - /api/events/head
 //! - /api/wallet/current, /api/wallet/tokens
 //! - /api/trader/stats
 //! - /api/header/metrics (SOL price is LIVE when the network is reachable)
@@ -20,6 +21,7 @@ mod aggregates;
 mod ai;
 mod dashboard;
 mod data;
+mod events;
 mod header;
 mod positions;
 mod trader;
@@ -29,6 +31,7 @@ pub use ai::get_promo_ai_status;
 pub use dashboard::{
     get_promo_dashboard_overview, get_promo_home_dashboard, get_promo_portfolio_calendar,
 };
+pub use events::get_promo_events;
 pub use header::get_promo_header_metrics;
 pub use positions::{get_promo_positions, get_promo_positions_stats};
 pub use trader::get_promo_trader_stats;

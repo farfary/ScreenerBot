@@ -351,3 +351,49 @@ pub(super) const PROMO_CLOSED_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, 
         "stop_loss",
     ),
 ];
+
+/// Promo archived positions — trades retired from the working set.
+///
+/// Deliberately a SEPARATE list from `PROMO_CLOSED_TOKENS`: the product excludes
+/// archived positions from "all" and from the closed aggregates, so reusing a
+/// closed trade here would make the Archived tab and the stats disagree about
+/// the same position.
+/// (symbol, name, mint, entry_price_sol, exit_price_sol, size_sol, exit_reason)
+pub(super) const PROMO_ARCHIVED_TOKENS: &[(&str, &str, &str, f64, f64, f64, &str)] = &[
+    (
+        "MOODENG",
+        "Moo Deng",
+        "ED5nyyWEzpPPiWimP8vYm7sD7TD3LAt3Q3gRTWHzPJBY",
+        0.000208,
+        0.000271,
+        0.20,
+        "take_profit",
+    ),
+    (
+        "FWOG",
+        "FWOG",
+        "A8C3xuqscfmyLrte3VmTqrAq8kgMASius9AFNANwpump",
+        0.000094,
+        0.000119,
+        0.12,
+        "trailing_stop",
+    ),
+    (
+        "MICHI",
+        "michi",
+        "5mbK36SZ7J19An8jFochhQS4of8g6BwUjbeCSxBSoWdp",
+        0.000431,
+        0.000388,
+        0.15,
+        "stop_loss",
+    ),
+    (
+        "BILLY",
+        "Billy",
+        "3B5wuUrMEi5yATD7on46hKfej3pfmd7t1RKgrsN3pump",
+        0.000156,
+        0.000203,
+        0.18,
+        "take_profit",
+    ),
+];

@@ -123,11 +123,42 @@ function networkBusy() {
  * their first payload.
  */
 function loadingVisible() {
-  return Boolean(
-    document.querySelector(
-      ".page-loading, [data-loading='true'], .loading-spinner, .skeleton, .skeleton-row"
-    )
+  // Only loading UI the camera would actually see counts. A dialog builds every
+  // one of its tab panels up front, and the panels the user never opened keep
+  // their "Loading…" placeholder forever because nothing ever fetches for them —
+  // the token details dialog alone parks five of them behind hidden tabs. Matching
+  // those made waitStable unsatisfiable on a perfectly finished frame, so the
+  // rendered-ness of the element is part of the question, not just its class.
+  // `.chart-loading-spinner` is a separate class token, not a `.loading-spinner`
+  // variant, so it has to be listed: without it the token details dialog was
+  // photographed with "Waiting for chart data…" spinning in half the frame.
+  const candidates = document.querySelectorAll(
+    ".page-loading, [data-loading='true'], .loading-spinner, .chart-loading-spinner," +
+      " .skeleton, .skeleton-row"
   );
+  for (const el of candidates) {
+    if (elementVisible(el)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether an element is actually on screen. Layout alone is not enough: the
+ * chart's loading overlay is dismissed with a class that only sets `opacity: 0`,
+ * so a finished chart kept reporting a full-size spinner rect and waitStable
+ * could never settle. `checkVisibility` answers for opacity, `visibility` and
+ * content-visibility in one call; the rect test is the fallback for anything
+ * that does not implement it.
+ */
+function elementVisible(el) {
+  if (typeof el.checkVisibility === "function") {
+    return el.checkVisibility({
+      opacityProperty: true,
+      visibilityProperty: true,
+      contentVisibilityAuto: true,
+    });
+  }
+  return el.getClientRects().length > 0;
 }
 
 /**

@@ -8,6 +8,18 @@ pub(super) async fn get_events_head(
     axum::extract::Query(params): axum::extract::Query<HeadQuery>,
 ) -> Json<EventsListResponse> {
     let limit = params.limit.unwrap_or(200).min(1000);
+
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Json(crate::webserver::promo::get_promo_events(
+            limit,
+            params.category.as_deref(),
+            params.severity.as_deref(),
+            params.mint.as_deref(),
+            params.search.as_deref(),
+        ));
+    }
+
     let category = params
         .category
         .as_ref()

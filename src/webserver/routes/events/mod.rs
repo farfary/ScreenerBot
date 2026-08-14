@@ -1,7 +1,7 @@
 //! Events route — Server-Sent Events (SSE) endpoint for real-time UI updates.
 
 mod handlers;
-mod types;
+pub(crate) mod types;
 
 use axum::{routing::get, Router};
 use std::sync::Arc;
