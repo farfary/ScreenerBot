@@ -440,6 +440,28 @@
     return `${days}d ago`;
   }
 
+  /**
+   * The forward counterpart of formatTimeAgo, for a moment that has not happened
+   * yet — a scheduled run, an unlock, a cooldown. formatTimeAgo floors a future
+   * date at "0s ago", which reads as "it just ran" about something that has not
+   * run at all, so a future time must never be sent through it.
+   */
+  function formatTimeUntil(value, { fallback = "-", past = "due" } = {}) {
+    const date = toDate(value);
+    if (!date) {
+      return fallback;
+    }
+    const seconds = Math.floor((date.getTime() - Date.now()) / 1000);
+    if (seconds <= 0) return past;
+    if (seconds < 60) return `in ${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `in ${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `in ${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `in ${days}d`;
+  }
+
   function formatUptime(seconds, { fallback = "0s", style = "detailed" } = {}) {
     const num = coerceNumber(seconds);
     if (!Number.isFinite(num) || num < 0) {
@@ -1386,6 +1408,7 @@
     formatTimeFromSeconds,
     formatTimestamp,
     formatTimeAgo,
+    formatTimeUntil,
     formatUptime,
     formatBytes,
     formatDuration,
@@ -1450,6 +1473,7 @@ export const {
   formatTimeFromSeconds,
   formatTimestamp,
   formatTimeAgo,
+  formatTimeUntil,
   formatUptime,
   formatBytes,
   formatDuration,

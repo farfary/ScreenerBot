@@ -49,11 +49,12 @@ const PROMO_DECISIONS: &[(&str, &str, &str, i64, f64, f64)] = &[
     ("allow", "Filter", "GOAT", 41, 623.0, 0.89),
 ];
 
-/// Generate a rich promo AI status snapshot.
-pub fn get_promo_ai_status() -> AiStatusResponse {
-    let now = Utc::now();
-
-    let configured_providers: Vec<ProviderStatus> = PROMO_PROVIDERS
+/// The provider table as the API reports it.
+///
+/// Shared with the Providers tab (`assistant.rs`) so the Overview tab's "active of
+/// total" count and the table the user reads are one source.
+pub(super) fn promo_provider_statuses() -> Vec<ProviderStatus> {
+    PROMO_PROVIDERS
         .iter()
         .map(
             |(id, name, enabled, has_api_key, model, rate)| ProviderStatus {
@@ -65,7 +66,14 @@ pub fn get_promo_ai_status() -> AiStatusResponse {
                 rate_limit_per_minute: *rate,
             },
         )
-        .collect();
+        .collect()
+}
+
+/// Generate a rich promo AI status snapshot.
+pub fn get_promo_ai_status() -> AiStatusResponse {
+    let now = Utc::now();
+
+    let configured_providers = promo_provider_statuses();
 
     let active_providers = configured_providers
         .iter()

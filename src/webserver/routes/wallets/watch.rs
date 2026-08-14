@@ -67,6 +67,15 @@ struct MessageResponse {
 /// List every watch target (alert-only in this phase; the own wallet is not a row
 /// here, see `wallets::watch`'s module doc).
 async fn list_targets() -> Response {
+    // Return promotional fixtures only for owner-initiated media capture. The real
+    // call also fails outright when the watch database was never opened, which is
+    // what puts "Watched addresses could not be loaded" on the tab.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        let targets = crate::webserver::promo::get_promo_watch_targets();
+        let total = targets.len();
+        return success_response(TargetListResponse { targets, total });
+    }
+
     match watch::list_targets().await {
         Ok(targets) => {
             let total = targets.len();
@@ -195,6 +204,19 @@ async fn set_target_enabled(
 /// Per-target status: whether the shared transport is connected, when its cursor
 /// last advanced, and to what.
 async fn get_status(Path(id): Path<i64>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return match crate::webserver::promo::get_promo_watch_status(id) {
+            Some(status) => success_response(status),
+            None => error_response(
+                StatusCode::NOT_FOUND,
+                "STATUS_ERROR",
+                "Failed to get watch status",
+                Some("Watch target not found"),
+            ),
+        };
+    }
+
     match watch::get_status(id).await {
         Ok(status) => success_response(status),
         Err(e) => {

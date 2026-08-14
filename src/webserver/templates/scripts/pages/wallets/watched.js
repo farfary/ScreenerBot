@@ -165,7 +165,7 @@ export function createWatchedWallets({
       });
     }
     try {
-      const data = await requestManager.fetch("/api/wallets/watch/", {
+      const data = await requestManager.fetch("/api/wallets/watch", {
         priority: force ? "high" : "normal",
         skipDedup: force,
       });
@@ -214,7 +214,7 @@ export function createWatchedWallets({
     setAddressError("");
     if (submit) submit.disabled = true;
     try {
-      await requestManager.fetch("/api/wallets/watch/", {
+      await requestManager.fetch("/api/wallets/watch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address, label: labelInput?.value.trim() || null }),

@@ -85,7 +85,8 @@ function renderAutomationList(tasks) {
     const statusLabel = task.enabled ? "Active" : "Paused";
     const scheduleLabel = formatSchedule(task.schedule_type, task.schedule_value);
     const lastRun = task.last_run_at ? Utils.formatTimeAgo(new Date(task.last_run_at)) : "Never";
-    const nextRun = task.next_run_at && task.enabled ? Utils.formatTimeAgo(new Date(task.next_run_at)) : "—";
+    const nextRun =
+      task.next_run_at && task.enabled ? Utils.formatTimeUntil(new Date(task.next_run_at)) : "—";
     const permLabel = task.tool_permissions === "full" ? "Full Access" : "Read Only";
     const permClass = task.tool_permissions === "full" ? "full" : "readonly";
 

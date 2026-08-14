@@ -18,6 +18,11 @@ use super::types::*;
 
 /// GET /api/ai/providers - List all providers with status
 pub async fn list_providers(State(_state): State<Arc<AppState>>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_providers());
+    }
+
     let config = with_config(|cfg| cfg.ai.clone());
 
     let mut providers = Vec::new();

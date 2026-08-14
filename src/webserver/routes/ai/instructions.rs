@@ -21,6 +21,11 @@ use super::types::*;
 
 /// GET /api/ai/instructions - List all instructions
 pub async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_instructions());
+    }
+
     match db::with_ai_db(|conn| db::list_instructions(conn)) {
         Ok(instructions) => {
             let total = instructions.len();
@@ -261,6 +266,13 @@ pub async fn list_history(
 ) -> Response {
     let page = query.page.unwrap_or(1).max(1);
     let per_page = query.per_page.unwrap_or(50).clamp(1, 100);
+
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_decision_history(
+            page, per_page,
+        ));
+    }
 
     // Calculate offset
     let offset = (page - 1) * per_page;

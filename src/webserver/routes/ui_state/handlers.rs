@@ -5,8 +5,20 @@ use super::types::*;
 use crate::paths;
 use crate::webserver::utils::{error_response, success_response};
 
-/// Load the UI state store from disk
+/// Load the UI state store from disk.
+///
+/// A promotional fixture session always starts from an empty store. Every
+/// `DataTable` persists its search text, active filters, sort, column widths and
+/// column order here, so without this the capture inherits whatever the operator
+/// last left on screen — a Services table pinned to the "Starting" status filter
+/// renders "No results found" over 26 healthy services, and the same applies to
+/// every other table. Defaults are what the product looks like to a new user, and
+/// that is what a screenshot has to show.
 fn load_store() -> UiStateStore {
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return HashMap::new();
+    }
+
     let path = paths::get_ui_state_path();
 
     if !path.exists() {
@@ -19,8 +31,16 @@ fn load_store() -> UiStateStore {
     }
 }
 
-/// Save the UI state store to disk
+/// Save the UI state store to disk.
+///
+/// Discarded during a promotional fixture session: the scene drives tables through
+/// states the operator never chose, and persisting those would rewrite the real
+/// store the next normal launch reads.
 fn save_store(store: &UiStateStore) -> Result<(), String> {
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Ok(());
+    }
+
     let path = paths::get_ui_state_path();
 
     // Ensure parent directory exists

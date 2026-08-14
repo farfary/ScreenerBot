@@ -43,7 +43,11 @@ export const TOKEN_VIEWS = [
 
 // Constants
 export const DEFAULT_VIEW = "all";
-export const DEFAULT_SERVER_SORT = { by: "symbol", direction: "asc" };
+// Matches `FilteringQuery::default()` on the backend. Alphabetical was never a
+// useful first view of a token screener — it ranks by the first character of a
+// ticker — and it disagreed with the order the server sorts by when the client
+// sends no preference.
+export const DEFAULT_SERVER_SORT = { by: "liquidity_usd", direction: "desc" };
 export const DEFAULT_FILTERS = {
   pool_price: false,
   positions: false,

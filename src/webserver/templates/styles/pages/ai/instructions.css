@@ -499,6 +499,30 @@
   background: rgb(239, 68, 68, 0.05);
 }
 
+/* The reasoning is a paragraph and the seven columns around it are short, so it
+   takes the slack. The clamp lives on an inner span, never on the cell: a table
+   cell forced to `display: -webkit-box` stops participating in table layout and
+   its text spills over the row below instead of being cut. Full text in the
+   title attribute. */
+.history-table .decision-reasoning {
+  width: 40%;
+  min-width: 16rem;
+  color: var(--text-secondary);
+}
+
+.history-table .decision-reasoning span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.history-table .decision-model,
+.history-table .decision-latency,
+.history-table .decision-when {
+  white-space: nowrap;
+}
+
 .token-symbol {
   font-weight: 600;
   display: block;

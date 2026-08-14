@@ -23,6 +23,15 @@ pub(crate) async fn get_tokens_list(
     let filtering_query = query.into_filtering_query(max_page_size);
     let view = FilteringView::from_str(&request_view);
 
+    // Return promotional fixtures only for owner-initiated media capture. The real
+    // list is whatever this machine's database happens to hold, which on a fresh
+    // install is a handful of rows and several empty views.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Json(crate::webserver::promo::get_promo_tokens_list(
+            &filtering_query,
+        ));
+    }
+
     match filtering::query_tokens(filtering_query).await {
         Ok(result) => {
             logger::debug(
@@ -75,6 +84,23 @@ pub(crate) async fn get_tokens_list(
 /// building the counts are reported absent with `snapshot_state: "building"`, never as
 /// zeros — the tab polls, and the real counts land on the next tick.
 pub async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
+    // Return promotional fixtures only for owner-initiated media capture. The
+    // snapshot is reported Ready because the promo universe is always built.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        let (total, priced, positions, blacklisted, with_ohlcv) =
+            crate::webserver::promo::get_promo_tokens_stats();
+        return Ok(Json(TokenStatsResponse {
+            snapshot_state: SnapshotState::Ready,
+            total_tokens_in_database: Some(total),
+            total_tokens: Some(total),
+            with_pool_price: Some(priced),
+            open_positions: Some(positions),
+            blacklisted: Some(blacklisted),
+            with_ohlcv: Some(with_ohlcv),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }));
+    }
+
     let snapshot = filtering::try_fetch_stats().await;
 
     if let Some(snapshot) = snapshot.as_ref() {

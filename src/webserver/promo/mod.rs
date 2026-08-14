@@ -10,6 +10,10 @@
 //! Affected endpoints:
 //! - /api/dashboard/home, /api/dashboard/overview, /api/dashboard/portfolio-calendar
 //! - /api/positions, /api/positions/stats
+//! - /api/tokens/list, /api/tokens/stats, /api/tokens/favorites
+//! - /api/wallets, /api/wallets/watch/*
+//! - /api/ai/stats, /api/ai/cache/stats, /api/ai/providers, /api/ai/instructions,
+//!   /api/ai/automation*, /api/ai/history, /api/ai/chat/sessions*
 //! - /api/copy-trading/overview
 //! - /api/events/head
 //! - /api/wallet/current, /api/wallet/tokens
@@ -20,16 +24,25 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 mod aggregates;
 mod ai;
+mod assistant;
 mod copy_trading;
 mod dashboard;
 mod data;
 mod events;
 mod header;
 mod positions;
+mod tokens;
 mod trader;
 mod wallet;
+mod wallets;
 
 pub use ai::get_promo_ai_status;
+pub use assistant::{
+    get_promo_ai_stats, get_promo_automation_runs, get_promo_automation_stats,
+    get_promo_automation_tasks, get_promo_cache_stats, get_promo_chat_session,
+    get_promo_chat_sessions, get_promo_decision_history, get_promo_instructions,
+    get_promo_providers,
+};
 pub use copy_trading::get_promo_copy_trading_overview;
 pub use dashboard::{
     get_promo_dashboard_overview, get_promo_home_dashboard, get_promo_portfolio_calendar,
@@ -37,8 +50,10 @@ pub use dashboard::{
 pub use events::get_promo_events;
 pub use header::get_promo_header_metrics;
 pub use positions::{get_promo_positions, get_promo_positions_stats};
+pub use tokens::{get_promo_favorites, get_promo_tokens_list, get_promo_tokens_stats};
 pub use trader::get_promo_trader_stats;
 pub use wallet::{get_promo_wallet_address, get_promo_wallet_current, get_promo_wallet_tokens};
+pub use wallets::{get_promo_wallets, get_promo_watch_status, get_promo_watch_targets};
 
 /// Fallback SOL/USD price used only when the live price service has not yet
 /// produced a fresh quote (e.g. offline). A live value always takes precedence.

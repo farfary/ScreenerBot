@@ -28,6 +28,10 @@ const AI_TABS = [
 ];
 const AI_TAB_IDS = new Set(AI_TABS.map(({ id }) => id));
 
+// Decisions per History page. Sent as `per_page` and used to compute the page
+// count, so one constant keeps the request and the pager agreeing.
+const HISTORY_PAGE_SIZE = 20;
+
 // Provider names mapping
 const PROVIDER_NAMES = {
   openai: "OpenAI",
@@ -579,14 +583,18 @@ function createLifecycle() {
    */
   async function loadHistory(page = 1) {
     try {
-      const response = await fetch(`/api/ai/history?page=${page}&limit=20`);
+      // `per_page`, not `limit`: HistoryQuery has no `limit` field, so the old
+      // parameter was silently dropped and every page asked for the default 50.
+      const response = await fetch(`/api/ai/history?page=${page}&per_page=${HISTORY_PAGE_SIZE}`);
       if (!response.ok) throw new Error("Failed to load history");
 
       const data = await response.json();
       state.historyPage = page;
       state.historyTotal = data.total || 0;
 
-      renderHistory(data.history || [], page, data.total || 0);
+      // The API returns `decisions`; reading `history` here meant the tab
+      // rendered its empty state no matter how many evaluations existed.
+      renderHistory(data.decisions || [], page, data.total || 0);
     } catch (error) {
       console.error("[AI] Error loading history:", error);
       const container = $("#history-list");
@@ -599,52 +607,44 @@ function createLifecycle() {
   /**
    * Render history list
    */
-  function renderHistory(history, page, total) {
+  function renderHistory(decisions, page, total) {
     const container = $("#history-list");
     if (!container) return;
 
-    if (!history || history.length === 0) {
+    if (!decisions || decisions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <span class="empty-icon">📋</span>
           <p class="empty-text">No AI requests yet</p>
         </div>
       `;
       return;
     }
 
-    const pageSize = 20;
-    const totalPages = Math.ceil(total / pageSize);
+    const totalPages = Math.ceil(total / HISTORY_PAGE_SIZE);
 
     container.innerHTML = `
-      <div class="history-items">
-        ${history
-          .map((item) => {
-            const statusClass = item.success ? "success" : "failed";
-            const statusIcon = item.success ? "check-circle" : "x-circle";
-            const time = item.timestamp ? new Date(item.timestamp).toLocaleString() : "";
-
-            return `
-            <div class="history-item ${statusClass}">
-              <i class="icon-${statusIcon} history-status-icon"></i>
-              <div class="history-info">
-                <div class="history-context">${Utils.escapeHtml(item.context || "Unknown")}</div>
-                <div class="history-details">
-                  <span>${time}</span>
-                  <span>${Math.round(item.latency_ms || 0)}ms</span>
-                  ${item.model ? `<span>${Utils.escapeHtml(item.model)}</span>` : ""}
-                </div>
-              </div>
-            </div>
-          `;
-          })
-          .join("")}
-      </div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Decision</th>
+            <th>Confidence</th>
+            <th>Risk</th>
+            <th>Reasoning</th>
+            <th>Model</th>
+            <th>Latency</th>
+            <th>When</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${decisions.map(renderDecisionRow).join("")}
+        </tbody>
+      </table>
       ${
         totalPages > 1
           ? `
-        <div class="history-pagination">
-          <button class="btn btn-sm btn-secondary" ${page <= 1 ? "disabled" : ""} 
+        <div class="pagination">
+          <button class="btn btn-sm btn-secondary" ${page <= 1 ? "disabled" : ""}
                   onclick="window.aiPage.loadHistory(${page - 1})">
             <i class="icon-chevron-left"></i> Previous
           </button>
@@ -657,6 +657,35 @@ function createLifecycle() {
       `
           : ""
       }
+    `;
+  }
+
+  /**
+   * One decision row. `decision` is the verdict the assistant reached, which is
+   * what `.decision-row.pass/.reject` colours the row by — not whether the
+   * request succeeded, since a failed request produces no record at all.
+   */
+  function renderDecisionRow(item) {
+    const allowed = item.decision === "allow" || item.decision === "pass";
+    const when = item.created_at ? Utils.formatTimeAgo(new Date(item.created_at)) : "—";
+    const reasoning = item.reasoning || "";
+
+    return `
+      <tr class="decision-row ${allowed ? "pass" : "reject"}">
+        <td>
+          <span class="token-symbol">${Utils.escapeHtml(item.symbol || "Unknown")}</span>
+          <span class="token-mint">${Utils.formatAddressCompact(item.mint)}</span>
+        </td>
+        <td><span class="badge ${allowed ? "success" : "error"}">${Utils.escapeHtml(item.decision || "—")}</span></td>
+        <td>${item.confidence ?? "—"}%</td>
+        <td>${Utils.escapeHtml(item.risk_level || "—")}</td>
+        <td class="decision-reasoning">
+          <span title="${Utils.escapeHtml(reasoning)}">${Utils.escapeHtml(reasoning)}</span>
+        </td>
+        <td class="decision-model">${Utils.escapeHtml(item.model || item.provider || "—")}${item.cached ? ' <span class="badge secondary">cached</span>' : ""}</td>
+        <td class="decision-latency">${Math.round(item.latency_ms || 0)}ms</td>
+        <td class="decision-when">${when}</td>
+      </tr>
     `;
   }
 

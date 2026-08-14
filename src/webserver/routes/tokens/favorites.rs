@@ -15,6 +15,13 @@ pub async fn get_favorites(
 ) -> Result<Json<FavoritesListResponse>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(LogTag::Webserver, "Fetching token favorites");
 
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        let favorites = crate::webserver::promo::get_promo_favorites();
+        let total = favorites.len();
+        return Ok(Json(FavoritesListResponse { favorites, total }));
+    }
+
     match crate::tokens::get_favorites_async().await {
         Ok(favorites) => {
             let total = favorites.len();

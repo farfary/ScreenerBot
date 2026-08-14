@@ -9,6 +9,13 @@ use super::types::*;
 
 /// GET /api/ai/automation — List all scheduled tasks
 pub async fn list_automation_tasks() -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(
+            serde_json::json!({ "tasks": crate::webserver::promo::get_promo_automation_tasks() }),
+        );
+    }
+
     let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
@@ -398,6 +405,15 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
 
 /// GET /api/ai/automation/:id/runs — Get run history for a task
 pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        let runs: Vec<_> = crate::webserver::promo::get_promo_automation_runs()
+            .into_iter()
+            .filter(|run| run.task_id == id)
+            .collect();
+        return success_response(serde_json::json!({ "runs": runs }));
+    }
+
     let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
@@ -423,6 +439,13 @@ pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
 
 /// GET /api/ai/automation/runs — Get all recent runs
 pub async fn get_automation_recent_runs() -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(
+            serde_json::json!({ "runs": crate::webserver::promo::get_promo_automation_runs() }),
+        );
+    }
+
     let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
@@ -474,6 +497,13 @@ pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
 
 /// GET /api/ai/automation/stats — Aggregated automation statistics
 pub async fn get_automation_stats_handler() -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(
+            serde_json::json!({ "stats": crate::webserver::promo::get_promo_automation_stats() }),
+        );
+    }
+
     let pool = match crate::ai::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {

@@ -23,6 +23,14 @@ use super::types::{
 
 /// List all wallets
 pub async fn list_wallets(Query(query): Query<ListWalletsQuery>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture — the real
+    // list is the operator's own wallet records.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        let wallets = crate::webserver::promo::get_promo_wallets(query.include_inactive);
+        let total = wallets.len();
+        return success_response(WalletListResponse { wallets, total });
+    }
+
     match wallets::list_wallets(query.include_inactive).await {
         Ok(wallets) => {
             let total = wallets.len();

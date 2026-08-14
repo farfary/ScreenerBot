@@ -95,6 +95,11 @@ pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
 
 /// GET /api/ai/stats - Get AI usage statistics
 pub async fn get_ai_stats(State(_state): State<Arc<AppState>>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_ai_stats());
+    }
+
     // TODO: Implement proper metrics tracking
     let response = AiStatsResponse {
         total_requests: 0,
@@ -258,6 +263,11 @@ pub async fn clear_cache(State(state): State<Arc<AppState>>) -> Response {
 
 /// GET /api/ai/cache/stats - Get cache statistics
 pub async fn get_cache_stats(State(state): State<Arc<AppState>>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_cache_stats());
+    }
+
     if let Some(engine) = &state.ai_engine {
         let (total_entries, fresh_entries) = engine.cache_stats();
         let ttl_seconds = with_config(|cfg| cfg.ai.cache_ttl_seconds);

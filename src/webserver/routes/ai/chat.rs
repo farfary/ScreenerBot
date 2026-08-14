@@ -216,6 +216,12 @@ pub async fn stream_chat_message(
 
 /// GET /api/ai/chat/sessions - List all chat sessions
 pub async fn list_chat_sessions(State(_state): State<Arc<AppState>>) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture — the real
+    // list is the operator's own conversations.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_chat_sessions());
+    }
+
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
@@ -280,6 +286,19 @@ pub async fn get_chat_session(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Response {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return match crate::webserver::promo::get_promo_chat_session(id) {
+            Some(response) => success_response(response),
+            None => error_response(
+                StatusCode::NOT_FOUND,
+                "NOT_FOUND",
+                &format!("Chat session {id} not found"),
+                None,
+            ),
+        };
+    }
+
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
