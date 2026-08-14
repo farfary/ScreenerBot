@@ -173,7 +173,7 @@ pub struct TradingPeriodStats {
 /// the same call the header makes — the two must never show different numbers.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletAnalytics {
-    /// Public address of the active main wallet; empty in preview mode.
+    /// Public address of the active main wallet; empty in Explore Mode.
     pub wallet_address: String,
     /// Free (uninvested) SOL sitting in the wallet.
     pub current_balance_sol: f64,

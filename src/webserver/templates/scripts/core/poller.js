@@ -6,7 +6,7 @@ const _state = {
   listeners: [],
   // Live Poller instances, added on construction and removed by cleanup().
   // Registration is what makes it possible to quiet the whole dashboard at once
-  // (demo capture) and to see what is actually polling.
+  // (Promo Studio capture) and to see what is actually polling.
   instances: new Set(),
   // Global pause latch (see pauseAllPollers). Pollers built while it is set
   // start paused and refuse to resume until it is cleared.
@@ -93,7 +93,7 @@ export function listPollers() {
 }
 
 /**
- * Pause every poller in the dashboard at once. Used by demo capture so a
+ * Pause every poller in the dashboard at once. Used by Promo Studio so a
  * screenshot cannot be taken across a refresh, and available for any future
  * "hold the world still" need.
  *
@@ -145,7 +145,7 @@ export class Poller {
     this.consecutiveFailures = 0;
     this.lastSuccessTime = null;
     // Honour a global pause that is already in effect, so a page opened during
-    // a demo capture does not start polling behind the freeze.
+    // Promo Studio does not start polling behind the freeze.
     this.isPaused = _state.allPaused;
 
     if (typeof onPoll !== "function") {
@@ -317,7 +317,7 @@ export class Poller {
   }
 
   resume() {
-    // A global pause (demo capture) outranks a per-poller resume, such as the
+    // A global pause (Promo Studio) outranks a per-poller resume, such as the
     // one the visibility listener issues when the window is focused.
     if (_state.allPaused) return;
     if (!this.isPaused) return;

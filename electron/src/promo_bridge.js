@@ -1,14 +1,14 @@
 /**
- * Demo capture bridge.
+ * Promo capture bridge.
  *
- * Present only when the app is launched with SCREENERBOT_DEMO_CONTROL set — the
- * demo studio driver does that; a normal launch never loads any of this.
+ * Present only when the app is launched with SCREENERBOT_PROMO_CONTROL set — the
+ * promo studio driver does that; a normal launch never loads any of this.
  *
  * It exposes one local HTTP endpoint the driver posts commands to, and routes
  * each command to whoever can actually observe its completion:
  *
  *   - window shape and identity                 -> this process
- *   - navigation, interaction, overlays, audio  -> the dashboard's demo runtime
+ *   - navigation, interaction, overlays, audio  -> the dashboard's promo runtime
  *
  * It deliberately does NOT capture anything. Screenshots and video are taken by
  * macOS itself (`screencapture`, targeted at this window's CoreGraphics id), so
@@ -54,11 +54,11 @@ function callRenderer(name, args) {
     }, RENDERER_TIMEOUT_MS);
 
     pending.set(id, { resolve, reject, timer });
-    mainWindow.webContents.send('demo:command', { id, name, args });
+    mainWindow.webContents.send('promo:command', { id, name, args });
   });
 }
 
-ipcMain.on('demo:result', (_event, { id, ok, result, error }) => {
+ipcMain.on('promo:result', (_event, { id, ok, result, error }) => {
   const entry = pending.get(id);
   if (!entry) return;
   clearTimeout(entry.timer);
@@ -110,7 +110,7 @@ async function fitZoom() {
   for (const level of FIT_ZOOM_STEPS) {
     mainWindow.webContents.setZoomLevel(level);
     await callRenderer('wait.viewport', {});
-    last = await callRenderer('demo.measureChrome', {});
+    last = await callRenderer('promo.measureChrome', {});
     if (!last.clipped) return level;
   }
 
@@ -371,7 +371,7 @@ async function handleRequest(req, res) {
     let runtimeReady = false;
     try {
       runtimeReady = Boolean(
-        mainWindow && (await mainWindow.webContents.executeJavaScript('window.__SB_DEMO_READY__ === true'))
+        mainWindow && (await mainWindow.webContents.executeJavaScript('window.__SB_PROMO_READY__ === true'))
       );
     } catch (_) {
       runtimeReady = false;
@@ -415,7 +415,7 @@ async function handleRequest(req, res) {
  * @param {number} [options.port]      0 lets the OS choose
  * @param {string} [options.mediaDir]  directory the scene's audio is read from
  */
-function startDemoBridge(window, { port = 0, mediaDir = null } = {}) {
+function startPromoBridge(window, { port = 0, mediaDir = null } = {}) {
   mainWindow = window;
   mediaRoot = mediaDir;
 
@@ -426,22 +426,22 @@ function startDemoBridge(window, { port = 0, mediaDir = null } = {}) {
     server.on('error', reject);
     server.listen(port, HOST, () => {
       const actual = server.address().port;
-      console.log(`SCREENERBOT_DEMO_BRIDGE:${actual}`);
+      console.log(`SCREENERBOT_PROMO_BRIDGE:${actual}`);
       resolve(actual);
     });
   });
 }
 
-function stopDemoBridge() {
+function stopPromoBridge() {
   if (server) {
     server.close();
     server = null;
   }
   pending.forEach(({ reject, timer }) => {
     clearTimeout(timer);
-    reject(new Error('Demo bridge stopped'));
+    reject(new Error('Promo bridge stopped'));
   });
   pending.clear();
 }
 
-module.exports = { startDemoBridge, stopDemoBridge };
+module.exports = { startPromoBridge, stopPromoBridge };

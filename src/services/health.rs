@@ -27,7 +27,7 @@ pub enum ServiceHealth {
     Stopping,
 
     /// Service is intentionally not running (disabled by config or mode, e.g. wallet/RPC
-    /// services while in preview mode). This is a normal state, never an error/issue.
+    /// services while in Explore Mode). This is a normal state, never an error/issue.
     #[serde(rename = "disabled")]
     Disabled,
 }

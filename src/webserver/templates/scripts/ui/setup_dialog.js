@@ -1,7 +1,7 @@
 /**
  * Setup Dialog — wallet + RPC credential entry as a modal.
  *
- * Used to complete setup from preview mode (header banner / config tab) without the
+ * Used to complete setup from Explore Mode (header banner / config tab) without the
  * full-screen wizard. Validates via /api/initialization/validate and persists via
  * /api/initialization/complete, then reloads into the fully-configured dashboard.
  *

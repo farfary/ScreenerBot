@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::positions;
-use crate::webserver::demo;
+use crate::webserver::promo;
 
 use super::types::*;
 
@@ -34,8 +34,8 @@ pub async fn get_portfolio_calendar(
     // Sunday=0 .. Saturday=6
     let first_weekday = first_day.weekday().num_days_from_sunday();
 
-    if demo::is_demo_mode() {
-        return Json(demo::get_demo_portfolio_calendar(
+    if promo::are_promo_fixtures_enabled() {
+        return Json(promo::get_promo_portfolio_calendar(
             year,
             month,
             days_in_month,

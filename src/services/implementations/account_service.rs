@@ -44,11 +44,11 @@ impl Service for AccountService {
         vec![]
     }
 
-    /// Runs in preview mode too. Signing in is one of the few useful things to
+    /// Runs in Explore Mode too. Signing in is one of the few useful things to
     /// do before a wallet and RPC exist, and refusing to run until setup is
     /// complete would make the account panel on the setup screen inert.
     fn is_enabled(&self) -> bool {
-        crate::global::is_preview_or_full()
+        crate::global::is_explore_or_full()
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

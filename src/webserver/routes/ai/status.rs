@@ -15,8 +15,8 @@ use super::types::*;
 
 /// GET /api/ai/status - Get AI module status
 pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
-    if crate::webserver::demo::is_demo_mode() {
-        return success_response(crate::webserver::demo::get_demo_ai_status());
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return success_response(crate::webserver::promo::get_promo_ai_status());
     }
 
     let config = with_config(|cfg| cfg.ai.clone());

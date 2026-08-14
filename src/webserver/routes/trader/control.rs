@@ -18,7 +18,7 @@ use super::types::*;
 /// GET /api/trader/status - Get current trader status
 pub async fn get_trader_status() -> Response {
     let available =
-        crate::global::is_initialization_complete() && !crate::global::is_preview_mode();
+        crate::global::is_initialization_complete() && !crate::global::is_explore_mode();
     let enabled = available && with_config(|cfg| cfg.trader.enabled);
     let running = available && is_trader_running();
 
@@ -35,7 +35,7 @@ pub async fn get_trader_status() -> Response {
 
 /// POST /api/trader/start - Start the trader
 pub async fn start_trader_handler() -> Response {
-    if crate::global::is_preview_mode() || !crate::global::is_initialization_complete() {
+    if crate::global::is_explore_mode() || !crate::global::is_initialization_complete() {
         return error_response(
             StatusCode::CONFLICT,
             "TraderUnavailable",
@@ -203,7 +203,7 @@ pub async fn monitors_status_handler(State(_state): State<Arc<AppState>>) -> Res
     use crate::trader::config;
 
     let available =
-        crate::global::is_initialization_complete() && !crate::global::is_preview_mode();
+        crate::global::is_initialization_complete() && !crate::global::is_explore_mode();
 
     success_response(serde_json::json!({
         "entry_monitor": {

@@ -471,9 +471,9 @@ pub async fn get_token_transactions(
         &format!("Fetching transactions for token: {mint}"),
     );
 
-    // Preview intentionally has no wallet transaction service or database.
+    // Explore Mode intentionally has no wallet transaction service or database.
     // This is a valid empty history, not a backend outage.
-    if crate::global::is_preview_mode() {
+    if crate::global::is_explore_mode() {
         return Ok(Json(Vec::new()));
     }
 

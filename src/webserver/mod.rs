@@ -1,9 +1,9 @@
 //! Web dashboard server — REST API and real-time status endpoints.
 mod server;
 
-pub mod demo;
 mod embeds;
 pub mod middleware;
+pub mod promo;
 pub mod routes;
 pub mod session;
 pub mod snapshot;

@@ -187,9 +187,9 @@ priority-based startup, readiness gates, health monitoring, and reverse-order sh
 
 ```
 Always available:
-  - Webserver (first-run setup, preview, and full mode)
+  - Webserver (first-run setup, Explore Mode, and full mode)
 
-Discovery tier (preview and full mode):
+Explore tier (Explore Mode and full mode):
   - Connectivity, Events, Tokens, Filtering
 
 Full trading tier:
@@ -202,9 +202,9 @@ Control and automation tier:
   - AI, Scheduled AI Tasks, Telegram, Account, Updates, and supporting services
 ```
 
-ScreenerBot has three boot states: **initialization** (webserver-only setup), **preview**
+ScreenerBot has three customer boot states: **initialization** (webserver-only setup), **Explore Mode**
 (market discovery and filtering without wallet-bound trading), and **full** (all enabled trading
-services). Moving from preview to full persists validated wallet/RPC settings and performs a graceful
+services). Moving from Explore Mode to full persists validated wallet/RPC settings and performs a graceful
 restart so the normal full boot path initializes every trading dependency cleanly.
 
 ### Main Data Flows
@@ -616,7 +616,7 @@ src/
 ├── pools/          # Pool service with 11 native DEX decoders
 ├── positions/      # Position lifecycle (DCA, partial exits, P&L)
 ├── rpc/            # Multi-provider RPC with rate limiting & circuit breaker
-├── run/            # Initialization, preview, and full-mode bootstrap
+├── run/            # Initialization, Explore Mode, and full-mode bootstrap
 ├── services/       # ServiceManager lifecycle, readiness, health, and metrics
 ├── strategies/     # Condition-based trading strategy engine
 ├── swaps/          # Quote-router registry and swap execution

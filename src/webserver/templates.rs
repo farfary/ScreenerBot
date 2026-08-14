@@ -121,8 +121,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("{{TOKEN_LOGO_SHAPE}}", token_logo_shape);
 
     // Inject initialization state for early DOM setup (prevents dashboard flash).
-    // preview mode shows the dashboard immediately, so it does not "need init".
-    let needs_initialization = !global::is_initialization_complete() && !global::is_preview_mode();
+    // Explore Mode shows the dashboard immediately, so it does not "need init".
+    let needs_initialization = !global::is_initialization_complete() && !global::is_explore_mode();
     html = html.replace(
         "{{NEEDS_INITIALIZATION}}",
         if needs_initialization {
@@ -230,12 +230,12 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         // Status bar (always visible at bottom)
         STATUS_BAR_STYLES,
     ];
-    // The demo capture layer is appended to the global bundle, and its module is
-    // the last script in the document — both only under --demo-capture, so a
+    // The Promo Studio layer is appended to the global bundle, and its module is
+    // the last script in the document — both only under --promo-capture, so a
     // normal session ships neither the styles nor the runtime.
-    let demo_capture = super::demo::is_demo_capture();
-    let global_styles = if demo_capture {
-        [combined_styles.join("\n"), DEMO_CAPTURE_STYLES.to_string()].join("\n")
+    let promo_capture = super::promo::is_promo_capture_enabled();
+    let global_styles = if promo_capture {
+        [combined_styles.join("\n"), PROMO_CAPTURE_STYLES.to_string()].join("\n")
     } else {
         combined_styles.join("\n")
     };
@@ -247,10 +247,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("{{ACTIVE_TAB}}", active_tab);
     html = html.replace("/*__THEME_SCRIPTS__*/", THEME_SCRIPTS);
     html = html.replace(
-        "<!--__DEMO_CAPTURE_SCRIPTS__-->",
-        &if demo_capture {
+        "<!--__PROMO_CAPTURE_SCRIPTS__-->",
+        &if promo_capture {
             format!(
-                "<script type=\"module\" src=\"/scripts/demo/runtime.js?v={}\"></script>",
+                "<script type=\"module\" src=\"/scripts/promo/runtime.js?v={}\"></script>",
                 asset_version
             )
         } else {
@@ -265,9 +265,9 @@ fn nav_tabs(active: &str) -> String {
     use crate::global;
 
     // In initialization mode (before config is loaded), return minimal nav.
-    // preview mode is exempt: the user skipped setup to browse, so they get the
+    // Explore Mode is exempt: the user skipped setup to browse, so they get the
     // full configured navigation (token/filtering pages work without a wallet).
-    if !global::is_initialization_complete() && !global::is_preview_mode() {
+    if !global::is_initialization_complete() && !global::is_explore_mode() {
         // Only show initialization tab during setup
         let active_class = if active == "initialization" {
             " active"

@@ -10,7 +10,7 @@ use crate::global::{
 use crate::positions;
 use crate::rpc::get_global_rpc_stats;
 use crate::trader::is_trader_running;
-use crate::webserver::demo;
+use crate::webserver::promo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
 
@@ -20,9 +20,9 @@ use super::utils::format_uptime;
 /// GET /api/dashboard/home
 /// Comprehensive home dashboard with all analytics
 pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDashboardResponse> {
-    // Return demo data if demo mode is enabled
-    if demo::is_demo_mode() {
-        return Json(demo::get_demo_home_dashboard());
+    // Return promotional fixtures only for owner-initiated media capture.
+    if promo::are_promo_fixtures_enabled() {
+        return Json(promo::get_promo_home_dashboard());
     }
 
     use chrono::{DateTime, Duration, TimeZone};
@@ -374,9 +374,9 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         found_all_time: total_in_database,
     };
 
-    // Get trader status (always off in preview mode — trading is disabled)
+    // Get trader status (always off in Explore Mode — trading is disabled)
     let trader_status = TraderStatusInfo {
-        running: !crate::global::is_preview_mode() && is_trader_running(),
+        running: !crate::global::is_explore_mode() && is_trader_running(),
     };
 
     Json(HomeDashboardResponse {

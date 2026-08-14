@@ -1,5 +1,5 @@
 // Stateless setup validation, requests, and restart polling shared by the
-// full-screen controller and the Preview Mode setup dialog.
+// full-screen controller and the Explore Mode setup dialog.
 (function () {
   "use strict";
 

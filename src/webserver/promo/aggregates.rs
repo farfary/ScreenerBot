@@ -1,11 +1,11 @@
-//! Derived demo aggregates — every demo total (P&L, win rate, invested, trade
+//! Derived promo aggregates — every promo total (P&L, win rate, invested, trade
 //! counts, wallet worth, period buckets) is computed here from the two token
 //! arrays in `data.rs`, so the home / overview / positions / trader / header /
 //! calendar endpoints all agree. Never hand-tune a total elsewhere; add it here.
 
 use chrono::{DateTime, Duration, Utc};
 
-use super::data::{DEMO_CLOSED_TOKENS, DEMO_OPEN_TOKENS};
+use super::data::{PROMO_CLOSED_TOKENS, PROMO_OPEN_TOKENS};
 
 // =============================================================================
 // OPEN POSITIONS
@@ -42,7 +42,7 @@ pub(super) fn open_agg() -> OpenAgg {
         pnl_percent: f64::INFINITY,
     };
 
-    for (symbol, _name, _mint, _logo, entry, current, size, hold) in DEMO_OPEN_TOKENS {
+    for (symbol, _name, _mint, _logo, entry, current, size, hold) in PROMO_OPEN_TOKENS {
         let pct = (current - entry) / entry * 100.0;
         invested += size;
         pnl += (current - entry) / entry * size;
@@ -61,7 +61,7 @@ pub(super) fn open_agg() -> OpenAgg {
         }
     }
 
-    let count = DEMO_OPEN_TOKENS.len();
+    let count = PROMO_OPEN_TOKENS.len();
     OpenAgg {
         count,
         invested_sol: invested,
@@ -88,7 +88,7 @@ pub(super) fn open_agg() -> OpenAgg {
 
 /// A synthesized closed trade with a deterministic exit timestamp. The same
 /// schedule feeds the positions list, the period stats, and the calendar so
-/// timestamps line up across every demo surface.
+/// timestamps line up across every promo surface.
 #[derive(Clone)]
 pub(super) struct ClosedTrade {
     pub symbol: &'static str,
@@ -114,7 +114,7 @@ pub(super) fn closed_exit_offset_hours(i: usize) -> i64 {
 }
 
 pub(super) fn closed_trades(now: DateTime<Utc>) -> Vec<ClosedTrade> {
-    DEMO_CLOSED_TOKENS
+    PROMO_CLOSED_TOKENS
         .iter()
         .enumerate()
         .map(

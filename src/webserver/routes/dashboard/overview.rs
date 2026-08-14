@@ -12,7 +12,7 @@ use crate::rpc::get_global_rpc_stats;
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
 use crate::wallet::get_wallet_worth;
-use crate::webserver::demo;
+use crate::webserver::promo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
 
@@ -22,9 +22,9 @@ use super::utils::format_uptime;
 /// GET /api/dashboard/overview
 /// Get comprehensive dashboard overview
 pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<DashboardOverview> {
-    // Return demo data if demo mode is enabled
-    if demo::is_demo_mode() {
-        return Json(demo::get_demo_dashboard_overview());
+    // Return promotional fixtures only for owner-initiated media capture.
+    if promo::are_promo_fixtures_enabled() {
+        return Json(promo::get_promo_dashboard_overview());
     }
 
     // Wallet info from the live worth cache — same source as the header and the home

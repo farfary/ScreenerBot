@@ -1,19 +1,19 @@
 /* =============================================================================
-   DEMO CAPTURE LAYER
+   PROMO CAPTURE LAYER
 
    Annotations drawn over the dashboard while a screenshot or promotional
    recording is being produced. Present only when the binary runs with
-   --demo-capture, so nothing here is reachable in a normal session.
+   --promo-capture, so nothing here is reachable in a normal session.
 
    The annotations are built from the dashboard's own surface, type and spacing
    tokens on purpose: an annotated frame has to look like the product, not like
    a screen-recording tool was pointed at it.
    ============================================================================= */
 
-.demo-layer {
+.promo-layer {
   position: fixed;
   inset: 0;
-  z-index: var(--z-demo-capture);
+  z-index: var(--z-promo-capture);
   pointer-events: none;
 }
 
@@ -21,7 +21,7 @@
    Callout
    ============================================================================= */
 
-.demo-callout {
+.promo-callout {
   position: fixed;
   max-width: 320px;
   padding: var(--spacing-md);
@@ -35,7 +35,7 @@
 
 /* The pointer is the panel's own corner rotated out from under it, so its fill
    and border always match the panel — including after a theme switch. */
-.demo-callout-pointer {
+.promo-callout-pointer {
   position: absolute;
   width: 12px;
   height: 12px;
@@ -44,7 +44,7 @@
   border-radius: 2px;
 }
 
-.demo-callout[data-side="bottom"] .demo-callout-pointer {
+.promo-callout[data-side="bottom"] .promo-callout-pointer {
   top: -7px;
   margin-left: -6px;
   border-right: 0;
@@ -52,7 +52,7 @@
   transform: rotate(45deg);
 }
 
-.demo-callout[data-side="top"] .demo-callout-pointer {
+.promo-callout[data-side="top"] .promo-callout-pointer {
   bottom: -7px;
   margin-left: -6px;
   border-top: 0;
@@ -60,7 +60,7 @@
   transform: rotate(45deg);
 }
 
-.demo-callout[data-side="right"] .demo-callout-pointer {
+.promo-callout[data-side="right"] .promo-callout-pointer {
   left: -7px;
   margin-top: -6px;
   border-top: 0;
@@ -68,7 +68,7 @@
   transform: rotate(45deg);
 }
 
-.demo-callout[data-side="left"] .demo-callout-pointer {
+.promo-callout[data-side="left"] .promo-callout-pointer {
   right: -7px;
   margin-top: -6px;
   border-bottom: 0;
@@ -76,7 +76,7 @@
   transform: rotate(45deg);
 }
 
-.demo-callout-eyebrow {
+.promo-callout-eyebrow {
   margin: 0 0 var(--spacing-xs);
   font-size: var(--font-size-xs);
   font-weight: 600;
@@ -85,14 +85,14 @@
   color: var(--text-muted);
 }
 
-.demo-callout-title {
+.promo-callout-title {
   margin: 0;
   font-size: var(--font-size-base);
   font-weight: 600;
   line-height: 1.35;
 }
 
-.demo-callout-body {
+.promo-callout-body {
   margin: var(--spacing-xs) 0 0;
   font-size: var(--font-size-sm);
   line-height: 1.5;
@@ -101,11 +101,11 @@
 
 /* Tone tints the eyebrow only. A callout on a BUY control reads as a buy through
    its label, never by repainting the whole panel green. */
-.demo-callout[data-tone="buy"] .demo-callout-eyebrow {
+.promo-callout[data-tone="buy"] .promo-callout-eyebrow {
   color: var(--success-color);
 }
 
-.demo-callout[data-tone="sell"] .demo-callout-eyebrow {
+.promo-callout[data-tone="sell"] .promo-callout-eyebrow {
   color: var(--danger);
 }
 
@@ -116,7 +116,7 @@
    and the element's own box is the cut-out.
    ============================================================================= */
 
-.demo-spotlight {
+.promo-spotlight {
   position: fixed;
   box-shadow: 0 0 0 100vmax rgb(0, 0, 0, 0.62);
   outline: 1px solid var(--border-color);
@@ -127,7 +127,7 @@
    Caption (lower third)
    ============================================================================= */
 
-.demo-caption {
+.promo-caption {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
@@ -141,15 +141,15 @@
   will-change: opacity, transform;
 }
 
-.demo-caption[data-position="bottom"] {
+.promo-caption[data-position="bottom"] {
   bottom: var(--spacing-2xl);
 }
 
-.demo-caption[data-position="top"] {
+.promo-caption[data-position="top"] {
   top: var(--spacing-2xl);
 }
 
-.demo-caption-text {
+.promo-caption-text {
   margin: 0;
   font-size: var(--font-size-lg);
   font-weight: 600;
@@ -157,7 +157,7 @@
   color: var(--text-primary);
 }
 
-.demo-caption-sub {
+.promo-caption-sub {
   margin: var(--spacing-xs) 0 0;
   font-size: var(--font-size-sm);
   line-height: 1.5;
@@ -168,7 +168,7 @@
    Title card
    ============================================================================= */
 
-.demo-title-card {
+.promo-title-card {
   position: fixed;
   inset: 0;
   display: flex;
@@ -182,7 +182,7 @@
   will-change: opacity;
 }
 
-.demo-title-card-title {
+.promo-title-card-title {
   margin: 0;
   font-size: clamp(2rem, 5vw, 3.25rem);
   font-weight: 700;
@@ -191,7 +191,7 @@
   color: var(--text-primary);
 }
 
-.demo-title-card-sub {
+.promo-title-card-sub {
   margin: 0;
   max-width: 46ch;
   font-size: var(--font-size-lg);
@@ -203,7 +203,7 @@
    Cursor
    ============================================================================= */
 
-.demo-cursor {
+.promo-cursor {
   position: fixed;
   top: 0;
   left: 0;
@@ -217,11 +217,11 @@
   will-change: transform, opacity;
 }
 
-.demo-cursor.is-visible {
+.promo-cursor.is-visible {
   opacity: 1;
 }
 
-.demo-cursor-ring {
+.promo-cursor-ring {
   position: absolute;
   inset: -14px;
   border: 2px solid var(--text-primary);
@@ -236,6 +236,6 @@
    the runtime's freeze(), removed by thaw().
    ============================================================================= */
 
-.demo-frozen * {
+.promo-frozen * {
   caret-color: transparent !important;
 }

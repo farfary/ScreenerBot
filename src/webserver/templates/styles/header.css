@@ -59,9 +59,9 @@
   padding-right: var(--header-inline-padding);
 }
 
-/* Preview is a persistent application state. Its setup action belongs beside
+/* Explore Mode is a persistent application state. Its setup action belongs beside
    the global controls instead of creating another header above them. */
-.preview-setup-control {
+.explore-setup-control {
   display: flex;
   align-items: center;
   flex: 0 1 286px;
@@ -82,23 +82,23 @@
     color var(--transition-fast);
 }
 
-.preview-setup-control[hidden] {
+.explore-setup-control[hidden] {
   display: none;
 }
 
-.preview-setup-control:hover {
+.explore-setup-control:hover {
   background: var(--warning-alpha-20);
   color: var(--text-primary);
 }
 
-.preview-setup-icon,
-.preview-setup-arrow {
+.explore-setup-icon,
+.explore-setup-arrow {
   flex-shrink: 0;
   font-size: 15px;
   line-height: 1;
 }
 
-.preview-setup-copy {
+.explore-setup-copy {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
@@ -107,7 +107,7 @@
   line-height: 1;
 }
 
-.preview-setup-title {
+.explore-setup-title {
   overflow: hidden;
   font-size: 12px;
   font-weight: 750;
@@ -117,7 +117,7 @@
   white-space: nowrap;
 }
 
-.preview-setup-detail {
+.explore-setup-detail {
   overflow: hidden;
   color: var(--text-secondary);
   font-size: 10px;
@@ -126,14 +126,14 @@
   white-space: nowrap;
 }
 
-.preview-setup-action {
+.explore-setup-action {
   flex-shrink: 0;
   font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
 }
 
-.preview-setup-arrow {
+.explore-setup-arrow {
   font-size: 13px;
 }
 
@@ -411,8 +411,8 @@
   color: var(--semantic-warning-text);
 }
 
-.modern-header .bot-card[data-status="preview"] .card-icon,
-.modern-header .bot-card[data-status="preview"] .card-status {
+.modern-header .bot-card[data-status="explore"] .card-icon,
+.modern-header .bot-card[data-status="explore"] .card-status {
   color: var(--semantic-info-text);
 }
 
@@ -519,7 +519,7 @@ html[data-input="keyboard"] .modern-header a:focus-visible {
   .modern-header .header-card,
   .modern-header .header-action-btn,
   .modern-header .header-actions-toggle,
-  .preview-setup-control {
+  .explore-setup-control {
     transition: none;
   }
 

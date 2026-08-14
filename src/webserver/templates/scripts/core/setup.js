@@ -41,7 +41,7 @@
       this.footer = document.querySelector(".setup-footer");
       this.backBtn = document.getElementById("setup-back");
       this.nextBtn = document.getElementById("setup-next");
-      this.skipBtn = document.getElementById("setup-skip");
+      this.exploreBtn = document.getElementById("setup-explore");
       this.retryBtn = document.getElementById("setup-retry");
       this.reconnectBtn = document.getElementById("setup-reconnect");
       this.reloadBtn = document.getElementById("setup-reload");
@@ -78,7 +78,7 @@
     bindEvents() {
       this.backBtn?.addEventListener("click", () => this.goBack());
       this.nextBtn?.addEventListener("click", () => this.goNext());
-      this.skipBtn?.addEventListener("click", () => this.skipSetup());
+      this.exploreBtn?.addEventListener("click", () => this.enterExploreMode());
       this.retryBtn?.addEventListener("click", () => this.reviewCredentials());
       this.reconnectBtn?.addEventListener("click", () => this.startRestartWait());
       this.reloadBtn?.addEventListener("click", () => window.location.reload());
@@ -141,9 +141,9 @@
         this.backBtn.hidden = this.currentStep > 2;
         this.backBtn.disabled = this.verificationBusy;
       }
-      if (this.skipBtn) {
-        this.skipBtn.hidden = this.currentStep !== 1;
-        this.skipBtn.disabled = this.verificationBusy;
+      if (this.exploreBtn) {
+        this.exploreBtn.hidden = this.currentStep !== 1;
+        this.exploreBtn.disabled = this.verificationBusy;
       }
       if (this.nextBtn) {
         this.nextBtn.hidden = this.currentStep !== 1;
@@ -385,27 +385,27 @@
       }
     }
 
-    async skipSetup() {
+    async enterExploreMode() {
       if (this.verificationBusy) return;
       this.hideError();
-      this.skipBtn.disabled = true;
-      const originalLabel = this.skipBtn.textContent;
-      this.skipBtn.textContent = "Opening preview…";
+      this.exploreBtn.disabled = true;
+      const originalLabel = this.exploreBtn.textContent;
+      this.exploreBtn.textContent = "Opening Explore Mode…";
 
       try {
-        const result = await requestJson("/api/initialization/skip", {
+        const result = await requestJson("/api/initialization/explore", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: "{}",
         });
         if (!result?.success) {
-          throw new Error(result?.errors?.join(" ") || "Preview mode could not be started.");
+          throw new Error(result?.errors?.join(" ") || "Explore Mode could not be started.");
         }
         window.location.assign("/tokens");
       } catch (error) {
-        this.skipBtn.disabled = false;
-        this.skipBtn.textContent = originalLabel;
-        this.showError(error.message || "Preview mode could not be started.", true);
+        this.exploreBtn.disabled = false;
+        this.exploreBtn.textContent = originalLabel;
+        this.showError(error.message || "Explore Mode could not be started.", true);
       }
     }
 

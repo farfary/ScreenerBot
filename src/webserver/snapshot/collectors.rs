@@ -136,7 +136,7 @@ pub(super) async fn collect_system_metrics_snapshot(
 }
 
 pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
-    if crate::global::is_preview_mode() {
+    if crate::global::is_explore_mode() {
         return None;
     }
 

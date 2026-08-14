@@ -1,14 +1,14 @@
 /**
- * Demo capture runtime.
+ * Promo capture runtime.
  *
- * Loaded only when the binary runs with `--demo-capture`. It turns the dashboard
+ * Loaded only when the binary runs with `--promo-capture`. It turns the dashboard
  * into something an external driver can operate step by step, with one hard rule:
  * every command resolves on an OBSERVED signal, never on a guessed delay. A
  * command that cannot observe its own completion rejects on its deadline so a
  * capture run fails loudly instead of silently photographing a half-painted page.
  *
- * The driver talks to the Electron demo bridge, which forwards renderer-scope
- * commands here over IPC. `window.__SB_DEMO__` is also usable directly from the
+ * The driver talks to the Electron promo bridge, which forwards renderer-scope
+ * commands here over IPC. `window.__SB_PROMO__` is also usable directly from the
  * console for authoring a scene by hand.
  */
 
@@ -74,7 +74,7 @@ function animationsBusy() {
   return document.getAnimations().some((animation) => {
     if (animation.playState !== "running") return false;
     const target = animation.effect?.target;
-    if (target?.closest?.(".demo-layer")) return false;
+    if (target?.closest?.(".promo-layer")) return false;
     return animation.effect?.getTiming?.().iterations !== Infinity;
   });
 }
@@ -96,7 +96,7 @@ function animationsBusy() {
 let inFlightFetches = 0;
 
 function installFetchTracking() {
-  if (window.__SB_DEMO_FETCH_PATCHED__) return;
+  if (window.__SB_PROMO_FETCH_PATCHED__) return;
   const original = window.fetch;
   window.fetch = function trackedFetch(...args) {
     inFlightFetches += 1;
@@ -104,7 +104,7 @@ function installFetchTracking() {
       inFlightFetches -= 1;
     });
   };
-  window.__SB_DEMO_FETCH_PATCHED__ = true;
+  window.__SB_PROMO_FETCH_PATCHED__ = true;
 }
 
 /** True while any request the page has issued is still outstanding. */
@@ -345,7 +345,7 @@ function requireElement(selector) {
   return el;
 }
 
-/** Center of an element in viewport coordinates — where the demo cursor aims. */
+/** Center of an element in viewport coordinates — where the promo cursor aims. */
 export function centerOf(el) {
   const rect = el.getBoundingClientRect();
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
@@ -365,7 +365,7 @@ export async function goto({ page, timeout = DEFAULT_TIMEOUT_MS } = {}) {
 }
 
 /**
- * Click an element the way a person would: the demo cursor travels to it, presses,
+ * Click an element the way a person would: the promo cursor travels to it, presses,
  * and only then is the real click dispatched. `moveCursor: false` clicks silently,
  * which is what screenshot scenes want.
  */
@@ -397,7 +397,7 @@ export async function click({
   return { selector };
 }
 
-/** Hover an element (and move the demo cursor there) without clicking it. */
+/** Hover an element (and move the promo cursor there) without clicking it. */
 export async function hover({ selector, travelMs = 650, timeout = DEFAULT_TIMEOUT_MS } = {}) {
   await waitFor({ selector, state: "visible", timeout });
   const el = requireElement(selector);
@@ -507,8 +507,8 @@ export function beat({ ms = 800 } = {}) {
 
 /**
  * Stop everything that would make two captures of the same screen differ:
- * pollers refetching, the caret blinking, transient overlays fading. The demo
- * data itself is already fixed server-side, and `--demo-freeze` pins the last
+ * pollers refetching, the caret blinking, transient overlays fading. The promo
+ * data itself is already fixed server-side, and `--promo-freeze` pins the last
  * live value (SOL price) there.
  */
 export async function freeze() {
@@ -518,7 +518,7 @@ export async function freeze() {
   // poller registry, so it needs its own stop or it keeps rewriting uptime and
   // RPC counters between two shots of the same page.
   window.StatusBar?.pausePolling();
-  document.documentElement.classList.add("demo-frozen");
+  document.documentElement.classList.add("promo-frozen");
   state.frozen = true;
   // Freeze is where a run absorbs the app's whole boot: it is the first point at
   // which requests can actually drain, because nothing is refetching any more.
@@ -532,7 +532,7 @@ export async function thaw() {
   if (!state.frozen) return { frozen: false };
   resumeAllPollers();
   window.StatusBar?.resumePolling();
-  document.documentElement.classList.remove("demo-frozen");
+  document.documentElement.classList.remove("promo-frozen");
   state.frozen = false;
   return { frozen: false };
 }
@@ -543,7 +543,7 @@ export async function thaw() {
  */
 export function setMotionScale({ scale = 1 } = {}) {
   state.motionScale = Math.max(0, Number(scale) || 0);
-  document.documentElement.style.setProperty("--demo-motion-scale", String(state.motionScale));
+  document.documentElement.style.setProperty("--promo-motion-scale", String(state.motionScale));
   return { scale: state.motionScale };
 }
 
@@ -554,7 +554,7 @@ export function setMotionScale({ scale = 1 } = {}) {
 const COMMANDS = {
   "wait.stable": waitStable,
   "wait.viewport": waitViewport,
-  "demo.measureChrome": measureChrome,
+  "promo.measureChrome": measureChrome,
   "wait.for": waitFor,
   "wait.beat": beat,
   "nav.goto": goto,
@@ -562,10 +562,10 @@ const COMMANDS = {
   "ui.hover": hover,
   "ui.type": type,
   "ui.scroll": scrollTo,
-  "demo.freeze": freeze,
-  "demo.thaw": thaw,
-  "demo.motion": setMotionScale,
-  "demo.state": () => ({
+  "promo.freeze": freeze,
+  "promo.thaw": thaw,
+  "promo.motion": setMotionScale,
+  "promo.state": () => ({
     page: getCurrentPage(),
     frozen: state.frozen,
     motionScale: state.motionScale,
@@ -591,8 +591,8 @@ const COMMANDS = {
   "audio.sfx": audio.playSfx,
   "audio.stop": audio.stopMusic,
   // Escape hatch for a scene that needs to read or poke something the command
-  // vocabulary does not cover yet. Reachable only through the demo bridge, which
-  // only exists under --demo-capture.
+  // vocabulary does not cover yet. Reachable only through the promo bridge, which
+  // only exists under --promo-capture.
   eval: async ({ expression }) => {
     const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
     return await new AsyncFunction(expression)();
@@ -602,21 +602,21 @@ const COMMANDS = {
 /** Run one driver command. Unknown names fail loudly rather than no-op. */
 export async function runCommand(name, args = {}) {
   const handler = COMMANDS[name];
-  if (!handler) throw new Error(`Unknown demo command: ${name}`);
+  if (!handler) throw new Error(`Unknown promo command: ${name}`);
   const result = await handler(args || {});
   return result === undefined ? null : result;
 }
 
-// The Electron demo bridge forwards driver commands here and reports the result
+// The Electron promo bridge forwards driver commands here and reports the result
 // back on the same request id. Registration is idempotent so a dashboard reload
 // mid-scene reconnects the channel instead of orphaning the driver.
-if (window.demoAPI && typeof window.demoAPI.onCommand === "function") {
-  window.demoAPI.onCommand(async ({ id, name, args }) => {
+if (window.promoAPI && typeof window.promoAPI.onCommand === "function") {
+  window.promoAPI.onCommand(async ({ id, name, args }) => {
     try {
       const result = await runCommand(name, args);
-      window.demoAPI.sendResult({ id, ok: true, result });
+      window.promoAPI.sendResult({ id, ok: true, result });
     } catch (error) {
-      window.demoAPI.sendResult({ id, ok: false, error: error?.message || String(error) });
+      window.promoAPI.sendResult({ id, ok: false, error: error?.message || String(error) });
     }
   });
 }
@@ -625,7 +625,7 @@ installFetchTracking();
 installActivityTracking();
 setMotionScale({ scale: 1 });
 
-window.__SB_DEMO__ = {
+window.__SB_PROMO__ = {
   runCommand,
   waitStable,
   waitViewport,
@@ -647,6 +647,6 @@ window.__SB_DEMO__ = {
 
 // The bridge polls for this before sending the first command, so a scene never
 // starts against a half-initialised runtime.
-window.__SB_DEMO_READY__ = true;
-document.documentElement.classList.add("demo-capture");
-console.log("[DemoCapture] Runtime ready");
+window.__SB_PROMO_READY__ = true;
+document.documentElement.classList.add("promo-capture");
+console.log("[PromoCapture] Runtime ready");

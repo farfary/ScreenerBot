@@ -16,23 +16,23 @@ pub fn is_reset_enabled() -> bool {
     has_arg("--reset")
 }
 
-/// Dashboard demo mode — show hardcoded showcase data for screenshots/marketing.
-pub fn is_dashboard_demo_enabled() -> bool {
-    has_arg("--dashboard-demo")
+/// Promo fixtures — show deterministic showcase data for owner-only media capture.
+pub fn is_promo_fixtures_enabled() -> bool {
+    has_arg("--promo-fixtures")
 }
 
-/// Demo capture mode — load the dashboard's demo capture runtime (overlays,
+/// Promo capture — load the dashboard's owner-only capture runtime (overlays,
 /// narration, quiescence reporting) so an external driver can produce
-/// screenshots and promotional recordings deterministically. Implies demo data.
-pub fn is_demo_capture_enabled() -> bool {
-    has_arg("--demo-capture")
+/// screenshots and promotional recordings deterministically. Implies promo fixtures.
+pub fn is_promo_capture_enabled() -> bool {
+    has_arg("--promo-capture")
 }
 
-/// Demo freeze — pin every remaining live value (SOL price above all) to its
-/// deterministic demo constant so two capture runs render byte-identical
-/// frames. Only meaningful together with demo mode.
-pub fn is_demo_freeze_enabled() -> bool {
-    has_arg("--demo-freeze")
+/// Promo freeze — pin every remaining live value (SOL price above all) to its
+/// deterministic promo constant so two capture runs render byte-identical
+/// frames. Only meaningful together with promo fixtures.
+pub fn is_promo_freeze_enabled() -> bool {
+    has_arg("--promo-freeze")
 }
 
 /// Force onboarding display — show onboarding even if already completed.

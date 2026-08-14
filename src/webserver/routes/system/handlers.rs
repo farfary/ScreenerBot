@@ -62,10 +62,10 @@ pub(crate) fn schedule_graceful_restart(reason: &'static str) {
 pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
     let timestamp = Utc::now();
     let initialization_complete = global::is_initialization_complete();
-    let preview_mode = global::is_preview_mode();
-    // In preview mode the user deliberately skipped setup, so the dashboard must
+    let explore_mode = global::is_explore_mode();
+    // In Explore Mode the user deliberately skipped setup, so the dashboard must
     // load (not the setup screen) even though full initialization is not complete.
-    let initialization_required = !initialization_complete && !preview_mode;
+    let initialization_required = !initialization_complete && !explore_mode;
     let core_services_ready = are_core_services_ready();
     let ready_for_requests = initialization_complete && core_services_ready;
 
@@ -81,9 +81,9 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
     let pools_ready = POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst);
     let transactions_ready = TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
 
-    // preview mode never starts the pools service, so it is not a UI prerequisite
+    // Explore Mode never starts the pools service, so it is not a UI prerequisite
     // there — connectivity + tokens are enough for the discovery dashboard to be usable.
-    let ui_prereqs_ready = if preview_mode {
+    let ui_prereqs_ready = if explore_mode {
         connectivity_ready && tokens_ready
     } else {
         connectivity_ready && tokens_ready && pools_ready
@@ -117,8 +117,8 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
         "initialization"
     } else if !ui_prereqs_ready {
         "ui_startup"
-    } else if preview_mode {
-        // preview: once UI prereqs are up the dashboard is fully usable; the
+    } else if explore_mode {
+        // Explore Mode: once UI prerequisites are up the dashboard is fully usable; the
         // remaining (wallet/RPC) services are intentionally not running.
         "ready"
     } else if !core_services_ready {
@@ -170,7 +170,7 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
         timestamp: timestamp.to_rfc3339(),
         initialization_required,
         initialization_complete,
-        preview_mode,
+        explore_mode,
         onboarding_complete,
         core_services_ready,
         ui_ready,

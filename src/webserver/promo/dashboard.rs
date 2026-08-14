@@ -1,4 +1,4 @@
-//! Demo generators for the dashboard home, overview and portfolio calendar.
+//! Promo generators for the dashboard home, overview and portfolio calendar.
 
 use std::collections::HashMap;
 
@@ -15,9 +15,9 @@ use crate::webserver::routes::dashboard::{
 use super::aggregates::{self, PeriodAgg};
 use super::data::*;
 
-/// Demo uptime shared by every "system" block (3d 7h 23m 45s).
-const DEMO_UPTIME_SECS: u64 = 3 * 24 * 3600 + 7 * 3600 + 23 * 60 + 45;
-const DEMO_UPTIME_STR: &str = "3d 7h 23m 45s";
+/// Promo uptime shared by every "system" block (3d 7h 23m 45s).
+const PROMO_UPTIME_SECS: u64 = 3 * 24 * 3600 + 7 * 3600 + 23 * 60 + 45;
+const PROMO_UPTIME_STR: &str = "3d 7h 23m 45s";
 
 /// Build a `TradingPeriodStats` from a realized-P&L bucket plus buys that
 /// occurred in the same window (round-trip sells + still-open entries).
@@ -33,8 +33,8 @@ fn period_stats(agg: &PeriodAgg, extra_open_buys: i64) -> TradingPeriodStats {
     }
 }
 
-/// Generate demo home dashboard response.
-pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
+/// Generate promo home dashboard response.
+pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
     let now = Utc::now();
     let open = aggregates::open_agg();
     let trades = aggregates::closed_trades(now);
@@ -50,24 +50,24 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         all_time: period_stats(&aggregates::period_over(trades.iter()), open_buys),
     };
 
-    let demo_equity = DEMO_SOL_BALANCE + open.current_value_sol;
+    let promo_equity = PROMO_SOL_BALANCE + open.current_value_sol;
     let wallet = WalletAnalytics {
-        wallet_address: DEMO_WALLET_ADDRESS.to_owned(),
-        current_balance_sol: DEMO_SOL_BALANCE,
+        wallet_address: PROMO_WALLET_ADDRESS.to_owned(),
+        current_balance_sol: PROMO_SOL_BALANCE,
         token_count: open.count,
         tokens_worth_sol: open.current_value_sol,
-        total_equity_sol: demo_equity,
+        total_equity_sol: promo_equity,
         unpriced_token_count: 0,
-        start_of_day_balance_sol: DEMO_START_BALANCE,
-        change_sol: demo_equity - DEMO_START_BALANCE,
-        change_percent: (demo_equity - DEMO_START_BALANCE) / DEMO_START_BALANCE * 100.0,
+        start_of_day_balance_sol: PROMO_START_BALANCE,
+        change_sol: promo_equity - PROMO_START_BALANCE,
+        change_percent: (promo_equity - PROMO_START_BALANCE) / PROMO_START_BALANCE * 100.0,
         sol_price_usd: 180.0,
         balance_history: vec![
-            DEMO_START_BALANCE,
-            DEMO_START_BALANCE * 1.01,
-            DEMO_START_BALANCE * 0.99,
-            DEMO_START_BALANCE * 1.03,
-            demo_equity,
+            PROMO_START_BALANCE,
+            PROMO_START_BALANCE * 1.01,
+            PROMO_START_BALANCE * 0.99,
+            PROMO_START_BALANCE * 1.03,
+            promo_equity,
         ],
     };
 
@@ -94,11 +94,11 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
     };
 
     let system = SystemMetrics {
-        uptime_seconds: DEMO_UPTIME_SECS,
-        uptime_formatted: DEMO_UPTIME_STR.to_owned(),
-        memory_mb: DEMO_MEMORY_MB,
+        uptime_seconds: PROMO_UPTIME_SECS,
+        uptime_formatted: PROMO_UPTIME_STR.to_owned(),
+        memory_mb: PROMO_MEMORY_MB,
         memory_percent: 2.4,
-        cpu_percent: DEMO_CPU_PERCENT,
+        cpu_percent: PROMO_CPU_PERCENT,
         rpc_calls_per_min: 847.3,
         rpc_success_rate: 99.7,
         websocket_connected: true,
@@ -112,7 +112,7 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         with_prices: Some(8923),
         passed_filters: Some(347),
         rejected_filters: Some(8576),
-        blacklisted: Some(DEMO_BLACKLISTED),
+        blacklisted: Some(PROMO_BLACKLISTED),
         with_ohlcv: Some(2847),
         found_today: 234,
         found_this_week: 1523,
@@ -131,21 +131,21 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
     }
 }
 
-/// Generate demo dashboard overview response.
-pub fn get_demo_dashboard_overview() -> DashboardOverview {
+/// Generate promo dashboard overview response.
+pub fn get_promo_dashboard_overview() -> DashboardOverview {
     let now = Utc::now();
     let open = aggregates::open_agg();
     let trades = aggregates::closed_trades(now);
     let realized = aggregates::period_over(trades.iter());
 
     let wallet = WalletInfo {
-        sol_balance: DEMO_SOL_BALANCE,
-        sol_balance_lamports: DEMO_SOL_LAMPORTS,
+        sol_balance: PROMO_SOL_BALANCE,
+        sol_balance_lamports: PROMO_SOL_LAMPORTS,
         total_tokens_count: open.count,
         last_updated: Some(now.to_rfc3339()),
     };
 
-    let open_position_details: Vec<OpenPositionDetail> = DEMO_OPEN_TOKENS
+    let open_position_details: Vec<OpenPositionDetail> = PROMO_OPEN_TOKENS
         .iter()
         .map(
             |(symbol, _name, mint, _logo, entry, current, _size, hold_min)| OpenPositionDetail {
@@ -177,17 +177,17 @@ pub fn get_demo_dashboard_overview() -> DashboardOverview {
             pool_service: true,
             transactions_system: true,
         },
-        uptime_seconds: DEMO_UPTIME_SECS,
-        uptime_formatted: DEMO_UPTIME_STR.to_owned(),
-        memory_mb: DEMO_MEMORY_MB,
-        cpu_percent: DEMO_CPU_PERCENT,
+        uptime_seconds: PROMO_UPTIME_SECS,
+        uptime_formatted: PROMO_UPTIME_STR.to_owned(),
+        memory_mb: PROMO_MEMORY_MB,
+        cpu_percent: PROMO_CPU_PERCENT,
         active_threads: 24,
     };
 
     let rpc = RpcInfo {
         total_calls: 847_234,
         calls_per_second: 4.7,
-        uptime_seconds: DEMO_UPTIME_SECS,
+        uptime_seconds: PROMO_UPTIME_SECS,
     };
 
     let mut by_reason = HashMap::new();
@@ -197,12 +197,12 @@ pub fn get_demo_dashboard_overview() -> DashboardOverview {
     by_reason.insert("NonAuthority::RugPull".to_owned(), 271);
 
     let blacklist = BlacklistInfo {
-        total_blacklisted: DEMO_BLACKLISTED,
+        total_blacklisted: PROMO_BLACKLISTED,
         by_reason,
     };
 
     let monitoring = MonitoringInfo {
-        tokens_tracked: DEMO_TOKENS_TRACKED,
+        tokens_tracked: PROMO_TOKENS_TRACKED,
         entry_check_interval_secs: 10,
         position_monitor_interval_secs: 5,
     };
@@ -218,10 +218,10 @@ pub fn get_demo_dashboard_overview() -> DashboardOverview {
     }
 }
 
-/// Generate the demo portfolio calendar for a given month. Real closed trades are
+/// Generate the promo portfolio calendar for a given month. Real closed trades are
 /// placed on their actual exit days; the remaining days get a gentle deterministic
 /// baseline so the month looks lived-in (as a real active month would).
-pub fn get_demo_portfolio_calendar(
+pub fn get_promo_portfolio_calendar(
     year: i32,
     month: u32,
     days_in_month: u32,
@@ -249,7 +249,7 @@ pub fn get_demo_portfolio_calendar(
     let mut days = Vec::with_capacity(days_in_month as usize);
     let mut month_net_pnl_sol = 0.0f64;
     let mut month_trades = 0i64;
-    let mut balance = DEMO_START_BALANCE;
+    let mut balance = PROMO_START_BALANCE;
 
     for day in 1..=days_in_month {
         let date = format!("{year:04}-{month:02}-{day:02}");

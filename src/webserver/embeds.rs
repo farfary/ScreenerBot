@@ -300,12 +300,12 @@ pub const CORE_SOUNDS: &str = include_str!("templates/scripts/core/sounds.js");
 pub const CORE_GLOBAL_CHAT: &str = include_str!("templates/scripts/core/global_chat.js");
 pub const CORE_CHAT_WIDGET: &str = include_str!("templates/scripts/core/chat_widget.js");
 
-// Demo capture runtime — served and loaded only under --demo-capture. Kept in
+// Promo Studio runtime — served and loaded only under --promo-capture. Kept in
 // its own namespace so nothing in the normal dashboard can reach it.
-pub const DEMO_RUNTIME: &str = include_str!("templates/scripts/demo/runtime.js");
-pub const DEMO_OVERLAY: &str = include_str!("templates/scripts/demo/overlay.js");
-pub const DEMO_AUDIO: &str = include_str!("templates/scripts/demo/audio.js");
-pub(super) const DEMO_CAPTURE_STYLES: &str = include_str!("templates/styles/demo/capture.css");
+pub const PROMO_RUNTIME: &str = include_str!("templates/scripts/promo/runtime.js");
+pub const PROMO_OVERLAY: &str = include_str!("templates/scripts/promo/overlay.js");
+pub const PROMO_AUDIO: &str = include_str!("templates/scripts/promo/audio.js");
+pub(super) const PROMO_CAPTURE_STYLES: &str = include_str!("templates/styles/promo/capture.css");
 
 // Theme scripts
 pub(super) const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");

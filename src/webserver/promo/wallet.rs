@@ -1,4 +1,4 @@
-//! Demo generators for the wallet current snapshot and token holdings.
+//! Promo generators for the wallet current snapshot and token holdings.
 //!
 //! Holdings mirror the open positions (those ARE the tokens the wallet holds), so
 //! the wallet worth reconciles exactly with the positions/home dashboards.
@@ -11,16 +11,16 @@ use crate::webserver::routes::wallet::{
 
 use super::data::*;
 
-const DEMO_TOKEN_DECIMALS: u8 = 6;
+const PROMO_TOKEN_DECIMALS: u8 = 6;
 
-pub fn get_demo_wallet_address() -> &'static str {
-    DEMO_WALLET_ADDRESS
+pub fn get_promo_wallet_address() -> &'static str {
+    PROMO_WALLET_ADDRESS
 }
 
 /// (mint, ui_amount, price_sol, value_sol) for each held token, derived from the
 /// open positions so token count and worth match everywhere.
 fn holdings() -> Vec<(&'static str, &'static str, &'static str, f64, f64, f64)> {
-    DEMO_OPEN_TOKENS
+    PROMO_OPEN_TOKENS
         .iter()
         .map(|(symbol, name, mint, _logo, entry, current, size, _hold)| {
             let value_sol = size * current / entry; // current SOL value of the holding
@@ -30,8 +30,8 @@ fn holdings() -> Vec<(&'static str, &'static str, &'static str, f64, f64, f64)> 
         .collect()
 }
 
-/// Generate demo wallet current response.
-pub fn get_demo_wallet_current() -> WalletCurrentResponse {
+/// Generate promo wallet current response.
+pub fn get_promo_wallet_current() -> WalletCurrentResponse {
     let now = Utc::now();
 
     let token_balances: Vec<TokenBalanceInfo> = holdings()
@@ -39,25 +39,25 @@ pub fn get_demo_wallet_current() -> WalletCurrentResponse {
         .map(
             |(_symbol, _name, mint, ui_amount, _price, _value)| TokenBalanceInfo {
                 mint: (*mint).to_owned(),
-                balance: (ui_amount * 10f64.powi(DEMO_TOKEN_DECIMALS as i32)) as u64,
+                balance: (ui_amount * 10f64.powi(PROMO_TOKEN_DECIMALS as i32)) as u64,
                 balance_ui: *ui_amount,
-                decimals: DEMO_TOKEN_DECIMALS,
+                decimals: PROMO_TOKEN_DECIMALS,
                 is_token_2022: false,
             },
         )
         .collect();
 
     WalletCurrentResponse {
-        sol_balance: DEMO_SOL_BALANCE,
-        sol_balance_lamports: DEMO_SOL_LAMPORTS,
+        sol_balance: PROMO_SOL_BALANCE,
+        sol_balance_lamports: PROMO_SOL_LAMPORTS,
         total_tokens_count: token_balances.len() as u32,
         token_balances,
         snapshot_time: now.to_rfc3339(),
     }
 }
 
-/// Generate demo wallet tokens response.
-pub fn get_demo_wallet_tokens() -> WalletTokensResponse {
+/// Generate promo wallet tokens response.
+pub fn get_promo_wallet_tokens() -> WalletTokensResponse {
     let tokens: Vec<WalletTokenHolding> = holdings()
         .iter()
         .map(
@@ -66,11 +66,11 @@ pub fn get_demo_wallet_tokens() -> WalletTokensResponse {
                 symbol: Some((*symbol).to_owned()),
                 name: Some((*name).to_owned()),
                 logo_url: None,
-                balance: (ui_amount * 10f64.powi(DEMO_TOKEN_DECIMALS as i32)) as u64,
+                balance: (ui_amount * 10f64.powi(PROMO_TOKEN_DECIMALS as i32)) as u64,
                 ui_amount: *ui_amount,
                 price_sol: Some(*price_sol),
                 value_sol: Some(*value_sol),
-                decimals: DEMO_TOKEN_DECIMALS,
+                decimals: PROMO_TOKEN_DECIMALS,
                 is_token_2022: false,
             },
         )

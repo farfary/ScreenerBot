@@ -186,7 +186,7 @@ impl ServiceManager {
         // ones that are disabled. Dependency declarations only define ordering, not
         // a hard requirement to run (see validate_dependencies: warn, don't fail).
         // Retain only enabled services so a disabled dependency (e.g. RPC-bound
-        // pools/transactions in preview mode) is never started. No-op when
+        // pools/transactions in Explore Mode) is never started. No-op when
         // every service is enabled (normal mode).
         ordered.retain(|name| {
             self.services
@@ -366,7 +366,7 @@ impl ServiceManager {
         };
 
         // Drop transitively-pulled-in dependencies that are disabled (e.g.
-        // RPC-bound services in preview mode). Also drop anything already
+        // RPC-bound services in Explore Mode). Also drop anything already
         // running so we never re-init it. See start_all for the rationale.
         ordered.retain(|name| {
             self.services

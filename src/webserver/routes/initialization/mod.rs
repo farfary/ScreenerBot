@@ -19,7 +19,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/status", get(handlers::initialization_status))
         .route("/validate", post(handlers::validate_credentials))
         .route("/complete", post(handlers::complete_initialization))
-        .route("/skip", post(handlers::skip_setup))
+        .route("/explore", post(handlers::enter_explore_mode))
         .route("/progress", get(handlers::initialization_progress))
         .route("/onboarding/complete", post(handlers::complete_onboarding))
 }

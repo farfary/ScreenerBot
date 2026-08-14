@@ -10,10 +10,10 @@ use crate::sol_price;
 use crate::tokens;
 
 pub async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<PositionResponse>> {
-    // Return demo data if demo mode is enabled
-    if crate::webserver::demo::is_demo_mode() {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
         let status = params.status.as_deref();
-        return Json(crate::webserver::demo::get_demo_positions(status));
+        return Json(crate::webserver::promo::get_promo_positions(status));
     }
 
     let status = params.status.as_deref().unwrap_or("all");
@@ -160,9 +160,9 @@ pub async fn map_position_to_response_async(p: &positions::Position) -> Position
 }
 
 pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
-    // Return demo data if demo mode is enabled
-    if crate::webserver::demo::is_demo_mode() {
-        return Json(crate::webserver::demo::get_demo_positions_stats());
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Json(crate::webserver::promo::get_promo_positions_stats());
     }
 
     let open_positions = positions::get_open_positions().await;

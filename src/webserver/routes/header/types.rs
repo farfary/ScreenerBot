@@ -31,7 +31,7 @@ pub struct TraderHeaderInfo {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TraderHeaderState {
-    Preview,
+    Explore,
     ForceStopped,
     Stopped,
     Waiting,

@@ -10,9 +10,9 @@ const METRICS_POLL_INTERVAL = 5000;
 const WALLET_SOL_DECIMALS = 4;
 
 const TRADER_STATES = {
-  preview: {
-    label: "PREVIEW",
-    control: "Auto Trader unavailable in preview mode. Open wallet and RPC setup.",
+  explore: {
+    label: "EXPLORE",
+    control: "Auto Trader unavailable in Explore Mode. Open wallet and RPC setup.",
   },
   force_stopped: {
     label: "HALTED",
@@ -67,7 +67,7 @@ function updateBotCard(trader, state) {
   card.title = statusConfig.control;
   status.textContent = statusConfig.label;
 
-  if (statusKey === "preview") {
+  if (statusKey === "explore") {
     pnl.textContent = "—";
     pnl.classList.remove("positive", "negative", "neutral");
     return;
@@ -97,7 +97,7 @@ function updateWalletCard(wallet, state) {
   const tokenCount = document.getElementById("walletTokenCount");
   if (!card || !worth) return;
 
-  if (state.traderStatus === "preview" || !wallet) {
+  if (state.traderStatus === "explore" || !wallet) {
     worth.textContent = "—";
     if (sol) sol.textContent = "—";
     if (change) {

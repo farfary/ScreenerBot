@@ -61,7 +61,7 @@ function initAudioContext() {
     limiter.release.value = 0.12;
 
     // `master` is the interaction-cue level; `outputBus` is everything the app
-    // emits. Keeping them separate means another source (demo capture music and
+    // emits. Keeping them separate means another source (Promo Studio music and
     // narration) can join the same graph — mixed through the same limiter, and
     // tappable as one stream for a recording — without borrowing the cue level.
     master.connect(outputBus);
@@ -425,7 +425,7 @@ export function isSoundsEnabled() {
  * Returned so another part of the app can play through the SAME context and
  * limiter instead of opening a second one — two AudioContexts cannot share
  * nodes, so a second context could never be mixed or captured together with
- * this one. Used by the demo capture runtime for music and narration.
+ * this one. Used by the Promo Studio runtime for music and narration.
  */
 export function ensureAudioGraph() {
   const context = initAudioContext();

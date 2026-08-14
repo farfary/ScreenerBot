@@ -11,9 +11,9 @@ use crate::wallet::{get_balance_at_time, get_wallet_worth};
 use super::types::*;
 
 pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
-    // Return demo data if demo mode is enabled
-    if crate::webserver::demo::is_demo_mode() {
-        return Json(crate::webserver::demo::get_demo_header_metrics());
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Json(crate::webserver::promo::get_promo_header_metrics());
     }
 
     let now = chrono::Utc::now();
@@ -46,7 +46,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     // hero renders.
     let worth = get_wallet_worth();
 
-    let preview = crate::global::is_preview_mode();
+    let explore = crate::global::is_explore_mode();
     let (trader_enabled, entry_enabled, exit_enabled) = with_config(|cfg| {
         (
             cfg.trader.enabled,
@@ -54,8 +54,8 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
             cfg.trader.exit_monitor_enabled,
         )
     });
-    let trader_state = if preview {
-        TraderHeaderState::Preview
+    let trader_state = if explore {
+        TraderHeaderState::Explore
     } else if crate::global::is_force_stopped() {
         TraderHeaderState::ForceStopped
     } else if !trader_enabled {
@@ -81,7 +81,7 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         .unwrap_or_default();
 
     let trader = TraderHeaderInfo {
-        enabled: !preview && trader_enabled,
+        enabled: !explore && trader_enabled,
         state: trader_state,
         today_pnl_sol,
         today_pnl_percent,
@@ -162,12 +162,12 @@ async fn calculate_system_health() -> SystemHeaderInfo {
     let mut unhealthy_services = Vec::new();
     let mut critical_degraded = false;
 
-    // In preview mode the wallet/RPC services are intentionally not running, so
+    // In Explore Mode the wallet/RPC services are intentionally not running, so
     // "core services" being incomplete is expected and must not be flagged as a problem.
-    let preview = crate::global::is_preview_mode();
+    let explore = crate::global::is_explore_mode();
 
-    // Check core services readiness (skipped in preview mode)
-    if !preview && !are_core_services_ready() {
+    // Check core services readiness (skipped in Explore Mode)
+    if !explore && !are_core_services_ready() {
         unhealthy_services.push("Core Services".to_owned());
         critical_degraded = true;
     }
@@ -179,7 +179,7 @@ async fn calculate_system_health() -> SystemHeaderInfo {
     }
 
     // Check service manager health. Only enabled services can be "unhealthy" — a
-    // disabled service (e.g. trading/pools in preview mode, or any service
+    // disabled service (e.g. trading/pools in Explore Mode, or any service
     // turned off via config) is intentionally off, not a fault.
     if let Some(manager_arc) = get_service_manager().await {
         let manager = manager_arc.read().await;

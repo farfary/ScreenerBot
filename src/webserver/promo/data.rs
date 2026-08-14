@@ -1,26 +1,26 @@
-//! Static demo INPUTS for the dashboard showcase.
+//! Static promo INPUTS for the dashboard showcase.
 //!
 //! Only genuine inputs live here — the SOL balance, host metrics, and the two
 //! token arrays. Every aggregate (P&L, win rate, invested, trade counts, wallet
-//! worth) is DERIVED from these arrays in `aggregates.rs`, so the whole demo is
+//! worth) is DERIVED from these arrays in `aggregates.rs`, so the whole promo is
 //! internally consistent. Never hand-tune a total here.
 
 // =============================================================================
-// DEMO INPUT CONSTANTS
+// PROMO INPUT CONSTANTS
 // =============================================================================
 
-pub(super) const DEMO_SOL_BALANCE: f64 = 9.847;
-pub(super) const DEMO_WALLET_ADDRESS: &str = "11111111111111111111111111111111";
-pub(super) const DEMO_SOL_LAMPORTS: u64 = 9_847_000_000;
-pub(super) const DEMO_START_BALANCE: f64 = 8.5;
-pub(super) const DEMO_MEMORY_MB: f64 = 384.5;
-pub(super) const DEMO_CPU_PERCENT: f64 = 12.3;
-pub(super) const DEMO_TOKENS_TRACKED: usize = 2847;
-pub(super) const DEMO_BLACKLISTED: usize = 1253;
+pub(super) const PROMO_SOL_BALANCE: f64 = 9.847;
+pub(super) const PROMO_WALLET_ADDRESS: &str = "11111111111111111111111111111111";
+pub(super) const PROMO_SOL_LAMPORTS: u64 = 9_847_000_000;
+pub(super) const PROMO_START_BALANCE: f64 = 8.5;
+pub(super) const PROMO_MEMORY_MB: f64 = 384.5;
+pub(super) const PROMO_CPU_PERCENT: f64 = 12.3;
+pub(super) const PROMO_TOKENS_TRACKED: usize = 2847;
+pub(super) const PROMO_BLACKLISTED: usize = 1253;
 
-/// Demo open positions - Top liquidity real tokens with logos
+/// Promo open positions - Top liquidity real tokens with logos
 /// (symbol, name, mint, logo_url, entry_price_sol, current_price_sol, size_sol, hold_minutes)
-pub(super) const DEMO_OPEN_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, i64)] = &[
+pub(super) const PROMO_OPEN_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, i64)] = &[
     (
         "TRUMP",
         "OFFICIAL TRUMP",
@@ -123,9 +123,9 @@ pub(super) const DEMO_OPEN_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, i64
     ),
 ];
 
-/// Demo closed positions - Real tokens with profitable/loss trades
+/// Promo closed positions - Real tokens with profitable/loss trades
 /// (symbol, name, mint, logo_url, entry_price_sol, exit_price_sol, size_sol, exit_reason)
-pub(super) const DEMO_CLOSED_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, &str)] = &[
+pub(super) const PROMO_CLOSED_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, &str)] = &[
     // Profitable trades - trailing stop
     (
         "Pnut",

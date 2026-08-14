@@ -33,26 +33,23 @@ impl Service for WebserverService {
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
-        // Enable demo mode if --dashboard-demo flag is present. --demo-capture
-        // implies it: the capture runtime only ever drives showcase data, never
+        // Enable promotional fixtures when requested. --promo-capture implies
+        // them: the capture runtime only ever drives showcase data, never
         // a real wallet.
-        let capture = crate::arguments::is_demo_capture_enabled();
-        if crate::arguments::is_dashboard_demo_enabled() || capture {
-            crate::webserver::demo::enable_demo_mode();
-            logger::info(
-                LogTag::Webserver,
-                "Dashboard demo mode enabled for screenshots",
-            );
+        let capture = crate::arguments::is_promo_capture_enabled();
+        if crate::arguments::is_promo_fixtures_enabled() || capture {
+            crate::webserver::promo::enable_promo_fixtures();
+            logger::info(LogTag::Webserver, "Promotional dashboard fixtures enabled");
         }
         if capture {
-            crate::webserver::demo::enable_demo_capture();
-            logger::info(LogTag::Webserver, "Demo capture runtime enabled");
+            crate::webserver::promo::enable_promo_capture();
+            logger::info(LogTag::Webserver, "Promo Studio capture runtime enabled");
         }
-        if crate::arguments::is_demo_freeze_enabled() {
-            crate::webserver::demo::enable_demo_freeze();
+        if crate::arguments::is_promo_freeze_enabled() {
+            crate::webserver::promo::enable_promo_freeze();
             logger::info(
                 LogTag::Webserver,
-                "Demo freeze enabled — live values pinned to demo constants",
+                "Promo freeze enabled — live values pinned to fixture constants",
             );
         }
         Ok(())
@@ -178,12 +175,12 @@ impl Service for WebserverService {
 
         let mut handles = vec![handle];
 
-        // Demo mode normally runs webserver-only (no wallet/RPC), so the SOL price
+        // Promotional fixtures normally run webserver-only (no wallet/RPC), so the SOL price
         // service never starts and the header would show a stale hardcoded price.
         // Start a lightweight SOL price service + the SOL/USD reference chart mirror
-        // so the demo header shows a genuinely LIVE price whenever the network is
+        // so the promo header shows a genuinely LIVE price whenever the network is
         // reachable (it still falls back to a constant when offline).
-        if crate::webserver::demo::is_demo_mode() {
+        if crate::webserver::promo::are_promo_fixtures_enabled() {
             match crate::sol_price::start_sol_price_service(shutdown.clone(), monitor.clone()).await
             {
                 Ok(h) => {
@@ -194,12 +191,12 @@ impl Service for WebserverService {
                     ));
                     logger::info(
                         LogTag::Webserver,
-                        "Demo mode: live SOL price service started",
+                        "Promo fixtures: live SOL price service started",
                     );
                 }
                 Err(e) => logger::warning(
                     LogTag::Webserver,
-                    &format!("Demo mode: could not start live SOL price service: {e}"),
+                    &format!("Promo fixtures: could not start live SOL price service: {e}"),
                 ),
             }
         }

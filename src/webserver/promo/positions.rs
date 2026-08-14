@@ -1,4 +1,4 @@
-//! Demo generators for the positions list and positions stats.
+//! Promo generators for the positions list and positions stats.
 
 use chrono::{Duration, Utc};
 
@@ -7,8 +7,8 @@ use crate::webserver::routes::positions::types::{PositionResponse, PositionsStat
 use super::aggregates::{self, closed_exit_offset_hours};
 use super::data::*;
 
-/// Generate demo positions list (open, closed, or both).
-pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
+/// Generate promo positions list (open, closed, or both).
+pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
     let now = Utc::now();
     let mut positions = Vec::new();
     let mut id_counter: i64 = 1;
@@ -17,7 +17,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
     let include_closed = status.is_none() || status == Some("closed") || status == Some("all");
 
     if include_open {
-        for (symbol, name, mint, logo, entry, current, size, hold_min) in DEMO_OPEN_TOKENS.iter() {
+        for (symbol, name, mint, logo, entry, current, size, hold_min) in PROMO_OPEN_TOKENS.iter() {
             let entry_time = now - Duration::minutes(*hold_min);
             let pnl_pct = (current - entry) / entry * 100.0;
             let unrealized_pnl = (current - entry) / entry * size;
@@ -37,7 +37,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 total_size_sol: *size,
                 price_highest: current * 1.05,
                 price_lowest: entry * 0.95,
-                entry_transaction_signature: Some(format!("demo_entry_sig_{id_counter}")),
+                entry_transaction_signature: Some(format!("promo_entry_sig_{id_counter}")),
                 exit_transaction_signature: None,
                 token_amount: Some((size / entry * 1e9) as u64),
                 effective_entry_price: Some(*entry),
@@ -77,7 +77,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
 
     if include_closed {
         for (i, (symbol, name, mint, logo, entry, exit, size, reason)) in
-            DEMO_CLOSED_TOKENS.iter().enumerate()
+            PROMO_CLOSED_TOKENS.iter().enumerate()
         {
             // Exit schedule + hold time MUST match aggregates so the list, the period
             // stats and the calendar all reconcile.
@@ -102,8 +102,8 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 total_size_sol: *size,
                 price_highest: exit.max(*entry) * 1.02,
                 price_lowest: exit.min(*entry) * 0.97,
-                entry_transaction_signature: Some(format!("demo_entry_sig_{id_counter}")),
-                exit_transaction_signature: Some(format!("demo_exit_sig_{id_counter}")),
+                entry_transaction_signature: Some(format!("promo_entry_sig_{id_counter}")),
+                exit_transaction_signature: Some(format!("promo_exit_sig_{id_counter}")),
                 token_amount: Some((size / entry * 1e9) as u64),
                 effective_entry_price: Some(*entry),
                 effective_exit_price: Some(*exit),
@@ -143,8 +143,8 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
     positions
 }
 
-/// Generate demo positions stats.
-pub fn get_demo_positions_stats() -> PositionsStatsResponse {
+/// Generate promo positions stats.
+pub fn get_promo_positions_stats() -> PositionsStatsResponse {
     let now = Utc::now();
     let open = aggregates::open_agg();
     let trades = aggregates::closed_trades(now);

@@ -74,24 +74,24 @@ function setLoading(isLoading) {
   headerMetrics?.syncBotControlState();
 }
 
-// Open the wallet + RPC setup dialog so the user can complete setup from preview mode
+// Open the wallet + RPC setup dialog so the user can complete setup from Explore Mode
 // without leaving the current page. On success the dialog reloads into full mode.
 function openSetupWizard() {
   SetupDialog.show();
 }
 
-// Keep the preview setup action synchronized with the process-wide boot mode.
-function updatePreviewSetupControl(status) {
-  const control = document.getElementById("previewSetupControl");
+// Keep the Explore Mode setup action synchronized with the process-wide boot mode.
+function updateExploreSetupControl(status) {
+  const control = document.getElementById("exploreSetupControl");
   if (!control) {
     return;
   }
 
-  const previewMode = Boolean(status?.preview_mode);
-  control.hidden = !previewMode;
-  control.closest(".modern-header")?.classList.toggle("has-preview-setup", previewMode);
+  const exploreMode = Boolean(status?.explore_mode);
+  control.hidden = !exploreMode;
+  control.closest(".modern-header")?.classList.toggle("has-explore-setup", exploreMode);
 
-  if (previewMode && !control.dataset.bound) {
+  if (exploreMode && !control.dataset.bound) {
     control.dataset.bound = "true";
     control.addEventListener("click", openSetupWizard);
   }
@@ -99,7 +99,7 @@ function updatePreviewSetupControl(status) {
 
 function applyBootstrapStatus(status) {
   state.bootstrapStatus = status;
-  updatePreviewSetupControl(status);
+  updateExploreSetupControl(status);
   const initializationRequired = Boolean(status?.initialization_required);
   const uiReady = Boolean(status && (status.ui_ready || initializationRequired));
 
@@ -289,7 +289,7 @@ function initCardHandlers() {
     botCard.addEventListener("click", () => {
       if (!state.available || state.loading) return;
 
-      if (state.traderStatus === "preview") {
+      if (state.traderStatus === "explore") {
         openSetupWizard();
         return;
       }

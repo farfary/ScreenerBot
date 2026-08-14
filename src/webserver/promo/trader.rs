@@ -1,4 +1,4 @@
-//! Demo generator for the trader statistics tab.
+//! Promo generator for the trader statistics tab.
 
 use chrono::Utc;
 
@@ -6,8 +6,8 @@ use crate::webserver::routes::trader::types::{ExitBreakdown, TraderStatsResponse
 
 use super::aggregates;
 
-/// Generate demo trader stats response, fully derived from the closed/open arrays.
-pub fn get_demo_trader_stats() -> TraderStatsResponse {
+/// Generate promo trader stats response, fully derived from the closed/open arrays.
+pub fn get_promo_trader_stats() -> TraderStatsResponse {
     let now = Utc::now();
     let open = aggregates::open_agg();
     let trades = aggregates::closed_trades(now);

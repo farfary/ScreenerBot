@@ -23,11 +23,11 @@ pub(super) async fn initialization_status() -> Response {
     let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
     let initialization_complete = global::is_initialization_complete();
-    let preview_mode = global::is_preview_mode();
+    let explore_mode = global::is_explore_mode();
     let force_onboarding = arguments::is_dashboard_onboarding_forced();
 
-    let setup_skipped = if config_exists {
-        config::with_config(|cfg| cfg.gui.dashboard.startup.setup_skipped)
+    let explore_mode_enabled = if config_exists {
+        config::with_config(|cfg| cfg.gui.dashboard.startup.explore_mode_enabled)
     } else {
         false
     };
@@ -40,12 +40,12 @@ pub(super) async fn initialization_status() -> Response {
         config::with_config(|cfg| cfg.gui.dashboard.startup.onboarding_complete)
     };
 
-    let (required, reason) = if preview_mode {
-        // preview mode: setup was skipped. The app is usable (token discovery);
+    let (required, reason) = if explore_mode {
+        // Explore Mode is a deliberate limited session, so the dashboard is usable;
         // setup is not "required" so the dashboard is not blocked by the setup screen.
         (
             false,
-            "Running in preview mode - wallet + RPC setup skipped.".to_owned(),
+            "Running in Explore Mode without wallet or RPC setup.".to_owned(),
         )
     } else if !config_exists {
         (
@@ -65,8 +65,8 @@ pub(super) async fn initialization_status() -> Response {
         initialization_complete,
         onboarding_complete,
         force_onboarding,
-        preview_mode,
-        setup_skipped,
+        explore_mode,
+        explore_mode_enabled,
     };
 
     success_response(response)
@@ -105,17 +105,17 @@ pub(super) async fn complete_onboarding() -> Response {
     success_response(serde_json::json!({ "success": true }))
 }
 
-/// POST /api/initialization/skip
-/// Skip wallet + RPC setup and enter preview mode.
+/// POST /api/initialization/explore
+/// Enter Explore Mode without wallet + RPC setup.
 ///
 /// Persists a config with an empty wallet, the public default RPC, and
-/// `setup_skipped = true`, then starts only the preview tier (connectivity,
+/// `explore_mode_enabled = true`, then starts only the Explore tier (connectivity,
 /// events, tokens, filtering, webserver). Trading and all wallet/RPC-dependent
 /// services stay stopped until the user completes setup later.
-pub(super) async fn skip_setup() -> Response {
+pub(super) async fn enter_explore_mode() -> Response {
     logger::info(
         LogTag::Webserver,
-        "Skipping wallet + RPC setup - entering preview mode",
+        "Entering Explore Mode without wallet + RPC setup",
     );
 
     let mut errors = Vec::new();
@@ -133,7 +133,7 @@ pub(super) async fn skip_setup() -> Response {
     if config.rpc.urls.is_empty() {
         config.rpc = crate::config::schemas::RpcConfig::default();
     }
-    config.gui.dashboard.startup.setup_skipped = true;
+    config.gui.dashboard.startup.explore_mode_enabled = true;
     config.gui.dashboard.startup.onboarding_complete = true;
 
     let config_path = crate::paths::get_config_path();
@@ -149,12 +149,12 @@ pub(super) async fn skip_setup() -> Response {
         );
     }
 
-    logger::info(LogTag::Webserver, "preview configuration saved");
+    logger::info(LogTag::Webserver, "Explore Mode configuration saved");
 
-    // Enter preview mode (INITIALIZATION_COMPLETE intentionally stays false).
-    global::set_preview_mode(true);
+    // Enter Explore Mode (INITIALIZATION_COMPLETE intentionally stays false).
+    global::set_explore_mode(true);
 
-    // Start discovery-tier services. start_newly_enabled is idempotent and the
+    // Start explore-tier services. start_newly_enabled is idempotent and the
     // ServiceManager filters out disabled (wallet/RPC-bound) services.
     let mut services_started = 0usize;
     match start_remaining_services().await {
@@ -163,7 +163,7 @@ pub(super) async fn skip_setup() -> Response {
             logger::info(
                 LogTag::Webserver,
                 &format!(
-                    "preview startup summary: started={} already_running={} total_enabled={} duration_ms={}",
+                    "Explore Mode startup summary: started={} already_running={} total_enabled={} duration_ms={}",
                     report.started.len(),
                     report.already_running,
                     report.total_enabled,
@@ -197,15 +197,15 @@ pub(super) async fn skip_setup() -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Webserver,
-                &format!("Failed to start discovery-tier services: {e}"),
+                &format!("Failed to start explore-tier services: {e}"),
             );
             errors.push(format!("Service startup incomplete: {e}"));
         }
     }
 
-    let response = SkipSetupResponse {
+    let response = ExploreModeResponse {
         success: errors.is_empty(),
-        preview_mode: true,
+        explore_mode: true,
         services_started,
         errors,
     };
@@ -392,7 +392,7 @@ pub(super) async fn complete_initialization(
     );
 
     // Merge into the existing config when one is already loaded (e.g. completing setup
-    // from preview mode) so user settings are preserved. Only fall back to
+    // from Explore Mode) so user settings are preserved. Only fall back to
     // defaults on a true first run with no config in memory.
     let mut config = if config::is_config_initialized() {
         config::get_config_clone()
@@ -404,8 +404,8 @@ pub(super) async fn complete_initialization(
     config.wallet_nonce = encrypted.nonce;
     config.rpc.urls = working_rpc_urls;
 
-    // Setup is now complete: clear the preview skip marker and mark onboarding done.
-    config.gui.dashboard.startup.setup_skipped = false;
+    // Setup is now complete: clear the Explore Mode marker and mark onboarding done.
+    config.gui.dashboard.startup.explore_mode_enabled = false;
     config.gui.dashboard.startup.onboarding_complete = true;
 
     let config_path = crate::paths::get_config_path();
@@ -423,7 +423,7 @@ pub(super) async fn complete_initialization(
 
     logger::info(LogTag::Webserver, "Configuration saved successfully");
 
-    // A full restart is intentional here. Preview may already own process-wide
+    // A full restart is intentional here. Explore Mode may already own process-wide
     // wallet/RPC/service singletons; mutating that graph live made setup behave
     // differently from every later boot. The normal boot path now activates the
     // saved wallet and RPC from a clean state.

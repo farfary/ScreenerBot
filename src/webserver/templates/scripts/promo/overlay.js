@@ -1,5 +1,5 @@
 /**
- * Demo capture overlay layer.
+ * Promo capture overlay layer.
  *
  * The annotation vocabulary a promotional screenshot or video needs: a pointed
  * callout anchored to real UI, a spotlight that dims everything else, a synthetic
@@ -12,14 +12,14 @@
  * it guessed.
  */
 
-const LAYER_ID = "demoCaptureLayer";
-const CURSOR_ID = "demoCaptureCursor";
+const LAYER_ID = "promoCaptureLayer";
+const CURSOR_ID = "promoCaptureCursor";
 
 const registry = new Map();
 let sequence = 0;
 
 function motionScale() {
-  const raw = getComputedStyle(document.documentElement).getPropertyValue("--demo-motion-scale");
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--promo-motion-scale");
   const value = Number.parseFloat(raw);
   return Number.isFinite(value) && value >= 0 ? value : 1;
 }
@@ -29,7 +29,7 @@ function layer() {
   if (!el) {
     el = document.createElement("div");
     el.id = LAYER_ID;
-    el.className = "demo-layer";
+    el.className = "promo-layer";
     el.setAttribute("aria-hidden", "true");
     document.body.appendChild(el);
   }
@@ -128,7 +128,7 @@ function place(panel, rect, placement, gap = 14) {
   panel.style.left = `${Math.round(left)}px`;
   panel.dataset.side = side;
 
-  const pointer = panel.querySelector(".demo-callout-pointer");
+  const pointer = panel.querySelector(".promo-callout-pointer");
   if (pointer) {
     if (side === "top" || side === "bottom") {
       const x = rect.left + rect.width / 2 - left;
@@ -171,20 +171,20 @@ export async function callout({
   clear({ id: panelId });
 
   const panel = document.createElement("div");
-  panel.className = "demo-callout";
+  panel.className = "promo-callout";
   panel.dataset.tone = tone;
   panel.id = panelId;
   panel.innerHTML = `
-    <span class="demo-callout-pointer" aria-hidden="true"></span>
-    ${eyebrow ? '<p class="demo-callout-eyebrow"></p>' : ""}
-    ${title ? '<p class="demo-callout-title"></p>' : ""}
-    ${body ? '<p class="demo-callout-body"></p>' : ""}
+    <span class="promo-callout-pointer" aria-hidden="true"></span>
+    ${eyebrow ? '<p class="promo-callout-eyebrow"></p>' : ""}
+    ${title ? '<p class="promo-callout-title"></p>' : ""}
+    ${body ? '<p class="promo-callout-body"></p>' : ""}
   `;
   // Text is assigned rather than interpolated: scene copy is authored freely and
   // must never be able to inject markup into the captured frame.
-  if (eyebrow) panel.querySelector(".demo-callout-eyebrow").textContent = eyebrow;
-  if (title) panel.querySelector(".demo-callout-title").textContent = title;
-  if (body) panel.querySelector(".demo-callout-body").textContent = body;
+  if (eyebrow) panel.querySelector(".promo-callout-eyebrow").textContent = eyebrow;
+  if (title) panel.querySelector(".promo-callout-title").textContent = title;
+  if (body) panel.querySelector(".promo-callout-body").textContent = body;
 
   layer().appendChild(panel);
   place(panel, rect, placement);
@@ -223,13 +223,13 @@ export async function spotlight({
   selector,
   padding = 8,
   radius = 10,
-  id = "demo-spotlight",
+  id = "promo-spotlight",
 } = {}) {
   const rect = rectOf(target || selector);
   clear({ id });
 
   const hole = document.createElement("div");
-  hole.className = "demo-spotlight";
+  hole.className = "promo-spotlight";
   hole.id = id;
   hole.style.top = `${rect.top - padding}px`;
   hole.style.left = `${rect.left - padding}px`;
@@ -259,17 +259,17 @@ export async function caption({
   text = "",
   sub = "",
   position = "bottom",
-  id = "demo-caption",
+  id = "promo-caption",
 } = {}) {
   clear({ id });
 
   const el = document.createElement("div");
-  el.className = "demo-caption";
+  el.className = "promo-caption";
   el.id = id;
   el.dataset.position = position;
-  el.innerHTML = `<p class="demo-caption-text"></p>${sub ? '<p class="demo-caption-sub"></p>' : ""}`;
-  el.querySelector(".demo-caption-text").textContent = text;
-  if (sub) el.querySelector(".demo-caption-sub").textContent = sub;
+  el.innerHTML = `<p class="promo-caption-text"></p>${sub ? '<p class="promo-caption-sub"></p>' : ""}`;
+  el.querySelector(".promo-caption-text").textContent = text;
+  if (sub) el.querySelector(".promo-caption-sub").textContent = sub;
 
   layer().appendChild(el);
   registry.set(id, { el, kind: "caption" });
@@ -281,17 +281,17 @@ export async function caption({
 }
 
 /** A full-screen card for the open and close of a promotional clip. */
-export async function titleCard({ title = "", sub = "", id = "demo-title-card" } = {}) {
+export async function titleCard({ title = "", sub = "", id = "promo-title-card" } = {}) {
   clear({ id });
 
   const el = document.createElement("div");
-  el.className = "demo-title-card";
+  el.className = "promo-title-card";
   el.id = id;
-  el.innerHTML = `<p class="demo-title-card-title"></p>${
-    sub ? '<p class="demo-title-card-sub"></p>' : ""
+  el.innerHTML = `<p class="promo-title-card-title"></p>${
+    sub ? '<p class="promo-title-card-sub"></p>' : ""
   }`;
-  el.querySelector(".demo-title-card-title").textContent = title;
-  if (sub) el.querySelector(".demo-title-card-sub").textContent = sub;
+  el.querySelector(".promo-title-card-title").textContent = title;
+  if (sub) el.querySelector(".promo-title-card-sub").textContent = sub;
 
   layer().appendChild(el);
   registry.set(id, { el, kind: "titleCard" });
@@ -315,8 +315,8 @@ function cursorEl() {
   if (!el) {
     el = document.createElement("div");
     el.id = CURSOR_ID;
-    el.className = "demo-cursor";
-    el.innerHTML = '<span class="demo-cursor-ring" aria-hidden="true"></span>';
+    el.className = "promo-cursor";
+    el.innerHTML = '<span class="promo-cursor-ring" aria-hidden="true"></span>';
     el.style.transform = "translate3d(-100px, -100px, 0)";
     layer().appendChild(el);
   }
@@ -351,7 +351,7 @@ export async function cursorHide() {
 }
 
 /**
- * Move the demo cursor to a point or an element along an eased path. The travel
+ * Move the promo cursor to a point or an element along an eased path. The travel
  * is one Web Animation, so the driver awaits the real end of the movement.
  */
 export async function cursorTo({ selector = null, x = null, y = null, duration = 650 } = {}) {
@@ -386,7 +386,7 @@ export async function cursorTo({ selector = null, x = null, y = null, duration =
 /** The press: the cursor dips and a ring expands from it, like a real tap. */
 export async function cursorPress() {
   const el = cursorEl();
-  const ring = el.querySelector(".demo-cursor-ring");
+  const ring = el.querySelector(".promo-cursor-ring");
   const duration = 320 * motionScale();
 
   const ripple = ring.animate(

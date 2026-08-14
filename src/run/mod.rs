@@ -178,11 +178,11 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
         );
         logger::info(LogTag::System, "Waiting for setup choice...");
 
-        // Wait until the user chooses preview or completes full setup.
+        // Wait until the user chooses Explore Mode or completes full setup.
         shutdown::wait_for_operational_mode_or_shutdown().await?;
 
-        if global::is_preview_mode() {
-            logger::info(LogTag::System, "Preview mode ready");
+        if global::is_explore_mode() {
+            logger::info(LogTag::System, "Explore Mode ready");
         } else {
             logger::info(
                 LogTag::System,
@@ -201,30 +201,30 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
             logger::info(LogTag::System, "Configuration loaded successfully");
         }
 
-        // 4b. Detect preview mode: the user skipped wallet + RPC setup at first
-        // run. The durable marker is `setup_skipped`; an empty encrypted wallet is a
-        // safety fallback (treat as preview rather than hard-failing later).
-        let preview = crate::config::with_config(|cfg| {
-            cfg.gui.dashboard.startup.setup_skipped || cfg.wallet_encrypted.trim().is_empty()
+        // 4b. Detect Explore Mode: the user selected wallet-free browsing at first
+        // run. The durable marker is `explore_mode_enabled`; an empty encrypted wallet is a
+        // safety fallback (treat as Explore Mode rather than hard-failing later).
+        let explore = crate::config::with_config(|cfg| {
+            cfg.gui.dashboard.startup.explore_mode_enabled || cfg.wallet_encrypted.trim().is_empty()
         });
 
-        if preview {
+        if explore {
             logger::info(
                 LogTag::System,
-                "preview mode: wallet + RPC not configured - starting preview tier only",
+                "Explore Mode: wallet + RPC not configured - starting Explore tier only",
             );
 
-            // preview mode: only the preview tier runs. Wallet/RPC-dependent
+            // Explore Mode: only the Explore tier runs. Wallet/RPC-dependent
             // services stay disabled and are filtered out of the startup order.
-            global::set_preview_mode(true);
+            global::set_explore_mode(true);
             global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
 
-            // AI chat/providers are wallet-independent. If the saved preview
+            // AI chat/providers are wallet-independent. If the saved Explore Mode
             // configuration enables AI, make the assistant usable here too.
             initialize_ai_runtime_if_enabled().await?;
 
             let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
-            logger::info(LogTag::System, "Service manager initialized (preview)");
+            logger::info(LogTag::System, "Service manager initialized (Explore Mode)");
 
             services::register_all_services(&mut service_manager);
             crate::services::init_global_service_manager(service_manager).await;
@@ -250,16 +250,16 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
 
             logger::info(
                 LogTag::System,
-                "preview mode active - complete wallet + RPC setup in the dashboard to enable trading",
+                "Explore Mode active - complete wallet + RPC setup in the dashboard to enable trading",
             );
         } else {
             // Full mode has one initialization path whether entered at boot or
-            // live from preview mode.
+            // live from Explore Mode.
             initialize_full_runtime().await?;
 
             // Only expose wallet/RPC-backed services after every prerequisite
             // above succeeded.
-            global::set_preview_mode(false);
+            global::set_explore_mode(false);
             global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
 
             // 9. Create service manager

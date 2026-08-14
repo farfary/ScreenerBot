@@ -177,7 +177,7 @@
 
   // The status bar is the one always-on refresh that is not a `Poller`, so it
   // cannot be quieted through the poller registry. This is its control surface:
-  // used by demo capture to hold the bar still for a screenshot, and by anything
+  // used by Promo Studio to hold the bar still for a screenshot, and by anything
   // else that needs the dashboard to stop changing under it.
   window.StatusBar = {
     pausePolling: stopPolling,

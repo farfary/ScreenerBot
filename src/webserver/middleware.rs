@@ -191,11 +191,11 @@ fn is_security_token_exempt_path(path: &str) -> bool {
 pub async fn initialization_gate(request: Request, next: Next) -> Response {
     let path = request.uri().path();
 
-    // If initialized, allow everything. preview mode (wallet + RPC skipped) is
+    // If initialized, allow everything. Explore Mode (wallet + RPC skipped) is
     // also treated as "allowed": the dashboard is usable for token discovery/browsing,
     // and wallet/RPC-dependent endpoints enforce their own deeper guards
     // (are_core_services_ready / FORCE_STOP) so trading still cannot happen.
-    if global::is_initialization_complete() || global::is_preview_mode() {
+    if global::is_initialization_complete() || global::is_explore_mode() {
         return next.run(request).await;
     }
 

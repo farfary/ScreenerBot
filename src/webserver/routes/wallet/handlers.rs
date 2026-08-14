@@ -17,8 +17,8 @@ use crate::webserver::utils::{error_response, success_response};
 
 /// Generate a QR code for the current main wallet address.
 pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
-    let current_address = if crate::webserver::demo::is_demo_mode() {
-        crate::webserver::demo::get_demo_wallet_address().to_owned()
+    let current_address = if crate::webserver::promo::are_promo_fixtures_enabled() {
+        crate::webserver::promo::get_promo_wallet_address().to_owned()
     } else {
         match crate::wallets::get_main_address().await {
             Ok(address) => address,
@@ -58,9 +58,9 @@ pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
 
 /// Get current wallet balance
 pub(super) async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
-    // Return demo data if demo mode is enabled
-    if crate::webserver::demo::is_demo_mode() {
-        return Json(Some(crate::webserver::demo::get_demo_wallet_current()));
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Json(Some(crate::webserver::promo::get_promo_wallet_current()));
     }
 
     match get_current_wallet_status().await {
@@ -102,9 +102,9 @@ pub(super) async fn get_wallet_balance() -> Json<Option<WalletCurrentResponse>> 
 
 /// Get wallet token holdings with enriched metadata (reads the latest snapshot).
 pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
-    // Return demo data if demo mode is enabled
-    if crate::webserver::demo::is_demo_mode() {
-        return Json(crate::webserver::demo::get_demo_wallet_tokens());
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Json(crate::webserver::promo::get_promo_wallet_tokens());
     }
 
     let snapshot = match get_current_wallet_status().await {
@@ -130,8 +130,8 @@ pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
 /// re-fetched from RPC (always), while token metadata is cache-first — only
 /// never-before-seen mints trigger a metadata fetch (see [`enrich_token_holdings`]).
 pub(super) async fn refresh_wallet_tokens() -> Json<WalletTokensResponse> {
-    if crate::webserver::demo::is_demo_mode() {
-        return Json(crate::webserver::demo::get_demo_wallet_tokens());
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
+        return Json(crate::webserver::promo::get_promo_wallet_tokens());
     }
 
     let snapshot = match crate::wallet::force_wallet_snapshot().await {

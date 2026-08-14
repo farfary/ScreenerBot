@@ -25,11 +25,11 @@ pub fn print_help() {
     println!(
         "                                Without --gui, runs headless with webserver on port 8080"
     );
-    println!("    --dashboard-demo            Show hardcoded demo data for screenshots/marketing");
-    println!("    --demo-capture              Load the demo capture runtime (overlays, narration,");
-    println!("                                quiescence reporting). Implies --dashboard-demo");
-    println!("    --demo-freeze               Pin live values to demo constants for reproducible");
-    println!("                                frames (use with --demo-capture)");
+    println!("    --promo-fixtures            Show owner-only fixtures for promotional media");
+    println!("    --promo-capture             Load the Promo Studio runtime (overlays, narration,");
+    println!("                                quiescence reporting). Implies --promo-fixtures");
+    println!("    --promo-freeze              Pin live values to promo constants for reproducible");
+    println!("                                frames (use with --promo-capture)");
     println!(
         "    --dashboard-onboarding      Force show onboarding screens (resets onboarding state)"
     );
@@ -72,7 +72,7 @@ pub fn print_help() {
     println!(
         "    screenerbot --gui                            # Start bot with desktop GUI window"
     );
-    println!("    screenerbot --gui --dashboard-demo           # Demo mode for screenshots");
+    println!("    screenerbot --gui --promo-fixtures           # Promo fixtures for media capture");
     println!("    screenerbot --debug-trader                   # Start bot with trader debug logs");
     println!("    screenerbot --reset                          # Reset with confirmation prompt");
     println!("    screenerbot --reset --force                  # Reset without confirmation");
@@ -130,14 +130,14 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     if is_gui_enabled() {
         modes.push("gui".to_owned());
     }
-    if is_dashboard_demo_enabled() {
-        modes.push("dashboard-demo".to_owned());
+    if is_promo_fixtures_enabled() {
+        modes.push("promo-fixtures".to_owned());
     }
-    if is_demo_capture_enabled() {
-        modes.push("demo-capture".to_owned());
+    if is_promo_capture_enabled() {
+        modes.push("promo-capture".to_owned());
     }
-    if is_demo_freeze_enabled() {
-        modes.push("demo-freeze".to_owned());
+    if is_promo_freeze_enabled() {
+        modes.push("promo-freeze".to_owned());
     }
     if is_force_enabled() {
         modes.push("force".to_owned());

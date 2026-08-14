@@ -112,9 +112,10 @@ config_struct! {
         /// Whether onboarding has been completed (set true after first-time onboarding)
         onboarding_complete: bool = false,
 
-        /// Whether the user skipped wallet + RPC setup at first run (preview mode).
-        /// When true the bot boots into preview mode until setup is completed.
-        setup_skipped: bool = false,
+        /// Whether the user chose Explore Mode instead of wallet + RPC setup.
+        /// The alias keeps existing installations that persisted the former key compatible.
+        #[serde(alias = "setup_skipped")]
+        explore_mode_enabled: bool = false,
     }
 }
 
@@ -282,4 +283,21 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     tabs.sort_by_key(|t| t.order);
 
     tabs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StartupConfig;
+
+    #[test]
+    fn startup_config_reads_legacy_explore_marker_and_writes_canonical_name() {
+        let config: StartupConfig =
+            toml::from_str("setup_skipped = true").expect("legacy startup key should deserialize");
+
+        assert!(config.explore_mode_enabled);
+
+        let serialized = toml::to_string(&config).expect("startup config should serialize");
+        assert!(serialized.contains("explore_mode_enabled = true"));
+        assert!(!serialized.contains("setup_skipped"));
+    }
 }

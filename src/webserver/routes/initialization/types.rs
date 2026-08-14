@@ -12,16 +12,16 @@ pub struct InitializationStatusResponse {
     pub initialization_complete: bool,
     pub onboarding_complete: bool,
     pub force_onboarding: bool,
-    /// Whether the bot is running in preview mode (wallet + RPC skipped).
-    pub preview_mode: bool,
-    /// Whether the user previously chose to skip wallet + RPC setup (persisted).
-    pub setup_skipped: bool,
+    /// Whether the bot is running in Explore Mode without wallet + RPC.
+    pub explore_mode: bool,
+    /// Whether the user persisted Explore Mode as the current startup choice.
+    pub explore_mode_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]
-pub struct SkipSetupResponse {
+pub struct ExploreModeResponse {
     pub success: bool,
-    pub preview_mode: bool,
+    pub explore_mode: bool,
     pub services_started: usize,
     pub errors: Vec<String>,
 }

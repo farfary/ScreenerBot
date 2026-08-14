@@ -57,10 +57,12 @@
   --z-onboarding: 50000;
   --z-splash: 99000;
   --z-lockscreen: 100000;
-  /* Demo capture annotations. Above EVERYTHING, lockscreen included: the layer
-     only exists under --demo-capture, and its whole job is to point at whatever
+
+  /* Promo Studio annotations. Above EVERYTHING, lockscreen included: the layer
+     only exists under --promo-capture, and its whole job is to point at whatever
      is currently on top. */
-  --z-demo-capture: 200000;
+  --z-promo-capture: 200000;
+
   /* Above dialogs/context menus, below toasts, app tooltips, setup and lockscreen. */
   --z-select-portal: 10008;
 

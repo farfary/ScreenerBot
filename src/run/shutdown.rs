@@ -81,7 +81,7 @@ async fn wait_for_os_shutdown_signal() -> Result<&'static str, String> {
     }
 }
 
-/// Wait until setup enters either preview or full mode, or for shutdown.
+/// Wait until setup enters either Explore Mode or full mode, or for shutdown.
 pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<(), String> {
     use tokio::time::{sleep, Duration, Instant};
 
@@ -97,9 +97,9 @@ pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<(), String
             return Ok(());
         }
 
-        // Skipping setup is also a completed transition: preview mode keeps the
+        // Choosing Explore Mode is also a completed transition: it keeps the
         // dashboard running without wallet/RPC-backed services.
-        if global::is_preview_or_full() {
+        if global::is_explore_or_full() {
             logger::info(
                 LogTag::System,
                 "Dashboard mode selected - services started successfully",

@@ -395,14 +395,14 @@ button.ticker-segment:hover .ticker-icon {
 
 /* Mid-width overflow drawer. It opens below the row instead of covering metrics. */
 @media (width >= 800px) and (width <= 1279px) {
-  .preview-setup-control {
+  .explore-setup-control {
     flex-basis: auto;
     min-width: 0;
     max-width: none;
   }
 
-  .preview-setup-detail,
-  .preview-setup-arrow {
+  .explore-setup-detail,
+  .explore-setup-arrow {
     display: none;
   }
 
@@ -509,8 +509,8 @@ button.ticker-segment:hover .ticker-icon {
     border-top: 1px solid var(--border-color);
   }
 
-  .preview-setup-control {
-    grid-area: preview;
+  .explore-setup-control {
+    grid-area: explore;
     width: 100%;
     min-width: 0;
     max-width: none;
@@ -518,21 +518,21 @@ button.ticker-segment:hover .ticker-icon {
     padding-inline: 8px;
   }
 
-  .modern-header.has-preview-setup .header-row-1 {
+  .modern-header.has-explore-setup .header-row-1 {
     grid-template-areas:
       "brand trader actions"
-      "preview preview preview"
+      "explore explore explore"
       "cards cards cards";
   }
 
-  .preview-setup-copy {
+  .explore-setup-copy {
     flex-direction: row;
     align-items: baseline;
     gap: 7px;
   }
 
-  .preview-setup-detail,
-  .preview-setup-arrow {
+  .explore-setup-detail,
+  .explore-setup-arrow {
     display: inline;
   }
 
@@ -612,7 +612,7 @@ button.ticker-segment:hover .ticker-icon {
     height: 40px;
   }
 
-  .preview-setup-detail {
+  .explore-setup-detail {
     display: none;
   }
 }

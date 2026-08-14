@@ -15,10 +15,10 @@ use super::types::*;
 
 /// GET /api/trader/stats - Get trader performance statistics
 pub async fn get_trader_stats() -> Response {
-    // Return demo data if demo mode is enabled
-    if crate::webserver::demo::is_demo_mode() {
+    // Return promotional fixtures only for owner-initiated media capture.
+    if crate::webserver::promo::are_promo_fixtures_enabled() {
         return crate::webserver::utils::success_response(
-            crate::webserver::demo::get_demo_trader_stats(),
+            crate::webserver::promo::get_promo_trader_stats(),
         );
     }
 

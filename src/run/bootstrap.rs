@@ -8,7 +8,7 @@ use crate::{
 /// Initialize persistence used directly by dashboard routes.
 ///
 /// These stores do not require a wallet or Solana RPC and therefore exist in
-/// initialization, preview, and full modes. Keeping them outside the service
+/// initialization, Explore Mode, and full boot states. Keeping them outside the service
 /// tier prevents globally available dashboard surfaces from depending on the
 /// wallet setup branch that happened to start the process.
 pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupError> {
@@ -48,7 +48,7 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
 
     // Strategy authoring and persistence are dashboard features. Evaluation is
     // consumed only by the full-mode trader, but the editor, templates, and
-    // configuration APIs must remain usable in preview mode.
+    // configuration APIs must remain usable in Explore Mode.
     crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
         .await
         .map_err(|e| format!("Failed to initialize strategy system: {e}"))?;
@@ -60,7 +60,7 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
 /// Initialize AI execution when configured.
 ///
 /// AI providers and chat do not require a wallet or Solana RPC, so this phase
-/// is valid in preview mode. The wallet/position-dependent AI background
+/// is valid in Explore Mode. The wallet/position-dependent AI background
 /// services remain gated separately on full initialization.
 pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupError> {
     if !crate::config::with_config(|cfg| cfg.ai.enabled) {

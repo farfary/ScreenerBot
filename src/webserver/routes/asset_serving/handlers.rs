@@ -116,20 +116,20 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
     }
 }
 
-/// Serve the demo capture runtime modules.
+/// Serve the Promo Studio runtime modules.
 ///
-/// Refuses to serve anything unless the binary was started with `--demo-capture`,
+/// Refuses to serve anything unless the binary was started with `--promo-capture`,
 /// so a normal install never exposes the automation surface even though the code
 /// ships in the same binary.
-pub async fn get_demo_script(Path(file): Path<String>) -> Response {
-    if !crate::webserver::demo::is_demo_capture() {
+pub async fn get_promo_script(Path(file): Path<String>) -> Response {
+    if !crate::webserver::promo::is_promo_capture_enabled() {
         return (StatusCode::NOT_FOUND, "Script not found").into_response();
     }
 
     let content = match file.as_str() {
-        "runtime.js" => Some(embeds::DEMO_RUNTIME),
-        "overlay.js" => Some(embeds::DEMO_OVERLAY),
-        "audio.js" => Some(embeds::DEMO_AUDIO),
+        "runtime.js" => Some(embeds::PROMO_RUNTIME),
+        "overlay.js" => Some(embeds::PROMO_OVERLAY),
+        "audio.js" => Some(embeds::PROMO_AUDIO),
         _ => None,
     };
 

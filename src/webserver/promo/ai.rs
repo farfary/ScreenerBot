@@ -1,4 +1,4 @@
-//! Demo generator for the AI assistant "Overview" tab (`/api/ai/status`).
+//! Promo generator for the AI assistant "Overview" tab (`/api/ai/status`).
 //!
 //! Produces a realistic, active-looking AI module snapshot — enabled module,
 //! a mix of configured providers, headline metrics, and a recent-decisions feed —
@@ -11,7 +11,7 @@ use crate::webserver::routes::ai::types::{
 };
 
 /// (id, name, enabled, has_api_key, model, rate_limit_per_minute)
-const DEMO_PROVIDERS: &[(&str, &str, bool, bool, &str, u32)] = &[
+const PROMO_PROVIDERS: &[(&str, &str, bool, bool, &str, u32)] = &[
     ("anthropic", "Anthropic", true, true, "claude-sonnet-5", 60),
     ("openai", "OpenAI", true, true, "gpt-5", 60),
     ("groq", "Groq", true, true, "llama-3.3-70b-versatile", 30),
@@ -38,7 +38,7 @@ const DEMO_PROVIDERS: &[(&str, &str, bool, bool, &str, u32)] = &[
 ];
 
 /// (decision, context, token, minutes_ago, latency_ms, confidence)
-const DEMO_DECISIONS: &[(&str, &str, &str, i64, f64, f64)] = &[
+const PROMO_DECISIONS: &[(&str, &str, &str, i64, f64, f64)] = &[
     ("allow", "Filter", "MOODENG", 1, 684.0, 0.92),
     ("reject", "Filter", "SAFEMOON2", 3, 731.0, 0.88),
     ("allow", "Entry", "GIGA", 6, 902.0, 0.81),
@@ -49,11 +49,11 @@ const DEMO_DECISIONS: &[(&str, &str, &str, i64, f64, f64)] = &[
     ("allow", "Filter", "GOAT", 41, 623.0, 0.89),
 ];
 
-/// Generate a rich demo AI status snapshot.
-pub fn get_demo_ai_status() -> AiStatusResponse {
+/// Generate a rich promo AI status snapshot.
+pub fn get_promo_ai_status() -> AiStatusResponse {
     let now = Utc::now();
 
-    let configured_providers: Vec<ProviderStatus> = DEMO_PROVIDERS
+    let configured_providers: Vec<ProviderStatus> = PROMO_PROVIDERS
         .iter()
         .map(
             |(id, name, enabled, has_api_key, model, rate)| ProviderStatus {
@@ -73,7 +73,7 @@ pub fn get_demo_ai_status() -> AiStatusResponse {
         .count() as u32;
     let total_providers = configured_providers.len() as u32;
 
-    let recent_decisions: Vec<AiDecision> = DEMO_DECISIONS
+    let recent_decisions: Vec<AiDecision> = PROMO_DECISIONS
         .iter()
         .map(
             |(decision, context, token, mins_ago, latency, confidence)| AiDecision {

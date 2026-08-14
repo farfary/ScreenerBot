@@ -64,17 +64,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 /**
- * Demo capture channel — exposed only when the app was launched by the demo
- * studio driver. A normal session never has `window.demoAPI`, so the dashboard's
+ * Promo Studio channel — exposed only when the app was launched by the owner-only
+ * capture driver. A normal session never has `window.promoAPI`, so the dashboard's
  * capture runtime cannot be driven from a real install.
  */
-if (process.env.SCREENERBOT_DEMO_CONTROL === '1') {
-  contextBridge.exposeInMainWorld('demoAPI', {
+if (process.env.SCREENERBOT_PROMO_CONTROL === '1') {
+  contextBridge.exposeInMainWorld('promoAPI', {
     onCommand: (callback) => {
       const handler = (event, payload) => callback(payload);
-      ipcRenderer.on('demo:command', handler);
-      return () => ipcRenderer.removeListener('demo:command', handler);
+      ipcRenderer.on('promo:command', handler);
+      return () => ipcRenderer.removeListener('promo:command', handler);
     },
-    sendResult: (payload) => ipcRenderer.send('demo:result', payload)
+    sendResult: (payload) => ipcRenderer.send('promo:result', payload)
   });
 }

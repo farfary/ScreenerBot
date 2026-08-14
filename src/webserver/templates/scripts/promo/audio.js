@@ -1,5 +1,5 @@
 /**
- * Demo capture audio bus.
+ * Promo capture audio bus.
  *
  * Music and one-off sound effects for a promotional recording, mixed into the
  * dashboard's own audio graph (see `core/sounds.js`) rather than a second
@@ -20,12 +20,12 @@ const players = new Map();
 
 /**
  * Media files live on disk beside the scene, not in the binary. The Electron
- * demo bridge serves them over its own local origin and tells the runtime where.
+ * promo bridge serves them over its own local origin and tells the runtime where.
  */
 function mediaUrl(file) {
-  const base = window.__SB_DEMO_MEDIA_BASE__;
+  const base = window.__SB_PROMO_MEDIA_BASE__;
   if (/^https?:/i.test(file)) return file;
-  if (!base) throw new Error("No demo media base URL — is the Electron demo bridge running?");
+  if (!base) throw new Error("No promo media base URL — is the Electron promo bridge running?");
   return `${base}/${encodeURIComponent(file)}`;
 }
 
@@ -83,7 +83,7 @@ export async function playMusic({
     element.addEventListener("canplaythrough", resolve, { once: true });
     element.addEventListener(
       "error",
-      () => reject(new Error(`Demo media failed to load: ${file}`)),
+      () => reject(new Error(`Promo media failed to load: ${file}`)),
       { once: true }
     );
     element.load();
@@ -149,7 +149,7 @@ export async function playSfx({ cue = null, file = null, volume = 0.8 } = {}) {
     element.addEventListener("canplaythrough", resolve, { once: true });
     element.addEventListener(
       "error",
-      () => reject(new Error(`Demo media failed to load: ${file}`)),
+      () => reject(new Error(`Promo media failed to load: ${file}`)),
       { once: true }
     );
     element.load();
