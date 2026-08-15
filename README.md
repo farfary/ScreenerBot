@@ -42,24 +42,24 @@
     <td align="center"><strong>Transaction Monitor</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/home.webp" alt="Dashboard Overview" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/transactions?full=1"><img src="https://screenerbot.io/api/screenshots/transactions.webp" alt="Transaction Monitor" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/current/home" alt="Dashboard Overview" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/transactions?full=1"><img src="https://screenerbot.io/api/screenshots/current/transactions" alt="Transaction Monitor" width="400"></a></td>
   </tr>
   <tr>
     <td align="center"><strong>Open Positions</strong></td>
     <td align="center"><strong>Position History</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/positions-open.webp" alt="Open Positions" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/positions-closed?full=1"><img src="https://screenerbot.io/api/screenshots/positions-closed.webp" alt="Position History" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-open" alt="Open Positions" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/positions-closed?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-closed" alt="Position History" width="400"></a></td>
   </tr>
   <tr>
     <td align="center"><strong>Trader Interface</strong></td>
     <td align="center"><strong>Token Details</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/trader.webp" alt="Trader Interface" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/token-details.webp" alt="Token Details" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/current/trader" alt="Trader Interface" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/current/token-details" alt="Token Details" width="400"></a></td>
   </tr>
 </table>
 
