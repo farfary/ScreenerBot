@@ -140,6 +140,11 @@ async fn handle_own_wallet_activity(
             activity.signature, activity.kind
         ),
     );
+
+    // The wallet just moved, so what it holds may no longer match what the positions
+    // table says: a token sold in another wallet app has to close its position here too.
+    // Debounced and single-flight inside the ledger; this call never blocks.
+    crate::positions::ledger::schedule_resync();
 }
 
 // =============================================================================

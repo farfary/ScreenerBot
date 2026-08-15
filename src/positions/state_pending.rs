@@ -256,6 +256,32 @@ pub async fn get_pending_partial_exits_for_mint(mint: &str) -> Vec<PendingPartia
         .collect()
 }
 
+/// Every mint with a swap in flight — a pending partial exit or a pending DCA add.
+///
+/// The wallet-history ledger reads this before reconciling a bot-executed position
+/// against the chain: a mint whose balance is about to move again must be left to the
+/// trader, or the ledger would close or resize a position out from under a swap that has
+/// already been submitted.
+pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
+    let mut mints: std::collections::HashSet<String> = PENDING_PARTIAL_EXITS
+        .read()
+        .await
+        .iter()
+        .filter(|(_, count)| **count > 0)
+        .map(|(mint, _)| mint.clone())
+        .collect();
+
+    mints.extend(
+        PENDING_DCA_SWAPS
+            .read()
+            .await
+            .values()
+            .map(|entry| entry.mint.clone()),
+    );
+
+    mints
+}
+
 /// Load pending partial exits from metadata into memory (used at startup)
 pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>, String> {
     let raw = db::get_metadata(PENDING_PARTIAL_EXIT_METADATA_KEY).await?;

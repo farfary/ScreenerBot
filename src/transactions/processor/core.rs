@@ -187,11 +187,10 @@ impl TransactionProcessor {
             // from. Own wallet only: a watched target's deltas are not our ledger
             // (see `new_for_watch_target`, which never persists raw JSON either).
             if self.retain_raw_json {
-                let deltas = crate::transactions::deltas::extract_subject_deltas(
-                    &self.wallet_pubkey.to_string(),
-                    &transaction,
-                );
-                if let Err(e) = database.store_subject_deltas(&deltas).await {
+                if let Err(e) = database
+                    .store_transaction_deltas(&self.wallet_pubkey.to_string(), &transaction)
+                    .await
+                {
                     logger::warning(
                         LogTag::Transactions,
                         &format!("Failed to store subject deltas for {signature}: {e}"),

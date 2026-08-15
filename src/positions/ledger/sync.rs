@@ -7,18 +7,35 @@
 //! every rule about what a wallet-derived row may claim is testable without a database,
 //! a wallet or a clock.
 //!
+//! # One row per round
+//!
+//! A round is a fact about the wallet, not about who executed it, so exactly ONE
+//! `positions` row may represent it — otherwise a bot-executed buy shows up twice, once
+//! as the trader's row and once as an imported round, and every portfolio total counts
+//! it twice. A round therefore claims an existing row before it ever inserts one:
+//!
+//! 1. by `round_key`, the identity stamped on the row by an earlier sync;
+//! 2. otherwise by the `entry_transaction_signature` of a row that has no round key yet
+//!    and holds the same mint — the trader's own row for the very swap this round was
+//!    reduced from. Claiming it is called ADOPTION, and it happens at most once per row.
+//!
 //! # Ownership boundary
 //!
-//! The planner only ever touches rows whose origin is [`PositionOrigin::External`] and
-//! whose `round_key` matches a reduced round. A position the bot executed itself is
-//! never read, rewritten or closed by this path — those rows are owned by the trader and
-//! its verification queue.
+//! What the ledger may write depends on who owns the row.
 //!
-//! Within an external row, the ledger owns the *history* fields (amounts, basis,
-//! realized P&L, signatures, open/closed) and nothing else. Live-price fields
-//! (`current_price`, `price_highest`, `price_lowest`, unrealized P&L) belong to the price
-//! updater, and `archived` belongs to the user — a resync must never move a row the user
-//! archived back into the open list, and must never archive one on its own.
+//! An [`PositionOrigin::External`] row is the ledger's own: it owns the *history* fields
+//! (amounts, basis, realized P&L, signatures, open/closed) and nothing else. Live-price
+//! fields (`current_price`, `price_highest`, `price_lowest`, unrealized P&L) belong to
+//! the price updater, and `archived` belongs to the user — a resync must never move a
+//! row the user archived back into the open list, and must never archive one on its own.
+//!
+//! A row the bot executed (Auto/Manual/Copy) keeps its origin, management, strategy
+//! targets and its own fee-exact cost basis forever. The ledger only RECONCILES it
+//! against the chain: it stamps the round key, flags a frozen account, lowers a holding
+//! the wallet no longer has, and closes a position whose token was sold somewhere else.
+//! Nothing else the trader owns is rewritten, and a row with work in flight (an
+//! unverified entry, a pending DCA or partial exit) is left completely alone until that
+//! work lands — including not being duplicated.
 //!
 //! Freezing is a FLAG, never an action: a frozen token account sets
 //! `holding_state = "frozen"` so the user can see the holding cannot be sold and archive
@@ -28,9 +45,13 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
-use super::{reconcile_with_wallet, reduce_rounds, LedgerRound, WalletHolding};
+use super::{reconcile_with_wallet, reduce_rounds, LedgerRound, WalletHolding, DUST};
 use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
+
+/// `closed_reason` for a bot-executed position whose token left the wallet through a
+/// sale or transfer the bot did not make.
+pub const CLOSED_EXTERNALLY: &str = "closed_externally";
 
 /// Display metadata for a mint, resolved once per sync from the tokens database.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -63,22 +84,28 @@ pub struct SyncSummary {
     pub unchanged: usize,
 }
 
-/// Decide which external position rows must be created or rewritten.
+/// Decide which position rows must be created, rewritten or reconciled.
 ///
-/// Pure: the same rounds, existing rows, metadata and `now` always produce the same
-/// plan. `now` is only ever used as the entry timestamp of a round whose history
-/// contains no block time at all, and even then only for a row being created for the
-/// first time — an existing row keeps the timestamp it already has, so repeated syncs
-/// never make a position appear to drift forward in time.
+/// Pure: the same rounds, existing rows, metadata, busy mints and `now` always produce
+/// the same plan. `now` is used for exactly two things, both of them a last resort: the
+/// entry timestamp of a round whose history contains no block time at all (and only for
+/// a row being created for the first time — an existing row keeps the timestamp it
+/// already has, so repeated syncs never make a position appear to drift forward in
+/// time), and the close time of a holding that vanished from the wallet without any
+/// disposal we could observe.
+///
+/// `busy_mints` are mints with bot work in flight (a pending DCA or partial exit). A
+/// matched row for one of them is neither reconciled nor duplicated — the trader's own
+/// bookkeeping lands first and the next sync sees a settled position.
 pub fn plan_position_writes(
     rounds: &[LedgerRound],
     existing: &[Position],
     metadata: &HashMap<String, RoundMetadata>,
+    busy_mints: &HashSet<String>,
     now: DateTime<Utc>,
 ) -> SyncPlan {
     let by_round_key: HashMap<&str, &Position> = existing
         .iter()
-        .filter(|position| position.is_wallet_derived())
         .filter_map(|position| {
             position
                 .round_key
@@ -87,24 +114,113 @@ pub fn plan_position_writes(
         })
         .collect();
 
+    // Rows that predate the ledger, and rows the trader opened before their transaction
+    // reached the delta table, carry no round key yet. They are adopted by
+    // (mint, entry signature) so the round they belong to reconciles them in place
+    // instead of materialising a second row for the same tokens.
+    let mut adoptable: HashMap<(&str, &str), Vec<&Position>> = HashMap::new();
+    for position in existing
+        .iter()
+        .filter(|position| position.round_key.is_none() && position.id.is_some())
+    {
+        if let Some(signature) = position.entry_transaction_signature.as_deref() {
+            adoptable
+                .entry((position.mint.as_str(), signature))
+                .or_default()
+                .push(position);
+        }
+    }
+    for candidates in adoptable.values_mut() {
+        candidates.sort_by_key(|position| (position.entry_time, position.id));
+    }
+
+    let mut claimed: HashSet<i64> = HashSet::new();
     let mut plan = SyncPlan::default();
 
     for round in rounds {
         let meta = metadata.get(&round.mint).cloned().unwrap_or_default();
-        let current = by_round_key.get(round.round_key.as_str()).copied();
-        let fresh = build_position(round, &meta, current, now);
+        let current = by_round_key
+            .get(round.round_key.as_str())
+            .copied()
+            .or_else(|| adopt_row(round, &adoptable, &mut claimed));
 
         match current {
-            Some(existing_row) => {
-                if differs(existing_row, &fresh) {
+            // The bot's own row. Reconcile it against the chain; never rewrite what the
+            // trader owns, and never insert a second row for the same round.
+            Some(owned) if !owned.is_wallet_derived() => {
+                if is_busy(owned, busy_mints) {
+                    continue;
+                }
+                let fresh = reconcile_owned_position(owned, round, &meta, now);
+                if differs_owned(owned, &fresh) {
                     plan.updates.push(fresh);
                 }
             }
-            None => plan.inserts.push(fresh),
+            Some(derived) => {
+                let fresh = build_position(round, &meta, Some(derived), now);
+                if differs(derived, &fresh) {
+                    plan.updates.push(fresh);
+                }
+            }
+            None => plan.inserts.push(build_position(round, &meta, None, now)),
         }
     }
 
     plan
+}
+
+/// True when the trader still has work in flight on this position, so the ledger must
+/// not touch it.
+///
+/// Three states qualify, and each is a race the reconciliation would lose: an entry that
+/// has not been verified yet (the chain may not even show the buy), a submitted exit
+/// awaiting verification (the verifier writes the fee-exact close moments later, and
+/// closing it here first would make that write land on an already-closed row), and a
+/// pending DCA or partial exit on the mint (the balance is about to move again).
+fn is_busy(position: &Position, busy_mints: &HashSet<String>) -> bool {
+    let exit_in_flight =
+        position.exit_transaction_signature.is_some() && !position.transaction_exit_verified;
+
+    !position.transaction_entry_verified || exit_in_flight || busy_mints.contains(&position.mint)
+}
+
+/// Claim the unkeyed row this round was executed through, if there is one.
+///
+/// Only an ACQUISITION signature can claim a row: a position's identity is the buy that
+/// opened it, and letting a sale match would attach a round to a row it never funded.
+/// The mint must match too — one signature can move several mints, and a token -> token
+/// swap's signature belongs to both sides.
+///
+/// A row is claimed at most once per plan, so two rounds of the same mint (the user
+/// bought, sold, and bought again) can never collapse onto the same row.
+fn adopt_row<'a>(
+    round: &LedgerRound,
+    adoptable: &HashMap<(&str, &str), Vec<&'a Position>>,
+    claimed: &mut HashSet<i64>,
+) -> Option<&'a Position> {
+    let mut signatures: Vec<&str> = Vec::new();
+    if let Some(signature) = round.entry_signature.as_deref() {
+        signatures.push(signature);
+    }
+    for event in &round.events {
+        if event.kind.is_acquisition() && !signatures.contains(&event.signature.as_str()) {
+            signatures.push(event.signature.as_str());
+        }
+    }
+
+    for signature in signatures {
+        let Some(candidates) = adoptable.get(&(round.mint.as_str(), signature)) else {
+            continue;
+        };
+        for candidate in candidates {
+            let Some(id) = candidate.id else { continue };
+            if claimed.insert(id) {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
 }
 
 /// Build the position row a round implies, carrying over everything the ledger does not
@@ -219,6 +335,108 @@ fn build_position(
         history_complete: round.history_complete,
         holding_state: (meta.frozen && round.is_open).then(|| HOLDING_STATE_FROZEN.to_owned()),
     }
+}
+
+/// Reconcile a position the BOT executed against what the chain says the wallet holds.
+///
+/// The trader owns this row: its origin, management, profit targets, entry records and
+/// fee-exact cost basis are never touched. Only three chain facts are written — the
+/// round key that ties the row to its round, the frozen flag, and a holding that left
+/// the wallet without us selling it.
+///
+/// A balance that GREW is deliberately ignored: those tokens were bought somewhere else
+/// and are not this position's to sell. Only a shrinking balance is adopted, so an exit
+/// can never be sized against tokens that are no longer there.
+fn reconcile_owned_position(
+    existing: &Position,
+    round: &LedgerRound,
+    meta: &RoundMetadata,
+    now: DateTime<Utc>,
+) -> Position {
+    let mut position = existing.clone();
+    position.round_key = Some(round.round_key.clone());
+    position.holding_state =
+        (meta.frozen && round.is_open).then(|| HOLDING_STATE_FROZEN.to_owned());
+
+    let observed_remaining = clamp_raw(round.balance_raw);
+    let claimed_remaining = existing.remaining_token_amount.unwrap_or(0);
+
+    if round.is_open {
+        if observed_remaining < claimed_remaining {
+            position.remaining_token_amount = Some(observed_remaining);
+            position.total_exited_amount = existing
+                .total_exited_amount
+                .saturating_add(claimed_remaining - observed_remaining);
+        }
+        return position;
+    }
+
+    // The round is closed on chain. A position that already booked its own exit is
+    // settled — the trader wrote the fee-exact numbers and there is nothing to add.
+    if existing.exit_time.is_some() {
+        return position;
+    }
+
+    position.remaining_token_amount = Some(0);
+    position.total_exited_amount = existing
+        .total_exited_amount
+        .saturating_add(claimed_remaining);
+    position.exit_time = Some(
+        round
+            .closed_at
+            .and_then(|ts| DateTime::from_timestamp(ts, 0))
+            // Gone from the wallet with no disposal we could observe: the close is real,
+            // only its moment is unknown, and "when we noticed" is the one honest stamp.
+            .unwrap_or(now),
+    );
+    if position.exit_transaction_signature.is_none() {
+        position.exit_transaction_signature = round.exit_signature.clone();
+    }
+    // Reduced from confirmed, fully-processed transactions: there is nothing left for
+    // the verifier to confirm, and an unverified exit would keep the row out of the
+    // Closed tab forever.
+    position.transaction_exit_verified = true;
+    if position.closed_reason.is_none() {
+        position.closed_reason = Some(CLOSED_EXTERNALLY.to_owned());
+    }
+    position.unrealized_pnl = None;
+    position.unrealized_pnl_percent = None;
+
+    // Proceeds only when every disposal in the round was priced in SOL. Otherwise the
+    // position closes with no exit price and no P&L rather than a guessed one.
+    if let Some(exit_price) = round.average_exit_price_sol {
+        position.exit_price = Some(exit_price);
+        position.effective_exit_price = Some(exit_price);
+        position.average_exit_price = Some(exit_price);
+        position.sol_received = Some(round.realized_proceeds_sol);
+        // The basis is the position's own cumulative `total_size_sol` (entry + every
+        // DCA), which is fee-exact because the trader booked it; the proceeds are the
+        // chain's. Mixing the two is the only complete number available here.
+        if position.total_size_sol > DUST {
+            let pnl = round.realized_proceeds_sol - position.total_size_sol;
+            position.pnl = Some(pnl);
+            position.pnl_percent = Some(pnl / position.total_size_sol * 100.0);
+        }
+    }
+
+    position
+}
+
+/// True when the reconciliation of a bot-owned row changes anything. Every other field
+/// is carried over untouched, so an unchanged wallet plans no write.
+fn differs_owned(existing: &Position, fresh: &Position) -> bool {
+    existing.round_key != fresh.round_key
+        || existing.holding_state != fresh.holding_state
+        || existing.remaining_token_amount != fresh.remaining_token_amount
+        || existing.total_exited_amount != fresh.total_exited_amount
+        || existing.exit_time != fresh.exit_time
+        || existing.exit_transaction_signature != fresh.exit_transaction_signature
+        || existing.transaction_exit_verified != fresh.transaction_exit_verified
+        || existing.closed_reason != fresh.closed_reason
+        || existing.unrealized_pnl != fresh.unrealized_pnl
+        || !same_opt_money(existing.exit_price, fresh.exit_price)
+        || !same_opt_money(existing.sol_received, fresh.sol_received)
+        || !same_opt_money(existing.pnl, fresh.pnl)
 }
 
 /// True when the ledger-owned fields of `fresh` say something different from `existing`.
@@ -343,7 +561,8 @@ pub async fn sync_wallet_history() -> Result<SyncSummary, String> {
     // orderings converge: a row inserted here is picked up by the later load, and a row
     // already in memory is updated in place below.
     let existing = crate::positions::db::load_all_positions().await?;
-    let plan = plan_position_writes(&rounds, &existing, &metadata, Utc::now());
+    let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
+    let plan = plan_position_writes(&rounds, &existing, &metadata, &busy_mints, Utc::now());
 
     let summary = SyncSummary {
         rounds: rounds.len(),
@@ -436,9 +655,91 @@ async fn apply_plan(plan: SyncPlan) {
             );
             continue;
         }
+
+        let closed_a_bot_position =
+            !position.is_wallet_derived() && !crate::positions::state::is_position_open(&position);
+
         crate::positions::state::update_position_state_by_id(id, |stored| {
             *stored = position.clone();
         })
         .await;
+
+        // A bot position the ledger just closed still holds the trading slot it took
+        // when it opened. Releasing it is idempotent, so a row that was already closed
+        // (or never held one) costs nothing.
+        if closed_a_bot_position {
+            crate::positions::state::release_position_slot(id).await;
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Closed position {id} ({}) from wallet history: the token left the wallet without us selling it",
+                    position.symbol
+                ),
+            );
+            // The user's own action closed this, so nothing else would announce it. It
+            // is the same shape as every other close, with its own action so the feed
+            // never claims the bot sold.
+            crate::events::record_position_event(
+                &id.to_string(),
+                &position.mint,
+                "closed_externally",
+                position.entry_transaction_signature.as_deref(),
+                position.exit_transaction_signature.as_deref(),
+                position.total_size_sol,
+                position.token_amount.unwrap_or_default(),
+                position.pnl,
+                position.pnl_percent,
+            )
+            .await;
+        }
     }
+}
+
+// =============================================================================
+// LIVE RESYNC
+// =============================================================================
+
+/// Coalescing window for [`schedule_resync`]. One swap produces several confirmed
+/// transactions in quick succession (approve, swap, close-account), and each of them
+/// broadcasts activity — one reduction over the whole burst is both cheaper and more
+/// correct than three over partial history.
+const RESYNC_DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Set while a resync is scheduled but has not started reducing yet.
+static RESYNC_SCHEDULED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Serialises the reductions themselves, so two overlapping bursts cannot plan against
+/// the same rows at once and write each other's stale view back.
+static RESYNC_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Re-derive positions from wallet history shortly after the wallet moves.
+///
+/// The boot sync alone is not enough: a token sold in another wallet app while the bot
+/// is running would keep its position open on screen until the next restart. Every
+/// confirmed own-wallet transaction calls this, and the debounce plus single-flight
+/// guard turn a burst of them into one reduction.
+///
+/// Fire-and-forget by design — the caller is a hot notification path and must never wait
+/// on a database, an RPC read or another sync.
+pub fn schedule_resync() {
+    use std::sync::atomic::Ordering;
+
+    if RESYNC_SCHEDULED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        tokio::time::sleep(RESYNC_DEBOUNCE).await;
+        // Cleared BEFORE the work starts: activity that arrives while this pass is
+        // reducing schedules the NEXT one instead of being swallowed by it.
+        RESYNC_SCHEDULED.store(false, Ordering::SeqCst);
+
+        let _guard = RESYNC_LOCK.lock().await;
+        if let Err(e) = sync_wallet_history().await {
+            logger::warning(
+                LogTag::Positions,
+                &format!("Wallet-history resync failed: {e}"),
+            );
+        }
+    });
 }

@@ -48,6 +48,26 @@ pub(super) async fn record(
         return Err(e);
     }
 
+    // The own wallet's ledger rows. Detection moved to this funnel, so this is the
+    // LIVE half of `subject_asset_deltas`: without it a swap made while the bot runs is
+    // stored and marked known, and the bootstrap that would have extracted its deltas
+    // skips it forever after — the position it opens or closes never appears. A failure
+    // is not fatal to recording: the boot gap-fill re-scans anything missing.
+    if is_own_wallet {
+        if let Err(e) = db
+            .store_transaction_deltas(&subject.address(), transaction)
+            .await
+        {
+            logger::warning(
+                LogTag::WalletWatch,
+                &format!(
+                    "Failed to store subject deltas for {}: {e}",
+                    transaction.signature
+                ),
+            );
+        }
+    }
+
     // Only the own wallet's transactions drive the events feed / position
     // verification side effects -- a watched target's activity is surfaced through
     // `WalletActivity` instead, which is what the alert (and, later, copy) consumers

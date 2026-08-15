@@ -139,6 +139,29 @@ pub fn set_config<F: FnOnce(&mut screenerbot::config::schemas::Config)>(f: F) {
     f(&mut cfg);
 }
 
+/// Configure a throwaway keypair as this process's "own wallet", so `Subject::own()`
+/// and `crate::utils::get_wallet_address()` resolve instead of erroring with "wallet
+/// not configured". Returns the wallet's base58 address.
+///
+/// Never touches a real key: the keypair is generated here and encrypted into the
+/// in-memory test config only.
+pub fn configure_own_wallet() -> String {
+    use solana_sdk::signature::{Keypair, Signer};
+
+    let keypair = Keypair::new();
+    let address = keypair.pubkey().to_string();
+    let private_key = bs58::encode(keypair.to_bytes()).into_string();
+    let encrypted = screenerbot::secure_storage::encrypt_private_key(&private_key)
+        .expect("encrypt throwaway test keypair");
+
+    set_config(|cfg| {
+        cfg.wallet_encrypted = encrypted.ciphertext.clone();
+        cfg.wallet_nonce = encrypted.nonce.clone();
+    });
+
+    address
+}
+
 // ==================== FIXTURES ====================
 
 /// A mint that is guaranteed not to exist on chain, so nothing can be fetched for it.

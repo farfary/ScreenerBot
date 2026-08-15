@@ -695,6 +695,15 @@ pub async fn perform_initial_transaction_bootstrap(
                 );
             }
         }
+
+        // Then repair anything recent the extraction missed. The backfill above runs
+        // once per version and cannot fix a gap that opens afterwards.
+        if let Err(e) = db.fill_subject_delta_gaps(&subject.address()).await {
+            logger::warning(
+                LogTag::Transactions,
+                &format!("Subject deltas gap fill failed: {e}"),
+            );
+        }
     }
 
     // With the delta table current, derive the wallet's position rounds from it. This is

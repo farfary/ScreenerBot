@@ -35,7 +35,9 @@ mod reducer;
 pub mod sync;
 
 pub use reducer::{reconcile_with_wallet, reduce_rounds};
-pub use sync::{sync_wallet_history, RoundMetadata, SyncPlan, SyncSummary};
+pub use sync::{
+    schedule_resync, sync_wallet_history, RoundMetadata, SyncPlan, SyncSummary, CLOSED_EXTERNALLY,
+};
 
 /// Whole-unit amounts below this are treated as zero. Raw integer balances are exact;
 /// this guards only the derived `f64` money math.

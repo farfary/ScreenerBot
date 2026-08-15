@@ -10,7 +10,7 @@ use crate::database;
 use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 
-use super::provenance::migrate_position_provenance;
+use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::types::*;
 
 impl PositionsDatabase {
@@ -150,6 +150,16 @@ impl PositionsDatabase {
         }
 
         migrate_position_provenance(&conn)?;
+
+        match merge_ledger_duplicates(&conn)? {
+            0 => {}
+            merged => logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Merged {merged} duplicate wallet-history rows into the positions they belong to"
+                ),
+            ),
+        }
 
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {

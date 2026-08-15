@@ -52,6 +52,27 @@ impl TransactionDatabase {
         Ok(())
     }
 
+    /// Extract and persist one decoded transaction's deltas for `wallet_address`.
+    ///
+    /// The ONE place a live transaction becomes ledger rows. Both paths that decode our
+    /// own wallet call it — the bootstrap processor and the wallet-watch recorder — so a
+    /// transaction observed while the bot runs lands in the ledger exactly like one
+    /// discovered at startup. It used to be wired into the bootstrap path only, which
+    /// meant every trade made while the app was running was recorded, marked known, and
+    /// then never converted into a delta by anything: the position it should have opened
+    /// or closed stayed invisible for good, because bootstrap skips known signatures.
+    pub async fn store_transaction_deltas(
+        &self,
+        wallet_address: &str,
+        transaction: &crate::transactions::types::Transaction,
+    ) -> Result<usize, String> {
+        let deltas =
+            crate::transactions::deltas::extract_subject_deltas(wallet_address, transaction);
+        let count = deltas.len();
+        self.store_subject_deltas(&deltas).await?;
+        Ok(count)
+    }
+
     fn insert_subject_delta(tx: &SqlTransaction, delta: &SubjectAssetDelta) -> Result<(), String> {
         let delta_raw = i64::try_from(delta.delta_raw)
             .map_err(|_| format!("delta_raw {} does not fit in i64", delta.delta_raw))?;
@@ -278,6 +299,113 @@ impl TransactionDatabase {
         );
 
         Ok(total_deltas)
+    }
+
+    /// Extract deltas for any recent own-wallet transaction that has none — the
+    /// self-healing counterpart to the once-per-version backfill.
+    ///
+    /// The full backfill runs once and never again, so a transaction that was stored
+    /// while the extraction was unavailable (a crash between recording and extraction, a
+    /// write that failed, a build where the live hook was missing) would stay outside
+    /// the ledger for the life of the install. This pass costs one indexed scan per boot
+    /// because it starts at the newest slot the ledger already knows about: everything
+    /// older is, by construction, already reduced.
+    ///
+    /// A transaction that genuinely moves nothing produces no delta rows and is
+    /// re-examined on the next boot; that is a handful of rows, not a rescan.
+    pub async fn fill_subject_delta_gaps(&self, wallet_address: &str) -> Result<u64, String> {
+        let watermark: i64 = {
+            let conn = self.get_connection()?;
+            conn.query_row(
+                "SELECT COALESCE(MAX(slot), 0) FROM subject_asset_deltas WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to read subject deltas watermark: {e}"))?
+        };
+
+        let mut cursor = String::new();
+        let mut repaired: u64 = 0;
+
+        loop {
+            let batch: Vec<(String, String, bool)> = {
+                let conn = self.get_connection()?;
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT r.signature, r.raw_transaction_data, r.success
+                         FROM raw_transactions r
+                         WHERE r.wallet_address = ?1
+                           AND r.raw_transaction_data IS NOT NULL
+                           AND (r.slot IS NULL OR r.slot >= ?2)
+                           AND r.signature > ?3
+                           AND NOT EXISTS (
+                             SELECT 1 FROM subject_asset_deltas d
+                             WHERE d.wallet_address = r.wallet_address
+                               AND d.signature = r.signature
+                           )
+                         ORDER BY r.signature
+                         LIMIT ?4",
+                    )
+                    .map_err(|e| format!("Failed to prepare subject deltas gap query: {e}"))?;
+
+                let rows = stmt
+                    .query_map(
+                        params![wallet_address, watermark, cursor, BACKFILL_BATCH_SIZE],
+                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                    )
+                    .map_err(|e| format!("Failed to execute subject deltas gap query: {e}"))?;
+
+                let mut collected = Vec::new();
+                for row in rows {
+                    collected.push(row.map_err(|e| format!("Failed to read gap row: {e}"))?);
+                }
+                collected
+            };
+
+            if batch.is_empty() {
+                break;
+            }
+
+            let batch_len = batch.len();
+            let mut batch_deltas = Vec::new();
+
+            for (signature, raw_json, success) in batch {
+                // Paged by signature, not offset: rows leave the result set as their
+                // deltas are written, so an offset would skip the ones that shifted up.
+                cursor = signature.clone();
+
+                let Ok(raw_value) = serde_json::from_str::<serde_json::Value>(&raw_json) else {
+                    continue;
+                };
+                let mut transaction = crate::transactions::types::Transaction::new(signature);
+                transaction.success = success;
+                transaction.raw_transaction_data = Some(raw_value);
+
+                let deltas = crate::transactions::deltas::extract_subject_deltas(
+                    wallet_address,
+                    &transaction,
+                );
+                if !deltas.is_empty() {
+                    repaired += 1;
+                    batch_deltas.extend(deltas);
+                }
+            }
+
+            self.store_subject_deltas(&batch_deltas).await?;
+
+            if (batch_len as i64) < BACKFILL_BATCH_SIZE {
+                break;
+            }
+        }
+
+        if repaired > 0 {
+            logger::info(
+                LogTag::Transactions,
+                &format!("Subject deltas gap fill repaired {repaired} transactions"),
+            );
+        }
+
+        Ok(repaired)
     }
 
     /// Count of stored deltas for `wallet_address`.

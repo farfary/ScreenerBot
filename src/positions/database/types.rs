@@ -10,7 +10,7 @@ pub(super) static POSITIONS_DB_INITIALIZED: LazyLock<AtomicBool> =
     LazyLock::new(|| AtomicBool::new(false));
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 3;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 4;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
