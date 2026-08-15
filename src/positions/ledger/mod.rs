@@ -176,6 +176,20 @@ impl LedgerRound {
     pub fn is_genesis(&self) -> bool {
         self.round_key.starts_with("genesis:")
     }
+
+    /// The latest moment this round was observed to exist.
+    ///
+    /// The honest close stamp for a round the wallet no longer holds but whose disposal
+    /// we never saw. "When we noticed" would be today's date, which ranks a holding
+    /// abandoned months ago above the wallet's genuinely most recent exit; the last
+    /// event we did see is a fact, and it orders the Closed tab truthfully.
+    pub fn last_seen_at(&self) -> Option<i64> {
+        self.events
+            .iter()
+            .filter_map(|event| event.block_time)
+            .max()
+            .or(self.opened_at)
+    }
 }
 
 /// A currently-held balance read from the wallet, used to reconcile the reduced rounds

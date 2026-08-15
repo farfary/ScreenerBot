@@ -240,13 +240,17 @@ fn build_position(
         .closed_at
         .and_then(|ts| DateTime::from_timestamp(ts, 0))
         // A round the wallet no longer holds but whose closing transaction we never saw
-        // is still closed; keep whatever close time the row already carried rather than
+        // is still closed; date it by the last moment we saw the holding rather than
         // inventing one, and fall back to the entry time so ordering stays sane.
         .or_else(|| {
             if round.is_open {
                 None
             } else {
-                existing.and_then(|p| p.exit_time).or(Some(entry_time))
+                round
+                    .last_seen_at()
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .or_else(|| existing.and_then(|p| p.exit_time))
+                    .or(Some(entry_time))
             }
         });
 
@@ -385,8 +389,15 @@ fn reconcile_owned_position(
         round
             .closed_at
             .and_then(|ts| DateTime::from_timestamp(ts, 0))
-            // Gone from the wallet with no disposal we could observe: the close is real,
-            // only its moment is unknown, and "when we noticed" is the one honest stamp.
+            // Gone from the wallet with no disposal we could observe: the close is real
+            // and only its moment is unknown, so date it by the last time we saw the
+            // holding. Stamping "now" would rank a long-abandoned position above the
+            // wallet's most recent exit every time the ledger re-read it.
+            .or_else(|| {
+                round
+                    .last_seen_at()
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+            })
             .unwrap_or(now),
     );
     if position.exit_transaction_signature.is_none() {

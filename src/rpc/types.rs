@@ -14,7 +14,11 @@ pub struct TransactionDetails {
     pub slot: u64,
     pub transaction: TransactionData,
     pub meta: Option<TransactionMeta>,
-    #[serde(rename = "blockTime")]
+    // The RPC sends `blockTime`, but cached `raw_transaction_data` written before this
+    // rename existed round-tripped the field as `block_time`. Without the alias those
+    // rows deserialize with no timestamp at all, which silently dates every position
+    // derived from them to the moment they were re-read.
+    #[serde(rename = "blockTime", alias = "block_time")]
     pub block_time: Option<i64>,
 }
 

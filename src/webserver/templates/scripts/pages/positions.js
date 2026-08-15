@@ -673,7 +673,9 @@ function createLifecycle() {
 
   const loadPositionsPage = async ({ reason, signal }) => {
     const status = state.view;
-    const url = `/api/positions?status=${encodeURIComponent(status)}&limit=500`;
+    // limit=0 is the whole tab. A capped page would quietly hide the oldest rounds of a
+    // wallet with a long history, and this table is the record of that history.
+    const url = `/api/positions?status=${encodeURIComponent(status)}&limit=0`;
     try {
       const rows = await requestManager.fetch(url, {
         priority: "normal",

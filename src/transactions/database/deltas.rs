@@ -19,6 +19,31 @@ const BACKFILL_METADATA_KEY: &str = "subject_deltas_backfill_version";
 /// once.
 const BACKFILL_BATCH_SIZE: i64 = 500;
 
+/// One cached `raw_transactions` row as both re-extraction passes read it:
+/// `(signature, raw JSON, slot, block_time, success)`.
+type CachedTransactionRow = (String, String, Option<i64>, Option<i64>, bool);
+
+/// Rebuild the minimal [`Transaction`](crate::transactions::types::Transaction) that
+/// `extract_subject_deltas` needs from a cached row, returning `None` when the blob is
+/// not JSON at all.
+///
+/// The row's own `slot`/`block_time` columns are carried over deliberately: they are
+/// correct even when the cached blob's encoding hides them, and the extractor falls back
+/// to them so no delta is ever written without a timestamp.
+fn cached_row_to_transaction(
+    row: CachedTransactionRow,
+) -> Option<crate::transactions::types::Transaction> {
+    let (signature, raw_json, slot, block_time, success) = row;
+    let raw_value = serde_json::from_str::<serde_json::Value>(&raw_json).ok()?;
+
+    let mut transaction = crate::transactions::types::Transaction::new(signature);
+    transaction.success = success;
+    transaction.raw_transaction_data = Some(raw_value);
+    transaction.slot = slot.and_then(|s| u64::try_from(s).ok());
+    transaction.block_time = block_time;
+    Some(transaction)
+}
+
 impl TransactionDatabase {
     /// Persist a batch of deltas in one transaction (`INSERT OR REPLACE`, keyed by
     /// `(wallet_address, signature, mint)`). A row whose `delta_raw` cannot fit in
@@ -206,7 +231,7 @@ impl TransactionDatabase {
         let mut offset: i64 = 0;
 
         loop {
-            let batch: Vec<(String, String, bool)> = {
+            let batch: Vec<CachedTransactionRow> = {
                 let conn = self.get_connection()?;
                 let mut stmt = conn
                     .prepare(
@@ -222,15 +247,13 @@ impl TransactionDatabase {
                     .query_map(
                         params![wallet_address, BACKFILL_BATCH_SIZE, offset],
                         |row| {
-                            let signature: String = row.get(0)?;
-                            let raw_json: String = row.get(1)?;
-                            // slot/block_time are already embedded in raw_transaction_data,
-                            // which extract_subject_deltas re-parses; only signature, the
-                            // raw JSON and success are needed to rebuild a minimal Transaction.
-                            let _slot: Option<i64> = row.get(2)?;
-                            let _block_time: Option<i64> = row.get(3)?;
-                            let success: bool = row.get(4)?;
-                            Ok((signature, raw_json, success))
+                            Ok((
+                                row.get(0)?,
+                                row.get(1)?,
+                                row.get::<_, Option<i64>>(2)?,
+                                row.get(3)?,
+                                row.get(4)?,
+                            ))
                         },
                     )
                     .map_err(|e| format!("Failed to execute subject deltas backfill query: {e}"))?;
@@ -249,13 +272,10 @@ impl TransactionDatabase {
             let batch_len = batch.len();
             let mut batch_deltas = Vec::new();
 
-            for (signature, raw_json, success) in batch {
-                let Ok(raw_value) = serde_json::from_str::<serde_json::Value>(&raw_json) else {
+            for row in batch {
+                let Some(transaction) = cached_row_to_transaction(row) else {
                     continue;
                 };
-                let mut transaction = crate::transactions::types::Transaction::new(signature);
-                transaction.success = success;
-                transaction.raw_transaction_data = Some(raw_value);
 
                 let deltas = crate::transactions::deltas::extract_subject_deltas(
                     wallet_address,
@@ -328,11 +348,11 @@ impl TransactionDatabase {
         let mut repaired: u64 = 0;
 
         loop {
-            let batch: Vec<(String, String, bool)> = {
+            let batch: Vec<CachedTransactionRow> = {
                 let conn = self.get_connection()?;
                 let mut stmt = conn
                     .prepare(
-                        "SELECT r.signature, r.raw_transaction_data, r.success
+                        "SELECT r.signature, r.raw_transaction_data, r.slot, r.block_time, r.success
                          FROM raw_transactions r
                          WHERE r.wallet_address = ?1
                            AND r.raw_transaction_data IS NOT NULL
@@ -351,7 +371,15 @@ impl TransactionDatabase {
                 let rows = stmt
                     .query_map(
                         params![wallet_address, watermark, cursor, BACKFILL_BATCH_SIZE],
-                        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                        |row| {
+                            Ok((
+                                row.get(0)?,
+                                row.get(1)?,
+                                row.get::<_, Option<i64>>(2)?,
+                                row.get(3)?,
+                                row.get(4)?,
+                            ))
+                        },
                     )
                     .map_err(|e| format!("Failed to execute subject deltas gap query: {e}"))?;
 
@@ -369,17 +397,14 @@ impl TransactionDatabase {
             let batch_len = batch.len();
             let mut batch_deltas = Vec::new();
 
-            for (signature, raw_json, success) in batch {
+            for row in batch {
                 // Paged by signature, not offset: rows leave the result set as their
                 // deltas are written, so an offset would skip the ones that shifted up.
-                cursor = signature.clone();
+                cursor = row.0.clone();
 
-                let Ok(raw_value) = serde_json::from_str::<serde_json::Value>(&raw_json) else {
+                let Some(transaction) = cached_row_to_transaction(row) else {
                     continue;
                 };
-                let mut transaction = crate::transactions::types::Transaction::new(signature);
-                transaction.success = success;
-                transaction.raw_transaction_data = Some(raw_value);
 
                 let deltas = crate::transactions::deltas::extract_subject_deltas(
                     wallet_address,

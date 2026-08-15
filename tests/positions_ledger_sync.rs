@@ -18,7 +18,7 @@ use std::collections::{HashMap, HashSet};
 
 use screenerbot::positions::ledger::reduce_rounds;
 use screenerbot::positions::ledger::sync::{plan_position_writes, RoundMetadata};
-use screenerbot::positions::ledger::LedgerRound;
+use screenerbot::positions::ledger::{LedgerEvent, LedgerEventKind, LedgerRound};
 use screenerbot::positions::{Position, PositionManagement, PositionOrigin};
 use screenerbot::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
@@ -73,6 +73,21 @@ fn open_round(mint: &str, round_key: &str) -> LedgerRound {
         realized_pnl_sol: None,
         exit_signature: None,
         ..round(mint, round_key)
+    }
+}
+
+/// One observed movement, carrying only the block time these tests care about.
+fn event(block_time: i64) -> LedgerEvent {
+    LedgerEvent {
+        signature: "open-sig".to_owned(),
+        slot: Some(1),
+        block_time: Some(block_time),
+        kind: LedgerEventKind::Entry,
+        amount: 1.0,
+        balance_after: 1.0,
+        quote: None,
+        price_sol: None,
+        venue: None,
     }
 }
 
@@ -493,9 +508,11 @@ fn a_bot_position_sold_somewhere_else_is_closed_from_wallet_history() {
 }
 
 #[test]
-fn a_close_we_could_not_time_is_stamped_when_we_noticed_it() {
+fn a_close_we_could_not_time_is_dated_by_the_last_time_we_saw_the_holding() {
     // `reconcile_with_wallet` closes a round the wallet no longer holds without
-    // inventing a disposal: no closing signature, no block time, no proceeds.
+    // inventing a disposal: no closing signature, no block time, no proceeds. Stamping
+    // "when we noticed" would date a holding abandoned months ago to today and rank it
+    // above the wallet's genuinely most recent exit in the Closed tab.
     let mut vanished = round(MINT, "open-sig:MINT");
     vanished.closed_at = None;
     vanished.exit_signature = None;
@@ -503,6 +520,7 @@ fn a_close_we_could_not_time_is_stamped_when_we_noticed_it() {
     vanished.realized_proceeds_sol = 0.0;
     vanished.basis_complete = false;
     vanished.history_complete = false;
+    vanished.events = vec![event(1_600_000_500)];
 
     let plan = plan_position_writes(
         &[vanished],
@@ -513,7 +531,12 @@ fn a_close_we_could_not_time_is_stamped_when_we_noticed_it() {
     );
 
     let reconciled = &plan.updates[0];
-    assert_eq!(reconciled.exit_time, Some(now()));
+    assert_eq!(
+        reconciled.exit_time,
+        Some(Utc.timestamp_opt(1_600_000_500, 0).unwrap()),
+        "the last movement we observed is the honest close stamp"
+    );
+    assert_ne!(reconciled.exit_time, Some(now()));
     assert_eq!(reconciled.exit_transaction_signature, None);
     assert_eq!(
         reconciled.sol_received, None,

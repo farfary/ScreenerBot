@@ -17,7 +17,10 @@ pub async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<Pos
     }
 
     let status = params.status.as_deref().unwrap_or("all");
-    let limit = params.limit.unwrap_or(100);
+    // No implicit cap: these lists are the wallet's own history, and a default that
+    // silently dropped everything past the hundredth row made the tabs look like an
+    // incomplete record of the wallet. A caller that wants a page asks for one.
+    let limit = params.limit.unwrap_or(0);
     let mint_filter = params.mint.as_deref();
 
     let responses = load_positions_with_filters(status, limit, mint_filter).await;

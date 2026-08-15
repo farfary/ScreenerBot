@@ -23,7 +23,9 @@ pub const NATIVE_SOL_SENTINEL: &str = "native";
 
 /// Bumping this re-runs `TransactionDatabase::backfill_subject_deltas` for every
 /// wallet on next boot (its once-only guard compares against this value).
-pub const SUBJECT_DELTAS_VERSION: u32 = 1;
+/// v2 re-extracts every stored transaction so rows written before the `block_time`
+/// fallback existed regain their timestamps.
+pub const SUBJECT_DELTAS_VERSION: u32 = 2;
 
 /// Below this, a native SOL delta is indistinguishable from transaction-fee noise.
 const NATIVE_NOISE_LAMPORTS: i128 = 50_000;
@@ -116,8 +118,13 @@ pub fn extract_subject_deltas(
         return Vec::new();
     };
 
-    let slot = Some(tx_data.slot);
-    let block_time = tx_data.block_time;
+    // The stored row's own columns are the authority whenever the blob is silent: a
+    // cached JSON written by an older encoding can lack the timestamp entirely, and a
+    // delta with no `block_time` gives its round no `opened_at`/`closed_at`, so the
+    // position materialised from it is dated "now" and jumps to the top of the Closed
+    // list ahead of trades that really are the wallet's most recent.
+    let slot = Some(tx_data.slot).filter(|s| *s > 0).or(transaction.slot);
+    let block_time = tx_data.block_time.or(transaction.block_time);
     let tx_index = raw
         .get("transactionIndex")
         .and_then(|v| v.as_u64())
@@ -468,5 +475,61 @@ mod tests {
         let tx = make_transaction(raw, false);
         let deltas = extract_subject_deltas(SUBJECT, &tx);
         assert!(deltas.is_empty());
+    }
+
+    /// A one-token buy, with the timestamp key spelled however the caller asks for.
+    fn buy_raw(block_time_key: Option<&str>) -> serde_json::Value {
+        let mut raw = json!({
+            "slot": 100,
+            "transaction": {
+                "signatures": ["test-signature"],
+                "message": { "accountKeys": [SUBJECT, POOL] }
+            },
+            "meta": {
+                "err": null,
+                "fee": 5000,
+                "preBalances": [10_000_000_000u64, 0u64],
+                "postBalances": [9_000_000_000u64, 0u64],
+                "preTokenBalances": [token_balance(0, SUBJECT, MINT_A, "0", 6)],
+                "postTokenBalances": [token_balance(0, SUBJECT, MINT_A, "1000000", 6)],
+            }
+        });
+        if let Some(key) = block_time_key {
+            raw[key] = json!(1_700_000_000i64);
+        }
+        raw
+    }
+
+    #[test]
+    fn a_cached_blob_written_in_snake_case_still_carries_its_timestamp() {
+        // Blobs cached before `TransactionDetails` renamed the field round-tripped it as
+        // `block_time`. Losing it dated every position derived from the round to the
+        // moment it was re-read, which sorted ancient trades to the top of Closed.
+        let tx = make_transaction(buy_raw(Some("block_time")), true);
+        let deltas = extract_subject_deltas(SUBJECT, &tx);
+
+        assert!(!deltas.is_empty());
+        assert!(deltas.iter().all(|d| d.block_time == Some(1_700_000_000)));
+    }
+
+    #[test]
+    fn a_blob_with_no_timestamp_falls_back_to_the_stored_row() {
+        let mut tx = make_transaction(buy_raw(None), true);
+        tx.block_time = Some(1_700_000_001);
+
+        let deltas = extract_subject_deltas(SUBJECT, &tx);
+
+        assert!(!deltas.is_empty());
+        assert!(deltas.iter().all(|d| d.block_time == Some(1_700_000_001)));
+    }
+
+    #[test]
+    fn the_blobs_own_timestamp_wins_over_the_stored_row() {
+        let mut tx = make_transaction(buy_raw(Some("blockTime")), true);
+        tx.block_time = Some(1);
+
+        let deltas = extract_subject_deltas(SUBJECT, &tx);
+
+        assert!(deltas.iter().all(|d| d.block_time == Some(1_700_000_000)));
     }
 }

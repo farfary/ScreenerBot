@@ -181,4 +181,42 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
         "a failed transaction has no balance movements"
     );
     assert_eq!(db.count_subject_deltas(&wallet).await.expect("count"), 4);
+
+    // ---- 6. A cached blob that hides its timestamp is repaired from the row itself ----
+    // Blobs cached before `TransactionDetails` renamed the field spell it `block_time`,
+    // and a delta with no timestamp gives its round no open/close moment at all: the
+    // position materialised from it is dated "now" on every boot and sorts above trades
+    // that really are the wallet's most recent. The row's own column is the authority.
+    let mut undated = swap("undated-signature", &wallet, 400, 300_000_000, 900_000);
+    let block_time = undated.block_time.expect("the helper stamps a block time");
+    if let Some(raw) = undated.raw_transaction_data.as_mut() {
+        let object = raw.as_object_mut().expect("the blob is an object");
+        object.remove("blockTime");
+        object.insert("block_time".to_owned(), json!(block_time));
+    }
+    db.store_raw_transaction(subject, &undated)
+        .await
+        .expect("store the undated raw transaction");
+
+    assert_eq!(
+        db.fill_subject_delta_gaps(&wallet)
+            .await
+            .expect("gap fill runs"),
+        1,
+        "the transaction above the watermark is reduced"
+    );
+
+    let deltas = db.get_subject_deltas(&wallet).await.expect("read deltas");
+    let undated_legs: Vec<_> = deltas
+        .iter()
+        .filter(|delta| delta.signature == "undated-signature")
+        .collect();
+    assert_eq!(undated_legs.len(), 2);
+    assert!(
+        undated_legs
+            .iter()
+            .all(|delta| delta.block_time == Some(block_time)),
+        "every repaired delta carries the transaction's real block time"
+    );
+    assert!(undated_legs.iter().all(|delta| delta.slot == Some(400)));
 }

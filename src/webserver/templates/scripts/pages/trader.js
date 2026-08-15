@@ -664,17 +664,24 @@ function createLifecycle() {
     if (!positionsSummary) return;
 
     try {
-      const data = await requestManager.fetch("/api/positions", {
+      // The endpoint answers with a bare array of PositionResponse; asking for the open
+      // tab keeps this summary off the wallet's entire closed history.
+      const open = await requestManager.fetch("/api/positions?status=open&limit=0", {
         priority: "normal",
       });
+      const data = { positions: Array.isArray(open) ? open : [] };
 
       const key = JSON.stringify(
-        data.positions?.map((p) => ({ id: p.id, roi: p.roi_percent, size: p.size_sol })) ?? null
+        data.positions.map((p) => ({
+          id: p.id,
+          roi: p.unrealized_pnl_percent,
+          size: p.total_size_sol,
+        }))
       );
       if (key === _lastPositionsKey) return;
       _lastPositionsKey = key;
 
-      if (!data.positions || data.positions.length === 0) {
+      if (data.positions.length === 0) {
         positionsSummary.innerHTML = `
           <div class="info-state">
             <i class="icon-inbox"></i>
@@ -686,24 +693,22 @@ function createLifecycle() {
 
       const cardsHtml = data.positions
         .map((pos) => {
-          const roi = pos.roi_percent || 0;
+          const roi = pos.unrealized_pnl_percent ?? 0;
           const roiClass = roi >= 0 ? "positive" : "negative";
-          const holdTime = pos.opened_at_timestamp
-            ? Utils.formatDuration(
-                (Date.now() - new Date(pos.opened_at_timestamp).getTime()) / 1000
-              )
+          const holdTime = pos.entry_time
+            ? Utils.formatDuration(Date.now() / 1000 - pos.entry_time)
             : "—";
 
           return `
           <div class="position-summary-card">
             <div class="position-summary-header">
-              <div class="position-summary-token">${Utils.escapeHtml(pos.token_symbol || "Unknown")}</div>
+              <div class="position-summary-token">${Utils.escapeHtml(pos.symbol || "Unknown")}</div>
               <div class="position-summary-roi ${roiClass}">${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%</div>
             </div>
             <div class="position-summary-details">
               <div class="position-summary-row">
                 <span class="position-summary-label">Size:</span>
-                <span class="position-summary-value">${(pos.size_sol || 0).toFixed(4)} SOL</span>
+                <span class="position-summary-value">${(pos.total_size_sol || 0).toFixed(4)} SOL</span>
               </div>
               <div class="position-summary-row">
                 <span class="position-summary-label">Hold Time:</span>
@@ -1040,31 +1045,29 @@ function createLifecycle() {
    */
   async function updateTimeRulesStatus() {
     try {
-      const data = await requestManager.fetch("/api/positions", {
+      const open = await requestManager.fetch("/api/positions?status=open&limit=0", {
         priority: "normal",
       });
+      const positions = Array.isArray(open) ? open : [];
 
       const statusList = $("#time-positions-status");
       if (!statusList) return;
 
-      if (!data.positions || data.positions.length === 0) {
+      if (positions.length === 0) {
         statusList.innerHTML = '<div class="empty-state">No open positions</div>';
         return;
       }
 
-      statusList.innerHTML = data.positions
+      statusList.innerHTML = positions
         .map((position) => {
-          const openedDate = position.opened_at_timestamp
-            ? new Date(position.opened_at_timestamp)
-            : null;
-          const holdSeconds = openedDate ? (Date.now() - openedDate.getTime()) / 1000 : 0;
+          const holdSeconds = position.entry_time ? Date.now() / 1000 - position.entry_time : 0;
           const holdTime = Utils.formatDuration(holdSeconds);
-          const roi = position.roi_percent || 0;
+          const roi = position.unrealized_pnl_percent ?? 0;
 
           return `
             <div class="time-rule-item">
               <div class="time-rule-token">
-                ${Utils.escapeHtml(position.token_symbol || "Unknown")}
+                ${Utils.escapeHtml(position.symbol || "Unknown")}
               </div>
               <div class="time-rule-metrics">
                 <div class="time-rule-metric">
