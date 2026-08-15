@@ -332,6 +332,10 @@ async fn open_position_impl(
         archived_at: None,
         origin,
         management,
+        round_key: None,
+        basis_complete: true,
+        history_complete: true,
+        holding_state: None,
     };
 
     // Save to database (with retry) and get ID

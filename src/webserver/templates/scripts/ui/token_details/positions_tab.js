@@ -106,15 +106,21 @@ function renderPositionSummary(position) {
   const stateLabel = position.archived ? "Archived" : isClosed ? "Closed" : "Open";
   const stateClass = position.archived ? "muted" : isClosed ? "warning" : "good";
 
-  const pnlSol = isClosed ? position.pnl : position.unrealized_pnl;
-  const pnlPct = isClosed ? position.pnl_percent : position.unrealized_pnl_percent;
+  // A wallet-derived round whose cost basis could not be established, or whose history
+  // does not reconcile with the chain, has no honest P&L or size. Rendering a number
+  // there (invested is zero for such a round) would read as pure profit on an airdrop.
+  const basisUnknown = position.basis_complete === false;
+  const pnlUnknown = basisUnknown || position.history_complete === false;
+
+  const pnlSol = pnlUnknown ? null : isClosed ? position.pnl : position.unrealized_pnl;
+  const pnlPct = pnlUnknown ? null : isClosed ? position.pnl_percent : position.unrealized_pnl_percent;
   const entry = pickPrice(
     position.effective_entry_price,
     position.average_entry_price,
     position.entry_price
   );
   const current = position.current_price;
-  const sizeSol = position.total_size_sol ?? position.entry_size_sol;
+  const sizeSol = basisUnknown ? null : (position.total_size_sol ?? position.entry_size_sol);
   const tokensHeld = isClosed
     ? position.token_amount
     : (position.remaining_token_amount ?? position.token_amount);
@@ -132,6 +138,19 @@ function renderPositionSummary(position) {
   metadata.push(
     `<span class="position-meta-item">${ownershipLabels[position.management] || "Auto Trader"}</span>`
   );
+  if (position.origin?.kind === "external") {
+    metadata.push('<span class="position-meta-item">From wallet history</span>');
+  }
+  if (position.holding_state === "frozen") {
+    metadata.push('<span class="position-meta-item">Frozen — cannot be sold</span>');
+  }
+  if (pnlUnknown) {
+    metadata.push(
+      `<span class="position-meta-item">${
+        basisUnknown ? "No cost basis" : "History incomplete"
+      }</span>`
+    );
+  }
   if (position.dca_count > 0) {
     metadata.push(`<span class="position-meta-item">DCA ${position.dca_count}</span>`);
   }
@@ -140,7 +159,7 @@ function renderPositionSummary(position) {
   }
 
   const marketFacts = [
-    ["Avg Entry", fmtPrice(entry)],
+    ["Avg Entry", basisUnknown ? "—" : fmtPrice(entry)],
     ["Current", fmtPrice(current)],
     ["Tokens", tokensHeld != null ? Utils.formatCompactNumber(tokensHeld) : "—"],
     ["Opened", ageStr],

@@ -127,6 +127,7 @@ impl TransactionDatabase {
             SCHEMA_PENDING_TRANSACTIONS,
             SCHEMA_METADATA,
             SCHEMA_BOOTSTRAP_STATE,
+            SCHEMA_SUBJECT_ASSET_DELTAS,
         ];
 
         for table_sql in &tables {

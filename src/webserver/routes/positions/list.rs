@@ -137,6 +137,10 @@ fn map_position_to_response_with_logo(
         archived_at: p.archived_at.map(|dt| dt.timestamp()),
         origin: p.origin.clone(),
         management: p.management,
+        round_key: p.round_key.clone(),
+        basis_complete: p.basis_complete,
+        history_complete: p.history_complete,
+        holding_state: p.holding_state.clone(),
     }
 }
 
@@ -172,17 +176,26 @@ pub async fn get_positions_stats() -> Json<PositionsStatsResponse> {
     let open = open_positions.len();
     let closed = closed_positions.len();
 
-    let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
+    // Capital currently at work is the CUMULATIVE cost basis, not the first entry:
+    // `entry_size_sol` never grows on a DCA, so a position averaged into three times
+    // reported only its first buy and the card understated the portfolio.
+    //
+    // A round with no established cost basis (an imported airdrop, a USD-quoted fill)
+    // contributes nothing rather than a zero that would silently read as "free".
+    let total_invested_sol: f64 = open_positions
+        .iter()
+        .filter(|p| p.has_trustworthy_pnl())
+        .map(|p| p.total_size_sol)
+        .sum();
 
+    // Realized P&L is the stored, fee-aware `pnl` — the one the position itself booked
+    // at close. Recomputing it as `sol_received - entry_size_sol` double-counted DCA
+    // adds as pure profit and ignored fees entirely. `pnl` is None exactly when there is
+    // no honest number, so those rounds drop out instead of being guessed at.
     let total_pnl: f64 = closed_positions
         .iter()
-        .filter_map(|p| {
-            if let (Some(sol_received), entry_size) = (p.sol_received, p.entry_size_sol) {
-                Some(sol_received - entry_size)
-            } else {
-                None
-            }
-        })
+        .filter(|p| p.has_trustworthy_pnl())
+        .filter_map(|p| p.pnl)
         .sum();
 
     Json(PositionsStatsResponse {

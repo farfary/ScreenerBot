@@ -12,6 +12,7 @@
 // - `global`: Global instance management
 
 mod bootstrap;
+mod deltas;
 mod global;
 mod maintenance;
 mod operations;

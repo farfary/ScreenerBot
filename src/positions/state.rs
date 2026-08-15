@@ -197,7 +197,7 @@ pub async fn release_position_slot(position_id: i64) {
 
 /// Rebuild the slot registry from the positions that are actually open (startup).
 pub async fn rebuild_position_slot_holders() {
-    let open_ids: std::collections::HashSet<i64> = get_open_positions()
+    let open_ids: std::collections::HashSet<i64> = get_capacity_consuming_positions()
         .await
         .iter()
         .filter_map(|position| position.id)
@@ -464,6 +464,20 @@ pub async fn get_archived_positions() -> Vec<Position> {
     positions.iter().filter(|p| p.archived).cloned().collect()
 }
 
+/// Open positions that consume the bot's trading capacity.
+///
+/// Wallet-derived rounds are excluded: they were never opened by us, never consumed a
+/// global position permit, and counting them would let a user who already holds twenty
+/// tokens exhaust `max_open_positions` before the trader ever places a trade.
+pub async fn get_capacity_consuming_positions() -> Vec<Position> {
+    let positions = POSITIONS.read().await;
+    positions
+        .iter()
+        .filter(|p| is_position_open(p) && !p.is_wallet_derived())
+        .cloned()
+        .collect()
+}
+
 /// Get count of open positions
 pub async fn get_open_positions_count() -> usize {
     get_open_positions().await.len()
@@ -590,7 +604,9 @@ pub async fn reconcile_global_position_semaphore(max_open: usize) {
     use crate::logger::{self, LogTag};
 
     let semaphore = get_global_position_semaphore();
-    let open_positions = get_open_positions().await; // clones but infrequent (startup)
+    // Only positions that actually consumed a permit are reconciled against the
+    // semaphore; wallet-derived rounds never took one.
+    let open_positions = get_capacity_consuming_positions().await; // clones but infrequent (startup)
     let open_count = open_positions.len();
     let available_before = semaphore.available_permits();
     let consumed_before = max_open - available_before;

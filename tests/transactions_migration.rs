@@ -223,7 +223,7 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
         .await
         .expect("open + migrate v4 database");
 
-    // 1. Version is 5.
+    // 1. Version is 6 (5 added the composite key; 6 added subject_asset_deltas).
     let conn = Connection::open(&db_path).expect("reopen migrated database");
     let stored_version: String = conn
         .query_row(
@@ -232,7 +232,7 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
             |row| row.get(0),
         )
         .expect("read migrated schema_version");
-    assert_eq!(stored_version, "5");
+    assert_eq!(stored_version, "6");
 
     // 2. The composite key exists on every migrated table.
     for table in [
@@ -391,7 +391,7 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
             |row| row.get(0),
         )
         .expect("read schema_version after second open");
-    assert_eq!(stored_version_again, "5");
+    assert_eq!(stored_version_again, "6");
 
     assert!(
         db_again
@@ -482,7 +482,7 @@ async fn migration_preserves_the_real_transactions_database_shape_and_rows() {
             |row| row.get(0),
         )
         .expect("read schema version from real clone");
-    assert_eq!(stored_version, "5");
+    assert_eq!(stored_version, "6");
 
     // Keep the configured subject used for backfills observable in failure output.
     assert!(!own_wallet.is_empty());

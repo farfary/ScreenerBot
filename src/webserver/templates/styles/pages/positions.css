@@ -100,6 +100,24 @@
   color: var(--info-color);
 }
 
+/* Derived from the wallet's own on-chain history rather than traded by the bot. */
+.position-origin-wallet {
+  color: var(--text-secondary);
+}
+
+/* The mint authority froze this token account, so the holding cannot be sold. It is
+   a warning about the holding, not an error in our data. */
+.position-frozen {
+  color: var(--warning-color);
+}
+
+/* Stands in for a number we refuse to invent (no cost basis, or history that does not
+   reconcile). Deliberately quieter than a real value so it never reads as zero. */
+.position-unknown {
+  color: var(--text-muted);
+  cursor: help;
+}
+
 .position-token__actions {
   position: absolute;
   top: 50%;

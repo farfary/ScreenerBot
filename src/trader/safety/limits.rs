@@ -6,7 +6,9 @@ use crate::trader::config;
 /// Check if we can open a new position based on limits
 pub async fn check_position_limits() -> Result<bool, String> {
     let max_positions = config::get_max_open_positions();
-    let open_positions = positions::get_open_positions().await;
+    // Wallet-derived rounds are the user's pre-existing holdings, not trades we placed,
+    // so they must not eat the trader's capacity.
+    let open_positions = positions::state::get_capacity_consuming_positions().await;
 
     // Check if we're under the limit
     Ok(open_positions.len() < max_positions)

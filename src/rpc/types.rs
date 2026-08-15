@@ -83,6 +83,11 @@ pub struct TokenAccountInfo {
     pub decimals: u8,
     pub is_token_2022: bool,
     pub is_nft: bool,
+    /// True when the mint's freeze authority has frozen this account, so the balance
+    /// exists but cannot be transferred or sold. Surfaced on positions as
+    /// `holding_state = "frozen"` so the user can archive an unsellable holding
+    /// instead of watching a sell fail forever.
+    pub is_frozen: bool,
 }
 
 // ============================================================================

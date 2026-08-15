@@ -32,6 +32,22 @@ pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<(), Strin
             "management",
             "ALTER TABLE positions ADD COLUMN management TEXT NOT NULL DEFAULT 'auto_trader'",
         ),
+        (
+            "round_key",
+            "ALTER TABLE positions ADD COLUMN round_key TEXT",
+        ),
+        (
+            "basis_complete",
+            "ALTER TABLE positions ADD COLUMN basis_complete BOOLEAN NOT NULL DEFAULT 1",
+        ),
+        (
+            "history_complete",
+            "ALTER TABLE positions ADD COLUMN history_complete BOOLEAN NOT NULL DEFAULT 1",
+        ),
+        (
+            "holding_state",
+            "ALTER TABLE positions ADD COLUMN holding_state TEXT",
+        ),
     ] {
         if !has_column(conn, column)? {
             conn.execute(sql, [])
@@ -86,6 +102,28 @@ mod tests {
                 (2, "manual".to_owned(), None, "user_only".to_owned()),
             ]
         );
+    }
+
+    #[test]
+    fn ledger_columns_are_added_once_and_get_safe_defaults() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE positions (id INTEGER PRIMARY KEY); INSERT INTO positions (id) VALUES (1);",
+        )
+        .unwrap();
+
+        migrate_position_provenance(&conn).unwrap();
+        migrate_position_provenance(&conn).unwrap();
+
+        let values: (Option<String>, bool, bool, Option<String>) = conn
+            .query_row(
+                "SELECT round_key, basis_complete, history_complete, holding_state FROM positions WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+
+        assert_eq!(values, (None, true, true, None));
     }
 
     #[test]

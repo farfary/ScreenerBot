@@ -1,0 +1,297 @@
+//! Persistence for subject-relative balance deltas (`subject_asset_deltas`).
+//!
+//! Sibling module to `operations.rs` / `operations_queries.rs`, extending
+//! `TransactionDatabase` via another `impl` block, same style: pooled connection via
+//! `self.get_connection()`, `String` errors, one `unchecked_transaction()` per batch
+//! write.
+
+use rusqlite::{params, OptionalExtension, Transaction as SqlTransaction};
+
+use crate::logger::{self, LogTag};
+use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, SUBJECT_DELTAS_VERSION};
+
+use super::operations::TransactionDatabase;
+
+/// `db_metadata` key guarding the once-only historical backfill.
+const BACKFILL_METADATA_KEY: &str = "subject_deltas_backfill_version";
+/// Rows read per page. An existing install's `raw_transactions` can be tens of
+/// thousands of rows with large JSON blobs, so the whole table is never loaded at
+/// once.
+const BACKFILL_BATCH_SIZE: i64 = 500;
+
+impl TransactionDatabase {
+    /// Persist a batch of deltas in one transaction (`INSERT OR REPLACE`, keyed by
+    /// `(wallet_address, signature, mint)`). A row whose `delta_raw` cannot fit in
+    /// `i64` is logged and skipped rather than corrupting the ledger with a clamped
+    /// value; `before_raw`/`after_raw` are informational and fall back to `NULL`.
+    pub async fn store_subject_deltas(&self, deltas: &[SubjectAssetDelta]) -> Result<(), String> {
+        if deltas.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.get_connection()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("Failed to start subject deltas transaction: {e}"))?;
+
+        for delta in deltas {
+            if let Err(e) = Self::insert_subject_delta(&tx, delta) {
+                logger::warning(
+                    LogTag::Transactions,
+                    &format!(
+                        "Skipping subject delta {} / {} / {}: {}",
+                        delta.wallet_address, delta.signature, delta.mint, e
+                    ),
+                );
+            }
+        }
+
+        tx.commit()
+            .map_err(|e| format!("Failed to commit subject deltas transaction: {e}"))?;
+
+        Ok(())
+    }
+
+    fn insert_subject_delta(tx: &SqlTransaction, delta: &SubjectAssetDelta) -> Result<(), String> {
+        let delta_raw = i64::try_from(delta.delta_raw)
+            .map_err(|_| format!("delta_raw {} does not fit in i64", delta.delta_raw))?;
+        let before_raw = delta.before_raw.and_then(|v| i64::try_from(v).ok());
+        let after_raw = delta.after_raw.and_then(|v| i64::try_from(v).ok());
+
+        tx.execute(
+            "INSERT OR REPLACE INTO subject_asset_deltas (
+                wallet_address, signature, mint, slot, block_time, tx_index,
+                delta_raw, before_raw, after_raw, decimals, kind, venue,
+                fee_lamports, success
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            params![
+                delta.wallet_address,
+                delta.signature,
+                delta.mint,
+                delta.slot.map(|s| s as i64),
+                delta.block_time,
+                delta.tx_index,
+                delta_raw,
+                before_raw,
+                after_raw,
+                delta.decimals,
+                delta.kind.as_str(),
+                delta.venue,
+                delta.fee_lamports.map(|f| f as i64),
+                delta.success,
+            ],
+        )
+        .map_err(|e| format!("Failed to insert subject delta: {e}"))?;
+
+        Ok(())
+    }
+
+    /// Every stored delta for `wallet_address`, ordered `(slot, tx_index, signature)`.
+    /// Rows with a NULL slot (never confirmed / not yet backfilled) sort last.
+    pub async fn get_subject_deltas(
+        &self,
+        wallet_address: &str,
+    ) -> Result<Vec<SubjectAssetDelta>, String> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT wallet_address, signature, mint, slot, block_time, tx_index,
+                    delta_raw, before_raw, after_raw, decimals, kind, venue,
+                    fee_lamports, success
+                 FROM subject_asset_deltas
+                 WHERE wallet_address = ?1
+                 ORDER BY slot IS NULL, slot ASC, tx_index ASC, signature ASC",
+            )
+            .map_err(|e| format!("Failed to prepare subject deltas query: {e}"))?;
+
+        let rows = stmt
+            .query_map(params![wallet_address], |row| {
+                let kind_str: String = row.get(10)?;
+                let kind = DeltaKind::parse(&kind_str).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        e.into(),
+                    )
+                })?;
+
+                Ok(SubjectAssetDelta {
+                    wallet_address: row.get(0)?,
+                    signature: row.get(1)?,
+                    mint: row.get(2)?,
+                    slot: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
+                    block_time: row.get(4)?,
+                    tx_index: row.get::<_, i64>(5)? as u32,
+                    delta_raw: row.get::<_, i64>(6)? as i128,
+                    before_raw: row
+                        .get::<_, Option<i64>>(7)?
+                        .and_then(|v| u128::try_from(v).ok()),
+                    after_raw: row
+                        .get::<_, Option<i64>>(8)?
+                        .and_then(|v| u128::try_from(v).ok()),
+                    decimals: row.get::<_, i64>(9)? as u8,
+                    kind,
+                    venue: row.get(11)?,
+                    fee_lamports: row.get::<_, Option<i64>>(12)?.map(|v| v as u64),
+                    success: row.get(13)?,
+                })
+            })
+            .map_err(|e| format!("Failed to execute subject deltas query: {e}"))?;
+
+        let mut deltas = Vec::new();
+        for row in rows {
+            deltas.push(row.map_err(|e| format!("Failed to parse subject delta row: {e}"))?);
+        }
+
+        Ok(deltas)
+    }
+
+    /// Rebuild `subject_asset_deltas` from the full `raw_transactions` history for
+    /// `wallet_address`, once per [`SUBJECT_DELTAS_VERSION`].
+    ///
+    /// The live hook in `TransactionProcessor::process_transaction` only extracts
+    /// deltas for transactions processed FROM NOW ON. An existing install already
+    /// has its whole history sitting in `raw_transactions` with every signature
+    /// marked known -- bootstrap skips known signatures -- so without this,
+    /// `subject_asset_deltas` (and everything built on it) would stay empty
+    /// forever on an upgrade. Pages the table instead of loading it whole.
+    pub async fn backfill_subject_deltas(&self, wallet_address: &str) -> Result<u64, String> {
+        {
+            let conn = self.get_connection()?;
+            let stored: Option<String> = conn
+                .query_row(
+                    "SELECT value FROM db_metadata WHERE key = ?1",
+                    params![BACKFILL_METADATA_KEY],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| format!("Failed to read subject deltas backfill version: {e}"))?;
+
+            if stored.as_deref() == Some(SUBJECT_DELTAS_VERSION.to_string().as_str()) {
+                return Ok(0);
+            }
+        }
+
+        logger::info(
+            LogTag::Transactions,
+            &format!(
+                "Backfilling subject_asset_deltas for {wallet_address} (v{SUBJECT_DELTAS_VERSION})..."
+            ),
+        );
+
+        let mut total_transactions: u64 = 0;
+        let mut total_deltas: u64 = 0;
+        let mut offset: i64 = 0;
+
+        loop {
+            let batch: Vec<(String, String, bool)> = {
+                let conn = self.get_connection()?;
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT signature, raw_transaction_data, slot, block_time, success
+                         FROM raw_transactions
+                         WHERE wallet_address = ?1 AND raw_transaction_data IS NOT NULL
+                         ORDER BY signature
+                         LIMIT ?2 OFFSET ?3",
+                    )
+                    .map_err(|e| format!("Failed to prepare subject deltas backfill query: {e}"))?;
+
+                let rows = stmt
+                    .query_map(
+                        params![wallet_address, BACKFILL_BATCH_SIZE, offset],
+                        |row| {
+                            let signature: String = row.get(0)?;
+                            let raw_json: String = row.get(1)?;
+                            // slot/block_time are already embedded in raw_transaction_data,
+                            // which extract_subject_deltas re-parses; only signature, the
+                            // raw JSON and success are needed to rebuild a minimal Transaction.
+                            let _slot: Option<i64> = row.get(2)?;
+                            let _block_time: Option<i64> = row.get(3)?;
+                            let success: bool = row.get(4)?;
+                            Ok((signature, raw_json, success))
+                        },
+                    )
+                    .map_err(|e| format!("Failed to execute subject deltas backfill query: {e}"))?;
+
+                let mut collected = Vec::new();
+                for row in rows {
+                    collected.push(row.map_err(|e| format!("Failed to read backfill row: {e}"))?);
+                }
+                collected
+            };
+
+            if batch.is_empty() {
+                break;
+            }
+
+            let batch_len = batch.len();
+            let mut batch_deltas = Vec::new();
+
+            for (signature, raw_json, success) in batch {
+                let Ok(raw_value) = serde_json::from_str::<serde_json::Value>(&raw_json) else {
+                    continue;
+                };
+                let mut transaction = crate::transactions::types::Transaction::new(signature);
+                transaction.success = success;
+                transaction.raw_transaction_data = Some(raw_value);
+
+                let deltas = crate::transactions::deltas::extract_subject_deltas(
+                    wallet_address,
+                    &transaction,
+                );
+                batch_deltas.extend(deltas);
+            }
+
+            total_deltas += batch_deltas.len() as u64;
+            self.store_subject_deltas(&batch_deltas).await?;
+
+            total_transactions += batch_len as u64;
+            offset += batch_len as i64;
+
+            logger::info(
+                LogTag::Transactions,
+                &format!(
+                    "Subject deltas backfill progress: {total_transactions} transactions scanned, {total_deltas} deltas written so far"
+                ),
+            );
+
+            if (batch_len as i64) < BACKFILL_BATCH_SIZE {
+                break;
+            }
+        }
+
+        {
+            let conn = self.get_connection()?;
+            conn.execute(
+                "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
+                params![BACKFILL_METADATA_KEY, SUBJECT_DELTAS_VERSION.to_string()],
+            )
+            .map_err(|e| format!("Failed to persist subject deltas backfill version: {e}"))?;
+        }
+
+        logger::info(
+            LogTag::Transactions,
+            &format!(
+                "Subject deltas backfill complete: {total_transactions} transactions scanned, {total_deltas} deltas written"
+            ),
+        );
+
+        Ok(total_deltas)
+    }
+
+    /// Count of stored deltas for `wallet_address`.
+    pub async fn count_subject_deltas(&self, wallet_address: &str) -> Result<u64, String> {
+        let conn = self.get_connection()?;
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM subject_asset_deltas WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to count subject deltas: {e}"))?;
+
+        Ok(count as u64)
+    }
+}

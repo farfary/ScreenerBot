@@ -4,6 +4,7 @@ pub mod database;
 pub use database as db;
 pub mod helpers;
 pub use helpers as lib; // Backward compatibility alias
+pub mod ledger;
 pub mod loss_detection;
 pub mod metrics;
 pub mod operations;

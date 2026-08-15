@@ -241,8 +241,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         }
 
                         // Record realized loss for loss limit tracking (full exit only)
-                        // pnl_sol was calculated above via calculate_position_pnl
-                        if pnl_sol < 0.0 {
+                        // pnl_sol was calculated above via calculate_position_pnl.
+                        // A wallet-derived round is excluded: it is the user's own
+                        // pre-existing holding, not risk the bot took, and a loss on it
+                        // must not pause the trader.
+                        if pnl_sol < 0.0 && !position.is_wallet_derived() {
                             crate::trader::safety::loss_limit::record_realized_loss(pnl_sol.abs());
                         }
 

@@ -28,6 +28,12 @@ use crate::tokens::database::get_global_database;
 /// * `Ok(())` - Processing completed successfully
 /// * `Err(String)` - Error during P&L calculation or blacklisting
 pub async fn process_position_loss_detection(position: &Position) -> Result<(), String> {
+    // An imported/wallet-history loss is not the bot's loss and must not blacklist a
+    // token the user happened to already be holding at a loss.
+    if matches!(position.origin, PositionOrigin::External) {
+        return Ok(());
+    }
+
     // Check if loss-based blacklisting is enabled via config
     let loss_blacklist_enabled = with_config(|cfg| cfg.positions.loss_blacklist_enabled);
     if !loss_blacklist_enabled {
@@ -77,6 +83,8 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
                         strategy_id.as_deref().unwrap_or("unattributed")
                     ),
                     PositionOrigin::Manual => "PoorPerformance:manual".to_owned(),
+                    // Unreachable: External returns Ok(()) above before this branch.
+                    PositionOrigin::External => "PoorPerformance:external".to_owned(),
                 };
                 match cleanup::blacklist_token(&position.mint, &reason, &db) {
                     Ok(_) => {

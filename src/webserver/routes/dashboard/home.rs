@@ -173,7 +173,13 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     // Process positions snapshot from parallel results
     let open_positions = open_positions_result.unwrap_or_default();
     let open_count = open_positions.len() as i64;
-    let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
+    // See `dashboard/overview.rs`: the basis is cumulative, and a round without one
+    // contributes nothing.
+    let total_invested_sol: f64 = open_positions
+        .iter()
+        .filter(|p| p.has_trustworthy_pnl())
+        .map(|p| p.total_size_sol)
+        .sum();
 
     // Calculate position P&L with performers
     let mut best_performer: Option<PositionPerformer> = None;
@@ -193,7 +199,21 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
             let hold_mins = (now - p.entry_time).num_minutes();
             total_hold_duration_mins += hold_mins;
 
-            if let (Some(current), entry) = (p.current_price, p.entry_price) {
+            // A wallet-derived round with no cost basis has no honest P&L at all, and
+            // including it as 0% would drag the best/worst performers toward zero.
+            if !p.has_trustworthy_pnl() {
+                return None;
+            }
+
+            // The WEIGHTED average entry is the position's real cost per token;
+            // `entry_price` is only the first buy and misprices anything DCA'd into.
+            let entry = if p.average_entry_price > 0.0 {
+                p.average_entry_price
+            } else {
+                p.entry_price
+            };
+
+            if let Some(current) = p.current_price {
                 let pnl_pct = if entry > 0.0 {
                     ((current - entry) / entry) * 100.0
                 } else {
@@ -233,7 +253,16 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                     _ => {}
                 }
 
-                Some((current - entry) * p.entry_size_sol / entry)
+                // Prefer the P&L the position already booked (fee-aware, computed by
+                // the price updater); fall back to the basis-scaled estimate only until
+                // the first price tick lands.
+                Some(p.unrealized_pnl.unwrap_or_else(|| {
+                    if entry > 0.0 {
+                        (current - entry) * p.total_size_sol / entry
+                    } else {
+                        0.0
+                    }
+                }))
             } else {
                 None
             }

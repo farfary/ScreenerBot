@@ -302,11 +302,13 @@ impl PositionsDatabase {
         phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
         pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
         remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-        dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management
+        dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
+        round_key, basis_complete, history_complete, holding_state
       ) VALUES (
         ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32,
-        ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46
+        ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46,
+        ?47, ?48, ?49, ?50
       ) RETURNING id
       "#,
                 params![
@@ -355,7 +357,11 @@ impl PositionsDatabase {
                     position.last_dca_time.map(|t| t.to_rfc3339()),
                     position.origin.kind(),
                     position.origin.reference(),
-                    position.management.as_str()
+                    position.management.as_str(),
+                    position.round_key,
+                    position.basis_complete,
+                    position.history_complete,
+                    position.holding_state,
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -424,6 +430,7 @@ impl PositionsDatabase {
         pnl = ?33, pnl_percent = ?34, unrealized_pnl = ?35, unrealized_pnl_percent = ?36,
         remaining_token_amount = ?37, total_exited_amount = ?38, average_exit_price = ?39,
         partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
+        round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
         updated_at = datetime('now')
       WHERE id = ?1
       "#,
@@ -470,7 +477,11 @@ impl PositionsDatabase {
                     position.partial_exit_count as i64,
                     position.dca_count as i64,
                     position.average_entry_price,
-                    position.last_dca_time.map(|t| t.to_rfc3339())
+                    position.last_dca_time.map(|t| t.to_rfc3339()),
+                    position.round_key,
+                    position.basis_complete,
+                    position.history_complete,
+                    position.holding_state,
                 ],
             )
             .map_err(|e| format!("Failed to update position: {e}"))?;
@@ -786,6 +797,14 @@ impl PositionsDatabase {
                     )
                 },
             )?,
+            round_key: row.get("round_key")?,
+            basis_complete: row
+                .get::<_, Option<bool>>("basis_complete")?
+                .unwrap_or(true),
+            history_complete: row
+                .get::<_, Option<bool>>("history_complete")?
+                .unwrap_or(true),
+            holding_state: row.get("holding_state")?,
         })
     }
 }

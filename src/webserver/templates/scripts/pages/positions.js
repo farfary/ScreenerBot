@@ -130,8 +130,29 @@ function createLifecycle() {
   const positionOriginLabel = (row) => {
     if (row?.origin?.kind === "copy") return "Copy";
     if (row?.origin?.kind === "manual") return "Manual";
+    // Derived from this wallet's own on-chain history rather than traded by the bot.
+    if (row?.origin?.kind === "external") return "Wallet";
     return "";
   };
+
+  // A wallet-derived round can be missing its cost basis (an airdrop, a USD-quoted
+  // fill, a token->token swap with no SOL leg) or fail to reconcile with the chain.
+  // Those rows show "—" instead of a number: a fabricated basis produces a plausible
+  // and permanently wrong P&L, which is worse than admitting we do not know.
+  const BASIS_UNKNOWN_TITLE =
+    "No cost basis in this wallet's history (airdrop, USD-quoted fill, or a swap with no SOL leg)";
+  const HISTORY_UNKNOWN_TITLE = "This round does not reconcile with the on-chain balance";
+
+  const basisUnknown = (row) => row?.basis_complete === false;
+  const pnlUnknown = (row) => row?.basis_complete === false || row?.history_complete === false;
+  const unknownCell = (title) =>
+    `<span class="position-unknown" title="${Utils.escapeHtml(title)}">—</span>`;
+  const basisCell = (row, render) =>
+    basisUnknown(row) ? unknownCell(BASIS_UNKNOWN_TITLE) : render();
+  const pnlGuardedCell = (row, render) =>
+    pnlUnknown(row)
+      ? unknownCell(basisUnknown(row) ? BASIS_UNKNOWN_TITLE : HISTORY_UNKNOWN_TITLE)
+      : render();
 
   const tokenCell = (row, actionsHtml = "", actionCount = 0) => {
     const logo = row.logo_url || row.image_url || "";
@@ -151,6 +172,10 @@ function createLifecycle() {
           <div class="token-name"><span>${Utils.escapeHtml(name)}</span>${
             originLabel
               ? `<span class="position-origin-label position-origin-${originLabel.toLowerCase()}">${originLabel}</span>`
+              : ""
+          }${
+            row?.holding_state === "frozen"
+              ? '<span class="position-origin-label position-frozen" title="The mint authority froze this token account - the balance cannot be transferred or sold">Frozen</span>'
               : ""
           }</div>
           ${stateCaption(row)}
@@ -227,12 +252,22 @@ function createLifecycle() {
 
     const busy = row?._state === "selling" || row?._state === "closing";
     const dis = busy ? " disabled" : "";
+    // A frozen token account cannot be transferred, so every sell would fail on-chain.
+    // The button is disabled and says why; the row itself stays exactly where it is —
+    // archiving an unsellable holding is the user's call, never automatic.
+    const frozen = row?.holding_state === "frozen";
+    const sellDis = busy || frozen ? " disabled" : "";
+    const sellTitle = frozen
+      ? "Frozen by the mint authority - this holding cannot be sold"
+      : "Sell (full or % partial)";
     const mintAttr = Utils.escapeHtml(mint);
     const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
     return `
       <div class="row-actions position-token__actions">
         <button class="btn row-action" data-action="add" data-mint="${mintAttr}" title="Add to position (DCA)" aria-label="Add to position"${dis}><i class="icon-circle-plus"></i></button>
-        <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="Sell (full or % partial)" aria-label="Sell position"${dis}><i class="icon-trending-down"></i></button>
+        <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="${Utils.escapeHtml(
+          sellTitle
+        )}" aria-label="Sell position"${sellDis}><i class="icon-trending-down"></i></button>
         <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
       </div>
     `;
@@ -267,14 +302,14 @@ function createLifecycle() {
       label: "Avg Entry (SOL)",
       sortable: true,
       minWidth: 140,
-      render: (v, r) => priceCell(v || r.entry_price),
+      render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
     },
     {
       id: "total_size_sol",
       label: "Total Invested",
       sortable: true,
       minWidth: 120,
-      render: (v) => solCell(v),
+      render: (v, r) => basisCell(r, () => solCell(v)),
     },
     {
       id: "sol_received",
@@ -283,13 +318,19 @@ function createLifecycle() {
       minWidth: 110,
       render: (v) => (v == null ? "—" : solCell(v)),
     },
-    { id: "pnl", label: "PnL", sortable: true, minWidth: 110, render: (v) => pnlCell(v) },
+    {
+      id: "pnl",
+      label: "PnL",
+      sortable: true,
+      minWidth: 110,
+      render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
+    },
     {
       id: "pnl_percent",
       label: "PnL %",
       sortable: true,
       minWidth: 100,
-      render: (v) => percentCell(v),
+      render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
     },
   ];
 
@@ -328,7 +369,7 @@ function createLifecycle() {
           label: "Avg Entry (SOL)",
           sortable: true,
           minWidth: 140,
-          render: (v) => priceCell(v),
+          render: (v, r) => basisCell(r, () => priceCell(v)),
         },
         {
           id: "current_price",
@@ -342,7 +383,7 @@ function createLifecycle() {
           label: "Total Invested",
           sortable: true,
           minWidth: 120,
-          render: (v) => solCell(v),
+          render: (v, r) => basisCell(r, () => solCell(v)),
         },
         {
           id: "current_size",
@@ -363,14 +404,14 @@ function createLifecycle() {
           label: "Unrealized PnL",
           sortable: true,
           minWidth: 130,
-          render: (v) => pnlCell(v),
+          render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
         },
         {
           id: "unrealized_pnl_percent",
           label: "Unrealized %",
           sortable: true,
           minWidth: 110,
-          render: (v) => percentCell(v),
+          render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
         },
       ];
     } else if (state.view === "archived") {
@@ -406,7 +447,7 @@ function createLifecycle() {
           label: "Avg Entry (SOL)",
           sortable: true,
           minWidth: 140,
-          render: (v, r) => priceCell(v || r.entry_price),
+          render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
         },
         {
           id: "average_exit_price",
@@ -420,7 +461,7 @@ function createLifecycle() {
           label: "Total Invested",
           sortable: true,
           minWidth: 120,
-          render: (v) => solCell(v),
+          render: (v, r) => basisCell(r, () => solCell(v)),
         },
         {
           id: "partial_exit_count",
@@ -436,13 +477,19 @@ function createLifecycle() {
           minWidth: 110,
           render: (v) => (v == null ? "—" : solCell(v)),
         },
-        { id: "pnl", label: "PnL", sortable: true, minWidth: 110, render: (v) => pnlCell(v) },
+        {
+          id: "pnl",
+          label: "PnL",
+          sortable: true,
+          minWidth: 110,
+          render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
+        },
         {
           id: "pnl_percent",
           label: "PnL %",
           sortable: true,
           minWidth: 100,
-          render: (v) => percentCell(v),
+          render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
         },
       ];
     }

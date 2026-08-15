@@ -40,7 +40,15 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     // Get positions summary
     let open_positions = positions::get_db_open_positions().await.unwrap_or_default();
 
-    let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
+    // Cost basis is the CUMULATIVE `total_size_sol` (entry + every DCA add), not
+    // `entry_size_sol`, which never grows after the first buy and understated any
+    // averaged-into position. Rounds with no established basis contribute nothing rather
+    // than a zero that would read as free capital.
+    let total_invested_sol: f64 = open_positions
+        .iter()
+        .filter(|p| p.has_trustworthy_pnl())
+        .map(|p| p.total_size_sol)
+        .sum();
 
     // Use SQL aggregation for closed positions stats (optimized)
     let epoch_start = chrono::DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")

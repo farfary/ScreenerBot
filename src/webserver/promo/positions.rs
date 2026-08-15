@@ -74,6 +74,10 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 archived_at: None,
                 origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
                 management: crate::positions::PositionManagement::AutoTrader,
+                round_key: None,
+                basis_complete: true,
+                history_complete: true,
+                holding_state: None,
             });
             id_counter += 1;
         }
@@ -139,6 +143,10 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 archived_at: None,
                 origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
                 management: crate::positions::PositionManagement::AutoTrader,
+                round_key: None,
+                basis_complete: true,
+                history_complete: true,
+                holding_state: None,
             });
             id_counter += 1;
         }
@@ -205,6 +213,10 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 archived_at: Some(archived_at.timestamp()),
                 origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
                 management: crate::positions::PositionManagement::AutoTrader,
+                round_key: None,
+                basis_complete: true,
+                history_complete: true,
+                holding_state: None,
             });
             id_counter += 1;
         }

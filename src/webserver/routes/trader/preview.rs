@@ -98,11 +98,12 @@ pub async fn get_trader_stats() -> Response {
     let worst_trade_pct = worst_trade.and_then(|p| p.pnl_percent).unwrap_or(0.0);
     let worst_trade_token = worst_trade.map(|p| p.symbol.clone());
 
-    // Total realized P&L in SOL across the window (sol_received - entry size)
-    let total_pnl_sol: f64 = recent_closed
-        .iter()
-        .filter_map(|p| p.sol_received.map(|recv| recv - p.entry_size_sol))
-        .sum();
+    // Total realized P&L in SOL across the window.
+    //
+    // Uses the `pnl` the position booked at close — fee-aware and DCA-aware. Deriving it
+    // as `sol_received - entry_size_sol` counted every DCA add as pure profit, because
+    // `entry_size_sol` is only the FIRST buy and never grows.
+    let total_pnl_sol: f64 = recent_closed.iter().filter_map(|p| p.pnl).sum();
 
     // Build exit breakdown from closed_reason in closed positions
     use std::collections::HashMap;

@@ -206,6 +206,10 @@ pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
         archived_at: None,
         origin: screenerbot::positions::PositionOrigin::Auto { strategy_id: None },
         management: screenerbot::positions::PositionManagement::AutoTrader,
+        round_key: None,
+        basis_complete: true,
+        history_complete: true,
+        holding_state: None,
     }
 }
 

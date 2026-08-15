@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::LazyLock;
 
 /// Database schema version for migration management
-pub(super) const DATABASE_SCHEMA_VERSION: u32 = 5;
+pub(super) const DATABASE_SCHEMA_VERSION: u32 = 6;
 
 /// Static flag to track if database has been initialized (to reduce log noise)
 pub(super) static DATABASE_INITIALIZED: LazyLock<AtomicBool> =
@@ -142,6 +142,29 @@ CREATE TABLE IF NOT EXISTS bootstrap_state (
 );
 "#;
 
+/// Subject-relative balance deltas — one row per (wallet, signature, mint) movement.
+/// The ledger `positions::ledger::reduce_rounds` derives wallet-history positions from.
+/// `CREATE TABLE IF NOT EXISTS` is the whole migration; no ALTER needed (v6).
+pub(super) const SCHEMA_SUBJECT_ASSET_DELTAS: &str = r#"
+CREATE TABLE IF NOT EXISTS subject_asset_deltas (
+    wallet_address TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    mint TEXT NOT NULL,          -- SPL mint, or the literal 'native' for native SOL
+    slot INTEGER,
+    block_time INTEGER,
+    tx_index INTEGER NOT NULL DEFAULT 0,
+    delta_raw INTEGER NOT NULL,  -- signed, raw base units
+    before_raw INTEGER,          -- NULL when not knowable
+    after_raw INTEGER,
+    decimals INTEGER NOT NULL,
+    kind TEXT NOT NULL,          -- 'trade' | 'transfer' | 'defi' | 'other'
+    venue TEXT,                  -- router name when a known DEX program is present
+    fee_lamports INTEGER,
+    success BOOLEAN NOT NULL DEFAULT 1,
+    PRIMARY KEY (wallet_address, signature, mint)
+);
+"#;
+
 /// Performance indexes for efficient queries
 pub(super) const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_wallet ON raw_transactions(wallet_address);",
@@ -158,4 +181,6 @@ pub(super) const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_known_signatures_added_at ON known_signatures(added_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_pending_transactions_wallet ON pending_transactions(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_pending_transactions_added_at ON pending_transactions(added_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_subject_deltas_wallet_mint ON subject_asset_deltas(wallet_address, mint, slot, tx_index);",
+    "CREATE INDEX IF NOT EXISTS idx_subject_deltas_wallet_order ON subject_asset_deltas(wallet_address, slot, tx_index, signature);",
 ];

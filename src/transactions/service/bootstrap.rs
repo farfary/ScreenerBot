@@ -674,5 +674,51 @@ pub async fn perform_initial_transaction_bootstrap(
 
     logger::info(LogTag::Transactions, &summary);
 
+    // Own wallet only: rebuild subject_asset_deltas from the full raw_transactions
+    // history once per SUBJECT_DELTAS_VERSION. The live per-transaction hook only
+    // covers transactions processed from now on, so an upgrade would otherwise
+    // leave this table (and everything wallet-history positions are built from)
+    // permanently empty. Never fails bootstrap.
+    if let Some(db) = transaction_db.as_ref() {
+        match db.backfill_subject_deltas(&subject.address()).await {
+            Ok(written) if written > 0 => {
+                logger::info(
+                    LogTag::Transactions,
+                    &format!("Subject deltas backfill wrote {written} rows"),
+                );
+            }
+            Ok(_) => {}
+            Err(e) => {
+                logger::warning(
+                    LogTag::Transactions,
+                    &format!("Subject deltas backfill failed: {e}"),
+                );
+            }
+        }
+    }
+
+    // With the delta table current, derive the wallet's position rounds from it. This is
+    // what makes a fresh install show the tokens the user already holds as positions
+    // instead of an empty list. Best-effort by design: a failure here leaves the trader
+    // and every existing position untouched, and the next boot retries.
+    match crate::positions::ledger::sync_wallet_history().await {
+        Ok(summary) if summary.inserted > 0 || summary.updated > 0 => {
+            logger::info(
+                LogTag::Transactions,
+                &format!(
+                    "Wallet-history positions: {} rounds ({} new, {} updated)",
+                    summary.rounds, summary.inserted, summary.updated
+                ),
+            );
+        }
+        Ok(_) => {}
+        Err(e) => {
+            logger::warning(
+                LogTag::Transactions,
+                &format!("Wallet-history position sync failed: {e}"),
+            );
+        }
+    }
+
     Ok(stats)
 }

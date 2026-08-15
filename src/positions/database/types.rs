@@ -10,13 +10,19 @@ pub(super) static POSITIONS_DB_INITIALIZED: LazyLock<AtomicBool> =
     LazyLock::new(|| AtomicBool::new(false));
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 2;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 3;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
 // =============================================================================
 
 // Column list for SELECT queries (DRY principle)
+/// The ONE column list every position read uses.
+///
+/// `row_to_position` reads columns BY NAME, so any query that hand-lists a subset breaks
+/// the moment a column is added — with a runtime "Invalid column name", not a compile
+/// error. Three queries had drifted exactly that way and could no longer return a row.
+/// Every position SELECT must interpolate this constant.
 pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
@@ -29,7 +35,8 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
   pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
   dca_count, average_entry_price, last_dca_time,
-  archived, archived_at, origin_kind, origin_ref, management
+  archived, archived_at, origin_kind, origin_ref, management,
+  round_key, basis_complete, history_complete, holding_state
 "#;
 
 pub(super) const SCHEMA_POSITIONS: &str = r#"
@@ -94,6 +101,11 @@ CREATE TABLE IF NOT EXISTS positions (
   origin_kind TEXT NOT NULL DEFAULT 'auto',
   origin_ref TEXT,
   management TEXT NOT NULL DEFAULT 'auto_trader',
+  -- Wallet-history ledger (External positions derived from on-chain history)
+  round_key TEXT,
+  basis_complete BOOLEAN NOT NULL DEFAULT 1,
+  history_complete BOOLEAN NOT NULL DEFAULT 1,
+  holding_state TEXT,
   -- Timestamps
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -247,6 +259,7 @@ pub(super) const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_positions_exit_signature ON positions(exit_transaction_signature);",
     "CREATE INDEX IF NOT EXISTS idx_positions_state ON positions(id, position_type, exit_time);",
     "CREATE INDEX IF NOT EXISTS idx_positions_archived ON positions(archived);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_round_key ON positions(wallet_address, round_key) WHERE round_key IS NOT NULL;",
     "CREATE INDEX IF NOT EXISTS idx_position_states_position_id ON position_states(position_id, changed_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_states_state ON position_states(state, changed_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_tracking_position_id ON position_tracking(position_id, tracked_at DESC);",

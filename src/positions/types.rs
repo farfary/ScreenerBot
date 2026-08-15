@@ -31,9 +31,16 @@ pub enum TradeOrigin {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PositionOrigin {
-    Auto { strategy_id: Option<String> },
+    Auto {
+        strategy_id: Option<String>,
+    },
     Manual,
-    Copy { task_id: i64, source_wallet: String },
+    Copy {
+        task_id: i64,
+        source_wallet: String,
+    },
+    /// Derived from wallet history, not executed by the bot -- see `positions::ledger`.
+    External,
 }
 
 impl PositionOrigin {
@@ -42,6 +49,7 @@ impl PositionOrigin {
             Self::Auto { .. } => "auto",
             Self::Manual => "manual",
             Self::Copy { .. } => "copy",
+            Self::External => "external",
         }
     }
 
@@ -53,6 +61,7 @@ impl PositionOrigin {
                 task_id,
                 source_wallet,
             } => Some(format!("{task_id}:{source_wallet}")),
+            Self::External => None,
         }
     }
 
@@ -62,6 +71,7 @@ impl PositionOrigin {
                 strategy_id: reference,
             }),
             "manual" => Ok(Self::Manual),
+            "external" => Ok(Self::External),
             "copy" => {
                 let value =
                     reference.ok_or_else(|| "copy origin is missing origin_ref".to_owned())?;
@@ -128,8 +138,12 @@ impl PositionManagement {
 
     /// Copy-owned modes require durable copy provenance so a real task can find
     /// and manage the position. Auto-trader and user ownership are valid for
-    /// every origin.
+    /// every origin except `External`, which -- being derived from wallet
+    /// history the bot never traded -- accepts only `UserOnly`.
     pub fn is_valid_for_origin(self, origin: &PositionOrigin) -> bool {
+        if matches!(origin, PositionOrigin::External) {
+            return matches!(self, Self::UserOnly);
+        }
         !matches!(self, Self::CopyTask | Self::Hybrid)
             || matches!(origin, PositionOrigin::Copy { .. })
     }
@@ -273,7 +287,59 @@ pub struct Position {
     // ==================== PROVENANCE & OWNERSHIP ====================
     pub origin: PositionOrigin,
     pub management: PositionManagement,
+
+    // ==================== WALLET-HISTORY LEDGER ====================
+    /// Identity of a wallet-derived round: the signature of the acquisition that took
+    /// the balance from zero, or `genesis:<mint>` for a round already open before our
+    /// history begins. `None` for positions the bot executed itself.
+    #[serde(default)]
+    pub round_key: Option<String>,
+    /// False when the cost basis cannot be established from what we have observed —
+    /// an airdrop, a USD-quoted leg, a mixed-quote round, or history that does not
+    /// reconcile. A position without a complete basis must never be shown a P&L.
+    #[serde(default = "default_true")]
+    pub basis_complete: bool,
+    /// False when the observed deltas do not reconcile with the on-chain balance.
+    #[serde(default = "default_true")]
+    pub history_complete: bool,
+    /// `None` normally; `Some("frozen")` when the wallet's token account is frozen and
+    /// the holding therefore cannot be sold.
+    #[serde(default)]
+    pub holding_state: Option<String>,
 }
+
+fn default_true() -> bool {
+    true
+}
+
+impl Position {
+    /// True when this row was DERIVED from wallet history rather than executed by us.
+    ///
+    /// Such a position holds no global position slot (it never consumed a permit), must
+    /// not count against `max_open_positions`, and must never enter the bot's own
+    /// trading statistics or the loss limiter — it is the user's pre-existing holding,
+    /// not a trade the bot made.
+    pub fn is_wallet_derived(&self) -> bool {
+        matches!(self.origin, PositionOrigin::External)
+    }
+
+    /// True when the position may be shown a realized/unrealized P&L.
+    ///
+    /// A wallet-derived round whose cost basis could not be established (airdrop,
+    /// USD-quoted fill, token -> token swap with no SOL leg, unreconciled history) has
+    /// no honest P&L, and inventing one would be a plausible, permanently wrong number.
+    pub fn has_trustworthy_pnl(&self) -> bool {
+        !self.is_wallet_derived() || (self.basis_complete && self.history_complete)
+    }
+
+    /// True when the wallet's token account is frozen, so the holding cannot be sold.
+    pub fn is_frozen(&self) -> bool {
+        self.holding_state.as_deref() == Some(HOLDING_STATE_FROZEN)
+    }
+}
+
+/// `holding_state` value for a token account the mint authority has frozen.
+pub const HOLDING_STATE_FROZEN: &str = "frozen";
 
 // ==================== EXIT & ENTRY HISTORY ====================
 
@@ -324,5 +390,15 @@ mod tests {
         assert!(!PositionManagement::Hybrid.is_valid_for_origin(&manual));
         assert!(PositionManagement::CopyTask.is_valid_for_origin(&copy));
         assert!(PositionManagement::Hybrid.is_valid_for_origin(&copy));
+    }
+
+    #[test]
+    fn an_external_origin_only_accepts_user_only_management() {
+        let external = PositionOrigin::External;
+
+        assert!(PositionManagement::UserOnly.is_valid_for_origin(&external));
+        assert!(!PositionManagement::AutoTrader.is_valid_for_origin(&external));
+        assert!(!PositionManagement::CopyTask.is_valid_for_origin(&external));
+        assert!(!PositionManagement::Hybrid.is_valid_for_origin(&external));
     }
 }

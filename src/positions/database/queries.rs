@@ -93,24 +93,15 @@ impl PositionsDatabase {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
+        let query = format!(
+            "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
+             WHERE entry_transaction_signature = ?1 AND wallet_address = ?2"
+        );
+
         let result = conn
-            .query_row(
-                r#"
-      SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-          position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-          entry_transaction_signature, exit_transaction_signature, token_amount,
-          effective_entry_price, effective_exit_price, sol_received,
-          profit_target_min, profit_target_max, liquidity_tier,
-          transaction_entry_verified, transaction_exit_verified,
-          entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-          phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-          remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-          dca_count, average_entry_price, last_dca_time
-      FROM positions WHERE entry_transaction_signature = ?1 AND wallet_address = ?2
-      "#,
-                params![signature, wallet_address],
-                |row| self.row_to_position(row),
-            )
+            .query_row(&query, params![signature, wallet_address], |row| {
+                self.row_to_position(row)
+            })
             .optional()
             .map_err(|e| format!("Failed to get position by entry signature: {e}"))?;
 
@@ -242,7 +233,7 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND transaction_exit_verified = 1 AND datetime(exit_time) >= datetime(?2) ORDER BY exit_time DESC",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND transaction_exit_verified = 1 AND origin_kind != 'external' AND datetime(exit_time) >= datetime(?2) ORDER BY exit_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
@@ -279,6 +270,7 @@ impl PositionsDatabase {
       WHERE wallet_address = ?1
        AND archived = 0
        AND transaction_exit_verified = 1
+       AND origin_kind != 'external'
        AND exit_time IS NOT NULL
        AND datetime(exit_time) >= datetime(?2)
       "#,
@@ -295,6 +287,12 @@ impl PositionsDatabase {
 
     /// Get aggregated trading statistics for a time period (OPTIMIZED - SQL aggregation)
     /// This replaces fetching all positions and calculating in Rust
+    ///
+    /// Wallet-derived rounds (`origin_kind = 'external'`) are excluded here and in every
+    /// other performance query: they are the user's own pre-existing history, not trades
+    /// the bot placed. Counting them would misreport win rate and — because
+    /// `initialize_from_history` seeds the loss limiter from this — could trip the loss
+    /// limit at startup on losses the bot never took.
     pub async fn get_period_trading_stats(
         &self,
         period_start: DateTime<Utc>,
@@ -321,6 +319,7 @@ impl PositionsDatabase {
       FROM positions 
       WHERE wallet_address = ?1 
         AND transaction_exit_verified = 1
+        AND origin_kind != 'external'
         AND exit_time IS NOT NULL
         AND datetime(exit_time) >= datetime(?2)
         AND datetime(exit_time) < datetime(?3)
@@ -343,6 +342,7 @@ impl PositionsDatabase {
       FROM positions 
       WHERE wallet_address = ?1 
         AND transaction_exit_verified = 1
+        AND origin_kind != 'external'
         AND exit_time IS NOT NULL
         AND datetime(exit_time) >= datetime(?2)
       "#
@@ -436,6 +436,7 @@ impl PositionsDatabase {
         FROM positions
         WHERE wallet_address = ?1
           AND transaction_exit_verified = 1
+          AND origin_kind != 'external'
           AND exit_time IS NOT NULL
           AND datetime(exit_time) >= datetime(?2)
           AND datetime(exit_time) < datetime(?3)
@@ -553,34 +554,23 @@ impl PositionsDatabase {
         // This requires joining with position_states to get current state
         let conn = self.get_connection()?;
 
+        let query = format!(
+            "SELECT {POSITION_SELECT_COLUMNS} FROM positions p \
+             WHERE EXISTS ( \
+               SELECT 1 FROM position_states ps \
+               WHERE ps.position_id = p.id \
+                 AND ps.state = ?1 \
+                 AND ps.changed_at = ( \
+                   SELECT MAX(ps2.changed_at) FROM position_states ps2 \
+                   WHERE ps2.position_id = p.id \
+                 ) \
+             ) \
+             ORDER BY p.entry_time DESC"
+        );
+
         let mut stmt = conn
-      .prepare(
-        r#"
-      SELECT p.id, p.mint, p.symbol, p.name, p.entry_price, p.entry_time, p.exit_price, p.exit_time,
-          p.position_type, p.entry_size_sol, p.total_size_sol, p.price_highest, p.price_lowest,
-          p.entry_transaction_signature, p.exit_transaction_signature, p.token_amount,
-          p.effective_entry_price, p.effective_exit_price, p.sol_received,
-          p.profit_target_min, p.profit_target_max, p.liquidity_tier,
-          p.transaction_entry_verified, p.transaction_exit_verified,
-          p.entry_fee_lamports, p.exit_fee_lamports, p.current_price, p.current_price_updated,
-          p.phantom_confirmations, p.phantom_first_seen, p.synthetic_exit, p.closed_reason,
-          p.remaining_token_amount, p.total_exited_amount, p.average_exit_price, p.partial_exit_count,
-          p.dca_count, p.average_entry_price, p.last_dca_time
-      FROM positions p
-      WHERE EXISTS (
-        SELECT 1 FROM position_states ps
-        WHERE ps.position_id = p.id
-         AND ps.state = ?1
-         AND ps.changed_at = (
-           SELECT MAX(ps2.changed_at)
-           FROM position_states ps2
-           WHERE ps2.position_id = p.id
-         )
-      )
-      ORDER BY p.entry_time DESC
-      "#
-      )
-      .map_err(|e| format!("Failed to prepare positions by state query: {e}"))?;
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare positions by state query: {e}"))?;
 
         let position_iter = stmt
             .query_map(params![state.to_string()], |row| self.row_to_position(row))
@@ -599,25 +589,15 @@ impl PositionsDatabase {
     pub async fn get_unverified_positions(&self) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
 
+        let query = format!(
+            "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
+             WHERE transaction_entry_verified = false \
+                OR (exit_transaction_signature IS NOT NULL AND transaction_exit_verified = false) \
+             ORDER BY entry_time DESC"
+        );
+
         let mut stmt = conn
-            .prepare(
-                r#"
-      SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-          position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-          entry_transaction_signature, exit_transaction_signature, token_amount,
-          effective_entry_price, effective_exit_price, sol_received,
-          profit_target_min, profit_target_max, liquidity_tier,
-          transaction_entry_verified, transaction_exit_verified,
-          entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-          phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-          remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-          dca_count, average_entry_price, last_dca_time
-      FROM positions 
-      WHERE transaction_entry_verified = false 
-        OR (exit_transaction_signature IS NOT NULL AND transaction_exit_verified = false)
-      ORDER BY entry_time DESC
-      "#,
-            )
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare unverified positions query: {e}"))?;
 
         let position_iter = stmt

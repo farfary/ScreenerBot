@@ -127,13 +127,16 @@ async fn the_dashboard_shell_stays_cheap_to_render_and_send() {
 async fn the_first_paint_html_carries_its_own_skeleton_and_styles() {
     let html = templates::base_template("ScreenerBot", "home", &templates::home_content());
 
+    // Assert on the shell's ROOT container and its skeleton flag, not on an inner card
+    // class: the home page has been redesigned before, and a card name that no longer
+    // exists fails the test while the invariant it guards is still intact.
     assert!(
-        html.contains("dashboard-card"),
-        "the home shell no longer ships its cards in the initial HTML"
+        html.contains("home-dashboard"),
+        "the home shell no longer ships its layout in the initial HTML"
     );
     assert!(
         html.contains("loading"),
-        "the home cards no longer carry the loading class at first paint, so the skeleton \
+        "the home shell no longer carries the loading class at first paint, so the skeleton \
          is being applied by script after the page is already visible"
     );
     assert!(

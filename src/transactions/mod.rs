@@ -36,6 +36,7 @@ pub mod analyzer;
 pub mod database;
 pub mod debug;
 mod debug_helpers;
+pub mod deltas;
 pub mod fetcher;
 pub mod manager;
 pub mod processor;
@@ -51,6 +52,9 @@ pub use service::{
     get_global_transaction_manager, get_transaction, is_global_transaction_service_running,
     reprocess_transaction, start_global_transaction_service, stop_global_transaction_service,
 };
+
+// Public API exports - Subject-relative balance deltas
+pub use deltas::{extract_subject_deltas, DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 // Public API exports - Types
 pub use types::{

@@ -142,7 +142,11 @@ pub(super) async fn force_close_position(
 
     // 9. A force close realizes the loss on everything still held. It was never fed to the
     // period loss limit, so writing off position after position could not pause entries.
-    if pnl < 0.0 {
+    //
+    // A wallet-derived round is excluded: it is the user's own pre-existing holding, so
+    // writing it off is not a loss the bot took, and counting it could pause the trader
+    // over money it never risked.
+    if pnl < 0.0 && !db_position.is_wallet_derived() {
         crate::trader::safety::loss_limit::record_realized_loss(pnl.abs());
     }
 

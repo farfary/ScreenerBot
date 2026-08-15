@@ -1439,6 +1439,11 @@ fn parse_token_account_info(
     // NFT detection: decimals=0 and balance=1 typically indicates an NFT
     let is_nft = decimals == 0 && balance == 1;
 
+    // jsonParsed reports "initialized" | "frozen" | "uninitialized". Anything we cannot
+    // read is treated as NOT frozen: claiming a sellable holding is frozen would hide a
+    // real position behind a warning.
+    let is_frozen = info.get("state").and_then(|v| v.as_str()) == Some("frozen");
+
     Some(TokenAccountInfo {
         account: pubkey_str.to_string(),
         mint: mint_str.to_string(),
@@ -1446,5 +1451,6 @@ fn parse_token_account_info(
         decimals,
         is_token_2022,
         is_nft,
+        is_frozen,
     })
 }

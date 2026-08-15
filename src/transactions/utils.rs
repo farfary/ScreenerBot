@@ -251,6 +251,14 @@ pub fn chunk_signatures(signatures: Vec<String>, chunk_size: usize) -> Vec<Vec<S
 mod tests {
     use super::*;
 
+    /// Two subjects no other test can be using.
+    ///
+    /// These tests share one process-global signature map and cargo runs them in
+    /// PARALLEL, so `clear_global_known_signatures()` inside a test wipes whatever a
+    /// concurrently running sibling just inserted — an intermittent failure that has
+    /// nothing to do with the behaviour under test. Unique subjects already isolate
+    /// each test's entries, so no test here clears the global; each cleans up after
+    /// itself instead.
     fn subjects() -> (Subject, Subject) {
         (
             Subject(solana_sdk::pubkey::Pubkey::new_unique()),
@@ -260,18 +268,18 @@ mod tests {
 
     #[tokio::test]
     async fn known_signature_is_scoped_to_its_subject() {
-        clear_global_known_signatures().await;
         let (subject_a, subject_b) = subjects();
 
         add_signature_to_known_globally(subject_a, "sigA1".to_owned()).await;
 
         assert!(is_signature_known_globally(subject_a, "sigA1").await);
         assert!(!is_signature_known_globally(subject_b, "sigA1").await);
+
+        remove_signature_from_known_globally(subject_a, "sigA1").await;
     }
 
     #[tokio::test]
     async fn removing_a_signature_for_one_subject_does_not_affect_another() {
-        clear_global_known_signatures().await;
         let (subject_a, subject_b) = subjects();
 
         add_signature_to_known_globally(subject_a, "sigA2".to_owned()).await;
@@ -281,11 +289,12 @@ mod tests {
 
         assert!(!is_signature_known_globally(subject_a, "sigA2").await);
         assert!(is_signature_known_globally(subject_b, "sigA2").await);
+
+        remove_signature_from_known_globally(subject_b, "sigA2").await;
     }
 
     #[tokio::test]
     async fn pending_transaction_removal_is_scoped_to_its_subject() {
-        clear_global_known_signatures().await;
         let (subject_a, subject_b) = subjects();
         let now = Utc::now();
 

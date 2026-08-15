@@ -63,6 +63,13 @@ pub struct PositionResponse {
     pub archived_at: Option<i64>,
     pub origin: PositionOrigin,
     pub management: PositionManagement,
+    // Wallet-history ledger. `round_key` identifies a derived round; the two
+    // completeness flags tell the UI whether it may render money at all, and
+    // `holding_state` is "frozen" for a holding the mint authority froze.
+    pub round_key: Option<String>,
+    pub basis_complete: bool,
+    pub history_complete: bool,
+    pub holding_state: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

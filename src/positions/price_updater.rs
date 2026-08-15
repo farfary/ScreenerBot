@@ -191,18 +191,28 @@ async fn update_position_price_and_pnl(
             format!("Position id={position_id} disappeared after price update: {token_mint}")
         })?;
 
-    // Calculate PnL with the bias-corrected price
-    let (pnl_sol, pnl_pct) =
-        crate::positions::calculate_position_pnl(&position, Some(corrected_price)).await;
+    // Calculate PnL with the bias-corrected price.
+    //
+    // A wallet-derived round with no established cost basis has NO honest unrealized
+    // P&L: `total_size_sol` is zero for it, so the calculation would report the whole
+    // current value as pure profit. Leave both fields None and let the dashboard render
+    // "—" rather than a plausible, permanently wrong number.
+    let (pnl_sol, pnl_pct) = if position.has_trustworthy_pnl() {
+        let (sol, pct) =
+            crate::positions::calculate_position_pnl(&position, Some(corrected_price)).await;
+        (Some(sol), Some(pct))
+    } else {
+        (None, None)
+    };
 
     // Update PnL fields in memory
-    position.unrealized_pnl = Some(pnl_sol);
-    position.unrealized_pnl_percent = Some(pnl_pct);
+    position.unrealized_pnl = pnl_sol;
+    position.unrealized_pnl_percent = pnl_pct;
 
     // Store back to in-memory state by position ID
     crate::positions::state::update_position_state_by_id(position_id, |pos| {
-        pos.unrealized_pnl = Some(pnl_sol);
-        pos.unrealized_pnl_percent = Some(pnl_pct);
+        pos.unrealized_pnl = pnl_sol;
+        pos.unrealized_pnl_percent = pnl_pct;
     })
     .await;
 
