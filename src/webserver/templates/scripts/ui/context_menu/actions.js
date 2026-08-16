@@ -40,30 +40,13 @@
     manager._sellToken = async function (context) {
       const { manualTrade } = await import("../manual_trade.js");
 
-      // Holdings size the sell percentage; 0 is a safe fallback (the dialog just
-      // cannot show a token quote).
-      let holdings = 0;
-      try {
-        const posRes = await fetch(`/api/positions/${encodeURIComponent(context.mint)}/details`);
-        if (posRes.ok) {
-          const posData = await posRes.json();
-          // /details returns PositionDetailResponse directly; `position` flattens
-          // the summary fields onto itself (no {success,data} envelope).
-          const pos = posData?.position;
-          if (pos) {
-            // remaining_token_amount reflects partial exits; token_amount is the original.
-            holdings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
-          }
-        }
-      } catch {
-        // Use 0 as fallback if position fetch fails
-      }
-
+      // Holdings are NOT resolved here: manualTrade fetches the position itself, and
+      // `holdings` is not a parameter it accepts — the position lookup that used to
+      // sit here was a second request whose result was discarded.
       await manualTrade({
         action: "sell",
         mint: context.mint,
         symbol: context.symbol,
-        holdings,
       });
     };
 

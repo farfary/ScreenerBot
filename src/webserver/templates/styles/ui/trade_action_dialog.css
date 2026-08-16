@@ -73,22 +73,6 @@ body.trade-action-dialog-open {
   gap: 14px;
 }
 
-.trade-action-icon-wrapper {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--action-color-light);
-  border-radius: var(--radius-lg, 8px);
-  color: var(--action-color);
-}
-
-.trade-action-icon-wrapper svg {
-  width: 22px;
-  height: 22px;
-}
-
 .trade-action-title-group {
   display: flex;
   flex-direction: column;

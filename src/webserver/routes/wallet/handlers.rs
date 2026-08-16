@@ -56,11 +56,39 @@ pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
     }
 }
 
-/// Get current wallet balance
+/// Get current wallet balance.
+///
+/// Served from the LIVE snapshot — the same source `get_wallet_worth()` reads for the
+/// header card and the home hero. Reading the database instead made this endpoint a
+/// second, lagging source of the wallet balance: the trade dialog sized orders against
+/// a figure that could disagree with the one on screen, and it cost two locked SQLite
+/// round-trips per call. The database is only consulted when the monitor has not
+/// published a snapshot yet (first boot on an empty database).
 pub(super) async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return Json(Some(crate::webserver::promo::get_promo_wallet_current()));
+    }
+
+    if let Some(snapshot) = crate::wallet::live_wallet_snapshot() {
+        // The live snapshot already carries its token balances — no second query.
+        return Json(Some(WalletCurrentResponse {
+            sol_balance: snapshot.sol_balance,
+            sol_balance_lamports: snapshot.sol_balance_lamports,
+            total_tokens_count: snapshot.total_tokens_count,
+            token_balances: snapshot
+                .token_balances
+                .iter()
+                .map(|tb| TokenBalanceInfo {
+                    mint: tb.mint.clone(),
+                    balance: tb.balance,
+                    balance_ui: tb.balance_ui,
+                    decimals: tb.decimals,
+                    is_token_2022: tb.is_token_2022,
+                })
+                .collect(),
+            snapshot_time: snapshot.snapshot_time.to_rfc3339(),
+        }));
     }
 
     match get_current_wallet_status().await {
@@ -100,23 +128,30 @@ pub(super) async fn get_wallet_balance() -> Json<Option<WalletCurrentResponse>> 
     get_wallet_current().await
 }
 
-/// Get wallet token holdings with enriched metadata (reads the latest snapshot).
+/// Get wallet token holdings with enriched metadata.
+///
+/// Reads the live snapshot for the same reason `get_wallet_current` does: the holdings
+/// list and the balance beside it must come from one source. Falls back to the database
+/// only before the monitor has published anything.
 pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return Json(crate::webserver::promo::get_promo_wallet_tokens());
     }
 
-    let snapshot = match get_current_wallet_status().await {
-        Ok(Some(s)) => s,
-        Ok(None) => return Json(WalletTokensResponse { tokens: vec![] }),
-        Err(err) => {
-            logger::warning(
-                LogTag::Webserver,
-                &format!("Failed to get wallet status for tokens: {err}"),
-            );
-            return Json(WalletTokensResponse { tokens: vec![] });
-        }
+    let snapshot = match crate::wallet::live_wallet_snapshot() {
+        Some(live) => (*live).clone(),
+        None => match get_current_wallet_status().await {
+            Ok(Some(s)) => s,
+            Ok(None) => return Json(WalletTokensResponse { tokens: vec![] }),
+            Err(err) => {
+                logger::warning(
+                    LogTag::Webserver,
+                    &format!("Failed to get wallet status for tokens: {err}"),
+                );
+                return Json(WalletTokensResponse { tokens: vec![] });
+            }
+        },
     };
 
     Json(WalletTokensResponse {

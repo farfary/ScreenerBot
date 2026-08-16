@@ -51,7 +51,6 @@ function createLifecycle() {
   let ohlcvPoller = null; // Separate poller for OHLCV data
   let tabBar = null;
   let tokenDetailsDialog = null;
-  let walletBalance = 0;
 
   // Event cleanup tracking
   const eventCleanups = [];
@@ -852,42 +851,22 @@ function createLifecycle() {
   /**
    * Manual trade (buy / add / sell) for every token-list table AND the favorites
    * table. Delegates to the shared manual-trade flow (ui/manual_trade.js), which owns
-   * the dialog, the payload and the toasts; this only supplies the row's context and
-   * reloads the view afterwards.
+   * the dialog, the payload and the toasts.
+   *
+   * It passes NOTHING from the row: the wallet balance, holdings, decimals, position
+   * size and DCA presets are all resolved live in the shared flow. Handing it this
+   * page's cached copies is how the dialog ended up sizing orders against a balance
+   * fetched once on tab activate.
    * @param {{action:string, mint:string, row?:object, btn?:HTMLElement, onReload?:Function}} opts
    */
   const performManualTrade = async ({ action, mint, row = {}, btn = null, onReload }) => {
     if (!action || !mint) return;
 
-    const symbol = row.symbol || "?";
-    const context = {};
-
-    if (action === "add") {
-      // DCA presets for the add dialog's size buttons.
-      let entrySizes = [0.005, 0.01, 0.02, 0.05];
-      try {
-        const configData = await requestManager.fetch("/api/config/trader", {
-          priority: "normal",
-        });
-        if (Array.isArray(configData?.data?.entry_sizes)) {
-          entrySizes = configData.data.entry_sizes;
-        }
-      } catch (err) {
-        console.warn("Failed to fetch entry_sizes config:", err);
-      }
-      context.entrySize = row.entry_sol || 0.005;
-      context.entrySizes = entrySizes;
-    }
-
     const placed = await manualTrade({
       action,
       mint,
-      symbol,
+      symbol: row.symbol || "?",
       btn,
-      context,
-      balance: walletBalance,
-      holdings: row.token_amount,
-      decimals: row.decimals,
     });
 
     if (placed && typeof onReload === "function") onReload();
@@ -1869,18 +1848,6 @@ function createLifecycle() {
       // (hints are lost when hide() clears innerHTML and show() rebuilds tabs)
       attachHintsToTabs();
 
-      // Fetch wallet balance for dialog context
-      fetch("/api/wallet/balance")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.sol_balance != null) {
-            walletBalance = data.sol_balance;
-          }
-        })
-        .catch(() => {
-          console.warn("[Tokens] Failed to fetch wallet balance");
-        });
-
       // Handle OHLCV view specially - it has its own poller
       if (state.view === "ohlcv") {
         if (deps.ohlcvPoller) {
@@ -1996,7 +1963,6 @@ function createLifecycle() {
       state.filters = getDefaultFiltersForView(DEFAULT_VIEW);
       state.summary = { ...DEFAULT_SUMMARY };
       state.hasLoadedOnce = false;
-      walletBalance = 0;
       // Reset OHLCV state
       ohlcvState.tokens = [];
       ohlcvState.stats = null;

@@ -23,17 +23,17 @@ export function applyQuickTradeMixin(TradeActionDialog) {
   proto._renderQuickMintStep = function (action) {
     // Get ACTION_CONFIG from the class
     const ACTION_CONFIG = this.constructor.ACTION_CONFIG || {
-      buy: { icon: "shopping-cart", colorClass: "action-buy" },
-      sell: { icon: "trending-down", colorClass: "action-sell" },
+      buy: { colorClass: "action-buy" },
+      sell: { colorClass: "action-sell" },
     };
     const config = ACTION_CONFIG[action];
 
     // Set action-specific class on dialog
     this.dialog.className = `trade-action-dialog ${config.colorClass} quick-mode`;
 
-    // Update icon based on action
-    const iconSvg = this._getActionIcon(config.icon);
-    this.iconWrapper.innerHTML = iconSvg;
+    // No icon is painted here: the header is deliberately minimal and carries no icon
+    // element, so the icon write that used to live here dereferenced null and threw
+    // before the step could render at all.
 
     // Set title for quick mode
     const quickTitle = action === "buy" ? "Quick Buy" : "Quick Sell";

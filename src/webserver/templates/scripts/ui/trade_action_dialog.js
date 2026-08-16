@@ -11,6 +11,19 @@ import { applyQuoteManagerMixin } from "./trade_action/quote_manager.js";
 // trader::constants::MAX_MANUAL_SLIPPAGE_PCT — the route rejects anything above it.
 const MAX_SLIPPAGE_PCT = 50;
 
+// SOL held back from a buy so the transaction can still pay its network fee and, for a
+// first-time mint, the associated-token-account rent. Spending the LAST lamport always
+// fails on chain, so the slider ceiling, the MAX button and the validator must all stop
+// here — they used to disagree, and typing the exact balance produced a buy that
+// validated in the dialog and then failed.
+const SOL_FEE_RESERVE = 0.002;
+
+// How often an open dialog re-reads the wallet balance and the position it is trading.
+// Without this the dialog was a snapshot of the moment it opened: SOL arriving while it
+// was on screen never appeared, so every buy stayed disabled as "insufficient balance"
+// while the header showed the funded wallet.
+const LIVE_SYNC_INTERVAL_MS = 5000;
+
 /**
  * TradeActionDialog - Modern modal for buy/add/sell actions
  *
@@ -25,7 +38,6 @@ const MAX_SLIPPAGE_PCT = 50;
 
 const ACTION_CONFIG = {
   buy: {
-    icon: "shopping-cart",
     title: "Buy Token",
     subtitle: "Enter amount in SOL",
     confirmLabel: "Execute Buy",
@@ -41,7 +53,6 @@ const ACTION_CONFIG = {
     ],
   },
   sell: {
-    icon: "trending-down",
     title: "Sell Position",
     subtitle: "Select sell percentage",
     confirmLabel: "Execute Sell",
@@ -57,7 +68,6 @@ const ACTION_CONFIG = {
     ],
   },
   add: {
-    icon: "plus-circle",
     title: "Add to Position",
     subtitle: "DCA into existing position",
     confirmLabel: "Add Position",
@@ -146,7 +156,19 @@ export class TradeActionDialog {
     this._quoteError = null;
     this._quoteTimestamp = null;
     this._quoteRefreshTimer = null;
+    // Monotonic id of the newest quote request. A response whose id is not the newest
+    // is discarded: the debounced input, the 15s auto-refresh and the manual refresh
+    // button can all be in flight together, and a slow earlier response would
+    // otherwise repaint the panel with a quote for an amount the user already changed.
+    this._quoteRequestId = 0;
+    // The amount the displayed quote was fetched for, so confirm can tell whether the
+    // price-impact check it is about to run describes the trade being confirmed.
+    this._quotedAmount = null;
     this._fetchQuoteDebounced = this._debounce(this._fetchQuote.bind(this), 400);
+
+    // Live sync: keeps balance/holdings current while the dialog is open.
+    this._liveSyncTimer = null;
+    this._liveSyncInFlight = false;
 
     this._ensureElements();
   }
@@ -400,7 +422,6 @@ export class TradeActionDialog {
     this.dialog = overlay.querySelector(".trade-action-dialog");
     this.titleEl = overlay.querySelector(".trade-action-title");
     this.subtitleEl = overlay.querySelector(".trade-action-subtitle");
-    this.iconWrapper = overlay.querySelector(".trade-action-icon-wrapper");
     this.contextEl = overlay.querySelector(".trade-action-context");
     this.presetsContainer = overlay.querySelector(".trade-action-presets");
     this.inputField = overlay.querySelector(".trade-action-input");
@@ -534,6 +555,8 @@ export class TradeActionDialog {
     this._quoteData = null;
     this._quoteError = null;
     this._quoteTimestamp = null;
+    this._quotedAmount = null;
+    this._quoteRequestId += 1; // orphan any response still in flight from a past open
     this._stopQuoteRefreshTimer();
 
     // Create promise before rendering
@@ -556,6 +579,9 @@ export class TradeActionDialog {
 
     document.addEventListener("keydown", this._keyListener, true);
     this._releaseEscape = pushEscapeHandler(() => this._handleCancelClick());
+
+    // The dialog is now a live view of the wallet and the position, not a snapshot.
+    this._startLiveSync();
 
     // Activate focus trap
     this._focusTrap = createFocusTrap(this.dialog);
@@ -601,6 +627,8 @@ export class TradeActionDialog {
 
     // Clear quote state
     this._stopQuoteRefreshTimer();
+    this._stopLiveSync();
+    this._quoteRequestId += 1; // discard anything still in flight
     this._setQuoteState("idle");
 
     // Reset quick mode state
@@ -881,22 +909,6 @@ export class TradeActionDialog {
     this._handleSlippageChange(this.slippageInputEl.value.trim());
   }
 
-  _getActionIcon(iconName) {
-    const icons = {
-      "shopping-cart": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-      </svg>`,
-      "trending-down": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/>
-      </svg>`,
-      "plus-circle": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-      </svg>`,
-    };
-    return icons[iconName] || icons["shopping-cart"];
-  }
-
   /**
    * Token identity strip: logo, name, symbol — so the user can SEE which token they
    * are about to trade, not just a bare ticker. Replaces a plain "Token: SYM" row.
@@ -996,6 +1008,187 @@ export class TradeActionDialog {
     const whole =
       context.decimals != null ? context.holdings / 10 ** context.decimals : context.holdings;
     return Utils.formatCompactNumber(whole, 2);
+  }
+
+  // --- Live sync ------------------------------------------------------------
+  //
+  // Everything the dialog shows about the wallet and the position is re-read on a
+  // timer while it is open. The dialog used to render whatever its caller happened to
+  // know at open time and never look again, so it drifted from the rest of the app the
+  // moment anything moved: SOL arriving left "Available 0.0000" and a permanently
+  // disabled Buy, a fill elsewhere left stale holdings, and a position closed from
+  // another surface still offered a sell.
+
+  _startLiveSync() {
+    this._stopLiveSync();
+    // Sync once immediately: the caller's values are already a beat old by the time
+    // the dialog paints, and a buy on a wallet that was funded seconds ago must not
+    // wait out a full interval before its amount validates.
+    this._syncLiveContext();
+    this._liveSyncTimer = setInterval(() => this._syncLiveContext(), LIVE_SYNC_INTERVAL_MS);
+  }
+
+  _stopLiveSync() {
+    if (this._liveSyncTimer) {
+      clearInterval(this._liveSyncTimer);
+      this._liveSyncTimer = null;
+    }
+  }
+
+  /**
+   * Re-read the wallet balance and the traded position, then repaint whatever they
+   * feed. Never touches the amount the user typed.
+   */
+  async _syncLiveContext() {
+    if (!this._isOpen || this._isLoading || this._liveSyncInFlight) return;
+    // The quick-trade mint step has no context to sync yet.
+    if (this._quickMode && this._quickStep === "mint") return;
+
+    const context = this.currentContext;
+    const mint = context?.mint;
+    if (!mint) return;
+
+    this._liveSyncInFlight = true;
+    const action = this.currentAction;
+
+    try {
+      // A plain buy is only reached for a token with no open position (manualTrade
+      // turns a buy on a held token into an add), so there is nothing to poll for —
+      // and polling would 404 every tick.
+      const tracksPosition = action !== "buy" || context.hasPosition === true;
+
+      // Settled, not all: one lookup failing must not discard the other's result.
+      const [balanceResult, positionResult] = await Promise.allSettled([
+        action === "sell" ? Promise.resolve(null) : this._fetchLiveBalance(),
+        tracksPosition ? this._fetchLivePosition(mint) : Promise.resolve(null),
+      ]);
+
+      // Anything could have closed or reopened the dialog while these were in flight.
+      if (!this._isOpen || this.currentContext !== context || this.currentAction !== action) {
+        return;
+      }
+
+      let changed = false;
+
+      const balance = balanceResult.status === "fulfilled" ? balanceResult.value : null;
+      if (balance != null && balance !== context.balance) {
+        context.balance = balance;
+        changed = true;
+      }
+
+      // A failed position lookup is NOT evidence the position closed — only a
+      // successful one that came back empty is.
+      if (positionResult.status !== "fulfilled") {
+        if (changed) this._applyLiveContext();
+        return;
+      }
+      const position = positionResult.value;
+
+      if (position) {
+        if (position.holdings !== context.holdings) {
+          context.holdings = position.holdings;
+          changed = true;
+        }
+        if (position.currentSize !== context.currentSize) {
+          context.currentSize = position.currentSize;
+          changed = true;
+        }
+        if (position.decimals != null && position.decimals !== context.decimals) {
+          context.decimals = position.decimals;
+          changed = true;
+        }
+        if (!context.hasPosition) {
+          context.hasPosition = true;
+          changed = true;
+        }
+      } else if (context.hasPosition) {
+        // The position went away (closed here, sold elsewhere, or force-closed).
+        context.hasPosition = false;
+        context.holdings = 0;
+        context.currentSize = null;
+        changed = true;
+      }
+
+      if (changed) this._applyLiveContext();
+    } catch {
+      // A failed poll leaves the last known values on screen; the next tick retries.
+    } finally {
+      this._liveSyncInFlight = false;
+    }
+  }
+
+  /** Live SOL balance, from the same source the header card reads. */
+  async _fetchLiveBalance() {
+    const res = await fetch("/api/wallet/balance", { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const balance = Number(data?.sol_balance);
+    return Number.isFinite(balance) ? balance : null;
+  }
+
+  /**
+   * Live position for the traded mint, or null when there is genuinely no open
+   * position.
+   *
+   * A server error THROWS rather than returning null: null is read as "the position is
+   * gone" and disables the sell, so a transient 500 must not be allowed to look like a
+   * closed position. The caller's catch leaves the last known state on screen.
+   */
+  async _fetchLivePosition(mint) {
+    const res = await fetch(`/api/positions/${encodeURIComponent(mint)}/details`, {
+      cache: "no-store",
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Position lookup failed (${res.status})`);
+    // /details returns PositionDetailResponse directly; `position` flattens the
+    // summary fields onto itself (no {success,data} envelope).
+    const data = await res.json();
+    const position = data?.position;
+    if (!position) return null;
+
+    return {
+      // remaining_token_amount reflects partial exits; token_amount is the original.
+      holdings: position.remaining_token_amount ?? position.token_amount ?? 0,
+      decimals: position.token_decimals ?? data?.token_info?.decimals ?? null,
+      currentSize: position.total_size_sol ?? position.entry_size_sol ?? null,
+    };
+  }
+
+  /**
+   * Repaint the parts of the dialog that a live value feeds, preserving the amount the
+   * user has already chosen: the context rows, the slider ceiling and ticks, and the
+   * confirm button's validity.
+   */
+  _applyLiveContext() {
+    const action = this.currentAction;
+    const context = this.currentContext;
+
+    this._renderContext(action, this._currentSymbol, context);
+
+    // Re-derive the slider's ceiling for the new balance without disturbing the value.
+    const typed = parseFloat(this.inputField?.value);
+    this._configureSliderRange(action, context);
+    this._syncSliderToValue(Number.isFinite(typed) ? typed : 0);
+
+    // Re-run validation against the NEW values rather than blindly clearing: an amount
+    // that was too large becomes valid the moment SOL lands, and one that was fine
+    // becomes too large the moment it leaves. Either way the message on screen has to
+    // describe the current state, not the state at open.
+    const value = this._getInputValue();
+    const error =
+      action === "sell" && !context.hasPosition
+        ? "This position is no longer open."
+        : value === null || value === ""
+          ? null
+          : this._validateInput(action, value, context);
+
+    if (error) {
+      this._showError(error);
+    } else {
+      this._clearError();
+    }
+
+    this._updateConfirmButton();
   }
 
   _buildPresets(action, context) {
@@ -1194,9 +1387,27 @@ export class TradeActionDialog {
 
   // --- Amount controls (slider + MAX) -------------------------------------
 
-  /** Configure the slider range/units for the current action + context. */
-  _configureAmountControls(action, context) {
+  /**
+   * The most SOL this action may spend, and the ONE ceiling the slider, the MAX button
+   * and the validator all use. `null` when the balance is unknown — nothing to bound.
+   *
+   * Both a buy and an add spend SOL from the same wallet, so both reserve the fee
+   * headroom; only the buy used to, which let an add of the whole balance validate and
+   * then fail on chain.
+   */
+  _maxSpendableSol(context) {
+    if (typeof context?.balance !== "number" || !Number.isFinite(context.balance)) return null;
+    return Math.max(context.balance - SOL_FEE_RESERVE, 0);
+  }
+
+  /**
+   * Set the slider's range, units, ticks and snap points for the current action and
+   * context. Does NOT touch the slider's value, so it is safe to re-run when a live
+   * balance update moves the ceiling under an amount the user already chose.
+   */
+  _configureSliderRange(action, context) {
     if (!this.sliderEl) return;
+
     if (action === "sell") {
       // Percentage 0–100
       this._sliderMax = 100;
@@ -1208,10 +1419,9 @@ export class TradeActionDialog {
       this.maxBtn.textContent = "100%";
       this.sliderRow.dataset.visible = "true";
     } else {
-      // Buy/add: SOL from 0 to available balance (fall back to a sane default)
-      const bal = typeof context.balance === "number" && context.balance > 0 ? context.balance : 1;
-      // Leave a tiny headroom for fees when using the balance as the ceiling.
-      const max = action === "buy" ? Math.max(bal - 0.002, 0.001) : Math.max(bal, 0.001);
+      // Buy/add: SOL from 0 up to the spendable balance (a sane default when unknown).
+      const spendable = this._maxSpendableSol(context);
+      const max = spendable != null ? Math.max(spendable, 0.001) : 1;
       this._sliderMax = max;
       this._sliderStep = max > 0.5 ? 0.005 : 0.001;
       this._sliderUnit = "SOL";
@@ -1220,14 +1430,19 @@ export class TradeActionDialog {
       this.sliderEl.step = String(this._sliderStep);
       this.maxBtn.textContent = "MAX";
       // Only show the slider when we know the balance (otherwise it's misleading).
-      this.sliderRow.dataset.visible = typeof context.balance === "number" ? "true" : "false";
+      this.sliderRow.dataset.visible = spendable != null ? "true" : "false";
     }
-    this.sliderEl.value = "0";
 
     // Build magnetic snap points + visible ticks (presets/round values + ends)
     this._buildSnapPoints(action, context);
     this._renderSliderTicks();
+  }
 
+  /** Configure the slider for a freshly rendered dialog and reset it to zero. */
+  _configureAmountControls(action, context) {
+    if (!this.sliderEl) return;
+    this._configureSliderRange(action, context);
+    this.sliderEl.value = "0";
     this._updateSliderFill();
     this._updateSliderReadout(0);
   }
@@ -1367,19 +1582,32 @@ export class TradeActionDialog {
   }
 
   _updateConfirmButton() {
+    const action = this.currentAction;
+    const context = this.currentContext || {};
+
+    // A sell needs something to sell. Once live sync sees the position close (sold
+    // here, sold elsewhere, force-closed) the button must go dead rather than submit
+    // an exit against holdings that no longer exist.
+    if (action === "sell" && (context.hasPosition === false || context.holdings <= 0)) {
+      this.confirmBtn.disabled = true;
+      return;
+    }
+
     const value = this._getInputValue();
 
     if (value === null || value === "") {
-      // Empty input - allow if default behavior is acceptable
-      if (this.currentAction === "buy" || this.currentAction === "add") {
-        this.confirmBtn.disabled = false; // Allow empty for default
+      // Empty input means "use the configured default size", which is only spendable
+      // when the wallet actually has room for it.
+      if (action === "buy" || action === "add") {
+        const spendable = this._maxSpendableSol(context);
+        this.confirmBtn.disabled = spendable != null && spendable <= 0;
       } else {
         this.confirmBtn.disabled = true;
       }
       return;
     }
 
-    const error = this._validateInput(this.currentAction, value, this.currentContext);
+    const error = this._validateInput(action, value, context);
     this.confirmBtn.disabled = error !== null;
   }
 
@@ -1416,8 +1644,12 @@ export class TradeActionDialog {
       if (value < 0.001) {
         return "Minimum: 0.001 SOL";
       }
-      if (context.balance != null && value > context.balance) {
-        return `Insufficient balance (need ${value.toFixed(4)}, have ${context.balance.toFixed(4)})`;
+      // Bounded by the SPENDABLE balance, not the raw one: a trade that consumes every
+      // lamport cannot pay its own fee, so accepting it here only moves the failure
+      // on chain. Same ceiling the slider and MAX use.
+      const spendable = this._maxSpendableSol(context);
+      if (spendable != null && value > spendable) {
+        return `Insufficient balance (need ${value.toFixed(4)} SOL plus ${SOL_FEE_RESERVE} for fees, have ${context.balance.toFixed(4)})`;
       }
     }
 
@@ -1467,6 +1699,21 @@ export class TradeActionDialog {
         this._showError(error);
         return;
       }
+    }
+
+    // The impact check below only means anything if the quote on screen describes THIS
+    // amount. Confirming inside the input debounce (type, hit Enter) left the previous
+    // amount's quote in place, so a small quoted trade could wave through a much larger
+    // one. Re-quote and wait when they disagree.
+    const confirmAmount = this._getSelectedAmount();
+    if (confirmAmount && this._quotedAmount !== confirmAmount) {
+      this._setLoading(true);
+      try {
+        await this._fetchQuote({ silent: true });
+      } finally {
+        this._setLoading(false);
+      }
+      if (!this._isOpen) return; // closed while re-quoting
     }
 
     // Warn when the quoted PRICE IMPACT exceeds the slippage tolerance actually in

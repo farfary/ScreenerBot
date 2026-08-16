@@ -97,8 +97,24 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       return;
     }
 
+    // Claim this request FIRST — before the empty-amount return, so that clearing the
+    // field also orphans a request already in flight. Anything that resolves while a
+    // newer request is pending is discarded: the debounced input, the 15s auto-refresh
+    // and the refresh button can all be in flight at once, and a slow earlier response
+    // would otherwise repaint the panel — and the price-impact gate on confirm — with a
+    // quote for an amount the user has already changed.
+    const requestId = ++this._quoteRequestId;
+    const isCurrent = () => this._isOpen && this._quoteRequestId === requestId;
+
     const amount = this._getSelectedAmount();
     if (!amount || amount <= 0) {
+      // No amount means no quote: drop the old one rather than leave a figure on
+      // screen (and in the confirm-time impact check) for an amount that is gone.
+      this._quoteData = null;
+      this._quotedAmount = null;
+      this._quoteError = null;
+      this._stopQuoteRefreshTimer();
+      this._setRefreshing(false);
       this._setQuoteState("idle");
       return;
     }
@@ -140,7 +156,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       const response = await fetch(url);
       const data = await response.json();
 
-      if (!this._isOpen) return; // Dialog closed during fetch
+      if (!isCurrent()) return; // Dialog closed, or a newer request superseded this one
 
       // The /api/trader/quote endpoint returns a FLAT object (success + quote
       // fields at the top level), not a {data:{...}} wrapper. _renderQuote and
@@ -149,6 +165,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         this._quoteData = data;
         this._quoteError = null;
         this._quoteTimestamp = Date.now();
+        this._quotedAmount = amount;
         this._renderQuote(data);
         this._setRefreshing(false);
         this._setQuoteState("loaded");
@@ -163,7 +180,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         throw e;
       }
     } catch (err) {
-      if (!this._isOpen) return;
+      if (!isCurrent()) return;
       this._setRefreshing(false);
       // On a silent refresh failure, keep the last good quote on screen instead
       // of flipping to an error panel — the next tick will retry.
@@ -172,6 +189,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       }
       this._quoteError = err.message;
       this._quoteData = null;
+      this._quotedAmount = null;
       this._renderQuoteError(err);
       this._setQuoteState("error");
     }

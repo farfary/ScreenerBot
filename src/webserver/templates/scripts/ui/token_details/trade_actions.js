@@ -52,7 +52,9 @@ export function applyTradeActionsMixin(DialogClass) {
       action: "sell",
       mint,
       symbol,
-      holdings: this.fullTokenData?.holdings || 0,
+      // No holdings passed on purpose: manualTrade resolves them from the position.
+      // `fullTokenData.holdings` is not a field the token API returns, so this only
+      // ever forwarded 0.
       btn: this.dialogEl?.querySelector("#headerSellBtn"),
     });
 

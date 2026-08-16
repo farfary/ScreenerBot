@@ -48,7 +48,11 @@ pub(super) fn publish_snapshot(snapshot: Arc<WalletSnapshot>) {
 }
 
 /// The live snapshot, if the monitor has produced (or hydrated) one.
-pub(super) fn live_snapshot() -> Option<Arc<WalletSnapshot>> {
+///
+/// Public because it is the same source `get_wallet_worth()` reads: an API that
+/// serves a balance must serve THIS, not a database row, or the number it returns
+/// disagrees with the header and the home hero.
+pub fn live_wallet_snapshot() -> Option<Arc<WalletSnapshot>> {
     LIVE_SNAPSHOT.load_full()
 }
 
@@ -87,7 +91,7 @@ pub(super) async fn settle_refresh_burst() {
 /// otherwise a token the bot never traded (an airdrop, a manual buy elsewhere) would
 /// be permanently unpriced and silently worth 0 in the headline.
 pub fn get_held_mints() -> Vec<String> {
-    live_snapshot()
+    live_wallet_snapshot()
         .map(|snapshot| {
             snapshot
                 .token_balances
@@ -115,7 +119,7 @@ fn price_token_sol(mint: &str) -> Option<f64> {
 
 /// The wallet's full worth, priced now. See the module doc.
 pub fn get_wallet_worth() -> WalletWorth {
-    let Some(snapshot) = live_snapshot() else {
+    let Some(snapshot) = live_wallet_snapshot() else {
         return WalletWorth::default();
     };
 

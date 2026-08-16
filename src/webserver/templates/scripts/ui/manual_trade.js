@@ -30,13 +30,19 @@ function getDialog() {
 }
 
 /**
- * Current wallet balance in SOL. Best-effort: the dialog still opens without it,
- * just with nothing to size the order against.
+ * Current wallet balance in SOL, read live at the moment it is needed.
+ *
+ * NEVER accept a balance a calling view already had: the tokens page fetched one on
+ * tab activate and passed it in, so a wallet funded after that (the exact case: the
+ * app started at 0 SOL, SOL arrived, the header updated) still opened the trade dialog
+ * at 0 — with every buy amount rejected as "insufficient balance" while the header
+ * showed the real figure. The endpoint serves the same live snapshot the header does.
+ *
  * @returns {Promise<number>}
  */
 export async function fetchWalletBalance() {
   try {
-    const data = await requestManager.fetch("/api/wallet/balance", { priority: "low" });
+    const data = await requestManager.fetch("/api/wallet/balance", { priority: "high" });
     const balance = Number(data?.sol_balance);
     if (Number.isFinite(balance)) return balance;
   } catch {
@@ -117,32 +123,40 @@ async function fetchTokenIdentity(mint) {
  *
  * `trade_size_sol` x `dca_size_percentage` is exactly what the BACKEND adds when no
  * size is sent, so showing it as a preset means the user sees the amount they are
- * about to commit instead of confirming an invisible default. Read from config —
- * never hardcoded. Cached: it is only re-read when the dialog module reloads.
+ * about to commit instead of confirming an invisible default. `entry_sizes` is the
+ * configured quick-amount list. All read from config — never hardcoded, and resolved
+ * HERE so no page carries its own copy of the defaults (the tokens and positions pages
+ * each fetched the section themselves and fell back to a hardcoded
+ * `[0.005, 0.01, 0.02, 0.05]`, which silently drifts from the real config).
+ *
+ * Not cached: config is editable while the app runs, and a dialog that shows a
+ * superseded trade size is the same class of bug as one that shows a stale balance.
+ * requestManager dedupes concurrent calls, so opening a dialog costs one request.
  */
-let traderDefaults = null;
-
 async function fetchTraderDefaults() {
-  if (traderDefaults) return traderDefaults;
-
   try {
     // Config GET routes wrap the section in { data, timestamp }.
-    const body = await requestManager.fetch("/api/config/trader", { priority: "low" });
+    const body = await requestManager.fetch("/api/config/trader", { priority: "high" });
     const tradeSize = Number(body?.data?.trade_size_sol);
     const dcaPct = Number(body?.data?.dca_size_percentage);
+    const entrySizes = body?.data?.entry_sizes;
 
-    if (Number.isFinite(tradeSize) && tradeSize > 0) {
-      traderDefaults = {
-        tradeSize,
-        dcaSize:
-          Number.isFinite(dcaPct) && dcaPct > 0 ? tradeSize * (dcaPct / 100) : tradeSize,
-      };
-    }
+    return {
+      tradeSize: Number.isFinite(tradeSize) && tradeSize > 0 ? tradeSize : null,
+      dcaSize:
+        Number.isFinite(tradeSize) && tradeSize > 0
+          ? Number.isFinite(dcaPct) && dcaPct > 0
+            ? tradeSize * (dcaPct / 100)
+            : tradeSize
+          : null,
+      entrySizes: Array.isArray(entrySizes)
+        ? entrySizes.filter((size) => Number.isFinite(size) && size > 0)
+        : [],
+    };
   } catch {
     // The dialog still opens — the user just types an amount instead of picking one.
+    return { tradeSize: null, dcaSize: null, entrySizes: [] };
   }
-
-  return traderDefaults;
 }
 
 const ENDPOINTS = {
@@ -203,23 +217,12 @@ function buildBody(action, mint, result) {
  * @param {string} [options.symbol] - display hint; the resolved value wins
  * @param {string} [options.name]
  * @param {string} [options.logo]
- * @param {number} [options.balance] - fetched when omitted (buy/add only)
  * @param {Object} [options.context] - extra fields merged into the dialog context
- *   (e.g. the tokens page's `entrySize` / `entrySizes` DCA presets for "add")
  * @param {HTMLElement} [options.btn] - disabled while the request is in flight
  * @returns {Promise<boolean>} true when a trade was actually placed (false = user
  *   cancelled, or it failed)
  */
-export async function manualTrade({
-  action,
-  mint,
-  symbol,
-  name,
-  logo,
-  balance,
-  context = {},
-  btn = null,
-}) {
+export async function manualTrade({ action, mint, symbol, name, logo, context = {}, btn = null }) {
   if (!action || !mint) {
     Utils.showToast("No mint address available", "error");
     return false;
@@ -230,7 +233,7 @@ export async function manualTrade({
     // the token's identity, so it doubles as the identity lookup when one exists.
     const [position, walletBalance] = await Promise.all([
       fetchPosition(mint),
-      action === "sell" ? Promise.resolve(null) : balance ?? fetchWalletBalance(),
+      action === "sell" ? Promise.resolve(null) : fetchWalletBalance(),
     ]);
 
     // Only pay for a second lookup when the position did not supply identity.
@@ -276,14 +279,16 @@ export async function manualTrade({
       // The multiplier presets (1.0x / 1.5x / 2.0x) are sized off the money already in
       // the position — the natural basis for averaging in. Fall back to the configured
       // trade size when the position's size could not be resolved.
-      if (dialogContext.entrySize == null) {
-        dialogContext.entrySize = position?.currentSize ?? defaults?.tradeSize ?? null;
-      }
-      // Flat preset: the configured DCA size — the same amount the backend uses when
-      // no size_sol is sent.
-      if (!dialogContext.entrySizes?.length && defaults?.dcaSize) {
-        dialogContext.entrySizes = [Number(defaults.dcaSize.toFixed(4))];
-      }
+      dialogContext.entrySize = position?.currentSize ?? defaults.tradeSize ?? null;
+
+      // Flat presets: the configured DCA size (the exact amount the backend adds when
+      // no size_sol is sent) plus the configured entry sizes, deduplicated.
+      const flat = [];
+      if (defaults.dcaSize) flat.push(Number(defaults.dcaSize.toFixed(4)));
+      defaults.entrySizes.forEach((size) => {
+        if (!flat.includes(size)) flat.push(size);
+      });
+      dialogContext.entrySizes = flat;
     }
 
     const result = await getDialog().open({

@@ -954,36 +954,14 @@ function createLifecycle() {
         }
 
         // Both actions go through the shared manual-trade flow (ui/manual_trade.js),
-        // which owns the dialog, the payload, the toasts AND resolves the position
-        // (holdings/decimals/size) itself — so this no longer passes them by hand.
-        const context = {};
-        if (action === "add") {
-          // DCA presets for the add dialog's size buttons.
-          let entrySizes = [0.005, 0.01, 0.02, 0.05];
-          try {
-            const configData = await requestManager.fetch("/api/config/trader", {
-              priority: "normal",
-            });
-            if (Array.isArray(configData?.data?.entry_sizes)) {
-              entrySizes = configData.data.entry_sizes;
-            }
-          } catch (err) {
-            console.warn("Failed to fetch entry_sizes config:", err);
-          }
-          // The positions API returns NEITHER `entry_sol` NOR `sol_size` — both were dead
-          // reads, so this was always undefined and the add dialog's multiplier presets
-          // (1.0x / 1.5x / 2.0x) never had a basis. `total_size_sol` is the money actually in
-          // the position (entry + every DCA), which is what an add should be sized against.
-          context.entrySize = row.total_size_sol ?? row.entry_size_sol;
-          context.entrySizes = entrySizes;
-        }
-
+        // which owns the dialog, the payload, the toasts AND resolves everything the
+        // dialog shows — position (holdings/decimals/size), wallet balance and the
+        // configured DCA presets — so this passes none of them by hand.
         const placed = await manualTrade({
           action,
           mint,
           symbol: row.symbol,
           btn,
-          context,
         });
 
         if (placed) table.refresh({ reason: "manual", preserveScroll: true });
