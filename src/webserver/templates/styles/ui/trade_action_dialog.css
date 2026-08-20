@@ -320,7 +320,11 @@ body.trade-action-dialog-open {
 .trade-action-preset-btn {
   padding: 14px 12px;
   border: 1px solid var(--border-color, #30363d);
-  background: rgb(0, 0, 0, 0.2);
+
+  /* A recessed surface on the card, resolved per-theme — was a hardcoded black
+     wash that only read as "recessed" in dark mode and needed a separate
+     [data-theme="light"] override to not look muddy on a white card. */
+  background: var(--bg-primary);
   color: var(--text-secondary, #8b949e);
   border-radius: var(--radius-md, 6px);
   cursor: pointer;
@@ -548,16 +552,21 @@ body.trade-action-dialog-open {
   gap: 8px;
 }
 
+/* Same rest/hover step as the working quick-trade paste button in this dialog
+   (--bg-card -> --bg-card-hover): both are real, distinct, per-theme colors.
+   The previous rgb(255,255,255,*) washes were tuned for a dark card only — on
+   the light card they left the resting fill nearly invisible and the hover
+   state (a white border at 15% alpha) all but disappeared. */
 .trade-action-btn-cancel {
-  background: rgb(255, 255, 255, 0.05);
+  background: var(--bg-card);
   color: var(--text-primary, #e6edf3);
   border-color: var(--border-color, #30363d);
 }
 
 .trade-action-btn-cancel:hover:not(:disabled),
 .trade-action-btn-cancel:focus-visible {
-  background: rgb(255, 255, 255, 0.08);
-  border-color: rgb(255, 255, 255, 0.15);
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
   outline: none;
 }
 
@@ -1119,15 +1128,7 @@ body.trade-action-dialog-open {
   background: var(--bg-card-hover, #f0f2f6);
 }
 
-[data-theme="light"] .trade-action-preset-btn {
-  background: var(--bg-card-hover, #f0f2f6);
-}
-
 [data-theme="light"] .trade-action-input {
-  background: var(--bg-card-hover, #f0f2f6);
-}
-
-[data-theme="light"] .trade-action-btn-cancel {
   background: var(--bg-card-hover, #f0f2f6);
 }
 
@@ -1148,7 +1149,11 @@ body.trade-action-dialog-open {
   width: min(380px, 90vw);
   padding: 24px;
   background: var(--bg-secondary, #161b22);
-  border: 1px solid rgb(239, 68, 68, 0.4);
+
+  /* --danger-alpha-30 (not -40): the only one of the pair with a real dark-theme
+     value — -40 is only ever declared once, in the light :root block, so it was
+     silently the light red's alpha in both themes. */
+  border: 1px solid var(--danger-alpha-30);
   border-radius: var(--radius-xl, 12px);
   text-align: center;
   animation: trade-dialog-slide-up 200ms ease;
@@ -1159,10 +1164,14 @@ body.trade-action-dialog-open {
   margin-bottom: 12px;
 }
 
+/* --danger/--danger-hover (not a hardcoded #ef4444/#dc2626) because --error-color
+   is a DIFFERENT red per theme (#ef4444 light / #f85149 dark) — the hardcoded
+   value silently painted the light theme's red even in dark mode, mismatching
+   every other danger-colored element in the dialog. */
 .slippage-warning-title {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #ef4444;
+  color: var(--danger);
   margin-bottom: 12px;
 }
 
@@ -1174,7 +1183,7 @@ body.trade-action-dialog-open {
 }
 
 .slippage-warning-text strong {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .slippage-warning-buttons {
@@ -1193,23 +1202,27 @@ body.trade-action-dialog-open {
   border: 1px solid transparent;
 }
 
+/* Same rest/hover pair as the dialog's own Cancel button: a white wash at
+   4-10% alpha was tuned for the dark card only and had no light-mode
+   equivalent, so this button read as barely-there fill with almost no hover
+   feedback in light mode. */
 .slippage-warning-btn.cancel {
-  background: rgb(255, 255, 255, 0.05);
+  background: var(--bg-card-hover);
   color: var(--text-primary, #e6edf3);
   border-color: var(--border-color, #30363d);
 }
 
 .slippage-warning-btn.cancel:hover {
-  background: rgb(255, 255, 255, 0.1);
+  border-color: var(--text-muted);
 }
 
 .slippage-warning-btn.confirm {
-  background: #ef4444;
+  background: var(--danger);
   color: #fff;
 }
 
 .slippage-warning-btn.confirm:hover {
-  background: #dc2626;
+  background: var(--danger-hover);
 }
 
 /* ============================================================
