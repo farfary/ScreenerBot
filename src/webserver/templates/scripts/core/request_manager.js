@@ -122,8 +122,12 @@ class RequestManager {
     const key = this._createKey(url, fetchOptions);
     const endpoint = new URL(url, window.location.origin).pathname;
 
-    // Check backoff delay
-    const backoffDelay = this._getBackoffDelay(endpoint);
+    // Check backoff delay. It exists to stop background POLLERS from hammering an
+    // endpoint that is failing — it must never sit in front of something the user just
+    // clicked. A trade POST that timed out records a failure, so without this exemption
+    // the very next Sell was held back 1s, 2s, 4s... before it was even sent, which is
+    // the worst possible moment to add latency.
+    const backoffDelay = priority === "high" ? 0 : this._getBackoffDelay(endpoint);
     if (backoffDelay > 0) {
       await new Promise((resolve) => setTimeout(resolve, backoffDelay));
     }

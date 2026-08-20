@@ -353,32 +353,96 @@ pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
 }
 
 pub fn unconfirmed_swap_signature_from_message(message: &str) -> Option<String> {
-    let (_, after) = message.split_once("Transaction ")?;
-    let (signature, _) = after.split_once(" not confirmed within timeout")?;
+    // The marker sentence is the anchor, not the word "Transaction": callers wrap swap
+    // errors in their own prose, and any earlier "Transaction " in that prose used to win
+    // the match and hand back everything in between as the "signature". What came out was
+    // a sentence fragment, and `close_position_direct` wrote it straight into
+    // `exit_transaction_signature` — an exit that verification could never settle because
+    // the chain has no such signature.
+    let (before_marker, _) = message.split_once(" not confirmed within timeout")?;
 
-    let signature = signature.trim();
-    if signature.is_empty() {
-        return None;
-    }
-    Some(signature.to_owned())
+    // The signature is the last whitespace-separated token before the marker.
+    let candidate = before_marker.split_whitespace().next_back()?;
+
+    is_plausible_signature(candidate).then(|| candidate.to_owned())
+}
+
+/// Base58 alphabet used by Solana signatures (no 0, O, I or l).
+const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/// Whether a string can actually BE a Solana transaction signature.
+///
+/// A recovered "signature" is written to the position and handed to verification, so a
+/// value that cannot exist on chain is worse than none at all: it produces an exit that
+/// stays pending forever. An ed25519 signature is 64 bytes, which is 86-88 base58
+/// characters; anything outside that, or carrying a character base58 cannot encode, is
+/// prose that leaked out of an error message.
+fn is_plausible_signature(candidate: &str) -> bool {
+    (86..=88).contains(&candidate.len()) && candidate.chars().all(|c| BASE58_ALPHABET.contains(c))
 }
 
 #[cfg(test)]
 mod submitted_timeout_tests {
-    use super::unconfirmed_swap_signature_from_message;
+    use super::{is_plausible_signature, unconfirmed_swap_signature_from_message};
+
+    /// A real (well-formed) mainnet signature: 88 base58 characters.
+    const SIGNATURE: &str =
+        "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
 
     #[test]
     fn submitted_timeout_recovers_the_signature_for_verification() {
         assert_eq!(
-            unconfirmed_swap_signature_from_message(
-                "RPC error: Transaction 5abcXYZ not confirmed within timeout"
-            ),
-            Some("5abcXYZ".to_owned())
+            unconfirmed_swap_signature_from_message(&format!(
+                "RPC error: Transaction {SIGNATURE} not confirmed within timeout"
+            )),
+            Some(SIGNATURE.to_owned())
         );
+    }
+
+    #[test]
+    fn a_pre_submission_failure_is_not_treated_as_submitted() {
         assert_eq!(
             unconfirmed_swap_signature_from_message("quote rejected before submission"),
             None
         );
+    }
+
+    /// The regression that made a stuck sell unrecoverable: a router wrapped the
+    /// send/confirm error in prose that itself contained "Transaction ", and the old
+    /// first-match parser returned the prose as the signature.
+    #[test]
+    fn a_wrapped_error_still_yields_the_real_signature_only() {
+        let recovered = unconfirmed_swap_signature_from_message(&format!(
+            "Transaction send failed: RPC error: Transaction {SIGNATURE} not confirmed within timeout"
+        ));
+        assert_eq!(recovered, Some(SIGNATURE.to_owned()));
+    }
+
+    /// Nothing that cannot exist on chain may ever be returned: it would be written to
+    /// `exit_transaction_signature` and leave the position pending verification forever.
+    #[test]
+    fn prose_is_never_returned_as_a_signature() {
+        for message in [
+            "Transaction  not confirmed within timeout",
+            "Transaction send failed: not confirmed within timeout",
+            "Transaction 5abcXYZ not confirmed within timeout",
+            "Transaction 0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl0O not confirmed within timeout",
+        ] {
+            assert_eq!(
+                unconfirmed_swap_signature_from_message(message),
+                None,
+                "message must not yield a signature: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn signature_shape_is_checked_against_base58_and_length() {
+        assert!(is_plausible_signature(SIGNATURE));
+        assert!(!is_plausible_signature(""));
+        assert!(!is_plausible_signature("short"));
+        // Right length, but '0' is not in the base58 alphabet.
+        assert!(!is_plausible_signature(&SIGNATURE.replacen('5', "0", 1)));
     }
 }
 

@@ -165,6 +165,22 @@ const ENDPOINTS = {
   sell: "/api/trader/manual/sell",
 };
 
+// A trade is not a normal request. The backend holds the connection for the WHOLE
+// execution — quote, swap build, submission, then polling the chain for confirmation —
+// which legitimately runs far past the request manager's 10s default. That default made
+// every slow-but-healthy trade surface as "Request timeout after 10000ms" while the swap
+// was still in flight, which reads as a failure and invites the user to click Sell again.
+const TRADE_TIMEOUT_MS = 180000;
+
+// What a timeout on a trade request ACTUALLY means: the browser stopped waiting, the
+// backend did not stop trading. Aborting a fetch cannot cancel a submitted swap, so the
+// only honest thing to say is that it is still running.
+const PENDING_MESSAGES = {
+  buy: "Buy is still running - watch the position row",
+  add: "Add to position is still running - watch the position row",
+  sell: "Sell is still running - watch the position row",
+};
+
 const SUCCESS_MESSAGES = {
   buy: "Buy order placed!",
   add: "Added to position!",
@@ -306,6 +322,7 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildBody(action, mint, result)),
         priority: "high",
+        timeout: TRADE_TIMEOUT_MS,
       });
     } finally {
       if (btn) btn.disabled = false;
@@ -314,6 +331,11 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
     Utils.showToast(SUCCESS_MESSAGES[action], "success");
     return true;
   } catch (error) {
+    // Never report a timed-out trade as a failure: the swap may already be on chain.
+    if (error?.name === "TimeoutError") {
+      Utils.showToast(PENDING_MESSAGES[action], "warning");
+      return false;
+    }
     Utils.showToast(await describeError(error, action), "error");
     return false;
   }

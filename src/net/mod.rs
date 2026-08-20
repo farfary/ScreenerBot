@@ -51,9 +51,33 @@ pub fn apply_proxy(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
     }
 }
 
-/// A reqwest client builder pre-configured with the detected proxy.
+/// Default ceiling on a whole HTTP request (connect + send + read the body).
+///
+/// reqwest has NO request timeout by default, so a socket that opens and then
+/// goes silent — a stalled proxy, a captive portal, a provider that accepts the
+/// connection and never answers — parks the calling task FOREVER. That is not a
+/// theoretical risk: a Jupiter `/swap/v1/swap` build request hung this way in the
+/// middle of a manual sell, so the swap never returned, the position stayed in
+/// "Selling" with its slot permit held, and the exit action never resolved.
+///
+/// Generous enough that a slow-but-live endpoint still succeeds, finite so that
+/// nothing in the app can wait forever. Any caller needing longer (the updater's
+/// binary download) overrides it on its own builder, and any caller needing
+/// shorter (swap execution) sets a per-request `.timeout()`, which reqwest
+/// applies in preference to this one.
+const DEFAULT_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
+/// Default ceiling on establishing the TCP+TLS connection alone.
+const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// A reqwest client builder pre-configured with the detected proxy and finite
+/// request/connect timeouts (see `DEFAULT_REQUEST_TIMEOUT`).
 pub fn client_builder() -> reqwest::ClientBuilder {
-    apply_proxy(reqwest::Client::builder())
+    apply_proxy(
+        reqwest::Client::builder()
+            .timeout(DEFAULT_REQUEST_TIMEOUT)
+            .connect_timeout(DEFAULT_CONNECT_TIMEOUT),
+    )
 }
 
 /// A default reqwest client with the detected proxy applied. Drop-in replacement

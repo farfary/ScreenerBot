@@ -477,6 +477,23 @@ impl ActionsDatabase {
             .transaction()
             .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
+        // CHILD ROWS FIRST. `action_steps.action_id` is a FOREIGN KEY into `actions(id)`
+        // with no ON DELETE CASCADE, so deleting the parent while its steps still point at
+        // it fails the whole transaction with "FOREIGN KEY constraint failed" — which is
+        // exactly what this cleanup did on every run, meaning it never deleted anything and
+        // both tables grew without bound for the life of the install.
+        tx.execute(
+            r#"
+            DELETE FROM action_steps
+            WHERE action_id IN (
+                SELECT id FROM actions
+                WHERE completed_at < ?1 AND completed_at IS NOT NULL
+            )
+            "#,
+            params![cutoff_str],
+        )
+        .map_err(|e| format!("Failed to cleanup old action steps: {e}"))?;
+
         let deleted = tx
             .execute(
                 "DELETE FROM actions WHERE completed_at < ?1 AND completed_at IS NOT NULL",
@@ -484,7 +501,7 @@ impl ActionsDatabase {
             )
             .map_err(|e| format!("Failed to cleanup old actions: {e}"))?;
 
-        // Cleanup orphaned steps
+        // Sweep steps left behind by any earlier failed cleanup.
         tx.execute(
             "DELETE FROM action_steps WHERE action_id NOT IN (SELECT id FROM actions)",
             [],

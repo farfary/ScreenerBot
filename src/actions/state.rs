@@ -147,7 +147,14 @@ pub async fn update_step(
     error: Option<String>,
     metadata: Option<Value>,
 ) -> bool {
-    // 1. Update database first
+    // 1. Persist first — but a persistence failure must NOT suppress steps 2 and 3.
+    //
+    // The in-memory action and the broadcast are what the dashboard actually renders. When
+    // this returned early on a DB error (a locked database is enough), the live trade kept
+    // running while its row froze on the last step that happened to write — a sell in the
+    // middle of submitting a swap still displaying "Validating". The step history is worth
+    // less than telling the user the truth about a trade that is moving money right now, so
+    // log the write failure and carry on updating the live state.
     if let Some(db_arc) = get_db().await {
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
@@ -164,11 +171,10 @@ pub async fn update_step(
                 logger::error(
                     LogTag::System,
                     &format!(
-                        "Failed to update step {} for action {}: {}",
+                        "Failed to persist step {} for action {} ({}); live state still updated",
                         step_index, action_id, e
                     ),
                 );
-                return false;
             }
         }
     }

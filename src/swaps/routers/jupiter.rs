@@ -164,6 +164,15 @@ struct JupiterSwapResponse {
 /// rather than failing the trade outright.
 const JUPITER_MAX_ATTEMPTS: u32 = 4;
 
+/// Ceiling on a SINGLE Jupiter HTTP call (quote or swap-build).
+///
+/// Both calls happen BEFORE anything is signed or submitted, so cutting one short
+/// is always safe — the worst case is a failed trade, never a duplicate one. The
+/// bound is deliberately tighter than the shared default in `crate::net`: a swap
+/// is a live, price-sensitive decision, and a quote that takes longer than this is
+/// already stale. Without it a stalled socket parked the whole sell indefinitely.
+const JUPITER_HTTP_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// Compute a backoff delay. Honors a server `Retry-After` (seconds) when present,
 /// otherwise exponential (~0.4s, 0.8s, 1.6s, 3.2s) capped at 4s, plus small jitter.
 fn jupiter_backoff_delay(attempt: u32, retry_after_secs: Option<u64>) -> Duration {
@@ -383,7 +392,7 @@ impl SwapRouter for JupiterRouter {
             if let Some(ref key) = api_key {
                 req = req.header("x-api-key", key.clone());
             }
-            req.query(&quote_req)
+            req.query(&quote_req).timeout(JUPITER_HTTP_TIMEOUT)
         })
         .await?;
 
@@ -491,6 +500,7 @@ impl SwapRouter for JupiterRouter {
             }
             req.header("Content-Type", "application/json")
                 .json(&swap_req)
+                .timeout(JUPITER_HTTP_TIMEOUT)
         })
         .await?;
 
@@ -499,10 +509,14 @@ impl SwapRouter for JupiterRouter {
 
         // Transaction is already base64 encoded, send it directly
         let rpc_client = crate::rpc::get_rpc_client();
+        // Propagate the send/confirm error UNCHANGED. Wrapping it used to prepend
+        // "Transaction send failed: ", which corrupted the submitted-but-unconfirmed
+        // marker that `swaps::unconfirmed_swap_signature` reads out of the message —
+        // the caller then stored a garbage string as the exit signature and
+        // verification could never reconcile the sell that actually landed.
         let signature = rpc_client
             .sign_send_and_confirm_transaction_simple(&swap_response.swap_transaction)
-            .await
-            .map_err(|e| Error::network_error(format!("Transaction send failed: {e}")))?;
+            .await?;
 
         let elapsed = start.elapsed();
 

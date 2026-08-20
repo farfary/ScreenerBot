@@ -550,18 +550,32 @@ function createLifecycle() {
       });
     };
 
+    // Keep the NEWEST action for a mint, not whichever one the active list happened to
+    // yield last. A trade that never finished (a hung swap leaves its action in progress
+    // forever) otherwise stays in the active set and can overwrite the entry for the trade
+    // the user is actually watching — the row then reports a step the live trade passed
+    // minutes ago.
+    const keepNewest = (map, n, mint, value) => {
+      const startedAt = parseTs(n.started_at);
+      const existing = map.get(mint);
+      if (existing && Number.isFinite(existing._startedAt)) {
+        if (!Number.isFinite(startedAt) || startedAt < existing._startedAt) return;
+      }
+      map.set(mint, { ...value, _startedAt: startedAt });
+    };
+
     const considerSell = (n) => {
       if (!ACTION_SELL_TYPES.has(n?.action_type)) return;
       const mint = actionMint(n);
       if (!mint) return;
-      sellByMint.set(mint, { step: shortStep(n.state?.current_step) });
+      keepNewest(sellByMint, n, mint, { step: shortStep(n.state?.current_step) });
     };
 
     const considerDca = (n) => {
       if (!ACTION_DCA_TYPES.has(n?.action_type)) return;
       const mint = actionMint(n);
       if (!mint) return;
-      dcaByMint.set(mint, { step: shortStep(n.state?.current_step) });
+      keepNewest(dcaByMint, n, mint, { step: shortStep(n.state?.current_step) });
     };
 
     try {
