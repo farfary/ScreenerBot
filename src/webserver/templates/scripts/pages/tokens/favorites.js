@@ -27,7 +27,7 @@ export function createFavoritesModule(deps) {
       }
     } catch (err) {
       console.error("Failed to fetch favorites:", err);
-      Utils.showToast("Failed to load favorites", "error");
+      Utils.showToast({ key: "favorites-load", type: "error", title: "Could not load favorites" });
     } finally {
       favoritesState.isLoading = false;
     }

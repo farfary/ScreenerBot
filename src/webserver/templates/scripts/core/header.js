@@ -14,6 +14,18 @@ import { playToggleOn, playToggleOff, playError } from "./sounds.js";
 // Without this the event fires into the void on pages that don't load the dialog.
 import "../ui/token_details_dialog.js";
 
+// Side-effect import: subscribes the action -> toast bridge to the notification
+// stream. It must load on every page (a trade can be running whatever the user
+// is looking at), and it must load through a plain relative specifier — a
+// `<script src=...?v=>` tag would create a SECOND module instance alongside the
+// one `ui/manual_trade.js` imports, and every trade would toast twice.
+import "./action_toasts.js";
+
+// Side-effect import: registers the Cmd/Ctrl+B and Cmd/Ctrl+Shift+S quick-trade
+// shortcuts. Same relative-specifier rule as above — it shares the trade dialog
+// and the manual-trade submitter with the rest of the dashboard.
+import "../ui/quick_trade_shortcuts.js";
+
 const state = {
   traderEnabled: false,
   traderStatus: "loading",
@@ -154,16 +166,22 @@ async function controlTrader(action) {
       applyStatus(payload.status);
     }
 
+    // No toast: the bot card flips to the new state and a confirmation sound
+    // plays, so a notice would only repeat what the user just watched happen.
     if (action === "start") {
       playToggleOn();
     } else {
       playToggleOff();
     }
-    Utils.showToast(`Trader ${action === "start" ? "started" : "stopped"}`, "success");
   } catch (err) {
     console.error("[TraderHeader] Control action failed", err);
     playError();
-    Utils.showToast(err.message || "Trader control failed", "error");
+    Utils.showToast({
+      key: "trader-control",
+      type: "error",
+      title: "Trader control failed",
+      message: err.message || null,
+    });
     setAvailability(false);
   } finally {
     setLoading(false);
@@ -541,28 +559,12 @@ function initNotifications() {
 
   if (!notifBtn) return;
 
-  // Subscribe to notification updates
+  // The header owns the unread BADGE only. Turning actions into toasts belongs
+  // to `core/action_toasts.js` — doing it here as well is what made a single
+  // swap raise a "started" and a "completed" toast on top of its own notice.
   notificationManager.subscribe((event) => {
     if (event.type === "summary" && event.summary) {
       updateNotificationBadge(event.summary.unread);
-    }
-
-    // Show toast for new notifications
-    if (event.type === "added" && event.notification) {
-      const action = event.notification;
-      const actionType = formatActionType(action.action_type);
-      Utils.showToast(`${actionType} started`, "info");
-    } else if (event.type === "updated" && event.notification) {
-      const action = event.notification;
-      const status = notificationManager.getStatus(action);
-
-      if (status === "completed") {
-        const actionType = formatActionType(action.action_type);
-        Utils.showToast(`${actionType} completed`, "success");
-      } else if (status === "failed") {
-        const actionType = formatActionType(action.action_type);
-        Utils.showToast(`${actionType} failed`, "error");
-      }
     }
   });
 
@@ -575,24 +577,6 @@ function initNotifications() {
   });
 
   notificationsInitialized = true;
-}
-
-function formatActionType(actionType) {
-  if (!actionType) return "Action";
-
-  // Backend sends snake_case format via Serde JSON serialization
-  // #[serde(rename_all = "snake_case")] in src/actions/types.rs line 177
-  const typeMap = {
-    swap_buy: "Buying",
-    swap_sell: "Selling",
-    position_open: "Opening Position",
-    position_close: "Closing Position",
-    position_dca: "DCA",
-    position_partial_exit: "Partial Exit",
-    manual_order: "Manual Order",
-  };
-
-  return typeMap[actionType] || actionType;
 }
 
 function updateNotificationBadge(count) {
@@ -621,7 +605,9 @@ async function handleRestart() {
   if (!confirmed) return;
 
   try {
-    Utils.showToast("Restarting bot...", "info");
+    // ONE notice for the whole restart: it is replaced in place if the restart
+    // fails, and the page reloads out from under it when it succeeds.
+    Utils.showToast({ key: "system-restart", type: "progress", title: "Restarting bot" });
 
     const res = await fetch("/api/system/reboot", {
       method: "POST",
@@ -633,7 +619,6 @@ async function handleRestart() {
     }
 
     const result = await res.json();
-    Utils.showToast("Bot restarting... Please wait.", "success");
 
     const waitForRestart = window.waitForScreenerBotRestart;
     if (typeof waitForRestart !== "function") {
@@ -642,7 +627,12 @@ async function handleRestart() {
     await waitForRestart(result.instance_id, { target: window.location.pathname || "/home" });
   } catch (err) {
     console.error("[Header] Restart failed:", err);
-    Utils.showToast(err.message, "error");
+    Utils.showToast({
+      key: "system-restart",
+      type: "error",
+      title: "Restart failed",
+      message: err.message,
+    });
   }
 }
 

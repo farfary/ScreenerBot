@@ -1,310 +1,88 @@
 /**
- * Toast Component - Individual toast UI renderer
+ * Toast view — renders one notice and nothing else.
  *
- * Handles:
- * - HTML structure rendering with variants
- * - Animations (enter, active, hover, exit)
- * - Event listeners (close, actions, hover)
- * - Progress bar updates
- * - Accessibility (ARIA labels, keyboard navigation)
- * - Icon mapping for each variant
+ * It owns no lifecycle: `core/toast.js` decides when a toast appears, changes
+ * or leaves, and hands this class callbacks. Keeping the two apart is what lets
+ * one toast be updated in place through the steps of a trade instead of being
+ * torn down and re-created (which is what made them stack).
  */
 
-export class Toast {
-  constructor(config, id) {
-    this.config = config;
-    this.id = id;
-    this.element = null;
-  }
+const CLOSE_ICON = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+  <path d="M1 1L11 11M1 11L11 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>`;
 
+export class Toast {
   /**
-   * Render the toast HTML element
-   * @returns {HTMLElement} Toast element
+   * @param {Object} config normalized config from the manager
+   * @param {number} repeat how many times this notice has fired
+   * @param {{onClose:Function,onHoverChange:Function}} callbacks
    */
-  render() {
+  constructor(config, repeat, { onClose, onHoverChange }) {
     this.element = document.createElement("div");
-    this.element.className = `toast toast--${this.config.type}`;
-    this.element.setAttribute("data-toast-id", this.id);
-    this.element.setAttribute("role", "alert");
-    this.element.setAttribute("aria-live", this.config.type === "error" ? "assertive" : "polite");
+    this.element.className = "toast";
+    this.element.setAttribute("role", "status");
     this.element.setAttribute("aria-atomic", "true");
 
-    // Build HTML structure
-    this.element.innerHTML = this._buildHTML();
+    this.element.innerHTML = `
+      <div class="toast__row">
+        <i class="toast__icon" aria-hidden="true"></i>
+        <div class="toast__body">
+          <p class="toast__title"></p>
+          <p class="toast__message"></p>
+        </div>
+        <span class="toast__repeat" aria-hidden="true"></span>
+        <button class="toast__close" type="button" aria-label="Dismiss">${CLOSE_ICON}</button>
+      </div>
+      <div class="toast__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden>
+        <span class="toast__progress-bar"></span>
+      </div>`;
 
-    // Setup ARIA relationships after HTML is inserted
-    this._setupAriaRelationships();
+    this.iconEl = this.element.querySelector(".toast__icon");
+    this.titleEl = this.element.querySelector(".toast__title");
+    this.messageEl = this.element.querySelector(".toast__message");
+    this.repeatEl = this.element.querySelector(".toast__repeat");
+    this.progressEl = this.element.querySelector(".toast__progress");
+    this.progressBarEl = this.element.querySelector(".toast__progress-bar");
 
-    // Attach event listeners
-    this._attachEventListeners();
+    this.element.querySelector(".toast__close").addEventListener("click", onClose);
+    this.element.addEventListener("mouseenter", () => onHoverChange(true));
+    this.element.addEventListener("mouseleave", () => onHoverChange(false));
 
-    return this.element;
+    this.update(config, repeat);
   }
 
-  /**
-   * Setup ARIA relationships for accessibility
-   */
-  _setupAriaRelationships() {
-    const titleEl = this.element.querySelector(".toast__title");
-    const messageEl = this.element.querySelector(".toast__message");
-    const descEl = this.element.querySelector(".toast__description");
+  /** Paint `config` onto the existing element — never rebuilds it. */
+  update(config, repeat) {
+    this.element.dataset.type = config.type;
+    // An error is the one notice worth interrupting a screen reader for.
+    this.element.setAttribute("aria-live", config.type === "error" ? "assertive" : "polite");
 
-    // Create unique IDs for ARIA relationships
-    const titleId = `toast-title-${this.id}`;
-    const messageId = `toast-message-${this.id}`;
-    const descId = `toast-desc-${this.id}`;
+    this.iconEl.className = `toast__icon ${config.icon}`;
+    this.titleEl.textContent = config.title;
 
-    if (titleEl) {
-      titleEl.id = titleId;
-    }
-    if (messageEl) {
-      messageEl.id = messageId;
-    }
-    if (descEl) {
-      descEl.id = descId;
-    }
+    this.messageEl.textContent = config.message || "";
+    this.messageEl.hidden = !config.message;
 
-    // Link toast to its content via aria-labelledby and aria-describedby
-    const labelledBy = [titleId];
-    const describedBy = [];
+    this.repeatEl.textContent = repeat > 1 ? `${repeat}` : "";
+    this.repeatEl.hidden = repeat <= 1;
 
-    if (messageEl) describedBy.push(messageId);
-    if (descEl) describedBy.push(descId);
-
-    if (labelledBy.length > 0) {
-      this.element.setAttribute("aria-labelledby", labelledBy.join(" "));
-    }
-    if (describedBy.length > 0) {
-      this.element.setAttribute("aria-describedby", describedBy.join(" "));
-    }
-
-    // Update close button label to be more specific
-    const closeBtn = this.element.querySelector(".toast__close");
-    if (closeBtn && this.config.title) {
-      closeBtn.setAttribute("aria-label", `Close ${this.config.title}`);
+    const hasProgress = config.progress !== null;
+    this.progressEl.hidden = !hasProgress;
+    if (hasProgress) {
+      this.progressBarEl.style.width = `${config.progress}%`;
+      this.progressEl.setAttribute("aria-valuenow", String(config.progress));
     }
   }
 
-  /**
-   * Build the toast HTML structure
-   * @returns {string} HTML string
-   */
-  _buildHTML() {
-    const { type, title, description, message, icon, progress, actions } = this.config;
-
-    // Escape HTML to prevent XSS
-    const escapeHTML = (str) => {
-      if (!str) return "";
-      const div = document.createElement("div");
-      div.textContent = str;
-      return div.innerHTML;
-    };
-
-    const titleHTML = escapeHTML(title);
-    const descriptionHTML = description ? escapeHTML(description) : "";
-    const messageHTML = message ? escapeHTML(message) : "";
-
-    // Icon with loading animation for loading type
-    const iconHTML =
-      type === "loading"
-        ? `<span class="toast__icon toast__icon--loading" aria-hidden="true">${icon}</span>`
-        : `<span class="toast__icon" aria-hidden="true">${icon}</span>`;
-
-    // Progress bar (if applicable)
-    const progressHTML =
-      progress !== undefined
-        ? `
-			<div class="toast__progress" role="progressbar" aria-valuenow="${progress}" aria-valuemin="0" aria-valuemax="100">
-				<div class="toast__progress-bar" style="width: ${progress}%"></div>
-			</div>
-		`
-        : "";
-
-    // Actions (if any)
-    const actionsHTML =
-      actions && actions.length > 0
-        ? `
-			<div class="toast__actions">
-				${actions
-          .map(
-            (action, index) => `
-					<button 
-						class="toast__action toast__action--${action.style || "primary"}" 
-						data-action-index="${index}"
-						type="button"
-					>
-						${escapeHTML(action.label)}
-					</button>
-				`
-          )
-          .join("")}
-			</div>
-		`
-        : "";
-
-    return `
-			<div class="toast__header">
-				${iconHTML}
-				<div class="toast__title-wrapper">
-					<h4 class="toast__title">${titleHTML}</h4>
-					${descriptionHTML ? `<p class="toast__description">${descriptionHTML}</p>` : ""}
-				</div>
-				<button class="toast__close" aria-label="Close notification" type="button">
-					<svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-						<path d="M1 1L11 11M1 11L11 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-					</svg>
-				</button>
-			</div>
-			${messageHTML ? `<div class="toast__message">${messageHTML}</div>` : ""}
-			${progressHTML}
-			${actionsHTML}
-		`;
+  enter() {
+    requestAnimationFrame(() => this.element.classList.add("toast--visible"));
   }
 
-  /**
-   * Attach event listeners to toast elements
-   */
-  _attachEventListeners() {
-    // Close button
-    const closeBtn = this.element.querySelector(".toast__close");
-    if (closeBtn) {
-      this._closeClickHandler = (e) => {
-        e.stopPropagation();
-        this._handleClose();
-      };
-      closeBtn.addEventListener("click", this._closeClickHandler);
-
-      // Keyboard accessibility for close button
-      this._closeKeyHandler = (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          this._handleClose();
-        }
-      };
-      closeBtn.addEventListener("keydown", this._closeKeyHandler);
-    }
-
-    // Action buttons
-    const actionButtons = this.element.querySelectorAll(".toast__action");
-    this._actionHandlers = [];
-    actionButtons.forEach((btn) => {
-      const handler = (e) => {
-        e.stopPropagation();
-        const index = parseInt(btn.getAttribute("data-action-index"), 10);
-        this._handleAction(index);
-      };
-      btn.addEventListener("click", handler);
-      this._actionHandlers.push({ element: btn, handler });
-    });
-
-    // Make toast focusable for keyboard navigation
-    this.element.setAttribute("tabindex", "0");
-
-    // Keyboard shortcuts
-    this._keydownHandler = (e) => {
-      if (e.key === "Escape") {
-        this._handleClose();
-      }
-    };
-    this.element.addEventListener("keydown", this._keydownHandler);
-
-    // Click on toast (optional callback)
-    this._clickHandler = () => {
-      if (this.config.onClick) {
-        this.config.onClick();
-      }
-    };
-    this.element.addEventListener("click", this._clickHandler);
+  startExit() {
+    this.element.classList.add("toast--exiting");
   }
 
-  /**
-   * Handle close button click
-   */
-  _handleClose() {
-    // Call onDismiss callback if provided
-    if (this.config.onDismiss) {
-      try {
-        this.config.onDismiss();
-      } catch (error) {
-        console.error("Toast onDismiss callback error:", error);
-      }
-    }
-
-    // Trigger dismiss from ToastManager
-    // The manager handles the actual removal and animation
-    import("../core/toast.js").then(({ toastManager }) => {
-      toastManager.dismiss(this.id);
-    });
-  }
-
-  /**
-   * Handle action button click
-   * @param {number} index - Action index
-   */
-  _handleAction(index) {
-    const action = this.config.actions[index];
-    if (!action || !action.callback) {
-      return;
-    }
-
-    try {
-      action.callback();
-    } catch (error) {
-      console.error(`Toast action callback error (index ${index}):`, error);
-    }
-
-    // Auto-dismiss after action (unless it's a persistent action)
-    if (!action.persistent) {
-      setTimeout(() => {
-        import("../core/toast.js").then(({ toastManager }) => {
-          toastManager.dismiss(this.id);
-        });
-      }, 300);
-    }
-  }
-
-  /**
-   * Destroy the toast (cleanup)
-   */
   destroy() {
-    // Remove all event listeners
-    if (this.element) {
-      const closeBtn = this.element.querySelector(".toast__close");
-      if (closeBtn) {
-        if (this._closeClickHandler) {
-          closeBtn.removeEventListener("click", this._closeClickHandler);
-        }
-        if (this._closeKeyHandler) {
-          closeBtn.removeEventListener("keydown", this._closeKeyHandler);
-        }
-      }
-
-      // Remove action button handlers
-      if (this._actionHandlers) {
-        this._actionHandlers.forEach(({ element, handler }) => {
-          element.removeEventListener("click", handler);
-        });
-        this._actionHandlers = null;
-      }
-
-      // Remove toast-level handlers
-      if (this._keydownHandler) {
-        this.element.removeEventListener("keydown", this._keydownHandler);
-        this._keydownHandler = null;
-      }
-      if (this._clickHandler) {
-        this.element.removeEventListener("click", this._clickHandler);
-        this._clickHandler = null;
-      }
-
-      // Remove from DOM
-      if (this.element.parentNode) {
-        this.element.remove();
-      }
-    }
-
-    this._closeClickHandler = null;
-    this._closeKeyHandler = null;
-    this.element = null;
+    this.element.remove();
   }
 }

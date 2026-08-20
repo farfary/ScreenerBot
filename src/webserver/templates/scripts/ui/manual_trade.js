@@ -17,6 +17,7 @@
  */
 
 import * as Utils from "../core/utils.js";
+import { tradeToastKey } from "../core/action_toasts.js";
 import { requestManager } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
 
@@ -175,23 +176,28 @@ const TRADE_TIMEOUT_MS = 180000;
 // What a timeout on a trade request ACTUALLY means: the browser stopped waiting, the
 // backend did not stop trading. Aborting a fetch cannot cancel a submitted swap, so the
 // only honest thing to say is that it is still running.
-const PENDING_MESSAGES = {
-  buy: "Buy is still running - watch the position row",
-  add: "Add to position is still running - watch the position row",
-  sell: "Sell is still running - watch the position row",
+const PENDING_TITLES = {
+  buy: "Buy still running",
+  add: "Add still running",
+  sell: "Sell still running",
 };
 
-const SUCCESS_MESSAGES = {
-  buy: "Buy order placed!",
-  add: "Added to position!",
-  sell: "Sell order placed!",
-};
+const PENDING_MESSAGE = "The browser stopped waiting; watch the position row for the result";
 
 const FAILURE_MESSAGES = {
   buy: "Buy failed",
   add: "Add to position failed",
   sell: "Sell failed",
 };
+
+// One trade, one notice. The backend registers an action for every manual trade and
+// streams it step by step, and `core/action_toasts.js` turns that stream into a single
+// toast that updates in place ("Buying BONK" -> "Bought BONK"). Raising a success toast
+// here as well is the same event announced twice — exactly how one swap used to end up
+// with three toasts stacked on screen. So this flow reports only what the action stream
+// cannot: a request rejected before any action existed, and a trade whose result the
+// browser gave up waiting for. Both go out under the SAME key the action stream uses, so
+// a failure that both of them know about collapses into one notice.
 
 /**
  * Build the POST body for a completed dialog result.
@@ -240,10 +246,11 @@ function buildBody(action, mint, result) {
  */
 export async function manualTrade({ action, mint, symbol, name, logo, context = {}, btn = null }) {
   if (!action || !mint) {
-    Utils.showToast("No mint address available", "error");
+    Utils.showToast({ type: "error", title: "No mint address available" });
     return false;
   }
 
+  let result;
   try {
     // The position is authoritative for holdings/decimals/size AND already carries
     // the token's identity, so it doubles as the identity lookup when one exists.
@@ -253,8 +260,7 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
     ]);
 
     // Only pay for a second lookup when the position did not supply identity.
-    const identity =
-      position || (symbol && logo) ? null : await fetchTokenIdentity(mint);
+    const identity = position || (symbol && logo) ? null : await fetchTokenIdentity(mint);
 
     // A buy OPENS a position, so buying a token that is already held would create a
     // second position for the same mint — which the backend now rejects outright
@@ -307,37 +313,75 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
       dialogContext.entrySizes = flat;
     }
 
-    const result = await getDialog().open({
+    result = await getDialog().open({
       action,
       mint,
       symbol: dialogContext.symbol,
       context: dialogContext,
     });
-    if (!result) return false; // user cancelled
+  } catch (error) {
+    Utils.showToast({
+      key: tradeToastKey(mint),
+      type: "error",
+      title: "Could not open the trade dialog",
+      message: error?.message || null,
+    });
+    return false;
+  }
 
-    if (btn) btn.disabled = true;
-    try {
-      await requestManager.fetch(ENDPOINTS[action], {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildBody(action, mint, result)),
-        priority: "high",
-        timeout: TRADE_TIMEOUT_MS,
-      });
-    } finally {
-      if (btn) btn.disabled = false;
-    }
+  if (!result) return false; // user cancelled
 
-    Utils.showToast(SUCCESS_MESSAGES[action], "success");
+  return submitTrade({ action, mint, result, btn });
+}
+
+/**
+ * POST a trade the user has already confirmed in the dialog.
+ *
+ * Split out of `manualTrade` because the Cmd+B / Cmd+Shift+S shortcut resolves its
+ * mint INSIDE the dialog rather than before it, and used to POST its own hand-built
+ * body — which sent `amount_sol`, a field the endpoint does not have, so every
+ * keyboard buy silently spent the configured default size instead of the amount the
+ * user typed. One submitter means one payload.
+ *
+ * @param {Object} options
+ * @param {"buy"|"add"|"sell"} options.action
+ * @param {string} options.mint
+ * @param {Object} options.result - the dialog's confirmed result
+ * @param {HTMLElement} [options.btn] - disabled while the request is in flight
+ * @returns {Promise<boolean>} true when the backend accepted the trade
+ */
+export async function submitTrade({ action, mint, result, btn = null }) {
+  if (btn) btn.disabled = true;
+  try {
+    await requestManager.fetch(ENDPOINTS[action], {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildBody(action, mint, result)),
+      priority: "high",
+      timeout: TRADE_TIMEOUT_MS,
+    });
     return true;
   } catch (error) {
     // Never report a timed-out trade as a failure: the swap may already be on chain.
     if (error?.name === "TimeoutError") {
-      Utils.showToast(PENDING_MESSAGES[action], "warning");
+      Utils.showToast({
+        key: tradeToastKey(mint),
+        type: "warning",
+        title: PENDING_TITLES[action],
+        message: PENDING_MESSAGE,
+      });
       return false;
     }
-    Utils.showToast(await describeError(error, action), "error");
+    const reason = await describeError(error, action);
+    Utils.showToast({
+      key: tradeToastKey(mint),
+      type: "error",
+      title: FAILURE_MESSAGES[action],
+      message: reason === FAILURE_MESSAGES[action] ? null : reason,
+    });
     return false;
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 

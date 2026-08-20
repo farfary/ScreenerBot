@@ -300,6 +300,17 @@ export function attachSecurityHandlers(dialog, content, _status) {
  * Update a security setting via API
  */
 async function updateSecuritySetting(key, value) {
+  // A saved setting raises no toast — the control the user moved already shows
+  // the new value. Only a rejected save gets one, keyed so a run of failures
+  // leaves a single notice instead of one per control.
+  const reportFailure = (message) =>
+    Utils.showToast({
+      key: "security-setting",
+      type: "error",
+      title: "Could not save security setting",
+      message: message || null,
+    });
+
   try {
     const response = await fetch("/api/lockscreen/settings", {
       method: "POST",
@@ -308,17 +319,17 @@ async function updateSecuritySetting(key, value) {
     });
 
     if (response.ok) {
-      Utils.showToast("Security setting updated", "success");
       // Update lockscreen controller if available
       if (window.Lockscreen) {
         window.Lockscreen.loadStatus();
       }
-    } else {
-      const data = await response.json();
-      Utils.showToast(data.message || "Failed to update setting", "error");
+      return;
     }
+
+    const data = await response.json().catch(() => null);
+    reportFailure(data?.message);
   } catch (error) {
-    Utils.showToast("Failed to update setting: " + error.message, "error");
+    reportFailure(error.message);
   }
 }
 
@@ -470,7 +481,7 @@ function showPasswordModal(dialog, mode, content) {
       });
 
       if (response.ok) {
-        Utils.showToast("Password saved successfully", "success");
+        Utils.showToast("Password saved", "success");
         closeModal();
         // Reload security tab
         await loadSecurityTab(dialog, content);
@@ -712,7 +723,7 @@ async function showTotpSetupModal(dialog, content) {
         return;
       }
 
-      Utils.showToast("Two-factor authentication enabled!", "success");
+      Utils.showToast("Two-factor authentication enabled", "success");
       closeModal();
       // Reload security tab
       await loadSecurityTab(dialog, content);

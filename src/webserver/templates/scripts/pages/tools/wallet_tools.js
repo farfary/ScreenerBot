@@ -951,13 +951,20 @@ function handleWalletAction(event) {
     case "copy-pubkey": {
       const pubkey = btn.dataset.pubkey;
       Utils.copyToClipboard(pubkey);
-      Utils.showToast("Public key copied to clipboard", "success");
+      Utils.notifyCopied("Public key");
       break;
     }
     case "copy-secret": {
       const secret = btn.dataset.secret;
       Utils.copyToClipboard(secret);
-      Utils.showToast("Private key copied to clipboard (keep it safe!)", "warning");
+      // A warning, not a confirmation: the clipboard now holds full control of
+      // this wallet, which is the part the user needs to be told.
+      Utils.showToast({
+        key: "clipboard",
+        type: "warning",
+        title: "Private key copied",
+        message: "Anyone with this key controls the wallet",
+      });
       break;
     }
     case "reveal": {
@@ -1018,7 +1025,7 @@ function handleExportGeneratedWallets() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
-  Utils.showToast("Wallets exported - store securely!", "success");
+  Utils.showToast("Wallets exported - store securely", "warning");
 }
 
 // =============================================================================

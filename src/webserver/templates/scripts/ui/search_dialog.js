@@ -12,6 +12,7 @@
  */
 
 import { $, create, show, hide, on, off } from "../core/dom.js";
+import { showToast, notifyCopied } from "../core/utils.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -104,17 +105,6 @@ function debounce(fn, ms) {
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => fn.apply(this, args), ms);
   };
-}
-
-/**
- * Show toast notification (uses global toast system if available)
- */
-function showToast(message, type = "info") {
-  if (window.showToast) {
-    window.showToast(message, type);
-  } else {
-    console.log(`[Toast] ${type}: ${message}`);
-  }
 }
 
 // =============================================================================
@@ -385,7 +375,7 @@ async function openTokenDetails(token) {
 async function copyMint(token) {
   try {
     await navigator.clipboard.writeText(token.mint);
-    showToast(`Copied: ${token.symbol || token.mint}`, "success");
+    notifyCopied(token.symbol || "Mint address");
   } catch {
     showToast("Failed to copy to clipboard", "error");
   }

@@ -12,6 +12,8 @@
  * - Automatic positioning to stay within viewport
  */
 
+import { showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
+
 // Icon mapping to Lucide font classes
 const ICONS = {
   copy: "icon-copy",
@@ -952,22 +954,15 @@ class ContextMenuManager {
   }
 
   _showToast(message, type) {
-    // Use existing toast system if available
-    if (typeof window.showToast === "function") {
-      window.showToast(message, type);
-    } else {
-      // Fallback to Utils module
-      import("../core/utils.js")
-        .then((Utils) => {
-          if (Utils.showToast) {
-            Utils.showToast(message, type);
-          }
-        })
-        .catch(() => {
-          // Silent fail if utils not available
-          console.log(`[${type}] ${message}`);
-        });
-    }
+    showToast(message, type);
+  }
+
+  _notifyCopied(label) {
+    notifyCopied(label);
+  }
+
+  _notifyCopyFailed(error) {
+    notifyCopyFailed(error);
   }
 }
 

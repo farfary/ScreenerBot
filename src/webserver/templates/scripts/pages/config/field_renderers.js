@@ -542,7 +542,6 @@ export const FIELD_RENDERERS = {
       event.target.classList.remove("config-field-error-input");
       event.target.removeAttribute("title");
       delete event.target.dataset.arrayInvalid;
-      delete event.target.dataset.arrayInvalidToastTs;
       onChange(values);
     };
 
@@ -558,16 +557,16 @@ export const FIELD_RENDERERS = {
       }
       const message = describeInvalidArrayEntries(invalid, itemType);
       if (message) {
-        const lastToastAt = Number(event.target.dataset.arrayInvalidToastTs || 0);
-        const now = Date.now();
-        if (Number.isNaN(lastToastAt) || now - lastToastAt > 1500) {
-          Utils.showToast({
-            type: "error",
-            title: "Invalid Array Entry",
-            message: message,
-          });
-          event.target.dataset.arrayInvalidToastTs = String(now);
-        }
+        // Keyed, so typing through several invalid entries updates ONE notice.
+        // This used to be a hand-rolled 1.5s throttle stamped onto the input's
+        // dataset, which existed only because toasts could not replace one
+        // another.
+        Utils.showToast({
+          key: "config-invalid-array",
+          type: "error",
+          title: "Invalid array entry",
+          message,
+        });
         event.target.setAttribute("title", message);
       }
     });
@@ -619,6 +618,7 @@ export const FIELD_RENDERERS = {
       } catch (error) {
         textarea.classList.add("config-field-error-input");
         Utils.showToast({
+          key: "config-invalid-json",
           type: "error",
           title: "Invalid JSON",
           message: error.message,

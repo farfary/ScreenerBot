@@ -43,9 +43,7 @@ function buildOverlay() {
       </div>
       <button type="button" class="conn-overlay-retry">Retry now</button>
     </div>`;
-  overlay
-    .querySelector(".conn-overlay-retry")
-    .addEventListener("click", () => checkHealth(true));
+  overlay.querySelector(".conn-overlay-retry").addEventListener("click", () => checkHealth(true));
   return overlay;
 }
 
@@ -69,8 +67,15 @@ function setOnline(isOnline) {
     document.documentElement.removeAttribute("data-backend-offline");
     window.dispatchEvent(new CustomEvent("screenerbot:reconnected"));
     try {
-      if (window.showToast) window.showToast("Core connection restored", "success");
-    } catch { /* toast optional */ }
+      // Keyed: a flapping backend must leave one notice, not one per recovery.
+      window.showToast?.({
+        key: "core-connection",
+        type: "success",
+        title: "Core connection restored",
+      });
+    } catch {
+      /* toast optional */
+    }
   } else {
     document.documentElement.setAttribute("data-backend-offline", "true");
     showOverlay();
@@ -142,7 +147,9 @@ function instrumentFetch() {
     try {
       const url = typeof input === "string" ? input : input && input.url;
       if (url) isSameOrigin = new URL(url, window.location.href).origin === window.location.origin;
-    } catch { /* treat unparseable URLs as same-origin */ }
+    } catch {
+      /* treat unparseable URLs as same-origin */
+    }
 
     try {
       const res = await rawFetch(input, init);

@@ -385,11 +385,7 @@ async function reorderInstructions(order) {
     await loadInstructions();
   } catch (error) {
     console.error("[AI] Error reordering instructions:", error);
-    Utils.showToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to reorder instructions",
-    });
+    Utils.showToast({ type: "error", title: "Failed to reorder instructions" });
     // Reload to restore original order
     await loadInstructions();
   }
@@ -634,11 +630,7 @@ async function saveNewInstruction() {
     });
   } catch (error) {
     console.error("[AI] Error creating instruction:", error);
-    Utils.showToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to create instruction",
-    });
+    Utils.showToast({ type: "error", title: "Failed to create instruction" });
   }
 }
 
@@ -660,7 +652,7 @@ async function toggleInstruction(id, enabled) {
     // Revert the checkbox on failure
     const checkbox = document.querySelector(`.instruction-item[data-id="${id}"] .toggle input`);
     if (checkbox) checkbox.checked = !enabled;
-    Utils.showToast({ type: "error", title: "Error", message: "Failed to toggle instruction" });
+    Utils.showToast({ type: "error", title: "Failed to toggle instruction" });
   }
 }
 
@@ -771,11 +763,7 @@ async function editInstruction(id) {
     }
   } catch (error) {
     console.error("[AI] Error loading instruction for edit:", error);
-    Utils.showToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to load instruction data",
-    });
+    Utils.showToast({ type: "error", title: "Failed to load instruction data" });
   }
 }
 
@@ -814,11 +802,7 @@ async function saveEditedInstruction(id) {
     });
   } catch (error) {
     console.error("[AI] Error updating instruction:", error);
-    Utils.showToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to update instruction",
-    });
+    Utils.showToast({ type: "error", title: "Failed to update instruction" });
   }
 }
 
@@ -846,11 +830,7 @@ async function deleteInstruction(id) {
     });
   } catch (error) {
     console.error("[AI] Error deleting instruction:", error);
-    Utils.showToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to delete instruction",
-    });
+    Utils.showToast({ type: "error", title: "Failed to delete instruction" });
   }
 }
 
@@ -887,11 +867,7 @@ async function duplicateInstruction(id) {
     });
   } catch (error) {
     console.error("[AI] Error duplicating instruction:", error);
-    Utils.showToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to duplicate instruction",
-    });
+    Utils.showToast({ type: "error", title: "Failed to duplicate instruction" });
   }
 }
 
@@ -920,11 +896,7 @@ async function useTemplate(templateId) {
     });
   } catch (error) {
     console.error("[AI] Error using template:", error);
-    Utils.showToast({
-      type: "error",
-      title: "Error",
-      message: "Failed to create instruction from template",
-    });
+    Utils.showToast({ type: "error", title: "Failed to create instruction from template" });
   }
 }
 

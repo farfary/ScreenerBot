@@ -204,34 +204,6 @@ pub enum ActionType {
     ManualOrder,
 }
 
-impl ActionType {
-    /// Get human-readable display name
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            Self::SwapBuy => "Buying Token",
-            Self::SwapSell => "Selling Token",
-            Self::PositionOpen => "Opening Position",
-            Self::PositionClose => "Closing Position",
-            Self::PositionDca => "Adding to Position (DCA)",
-            Self::PositionPartialExit => "Partial Exit",
-            Self::ManualOrder => "Manual Order",
-        }
-    }
-
-    /// Get icon emoji for UI
-    pub fn icon(&self) -> &'static str {
-        match self {
-            Self::SwapBuy => "",
-            Self::PositionOpen => "",
-            Self::SwapSell => "",
-            Self::PositionClose => "",
-            Self::PositionDca => "",
-            Self::PositionPartialExit => "",
-            Self::ManualOrder => "",
-        }
-    }
-}
-
 /// Current state of an action
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]

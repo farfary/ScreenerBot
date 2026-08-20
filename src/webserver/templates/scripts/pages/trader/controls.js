@@ -101,14 +101,19 @@ export function createTraderControls({
         playToggleOff();
       }
 
-      // Show toast
-      Utils.showToast(`Auto Trader ${shouldStart ? "started" : "stopped"}`, "success");
+      // No success toast: the toggle, the status bars below and the sound all
+      // report the new state already.
 
       // Update status bars
       updateAutoTraderStatusBars({ running: shouldStart });
     } catch (error) {
       console.error("Toggle auto trader error:", error);
-      Utils.showToast(error.message, "error");
+      Utils.showToast({
+        key: "auto-trader-control",
+        type: "error",
+        title: "Auto Trader control failed",
+        message: error.message || null,
+      });
       playError();
 
       // Revert toggle states
@@ -323,11 +328,11 @@ export function createTraderControls({
             await loadControlsStatus();
           } else {
             const data = await res.json().catch(() => null);
-            Utils.showToast(data?.error?.message || "Failed to activate force stop", "error");
+            Utils.showToast({ type: "error", title: "Could not activate force stop", message: data?.error?.message || null });
             playError();
           }
         } catch {
-          Utils.showToast("Failed to activate force stop", "error");
+          Utils.showToast({ type: "error", title: "Could not activate force stop" });
           playError();
         }
       });
@@ -345,11 +350,11 @@ export function createTraderControls({
             await loadControlsStatus();
           } else {
             const data = await res.json().catch(() => null);
-            Utils.showToast(data?.error?.message || "Failed to resume trading", "error");
+            Utils.showToast({ type: "error", title: "Could not resume trading", message: data?.error?.message || null });
             playError();
           }
         } catch {
-          Utils.showToast("Failed to resume trading", "error");
+          Utils.showToast({ type: "error", title: "Could not resume trading" });
           playError();
         }
       });
@@ -368,14 +373,14 @@ export function createTraderControls({
           if (!res.ok) {
             e.target.checked = !e.target.checked; // Revert
             const data = await res.json().catch(() => null);
-            Utils.showToast(data?.error?.message || "Failed to toggle entry monitor", "error");
+            Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the entry monitor", message: data?.error?.message || null });
             playError();
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
         } catch {
           e.target.checked = !e.target.checked;
-          Utils.showToast("Failed to toggle entry monitor", "error");
+          Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the entry monitor" });
           playError();
         }
       });
@@ -394,14 +399,14 @@ export function createTraderControls({
           if (!res.ok) {
             e.target.checked = !e.target.checked; // Revert
             const data = await res.json().catch(() => null);
-            Utils.showToast(data?.error?.message || "Failed to toggle exit monitor", "error");
+            Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the exit monitor", message: data?.error?.message || null });
             playError();
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
         } catch {
           e.target.checked = !e.target.checked;
-          Utils.showToast("Failed to toggle exit monitor", "error");
+          Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the exit monitor" });
           playError();
         }
       });

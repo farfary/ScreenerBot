@@ -42,11 +42,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       renderProviders(state.providers);
     } catch (error) {
       console.error("[AI] Failed to load providers:", error);
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to load providers",
-      });
+      Utils.showToast({ key: "ai-load", type: "error", title: "Could not load providers" });
     }
   }
 
@@ -146,11 +142,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       // the mutation fails instead of leaving the failed choice checked.
       _lastProvidersKey = null;
       renderProviders(state.providers);
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to set default provider",
-      });
+      Utils.showToast({ type: "error", title: "Failed to set default provider" });
     }
   }
 
@@ -428,11 +420,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         await loadProviders();
       } catch (error) {
         console.error(`[AI] Failed to save provider ${providerId}:`, error);
-        Utils.showToast({
-          type: "error",
-          title: "Error",
-          message: "Failed to save provider configuration",
-        });
+        Utils.showToast({ type: "error", title: "Failed to save provider configuration" });
         saveBtn.disabled = false;
         saveBtn.innerHTML = '<i class="icon-save"></i> Save Configuration';
       }

@@ -1,6 +1,5 @@
 // Notification drawer UI manager
 import { notificationManager } from "../core/notifications.js";
-import { toastManager } from "../core/toast.js";
 import * as Utils from "../core/utils.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
@@ -86,9 +85,6 @@ export function open() {
   resetScrollState();
   renderNotifications();
 
-  // Notify toast manager about drawer state
-  toastManager.onDrawerStateChange(true);
-
   // Mark all as read after short delay
   setTimeout(() => {
     notificationManager.markAllAsRead().catch((error) => {
@@ -108,9 +104,6 @@ export function close() {
   drawer.setAttribute("data-state", "closed");
   drawer.setAttribute("aria-hidden", "true");
   document.body.classList.remove("notification-drawer-open");
-
-  // Notify toast manager about drawer state
-  toastManager.onDrawerStateChange(false);
 }
 
 /**
@@ -334,8 +327,9 @@ function setupActions() {
   if (markAllReadBtn) {
     handlers.markAllRead = async () => {
       try {
+        // No success toast: the unread badge clears and every row loses its
+        // unread mark on screen, so a notice would only repeat that.
         await notificationManager.markAllAsRead();
-        Utils.showToast({ type: "success", title: "All marked as read" });
       } catch (error) {
         console.error("[NotificationPanel] Failed to mark all read:", error);
         Utils.showToast("Failed to mark notifications read", "error");
@@ -357,8 +351,8 @@ function setupActions() {
 
       if (confirmed) {
         try {
+          // No success toast: the list the user is looking at empties.
           await notificationManager.clearAll();
-          Utils.showToast("Notifications cleared", "info");
         } catch (error) {
           console.error("[NotificationPanel] Failed to clear notifications:", error);
           Utils.showToast("Failed to clear notifications", "error");
@@ -402,16 +396,23 @@ function subscribeToUpdates() {
 
     if (event.type === "lag") {
       const skipped = event.payload?.skipped || 0;
-      Utils.showToast(
-        skipped > 0
-          ? `Missed ${skipped} updates — refreshing…`
-          : "Stream fell behind — refreshing…",
-        "warning"
-      );
+      Utils.showToast({
+        key: "actions-stream",
+        type: "warning",
+        title: "Action stream fell behind",
+        message: skipped > 0 ? `Missed ${skipped} updates — refreshing` : "Refreshing",
+      });
     }
 
     if (event.type === "sync_error") {
-      Utils.showToast(`Failed to refresh (${event.error || "unknown"})`, "warning");
+      // Keyed: a backend that is down fails every sync, and this must stay one
+      // notice rather than one per retry.
+      Utils.showToast({
+        key: "actions-stream",
+        type: "warning",
+        title: "Could not refresh actions",
+        message: event.error || null,
+      });
     }
   });
 }

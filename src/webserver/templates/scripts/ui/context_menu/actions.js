@@ -214,9 +214,9 @@
     manager._copyToClipboard = async function (text, label) {
       try {
         await navigator.clipboard.writeText(text);
-        this._showToast(`${label} copied!`, "success");
+        this._notifyCopied(label);
       } catch {
-        this._showToast("Failed to copy", "error");
+        this._notifyCopyFailed();
       }
     };
 

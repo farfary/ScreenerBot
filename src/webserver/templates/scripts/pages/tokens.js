@@ -681,7 +681,7 @@ function createLifecycle() {
           description: "Waiting for the backend to respond. We will retry automatically.",
         });
       } else if (reason !== "poll") {
-        Utils.showToast("Failed to load tokens", "warning");
+        Utils.showToast({ key: "tokens-load", type: "warning", title: "Could not load tokens" });
       }
       throw error;
     }
@@ -824,7 +824,7 @@ function createLifecycle() {
           description: "Waiting for the backend to respond. We will retry automatically.",
         });
       } else if (reason !== "poll") {
-        Utils.showToast("Failed to load tokens page", "warning");
+        Utils.showToast({ key: "tokens-load", type: "warning", title: "Could not load tokens" });
       }
       throw error;
     }
@@ -1255,7 +1255,7 @@ function createLifecycle() {
       navigator.clipboard
         .writeText(mint)
         .then(() => {
-          Utils.showToast("Mint address copied", "success");
+          Utils.notifyCopied("Mint address");
         })
         .catch((err) => {
           console.error("Failed to copy mint:", err);

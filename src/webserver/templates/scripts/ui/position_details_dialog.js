@@ -861,7 +861,7 @@ export class PositionDetailsDialog {
     const copyMintButton = this.dialogEl.querySelector("#pddCopyMintBtn");
     this._copyMintHandler = () => {
       Utils.copyToClipboard(this.positionData.mint);
-      Utils.showToast("Mint address copied", "success");
+      Utils.notifyCopied("Mint address");
     };
     copyMintButton.addEventListener("click", this._copyMintHandler);
 

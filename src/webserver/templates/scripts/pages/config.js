@@ -940,15 +940,20 @@ async function renderTelegramAuthSection(container) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ commands_require_2fa: toggle.checked }),
         });
-        if (response.ok) {
-          Utils.showToast(
-            toggle.checked ? "2FA required for commands" : "2FA not required for commands",
-            "success"
-          );
+        // The toggle itself shows the saved state, so success is silent. A
+        // rejected save was previously silent TOO, which left the toggle
+        // showing a value the backend had refused.
+        if (!response.ok) {
+          throw new Error(`Save rejected (${response.status})`);
         }
-      } catch {
-        Utils.showToast("Failed to update setting", "error");
+      } catch (error) {
         toggle.checked = !toggle.checked; // Revert
+        Utils.showToast({
+          key: "telegram-setting",
+          type: "error",
+          title: "Could not save Telegram setting",
+          message: error?.message || null,
+        });
       }
     });
   }
@@ -1012,18 +1017,15 @@ async function handleSaveAll() {
       });
     }
 
-    Utils.showToast({
-      type: "success",
-      title: "Configuration Updated",
-      message: "Settings saved successfully",
-    });
+    Utils.showToast({ type: "success", title: "Configuration saved" });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Save failed", error);
     Utils.showToast({
+      key: "config-save",
       type: "error",
-      title: "Save Failed",
-      message: error.message || "Failed to save configuration",
+      title: "Could not save configuration",
+      message: error.message || null,
     });
   } finally {
     setState({ saving: false });
@@ -1040,18 +1042,15 @@ async function handleReload() {
       method: "POST",
       priority: "high",
     });
-    Utils.showToast({
-      type: "success",
-      title: "Configuration Reloaded",
-      message: "Settings reloaded from disk successfully",
-    });
+    Utils.showToast({ type: "success", title: "Configuration reloaded from disk" });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Reload failed", error);
     Utils.showToast({
+      key: "config-save",
       type: "error",
-      title: "Reload Failed",
-      message: error.message || "Failed to reload configuration",
+      title: "Could not reload configuration",
+      message: error.message || null,
     });
   } finally {
     setState({ loading: false });
@@ -1066,16 +1065,16 @@ async function handleDiff() {
     const message = payload?.message ?? payload?.error?.message;
     Utils.showToast({
       type: "info",
-      title: "Configuration Diff",
-      message: message || "Diff calculation complete",
+      title: "Configuration diff",
+      message: message || "Written to the browser console",
     });
     console.info("Config diff:", payload);
   } catch (error) {
     console.error("[Config] Diff failed", error);
     Utils.showToast({
       type: "error",
-      title: "Diff Failed",
-      message: error.message || "Failed to calculate diff",
+      title: "Could not calculate diff",
+      message: error.message || null,
     });
   }
 }
@@ -1100,7 +1099,7 @@ async function handleResetToDefaults() {
     });
     Utils.showToast({
       type: "warning",
-      title: "Configuration Reset",
+      title: "Configuration reset",
       message: "All settings restored to default values",
     });
     await loadConfig();
@@ -1108,8 +1107,8 @@ async function handleResetToDefaults() {
     console.error("[Config] Reset failed", error);
     Utils.showToast({
       type: "error",
-      title: "Reset Failed",
-      message: error.message || "Failed to reset configuration",
+      title: "Could not reset configuration",
+      message: error.message || null,
     });
   }
 }
@@ -1143,9 +1142,10 @@ async function loadConfig() {
   } catch (error) {
     console.error("[Config] Load failed", error);
     Utils.showToast({
+      key: "config-load",
       type: "error",
-      title: "Load Failed",
-      message: error.message || "Failed to load configuration from server",
+      title: "Could not load configuration",
+      message: error.message || null,
     });
   } finally {
     setState({ loading: false });
@@ -1247,14 +1247,14 @@ async function init(ctx) {
     } catch (error) {
       console.error("[Config] Metadata load failed", error);
       Utils.showToast({
+        key: "config-load",
         type: "error",
-        title: "Metadata Load Failed",
-        message: error.message || "Failed to load configuration metadata",
+        title: "Could not load configuration metadata",
+        message: error.message || null,
       });
       return;
     }
   }
-
 
   syncSectionFromHash();
   if (state.activeSection && window.location.hash !== `#${state.activeSection}`) {

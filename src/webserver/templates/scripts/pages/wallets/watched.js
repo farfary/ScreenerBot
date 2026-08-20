@@ -147,7 +147,7 @@ export function createWatchedWallets({
       if (!btn) return;
       e.stopPropagation();
       Utils.copyToClipboard(btn.dataset.copyAddress);
-      Utils.showToast("Address copied!", "success");
+      Utils.notifyCopied("Address");
     };
     root.addEventListener("click", copyClickHandler);
     return table;

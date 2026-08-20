@@ -186,11 +186,7 @@ function createLifecycle() {
       updateRecentDecisions(data.recent_decisions || []);
     } catch (error) {
       console.error("[AI] Failed to load AI status:", error);
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to load AI status",
-      });
+      Utils.showToast({ key: "ai-load", type: "error", title: "Could not load AI status" });
     }
   }
 
@@ -329,11 +325,7 @@ function createLifecycle() {
     } catch (error) {
       console.error("[AI] Failed to toggle AI:", error);
       playError();
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to update AI status",
-      });
+      Utils.showToast({ type: "error", title: "Failed to update AI status" });
 
       // Revert toggle
       const toggle = $("#stats-ai-toggle");
@@ -359,11 +351,7 @@ function createLifecycle() {
       updateConfigForm(data);
     } catch (error) {
       console.error("[AI] Failed to load config:", error);
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to load AI configuration",
-      });
+      Utils.showToast({ key: "ai-load", type: "error", title: "Could not load AI configuration" });
     }
   }
 
@@ -460,11 +448,7 @@ function createLifecycle() {
     } catch (error) {
       console.error("[AI] Failed to clear cache:", error);
       playError();
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to clear cache",
-      });
+      Utils.showToast({ type: "error", title: "Failed to clear cache" });
     }
   }
 
@@ -518,11 +502,7 @@ function createLifecycle() {
         } catch (error) {
           console.error("[AI] Failed to save config:", error);
           playError();
-          Utils.showToast({
-            type: "error",
-            title: "Error",
-            message: "Failed to save configuration",
-          });
+          Utils.showToast({ type: "error", title: "Failed to save configuration" });
         }
       });
     }

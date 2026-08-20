@@ -246,7 +246,7 @@ function createLifecycle() {
           description: "Waiting for the backend to respond. We will retry automatically.",
         });
       } else if (reason !== "poll") {
-        Utils.showToast("Failed to load events", "warning");
+        Utils.showToast({ key: "events-load", type: "warning", title: "Could not load events" });
       }
       throw error;
     }

@@ -52,7 +52,7 @@ export function createWalletRenderers({
       if (!btn) return;
       e.stopPropagation();
       Utils.copyToClipboard(btn.dataset.copyAddress);
-      Utils.showToast("Address copied!", "success");
+      Utils.notifyCopied("Address");
     };
     rootEl.addEventListener("click", handler);
     return handler;
@@ -361,7 +361,7 @@ export function createWalletRenderers({
       if (btn) {
         e.stopPropagation();
         Utils.copyToClipboard(btn.dataset.copyMint);
-        Utils.showToast("Mint copied!", "success");
+        Utils.notifyCopied("Mint address");
       }
     };
     dtRoot.addEventListener("click", tokenTableClickHandler);

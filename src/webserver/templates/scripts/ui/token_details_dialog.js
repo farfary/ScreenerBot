@@ -1125,7 +1125,7 @@ export class TokenDetailsDialog {
       copyBtn._hasListener = true;
       copyBtn.addEventListener("click", () => {
         Utils.copyToClipboard(token.mint);
-        Utils.showToast("Mint address copied!", "success");
+        Utils.notifyCopied("Mint address");
       });
     }
 

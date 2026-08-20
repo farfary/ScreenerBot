@@ -445,8 +445,17 @@ function buildTelegramTab(settings) {
  * Attach handlers for Telegram tab
  */
 function attachTelegramHandlers(dialog, content, settings) {
-  // Helper to update telegram settings
-  const updateSetting = async (key, value) => {
+  // Helper to update telegram settings.
+  //
+  // A saved setting raises NO toast: the control the user just moved is the
+  // confirmation. Only a REJECTED save is worth a notice, because the control
+  // then shows a value the backend does not have — so it is also reverted, and
+  // the notice is keyed so flipping several failing toggles leaves one notice.
+  const updateSetting = async (key, value, control = null) => {
+    const revert = () => {
+      if (control && control.type === "checkbox") control.checked = !value;
+    };
+
     try {
       const response = await fetch("/api/telegram/settings", {
         method: "POST",
@@ -454,21 +463,33 @@ function attachTelegramHandlers(dialog, content, settings) {
         body: JSON.stringify({ [key]: value }),
       });
 
-      if (response.ok) {
-        Utils.showToast("Telegram setting updated", "success");
-      } else {
-        const data = await response.json();
-        Utils.showToast(data.message || "Failed to update setting", "error");
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        revert();
+        Utils.showToast({
+          key: "telegram-setting",
+          type: "error",
+          title: "Could not save Telegram setting",
+          message: data?.message || null,
+        });
       }
-    } catch {
-      Utils.showToast("Failed to update setting", "error");
+    } catch (error) {
+      revert();
+      Utils.showToast({
+        key: "telegram-setting",
+        type: "error",
+        title: "Could not save Telegram setting",
+        message: error?.message || null,
+      });
     }
   };
 
   // Enable toggle
   const enableToggle = content.querySelector("#tgEnabled");
   if (enableToggle) {
-    enableToggle.addEventListener("change", (e) => updateSetting("enabled", e.target.checked));
+    enableToggle.addEventListener("change", (e) =>
+      updateSetting("enabled", e.target.checked, e.target)
+    );
   }
 
   // Bot token field
@@ -495,7 +516,11 @@ function attachTelegramHandlers(dialog, content, settings) {
       const response = await fetch("/api/telegram/discovery/start", { method: "POST" });
       if (!response.ok) {
         const data = await response.json();
-        Utils.showToast(data.message || "Failed to start discovery", "error");
+        Utils.showToast({
+          type: "error",
+          title: "Could not start discovery",
+          message: data.message || null,
+        });
         return;
       }
 
@@ -516,7 +541,7 @@ function attachTelegramHandlers(dialog, content, settings) {
         }
       }, 2000);
     } catch {
-      Utils.showToast("Failed to start discovery", "error");
+      Utils.showToast({ type: "error", title: "Could not start discovery" });
     }
   };
 
@@ -575,16 +600,20 @@ function attachTelegramHandlers(dialog, content, settings) {
         method: "POST",
       });
       if (response.ok) {
-        Utils.showToast("Chat selected successfully!", "success");
+        Utils.showToast("Chat selected", "success");
         stopDiscovery();
         // Reload the Telegram tab
         loadTelegramTab(dialog, content);
       } else {
         const data = await response.json();
-        Utils.showToast(data.message || "Failed to select chat", "error");
+        Utils.showToast({
+          type: "error",
+          title: "Could not select chat",
+          message: data.message || null,
+        });
       }
     } catch {
-      Utils.showToast("Failed to select chat", "error");
+      Utils.showToast({ type: "error", title: "Could not select chat" });
     }
   };
 
@@ -621,12 +650,16 @@ function attachTelegramHandlers(dialog, content, settings) {
         });
         const data = await response.json();
         if (response.ok) {
-          Utils.showToast("Test message sent successfully!", "success");
+          Utils.showToast("Test message sent", "success");
         } else {
-          Utils.showToast(data.message || "Failed to send test message", "error");
+          Utils.showToast({
+            type: "error",
+            title: "Test message failed",
+            message: data.message || null,
+          });
         }
       } catch {
-        Utils.showToast("Failed to send test message", "error");
+        Utils.showToast({ type: "error", title: "Test message failed" });
       } finally {
         testBtn.dataset.submitting = "false";
         testBtn.disabled = false;
@@ -656,10 +689,10 @@ function attachTelegramHandlers(dialog, content, settings) {
           Utils.showToast("Session revoked", "success");
           loadTelegramTab(dialog, content);
         } else {
-          Utils.showToast("Failed to revoke session", "error");
+          Utils.showToast({ type: "error", title: "Could not revoke session" });
         }
       } catch {
-        Utils.showToast("Failed to revoke session", "error");
+        Utils.showToast({ type: "error", title: "Could not revoke session" });
       }
     });
   });
@@ -691,21 +724,21 @@ function attachTelegramHandlers(dialog, content, settings) {
   const commandsToggle = content.querySelector("#tgCommandsEnabled");
   if (commandsToggle) {
     commandsToggle.addEventListener("change", (e) =>
-      updateSetting("commands_enabled", e.target.checked)
+      updateSetting("commands_enabled", e.target.checked, e.target)
     );
   }
 
   const inlineToggle = content.querySelector("#tgInlineActions");
   if (inlineToggle) {
     inlineToggle.addEventListener("change", (e) =>
-      updateSetting("inline_actions", e.target.checked)
+      updateSetting("inline_actions", e.target.checked, e.target)
     );
   }
 
   const require2faToggle = content.querySelector("#tgRequire2fa");
   if (require2faToggle) {
     require2faToggle.addEventListener("change", (e) => {
-      updateSetting("commands_require_2fa", e.target.checked);
+      updateSetting("commands_require_2fa", e.target.checked, e.target);
       // Refresh auth section to update status display
       loadTelegramAuthState(dialog, content);
     });

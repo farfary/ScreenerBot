@@ -718,7 +718,11 @@ function createLifecycle() {
       if (err?.name !== "AbortError") {
         console.error("[Positions] fetch failed:", err);
         if (reason !== "poll") {
-          Utils.showToast("Failed to refresh positions", "warning");
+          Utils.showToast({
+            key: "positions-load",
+            type: "warning",
+            title: "Could not refresh positions",
+          });
         }
       }
       throw err;

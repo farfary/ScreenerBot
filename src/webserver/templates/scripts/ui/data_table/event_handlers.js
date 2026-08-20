@@ -4,7 +4,7 @@
  */
 
 import { openMenu, closeMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
-import { copyToClipboard, showToast } from "../../core/utils.js";
+import { copyToClipboard, notifyCopied, notifyCopyFailed } from "../../core/utils.js";
 
 export function applyEventHandlersMixin(DataTable) {
   const proto = DataTable.prototype;
@@ -930,8 +930,8 @@ export function applyEventHandlersMixin(DataTable) {
         return;
       }
       copyToClipboard(value)
-        .then(() => showToast({ type: "success", title: "Address copied to clipboard" }))
-        .catch(() => showToast({ type: "error", title: "Failed to copy address" }));
+        .then(() => notifyCopied("Address"))
+        .catch(notifyCopyFailed);
     };
     this._addEventListener(copyBtn, "click", handler);
   };

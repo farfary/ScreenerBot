@@ -172,7 +172,7 @@ export function createOhlcvModule(deps) {
       }
     } catch (err) {
       console.error("Failed to fetch OHLCV data:", err);
-      Utils.showToast("Failed to load OHLCV data", "error");
+      Utils.showToast({ key: "ohlcv-load", type: "error", title: "Could not load OHLCV data" });
     } finally {
       ohlcvState.isLoading = false;
     }

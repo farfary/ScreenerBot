@@ -147,7 +147,7 @@ function createLifecycle() {
           description: "Waiting for the backend to respond. We will retry automatically.",
         });
       } else if (reason !== "poll") {
-        Utils.showToast("Failed to refresh services", "warning");
+        Utils.showToast({ key: "services-load", type: "warning", title: "Could not refresh services" });
       }
       throw error;
     }

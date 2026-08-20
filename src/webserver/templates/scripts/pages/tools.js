@@ -386,7 +386,7 @@ function createLifecycle() {
 
           // Handle non-available tools
           if (status === "coming") {
-            Utils.showToast("This tool is coming soon!", "info");
+            Utils.showToast("This tool is coming soon", "info");
             return;
           }
           if (status === "disabled") {

@@ -286,6 +286,7 @@ pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 pub const CORE_HEADER_METRICS: &str = include_str!("templates/scripts/core/header_metrics.js");
 pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
 pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");
+pub const CORE_ACTION_TOASTS: &str = include_str!("templates/scripts/core/action_toasts.js");
 pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");
 pub const CORE_CLIENT_READY: &str = include_str!("templates/scripts/core/client_ready.js");
 pub const CORE_BRAND_TEXT: &str = include_str!("templates/scripts/core/brand_text.js");
@@ -322,6 +323,8 @@ pub const DATA_TABLE_EVENT_HANDLERS: &str =
     include_str!("templates/scripts/ui/data_table/event_handlers.js");
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 pub const TOAST_UI: &str = include_str!("templates/scripts/ui/toast.js");
+pub const QUICK_TRADE_SHORTCUTS: &str =
+    include_str!("templates/scripts/ui/quick_trade_shortcuts.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");
 pub const CONFIRMATION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/confirmation_dialog.js");

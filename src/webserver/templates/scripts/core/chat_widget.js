@@ -220,15 +220,9 @@ export class ChatWidget {
             const orig = icon.className;
             icon.className = "icon-check";
             setTimeout(() => (icon.className = orig), 1500);
-            Utils.showToast({
-              type: "success",
-              title: "Copied",
-              message: "Message copied to clipboard",
-            });
+            Utils.notifyCopied("Message");
           })
-          .catch(() =>
-            Utils.showToast({ type: "error", title: "Error", message: "Failed to copy message" })
-          );
+          .catch(() => Utils.showToast({ type: "error", title: "Failed to copy message" }));
       } else if (action === "regenerate") {
         this.regenerateLastMessage();
       }
@@ -298,7 +292,11 @@ export class ChatWidget {
     } catch (error) {
       if (generation !== this._sessionLoadGeneration) return;
       console.error("[ChatWidget] Error loading sessions:", error);
-      Utils.showToast({ type: "error", title: "Error", message: "Failed to load chat sessions" });
+      Utils.showToast({
+        key: "chat-sessions",
+        type: "error",
+        title: "Could not load chat sessions",
+      });
     }
   }
 
@@ -350,11 +348,11 @@ export class ChatWidget {
       }
 
       await this.loadSessions();
-      Utils.showToast({ type: "success", title: "Success", message: "Chat session deleted" });
+      Utils.showToast({ type: "success", title: "Chat session deleted" });
     } catch (error) {
       console.error("[ChatWidget] Error deleting session:", error);
       playError();
-      Utils.showToast({ type: "error", title: "Error", message: "Failed to delete chat session" });
+      Utils.showToast({ type: "error", title: "Failed to delete chat session" });
     }
   }
 
@@ -413,7 +411,7 @@ export class ChatWidget {
         this._showChatInterface();
       } catch (error) {
         console.error("[ChatWidget] Error auto-creating session:", error);
-        Utils.showToast({ type: "error", title: "Error", message: "Failed to start chat session" });
+        Utils.showToast({ type: "error", title: "Failed to start chat session" });
         return;
       }
     }
@@ -504,7 +502,7 @@ export class ChatWidget {
   async regenerateLastMessage() {
     const lastUserIndex = this.state.messages.map((m) => m.role).lastIndexOf("user");
     if (lastUserIndex === -1) {
-      Utils.showToast({ type: "error", title: "Error", message: "No message to regenerate" });
+      Utils.showToast({ type: "error", title: "No message to regenerate" });
       return;
     }
 
@@ -513,8 +511,7 @@ export class ChatWidget {
     if (!previousAssistant?.id || previousAssistant.role !== "assistant") {
       Utils.showToast({
         type: "error",
-        title: "Error",
-        message: "Reload the chat before regenerating this response",
+        title: "Reload the chat before regenerating this response",
       });
       return;
     }
@@ -582,11 +579,7 @@ export class ChatWidget {
         "error"
       );
       setTimeout(() => this._updateInputStatus(""), 5000);
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: error.message || "Failed to regenerate response",
-      });
+      Utils.showToast({ type: "error", title: error.message || "Failed to regenerate response" });
     } finally {
       this._abortController = null;
       this.state.isLoading = false;
@@ -631,11 +624,7 @@ export class ChatWidget {
 
       if (approved) {
         playSuccess();
-        Utils.showToast({
-          type: "success",
-          title: "Success",
-          message: "Tool executed successfully",
-        });
+        Utils.showToast({ type: "success", title: "Tool executed" });
       } else {
         Utils.showToast({ type: "info", title: "Cancelled", message: "Tool execution cancelled" });
       }
@@ -647,11 +636,7 @@ export class ChatWidget {
     } catch (error) {
       console.error("[ChatWidget] Error confirming tool:", error);
       playError();
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to confirm tool execution",
-      });
+      Utils.showToast({ type: "error", title: "Failed to confirm tool execution" });
       this._showToolConfirmation(confirmation);
     }
   }

@@ -330,7 +330,11 @@ function createLifecycle() {
       }
       console.error("[Transactions] Failed to fetch:", error);
       if (reason !== "scroll") {
-        Utils.showToast("Failed to refresh transactions", "warning");
+        Utils.showToast({
+          key: "transactions-load",
+          type: "warning",
+          title: "Could not refresh transactions",
+        });
       }
       throw error;
     }

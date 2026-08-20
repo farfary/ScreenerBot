@@ -353,7 +353,7 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
         event.preventDefault();
         event.stopPropagation();
         Utils.copyToClipboard(copyEl.dataset.copy);
-        Utils.showToast("Signature copied", "success");
+        Utils.notifyCopied("Signature");
         return;
       }
 
@@ -392,7 +392,6 @@ export function applyActivityTabMixin(PositionDetailsDialog) {
         this._applyActivityFilter(content);
         return;
       }
-
     };
 
     content.addEventListener("click", this._activityClickHandler);

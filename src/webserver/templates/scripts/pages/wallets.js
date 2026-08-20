@@ -308,7 +308,7 @@ function setupExportModal() {
       const keyEl = $("#exported-key");
       if (keyEl && keyEl.textContent !== "...") {
         Utils.copyToClipboard(keyEl.textContent);
-        Utils.showToast("Private key copied to clipboard!", "success");
+        Utils.notifyCopied("Private key");
       }
     });
   }
@@ -446,10 +446,10 @@ async function handleRefresh(btn) {
   btn.disabled = true;
 
   try {
+    // No success toast: the table repaints and the button's spinner stops.
     await loadActiveTab({ force: true });
-    Utils.showToast("Wallets refreshed", "success");
   } catch {
-    Utils.showToast("Failed to refresh", "error");
+    Utils.showToast({ key: "wallets-load", type: "error", title: "Could not refresh wallets" });
   } finally {
     if (icon) icon.classList.remove("spin");
     btn.disabled = false;
@@ -650,7 +650,7 @@ async function handleExportKey() {
     if (keyDisplay) keyDisplay.classList.remove("hidden");
     if (confirmBtn) confirmBtn.classList.add("hidden");
 
-    Utils.showToast("Key revealed - handle with care!", "warning");
+    Utils.showToast("Key revealed - handle with care", "warning");
   } catch (error) {
     Utils.showToast(`Failed: ${error.message}`, "error");
     closeExportModal();

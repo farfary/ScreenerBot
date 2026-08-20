@@ -324,11 +324,11 @@ async function saveNewAutomationTask() {
     }
 
     document.querySelector(".modal-overlay")?.remove();
-    Utils.showToast({ type: "success", title: "Success", message: "Task created successfully" });
+    Utils.showToast({ type: "success", title: "Task created" });
     await loadAutomationTasks();
     await loadAutomationStats();
   } catch (error) {
-    Utils.showToast({ type: "error", title: "Error", message: error.message });
+    Utils.showToast({ type: "error", title: error.message });
   }
 }
 
@@ -348,7 +348,7 @@ async function toggleAutomationTask(id, enabled) {
     await loadAutomationTasks();
     await loadAutomationStats();
   } catch (error) {
-    Utils.showToast({ type: "error", title: "Error", message: error.message });
+    Utils.showToast({ type: "error", title: error.message });
     await loadAutomationTasks();
   }
 }
@@ -364,10 +364,10 @@ async function runAutomationTask(id) {
       const err = await response.json().catch(() => ({}));
       throw new Error(err.error || "Failed to trigger task");
     }
-    Utils.showToast({ type: "success", title: "Success", message: "Task triggered" });
+    Utils.showToast({ type: "success", title: "Task triggered" });
     setTimeout(() => loadAutomationRuns(), 2000);
   } catch (error) {
-    Utils.showToast({ type: "error", title: "Error", message: error.message });
+    Utils.showToast({ type: "error", title: error.message });
   } finally {
     if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.style.opacity = ""; }
   }
@@ -385,11 +385,11 @@ async function deleteAutomationTask(id) {
   try {
     const response = await fetch(`/api/ai/automation/${id}`, { method: "DELETE" });
     if (!response.ok) throw new Error("Failed to delete task");
-    Utils.showToast({ type: "success", title: "Success", message: "Task deleted" });
+    Utils.showToast({ type: "success", title: "Task deleted" });
     await loadAutomationTasks();
     await loadAutomationStats();
   } catch (error) {
-    Utils.showToast({ type: "error", title: "Error", message: error.message });
+    Utils.showToast({ type: "error", title: error.message });
   }
 }
 
@@ -504,10 +504,10 @@ async function saveEditedAutomationTask(id) {
     });
     if (!response.ok) throw new Error("Failed to update task");
     document.querySelector(".modal-overlay")?.remove();
-    Utils.showToast({ type: "success", title: "Success", message: "Task updated" });
+    Utils.showToast({ type: "success", title: "Task updated" });
     await loadAutomationTasks();
   } catch (error) {
-    Utils.showToast({ type: "error", title: "Error", message: error.message });
+    Utils.showToast({ type: "error", title: error.message });
   }
 }
 
@@ -568,7 +568,7 @@ async function viewAutomationRun(runId) {
     `;
     document.body.appendChild(modal);
   } catch (error) {
-    Utils.showToast({ type: "error", title: "Error", message: error.message });
+    Utils.showToast({ type: "error", title: error.message });
   }
 }
 
@@ -734,7 +734,7 @@ async function viewAutomationTaskRuns(id) {
     `;
     document.body.appendChild(modal);
   } catch (error) {
-    Utils.showToast({ type: "error", title: "Error", message: error.message });
+    Utils.showToast({ type: "error", title: error.message });
   }
 }
 

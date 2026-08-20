@@ -547,7 +547,7 @@ function renderTaTokenHeader(overview) {
         <button class="btn btn-sm btn-icon action-blacklist" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" title="Add to Blacklist">
           <i class="icon-slash"></i>
         </button>
-        <button class="btn btn-sm btn-icon" onclick="navigator.clipboard.writeText('${escapeHtml(mint)}'); Utils.showToast('Mint copied', 'success');" title="Copy Mint Address">
+        <button class="btn btn-sm btn-icon" onclick="navigator.clipboard.writeText('${escapeHtml(mint)}'); Utils.notifyCopied('Mint address');" title="Copy Mint Address">
           <i class="icon-copy"></i>
         </button>
         <button class="btn btn-sm btn-icon" onclick="window.open('https://dexscreener.com/solana/${escapeHtml(mint)}', '_blank');" title="View on DexScreener">
@@ -1166,7 +1166,7 @@ function copyAnalysisReport() {
   report += `\nGenerated: ${new Date(taAnalysisData.fetched_at).toLocaleString()}\n`;
 
   Utils.copyToClipboard(report);
-  Utils.showToast("Analysis report copied to clipboard", "success");
+  Utils.notifyCopied("Analysis report");
 }
 
 /**

@@ -154,7 +154,7 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
       pathDisplay.addEventListener("click", async () => {
         try {
           await Utils.copyToClipboard(pathsInfo.config_path);
-          Utils.showToast("Config path copied to clipboard", "success");
+          Utils.notifyCopied("Config path");
         } catch {
           Utils.showToast("Failed to copy path", "error");
         }
@@ -323,14 +323,18 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
   if (openFolderBtn) {
     openFolderBtn.addEventListener("click", async () => {
       try {
+        // Success is the folder appearing in front of the user; only a
+        // failure needs saying.
         const response = await fetch("/api/system/paths/open-data", { method: "POST" });
-        if (response.ok) {
-          Utils.showToast("Data folder opened", "success");
-        } else {
-          Utils.showToast("Failed to open folder", "error");
+        if (!response.ok) {
+          Utils.showToast({ type: "error", title: "Could not open the data folder" });
         }
       } catch (err) {
-        Utils.showToast("Failed to open folder: " + err.message, "error");
+        Utils.showToast({
+          type: "error",
+          title: "Could not open the data folder",
+          message: err.message,
+        });
       }
     });
   }
@@ -417,7 +421,7 @@ async function exportConfig() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    Utils.showToast("Configuration exported successfully", "success");
+    Utils.showToast("Configuration exported", "success");
   } catch (err) {
     Utils.showToast("Failed to export config: " + err.message, "error");
   }
@@ -591,7 +595,7 @@ async function applyPreset(presetName) {
       }
     }
 
-    Utils.showToast(`${presetDisplayName} preset applied successfully`, "success");
+    Utils.showToast(`${presetDisplayName} preset applied`, "success");
   } catch (err) {
     Utils.showToast("Failed to apply preset: " + err.message, "error");
   }

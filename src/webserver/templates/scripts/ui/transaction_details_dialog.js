@@ -426,7 +426,7 @@ export class TransactionDetailsDialog {
     if (copyBtn) {
       copyBtn.addEventListener("click", () => {
         Utils.copyToClipboard(this.transactionData.signature);
-        Utils.showToast("Signature copied!", "success");
+        Utils.notifyCopied("Signature");
       });
     }
 
@@ -1100,7 +1100,7 @@ export class TransactionDetailsDialog {
     if (copyBtn && rawData) {
       copyBtn.addEventListener("click", () => {
         Utils.copyToClipboard(JSON.stringify(rawData, null, 2));
-        Utils.showToast("JSON copied to clipboard!", "success");
+        Utils.notifyCopied("JSON");
       });
     }
   }

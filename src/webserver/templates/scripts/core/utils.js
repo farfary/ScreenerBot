@@ -678,63 +678,47 @@
   }
 
   /**
-   * Show a toast notification (NEW SYSTEM with backwards compatibility)
+   * Show a toast notice.
    *
-   * @param {string|Object} messageOrConfig - Message string (legacy) or config object (new)
-   * @param {string} type - Toast type (legacy, only used if first param is string)
-   * @returns {Object} Toast instance with control methods
+   * Two shapes, one behaviour: `showToast("Saved", "success")` for a bare
+   * outcome, or `showToast({ type, title, message, key })` when the notice has
+   * detail or an identity. Passing a `key` makes repeat calls UPDATE the toast
+   * already on screen instead of stacking another one — use it for anything
+   * that can fire more than once (a poll failure, a step of a long operation).
    *
-   * @example
-   * // Legacy usage (backwards compatible)
-   * showToast("Configuration saved", "success");
-   * showToast("Failed to load data", "error");
-   *
-   * // New usage (recommended)
-   * showToast({
-   *   type: 'success',
-   *   title: 'Configuration Saved',
-   *   message: 'Your changes have been applied successfully',
-   *   duration: 4000
-   * });
-   *
-   * // With actions
-   * showToast({
-   *   type: 'action',
-   *   title: 'Unsaved Changes',
-   *   message: 'You have modified the configuration',
-   *   actions: [
-   *     { label: 'Save', callback: () => saveConfig() },
-   *     { label: 'Discard', callback: () => discardChanges(), style: 'secondary' }
-   *   ]
-   * });
+   * @param {string|Object} messageOrConfig
+   * @param {string} [type] only read when the first argument is a string
+   * @returns {{key:string,update:Function,dismiss:Function}|null}
    */
   function showToast(messageOrConfig, type = "success") {
-    // Wait for toast manager to load
     if (!toastManager) {
-      console.warn("[Utils] Toast manager not loaded yet, falling back to console");
-      console.log(`[Toast ${type}]`, messageOrConfig);
+      console.warn("[Utils] Toast manager not loaded yet:", messageOrConfig);
       return null;
     }
 
-    // Backwards compatibility: showToast("message", "type")
     if (typeof messageOrConfig === "string") {
-      return toastManager.show({
-        type: type,
-        title: messageOrConfig,
-        message: null,
-        duration: type === "error" ? 8000 : type === "warning" ? 6000 : 4000,
-      });
+      return toastManager.show({ type, title: messageOrConfig });
     }
 
-    // New usage: showToast({ type, title, message, ... })
     return toastManager.show(messageOrConfig);
   }
 
-  /**
-   * @deprecated Use showToast() instead
-   */
-  function showNotification(message, type = "info") {
-    return showToast(message, type);
+  // Clipboard results all share one toast key, so copying five addresses in a
+  // row replaces one notice instead of stacking five identical ones.
+  const CLIPBOARD_TOAST_KEY = "clipboard";
+
+  /** @param {string} label what was copied, e.g. "Mint address" */
+  function notifyCopied(label) {
+    return showToast({ key: CLIPBOARD_TOAST_KEY, type: "success", title: `${label} copied` });
+  }
+
+  function notifyCopyFailed(error) {
+    return showToast({
+      key: CLIPBOARD_TOAST_KEY,
+      type: "error",
+      title: "Copy failed",
+      message: error ? String(error) : null,
+    });
   }
 
   function copyToClipboard(value) {
@@ -743,18 +727,18 @@
 
   function copyMint(mint) {
     return copyToClipboard(mint)
-      .then(() => showToast({ type: "success", title: "Mint address copied to clipboard" }))
+      .then(() => notifyCopied("Mint address"))
       .catch((err) => {
-        showToast({ type: "error", title: "Failed to copy", message: String(err) });
+        notifyCopyFailed(err);
         throw err;
       });
   }
 
   function copyDebugValue(value, label) {
     return copyToClipboard(value)
-      .then(() => showToast({ type: "success", title: `${label} copied to clipboard` }))
+      .then(() => notifyCopied(label))
       .catch((err) => {
-        showToast({ type: "error", title: "Failed to copy", message: String(err) });
+        notifyCopyFailed(err);
         throw err;
       });
   }
@@ -770,10 +754,10 @@
       const data = await res.json();
       const text = generateDebugText(data, type);
       await copyToClipboard(text);
-      showToast({ type: "success", title: "Debug info copied to clipboard" });
+      notifyCopied("Debug info");
     } catch (err) {
       console.error("copyDebugInfo error:", err);
-      showToast({ type: "error", title: "Failed to copy debug info", message: String(err) });
+      notifyCopyFailed(err);
       throw err;
     }
   }
@@ -1166,9 +1150,9 @@
   // Copy an address and surface a toast (use for wallet/pool/authority addresses).
   function copyAddress(address) {
     return copyToClipboard(address)
-      .then(() => showToast({ type: "success", title: "Address copied to clipboard" }))
+      .then(() => notifyCopied("Address"))
       .catch((err) => {
-        showToast({ type: "error", title: "Failed to copy", message: String(err) });
+        notifyCopyFailed(err);
         throw err;
       });
   }
@@ -1427,7 +1411,8 @@
     freezeTableLayout,
     preserveScrollPosition,
     showToast,
-    showNotification,
+    notifyCopied,
+    notifyCopyFailed,
     copyToClipboard,
     copyMint,
     copyDebugValue,
@@ -1492,7 +1477,8 @@ export const {
   freezeTableLayout,
   preserveScrollPosition,
   showToast,
-  showNotification,
+  notifyCopied,
+  notifyCopyFailed,
   copyToClipboard,
   copyMint,
   copyDebugValue,
@@ -1575,7 +1561,8 @@ if (typeof document !== "undefined" && !window.__copyDelegationInstalled) {
     const text = trigger.dataset.copy;
     if (!text) return;
     event.preventDefault();
-    copyToClipboard(text);
-    showToast("Copied to clipboard", "success");
+    copyToClipboard(text)
+      .then(() => notifyCopied("Value"))
+      .catch(notifyCopyFailed);
   });
 }
