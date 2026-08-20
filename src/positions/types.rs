@@ -325,11 +325,14 @@ impl Position {
 
     /// True when the position may be shown a realized/unrealized P&L.
     ///
-    /// A wallet-derived round whose cost basis could not be established (airdrop,
-    /// USD-quoted fill, token -> token swap with no SOL leg, unreconciled history) has
-    /// no honest P&L, and inventing one would be a plausible, permanently wrong number.
+    /// A round whose cost basis could not be established (airdrop, USD-quoted fill,
+    /// token -> token swap with no SOL leg, unreconciled history) has no honest P&L, and
+    /// inventing one would be a plausible, permanently wrong number. This is NOT limited
+    /// to wallet-derived rows: a bot-executed position the user bought more of in
+    /// another wallet app has an outside leg the ledger may not be able to price, and
+    /// the reconciliation clears `basis_complete` on the trader's own row to say so.
     pub fn has_trustworthy_pnl(&self) -> bool {
-        !self.is_wallet_derived() || (self.basis_complete && self.history_complete)
+        self.basis_complete && self.history_complete
     }
 
     /// True when the wallet's token account is frozen, so the holding cannot be sold.

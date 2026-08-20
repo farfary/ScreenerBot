@@ -36,7 +36,8 @@ pub mod sync;
 
 pub use reducer::{reconcile_with_wallet, reduce_rounds};
 pub use sync::{
-    schedule_resync, sync_wallet_history, RoundMetadata, SyncPlan, SyncSummary, CLOSED_EXTERNALLY,
+    schedule_resync, sync_wallet_history, RoundMetadata, SyncPlan, SyncSummary, TraderLegs,
+    CLOSED_EXTERNALLY,
 };
 
 /// Whole-unit amounts below this are treated as zero. Raw integer balances are exact;

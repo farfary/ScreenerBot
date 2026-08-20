@@ -29,13 +29,16 @@
 //! the price updater, and `archived` belongs to the user — a resync must never move a
 //! row the user archived back into the open list, and must never archive one on its own.
 //!
-//! A row the bot executed (Auto/Manual/Copy) keeps its origin, management, strategy
-//! targets and its own fee-exact cost basis forever. The ledger only RECONCILES it
-//! against the chain: it stamps the round key, flags a frozen account, lowers a holding
-//! the wallet no longer has, and closes a position whose token was sold somewhere else.
-//! Nothing else the trader owns is rewritten, and a row with work in flight (an
-//! unverified entry, a pending DCA or partial exit) is left completely alone until that
-//! work lands — including not being duplicated.
+//! A row the bot executed (Auto/Manual/Copy) keeps its origin, management and strategy
+//! targets forever, and keeps the fee-exact SOL it booked for the legs IT executed. The
+//! ledger RECONCILES it against the chain: it stamps the round key, flags a frozen
+//! account, follows the holding up as well as down, and closes a position whose token
+//! was sold somewhere else. Following it UP is what makes a buy the user made in another
+//! wallet app show up — it is the same round, so it is the same row, and the row's basis
+//! becomes the trader's booked SOL plus the chain's SOL for every leg the trader did not
+//! book (see [`TraderLegs`]). Nothing else the trader owns is rewritten, and a row with
+//! work in flight (an unverified entry, a pending DCA or partial exit) is left
+//! completely alone until that work lands — including not being duplicated.
 //!
 //! Freezing is a FLAG, never an action: a frozen token account sets
 //! `holding_state = "frozen"` so the user can see the holding cannot be sold and archive
@@ -45,13 +48,48 @@ use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 
-use super::{reconcile_with_wallet, reduce_rounds, LedgerRound, WalletHolding, DUST};
+use super::{
+    reconcile_with_wallet, reduce_rounds, LedgerEventKind, LedgerRound, QuoteAsset, WalletHolding,
+    DUST,
+};
 use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
 
 /// `closed_reason` for a bot-executed position whose token left the wallet through a
 /// sale or transfer the bot did not make.
 pub const CLOSED_EXTERNALLY: &str = "closed_externally";
+
+/// The swap legs the TRADER itself executed for one position.
+///
+/// A bot-owned round can also contain acquisitions the user made in another wallet app.
+/// Telling the two apart is what lets the row absorb the outside buy — the trader's own
+/// legs keep their fee-exact SOL, and only the rest is taken from the chain.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TraderLegs {
+    /// Signatures of acquisitions the trader booked.
+    pub entry_signatures: HashSet<String>,
+    /// SOL those acquisitions cost, fee-exact as the trader recorded it.
+    pub booked_invested_sol: f64,
+}
+
+impl TraderLegs {
+    /// Build the per-position map from `(position_id, signature, is_exit, sol)` rows.
+    pub fn from_rows(
+        rows: impl IntoIterator<Item = (i64, String, bool, f64)>,
+    ) -> HashMap<i64, Self> {
+        let mut map: HashMap<i64, Self> = HashMap::new();
+        for (position_id, signature, is_exit, sol) in rows {
+            if is_exit {
+                continue;
+            }
+            let legs = map.entry(position_id).or_default();
+            if legs.entry_signatures.insert(signature) {
+                legs.booked_invested_sol += sol;
+            }
+        }
+        map
+    }
+}
 
 /// Display metadata for a mint, resolved once per sync from the tokens database.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -101,6 +139,7 @@ pub fn plan_position_writes(
     rounds: &[LedgerRound],
     existing: &[Position],
     metadata: &HashMap<String, RoundMetadata>,
+    trader_legs: &HashMap<i64, TraderLegs>,
     busy_mints: &HashSet<String>,
     now: DateTime<Utc>,
 ) -> SyncPlan {
@@ -151,7 +190,8 @@ pub fn plan_position_writes(
                 if is_busy(owned, busy_mints) {
                     continue;
                 }
-                let fresh = reconcile_owned_position(owned, round, &meta, now);
+                let legs = owned.id.and_then(|id| trader_legs.get(&id));
+                let fresh = reconcile_owned_position(owned, round, &meta, legs, now);
                 if differs_owned(owned, &fresh) {
                     plan.updates.push(fresh);
                 }
@@ -343,18 +383,33 @@ fn build_position(
 
 /// Reconcile a position the BOT executed against what the chain says the wallet holds.
 ///
-/// The trader owns this row: its origin, management, profit targets, entry records and
-/// fee-exact cost basis are never touched. Only three chain facts are written — the
-/// round key that ties the row to its round, the frozen flag, and a holding that left
-/// the wallet without us selling it.
+/// The trader owns this row: its origin, management, profit targets, strategy state and
+/// entry records are never touched. What the CHAIN owns is the size of the holding and
+/// what it cost, and this is where the two meet.
 ///
-/// A balance that GREW is deliberately ignored: those tokens were bought somewhere else
-/// and are not this position's to sell. Only a shrinking balance is adopted, so an exit
-/// can never be sized against tokens that are no longer there.
+/// A round is one wallet fact and one row, so an acquisition the user made in another
+/// wallet app belongs to the same round as the bot's own buy. Ignoring it — which is
+/// what this used to do — left the row claiming the balance and the cost basis it had
+/// before the outside buy: the Positions tab showed 0.005 SOL invested while the wallet
+/// held three times the tokens, and the next exit would have been sized against a
+/// holding that no longer existed.
+///
+/// So the growth is ADOPTED, but only from legs the trader did not book itself:
+/// `legs` carries the signatures and fee-exact SOL of the entries this position already
+/// recorded, and everything else in the round is taken from the chain. That makes the
+/// basis `booked + external`, which is recomputed identically on every resync instead of
+/// accumulating.
+///
+/// Adoption requires the round to reconcile. A round whose history has a hole
+/// (`history_complete == false`) keeps the old shrink-only behaviour, and a round whose
+/// consideration could not be established in SOL (`basis_complete == false`) leaves the
+/// trader's basis alone and clears `basis_complete` on the row, so the dashboard hides a
+/// P&L it cannot compute rather than showing a wrong one.
 fn reconcile_owned_position(
     existing: &Position,
     round: &LedgerRound,
     meta: &RoundMetadata,
+    legs: Option<&TraderLegs>,
     now: DateTime<Utc>,
 ) -> Position {
     let mut position = existing.clone();
@@ -364,6 +419,11 @@ fn reconcile_owned_position(
 
     let observed_remaining = clamp_raw(round.balance_raw);
     let claimed_remaining = existing.remaining_token_amount.unwrap_or(0);
+    let grew = observed_remaining > claimed_remaining;
+
+    if grew && round.history_complete {
+        adopt_external_growth(&mut position, existing, round, legs);
+    }
 
     if round.is_open {
         if observed_remaining < claimed_remaining {
@@ -413,8 +473,16 @@ fn reconcile_owned_position(
     position.unrealized_pnl = None;
     position.unrealized_pnl_percent = None;
 
-    // Proceeds only when every disposal in the round was priced in SOL. Otherwise the
-    // position closes with no exit price and no P&L rather than a guessed one.
+    // Proceeds only when every disposal in the round was priced in SOL AND the history
+    // reconciles. A round whose tokens left the wallet without a disposal we could
+    // observe still carries the average price of the disposals we DID see, so pricing
+    // the close from it would book the proceeds of part of the position against the cost
+    // of all of it — a plausible, permanently wrong loss. Flag it instead.
+    if !round.history_complete {
+        position.history_complete = false;
+        return position;
+    }
+
     if let Some(exit_price) = round.average_exit_price_sol {
         position.exit_price = Some(exit_price);
         position.effective_exit_price = Some(exit_price);
@@ -433,13 +501,79 @@ fn reconcile_owned_position(
     position
 }
 
+/// Fold acquisitions the user made outside the bot into a bot-owned row.
+///
+/// The trader's own legs are identified by signature and keep the SOL it recorded (which
+/// includes the fee it actually paid); every other traded acquisition in the round
+/// contributes the SOL the chain shows. Recomputing the whole basis from those two parts
+/// on each pass is what makes a resync idempotent — adding the difference would inflate
+/// the position a little more every time the wallet moved.
+fn adopt_external_growth(
+    position: &mut Position,
+    existing: &Position,
+    round: &LedgerRound,
+    legs: Option<&TraderLegs>,
+) {
+    // Chain truth for the sizes, whoever bought them.
+    position.remaining_token_amount = Some(clamp_raw(round.balance_raw));
+    position.token_amount = Some(clamp_raw(round.total_acquired_raw));
+    position.total_exited_amount = clamp_raw(round.total_disposed_raw);
+    position.dca_count = round.entry_count.saturating_sub(1);
+
+    if !round.basis_complete {
+        // The outside buy has no SOL price we can trust (an airdrop, a USD fill, a
+        // token -> token swap). The holding is real, the cost of part of it is not.
+        position.basis_complete = false;
+        return;
+    }
+
+    // Legs the trader booked itself; without any records the row's own total is the
+    // best fee-exact number we have and its entry signature is the only leg we can
+    // attribute.
+    let (booked_signatures, booked_sol) = match legs.filter(|l| !l.entry_signatures.is_empty()) {
+        Some(legs) => (legs.entry_signatures.clone(), legs.booked_invested_sol),
+        None => (
+            existing
+                .entry_transaction_signature
+                .iter()
+                .cloned()
+                .collect(),
+            existing.total_size_sol,
+        ),
+    };
+
+    let external_sol: f64 = round
+        .events
+        .iter()
+        .filter(|event| {
+            matches!(event.kind, LedgerEventKind::Entry | LedgerEventKind::Add)
+                && !booked_signatures.contains(&event.signature)
+        })
+        .filter_map(|event| event.quote)
+        .filter(|quote| quote.asset == QuoteAsset::Sol)
+        .map(|quote| quote.amount)
+        .sum();
+
+    position.total_size_sol = booked_sol + external_sol;
+
+    let acquired = super::raw_to_whole(round.total_acquired_raw as i128, round.decimals);
+    if acquired > DUST {
+        position.average_entry_price = position.total_size_sol / acquired;
+    }
+}
+
 /// True when the reconciliation of a bot-owned row changes anything. Every other field
 /// is carried over untouched, so an unchanged wallet plans no write.
 fn differs_owned(existing: &Position, fresh: &Position) -> bool {
     existing.round_key != fresh.round_key
         || existing.holding_state != fresh.holding_state
         || existing.remaining_token_amount != fresh.remaining_token_amount
+        || existing.token_amount != fresh.token_amount
         || existing.total_exited_amount != fresh.total_exited_amount
+        || existing.dca_count != fresh.dca_count
+        || existing.basis_complete != fresh.basis_complete
+        || !same_money(existing.total_size_sol, fresh.total_size_sol)
+        || !same_money(existing.average_entry_price, fresh.average_entry_price)
         || existing.exit_time != fresh.exit_time
         || existing.exit_transaction_signature != fresh.exit_transaction_signature
         || existing.transaction_exit_verified != fresh.transaction_exit_verified
@@ -573,7 +707,22 @@ pub async fn sync_wallet_history() -> Result<SyncSummary, String> {
     // already in memory is updated in place below.
     let existing = crate::positions::db::load_all_positions().await?;
     let busy_mints = crate::positions::state::mints_with_pending_swaps().await;
-    let plan = plan_position_writes(&rounds, &existing, &metadata, &busy_mints, Utc::now());
+    // Which legs the trader booked itself, so a bot-owned round can absorb an outside
+    // buy without double-counting the bot's own. A failure here is not fatal: the row
+    // falls back to its own recorded total.
+    let trader_legs = TraderLegs::from_rows(
+        crate::positions::db::get_trader_swap_legs()
+            .await
+            .unwrap_or_default(),
+    );
+    let plan = plan_position_writes(
+        &rounds,
+        &existing,
+        &metadata,
+        &trader_legs,
+        &busy_mints,
+        Utc::now(),
+    );
 
     let summary = SyncSummary {
         rounds: rounds.len(),

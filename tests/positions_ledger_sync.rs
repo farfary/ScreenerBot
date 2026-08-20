@@ -17,8 +17,10 @@ use chrono::{DateTime, TimeZone, Utc};
 use std::collections::{HashMap, HashSet};
 
 use screenerbot::positions::ledger::reduce_rounds;
-use screenerbot::positions::ledger::sync::{plan_position_writes, RoundMetadata};
-use screenerbot::positions::ledger::{LedgerEvent, LedgerEventKind, LedgerRound};
+use screenerbot::positions::ledger::sync::{plan_position_writes, RoundMetadata, TraderLegs};
+use screenerbot::positions::ledger::{
+    LedgerEvent, LedgerEventKind, LedgerRound, QuoteAsset, QuoteLeg,
+};
 use screenerbot::positions::{Position, PositionManagement, PositionOrigin};
 use screenerbot::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
@@ -111,6 +113,12 @@ fn no_busy() -> HashSet<String> {
     HashSet::new()
 }
 
+/// No trader-booked legs: every acquisition in the round is treated as one the bot did
+/// not execute itself.
+fn no_legs() -> HashMap<i64, TraderLegs> {
+    HashMap::new()
+}
+
 /// A position the TRADER opened and verified for the same buy the round was reduced
 /// from: still open, because the bot never sold it — whatever the chain went on to do.
 fn bot_position(round: &LedgerRound) -> Position {
@@ -145,7 +153,7 @@ fn bot_position(round: &LedgerRound) -> Position {
 /// The row a first sync would create — used as the "already exists" input everywhere
 /// below, so the tests never hand-build a 50-field `Position`.
 fn materialise(rounds: &[LedgerRound], meta: &HashMap<String, RoundMetadata>) -> Vec<Position> {
-    let plan = plan_position_writes(rounds, &[], meta, &no_busy(), now());
+    let plan = plan_position_writes(rounds, &[], meta, &no_legs(), &no_busy(), now());
     assert!(plan.updates.is_empty(), "nothing existed to update");
     plan.inserts
         .into_iter()
@@ -165,7 +173,14 @@ fn materialise(rounds: &[LedgerRound], meta: &HashMap<String, RoundMetadata>) ->
 #[test]
 fn a_new_round_becomes_an_external_user_only_position() {
     let rounds = vec![round(MINT, "open-sig:MINT")];
-    let plan = plan_position_writes(&rounds, &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &rounds,
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
 
     assert_eq!(plan.inserts.len(), 1);
     assert!(plan.updates.is_empty());
@@ -184,7 +199,14 @@ fn a_new_round_becomes_an_external_user_only_position() {
 #[test]
 fn a_closed_round_is_marked_exit_verified_so_it_reaches_the_closed_tab() {
     let rounds = vec![round(MINT, "open-sig:MINT")];
-    let plan = plan_position_writes(&rounds, &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &rounds,
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     let position = &plan.inserts[0];
 
     // `get_closed_positions` filters on `transaction_exit_verified`. A round reduced
@@ -202,7 +224,14 @@ fn a_closed_round_is_marked_exit_verified_so_it_reaches_the_closed_tab() {
 #[test]
 fn an_open_round_is_not_marked_exited() {
     let rounds = vec![open_round(MINT, "open-sig:MINT")];
-    let plan = plan_position_writes(&rounds, &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &rounds,
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     let position = &plan.inserts[0];
 
     assert!(!position.transaction_exit_verified);
@@ -219,7 +248,14 @@ fn a_second_round_in_the_same_mint_is_a_separate_row() {
         round(MINT, "first-sig:MINT"),
         open_round(MINT, "second-sig:MINT"),
     ];
-    let plan = plan_position_writes(&rounds, &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &rounds,
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
 
     assert_eq!(plan.inserts.len(), 2);
     let keys: Vec<_> = plan
@@ -238,7 +274,14 @@ fn entries_and_exits_are_counted_as_adds_and_partials() {
     source.entry_count = 3;
     source.exit_count = 3;
 
-    let plan = plan_position_writes(&[source], &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &[source],
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     let position = &plan.inserts[0];
 
     assert_eq!(position.dca_count, 2);
@@ -251,7 +294,14 @@ fn an_open_round_counts_every_disposal_as_a_partial() {
     let mut source = open_round(MINT, "open-sig:MINT");
     source.exit_count = 2;
 
-    let plan = plan_position_writes(&[source], &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &[source],
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     assert_eq!(plan.inserts[0].partial_exit_count, 2);
 }
 
@@ -261,6 +311,7 @@ fn a_mint_with_no_metadata_still_gets_a_readable_row() {
         &[round(MINT, "open-sig:MINT")],
         &[],
         &no_metadata(),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -285,7 +336,14 @@ fn a_round_without_a_cost_basis_carries_no_pnl_and_no_invested_figure() {
     source.realized_pnl_sol = None;
     source.average_entry_price_sol = None;
 
-    let plan = plan_position_writes(&[source], &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &[source],
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     let position = &plan.inserts[0];
 
     assert!(!position.basis_complete);
@@ -303,7 +361,14 @@ fn history_that_does_not_reconcile_suppresses_the_pnl_even_with_a_complete_basis
     let mut source = round(MINT, "open-sig:MINT");
     source.history_complete = false;
 
-    let plan = plan_position_writes(&[source], &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &[source],
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     let position = &plan.inserts[0];
 
     assert!(position.basis_complete);
@@ -320,6 +385,7 @@ fn a_complete_round_reports_pnl_against_the_cost_actually_released() {
         &[round(MINT, "open-sig:MINT")],
         &[],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -338,7 +404,14 @@ fn a_zero_cost_round_reports_no_percentage_rather_than_infinity() {
     source.realized_cost_sol = 0.0;
     source.realized_pnl_sol = Some(3.0);
 
-    let plan = plan_position_writes(&[source], &[], &metadata(MINT, false), &no_busy(), now());
+    let plan = plan_position_writes(
+        &[source],
+        &[],
+        &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     let position = &plan.inserts[0];
 
     assert_eq!(position.pnl, Some(3.0));
@@ -360,7 +433,7 @@ fn resyncing_unchanged_history_writes_nothing() {
     let meta = metadata(MINT, false);
     let existing = materialise(&rounds, &meta);
 
-    let plan = plan_position_writes(&rounds, &existing, &meta, &no_busy(), now());
+    let plan = plan_position_writes(&rounds, &existing, &meta, &no_legs(), &no_busy(), now());
 
     assert!(plan.is_empty(), "unchanged history must produce no writes");
 }
@@ -376,7 +449,7 @@ fn a_row_the_user_archived_stays_archived_across_a_resync() {
     // History moved on, so a write is due — but archival is the user's decision.
     let mut moved = open_round(MINT, "open-sig:MINT");
     moved.balance_raw = 500_000;
-    let plan = plan_position_writes(&[moved], &existing, &meta, &no_busy(), now());
+    let plan = plan_position_writes(&[moved], &existing, &meta, &no_legs(), &no_busy(), now());
 
     assert_eq!(plan.updates.len(), 1);
     assert!(plan.updates[0].archived);
@@ -396,7 +469,7 @@ fn live_price_fields_survive_a_resync() {
 
     let mut moved = open_round(MINT, "open-sig:MINT");
     moved.balance_raw = 500_000;
-    let plan = plan_position_writes(&[moved], &existing, &meta, &no_busy(), now());
+    let plan = plan_position_writes(&[moved], &existing, &meta, &no_legs(), &no_busy(), now());
 
     let updated = &plan.updates[0];
     // These belong to the price updater. Resetting them would blank the dashboard's
@@ -423,6 +496,7 @@ fn a_round_the_bot_executed_is_adopted_instead_of_duplicated() {
         &[open],
         std::slice::from_ref(&bot_row),
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -449,6 +523,7 @@ fn an_adopted_row_is_matched_by_round_key_from_then_on() {
         &[open],
         &[adopted],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -468,6 +543,7 @@ fn a_bot_position_sold_somewhere_else_is_closed_from_wallet_history() {
         &[closed],
         &[bot_row],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -526,6 +602,7 @@ fn a_close_we_could_not_time_is_dated_by_the_last_time_we_saw_the_holding() {
         &[vanished],
         &[bot_position(&round(MINT, "open-sig:MINT"))],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -558,6 +635,7 @@ fn a_partial_sale_elsewhere_lowers_the_holding_but_leaves_it_open() {
         &[partly_sold],
         &[bot_row],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -568,25 +646,174 @@ fn a_partial_sale_elsewhere_lowers_the_holding_but_leaves_it_open() {
     assert!(reconciled.exit_time.is_none(), "still holding something");
 }
 
-#[test]
-fn a_holding_that_grew_elsewhere_is_never_claimed_by_the_position() {
-    // Tokens bought in another app are not this position's to sell.
+/// The same round after the user bought 4x more of the mint in another wallet app: two
+/// extra SOL-priced acquisitions the bot never executed, on top of the trader's own.
+fn grown_round() -> LedgerRound {
     let mut grown = open_round(MINT, "open-sig:MINT");
     grown.balance_raw = 5_000_000;
+    grown.total_acquired_raw = 5_000_000;
+    grown.entry_count = 3;
+    grown.invested_sol = 8.0;
+    grown.events = vec![
+        acquisition("open-sig", LedgerEventKind::Entry, 1.0, 2.0),
+        acquisition("outside-1", LedgerEventKind::Add, 2.0, 3.0),
+        acquisition("outside-2", LedgerEventKind::Add, 2.0, 3.0),
+    ];
+    grown
+}
+
+/// One priced acquisition inside a round: `amount` whole tokens for `sol` SOL.
+fn acquisition(signature: &str, kind: LedgerEventKind, amount: f64, sol: f64) -> LedgerEvent {
+    LedgerEvent {
+        signature: signature.to_owned(),
+        slot: Some(1),
+        block_time: Some(1_600_000_500),
+        kind,
+        amount,
+        balance_after: amount,
+        quote: Some(QuoteLeg {
+            asset: QuoteAsset::Sol,
+            amount: sol,
+        }),
+        price_sol: Some(sol / amount),
+        venue: Some("jupiter".to_owned()),
+    }
+}
+
+#[test]
+fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
+    // The user bought more of a mint the bot already holds, from a phone wallet. It is
+    // the SAME round, so the bot's row must carry the whole holding and the whole cost —
+    // otherwise the Positions tab shows the pre-buy invested figure forever.
+    let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
+    bot_row.id = Some(7);
+    bot_row.remaining_token_amount = Some(1_000_000);
+
+    let legs = HashMap::from([(
+        7i64,
+        TraderLegs {
+            entry_signatures: HashSet::from(["open-sig".to_owned()]),
+            // Fee-exact, and slightly above the chain's 2.0 leg because the trader
+            // booked what it actually paid.
+            booked_invested_sol: 2.01,
+        },
+    )]);
+
+    let plan = plan_position_writes(
+        &[grown_round()],
+        &[bot_row],
+        &metadata(MINT, false),
+        &legs,
+        &no_busy(),
+        now(),
+    );
+
+    assert_eq!(plan.updates.len(), 1);
+    let grown = &plan.updates[0];
+    assert_eq!(grown.remaining_token_amount, Some(5_000_000));
+    assert_eq!(grown.token_amount, Some(5_000_000));
+    assert_eq!(grown.dca_count, 2);
+    // The trader's own leg keeps its fee-exact number; the two outside buys come from
+    // the chain. Never the round's 8.0, which would discard the fee.
+    assert!(
+        (grown.total_size_sol - 8.01).abs() < 1e-9,
+        "{:?}",
+        grown.total_size_sol
+    );
+    assert!(grown.exit_time.is_none());
+}
+
+#[test]
+fn absorbing_an_outside_buy_is_idempotent() {
+    // The second resync must plan no write at all: recomputing booked + external gives
+    // the same number, where accumulating the difference would inflate it every pass.
+    let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
+    bot_row.id = Some(7);
+    bot_row.remaining_token_amount = Some(1_000_000);
+
+    let legs = HashMap::from([(
+        7i64,
+        TraderLegs {
+            entry_signatures: HashSet::from(["open-sig".to_owned()]),
+            booked_invested_sol: 2.0,
+        },
+    )]);
+
+    let first = plan_position_writes(
+        &[grown_round()],
+        &[bot_row],
+        &metadata(MINT, false),
+        &legs,
+        &no_busy(),
+        now(),
+    );
+    let settled = first.updates[0].clone();
+
+    let second = plan_position_writes(
+        &[grown_round()],
+        &[settled],
+        &metadata(MINT, false),
+        &legs,
+        &no_busy(),
+        now(),
+    );
+    assert!(second.is_empty(), "{:?}", second.updates);
+}
+
+#[test]
+fn an_unpriced_outside_buy_takes_the_holding_but_not_a_basis() {
+    // An airdrop or a USD-quoted fill grew the holding. The tokens are real; their cost
+    // in SOL is not knowable, so the row must stop claiming a P&L rather than show one
+    // computed from half a basis.
+    let mut grown = grown_round();
+    grown.basis_complete = false;
 
     let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
+    bot_row.id = Some(7);
     bot_row.remaining_token_amount = Some(1_000_000);
 
     let plan = plan_position_writes(
         &[grown],
         &[bot_row],
         &metadata(MINT, false),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
+
+    let reconciled = &plan.updates[0];
+    assert_eq!(reconciled.remaining_token_amount, Some(5_000_000));
+    assert!(!reconciled.basis_complete);
+    assert!(!reconciled.has_trustworthy_pnl());
+    assert!(
+        (reconciled.total_size_sol - 2.0).abs() < 1e-9,
+        "the trader's basis is left alone, never mixed with an unpriceable leg"
+    );
+}
+
+#[test]
+fn a_holding_that_grew_on_broken_history_is_not_claimed() {
+    // The deltas do not reconcile with the balances we saw, so the extra tokens cannot
+    // be attributed to anything. Shrink-only is the safe behaviour here.
+    let mut grown = grown_round();
+    grown.history_complete = false;
+
+    let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
+    bot_row.id = Some(7);
+    bot_row.remaining_token_amount = Some(1_000_000);
+
+    let plan = plan_position_writes(
+        &[grown],
+        &[bot_row],
+        &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
 
     assert_eq!(plan.updates.len(), 1, "only the round key is stamped");
     assert_eq!(plan.updates[0].remaining_token_amount, Some(1_000_000));
+    assert!((plan.updates[0].total_size_sol - 2.0).abs() < 1e-9);
 }
 
 #[test]
@@ -605,6 +832,7 @@ fn a_position_that_booked_its_own_exit_is_never_rewritten() {
         &[closed],
         &[bot_row],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -622,7 +850,14 @@ fn a_mint_with_a_swap_in_flight_is_left_entirely_alone() {
     let bot_row = bot_position(&closed);
     let busy = HashSet::from([MINT.to_owned()]);
 
-    let plan = plan_position_writes(&[closed], &[bot_row], &metadata(MINT, false), &busy, now());
+    let plan = plan_position_writes(
+        &[closed],
+        &[bot_row],
+        &metadata(MINT, false),
+        &no_legs(),
+        &busy,
+        now(),
+    );
 
     assert!(plan.updates.is_empty(), "the trader's swap lands first");
     assert!(
@@ -641,6 +876,7 @@ fn an_unverified_entry_is_left_alone_and_not_duplicated() {
         &[open],
         &[bot_row],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -660,6 +896,7 @@ fn an_exit_awaiting_verification_is_left_to_the_verifier() {
         &[closed],
         &[bot_row],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -681,6 +918,7 @@ fn a_row_is_adopted_by_at_most_one_round() {
         &[first, second],
         std::slice::from_ref(&bot_row),
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -706,6 +944,7 @@ fn a_row_holding_a_different_mint_is_never_adopted() {
         &[open],
         &[other_mint_row],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -724,6 +963,7 @@ fn a_frozen_account_flags_the_bot_position_too() {
         &[open],
         &[bot_row],
         &metadata(MINT, true),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -754,7 +994,7 @@ fn an_entry_time_is_never_re_invented_for_a_round_with_no_block_time() {
     let later = Utc.timestamp_opt(1_800_000_000, 0).unwrap();
     let mut moved = undated;
     moved.balance_raw = 500_000;
-    let plan = plan_position_writes(&[moved], &existing, &meta, &no_busy(), later);
+    let plan = plan_position_writes(&[moved], &existing, &meta, &no_legs(), &no_busy(), later);
 
     assert_eq!(plan.updates.len(), 1);
     assert_eq!(plan.updates[0].entry_time, first_entry_time);
@@ -767,7 +1007,14 @@ fn an_entry_time_is_never_re_invented_for_a_round_with_no_block_time() {
 #[test]
 fn a_frozen_holding_is_flagged_but_never_archived_or_closed() {
     let rounds = vec![open_round(MINT, "open-sig:MINT")];
-    let plan = plan_position_writes(&rounds, &[], &metadata(MINT, true), &no_busy(), now());
+    let plan = plan_position_writes(
+        &rounds,
+        &[],
+        &metadata(MINT, true),
+        &no_legs(),
+        &no_busy(),
+        now(),
+    );
     let position = &plan.inserts[0];
 
     assert!(position.is_frozen());
@@ -786,6 +1033,7 @@ fn a_closed_round_is_never_flagged_frozen() {
         &[round(MINT, "open-sig:MINT")],
         &[],
         &metadata(MINT, true),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -804,6 +1052,7 @@ fn thawing_a_holding_clears_the_flag() {
         &rounds,
         &existing,
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -822,6 +1071,7 @@ fn a_wallet_derived_row_is_not_bot_capacity() {
         &[open_round(MINT, "open-sig:MINT")],
         &[],
         &metadata(MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );
@@ -909,6 +1159,7 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
         &rounds,
         std::slice::from_ref(&bot_row),
         &metadata(TRADED_MINT, false),
+        &no_legs(),
         &no_busy(),
         now(),
     );

@@ -3,7 +3,7 @@
 //! Pure and total. No I/O, no clock, no global state, no panics — a malformed row
 //! degrades the completeness flags rather than aborting the reduction.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
@@ -32,6 +32,11 @@ pub fn reduce_rounds(deltas: &[SubjectAssetDelta]) -> Vec<LedgerRound> {
 
     let mut open: HashMap<String, Round> = HashMap::new();
     let mut finished: Vec<LedgerRound> = Vec::new();
+    // Mints that have already spent the bare `genesis:<mint>` key. History with two
+    // holes in the same mint reduces to two genesis rounds, and a round key is a UNIQUE
+    // index on `positions` — a second bare key would make one of the two rows fail to
+    // insert, or collapse both onto one row and hide a whole holding.
+    let mut genesis_used: HashSet<String> = HashSet::new();
 
     let mut cursor = 0usize;
     while cursor < ordered.len() {
@@ -50,7 +55,7 @@ pub fn reduce_rounds(deltas: &[SubjectAssetDelta]) -> Vec<LedgerRound> {
             if is_reference_asset(&delta.mint) || delta.delta_raw == 0 {
                 continue;
             }
-            apply_delta(&mut open, &mut finished, group, delta);
+            apply_delta(&mut open, &mut finished, &mut genesis_used, group, delta);
         }
     }
 
@@ -72,6 +77,7 @@ pub fn reduce_rounds(deltas: &[SubjectAssetDelta]) -> Vec<LedgerRound> {
 fn apply_delta(
     open: &mut HashMap<String, Round>,
     finished: &mut Vec<LedgerRound>,
+    genesis_used: &mut HashSet<String>,
     group: &[&SubjectAssetDelta],
     delta: &SubjectAssetDelta,
 ) {
@@ -98,10 +104,15 @@ fn apply_delta(
     } else if !open.contains_key(&delta.mint) {
         // First thing we ever see for this mint is a disposal, or an acquisition onto a
         // non-zero balance: the round was already running before our history begins.
-        open.insert(
-            delta.mint.clone(),
-            Round::genesis(delta, format!("genesis:{}", delta.mint)),
-        );
+        // The first gap in a mint keeps the bare key, so rows written by earlier
+        // versions still match; any further gap is qualified by the delta that revealed
+        // it, which is as stable as the history it was reduced from.
+        let round_key = if genesis_used.insert(delta.mint.clone()) {
+            format!("genesis:{}", delta.mint)
+        } else {
+            format!("genesis:{}:{}", delta.signature, delta.mint)
+        };
+        open.insert(delta.mint.clone(), Round::genesis(delta, round_key));
     }
 
     let Some(round) = open.get_mut(&delta.mint) else {
@@ -154,11 +165,14 @@ pub fn reconcile_with_wallet(rounds: &mut Vec<LedgerRound>, holdings: &[WalletHo
         }
     }
 
-    let known: std::collections::HashSet<&str> = rounds
+    let known: HashSet<&str> = rounds
         .iter()
         .filter(|r| r.is_open)
         .map(|r| r.mint.as_str())
         .collect();
+    // Keys already taken by rounds we reduced, including closed ones: the synthetic
+    // round below must never reuse one.
+    let taken: HashSet<String> = rounds.iter().map(|r| r.round_key.clone()).collect();
 
     let missing: Vec<&WalletHolding> = holdings
         .iter()
@@ -166,10 +180,16 @@ pub fn reconcile_with_wallet(rounds: &mut Vec<LedgerRound>, holdings: &[WalletHo
         .collect();
 
     for holding in missing {
+        let bare = format!("genesis:{}", holding.mint);
+        let round_key = if taken.contains(&bare) {
+            format!("genesis:holding:{}", holding.mint)
+        } else {
+            bare
+        };
         rounds.push(LedgerRound {
             mint: holding.mint.clone(),
             decimals: holding.decimals,
-            round_key: format!("genesis:{}", holding.mint),
+            round_key,
             opened_at: None,
             closed_at: None,
             is_open: true,

@@ -720,3 +720,77 @@ fn reconciliation_surfaces_a_holding_no_transaction_ever_explained() {
         "a round that agrees with the wallet keeps its basis"
     );
 }
+
+#[test]
+fn two_gaps_in_one_mint_produce_two_distinct_round_keys() {
+    // History with two holes: each time our first sight of the mint is a sale off a
+    // balance we never watched arrive, so each is its own genesis round. A round key is
+    // a UNIQUE index on `positions` — two bare `genesis:<mint>` keys would either fail
+    // to insert the second row or collapse both holdings onto one.
+    let deltas = vec![
+        token(
+            "gap-one",
+            10,
+            MINT_A,
+            -1_000_000,
+            1_000_000,
+            0,
+            DeltaKind::Trade,
+        ),
+        native("gap-one", 10, 2.0),
+        token(
+            "gap-two",
+            20,
+            MINT_A,
+            -3_000_000,
+            3_000_000,
+            0,
+            DeltaKind::Trade,
+        ),
+        native("gap-two", 20, 4.0),
+    ];
+
+    let rounds = reduce_rounds(&deltas);
+    assert_eq!(rounds.len(), 2);
+    assert!(rounds.iter().all(LedgerRound::is_genesis));
+    assert_ne!(
+        rounds[0].round_key, rounds[1].round_key,
+        "each gap needs its own identity"
+    );
+    assert!(rounds
+        .iter()
+        .any(|round| round.round_key == format!("genesis:{MINT_A}")));
+}
+
+#[test]
+fn a_held_mint_never_reuses_a_closed_genesis_key() {
+    // The wallet still holds a mint whose only history is a genesis round that already
+    // closed. The synthetic round for the holding must not claim that round's key.
+    let deltas = vec![
+        token(
+            "gap-one",
+            10,
+            MINT_A,
+            -1_000_000,
+            1_000_000,
+            0,
+            DeltaKind::Trade,
+        ),
+        native("gap-one", 10, 2.0),
+    ];
+
+    let mut rounds = reduce_rounds(&deltas);
+    reconcile_with_wallet(
+        &mut rounds,
+        &[WalletHolding {
+            mint: MINT_A.to_string(),
+            amount_raw: 5_000_000,
+            decimals: TOKEN_DECIMALS,
+        }],
+    );
+
+    assert_eq!(rounds.len(), 2);
+    assert_ne!(rounds[0].round_key, rounds[1].round_key);
+    let held = rounds.iter().find(|round| round.is_open).expect("held");
+    assert_eq!(held.balance_raw, 5_000_000);
+}

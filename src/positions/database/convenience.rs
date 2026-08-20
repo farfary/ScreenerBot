@@ -611,3 +611,48 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
 
     Ok(records)
 }
+
+/// Every swap leg the TRADER itself booked, for the whole wallet, in one query.
+///
+/// Returns `(position_id, transaction_signature, is_exit, sol)`. The wallet-history
+/// ledger uses it to tell the legs it already has a fee-exact number for apart from the
+/// ones the user executed elsewhere, so a bot-owned position can absorb an outside buy
+/// without double-counting its own.
+pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    let db = db_guard
+        .as_ref()
+        .ok_or("Positions database not initialized")?;
+
+    let conn = db
+        .pool
+        .get()
+        .map_err(|e| format!("Failed to get connection: {e}"))?;
+
+    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT position_id, transaction_signature, 0 AS is_exit, sol_spent AS sol
+               FROM position_entries WHERE wallet_address = ?1
+             UNION ALL
+             SELECT position_id, transaction_signature, 1 AS is_exit, sol_received AS sol
+               FROM position_exits WHERE wallet_address = ?1",
+        )
+        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+
+    let legs = stmt
+        .query_map(params![wallet_address], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)? != 0,
+                row.get::<_, f64>(3)?,
+            ))
+        })
+        .map_err(|e| format!("Failed to query trader swap legs: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to read trader swap legs: {e}"))?;
+
+    Ok(legs)
+}
