@@ -131,6 +131,14 @@ pub struct EvaluationContext {
     pub market_data: Option<MarketData>,
     pub timeframe_bundle: Option<TimeframeBundle>,
     pub strategy_timeframe: String, // Which timeframe this strategy uses (from Strategy.timeframe)
+    /// The instant this context describes — the moment `current_price` was read.
+    ///
+    /// Carried explicitly instead of each condition calling `Utc::now()`, because it is
+    /// the only thing that can tell a live series from a dead one: candles are written
+    /// only when a trade happens, so the newest candle in a bundle can be hours older
+    /// than the price standing next to it. Conditions compare against this, never the
+    /// wall clock, which also keeps them pure functions of their input.
+    pub evaluated_at: DateTime<Utc>,
 }
 
 /// Position-related data for evaluation

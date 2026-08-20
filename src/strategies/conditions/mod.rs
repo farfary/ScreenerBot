@@ -17,40 +17,32 @@ pub use price_change_percent::PriceChangePercentCondition;
 pub use price_to_ma::PriceToMaCondition;
 pub use volume_spike::VolumeSpikeCondition;
 
-use crate::ohlcvs::Candle;
+use crate::ohlcvs::{Candle, Timeframe};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
-/// Helper to extract candles from TimeframeBundle using strategy's configured timeframe
-/// Returns detailed error messages for debugging
-pub fn get_candles_from_context(context: &EvaluationContext) -> Result<Vec<Candle>, String> {
-    // Check if bundle exists
-    let bundle = context
-        .timeframe_bundle
-        .as_ref()
-        .ok_or_else(|| "OHLCV data not available - bundle is None".to_owned())?;
-
-    // Check if timeframe exists in bundle
-    let timeframe = &context.strategy_timeframe;
-    let candles = bundle.get_timeframe(timeframe).ok_or_else(|| {
-        format!(
-            "Timeframe {} not available in bundle (valid: 1m, 5m, 15m, 1h, 4h, 12h, 1d)",
-            timeframe
-        )
-    })?;
-
-    // Check if timeframe has data
-    if candles.is_empty() {
-        return Err(format!("Timeframe {timeframe} has no candle data - OHLCV system may not have fetched historical data yet"));
-    }
-
-    Ok(candles.clone())
-}
+/// How far behind the evaluation instant a series may fall before it is refused.
+///
+/// A rule that compares the LIVE pool price against candle history is only meaningful
+/// while the two describe the same moment. Candles are written only when a trade
+/// happens — no-trade candles are never stored — so a token that stopped trading keeps
+/// serving its last candles indefinitely while `current_price` is from this second.
+/// Without this bound, a move that finished hours ago is measured as if it had just
+/// happened and momentum rules fire on it.
+///
+/// Three buckets tolerates the ordinary quiet gap (a minute or two of no trades on a 1m
+/// series) and refuses a series that has genuinely stopped tracking the price.
+const MAX_SERIES_STALENESS_BUCKETS: i64 = 3;
 
 /// Helper to extract candles for a specific timeframe from TimeframeBundle
-/// Supports per-condition timeframe selection with fallback to strategy timeframe
-/// Returns detailed error messages for debugging
+///
+/// Supports per-condition timeframe selection with fallback to the strategy timeframe,
+/// and refuses data that cannot answer the question being asked: a missing bundle, an
+/// unknown timeframe, an empty series, or a series too far behind
+/// [`EvaluationContext::evaluated_at`] to stand next to a live price. Every refusal is
+/// an `Err` naming what is wrong — a condition that returned `false` here would be
+/// indistinguishable from one that simply did not fire.
 pub fn get_candles_for_timeframe(
     context: &EvaluationContext,
     condition_timeframe: Option<&str>,
@@ -64,15 +56,15 @@ pub fn get_candles_for_timeframe(
     // Use condition's timeframe if provided, otherwise fallback to strategy timeframe
     let timeframe = condition_timeframe.unwrap_or(&context.strategy_timeframe);
 
-    // Validate timeframe value
-    let valid_timeframes = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
-    if !valid_timeframes.contains(&timeframe) {
-        return Err(format!(
-            "Invalid timeframe '{}' - valid options: {}",
-            timeframe,
-            valid_timeframes.join(", ")
-        ));
-    }
+    // Validate timeframe value against the one enum that defines them
+    let bucket_seconds = Timeframe::from_str(timeframe)
+        .ok_or_else(|| {
+            format!(
+                "Invalid timeframe '{}' - valid options: 1m, 5m, 15m, 1h, 4h, 12h, 1d",
+                timeframe
+            )
+        })?
+        .to_seconds();
 
     // Check if timeframe exists in bundle
     let candles = bundle.get_timeframe(timeframe).ok_or_else(|| {
@@ -87,7 +79,55 @@ pub fn get_candles_for_timeframe(
         return Err(format!("Timeframe {timeframe} has no candle data - OHLCV system may not have fetched historical data yet"));
     }
 
+    // Check the series still describes the present
+    let newest = candles
+        .iter()
+        .map(|c| c.timestamp)
+        .max()
+        .unwrap_or_default();
+    let age_seconds = context.evaluated_at.timestamp() - newest;
+    let max_age_seconds = bucket_seconds * MAX_SERIES_STALENESS_BUCKETS;
+    if age_seconds > max_age_seconds {
+        return Err(format!(
+            "Timeframe {timeframe} series is stale: newest candle is {age_seconds}s old (max {max_age_seconds}s) - the live price and these candles no longer describe the same moment"
+        ));
+    }
+
     Ok(candles.clone())
+}
+
+/// The live price the whole context is built around, refusing a value no comparison can
+/// use.
+///
+/// `NaN` is the dangerous one: every `>=`/`<=` against it is `false`, so a rule fed a
+/// `NaN` price reports "no signal" forever instead of failing. An entry that never fires
+/// is money not spent, but an EXIT that never fires is a position that cannot be closed
+/// by strategy, so this is an `Err` and never a `false`.
+pub fn get_current_price(context: &EvaluationContext) -> Result<f64, String> {
+    let price = context
+        .current_price
+        .ok_or_else(|| "Current price not available".to_owned())?;
+
+    if !price.is_finite() || price <= 0.0 {
+        return Err(format!("Current price is not usable: {price}"));
+    }
+
+    Ok(price)
+}
+
+/// Guard a value that is about to become the denominator of a percentage.
+///
+/// A zero or non-finite basis turns `(current - basis) / basis` into `+inf`, which
+/// clears EVERY upward threshold a user can configure — the validator caps the
+/// threshold at 1000%, and infinity is above that too. Refusing the basis is the only
+/// way such a series produces no signal rather than a guaranteed one.
+pub fn usable_basis(label: &str, value: f64) -> Result<f64, String> {
+    if !value.is_finite() || value <= 0.0 {
+        return Err(format!(
+            "{label} is not a usable basis for a percentage: {value}"
+        ));
+    }
+    Ok(value)
 }
 
 /// Trait for condition evaluation

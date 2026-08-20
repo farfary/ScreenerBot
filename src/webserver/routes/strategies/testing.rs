@@ -73,6 +73,7 @@ pub async fn test_strategy(
         market_data,
         timeframe_bundle,
         strategy_timeframe: strategy.timeframe.clone(),
+        evaluated_at: Utc::now(),
     };
 
     // Create engine and evaluate

@@ -14,6 +14,15 @@ use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReaso
 use chrono::Utc;
 use std::time::Duration;
 
+/// Pool reserves only count as a liquidity reading when they are a real measurement.
+///
+/// `0.0` is what an API-derived price result carries for `sol_reserves` — it means
+/// nobody measured the pool, not that the pool is empty. Passed through as a reading it
+/// would satisfy every "liquidity below X" rule on a token whose liquidity is unknown.
+fn usable_liquidity(sol_reserves: f64) -> Option<f64> {
+    (sol_reserves.is_finite() && sol_reserves > 0.0).then_some(sol_reserves)
+}
+
 /// Evaluator for applying strategies to trading decisions
 pub struct StrategyEvaluator;
 
@@ -49,7 +58,7 @@ impl StrategyEvaluator {
 
         // Build market data from price info
         let market_data = MarketData {
-            liquidity_sol: Some(price_info.sol_reserves),
+            liquidity_sol: usable_liquidity(price_info.sol_reserves),
             volume_24h: None,
             market_cap: None,
             holder_count: None,
@@ -86,7 +95,13 @@ impl StrategyEvaluator {
                         Some(bundle)
                     }
                     Err(e) => {
-                        logger::debug(
+                        // Visible on purpose: with no bundle every candle condition
+                        // errors, so each affected strategy is silently reduced to its
+                        // non-candle rules. Whether that surfaces as a strategy error
+                        // depends on rule order (an `And` short-circuits on the first
+                        // false leaf), so the outage is reported here, at the boundary
+                        // where it is unambiguous.
+                        logger::warning(
               LogTag::Trader,
               &format!("Failed to build OHLCV bundle for {token_mint}: {e} - evaluating without OHLCV"),
             );
@@ -200,7 +215,7 @@ impl StrategyEvaluator {
 
         // NOTE: Exit strategy evaluation is called after other exit checks (blacklist, risk, trailing, ROI, time)
         // Connectivity check here is defensive since exit coordinator doesn't pre-check
-        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_usable(&["rpc"]).await {
             logger::debug(
                 LogTag::Trader,
                 &format!(
@@ -237,9 +252,14 @@ impl StrategyEvaluator {
             position_age_hours: (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0,
         };
 
-        // Build market data (could be enriched from pools/tokens if needed)
+        // Build market data. Liquidity comes from the same single source the entry path
+        // reads — the live pool price result. It used to be left `None` here, which made
+        // the liquidity-drain exit (the documented exit use of LiquidityLevel) impossible:
+        // the condition errored on every tick, the error aborted the whole strategy, and
+        // the rule never fired once in the life of any position.
         let market_data = MarketData {
-            liquidity_sol: None,
+            liquidity_sol: crate::pools::get_pool_price(&position.mint)
+                .and_then(|price| usable_liquidity(price.sol_reserves)),
             volume_24h: None,
             market_cap: None,
             holder_count: None,
@@ -276,7 +296,10 @@ impl StrategyEvaluator {
                         Some(bundle)
                     }
                     Err(e) => {
-                        logger::debug(
+                        // See the entry path: an exit strategy without candles keeps only
+                        // its non-candle rules, so the outage is reported here rather than
+                        // left to whichever leaf happens to be evaluated first.
+                        logger::warning(
               LogTag::Trader,
               &format!("Failed to build OHLCV bundle for position {:?}: {} - evaluating without OHLCV", position.id, e),
             );

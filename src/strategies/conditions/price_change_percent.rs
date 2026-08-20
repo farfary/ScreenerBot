@@ -1,8 +1,8 @@
 //! Price change percent condition — triggers on percentage price moves within a time window.
 
 use crate::strategies::conditions::{
-    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
-    validate_timeframe_param, ConditionEvaluator,
+    get_candles_for_timeframe, get_current_price, get_param_f64, get_param_string,
+    get_param_string_optional, usable_basis, validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
@@ -28,9 +28,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         let time_unit = get_param_string(condition, "time_unit")?;
         let timeframe = get_param_string_optional(condition, "timeframe");
 
-        let current_price = context
-            .current_price
-            .ok_or_else(|| "Current price not available".to_owned())?;
+        let current_price = get_current_price(context)?;
 
         // Convert time period to seconds
         let lookback_seconds = match time_unit.as_str() {
@@ -43,32 +41,50 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         // Get candles for specified timeframe (or use strategy default)
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
-        // Get current timestamp (use most recent candle timestamp)
-        let current_timestamp = candles.last().map(|c| c.timestamp).unwrap_or_default();
+        // Anchor "now" on the newest candle. That is only sound because
+        // `get_candles_for_timeframe` has already refused a series too far behind
+        // `context.evaluated_at` — otherwise this window would float backwards with the
+        // series while `current_price` stayed live, and an hours-old move would be
+        // reported as a move of `time_value` `time_unit`.
+        let current_timestamp = candles
+            .iter()
+            .map(|c| c.timestamp)
+            .max()
+            .unwrap_or_default();
         let lookback_timestamp = current_timestamp - lookback_seconds;
 
-        // Find candle closest to lookback timestamp
+        // The reference is the NEWEST candle at or before the lookback instant. Taking
+        // the candle CLOSEST to that instant instead could select one inside the window
+        // and then reject it for being too recent — an "insufficient data" error that
+        // reported more seconds available than the lookback had asked for.
         let past_candle = candles
             .iter()
-            .min_by_key(|c| (c.timestamp - lookback_timestamp).abs())
-            .ok_or_else(|| "Failed to find historical candle".to_owned())?;
+            .filter(|c| c.timestamp <= lookback_timestamp)
+            .max_by_key(|c| c.timestamp);
 
-        // Check if we have sufficient data
-        if past_candle.timestamp > lookback_timestamp {
-            let available_seconds = current_timestamp - candles[0].timestamp;
-            let requested_unit = match time_unit.as_str() {
-                "SECONDS" => format!("{time_value} seconds"),
-                "MINUTES" => format!("{time_value} minutes"),
-                "HOURS" => format!("{time_value} hours"),
-                _ => "unknown".to_owned(),
-            };
-            return Err(format!(
-                "Insufficient historical data: requested {} lookback, only {} seconds available",
-                requested_unit, available_seconds
-            ));
-        }
+        let past_candle = match past_candle {
+            Some(candle) => candle,
+            None => {
+                let oldest_timestamp = candles
+                    .iter()
+                    .map(|c| c.timestamp)
+                    .min()
+                    .unwrap_or(current_timestamp);
+                let available_seconds = current_timestamp - oldest_timestamp;
+                let requested_unit = match time_unit.as_str() {
+                    "SECONDS" => format!("{time_value} seconds"),
+                    "MINUTES" => format!("{time_value} minutes"),
+                    "HOURS" => format!("{time_value} hours"),
+                    _ => "unknown".to_owned(),
+                };
+                return Err(format!(
+                    "Insufficient historical data: requested {} lookback, only {} seconds available",
+                    requested_unit, available_seconds
+                ));
+            }
+        };
 
-        let past_price = past_candle.close;
+        let past_price = usable_basis("Reference candle close", past_candle.close)?;
 
         // Calculate price change percentage
         let price_change_pct = ((current_price - past_price) / past_price) * 100.0;

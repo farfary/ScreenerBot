@@ -20,8 +20,8 @@
 //! (`0.0`, `NaN`) that survives a percentage calculation produces `inf` — which passes
 //! every "did the price move enough?" test there is. Both spend SOL without a bug report.
 //!
-//! Tests that pin behaviour the code gets WRONG say so in their name and comment; they
-//! exist so the current answer is written down and a fix has to change a test.
+//! Each rule here is a guard that was added after this file first pinned the behaviour
+//! without it, so the comments name both the answer and the wrong answer it replaced.
 
 mod common;
 
@@ -222,11 +222,12 @@ fn entry_market_data(liquidity_sol: f64) -> MarketData {
     }
 }
 
-/// `check_exit_strategies`: the market data is constructed with EVERY field `None`
-/// ("could be enriched from pools/tokens if needed").
-fn exit_market_data() -> MarketData {
+/// `check_exit_strategies`: liquidity is read from the live pool price result — the same
+/// single source the entry path uses — and stays `None` only when no pool price exists
+/// for the mint (an API-derived price carries no reserves). Every other field is `None`.
+fn exit_market_data(liquidity_sol: Option<f64>) -> MarketData {
     MarketData {
-        liquidity_sol: None,
+        liquidity_sol,
         volume_24h: None,
         market_cap: None,
         holder_count: None,
@@ -255,9 +256,9 @@ fn entry_context(liquidity_sol: f64, price: f64) -> EvaluationContext {
     ctx
 }
 
-fn exit_context(price: f64) -> EvaluationContext {
+fn exit_context(price: f64, liquidity_sol: Option<f64>) -> EvaluationContext {
     let mut ctx = context_bare(Some(price));
-    ctx.market_data = Some(exit_market_data());
+    ctx.market_data = Some(exit_market_data(liquidity_sol));
     ctx.position_data = Some(exit_position_data(1.0, price));
     ctx
 }
@@ -272,17 +273,40 @@ async fn an_entry_strategy_can_read_the_pool_liquidity_the_trader_passes_it() {
 }
 
 #[tokio::test]
-async fn a_liquidity_drain_exit_can_never_fire_because_the_exit_path_passes_no_liquidity() {
-    // BUG (pinned): `LiquidityLevel`'s own schema advertises "Exit: detect liquidity
-    // drain", but `check_exit_strategies` builds `MarketData` with `liquidity_sol: None`.
-    // The rule therefore cannot answer — it errors, the error fails the whole strategy,
-    // and `evaluate_exit_strategies` logs it and moves to the next strategy. A user who
-    // builds "liquidity dropped below 5 SOL -> sell" gets a rule that is silently dead
-    // for the entire life of the position, while the identical rule works on entry.
+async fn a_liquidity_drain_exit_fires_on_the_liquidity_the_exit_path_passes() {
+    // `LiquidityLevel`'s schema advertises "Exit: detect liquidity drain". The exit path
+    // used to build its `MarketData` with every field `None`, so the rule could not
+    // answer: it errored, the error failed the whole strategy, and the user's
+    // "liquidity dropped below 5 SOL -> sell" was silently dead for the life of every
+    // position while the identical rule worked on entry.
+    assert!(
+        eval(
+            &LiquidityLevelCondition,
+            &liquidity_below(5.0),
+            &exit_context(1.0, Some(2.0))
+        )
+        .await
+    );
+    assert!(
+        !eval(
+            &LiquidityLevelCondition,
+            &liquidity_below(5.0),
+            &exit_context(1.0, Some(120.0))
+        )
+        .await
+    );
+}
+
+#[tokio::test]
+async fn a_pool_with_no_price_reports_unknown_liquidity_rather_than_zero() {
+    // The one case that still has no reading: no live pool price for the mint. Absence
+    // must stay absence — passing the `0.0` an API-derived price carries would satisfy
+    // every "liquidity below X" rule on a token nobody measured, and sell the position
+    // on a drain that was never observed.
     let err = eval_err(
         &LiquidityLevelCondition,
         &liquidity_below(5.0),
-        &exit_context(1.0),
+        &exit_context(1.0, None),
     )
     .await;
     assert!(
@@ -295,7 +319,7 @@ async fn a_liquidity_drain_exit_can_never_fire_because_the_exit_path_passes_no_l
 async fn an_exit_context_still_carries_the_position_the_rules_need() {
     // The position half of the exit context IS populated, so the contrast above is a
     // gap in one field rather than a context that was never built.
-    let ctx = exit_context(2.0);
+    let ctx = exit_context(2.0, Some(50.0));
     let position = ctx
         .position_data
         .as_ref()
@@ -344,19 +368,17 @@ async fn a_bundle_that_is_missing_the_strategy_timeframe_names_the_timeframe_it_
 }
 
 #[tokio::test]
-async fn a_bundle_is_never_checked_for_completeness_or_freshness_before_it_decides() {
-    // `TimeframeBundle::is_complete()` and `is_fresh()` exist and NOTHING in the trader
-    // calls them. The only staleness bound is the bundle cache TTL inside the OHLCV
-    // service; once a bundle is in hand, its age is logged and then ignored.
-    //
-    // This test pins that: a bundle stamped a week ago, holding one timeframe out of
-    // seven, still produces a normal trading verdict.
+async fn a_bundle_is_judged_on_its_candles_not_on_its_cache_age_or_completeness() {
+    // `cache_age_seconds` and `is_complete()` describe the BUNDLE, not the market: a
+    // bundle rebuilt this second can hold candles hours old, and a healthy new token has
+    // no 12h or 1d series at all. Neither may gate a decision, so a week-old, one-of-
+    // seven bundle whose candles are current still answers normally.
     let mut bundle = bundle_with("1m", candle_series(anchor_ts(), MINUTE, &[100.0; 20]));
     bundle.timestamp = chrono::Utc::now() - chrono::Duration::days(7);
     bundle.cache_age_seconds = 604_800;
 
     assert!(!bundle.is_complete(), "fixture must be a partial bundle");
-    assert!(!bundle.is_fresh(60), "fixture must be a stale bundle");
+    assert!(!bundle.is_fresh(60), "fixture must be stale by cache age");
 
     let ctx = context_with_candles(110.0, "1m", bundle);
     assert!(
@@ -366,77 +388,76 @@ async fn a_bundle_is_never_checked_for_completeness_or_freshness_before_it_decid
             &ctx
         )
         .await,
-        "a week-old bundle still answers, so freshness is not gated at the decision"
+        "current candles answer regardless of how the bundle was cached"
     );
 }
 
 #[tokio::test]
-async fn a_stale_series_measures_its_lookback_from_the_last_candle_not_from_now() {
-    // BUG (pinned): `PriceChangePercent` anchors "now" on `candles.last().timestamp`,
-    // but the price it compares against is the LIVE pool price. On a token that has not
-    // traded for hours the newest candle is hours old, so a rule that reads "price gained
-    // 10% in the last 5 minutes" actually compares today's price against a candle from
-    // five minutes before the series went quiet — a move that may be hours old, or that
-    // happened while the bot was not looking.
+async fn a_series_that_stopped_tracking_the_price_is_refused_not_measured() {
+    // `PriceChangePercent` anchors "now" on the newest candle, but the price it compares
+    // against is the LIVE pool price. On a token that has not traded for hours those two
+    // describe different moments, and the rule used to answer anyway: "price gained 10%
+    // in the last 5 minutes" was reported for a move that finished three hours ago.
     //
-    // The series here ends three hours before the current price is taken.
+    // Candles are only written when a trade happens, so a quiet token keeps serving its
+    // last series indefinitely — the only way to tell a live series from a dead one is
+    // `evaluated_at`, which every context now carries.
     let three_hours_ago = anchor_ts() - 3 * HOUR;
     let stale = candle_series(three_hours_ago, MINUTE, &[100.0; 20]);
     let ctx = context_with_candles(150.0, "1m", bundle_with("1m", stale));
 
+    for (name, evaluator, cond) in every_candle_rule() {
+        let err = eval_err(evaluator.as_ref(), &cond, &ctx).await;
+        assert!(
+            err.contains("is stale") && err.contains("10800s old"),
+            "{name} answered `{err}` instead of refusing a three-hour-old series"
+        );
+    }
+
+    // The bound is generous enough for ordinary quiet: three buckets of silence still
+    // answers, four does not.
+    let quiet = candle_series(anchor_ts() - 3 * MINUTE, MINUTE, &[100.0; 20]);
     assert!(
         eval(
             &PriceChangePercentCondition,
             &price_change(10.0, "ABOVE", 5.0),
-            &ctx
+            &context_with_candles(150.0, "1m", bundle_with("1m", quiet)),
         )
-        .await,
-        "a +50% reading against a three-hour-old candle is reported as a 5-minute move"
+        .await
     );
 
-    // And the rule cannot tell the caller it did so: nothing in the contract exposes the
-    // age of the newest candle, so the only defence is the OHLCV service's own freshness.
-    let newest = ctx
-        .timeframe_bundle
-        .as_ref()
-        .and_then(|b| b.get_timeframe("1m"))
-        .and_then(|c| c.last())
-        .map(|c| c.timestamp)
-        .expect("series has a newest candle");
-    assert_eq!(newest, three_hours_ago);
+    let too_quiet = candle_series(anchor_ts() - 4 * MINUTE, MINUTE, &[100.0; 20]);
+    assert!(eval_err(
+        &PriceChangePercentCondition,
+        &price_change(10.0, "ABOVE", 5.0),
+        &context_with_candles(150.0, "1m", bundle_with("1m", too_quiet)),
+    )
+    .await
+    .contains("is stale"));
 }
 
 #[tokio::test]
-async fn enough_history_can_still_be_reported_as_insufficient() {
-    // BUG (pinned): the lookback candle is chosen with `min_by_key` on absolute distance,
-    // and the "do we have enough history?" guard then rejects the result if that nearest
-    // candle happens to sit AFTER the lookback instant — even when an older candle that
-    // fully covers the window is right there in the series.
+async fn history_that_covers_the_lookback_is_used_even_when_no_candle_lands_on_it() {
+    // The lookback candle is the NEWEST one at or before the lookback instant. Choosing
+    // the CLOSEST candle instead used to pick one INSIDE the window and then reject it
+    // for being too recent — an "insufficient data" error that reported more seconds
+    // available than the lookback had asked for.
     //
-    // Five-minute candles, ten minutes of history, asking for a seven-minute lookback:
-    // the instant seven minutes back falls between the candle at -10m (distance 3m) and
-    // the one at -5m (distance 2m), so the nearer -5m candle wins and is rejected.
+    // Five-minute candles, ten minutes of history, a seven-minute lookback: the instant
+    // seven minutes back falls between the candle at -10m and the one at -5m.
     let series = candle_series(anchor_ts(), 5 * MINUTE, &[100.0, 100.0, 100.0]);
     let ctx = context_with_candles(150.0, "5m", bundle_with("5m", series));
 
-    let err = eval_err(
-        &PriceChangePercentCondition,
-        &price_change(10.0, "ABOVE", 7.0),
-        &ctx,
-    )
-    .await;
     assert!(
-        err.contains("Insufficient historical data"),
-        "unexpected error: {err}"
+        eval(
+            &PriceChangePercentCondition,
+            &price_change(10.0, "ABOVE", 7.0),
+            &ctx
+        )
+        .await,
+        "the -10m candle covers a seven-minute lookback"
     );
-    // The message contradicts itself: 600 seconds of history, 420 seconds requested.
-    assert!(
-        err.contains("600 seconds available"),
-        "the error should report the history it declined to use: {err}"
-    );
-
-    // The same series answers a lookback that lands exactly on a candle, which is what
-    // makes this a boundary bug rather than a genuinely short series.
+    // And the lookback that lands exactly on a candle still answers the same way.
     assert!(
         eval(
             &PriceChangePercentCondition,
@@ -448,34 +469,67 @@ async fn enough_history_can_still_be_reported_as_insufficient() {
 }
 
 #[tokio::test]
-async fn the_two_lookback_rules_disagree_about_how_much_history_a_lookback_needs() {
-    // Both rules mean the same thing by "lookback": N candles BEFORE the current one.
-    // `VolumeSpike` demands `lookback + 1` candles and errors otherwise; `PriceBreakout`
-    // demands only `lookback`, so at exactly that length it silently computes its period
-    // high from `lookback - 1` candles instead of refusing.
-    let five = candle_series(anchor_ts(), MINUTE, &[100.0; 5]);
+async fn a_series_shorter_than_the_lookback_says_how_much_it_actually_holds() {
+    // The genuine short-history case, and the number in the message has to be the truth:
+    // it is what tells an operator whether to wait for backfill or shorten the rule.
+    let series = candle_series(anchor_ts(), 5 * MINUTE, &[100.0, 100.0, 100.0]);
+    let ctx = context_with_candles(150.0, "5m", bundle_with("5m", series));
 
-    let volume_err = eval_err(
-        &VolumeSpikeCondition,
-        &volume_spike(5, 2.0),
-        &context_with_candles(100.0, "1m", bundle_with("1m", five.clone())),
+    let err = eval_err(
+        &PriceChangePercentCondition,
+        &price_change(10.0, "ABOVE", 20.0),
+        &ctx,
     )
     .await;
     assert!(
-        volume_err.contains("Not enough candles"),
-        "unexpected error: {volume_err}"
+        err.contains("Insufficient historical data") && err.contains("600 seconds available"),
+        "unexpected error: {err}"
     );
+}
 
-    // Same five candles, same "5" lookback — a verdict, from a four-candle window.
-    let breakout_ctx = context_with_candles(1_000.0, "1m", bundle_with("1m", five));
+#[tokio::test]
+async fn both_lookback_rules_require_the_same_history_for_the_same_lookback() {
+    // Both rules mean the same thing by "lookback": N candles BEFORE the current one, so
+    // both need `N + 1`. `PriceBreakout` used to accept exactly N and then compute its
+    // period high from `N - 1` candles — a narrower window than the strategy configured,
+    // which makes the breakout easier to clear than the user asked for.
+    let five = candle_series(anchor_ts(), MINUTE, &[100.0; 5]);
+
+    for (name, err) in [
+        (
+            "VolumeSpike",
+            eval_err(
+                &VolumeSpikeCondition,
+                &volume_spike(5, 2.0),
+                &context_with_candles(100.0, "1m", bundle_with("1m", five.clone())),
+            )
+            .await,
+        ),
+        (
+            "PriceBreakout",
+            eval_err(
+                &PriceBreakoutCondition,
+                &breakout(5, "UPWARD", 1.0),
+                &context_with_candles(1_000.0, "1m", bundle_with("1m", five)),
+            )
+            .await,
+        ),
+    ] {
+        assert!(
+            err.contains("Not enough candles: 5 < 6"),
+            "{name} answered `{err}` instead of asking for six candles"
+        );
+    }
+
+    // With six candles the window is the full five, oldest candle included: a high of
+    // 1000 there must still cap the breakout level. A window short by one would drop it
+    // and let a price of 500 clear a period high of 100.
+    let mut six = candle_series(anchor_ts(), MINUTE, &[100.0; 6]);
+    six[0].high = 1_000.0;
+    let ctx = context_with_candles(500.0, "1m", bundle_with("1m", six));
     assert!(
-        eval(
-            &PriceBreakoutCondition,
-            &breakout(5, "UPWARD", 1.0),
-            &breakout_ctx
-        )
-        .await,
-        "PriceBreakout answers a five-candle question with four candles"
+        !eval(&PriceBreakoutCondition, &breakout(5, "UPWARD", 0.0), &ctx).await,
+        "the oldest candle in the lookback window still sets the level"
     );
 }
 
@@ -490,79 +544,91 @@ fn flat_candle(timestamp: i64, price: f64) -> Candle {
 }
 
 #[tokio::test]
-async fn a_zero_reference_price_turns_any_move_into_an_infinite_gain() {
-    // BUG (pinned): `(current - past) / past` with `past == 0.0` is `+inf`, and `inf`
-    // clears EVERY "ABOVE" threshold, including the 1000% maximum the validator allows.
-    // A single zero-close candle — a denomination slip, a pool that priced at zero for a
-    // minute — is therefore a guaranteed buy signal for every gain rule on that token.
+async fn a_zero_reference_price_is_refused_instead_of_reading_as_an_infinite_gain() {
+    // `(current - past) / past` with `past == 0.0` is `+inf`, and `inf` clears EVERY
+    // "ABOVE" threshold — including the 1000% maximum the validator allows. A single
+    // zero-close candle (a denomination slip, a pool that priced at zero for a minute)
+    // was therefore a guaranteed buy signal for every gain rule on that token.
     let series: Vec<Candle> = (0..10)
         .map(|i| flat_candle(anchor_ts() - (9 - i) * MINUTE, 0.0))
         .collect();
     let ctx = context_with_candles(0.000_001, "1m", bundle_with("1m", series));
 
-    assert!(
-        eval(
+    for direction in ["ABOVE", "BELOW", "WITHIN"] {
+        let err = eval_err(
             &PriceChangePercentCondition,
-            &price_change(1000.0, "ABOVE", 5.0),
-            &ctx
+            &price_change(1000.0, direction, 5.0),
+            &ctx,
         )
-        .await,
-        "a zero reference price clears even the largest allowed gain threshold"
-    );
-    // The mirror image is just as wrong in the other direction: no drop is ever detected.
-    assert!(
-        !eval(
-            &PriceChangePercentCondition,
-            &price_change(1.0, "BELOW", 5.0),
-            &ctx
-        )
-        .await
-    );
+        .await;
+        assert!(
+            err.contains("not a usable basis"),
+            "{direction} answered `{err}` instead of refusing the zero reference"
+        );
+    }
 }
 
 #[tokio::test]
-async fn a_dead_series_puts_the_price_infinitely_above_its_moving_average() {
-    // Same division, different rule: an all-zero moving average makes `distance_pct`
-    // infinite, so "price is at least 100% above its MA" fires on a token whose recorded
+async fn a_dead_series_cannot_place_the_price_above_its_moving_average() {
+    // Same division, different rule: an all-zero moving average made `distance_pct`
+    // infinite, so "price is at least 100% above its MA" fired on a token whose recorded
     // history is entirely zeros.
     let series: Vec<Candle> = (0..10)
         .map(|i| flat_candle(anchor_ts() - (9 - i) * MINUTE, 0.0))
         .collect();
     let ctx = context_with_candles(0.000_001, "1m", bundle_with("1m", series));
 
-    assert!(eval(&PriceToMaCondition, &price_to_ma(5, "ABOVE", 100.0), &ctx).await);
+    let err = eval_err(&PriceToMaCondition, &price_to_ma(5, "ABOVE", 100.0), &ctx).await;
+    assert!(
+        err.contains("not a usable basis"),
+        "unexpected error: {err}"
+    );
 }
 
 #[tokio::test]
-async fn a_zero_open_candle_always_counts_as_a_green_candle() {
-    // `ConsecutiveCandles` measures each body as `(close - open) / open`. With `open`
-    // at zero that is `+inf`, which passes any `minimum_change` filter — so the
-    // "filters noise" parameter is inert exactly on the candles most likely to be junk.
+async fn a_zero_open_candle_cannot_be_coloured_so_it_breaks_the_streak() {
+    // `ConsecutiveCandles` measures each body as `(close - open) / open`. With `open` at
+    // zero that is `+inf`, which passed any `minimum_change` filter — so the "filters
+    // noise" parameter was inert exactly on the candles most likely to be junk. An
+    // unclassifiable candle now breaks the streak instead of extending it.
     let series: Vec<Candle> = (0..5)
         .map(|i| candle(anchor_ts() - (4 - i) * MINUTE, 0.0, 1.0, 0.0, 1.0, 1.0))
         .collect();
     let ctx = context_with_candles(1.0, "1m", bundle_with("1m", series));
 
     assert!(
-        eval(
+        !eval(
             &ConsecutiveCandlesCondition,
             &consecutive(3, "GREEN", 50.0),
             &ctx
         )
         .await
     );
+
+    // The control: real candles of the same shape still make a streak.
+    let real: Vec<Candle> = (0..5)
+        .map(|i| candle(anchor_ts() - (4 - i) * MINUTE, 1.0, 2.0, 1.0, 2.0, 1.0))
+        .collect();
+    assert!(
+        eval(
+            &ConsecutiveCandlesCondition,
+            &consecutive(3, "GREEN", 50.0),
+            &context_with_candles(2.0, "1m", bundle_with("1m", real))
+        )
+        .await
+    );
 }
 
 #[tokio::test]
-async fn a_not_a_number_price_never_fires_a_rule_in_either_direction() {
+async fn a_not_a_number_price_is_refused_by_every_price_rule() {
     // The other half of the degenerate-input story, and the one that is dangerous on the
-    // SELL side: `NaN` loses every comparison, so a rule fed a `NaN` price answers
-    // `false` — "no signal" — for gains, losses AND for a "within range" band that a
-    // real number could not miss. An exit strategy simply stops working, silently.
+    // SELL side: `NaN` loses every comparison, so a rule fed a `NaN` price answered
+    // `false` — "no signal" — for gains, losses AND for a "within range" band that a real
+    // number could not miss. An exit strategy simply stopped working, silently.
     //
-    // `resolve_evaluation_input` (src/trader/evaluators/exit.rs) is what keeps `NaN` out
-    // of the exit path today: it rejects any price that is not finite and positive. This
-    // test is the record of what that guard is protecting.
+    // `resolve_evaluation_input` (src/trader/evaluators/exit.rs) keeps `NaN` out of the
+    // exit path by rejecting any price that is not finite and positive; this is the same
+    // guard one layer in, where a rule can no longer answer a question it cannot compute.
     let ctx = context_with_candles(
         f64::NAN,
         "1m",
@@ -570,18 +636,27 @@ async fn a_not_a_number_price_never_fires_a_rule_in_either_direction() {
     );
 
     for direction in ["ABOVE", "BELOW", "WITHIN"] {
+        let err = eval_err(
+            &PriceChangePercentCondition,
+            &price_change(1.0, direction, 5.0),
+            &ctx,
+        )
+        .await;
         assert!(
-            !eval(
-                &PriceChangePercentCondition,
-                &price_change(1.0, direction, 5.0),
-                &ctx
-            )
-            .await,
-            "a NaN price answered `true` for {direction}"
+            err.contains("Current price is not usable"),
+            "a NaN price answered `{err}` for {direction}"
         );
     }
-    assert!(!eval(&PriceToMaCondition, &price_to_ma(5, "WITHIN", 100.0), &ctx).await);
-    assert!(!eval(&PriceBreakoutCondition, &breakout(5, "DOWNWARD", 0.0), &ctx).await);
+    assert!(
+        eval_err(&PriceToMaCondition, &price_to_ma(5, "WITHIN", 100.0), &ctx)
+            .await
+            .contains("Current price is not usable")
+    );
+    assert!(
+        eval_err(&PriceBreakoutCondition, &breakout(5, "DOWNWARD", 0.0), &ctx)
+            .await
+            .contains("Current price is not usable")
+    );
 }
 
 // ==================== WHOLE-STRATEGY BEHAVIOUR ====================
@@ -628,7 +703,7 @@ async fn one_unavailable_input_fails_the_whole_strategy_not_just_its_own_leaf() 
     );
 
     let err = engine
-        .evaluate_strategy(&s, &exit_context(1.0))
+        .evaluate_strategy(&s, &exit_context(1.0, Some(50.0)))
         .await
         .expect_err("a tree containing an unanswerable rule must not return a verdict");
     assert!(
@@ -643,7 +718,9 @@ async fn whether_a_data_outage_is_even_visible_depends_on_the_order_of_the_condi
     // never reached. The same two rules, same missing data, produce either "no signal"
     // or "unanswerable" depending purely on the order the user happened to add them in.
     //
-    // This is why an outage cannot be detected by watching for strategy errors alone.
+    // This is why an outage cannot be detected by watching for strategy errors alone —
+    // `check_entry_strategies`/`check_exit_strategies` log the missing bundle at warning
+    // level at the boundary instead, where rule order cannot hide it.
     let engine = uncached_engine();
     let ctx = entry_context(10.0, 1.0); // liquidity 10 SOL, no bundle
 
@@ -738,26 +815,31 @@ async fn mark_unhealthy(name: &'static str) {
 }
 
 #[tokio::test]
-async fn an_endpoint_that_was_never_registered_reads_as_unhealthy() {
-    // `is_healthy` is `unwrap_or_default()` over the health map, so an unknown name is
-    // false. That is the right default — it fails closed — but it also means a name
-    // that no monitor ever registers can never become healthy.
+async fn an_unknown_endpoint_is_not_healthy_but_is_also_not_confirmed_down() {
+    // Two different questions, and the entry gate must ask the second one. `is_healthy`
+    // is `unwrap_or_default()` over the health map, so a name no monitor ever registered
+    // is false forever — never probed is not the same as measured and failing.
     assert!(!connectivity_state::is_endpoint_healthy("no_such_endpoint").await);
     assert_eq!(
         screenerbot::connectivity::check_endpoints_healthy(&["no_such_endpoint"]).await,
         Some("no_such_endpoint".to_owned())
     );
+    assert_eq!(
+        screenerbot::connectivity::check_endpoints_usable(&["no_such_endpoint"]).await,
+        None,
+        "an endpoint with no reading is not evidence of an outage"
+    );
 }
 
 #[tokio::test]
-async fn an_unregistered_security_endpoint_blocks_every_automated_entry() {
-    // HAZARD (pinned): `ConnectivityChecker::register_monitors` registers a monitor only
-    // when `is_enabled()`, and `RugcheckMonitor::is_enabled()` is
+async fn a_disabled_security_monitor_does_not_block_automated_entry() {
+    // `ConnectivityChecker::register_monitors` registers a monitor only when
+    // `is_enabled()`, and `RugcheckMonitor::is_enabled()` is
     // `connectivity.enabled && connectivity.endpoints.rugcheck.enabled`. Turning either
-    // off means "rugcheck" is never registered, `is_healthy("rugcheck")` is false
-    // forever, and this gate blocks EVERY strategy entry — even though the endpoint is
-    // declared `Optional` with a `Skip` fallback. The bot stops buying, and says so only
-    // at info level, per token.
+    // off leaves "rugcheck" unregistered and permanently `Unknown` — which used to block
+    // EVERY strategy entry through this gate, for an endpoint declared `Optional` with a
+    // `Skip` fallback, saying so only at info level, per token. The bot stopped buying
+    // and nothing named the cause.
     let _cfg = common::config_guard();
     screenerbot::global::set_force_stopped(false, None);
 
@@ -765,14 +847,18 @@ async fn an_unregistered_security_endpoint_blocks_every_automated_entry() {
     mark_healthy("dexscreener").await;
     // "rugcheck" deliberately left unregistered, exactly as a disabled monitor leaves it.
 
-    let block = check_entry_admission(TEST_MINT, &ENTRY_ENDPOINTS)
-        .await
-        .expect_err("entry must be blocked");
-    assert_eq!(block, EntryBlock::Connectivity("rugcheck".to_owned()));
+    let outcome = check_entry_admission(TEST_MINT, &ENTRY_ENDPOINTS).await;
+    assert!(
+        !matches!(outcome, Err(EntryBlock::Connectivity(_))),
+        "an unprobed optional endpoint must not gate entry: {outcome:?}"
+    );
 }
 
 #[tokio::test]
 async fn a_failing_security_endpoint_blocks_entries_and_names_itself() {
+    // The other half: an endpoint that WAS probed and failed is real evidence, and it
+    // still stops entries — the relaxation above is about absence of data, not about
+    // trading through a known outage.
     let _cfg = common::config_guard();
     screenerbot::global::set_force_stopped(false, None);
 

@@ -39,6 +39,15 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         // Check for consecutive pattern
         let mut consecutive_count = 0;
         for candle in recent_candles {
+            // A candle with no usable open cannot be coloured: dividing by it yields
+            // +/-inf or NaN, and a zero open used to score as green for ANY minimum
+            // change, defeating the noise filter entirely. An unclassifiable candle
+            // breaks the streak rather than extending it.
+            if !candle.open.is_finite() || candle.open <= 0.0 || !candle.close.is_finite() {
+                consecutive_count = 0;
+                continue;
+            }
+
             let price_change_pct = ((candle.close - candle.open) / candle.open) * 100.0;
 
             let is_match = match direction.as_str() {

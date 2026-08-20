@@ -316,6 +316,7 @@ pub fn context_with_candles(
         market_data: None,
         timeframe_bundle: Some(bundle),
         strategy_timeframe: strategy_timeframe.to_owned(),
+        evaluated_at: anchor_time(),
     }
 }
 
@@ -328,7 +329,17 @@ pub fn context_bare(current_price: Option<f64>) -> EvaluationContext {
         market_data: None,
         timeframe_bundle: None,
         strategy_timeframe: "5m".to_owned(),
+        evaluated_at: anchor_time(),
     }
+}
+
+/// The same anchor as [`anchor_ts`] as an instant, for `EvaluationContext::evaluated_at`.
+///
+/// Conditions measure series staleness against `evaluated_at`, never the wall clock, so a
+/// fixture whose newest candle sits on `anchor_ts()` reads as perfectly fresh no matter
+/// when the test runs.
+pub fn anchor_time() -> DateTime<Utc> {
+    DateTime::from_timestamp(anchor_ts(), 0).expect("valid anchor")
 }
 
 /// Fixed UTC timestamp used as the "now" anchor for candle fixtures, so tests never

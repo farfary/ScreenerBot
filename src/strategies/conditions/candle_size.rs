@@ -48,7 +48,16 @@ impl ConditionEvaluator for CandleSizeCondition {
             0.0
         };
 
-        let price_change_pct = ((candle.close - candle.open) / candle.open).abs() * 100.0;
+        // Guard the denominator: a zero or non-finite open produces inf/NaN, and inf
+        // clears every LARGE_BODY threshold while NaN silently fails all of them.
+        let price_change_pct = if candle.open.is_finite() && candle.open > 0.0 {
+            ((candle.close - candle.open) / candle.open).abs() * 100.0
+        } else {
+            return Err(format!(
+                "Candle open is not a usable basis for a percentage: {}",
+                candle.open
+            ));
+        };
 
         let result = match pattern.as_str() {
             "LARGE_BODY" => {

@@ -92,6 +92,7 @@ pub async fn evaluate_entry_strategies(
             market_data: market_data.clone(),
             timeframe_bundle: timeframe_bundle.clone(),
             strategy_timeframe: strategy.timeframe.clone(),
+            evaluated_at: Utc::now(),
         };
 
         let result = engine.evaluate_strategy(&strategy, &context).await;
@@ -175,6 +176,7 @@ pub async fn evaluate_exit_strategies(
             market_data: market_data.clone(),
             timeframe_bundle: timeframe_bundle.clone(),
             strategy_timeframe: strategy.timeframe.clone(),
+            evaluated_at: Utc::now(),
         };
 
         let result = engine.evaluate_strategy(&strategy, &context).await;

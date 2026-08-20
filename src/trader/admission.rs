@@ -108,9 +108,14 @@ pub async fn check_entry_admission(
         return Err(EntryBlock::LossLimit);
     }
 
-    // 1. Connectivity check - critical endpoints must be healthy
-    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(required_endpoints).await
-    {
+    // 1. Connectivity check - no required endpoint may be CONFIRMED down.
+    //
+    // Confirmed-down, not "not known to be up": an endpoint whose monitor is disabled in
+    // config is never probed and stays `Unknown` forever, so the stricter check turned
+    // `connectivity.endpoints.rugcheck.enabled = false` into a permanent, silent halt on
+    // all automated buying. The executors still refuse to send a swap without a healthy
+    // RPC, which is where fail-closed belongs.
+    if let Some(unhealthy) = crate::connectivity::check_endpoints_usable(required_endpoints).await {
         crate::logger::info(
             crate::logger::LogTag::Trader,
             &format!(

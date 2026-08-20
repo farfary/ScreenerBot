@@ -1,8 +1,8 @@
 //! Price-to-MA condition — compares current price against moving averages.
 
 use crate::strategies::conditions::{
-    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
-    validate_timeframe_param, ConditionEvaluator,
+    get_candles_for_timeframe, get_current_price, get_param_f64, get_param_string,
+    get_param_string_optional, usable_basis, validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
@@ -40,10 +40,11 @@ impl ConditionEvaluator for PriceToMaCondition {
         // Calculate simple moving average
         let recent_candles = &candles[candles.len() - period..];
         let ma: f64 = recent_candles.iter().map(|c| c.close).sum::<f64>() / period as f64;
+        // A dead series averages to zero, which would put any price infinitely above its
+        // own moving average and satisfy every ABOVE rule ever configured.
+        let ma = usable_basis("Moving average", ma)?;
 
-        let current_price = context
-            .current_price
-            .ok_or_else(|| "Current price not available".to_owned())?;
+        let current_price = get_current_price(context)?;
 
         // Calculate percentage distance from MA
         let distance_pct = ((current_price - ma) / ma) * 100.0;

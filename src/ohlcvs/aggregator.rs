@@ -8,27 +8,45 @@ use std::collections::HashMap;
 pub struct OhlcvAggregator;
 
 impl OhlcvAggregator {
-    /// Aggregate 1-minute data to a higher timeframe
+    /// Combine a finer series into a coarser one.
+    ///
+    /// `from_timeframe` declares what `data` actually holds and is enforced: a request to
+    /// synthesize finer candles from coarser ones is an error rather than a silently
+    /// mis-bucketed series, and an equal pair returns the input (de-duplicated) untouched.
+    ///
+    /// Bucket boundaries come from the TARGET timeframe and the canonical UTC floor
+    /// (`(ts / bucket) * bucket`), never from the first candle seen, so two batches of the
+    /// same token always land on the same grid.
+    ///
+    /// The newest bucket is emitted as an ordinary candle even when it is still forming —
+    /// deliberate, because the chart and the indicators both want the in-progress bar —
+    /// so a caller that needs only closed candles must drop the last one itself.
     pub fn aggregate(
         data: &[Candle],
         from_timeframe: Timeframe,
         to_timeframe: Timeframe,
     ) -> OhlcvResult<Vec<Candle>> {
+        if from_timeframe.to_seconds() > to_timeframe.to_seconds() {
+            return Err(OhlcvError::InvalidTimeframe(format!(
+                "cannot aggregate {from_timeframe} candles into finer {to_timeframe} candles"
+            )));
+        }
+
         if data.is_empty() {
             return Ok(Vec::new());
         }
 
-        // 1-minute data doesn't need aggregation
-        if to_timeframe == Timeframe::Minute1 {
-            return Ok(data.to_vec());
+        // Already at the requested granularity - nothing to combine.
+        if from_timeframe == to_timeframe {
+            return Ok(Self::one_candle_per_timestamp(data));
         }
 
         let bucket_size = to_timeframe.to_seconds();
 
         // Group data points into buckets
-        let mut buckets: HashMap<i64, Vec<&Candle>> = HashMap::new();
+        let mut buckets: HashMap<i64, Vec<Candle>> = HashMap::new();
 
-        for point in data {
+        for point in Self::one_candle_per_timestamp(data) {
             let bucket_start = (point.timestamp / bucket_size) * bucket_size;
             buckets.entry(bucket_start).or_default().push(point);
         }
@@ -66,33 +84,45 @@ impl OhlcvAggregator {
         Ok(aggregated)
     }
 
-    /// Aggregate multiple data points into a single candle
-    fn aggregate_bucket(timestamp: i64, points: &[&Candle]) -> Option<Candle> {
-        if points.is_empty() {
-            return None;
+    /// One candle per source timestamp, ascending, latest write winning.
+    ///
+    /// A repeated timestamp is the same period delivered twice (two providers, or a
+    /// retried write). Summed into a bucket it doubles that bucket's volume while leaving
+    /// its prices untouched — exactly the shape a VolumeSpike entry buys on — so the
+    /// duplicate is dropped here rather than trusted to hold in every caller.
+    fn one_candle_per_timestamp(data: &[Candle]) -> Vec<Candle> {
+        let mut sorted = data.to_vec();
+        sorted.sort_by_key(|c| c.timestamp);
+
+        let mut unique: Vec<Candle> = Vec::with_capacity(sorted.len());
+        for candle in sorted {
+            match unique.last_mut() {
+                Some(last) if last.timestamp == candle.timestamp => *last = candle,
+                _ => unique.push(candle),
+            }
         }
 
-        // Sort points by timestamp within bucket
-        let mut sorted_points = points.to_vec();
-        sorted_points.sort_by_key(|p| p.timestamp);
+        unique
+    }
 
+    /// Aggregate multiple data points into a single candle
+    fn aggregate_bucket(timestamp: i64, points: &[Candle]) -> Option<Candle> {
         // OHLCV aggregation rules:
         // - Open: first candle's open
         // - High: maximum high
         // - Low: minimum low
         // - Close: last candle's close
         // - Volume: sum of all volumes
-
-        let open = sorted_points.first()?.open;
-        let close = sorted_points.last()?.close;
-        let high = sorted_points
+        //
+        // `points` is ascending and duplicate-free: its only builder is `aggregate`,
+        // which fills the buckets from `one_candle_per_timestamp`.
+        let open = points.first()?.open;
+        let close = points.last()?.close;
+        let high = points
             .iter()
             .map(|p| p.high)
             .fold(f64::NEG_INFINITY, f64::max);
-        let low = sorted_points
-            .iter()
-            .map(|p| p.low)
-            .fold(f64::INFINITY, f64::min);
+        let low = points.iter().map(|p| p.low).fold(f64::INFINITY, f64::min);
         let volume: f64 = points.iter().map(|p| p.volume).sum();
 
         Some(Candle {
@@ -218,8 +248,9 @@ mod tests {
     #[test]
     fn a_partial_bucket_is_emitted_as_though_it_were_finished() {
         // The newest bucket is always incomplete in live data — the current five-minute
-        // candle is two minutes old. Aggregation emits it anyway, with no marker, so
-        // every strategy indicator includes one forming candle as if it had closed.
+        // candle is two minutes old. Aggregation emits it anyway, with no marker: the
+        // chart and the indicators both want the forming bar, so a caller that needs
+        // only closed candles has to drop the last one itself.
         let two_minutes: Vec<Candle> = (0..2).map(|i| c(i, 10.0, 10.0, 10.0, 10.0, 1.0)).collect();
         let out = OhlcvAggregator::aggregate(&two_minutes, Timeframe::Minute1, Timeframe::Minute5)
             .expect("aggregation succeeds");
@@ -252,11 +283,11 @@ mod tests {
     }
 
     #[test]
-    fn a_duplicated_candle_is_counted_twice_in_the_aggregated_volume() {
-        // HAZARD (pinned): there is no de-duplication here — uniqueness is the storage
-        // layer's job. If a duplicate row ever reaches this function, the bucket's volume
-        // is inflated while its price stays put, which is precisely the shape
-        // `VolumeSpike` treats as a signal to buy.
+    fn a_repeated_timestamp_is_one_candle_not_two_helpings_of_volume() {
+        // A duplicate row is the same minute delivered twice. Summed into its bucket it
+        // inflates the volume while the price stays put, which is precisely the shape
+        // `VolumeSpike` treats as a signal to buy — so the last write wins and the
+        // repeat contributes nothing.
         let mut with_duplicate = ten_minutes();
         with_duplicate.push(with_duplicate[0].clone());
 
@@ -264,41 +295,78 @@ mod tests {
             OhlcvAggregator::aggregate(&with_duplicate, Timeframe::Minute1, Timeframe::Minute5)
                 .unwrap();
 
-        assert_eq!(out[0].volume, 6.0, "the repeated minute is summed again");
-        assert_eq!(out.len(), 2, "but it creates no extra candle");
+        assert_eq!(out.len(), 2, "and it creates no extra candle");
+        assert_eq!(out[0].volume, 5.0, "the repeated minute is counted once");
     }
 
     #[test]
-    fn aggregation_is_driven_by_the_target_timeframe_alone() {
-        // `from_timeframe` is accepted and never read: bucketing comes from the
-        // timestamps and the target size only. A caller that mislabels its source data
-        // gets no error and no different answer, so the argument must never be trusted
-        // as a declaration of what the input actually is.
-        let data = ten_minutes();
-        let honest =
-            OhlcvAggregator::aggregate(&data, Timeframe::Minute1, Timeframe::Minute5).unwrap();
-        let mislabelled =
-            OhlcvAggregator::aggregate(&data, Timeframe::Day1, Timeframe::Minute5).unwrap();
+    fn a_later_write_of_the_same_minute_replaces_the_earlier_one() {
+        // Two providers disagreeing about one minute must not average or double: batch
+        // order decides, and the value that arrived last is the one kept.
+        let mut revised = ten_minutes();
+        revised.push(c(0, 100.0, 200.0, 50.0, 150.0, 9.0));
 
-        assert_eq!(honest.len(), mislabelled.len());
-        assert_eq!(honest[0].volume, mislabelled[0].volume);
+        let out =
+            OhlcvAggregator::aggregate(&revised, Timeframe::Minute1, Timeframe::Minute5).unwrap();
+
+        assert_eq!(out[0].high, 200.0, "the revision's high is used");
+        assert_eq!(out[0].volume, 13.0, "9.0 replaces the original 1.0");
     }
 
     #[test]
-    fn a_one_minute_target_returns_the_input_untouched_whatever_it_holds() {
-        // The early return is on the TARGET timeframe, so hourly candles asked to become
-        // "1m candles" come back unchanged rather than erroring. Callers must not use
-        // this path to normalise unknown data.
+    fn a_target_finer_than_the_source_is_refused() {
+        // Hourly candles cannot be cut into minutes. This used to return the input
+        // unchanged whenever the TARGET was 1m, so a caller could "normalise" unknown
+        // data into a series labelled 1m that held nothing of the sort.
         let hourly = vec![
             Candle::new(BASE, 1.0, 2.0, 0.5, 1.5, 10.0),
             Candle::new(BASE + 3_600, 1.5, 3.0, 1.0, 2.5, 20.0),
         ];
-        let out =
-            OhlcvAggregator::aggregate(&hourly, Timeframe::Hour1, Timeframe::Minute1).unwrap();
 
-        assert_eq!(out.len(), 2);
-        assert_eq!(out[0].timestamp, BASE);
-        assert_eq!(out[1].timestamp, BASE + 3_600);
+        let err = OhlcvAggregator::aggregate(&hourly, Timeframe::Hour1, Timeframe::Minute1)
+            .expect_err("a finer target is not aggregatable");
+        assert!(
+            matches!(err, OhlcvError::InvalidTimeframe(_)),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn a_source_label_that_contradicts_the_target_is_an_error_not_a_silent_answer() {
+        // `from_timeframe` declares what the input holds and is now enforced against the
+        // target. It used to be accepted and never read, so a caller that mislabelled its
+        // source got no error and no different answer.
+        let data = ten_minutes();
+        OhlcvAggregator::aggregate(&data, Timeframe::Minute1, Timeframe::Minute5)
+            .expect("1m into 5m is the ordinary case");
+        assert!(
+            OhlcvAggregator::aggregate(&data, Timeframe::Day1, Timeframe::Minute5).is_err(),
+            "daily candles cannot produce five-minute ones"
+        );
+    }
+
+    #[test]
+    fn an_equal_pair_returns_the_series_at_its_own_granularity() {
+        // The no-op path: same timeframe in and out, still ordered and de-duplicated.
+        let mut hourly = vec![
+            Candle::new(BASE + 3_600, 1.5, 3.0, 1.0, 2.5, 20.0),
+            Candle::new(BASE, 1.0, 2.0, 0.5, 1.5, 10.0),
+            Candle::new(BASE, 1.0, 2.0, 0.5, 1.5, 11.0),
+        ];
+        let out = OhlcvAggregator::aggregate(&hourly, Timeframe::Hour1, Timeframe::Hour1).unwrap();
+
+        assert_eq!(
+            out.iter().map(|k| k.timestamp).collect::<Vec<_>>(),
+            vec![BASE, BASE + 3_600]
+        );
+        assert_eq!(out[0].volume, 11.0, "latest write wins");
+
+        hourly.clear();
+        assert!(
+            OhlcvAggregator::aggregate(&hourly, Timeframe::Hour1, Timeframe::Hour1)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

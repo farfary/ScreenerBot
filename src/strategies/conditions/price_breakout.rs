@@ -1,8 +1,8 @@
 //! Price breakout condition — detects price breaking above/below recent highs/lows.
 
 use crate::strategies::conditions::{
-    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
-    validate_timeframe_param, ConditionEvaluator,
+    get_candles_for_timeframe, get_current_price, get_param_f64, get_param_string,
+    get_param_string_optional, validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
@@ -29,17 +29,20 @@ impl ConditionEvaluator for PriceBreakoutCondition {
 
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
-        if candles.len() < lookback {
+        // `lookback` candles form the level, and the current candle is excluded from it,
+        // so `lookback + 1` are needed — the same arithmetic VolumeSpike demands. Asking
+        // for only `lookback` used to leave the window one candle short of what the user
+        // configured, measuring the level over a narrower range and making the breakout
+        // easier to clear than the strategy said.
+        if candles.len() < lookback + 1 {
             return Err(format!(
                 "Not enough candles: {} < {}",
                 candles.len(),
-                lookback
+                lookback + 1
             ));
         }
 
-        let current_price = context
-            .current_price
-            .ok_or_else(|| "Current price not available".to_owned())?;
+        let current_price = get_current_price(context)?;
 
         // Get lookback candles (excluding current)
         let end_idx = candles.len().saturating_sub(1);
