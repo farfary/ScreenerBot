@@ -137,8 +137,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     // Price the quote at the slippage this trade will actually execute with, so the
     // preview the user confirms is the one they get. Omitted when on "Auto" — the
     // backend then applies the configured default itself.
-    const slippageParam =
-      this._slippagePct != null ? `&slippage_pct=${this._slippagePct}` : "";
+    const slippageParam = this._slippagePct != null ? `&slippage_pct=${this._slippagePct}` : "";
 
     try {
       // Build URL based on direction
@@ -169,6 +168,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         this._renderQuote(data);
         this._setRefreshing(false);
         this._setQuoteState("loaded");
+        this._restartQuoteCountdown();
         this._pulseQuote();
         this._startQuoteRefreshTimer();
       } else {
@@ -220,29 +220,44 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
    */
   proto._renderQuote = function (quote) {
     const isSell = this.currentAction === "sell";
-    const outUnit = isSell ? "SOL" : "tokens";
+    // Name the asset the user actually holds instead of the generic "tokens" — the
+    // backend cannot know the symbol the dialog was opened with.
+    const symbol = (this._currentSymbol || this.currentContext?.symbol || "").trim();
+    const tokenUnit = symbol || "tokens";
+    const outUnit = isSell ? "SOL" : tokenUnit;
+    const inUnit = isSell ? tokenUnit : "SOL";
 
-    // Hero: output amount + unit price
-    this.quoteOutputEl.textContent = `≈ ${quote.output_formatted}`;
+    // Pay leg: for a sell this is the only absolute token figure in the dialog —
+    // the left pane only offers a percentage of the balance.
+    if (this.quoteYouPayEl) {
+      this.quoteYouPayEl.textContent = formatAmount(quote.input_amount, inUnit);
+    }
+
+    // Receive leg. The server's pre-formatted string says "tokens"; prefer our own
+    // symbol-aware formatting and fall back to it only when the symbol is unknown.
+    const knowsOutUnit = Boolean(symbol) || isSell;
+    this.quoteOutputEl.textContent = `≈ ${
+      knowsOutUnit ? formatAmount(quote.output_amount, outUnit) : quote.output_formatted
+    }`;
     if (this.quoteUnitPriceEl) {
       const pp = quote.price_per_token_sol;
       this.quoteUnitPriceEl.textContent =
-        typeof pp === "number" && pp > 0 ? `1 token ≈ ${trimSol(pp)} SOL` : "";
+        typeof pp === "number" && pp > 0 ? `1 ${tokenUnit} ≈ ${trimSol(pp)} SOL` : "";
     }
 
     // Price impact with color
-    const impactPct = (quote.price_impact_pct ?? 0).toFixed(2);
-    this.quoteImpactEl.textContent = `${impactPct}%`;
+    const impactPct = quote.price_impact_pct ?? 0;
+    this.quoteImpactEl.textContent = `${impactPct.toFixed(2)}%`;
     this.quoteImpactEl.className = "quote-value quote-impact";
-    if (quote.price_impact_pct > 5) {
+    if (impactPct > 5) {
       this.quoteImpactEl.classList.add("impact-high");
-    } else if (quote.price_impact_pct > 1) {
+    } else if (impactPct > 1) {
       this.quoteImpactEl.classList.add("impact-medium");
     } else {
       this.quoteImpactEl.classList.add("impact-low");
     }
 
-    // Minimum received (after max slippage)
+    // Guaranteed minimum (what survives max slippage)
     if (this.quoteMinReceivedEl) {
       const slipFrac = (quote.slippage_bps || 0) / 10000;
       const minOut = (quote.output_amount ?? 0) * (1 - slipFrac);
@@ -253,23 +268,34 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     this.quotePlatformFeeEl.textContent = `${quote.platform_fee_pct}% · ${trimSol(quote.platform_fee_sol)} SOL`;
     this.quoteNetworkFeeEl.textContent = `≈ ${trimSol(quote.network_fee_sol)} SOL`;
 
-    // Slippage + provider + full route path
     this.quoteSlippageEl.textContent = `${(quote.slippage_bps / 100).toFixed(1)}%`;
-    this.quoteRouteEl.textContent = quote.router || "Unknown";
+
+    // One route row: the aggregator that priced it, with the venue path beneath it
+    // when the path says something the aggregator name does not.
+    const router = quote.router || "Unknown";
+    this.quoteRouteEl.textContent = router;
     if (this.quoteRoutePathEl) {
-      this.quoteRoutePathEl.textContent = quote.route || quote.router || "Direct";
+      const path = quote.route || "";
+      this.quoteRoutePathEl.textContent = path && path !== router ? path : "";
     }
 
-    // You pay (advanced)
-    if (this.quoteYouPayEl) {
-      this.quoteYouPayEl.textContent = isSell
-        ? formatAmount(quote.input_amount, "tokens")
-        : `${trimSol(quote.input_amount)} SOL`;
+    // Impact above the slippage this trade will execute with is what the confirm-time
+    // gate stops on, so say it here rather than ambushing the user after they click.
+    if (this.quoteWarningEl && this.quoteWarningTextEl) {
+      const tolerance = this._slippagePct ?? this._configuredSlippage ?? 5;
+      const exceeds = impactPct > tolerance;
+      this.quoteWarningEl.dataset.visible = exceeds ? "true" : "false";
+      if (exceeds) {
+        this.quoteWarningTextEl.textContent =
+          `Price impact ${impactPct.toFixed(2)}% is above your ${trimPct(tolerance)}% max slippage — ` +
+          "this size moves the pool. A smaller amount fills closer to the market price.";
+      }
     }
 
-    // Auto-refresh countdown (advanced) — kept live by the refresh timer.
-    if (this.quoteExpiryEl) {
-      this.quoteExpiryEl.textContent = `in ${QUOTE_REFRESH_SECS}s`;
+    // The header badge counts the same 15s the refresh timer does; seed it here so it
+    // does not show the previous quote's remainder for the first second.
+    if (this.quoteAgeEl) {
+      this.quoteAgeEl.textContent = `${QUOTE_REFRESH_SECS}s`;
     }
   };
 
@@ -279,6 +305,12 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     if (n === 0) return "0";
     if (n < 0.000001) return n.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
     return parseFloat(n.toFixed(6)).toString();
+  }
+
+  /** Percent without trailing zeros — "1%", "1.5%", never "1.00%". */
+  function trimPct(n) {
+    if (typeof n !== "number" || !isFinite(n)) return "0";
+    return parseFloat(n.toFixed(2)).toString();
   }
 
   /** Compact amount with a unit label, using K/M/B for large token counts. */
@@ -296,9 +328,27 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
    * @param {string} state - One of: "idle", "loading", "loaded", "error"
    */
   proto._setQuoteState = function (state) {
-    if (this.quoteSection) {
-      this.quoteSection.dataset.state = state;
+    if (!this.quoteSection) return;
+    this.quoteSection.dataset.state = state;
+    // Nothing is counting down unless a quote is on screen.
+    if (state !== "loaded") {
+      this.quoteSection.classList.remove("quote-counting");
     }
+  };
+
+  /**
+   * Restart the top edge's countdown so the bar drains over exactly the interval the
+   * refresh timer waits. The duration comes from the JS constant, so the bar, the
+   * header badge and the actual refetch can never disagree.
+   */
+  proto._restartQuoteCountdown = function () {
+    const el = this.quoteSection;
+    if (!el) return;
+    el.style.setProperty("--quote-refresh-secs", `${QUOTE_REFRESH_SECS}s`);
+    el.classList.remove("quote-counting");
+    // Force reflow so the animation restarts on every silent refresh.
+    void el.offsetWidth;
+    el.classList.add("quote-counting");
   };
 
   /** Toggle the subtle "refreshing" indicator (thin bar + spinning refresh icon)
@@ -348,13 +398,10 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       if (this._isOpen && this._quoteData) {
         const age = Math.floor((Date.now() - this._quoteTimestamp) / 1000);
         const remaining = Math.max(0, QUOTE_REFRESH_SECS - age);
-        // Both the header badge and the Auto-refresh row count down to the same
-        // moment the quote actually refreshes.
+        // The badge and the draining top edge count to the same moment the quote
+        // actually refreshes — reduced motion drops the bar, never the number.
         if (this.quoteAgeEl) {
           this.quoteAgeEl.textContent = `${remaining}s`;
-        }
-        if (this.quoteExpiryEl) {
-          this.quoteExpiryEl.textContent = remaining > 0 ? `in ${remaining}s` : "refreshing…";
         }
         if (age >= QUOTE_REFRESH_SECS) {
           this._fetchQuote();

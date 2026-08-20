@@ -302,53 +302,72 @@ export class TradeActionDialog {
               </div>
             </div>
             <div class="trade-action-quote-content">
-              <div class="quote-hero">
-                <span class="quote-hero-label">You receive (estimated)</span>
-                <span class="quote-hero-value quote-output">—</span>
-                <span class="quote-hero-sub quote-unit-price"></span>
+              <!--
+                The swap reads as a swap: what leaves the wallet, then what comes back.
+                The pay leg is the only place a sell shows its absolute token amount (the
+                left pane only offers a percentage), and the receive leg is the figure the
+                decision is made on, so it carries the type weight.
+              -->
+              <div class="quote-flow">
+                <div class="quote-leg quote-leg-in">
+                  <span class="quote-leg-label">You pay</span>
+                  <span class="quote-leg-value quote-you-pay">—</span>
+                </div>
+                <div class="quote-leg quote-leg-out">
+                  <span class="quote-leg-label">
+                    <svg class="quote-leg-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                      <path d="M12 5v13M6 12l6 6 6-6"/>
+                    </svg>
+                    You receive (estimated)
+                  </span>
+                  <span class="quote-leg-value quote-output">—</span>
+                  <span class="quote-leg-sub quote-unit-price"></span>
+                </div>
+              </div>
+              <!-- The estimate above can move; this is the number the chain guarantees. -->
+              <div class="quote-floor">
+                <span class="quote-floor-label" title="The least you can receive after max slippage. The swap reverts rather than fill below it.">Guaranteed minimum</span>
+                <span class="quote-floor-value quote-min-received"></span>
               </div>
               <div class="quote-rows">
-                <div class="quote-row" data-min="minimal">
+                <div class="quote-row">
                   <span class="quote-label">Price impact</span>
                   <span class="quote-value quote-impact"></span>
                 </div>
-                <div class="quote-row" data-min="minimal">
-                  <span class="quote-label">Minimum received <span class="quote-info" title="The least you will get after max slippage. The swap reverts if it cannot fill at this amount.">?</span></span>
-                  <span class="quote-value quote-min-received"></span>
-                </div>
-                <div class="quote-row" data-min="normal">
-                  <span class="quote-label">Platform fee <span class="quote-info" title="0.5% — supports development. Built into the quote.">?</span></span>
-                  <span class="quote-value quote-platform-fee"></span>
-                </div>
-                <div class="quote-row" data-min="normal">
-                  <span class="quote-label">Network fee</span>
-                  <span class="quote-value quote-network-fee"></span>
-                </div>
-                <div class="quote-row" data-min="normal">
+                <div class="quote-row">
                   <span class="quote-label">Max slippage</span>
                   <span class="quote-value quote-slippage"></span>
                 </div>
-                <div class="quote-row" data-min="normal">
-                  <span class="quote-label">Provider</span>
-                  <span class="quote-value quote-route"></span>
+                <div class="quote-row">
+                  <span class="quote-label quote-label-info" title="0.5% — supports development. Already built into the quote above.">Platform fee</span>
+                  <span class="quote-value quote-platform-fee"></span>
                 </div>
-                <div class="quote-row" data-min="advanced">
-                  <span class="quote-label">You pay</span>
-                  <span class="quote-value quote-you-pay"></span>
+                <div class="quote-row">
+                  <span class="quote-label">Network fee</span>
+                  <span class="quote-value quote-network-fee"></span>
                 </div>
-                <div class="quote-row" data-min="advanced">
+                <div class="quote-row quote-row-route">
                   <span class="quote-label">Route</span>
-                  <span class="quote-value quote-route-path"></span>
-                </div>
-                <div class="quote-row" data-min="advanced">
-                  <span class="quote-label">Auto-refresh</span>
-                  <span class="quote-value quote-expiry"></span>
+                  <span class="quote-value">
+                    <span class="quote-route"></span>
+                    <span class="quote-route-path"></span>
+                  </span>
                 </div>
               </div>
-              <div class="quote-disclaimer" data-min="advanced">
-                Estimates update with live on-chain prices. The transaction reverts if it can't
-                fill within your max slippage, so you never spend more than shown.
+              <!-- Shown only when the quoted impact exceeds the slippage this trade will
+                   execute with — the same threshold the confirm-time gate uses, so the
+                   preview warns about exactly what will stop the user on confirm. -->
+              <div class="quote-warning" data-visible="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <path d="M12 9v4M12 17h.01"/>
+                </svg>
+                <span class="quote-warning-text"></span>
               </div>
+              <p class="quote-disclaimer">
+                Prices update live from the chain. The swap reverts if it can't fill above your
+                guaranteed minimum, so you never get less than shown.
+              </p>
             </div>
           </div>
           </div>
@@ -458,7 +477,8 @@ export class TradeActionDialog {
     this.quoteMinReceivedEl = overlay.querySelector(".quote-min-received");
     this.quoteYouPayEl = overlay.querySelector(".quote-you-pay");
     this.quoteRoutePathEl = overlay.querySelector(".quote-route-path");
-    this.quoteExpiryEl = overlay.querySelector(".quote-expiry");
+    this.quoteWarningEl = overlay.querySelector(".quote-warning");
+    this.quoteWarningTextEl = overlay.querySelector(".quote-warning-text");
     this.quoteContentEl = overlay.querySelector(".trade-action-quote-content");
 
     // Amount controls (slider + MAX)

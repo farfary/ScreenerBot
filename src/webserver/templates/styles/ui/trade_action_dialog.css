@@ -38,22 +38,32 @@ body.trade-action-dialog-open {
   animation: trade-dialog-slide-up 300ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Action-specific accent colors */
+/* Action-specific accent colors.
+   `soft` and `edge` are the quote preview's directional identity: a tint faint
+   enough to sit under body text on BOTH themes (the 0.15 `light` value is a wash
+   in light mode) plus a matching hairline. They are composited over an opaque
+   surface with background-image, so the same alpha works on white and on #161b22. */
 .trade-action-dialog.action-buy {
   --action-color: #10b981;
   --action-color-light: rgb(16, 185, 129, 0.15);
+  --action-color-soft: rgb(16, 185, 129, 0.07);
+  --action-color-edge: rgb(16, 185, 129, 0.28);
   --action-color-dark: #059669;
 }
 
 .trade-action-dialog.action-sell {
   --action-color: #ef4444;
   --action-color-light: rgb(239, 68, 68, 0.15);
+  --action-color-soft: rgb(239, 68, 68, 0.07);
+  --action-color-edge: rgb(239, 68, 68, 0.28);
   --action-color-dark: #dc2626;
 }
 
 .trade-action-dialog.action-add {
   --action-color: #3b82f6;
   --action-color-light: rgb(59, 130, 246, 0.15);
+  --action-color-soft: rgb(59, 130, 246, 0.07);
+  --action-color-edge: rgb(59, 130, 246, 0.28);
   --action-color-dark: #2563eb;
 }
 
@@ -607,66 +617,82 @@ body.trade-action-dialog-open {
 
 /* ========================================
    Quote Preview Section
+
+   A recessed panel holding the swap flow (pay -> receive), the guaranteed floor,
+   the receipt rows and the safety notes. Every colour here resolves through the
+   real foundation tokens: the earlier `rgb(var(--color-surface))` / `rgb(var(
+   --color-error, ...))` forms named variables that do not exist, or that hold a
+   hex value, so each of those declarations was invalid at computed-value time and
+   dropped — which is why price impact never coloured and the card rendered as a
+   flat grey slab in light mode.
    ======================================== */
 
 .trade-action-quote-section {
+  /* Overwritten by the quote manager from its QUOTE_REFRESH_SECS constant. */
+  --quote-refresh-secs: 15s;
+
   position: relative;
-  margin-top: 16px;
-  padding: 12px;
-  background: rgb(var(--color-surface) / 0.6);
-  border: 1px solid rgb(var(--color-border));
-  border-radius: var(--radius-md, 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+
+  /* Keeps the countdown edge inside the rounded corners. */
+  overflow: hidden;
 }
 
 .trade-action-quote-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 8px;
 }
 
 .trade-action-quote-title {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.6875rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: rgb(var(--color-text-secondary));
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
 }
 
 .trade-action-quote-refresh {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  font-size: 0.7rem;
-  color: rgb(var(--color-text-secondary));
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  font-family: var(--font-data, monospace);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
   background: transparent;
-  border: 1px solid rgb(var(--color-border));
-  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    background 0.15s ease;
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .trade-action-quote-refresh svg {
   width: 12px;
   height: 12px;
+  flex-shrink: 0;
 }
 
 .trade-action-quote-refresh:hover {
-  color: rgb(var(--color-text-primary));
-  border-color: rgb(var(--color-text-secondary));
-  background: rgb(var(--color-surface-elevated));
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+  background: var(--bg-card-hover);
 }
 
 .trade-action-quote-refresh:active svg {
   animation: trade-spinner 0.6s linear;
-}
-
-.quote-age {
-  font-variant-numeric: tabular-nums;
 }
 
 /* Quote States */
@@ -681,9 +707,10 @@ body.trade-action-dialog-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 26px 12px;
   font-size: 0.8rem;
-  color: rgb(var(--color-text-tertiary));
+  text-align: center;
+  color: var(--text-muted);
 }
 
 .trade-action-quote-section[data-state="loading"] .trade-action-quote-loading {
@@ -691,16 +718,17 @@ body.trade-action-dialog-open {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 16px;
+  padding: 26px 12px;
   font-size: 0.8rem;
-  color: rgb(var(--color-text-secondary));
+  color: var(--text-secondary);
 }
 
+/* The spinner carries the action colour, so even the wait reads as buy or sell. */
 .trade-action-quote-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgb(var(--color-border));
-  border-top-color: rgb(var(--color-accent));
+  border: 2px solid var(--border-color);
+  border-top-color: var(--action-color);
   border-radius: var(--radius-full);
   animation: trade-spinner 0.8s linear infinite;
 }
@@ -711,9 +739,10 @@ body.trade-action-dialog-open {
   gap: 8px;
   padding: 12px;
   font-size: 0.8rem;
-  color: rgb(var(--color-error, 248 81 73));
-  background: rgb(var(--color-error, 248 81 73) / 0.1);
-  border-radius: var(--radius-sm, 4px);
+  color: var(--semantic-error-text);
+  background: var(--danger-alpha-10);
+  border: 1px solid var(--danger-alpha-20);
+  border-radius: var(--radius-md);
 }
 
 .trade-action-quote-error svg {
@@ -741,7 +770,7 @@ body.trade-action-dialog-open {
 .quote-error-detail {
   font-size: 0.72rem;
   line-height: 1.35;
-  color: rgb(var(--color-text-secondary));
+  color: var(--text-secondary);
 }
 
 .quote-error-retry {
@@ -750,25 +779,22 @@ body.trade-action-dialog-open {
   padding: 3px 10px;
   font-size: 0.72rem;
   font-weight: 600;
-  color: rgb(var(--color-error, 248 81 73));
+  color: var(--semantic-error-text);
   background: transparent;
-  border: 1px solid rgb(var(--color-error, 248 81 73) / 0.4);
-  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--danger-alpha-40);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background var(--transition-fast, 0.15s) ease;
+  transition: background var(--transition-fast);
 }
 
 .quote-error-retry:hover {
-  background: rgb(var(--color-error, 248 81 73) / 0.15);
+  background: var(--danger-alpha-15);
 }
 
 .trade-action-quote-section[data-state="loaded"] .trade-action-quote-content {
-  display: block;
-}
-
-.trade-action-quote-section[data-state="loaded"] .trade-action-quote-refresh,
-.trade-action-quote-section[data-state="error"] .trade-action-quote-refresh {
-  opacity: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .trade-action-quote-section[data-state="idle"] .trade-action-quote-refresh,
@@ -777,52 +803,226 @@ body.trade-action-dialog-open {
   pointer-events: none;
 }
 
-/* Quote Content — stat grid (label stacked over value for clean alignment) */
+/* ---- The swap itself: what leaves the wallet, then what comes back ---- */
+.quote-flow {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  border: 1px solid var(--action-color-edge);
+  border-radius: var(--radius-md);
+
+  /* Tint composited over an opaque surface so one alpha reads correctly on both
+     themes — a plain `background: var(--action-color-light)` washes out in light. */
+  background-color: var(--bg-secondary);
+  background-image: linear-gradient(var(--action-color-soft), var(--action-color-soft));
+}
+
+.quote-leg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.quote-leg-in {
+  padding-bottom: 10px;
+}
+
+.quote-leg-out {
+  padding-top: 10px;
+  border-top: 1px dashed var(--action-color-edge);
+}
+
+.quote-leg-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.quote-leg-arrow {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  color: var(--action-color);
+}
+
+.quote-leg-value {
+  font-family: var(--font-data, monospace);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* The received amount is the figure the decision is made on. It stays in the
+   primary text colour rather than the action colour: a sell's SOL proceeds are
+   good news and must not be painted in the sell red. */
+.quote-leg-out .quote-leg-value {
+  font-size: clamp(1.25rem, 3.4vw, 1.625rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.quote-leg-sub {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.quote-leg-sub:empty {
+  display: none;
+}
+
+/* ---- The number the chain actually guarantees ---- */
+.quote-floor {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.quote-floor-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px dotted currentcolor;
+  cursor: help;
+}
+
+.quote-floor-value {
+  font-family: var(--font-data, monospace);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Receipt rows: quiet label left, figure right ---- */
 .quote-rows {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0 26px;
+  display: flex;
+  flex-direction: column;
 }
 
 .quote-row {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 9px 0;
-  border-bottom: 1px solid rgb(255, 255, 255, 0.06);
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.quote-row:first-child {
+  padding-top: 0;
+}
+
+.quote-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .quote-label {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.64rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  line-height: 1.2;
-  color: var(--text-secondary, #8b949e);
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Terms that carry a tooltip say so the way prose does, without a chip behind them. */
+.quote-label-info {
+  border-bottom: 1px dotted currentcolor;
+  cursor: help;
 }
 
 .quote-value {
-  font-size: 0.9rem;
+  min-width: 0;
+  font-family: var(--font-data, monospace);
+  font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.3;
+  text-align: right;
   font-variant-numeric: tabular-nums;
-  color: var(--text-primary, #e6edf3);
+  color: var(--text-primary);
   overflow-wrap: anywhere;
 }
 
-/* Impact colors */
+/* Aggregator on top, venue path beneath — one row instead of two. */
+.quote-row-route .quote-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.quote-route-path {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.quote-route-path:empty {
+  display: none;
+}
+
+/* Impact colors — the `--semantic-*-text` pair is tuned for small text on both themes. */
 .quote-impact.impact-low {
-  color: rgb(var(--color-success, 63 185 80));
+  color: var(--semantic-success-text);
 }
 
 .quote-impact.impact-medium {
-  color: rgb(var(--color-warning, 210 153 34));
+  color: var(--semantic-warning-text);
 }
 
 .quote-impact.impact-high {
-  color: rgb(var(--color-error, 248 81 73));
+  color: var(--semantic-error-text);
+}
+
+/* ---- Size warning: shown only when impact exceeds this trade's slippage ---- */
+.quote-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 8px 10px;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--semantic-warning-text);
+  background: var(--warning-alpha-10);
+  border: 1px solid var(--warning-alpha-20);
+  border-radius: var(--radius-md);
+}
+
+.quote-warning[data-visible="false"] {
+  display: none;
+}
+
+.quote-warning svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Closing note: the safety rule the whole panel rests on. */
+.quote-disclaimer {
+  margin: 0;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
 
 /* Animations */
@@ -1169,79 +1369,11 @@ body.trade-action-dialog-open {
   font-family: var(--font-data, monospace);
 }
 
-/* Hero "you receive" block */
-.quote-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  background: var(--action-color-light, rgb(16, 185, 129, 0.1));
-  border: 1px solid var(--action-color-light, rgb(16, 185, 129, 0.15));
-  border-radius: var(--radius-md, 8px);
-}
-
-.quote-hero-label {
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary, #8b949e);
-}
-
-.quote-hero-value {
-  font-size: clamp(1.15rem, 4.5vw, 1.5rem);
-  font-weight: 800;
-  line-height: 1.15;
-  color: var(--text-primary, #e6edf3);
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.quote-hero-sub {
-  font-size: 0.72rem;
-  color: var(--text-muted, #6e7681);
-  font-variant-numeric: tabular-nums;
-}
-
-.quote-hero-sub:empty {
-  display: none;
-}
-
-/* Info tooltip marker */
-.quote-info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  margin-left: 4px;
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: var(--text-muted, #6e7681);
-  background: rgb(255, 255, 255, 0.08);
-  border-radius: 50%;
-  cursor: help;
-}
-
-/* Advanced disclaimer */
-.quote-disclaimer {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border-color, #30363d);
-  font-size: 0.68rem;
-  line-height: 1.45;
-  color: var(--text-muted, #6e7681);
-}
-
 /* Light mode for new components */
 [data-theme="light"] .trade-action-slider {
   background:
     linear-gradient(var(--action-color), var(--action-color)) 0 / var(--slider-fill) 100% no-repeat,
     rgb(0, 0, 0, 0.1);
-}
-
-[data-theme="light"] .quote-info {
-  background: rgb(0, 0, 0, 0.06);
 }
 
 /* ============================================================
@@ -1262,12 +1394,6 @@ body.trade-action-dialog-open {
   flex-direction: column;
   gap: 20px;
   min-width: 0;
-}
-
-/* The preview card's legacy top margin is not needed inside the grid — both
-   panes' first cards align flush at the top. */
-.trade-action-grid .trade-action-quote-section {
-  margin-top: 0;
 }
 
 .trade-action-pane-preview {
@@ -1292,12 +1418,9 @@ body.trade-action-dialog-open {
     top: 0;
   }
 
-  /* The preview reads as a card on desktop */
+  /* The preview owns a full column here, so it gets room to breathe. */
   .trade-action-quote-section {
-    background: rgb(0, 0, 0, 0.18);
-    border: 1px solid var(--border-color, #30363d);
-    border-radius: var(--radius-lg, 8px);
-    padding: 14px 16px;
+    padding: 16px;
   }
 }
 
@@ -1314,7 +1437,7 @@ body.trade-action-dialog-open {
 }
 
 /* ============================================================
-   Silent refresh: thin progress bar + spin + subtle value pulse
+   The top edge: drains over the refresh interval, ping-pongs while refetching
    ============================================================ */
 .trade-action-quote-refresh-bar {
   position: absolute;
@@ -1322,7 +1445,6 @@ body.trade-action-dialog-open {
   left: 0;
   height: 2px;
   width: 100%;
-  border-radius: 999px 999px 0 0;
   background: var(--action-color, #10b981);
   transform: scaleX(0);
   transform-origin: left center;
@@ -1330,9 +1452,27 @@ body.trade-action-dialog-open {
   pointer-events: none;
 }
 
+/* Time left on the quote, drawn to scale. The class is re-applied per quote by
+   _restartQuoteCountdown so the animation restarts on every silent refresh. */
+.trade-action-quote-section.quote-counting .trade-action-quote-refresh-bar {
+  opacity: 0.85;
+  animation: trade-quote-countdown var(--quote-refresh-secs) linear forwards;
+}
+
+/* Declared after the countdown so an in-flight refetch wins at equal specificity. */
 .trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh-bar {
   opacity: 1;
   animation: trade-quote-bar 0.9s ease-in-out infinite;
+}
+
+@keyframes trade-quote-countdown {
+  from {
+    transform: scaleX(1);
+  }
+
+  to {
+    transform: scaleX(0);
+  }
 }
 
 .trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh svg {
@@ -1361,7 +1501,8 @@ body.trade-action-dialog-open {
 }
 
 /* Brief highlight when a silent refresh swaps in new values */
-.trade-action-quote-content.quote-pulse .quote-hero-value,
+.trade-action-quote-content.quote-pulse .quote-leg-value,
+.trade-action-quote-content.quote-pulse .quote-floor-value,
 .trade-action-quote-content.quote-pulse .quote-value {
   animation: trade-quote-pulse 0.5s ease;
 }
@@ -1378,15 +1519,18 @@ body.trade-action-dialog-open {
 
 /* Responsive refinements */
 @media (width <= 480px) {
-  .quote-hero-value {
-    font-size: clamp(1.1rem, 6vw, 1.4rem);
+  .quote-leg-out .quote-leg-value {
+    font-size: clamp(1.15rem, 6vw, 1.45rem);
   }
 }
 
+/* The bar is the only thing lost here — the badge keeps counting in text. */
 @media (prefers-reduced-motion: reduce) {
+  .trade-action-quote-section.quote-counting .trade-action-quote-refresh-bar,
   .trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh-bar,
   .trade-action-quote-section[data-refreshing="true"] .trade-action-quote-refresh svg,
-  .trade-action-quote-content.quote-pulse .quote-hero-value,
+  .trade-action-quote-content.quote-pulse .quote-leg-value,
+  .trade-action-quote-content.quote-pulse .quote-floor-value,
   .trade-action-quote-content.quote-pulse .quote-value {
     animation: none;
   }
