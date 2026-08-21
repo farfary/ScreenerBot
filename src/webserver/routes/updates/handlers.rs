@@ -63,7 +63,7 @@ pub(super) async fn check_updates() -> Response {
 
 /// POST /api/updates/download
 /// Starts downloading an available update
-pub(super) async fn download_update(_body: Json<DownloadRequest>) -> Response {
+pub(super) async fn download_update(Json(body): Json<DownloadRequest>) -> Response {
     logger::info(LogTag::Webserver, "Download update requested");
 
     let state = version::get_update_state().await;
@@ -81,12 +81,11 @@ pub(super) async fn download_update(_body: Json<DownloadRequest>) -> Response {
         }
     };
 
-    // Check if already downloading
-    if state.download_progress.downloading {
+    if update.version != body.version {
         return error_response(
             StatusCode::BAD_REQUEST,
-            "DOWNLOAD_IN_PROGRESS",
-            "Download already in progress",
+            "UPDATE_VERSION_CHANGED",
+            "The available update changed; check for updates again",
             None,
         );
     }
@@ -94,12 +93,9 @@ pub(super) async fn download_update(_body: Json<DownloadRequest>) -> Response {
     // Clone version for response before moving into spawn
     let version_str = update.version.clone();
 
-    // Start download in background
-    tokio::spawn(async move {
-        if let Err(e) = version::download_update(&update).await {
-            logger::warning(LogTag::System, &format!("Download failed: {e}"));
-        }
-    });
+    if let Err(e) = version::start_download(update).await {
+        return error_response(StatusCode::CONFLICT, "DOWNLOAD_NOT_STARTED", &e, None);
+    }
 
     success_response(DownloadResponse {
         started: true,
@@ -119,25 +115,11 @@ pub(super) async fn get_status() -> Response {
 pub(super) async fn install_update() -> Response {
     logger::info(LogTag::Webserver, "Install update requested");
 
-    let state = version::get_update_state().await;
-
-    // Check if download is complete
-    let path = match state.download_progress.downloaded_path {
-        Some(p) if state.download_progress.completed => p,
-        _ => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "NO_DOWNLOADED_UPDATE",
-                "No downloaded update available",
-                None,
-            );
-        }
-    };
-
-    match version::open_update(&path) {
+    match version::prepare_install().await {
         Ok(_) => success_response(InstallResponse {
             opened: true,
-            message: "Update installer opened. Please complete the installation.".to_owned(),
+            message: "Verified update installer opened. Complete the operating-system installer."
+                .to_owned(),
         }),
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,

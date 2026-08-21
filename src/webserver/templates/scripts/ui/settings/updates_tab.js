@@ -76,7 +76,7 @@ export function buildUpdatesTab(dialog, versionInfo, updateState) {
                 <span class="detail-value">${platform || "Unknown"}</span>
               </div>
               <div class="detail-row">
-                <span class="detail-label">Auto Update</span>
+                <span class="detail-label">Update Checks</span>
                 <span class="detail-value channel-badge">Enabled</span>
               </div>
             </div>
@@ -138,11 +138,22 @@ function buildUpdateAvailableState(state, currentVersion, versionInfo) {
   const info = state.info;
   const isDownloading = state.downloading;
   const isDownloaded = state.downloaded;
+  const isHeadless = !window.__SCREENERBOT_GUI_MODE;
   const fileSize = info.file_size ? formatBytes(info.file_size) : null;
 
   let actionContent = "";
 
-  if (isDownloaded) {
+  if (isHeadless) {
+    actionContent = `
+        <div class="download-success">
+          <div class="success-badge">
+            <i class="icon-terminal"></i>
+            <span>Headless Update Available</span>
+          </div>
+          <p class="install-hint">Run <code>sudo screenerbot-manager update</code> on the server. The manager verifies, applies, health-checks, and rolls back automatically on failure.</p>
+        </div>
+      `;
+  } else if (isDownloaded) {
     actionContent = `
         <div class="download-success">
           <div class="success-badge">
@@ -154,7 +165,7 @@ function buildUpdateAvailableState(state, currentVersion, versionInfo) {
         <div class="status-actions">
           <button class="updates-btn success" id="installUpdateBtn">
             <i class="icon-download"></i>
-            <span>Install & Restart</span>
+            <span>Open Installer & Quit</span>
           </button>
         </div>
       `;
@@ -253,7 +264,7 @@ function getInstallHint(versionInfo) {
   } else if (platform.toLowerCase().includes("windows")) {
     return "The installer will guide you through the update process.";
   } else if (platform.toLowerCase().includes("linux")) {
-    return "Run the AppImage or install the .deb package to update.";
+    return "The verified .deb installer will open in your system package manager.";
   }
   return "Follow the installer instructions to complete the update.";
 }
@@ -301,6 +312,9 @@ export function attachUpdatesHandlers(
       // Call the check API
       const response = await fetch("/api/updates/check");
       const data = await response.json();
+      if (!response.ok || data.success === false) {
+        throw new Error(data.error?.message || data.error || "Failed to check for updates");
+      }
 
       updateState.checking = false;
 
@@ -310,6 +324,8 @@ export function attachUpdatesHandlers(
       } else {
         updateState.available = false;
         updateState.info = null;
+        updateState.downloaded = false;
+        updateState.downloading = false;
       }
     } catch (err) {
       console.error("Update check failed:", err);
@@ -362,8 +378,8 @@ export function attachUpdatesHandlers(
       const confirmResult = await ConfirmationDialog.show({
         title: "Install Update",
         message:
-          "ScreenerBot will install the update and close. The installer will launch automatically. Continue?",
-        confirmLabel: "Install",
+          "The verified operating-system installer will open, then ScreenerBot will quit cleanly. Complete the installer and reopen ScreenerBot. Continue?",
+        confirmLabel: "Open Installer",
         cancelLabel: "Cancel",
         variant: "warning",
       });
@@ -380,27 +396,22 @@ export function attachUpdatesHandlers(
         const data = await response.json();
 
         if (!response.ok || !data.success) {
-          throw new Error(data.error || "Failed to open installer");
+          throw new Error(data.error?.message || data.error || "Failed to open installer");
         }
 
         // Show success message
         Utils.showToast({
           type: "success",
           title: "Update Ready",
-          message: "Closing app to complete installation...",
+          message: "Installer opened. ScreenerBot will quit cleanly now.",
         });
 
-        // Exit the app via backend API after a short delay
-        setTimeout(async () => {
-          try {
-            await fetch("/api/system/exit", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ delay_ms: 500 }),
-            });
-          } catch (exitErr) {
-            console.warn("Exit request failed:", exitErr);
-            // Fallback: just close the dialog
+        // Electron owns the Rust child process and must coordinate a graceful
+        // quit. A raw backend exit is interpreted as a crash by the shell.
+        setTimeout(() => {
+          if (window.electronAPI?.quitForUpdate) {
+            window.electronAPI.quitForUpdate();
+          } else {
             dialog.close();
           }
         }, 1000);

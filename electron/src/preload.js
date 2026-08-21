@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // App info
   getVersion: () => ipcRenderer.invoke('app:get-version'),
+  quitForUpdate: () => ipcRenderer.invoke('app:quit-for-update'),
+  onCheckForUpdates: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on('updates:check', handler);
+    return () => ipcRenderer.removeListener('updates:check', handler);
+  },
 
   // Persist the UI theme so the next launch's splash + window match it.
   saveTheme: (theme) => ipcRenderer.invoke('theme:set', theme),

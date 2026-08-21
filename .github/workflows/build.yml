@@ -61,6 +61,12 @@ jobs:
             VERSION="v${BASE}"
             DO_RELEASE="${{ inputs.create_release }}"
           fi
+          VERSION_NUMBER="${VERSION#v}"
+          CARGO_VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          ELECTRON_VERSION="$(node -p "require('./electron/package.json').version")"
+          [ "$VERSION" = "v$VERSION_NUMBER" ] || { echo "Version must start with v" >&2; exit 1; }
+          [ "$VERSION_NUMBER" = "$CARGO_VERSION" ] || { echo "Tag $VERSION does not match Cargo.toml $CARGO_VERSION" >&2; exit 1; }
+          [ "$VERSION_NUMBER" = "$ELECTRON_VERSION" ] || { echo "Tag $VERSION does not match Electron $ELECTRON_VERSION" >&2; exit 1; }
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "do_release=${DO_RELEASE}" >> "$GITHUB_OUTPUT"
           echo "Resolved version=${VERSION} do_release=${DO_RELEASE}"
@@ -69,8 +75,27 @@ jobs:
   # Build Rust binaries for all platforms
   # ===========================================================================
 
-  build-rust:
+  test-updater:
     needs: prepare
+    runs-on: ubuntu-22.04
+    name: Test · updater contract and state machine
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.89.0
+      - name: Run updater tests
+        run: cargo test version::
+      - name: Validate Electron update bridge syntax
+        run: |
+          node --check electron/src/main.js
+          node --check electron/src/preload.js
+
+  build-rust:
+    needs: [prepare, test-updater]
     strategy:
       fail-fast: false
       matrix:
@@ -117,6 +142,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
+          toolchain: 1.89.0
           targets: ${{ matrix.target }}
 
       - name: Cache Cargo registry & build
@@ -148,7 +174,7 @@ jobs:
         if: matrix.target == 'x86_64-apple-darwin'
         run: |
           # Install x86_64 Homebrew and OpenSSL for cross-compilation
-          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/cced90146ea6d3057c03a636b668fef177415eb3/install.sh)"
           arch -x86_64 /usr/local/bin/brew install openssl@3
           echo "OPENSSL_DIR=/usr/local/opt/openssl@3" >> "$GITHUB_ENV"
           echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
@@ -207,7 +233,6 @@ jobs:
 
   package-macos:
     needs: [prepare, build-rust]
-    if: always() && !cancelled()
     strategy:
       fail-fast: false
       matrix:
@@ -278,7 +303,6 @@ jobs:
 
   package-linux:
     needs: [prepare, build-rust]
-    if: always() && !cancelled()
     strategy:
       fail-fast: false
       matrix:
@@ -358,7 +382,6 @@ jobs:
 
   package-windows:
     needs: [prepare, build-rust]
-    if: always() && !cancelled()
     strategy:
       fail-fast: false
       matrix:
@@ -423,7 +446,7 @@ jobs:
   # ===========================================================================
 
   release:
-    if: ${{ always() && !cancelled() && needs.prepare.outputs.do_release == 'true' }}
+    if: ${{ needs.prepare.outputs.do_release == 'true' }}
     needs: [prepare, package-macos, package-linux, package-windows, build-rust]
     runs-on: ubuntu-latest
     name: Create Release
@@ -449,6 +472,39 @@ jobs:
           find artifacts/headless-* -type f -name "*.tar.gz" -exec cp {} release/ \;
           echo "Release artifacts:"
           ls -la release/
+
+      - name: Enforce complete immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ needs.prepare.outputs.version }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release ${{ needs.prepare.outputs.version }} already exists; published versions are immutable" >&2
+            exit 1
+          fi
+          cd release
+          VERSION="${{ needs.prepare.outputs.version }}"
+          expected="$(printf '%s\n' \
+            "ScreenerBot-${VERSION}-Linux-arm64-headless.tar.gz" \
+            "ScreenerBot-${VERSION}-Linux-arm64.deb" \
+            "ScreenerBot-${VERSION}-Linux-arm64.zip" \
+            "ScreenerBot-${VERSION}-Linux-x64-headless.tar.gz" \
+            "ScreenerBot-${VERSION}-Linux-x64.deb" \
+            "ScreenerBot-${VERSION}-Linux-x64.zip" \
+            "ScreenerBot-${VERSION}-macOS-arm64.dmg" \
+            "ScreenerBot-${VERSION}-macOS-arm64.zip" \
+            "ScreenerBot-${VERSION}-macOS-x64.dmg" \
+            "ScreenerBot-${VERSION}-macOS-x64.zip" \
+            "ScreenerBot-${VERSION}-Windows-arm64.msi" \
+            "ScreenerBot-${VERSION}-Windows-arm64.zip" \
+            "ScreenerBot-${VERSION}-Windows-x64.msi" \
+            "ScreenerBot-${VERSION}-Windows-x64.zip" | sort)"
+          actual="$(find . -maxdepth 1 -type f -exec basename {} \; | sort)"
+          [ "$actual" = "$expected" ] || {
+            echo "Release asset matrix is incomplete or contains unexpected files" >&2
+            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+            exit 1
+          }
+          sha256sum ScreenerBot-* > SHA256SUMS
 
       - name: Create Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2

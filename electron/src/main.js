@@ -967,8 +967,8 @@ function createApplicationMenu() {
         { type: 'separator' },
         {
           label: 'Check for Updates...',
-          click: async () => {
-            await shell.openExternal('https://screenerbot.io/download');
+          click: () => {
+            mainWindow?.webContents.send('updates:check');
           }
         },
         { type: 'separator' },
@@ -1164,8 +1164,8 @@ Other:
         { type: 'separator' },
         {
           label: 'Check for Updates...',
-          click: async () => {
-            await shell.openExternal('https://screenerbot.io/download');
+          click: () => {
+            mainWindow?.webContents.send('updates:check');
           }
         },
         ...(!isMac ? [
@@ -1592,6 +1592,13 @@ ipcMain.handle('app:get-zoom-level', () => {
 
 ipcMain.handle('app:get-version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('app:quit-for-update', () => {
+  console.log('[Electron] Verified installer opened; quitting cleanly for update');
+  isQuitting = true;
+  app.quit();
+  return true;
 });
 
 ipcMain.handle('app:toggle-fullscreen', () => {

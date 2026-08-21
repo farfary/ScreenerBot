@@ -14,6 +14,7 @@ pub struct VersionInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateInfo {
     pub version: String,
+    pub filename: String,
     pub download_url: String,
     pub file_size: u64,
     pub checksum: String,
@@ -47,13 +48,34 @@ pub(super) struct UpdateResponseData {
     pub release_notes: Option<String>,
     pub published_at: Option<String>,
     pub download_url: String,
+    pub filename: String,
     pub file_size: u64,
     pub checksum: String,
 }
 
 /// Download progress information
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdatePhase {
+    #[default]
+    Idle,
+    Checking,
+    UpToDate,
+    Available,
+    CheckFailed,
+    Downloading,
+    Verifying,
+    Ready,
+    Installing,
+    Applied,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct DownloadProgress {
+    pub version: Option<String>,
+    pub checksum: Option<String>,
     pub downloading: bool,
     pub bytes_downloaded: u64,
     pub total_bytes: u64,
@@ -64,9 +86,13 @@ pub struct DownloadProgress {
 }
 
 /// Update state
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct UpdateState {
+    pub phase: UpdatePhase,
     pub available_update: Option<UpdateInfo>,
     pub last_check: Option<DateTime<Utc>>,
+    pub last_check_attempt: Option<DateTime<Utc>>,
+    pub check_error: Option<String>,
     pub download_progress: DownloadProgress,
 }

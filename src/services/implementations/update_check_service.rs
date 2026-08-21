@@ -46,8 +46,13 @@ impl Service for UpdateCheckService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        // Update check is healthy if we can determine update availability
-        // (either true or false - we just need to have checked)
-        ServiceHealth::Healthy
+        let state = crate::version::get_update_state().await;
+        if let Some(error) = state.check_error {
+            ServiceHealth::Degraded(error)
+        } else if state.last_check.is_some() {
+            ServiceHealth::Healthy
+        } else {
+            ServiceHealth::Starting
+        }
     }
 }

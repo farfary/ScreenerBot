@@ -27,8 +27,9 @@ pub struct UpdateStatusResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DownloadRequest {
-    // Empty for now, could add options later
+    pub version: String,
 }
 
 #[derive(Debug, Serialize)]

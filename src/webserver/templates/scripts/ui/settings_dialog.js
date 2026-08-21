@@ -6,7 +6,6 @@ import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { getCurrentPage } from "../core/router.js";
-import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
@@ -104,6 +103,8 @@ export class SettingsDialog {
         // API returns { state: { available_update, download_progress, ... } }
         const state = data.state || data;
         const progress = state.download_progress || {};
+        globalUpdateState.checked = Boolean(state.last_check_attempt || state.last_check);
+        globalUpdateState.error = state.check_error || progress.error || null;
 
         if (progress.downloading) {
           globalUpdateState.downloading = true;
@@ -125,6 +126,10 @@ export class SettingsDialog {
           // Update available but not downloading yet
           globalUpdateState.available = true;
           globalUpdateState.info = state.available_update;
+        } else {
+          globalUpdateState.available = false;
+          globalUpdateState.info = null;
+          globalUpdateState.downloaded = false;
         }
       }
     } catch (err) {
@@ -158,14 +163,20 @@ export class SettingsDialog {
     try {
       const response = await fetch("/api/updates/check");
       const data = await response.json();
+      if (!response.ok || data.success === false) {
+        throw new Error(data.error?.message || data.error || "Failed to check for updates");
+      }
 
       globalUpdateState.checking = false;
+      globalUpdateState.error = null;
 
       if (data.update_available) {
         globalUpdateState.available = true;
         globalUpdateState.info = data.update; // API returns 'update' not 'update_info'
       } else {
         globalUpdateState.available = false;
+        globalUpdateState.info = null;
+        globalUpdateState.downloaded = false;
       }
     } catch (err) {
       console.error("Background update check failed:", err);
@@ -252,7 +263,7 @@ export class SettingsDialog {
 
     // Stop any active pollers
     if (this.downloadPoller) {
-      this.downloadPoller.stop();
+      this.downloadPoller.cleanup();
       this.downloadPoller = null;
     }
 
@@ -891,256 +902,6 @@ export class SettingsDialog {
   // ==========================================================================
 
   /**
-   * Build Updates tab content - Modern design with version history
-   */
-  _buildUpdatesTab() {
-    const { version, platform } = this.versionInfo;
-    const state = globalUpdateState;
-
-    // Build status section based on current state
-    let statusSection = "";
-
-    if (state.checking) {
-      statusSection = this._buildCheckingState();
-    } else if (state.error) {
-      statusSection = this._buildErrorState(state.error);
-    } else if (state.available && state.info) {
-      statusSection = this._buildUpdateAvailableState(state, version);
-    } else {
-      statusSection = this._buildUpToDateState(version);
-    }
-
-    return `
-      <div class="updates-container">
-        <!-- Main Content -->
-        <div class="updates-main">
-          <!-- Status Card -->
-          ${statusSection}
-        </div>
-        
-        <!-- Sidebar -->
-        <div class="updates-sidebar">
-          <!-- Current Version Card -->
-          <div class="updates-version-card">
-            <div class="version-card-header">
-              <div class="version-icon">
-                <i class="icon-box"></i>
-              </div>
-              <div class="version-info">
-                <h4>Current Installation</h4>
-                <span class="version-number">v${version}</span>
-              </div>
-            </div>
-            <div class="version-details">
-              <div class="detail-row">
-                <span class="detail-label">Platform</span>
-                <span class="detail-value">${platform || "Unknown"}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- System Info Section -->
-          <div class="updates-system-section">
-            <div class="system-header">
-              <div class="system-title">
-                <i class="icon-info"></i>
-                <span>Installation Details</span>
-              </div>
-            </div>
-            <div class="system-details">
-              <div class="detail-row">
-                <span class="detail-label">Version</span>
-                <span class="detail-value">v${version}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Platform</span>
-                <span class="detail-value">${platform || "Unknown"}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Auto Update</span>
-                <span class="detail-value channel-badge">Enabled</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      ${this._getUpdatesStyles()}
-    `;
-  }
-
-  /**
-   * Build checking for updates state
-   */
-  _buildCheckingState() {
-    return `
-      <div class="updates-status-card checking">
-        <div class="status-visual">
-          <div class="pulse-ring"></div>
-          <div class="status-icon-wrapper">
-            <i class="icon-refresh-cw spinning"></i>
-          </div>
-        </div>
-        <div class="status-content">
-          <h3>Checking for Updates</h3>
-          <p>Connecting to update server...</p>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Build error state
-   */
-  _buildErrorState(error) {
-    return `
-      <div class="updates-status-card error">
-        <div class="status-visual">
-          <div class="status-icon-wrapper error">
-            <i class="icon-triangle-alert"></i>
-          </div>
-        </div>
-        <div class="status-content">
-          <h3>Update Check Failed</h3>
-          <p class="error-message">${Utils.escapeHtml(error)}</p>
-        </div>
-        <div class="status-actions">
-          <button class="updates-btn secondary" id="retryUpdateBtn">
-            <i class="icon-refresh-cw"></i>
-            <span>Try Again</span>
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Build update available state
-   */
-  _buildUpdateAvailableState(state, currentVersion) {
-    const info = state.info;
-    const isDownloading = state.downloading;
-    const isDownloaded = state.downloaded;
-    const fileSize = info.file_size ? this._formatBytes(info.file_size) : null;
-
-    let actionContent = "";
-
-    if (isDownloaded) {
-      actionContent = `
-        <div class="download-success">
-          <div class="success-badge">
-            <i class="icon-circle-check"></i>
-            <span>Ready to Install</span>
-          </div>
-          <p class="install-hint">${this._getInstallHint()}</p>
-        </div>
-        <div class="status-actions">
-          <button class="updates-btn success" id="installUpdateBtn">
-            <i class="icon-download"></i>
-            <span>Install & Restart</span>
-          </button>
-        </div>
-      `;
-    } else if (isDownloading) {
-      actionContent = `
-        <div class="download-progress">
-          <div class="progress-header">
-            <span class="progress-status" id="downloadStatusText">Downloading update...</span>
-            <span class="progress-stats">
-              <span id="download-speed-text"></span>
-              <span id="download-percent-text">${Math.round(state.progress)}%</span>
-            </span>
-          </div>
-          <div class="progress-track">
-            <div class="progress-fill" id="downloadProgressBar" style="width: ${state.progress}%">
-              <div class="progress-glow"></div>
-            </div>
-          </div>
-          <div class="progress-footer">
-            <span id="downloadSizeText">${fileSize ? `0 / ${fileSize}` : ""}</span>
-            <span id="downloadEtaText"></span>
-          </div>
-        </div>
-      `;
-    } else {
-      actionContent = `
-        <div class="status-actions">
-          <button class="updates-btn primary" id="downloadUpdateBtn">
-            <i class="icon-download"></i>
-            <span>Download Update</span>
-            ${fileSize ? `<span class="btn-meta">(${fileSize})</span>` : ""}
-          </button>
-        </div>
-      `;
-    }
-
-    return `
-      <div class="updates-status-card available">
-        <div class="update-badge">New Version Available</div>
-        <div class="status-visual">
-          <div class="version-transition">
-            <span class="old-version">v${currentVersion}</span>
-            <i class="icon-arrow-right"></i>
-            <span class="new-version">v${info.version}</span>
-          </div>
-        </div>
-        <div class="status-content">
-          ${
-            info.release_notes
-              ? `
-            <div class="release-notes-preview">
-              <h4>What's New</h4>
-              <div class="notes-text">${Utils.escapeHtml(info.release_notes)}</div>
-            </div>
-          `
-              : ""
-          }
-        </div>
-        ${actionContent}
-      </div>
-    `;
-  }
-
-  /**
-   * Build up to date state
-   */
-  _buildUpToDateState(version) {
-    return `
-      <div class="updates-status-card success">
-        <div class="status-visual">
-          <div class="status-icon-wrapper success">
-            <i class="icon-circle-check"></i>
-          </div>
-        </div>
-        <div class="status-content">
-          <h3>You're Up to Date</h3>
-          <p>ScreenerBot v${version} is the latest version.</p>
-        </div>
-        <div class="status-actions">
-          <button class="updates-btn secondary" id="checkUpdatesBtn">
-            <i class="icon-refresh-cw"></i>
-            <span>Check Again</span>
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Get platform-specific install hint
-   */
-  _getInstallHint() {
-    const platform = this.versionInfo.platform || "";
-    if (platform.toLowerCase().includes("macos") || platform.toLowerCase().includes("darwin")) {
-      return "The installer will open. Drag ScreenerBot to your Applications folder.";
-    } else if (platform.toLowerCase().includes("windows")) {
-      return "The installer will guide you through the update process.";
-    } else if (platform.toLowerCase().includes("linux")) {
-      return "Run the AppImage or install the .deb package to update.";
-    }
-    return "Follow the installer instructions to complete the update.";
-  }
-
-  /**
    * Format bytes to human readable size
    */
   _formatBytes(bytes) {
@@ -1149,13 +910,6 @@ export class SettingsDialog {
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  }
-
-  /**
-   * Get styles for Updates tab (styles now in settings_dialog.css)
-   */
-  _getUpdatesStyles() {
-    return "";
   }
 
   /**
@@ -1173,145 +927,6 @@ export class SettingsDialog {
         () => this._startDownloadPoller(),
         () => this._updateUpdatesBadge()
       );
-    }
-  }
-
-  /**
-   * Attach event handlers for Updates tab
-   */
-  _attachUpdatesHandlers() {
-    if (!this.dialogEl) return;
-
-    const checkBtn = this.dialogEl.querySelector("#checkUpdatesBtn");
-    const retryBtn = this.dialogEl.querySelector("#retryUpdateBtn");
-    const downloadBtn = this.dialogEl.querySelector("#downloadUpdateBtn");
-    const installBtn = this.dialogEl.querySelector("#installUpdateBtn");
-
-    // Check / Retry Handler
-    const handleCheck = async () => {
-      globalUpdateState.checking = true;
-      globalUpdateState.error = null;
-      this._updateUpdatesTabUI();
-
-      try {
-        // Call the check API
-        const response = await fetch("/api/updates/check");
-        const data = await response.json();
-
-        globalUpdateState.checking = false;
-
-        if (data.update_available) {
-          globalUpdateState.available = true;
-          globalUpdateState.info = data.update; // API returns 'update' not 'update_info'
-        } else {
-          globalUpdateState.available = false;
-          globalUpdateState.info = null;
-        }
-      } catch (err) {
-        console.error("Update check failed:", err);
-        globalUpdateState.checking = false;
-        globalUpdateState.error = err.message || "Failed to check for updates";
-      }
-
-      this._updateUpdatesBadge();
-      this._updateUpdatesTabUI();
-    };
-
-    if (checkBtn) checkBtn.addEventListener("click", handleCheck);
-    if (retryBtn) retryBtn.addEventListener("click", handleCheck);
-
-    // Download Handler
-    if (downloadBtn) {
-      downloadBtn.addEventListener("click", async () => {
-        if (!globalUpdateState.info) return;
-
-        globalUpdateState.downloading = true;
-        globalUpdateState.progress = 0;
-        globalUpdateState.downloadStartTime = Date.now();
-        globalUpdateState.downloadedBytes = 0;
-        this._updateUpdatesTabUI();
-
-        try {
-          // Start download
-          const response = await fetch("/api/updates/download", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ version: globalUpdateState.info.version }),
-          });
-
-          if (!response.ok) throw new Error("Failed to start download");
-
-          // Start polling for progress
-          this._startDownloadPoller();
-        } catch (err) {
-          console.error("Download start failed:", err);
-          globalUpdateState.downloading = false;
-          globalUpdateState.error = err.message;
-          this._updateUpdatesTabUI();
-        }
-      });
-    }
-
-    // Install Handler
-    if (installBtn) {
-      installBtn.addEventListener("click", async () => {
-        const confirmResult = await ConfirmationDialog.show({
-          title: "Install Update",
-          message:
-            "ScreenerBot will install the update and close. The installer will launch automatically. Continue?",
-          confirmLabel: "Install",
-          cancelLabel: "Cancel",
-          variant: "warning",
-        });
-        if (!confirmResult.confirmed) return;
-
-        installBtn.disabled = true;
-        const originalText = installBtn.innerHTML;
-        installBtn.innerHTML = '<i class="icon-loader spinning"></i><span>Installing...</span>';
-
-        try {
-          const response = await fetch("/api/updates/install", {
-            method: "POST",
-          });
-          const data = await response.json();
-
-          if (!response.ok || !data.success) {
-            throw new Error(data.error || "Failed to open installer");
-          }
-
-          // Show success message
-          Utils.showToast({
-            type: "success",
-            title: "Update Ready",
-            message: "Closing app to complete installation...",
-          });
-
-          // Exit the app via backend API after a short delay
-          setTimeout(async () => {
-            try {
-              await fetch("/api/system/exit", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ delay_ms: 500 }),
-              });
-            } catch (exitErr) {
-              console.warn("Exit request failed:", exitErr);
-              // Fallback: just close the dialog
-              this.close();
-            }
-          }, 1000);
-        } catch (err) {
-          console.error("Install failed:", err);
-          installBtn.disabled = false;
-          installBtn.innerHTML = originalText;
-
-          Utils.showToast({
-            type: "error",
-            title: "Failed to Open Installer",
-            message: err.message || "Please try downloading again.",
-          });
-        }
-      });
     }
   }
 
@@ -1511,7 +1126,7 @@ export class SettingsDialog {
    * Start the download progress poller
    */
   _startDownloadPoller() {
-    if (this.downloadPoller) this.downloadPoller.stop();
+    if (this.downloadPoller) this.downloadPoller.cleanup();
 
     // Track download speed
     let lastProgress = 0;
@@ -1522,6 +1137,9 @@ export class SettingsDialog {
       try {
         const statusRes = await fetch("/api/updates/status");
         const data = await statusRes.json();
+        if (!statusRes.ok || data.success === false) {
+          throw new Error(data.error?.message || data.error || "Failed to read update status");
+        }
         // API returns { state: { download_progress: { downloading, progress_percent, completed, error, downloaded_bytes, total_bytes } } }
         const state = data.state || data;
         const progress = state.download_progress || {};
@@ -1598,7 +1216,8 @@ export class SettingsDialog {
           globalUpdateState.downloading = false;
           globalUpdateState.downloaded = true;
           globalUpdateState.progress = 100;
-          if (this.downloadPoller) this.downloadPoller.stop();
+          if (this.downloadPoller) this.downloadPoller.cleanup();
+          this.downloadPoller = null;
           this._updateUpdatesTabUI();
         } else if (progress.error) {
           throw new Error(progress.error || "Download failed");
@@ -1607,10 +1226,11 @@ export class SettingsDialog {
         console.error("Download poll error:", err);
         globalUpdateState.downloading = false;
         globalUpdateState.error = err.message;
-        if (this.downloadPoller) this.downloadPoller.stop();
+        if (this.downloadPoller) this.downloadPoller.cleanup();
+        this.downloadPoller = null;
         this._updateUpdatesTabUI();
       }
-    }, 1000);
+    }, { label: "UpdateDownload", intervalMs: 1000, pauseWhenHidden: false });
 
     this.downloadPoller.start();
   }
@@ -1658,6 +1278,13 @@ export function closeSettingsDialog() {
   if (settingsDialogInstance) {
     settingsDialogInstance.close();
   }
+}
+
+if (window.electronAPI?.onCheckForUpdates) {
+  window.electronAPI.onCheckForUpdates(async () => {
+    await showSettingsDialog({ tab: "updates" });
+    setTimeout(() => settingsDialogInstance?._performBackgroundUpdateCheck(), 150);
+  });
 }
 
 /**

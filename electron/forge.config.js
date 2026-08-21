@@ -30,13 +30,19 @@ module.exports = {
         path.join(__dirname, 'redist', isArm64 ? 'vc_redist.arm64.exe' : 'vc_redist.x64.exe')
       ] : [])
     ],
-    // macOS code signing (disabled by default - enable for distribution)
-    // osxSign: {},
-    // osxNotarize: {
-    //   appleId: process.env.APPLE_ID,
-    //   appleIdPassword: process.env.APPLE_PASSWORD,
-    //   teamId: process.env.APPLE_TEAM_ID,
-    // },
+    // A free ad-hoc signature keeps the bundle internally verifiable. When an
+    // Apple identity is available, the same config upgrades to trusted signing;
+    // notarization remains optional because it requires an Apple developer account.
+    osxSign: { identity: process.env.APPLE_SIGNING_IDENTITY || '-' },
+    ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
+      ? {
+          osxNotarize: {
+            appleId: process.env.APPLE_ID,
+            appleIdPassword: process.env.APPLE_PASSWORD,
+            teamId: process.env.APPLE_TEAM_ID,
+          },
+        }
+      : {}),
     darwinDarkModeSupport: true,
   },
   rebuildConfig: {},
@@ -134,9 +140,14 @@ module.exports = {
         ui: {
           chooseDirectory: true, // Allow user to choose install directory
         },
-        // Optional: Code signing for Windows
-        // certificateFile: process.env.WINDOWS_CERT_FILE,
-        // certificatePassword: process.env.WINDOWS_CERT_PASSWORD,
+        // Authenticode is optional until a certificate is affordable. Release
+        // integrity is still enforced independently with GitHub's asset digest.
+        ...(process.env.WINDOWS_CERT_FILE
+          ? {
+              certificateFile: process.env.WINDOWS_CERT_FILE,
+              certificatePassword: process.env.WINDOWS_CERT_PASSWORD,
+            }
+          : {}),
       }
     },
     {

@@ -276,30 +276,6 @@ pub(super) async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
     }
 }
 
-/// POST /api/system/exit — Exit the application
-/// Used for "Install & Restart" to close the app after opening the installer
-pub(super) async fn exit_app(Json(request): Json<ExitAppRequest>) -> Response {
-    logger::info(
-        LogTag::System,
-        &format!("Exit requested via API with delay: {}ms", request.delay_ms),
-    );
-
-    // Spawn exit task with optional delay
-    let delay_ms = request.delay_ms;
-    task::spawn(async move {
-        if delay_ms > 0 {
-            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-        }
-        logger::info(LogTag::System, "Exiting application...");
-        std::process::exit(0);
-    });
-
-    success_response(ExitAppResponse {
-        success: true,
-        message: format!("Application will exit in {}ms", request.delay_ms),
-    })
-}
-
 /// GET /api/system/data-stats — Get statistics for all databases and data files
 pub(super) async fn get_data_stats() -> Response {
     let mut databases = Vec::new();

@@ -20,7 +20,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/paths", get(handlers::get_paths))
         .route("/paths/open-data", post(handlers::open_data_directory))
         .route("/open-url", post(handlers::open_url))
-        .route("/exit", post(handlers::exit_app))
         .route("/data-stats", get(handlers::get_data_stats))
         .route("/client-ready", post(handlers::client_ready))
 }

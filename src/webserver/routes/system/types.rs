@@ -77,19 +77,6 @@ pub struct DataStatsResponse {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct ExitAppRequest {
-    /// Delay in milliseconds before exiting (default: 0)
-    #[serde(default)]
-    pub delay_ms: u64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ExitAppResponse {
-    pub success: bool,
-    pub message: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
 pub struct OpenUrlRequest {
     pub url: String,
 }
