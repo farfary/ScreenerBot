@@ -66,6 +66,14 @@ pub struct WalletDatabase {
     database_path: String,
     schema_version: u32,
     chain: ChainId,
+    /// The wallet address every read/write in this database is scoped to.
+    /// Resolved ONCE (here and on `rebind_subject`) rather than re-derived on
+    /// every query, so a query never has to re-resolve "the configured
+    /// wallet" — and never touches signing/key material to do it, since
+    /// `configured_address_async()` is key-free once the multi-wallet
+    /// database is initialized. See `rebind_subject` for how this stays
+    /// current when the main wallet changes.
+    subject: String,
 }
 impl WalletDatabase {
     /// Create new WalletDatabase with connection pooling
@@ -91,11 +99,16 @@ impl WalletDatabase {
             .build(manager)
             .map_err(|e| format!("Failed to create wallet connection pool: {e}"))?;
 
+        let subject = crate::chains::solana::accounts::configured_address_async()
+            .await
+            .map_err(|e| format!("Failed to resolve wallet-monitor subject: {e}"))?;
+
         let mut db = WalletDatabase {
             pool,
             database_path: database_path_str.clone(),
             schema_version: WALLET_SCHEMA_VERSION,
             chain,
+            subject,
         };
 
         // Initialize database schema
@@ -105,9 +118,20 @@ impl WalletDatabase {
         Ok(db)
     }
 
+    /// Rebind the wallet-monitor's subject to whichever wallet is now main,
+    /// without decrypting anything (`configured_address_async()` is
+    /// key-free once the multi-wallet database is initialized). Called by
+    /// `crate::wallets::manager::crud` after any mutation that can change
+    /// the main wallet, so every subsequent snapshot/dashboard/flow query
+    /// scopes to the new wallet instead of a stale cached address.
+    pub async fn rebind_subject(&mut self) -> Result<(), String> {
+        self.subject = crate::chains::solana::accounts::configured_address_async().await?;
+        Ok(())
+    }
+
     /// Initialize database schema with all tables and indexes
     async fn initialize_schema(&mut self) -> Result<(), String> {
-        let conn = self.get_connection()?;
+        let mut conn = self.get_connection()?;
 
         // Create all tables
         conn.execute(SCHEMA_WALLET_SNAPSHOTS, [])
@@ -145,7 +169,7 @@ impl WalletDatabase {
         )
         .ok(); // Ignore error if column already exists
 
-        self.migrate_chain_identity(&conn)?;
+        self.migrate_chain_identity(&mut conn)?;
 
         // Create all indexes
         for index_sql in WALLET_INDEXES {
@@ -170,13 +194,11 @@ impl WalletDatabase {
         .map_err(|e| format!("Failed to set wallet schema version: {e}"))?;
 
         // Store current wallet address in metadata
-        let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
         conn.execute(
             "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES (?1, ?2)",
             params![
                 format!("current_wallet:{}", self.chain.as_str()),
-                wallet_address
+                self.subject
             ],
         )
         .map_err(|e| format!("Failed to set current_wallet in metadata: {e}"))?;
@@ -189,7 +211,19 @@ impl WalletDatabase {
         Ok(())
     }
 
-    fn migrate_chain_identity(&self, conn: &Connection) -> Result<(), String> {
+    /// Rebuild the pre-chain-identity wallet-monitor tables to the
+    /// `(chain_id, wallet_address, ...)` shape.
+    ///
+    /// `foreign_keys` cannot be toggled inside a transaction, so it is
+    /// disabled here (outside any transaction) and unconditionally restored
+    /// after the migration closure below runs — on every exit path, success
+    /// or failure — modeled on the same guard in
+    /// `crate::transactions::database::operations`'s schema migrations. A
+    /// failure inside the closure leaves `tx` unc­ommitted, so it rolls back
+    /// on drop; the pragma restoration afterward means a crash or error
+    /// between the rebuild and the final commit can never leave the pooled
+    /// connection mid-transaction or with foreign-key enforcement off.
+    fn migrate_chain_identity(&self, conn: &mut Connection) -> Result<(), String> {
         let has_chain: bool = conn
             .prepare("PRAGMA table_info(wallet_snapshots)")
             .map_err(|e| format!("Failed to inspect wallet snapshot schema: {e}"))?
@@ -200,39 +234,60 @@ impl WalletDatabase {
         if has_chain {
             return Ok(());
         }
-        let row_count = |table: &str| -> Result<i64, String> {
+
+        fn row_count(conn: &Connection, table: &str) -> Result<i64, String> {
             conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                 row.get(0)
             })
             .map_err(|e| format!("Failed to count {table} before wallet chain migration: {e}"))
-        };
+        }
         let expected = [
-            ("wallet_snapshots", row_count("wallet_snapshots")?),
-            ("sol_flow_cache", row_count("sol_flow_cache")?),
+            ("wallet_snapshots", row_count(conn, "wallet_snapshots")?),
+            ("sol_flow_cache", row_count(conn, "sol_flow_cache")?),
             (
                 "wallet_dashboard_metrics",
-                row_count("wallet_dashboard_metrics")?,
+                row_count(conn, "wallet_dashboard_metrics")?,
             ),
         ];
-        conn.execute_batch("PRAGMA foreign_keys = OFF; BEGIN IMMEDIATE; CREATE TABLE wallet_snapshots__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL, snapshot_time TEXT NOT NULL, sol_balance REAL NOT NULL, sol_balance_lamports INTEGER NOT NULL, total_equity_sol REAL, total_tokens_count INTEGER NOT NULL DEFAULT 0, total_nfts_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now'))); INSERT INTO wallet_snapshots__chain_v1 (id, chain_id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count, total_nfts_count, created_at) SELECT id, 'solana', wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count, total_nfts_count, created_at FROM wallet_snapshots; DROP TABLE wallet_snapshots; ALTER TABLE wallet_snapshots__chain_v1 RENAME TO wallet_snapshots; CREATE TABLE sol_flow_cache__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', signature TEXT NOT NULL, timestamp TEXT NOT NULL, sol_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, signature)); INSERT INTO sol_flow_cache__chain_v1 (chain_id, wallet_address, signature, timestamp, sol_delta, created_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), signature, timestamp, sol_delta, created_at FROM sol_flow_cache; DROP TABLE sol_flow_cache; ALTER TABLE sol_flow_cache__chain_v1 RENAME TO sol_flow_cache; CREATE TABLE wallet_dashboard_metrics__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', window_key TEXT NOT NULL, window_hours INTEGER NOT NULL, snapshot_limit INTEGER NOT NULL, token_limit INTEGER NOT NULL, payload_blob BLOB NOT NULL, payload_format TEXT NOT NULL DEFAULT 'json-gzip', computed_at TEXT NOT NULL, valid_until TEXT NOT NULL, computation_duration_ms INTEGER, snapshot_count INTEGER NOT NULL DEFAULT 0, flow_cache_rows INTEGER NOT NULL DEFAULT 0, last_processed_timestamp TEXT, last_processed_signature TEXT, window_start TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, window_key)); INSERT INTO wallet_dashboard_metrics__chain_v1 (chain_id, wallet_address, window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at FROM wallet_dashboard_metrics; DROP TABLE wallet_dashboard_metrics; ALTER TABLE wallet_dashboard_metrics__chain_v1 RENAME TO wallet_dashboard_metrics; COMMIT; PRAGMA foreign_keys = ON;")
-            .map_err(|e| format!("Failed to migrate wallet chain identity: {e}"))?;
-        for (table, count) in expected {
-            let actual = row_count(table)?;
-            if actual != count {
-                return Err(format!("Wallet monitor chain migration changed {table} row count: expected {count}, found {actual}"));
+
+        conn.pragma_update(None, "foreign_keys", 0).map_err(|e| {
+            format!("Failed to disable foreign_keys for wallet chain migration: {e}")
+        })?;
+
+        let migration_result = (|| -> Result<(), String> {
+            let tx = conn
+                .transaction()
+                .map_err(|e| format!("Failed to begin wallet chain migration: {e}"))?;
+
+            tx.execute_batch("CREATE TABLE wallet_snapshots__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL, snapshot_time TEXT NOT NULL, sol_balance REAL NOT NULL, sol_balance_lamports INTEGER NOT NULL, total_equity_sol REAL, total_tokens_count INTEGER NOT NULL DEFAULT 0, total_nfts_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now'))); INSERT INTO wallet_snapshots__chain_v1 (id, chain_id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count, total_nfts_count, created_at) SELECT id, 'solana', wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count, total_nfts_count, created_at FROM wallet_snapshots; DROP TABLE wallet_snapshots; ALTER TABLE wallet_snapshots__chain_v1 RENAME TO wallet_snapshots; CREATE TABLE sol_flow_cache__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', signature TEXT NOT NULL, timestamp TEXT NOT NULL, sol_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, signature)); INSERT INTO sol_flow_cache__chain_v1 (chain_id, wallet_address, signature, timestamp, sol_delta, created_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), signature, timestamp, sol_delta, created_at FROM sol_flow_cache; DROP TABLE sol_flow_cache; ALTER TABLE sol_flow_cache__chain_v1 RENAME TO sol_flow_cache; CREATE TABLE wallet_dashboard_metrics__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', window_key TEXT NOT NULL, window_hours INTEGER NOT NULL, snapshot_limit INTEGER NOT NULL, token_limit INTEGER NOT NULL, payload_blob BLOB NOT NULL, payload_format TEXT NOT NULL DEFAULT 'json-gzip', computed_at TEXT NOT NULL, valid_until TEXT NOT NULL, computation_duration_ms INTEGER, snapshot_count INTEGER NOT NULL DEFAULT 0, flow_cache_rows INTEGER NOT NULL DEFAULT 0, last_processed_timestamp TEXT, last_processed_signature TEXT, window_start TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, window_key)); INSERT INTO wallet_dashboard_metrics__chain_v1 (chain_id, wallet_address, window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at FROM wallet_dashboard_metrics; DROP TABLE wallet_dashboard_metrics; ALTER TABLE wallet_dashboard_metrics__chain_v1 RENAME TO wallet_dashboard_metrics;")
+                .map_err(|e| format!("Failed to migrate wallet chain identity: {e}"))?;
+
+            for (table, count) in expected {
+                let actual = row_count(&tx, table)?;
+                if actual != count {
+                    return Err(format!("Wallet monitor chain migration changed {table} row count: expected {count}, found {actual}"));
+                }
             }
-        }
-        let fk_errors: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
-                row.get(0)
-            })
-            .map_err(|e| format!("Failed to verify wallet chain migration: {e}"))?;
-        if fk_errors != 0 {
-            return Err(format!(
-                "Wallet monitor chain migration foreign key check found {fk_errors} errors"
-            ));
-        }
-        Ok(())
+            let fk_errors: i64 = tx
+                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                    row.get(0)
+                })
+                .map_err(|e| format!("Failed to verify wallet chain migration: {e}"))?;
+            if fk_errors != 0 {
+                return Err(format!(
+                    "Wallet monitor chain migration foreign key check found {fk_errors} errors"
+                ));
+            }
+
+            tx.commit()
+                .map_err(|e| format!("Failed to commit wallet chain migration: {e}"))
+        })();
+
+        conn.pragma_update(None, "foreign_keys", 1).map_err(|e| {
+            format!("Failed to re-enable foreign_keys after wallet chain migration: {e}")
+        })?;
+
+        migration_result
     }
 
     /// Get database connection from pool
@@ -249,8 +304,6 @@ impl WalletDatabase {
     /// must use `get_wallet_worth()` (live) or `get_latest_snapshot_with_balances()`.
     pub fn get_recent_snapshots(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
 
         let mut stmt = conn
             .prepare(
@@ -266,7 +319,7 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to prepare snapshots query: {e}"))?;
 
         let snapshot_iter = stmt
-            .query_map(params![self.chain.as_str(), wallet_address, limit], |row| {
+            .query_map(params![self.chain.as_str(), self.subject, limit], |row| {
                 Self::map_snapshot_row(row)
             })
             .map_err(|e| format!("Failed to execute snapshots query: {e}"))?;
@@ -330,8 +383,8 @@ impl WalletDatabase {
 
         let total_snapshots: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM wallet_snapshots WHERE chain_id = ?1",
-                params![self.chain.as_str()],
+                "SELECT COUNT(*) FROM wallet_snapshots WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), self.subject],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count snapshots: {e}"))?;
@@ -341,12 +394,12 @@ impl WalletDatabase {
             .query_row(
                 r#"
             SELECT wallet_address, snapshot_time, sol_balance, total_tokens_count
-            FROM wallet_snapshots 
-            WHERE chain_id = ?1
-            ORDER BY snapshot_time DESC 
+            FROM wallet_snapshots
+            WHERE chain_id = ?1 AND wallet_address = ?2
+            ORDER BY snapshot_time DESC
             LIMIT 1
             "#,
-                params![self.chain.as_str()],
+                params![self.chain.as_str(), self.subject],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
@@ -468,15 +521,15 @@ impl WalletDatabase {
         let deleted_count = conn
             .execute(
                 r#"
-            DELETE FROM wallet_snapshots 
-            WHERE chain_id = ?1 AND id NOT IN (
-                SELECT id FROM wallet_snapshots 
-                WHERE chain_id = ?1
-                ORDER BY snapshot_time DESC 
+            DELETE FROM wallet_snapshots
+            WHERE chain_id = ?1 AND wallet_address = ?2 AND id NOT IN (
+                SELECT id FROM wallet_snapshots
+                WHERE chain_id = ?1 AND wallet_address = ?2
+                ORDER BY snapshot_time DESC
                 LIMIT 1000
             )
             "#,
-                params![self.chain.as_str()],
+                params![self.chain.as_str(), self.subject],
             )
             .map_err(|e| format!("Failed to cleanup old snapshots: {e}"))?;
 
@@ -554,17 +607,18 @@ mod migration_tests {
             database_path: ":memory:".to_owned(),
             schema_version: WALLET_SCHEMA_VERSION,
             chain: ChainId::Solana,
+            subject: "MAIN_WALLET_ADDR".to_owned(),
         }
     }
 
     #[test]
     fn legacy_wallet_monitor_tables_migrate_to_chain_scoped_schema_losslessly_and_idempotently() {
-        let conn = legacy_connection();
+        let mut conn = legacy_connection();
         let db = unmigrated_db();
 
-        db.migrate_chain_identity(&conn)
+        db.migrate_chain_identity(&mut conn)
             .expect("migrate legacy wallet-monitor database");
-        db.migrate_chain_identity(&conn)
+        db.migrate_chain_identity(&mut conn)
             .expect("repeat wallet-monitor chain migration");
 
         for (table, expected) in [
@@ -604,5 +658,73 @@ mod migration_tests {
             .optional()
             .unwrap()
             .is_none());
+    }
+
+    /// A migration that fails partway (here: the rebuild's very first `CREATE
+    /// TABLE` collides with a pre-existing `wallet_snapshots__chain_v1`, a
+    /// deterministic and reproducible way to fail before any row is copied)
+    /// must leave the connection exactly as it found it: autocommit restored,
+    /// `foreign_keys` back on, and the original legacy data untouched. This is
+    /// the exception-safety the pragma/transaction guard in
+    /// `migrate_chain_identity` exists for.
+    #[test]
+    fn failed_wallet_monitor_chain_migration_leaves_connection_clean_and_data_intact() {
+        let mut conn = legacy_connection();
+        conn.execute_batch("CREATE TABLE wallet_snapshots__chain_v1 (poison INTEGER);")
+            .expect("seed a colliding table to force the migration to fail");
+        let db = unmigrated_db();
+
+        let result = db.migrate_chain_identity(&mut conn);
+        assert!(result.is_err(), "colliding table must fail the migration");
+
+        assert!(
+            conn.is_autocommit(),
+            "a failed migration must not leave the connection mid-transaction"
+        );
+        let foreign_keys_on: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .expect("read foreign_keys pragma");
+        assert_eq!(
+            foreign_keys_on, 1,
+            "a failed migration must restore foreign_keys = ON"
+        );
+
+        // Original legacy data must be exactly as it was -- the migration never
+        // reached a copy or a commit.
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| {
+                row.get(0)
+            })
+            .expect("count legacy wallet_snapshots rows");
+        assert_eq!(count, 1, "legacy wallet_snapshots row must survive intact");
+        let has_chain_id: bool = conn
+            .prepare("PRAGMA table_info(wallet_snapshots)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|column| column == "chain_id");
+        assert!(
+            !has_chain_id,
+            "legacy wallet_snapshots must still be pre-migration shape"
+        );
+        let current_wallet: String = conn
+            .query_row(
+                "SELECT value FROM wallet_metadata WHERE key = 'current_wallet'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read current_wallet metadata");
+        assert_eq!(current_wallet, "MAIN_WALLET_ADDR");
+
+        // Now remove the collision and confirm the migration is still usable
+        // (retryable) and idempotent from a clean connection state.
+        conn.execute_batch("DROP TABLE wallet_snapshots__chain_v1;")
+            .expect("remove colliding table");
+        db.migrate_chain_identity(&mut conn)
+            .expect("migration succeeds once the collision is gone");
+        db.migrate_chain_identity(&mut conn)
+            .expect("second migration call remains a no-op");
+        assert!(conn.is_autocommit());
     }
 }

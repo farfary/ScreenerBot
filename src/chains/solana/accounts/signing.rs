@@ -132,22 +132,50 @@ pub async fn configured_keypair_async() -> Result<Keypair, String> {
     configured_keypair_from_legacy_config()
 }
 
+/// Async, key-free form of [`configured_address`]. Once the multi-wallet
+/// database is initialized this never touches `main_keypair()` or
+/// `MAIN_KEYPAIR_CACHE` — it reads `crate::wallets::get_main_address()`,
+/// which resolves the cached wallet record only. Any read-only caller that
+/// wants an address (dashboard, wallet-monitor snapshots/metrics) should
+/// prefer this over `configured_pubkey`/`configured_keypair`, which force a
+/// decrypt.
+pub async fn configured_address_async() -> Result<String, String> {
+    if crate::wallets::is_initialized().await {
+        return crate::wallets::get_main_address().await;
+    }
+    configured_keypair_from_legacy_config().map(|kp| kp.pubkey().to_string())
+}
+
 /// The configured trading wallet's keypair — the multi-wallet database's
 /// main wallet once it's initialized, else the legacy single-wallet keypair
-/// straight from `config.toml`. Callable from sync or async context: when an
-/// executor is running, this drives the async lookup with a bare
-/// `futures::executor::block_on` rather than Tokio's `block_in_place` (which
-/// requires the multi-thread runtime and panics under `#[tokio::test]`'s
-/// current-thread flavor, or any future current-thread executor). Safe
-/// because the awaited work here is only short-lived lock acquisition
-/// (`RwLock`/`Mutex`), never I/O or timers that depend on being polled by
-/// the enclosing runtime's reactor.
+/// straight from `config.toml`. Callable from sync or async context.
+///
+/// On a multi-thread Tokio runtime this drives the async lookup via
+/// `tokio::task::block_in_place`, which tells the runtime this worker thread
+/// is about to block so it can move the thread's other queued tasks
+/// elsewhere before `futures::executor::block_on` parks it — the safe way to
+/// wait synchronously without starving the runtime.
+///
+/// `block_in_place` panics on a current-thread runtime (there is no other
+/// worker to move work to), and blocking there with a bare `block_on` risks
+/// a real deadlock if the awaited path ever needs a task that only the
+/// current thread could poll. Rather than gamble on that never happening,
+/// a current-thread caller gets a clear error telling it to use
+/// `configured_keypair_async()` instead — never a hang.
 pub fn configured_keypair() -> Result<Keypair, String> {
-    if tokio::runtime::Handle::try_current().is_ok() {
-        return futures::executor::block_on(configured_keypair_async());
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => tokio::task::block_in_place(|| {
+                futures::executor::block_on(configured_keypair_async())
+            }),
+            _ => Err(
+                "configured_keypair() cannot run synchronously on a current-thread Tokio \
+                 runtime (would risk a deadlock) - call configured_keypair_async() instead"
+                    .to_owned(),
+            ),
+        },
+        Err(_) => configured_keypair_from_legacy_config(),
     }
-
-    configured_keypair_from_legacy_config()
 }
 
 /// Legacy fallback: decrypt the single wallet stored directly in
@@ -170,16 +198,37 @@ fn configured_keypair_from_legacy_config() -> Result<Keypair, String> {
     })
 }
 
-/// The configured trading wallet's public key.
+/// The configured trading wallet's public key, parsed from
+/// [`configured_address`] — never decrypts a keypair merely to derive a
+/// public key that is already recoverable from the stored address string.
 pub fn configured_pubkey() -> Result<Pubkey, String> {
-    configured_keypair().map(|kp| kp.pubkey())
+    use std::str::FromStr;
+
+    let address = configured_address()?;
+    Pubkey::from_str(&address).map_err(|e| format!("Invalid configured wallet address: {e}"))
 }
 
 /// The configured trading wallet's address as a base58 string — the only
 /// one of this trio that shared code outside `crate::chains::solana` may
 /// call (`crate::config::get_wallet_pubkey_string`).
+///
+/// Key-free once the multi-wallet database is initialized (see
+/// `configured_address_async`); only the legacy pre-multi-wallet fallback
+/// decrypts. Same runtime-flavor bridging as `configured_keypair`.
 pub fn configured_address() -> Result<String, String> {
-    configured_pubkey().map(|pk| pk.to_string())
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => tokio::task::block_in_place(|| {
+                futures::executor::block_on(configured_address_async())
+            }),
+            _ => Err(
+                "configured_address() cannot run synchronously on a current-thread Tokio \
+                 runtime (would risk a deadlock) - call configured_address_async() instead"
+                    .to_owned(),
+            ),
+        },
+        Err(_) => configured_keypair_from_legacy_config().map(|kp| kp.pubkey().to_string()),
+    }
 }
 
 #[cfg(test)]

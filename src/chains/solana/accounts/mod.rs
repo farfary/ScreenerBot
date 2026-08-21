@@ -18,7 +18,7 @@ pub use keypair::{
     parse_private_key, parse_pubkey_safe, validate_address,
 };
 pub use signing::{
-    cached_main_wallet_id, configured_address, configured_keypair, configured_pubkey,
-    invalidate_main_wallet_cache, keypair_for_wallet, main_keypair,
-    sign_message_for_active_wallets, sign_message_with_main_wallet,
+    cached_main_wallet_id, configured_address, configured_address_async, configured_keypair,
+    configured_keypair_async, configured_pubkey, invalidate_main_wallet_cache, keypair_for_wallet,
+    main_keypair, sign_message_for_active_wallets, sign_message_with_main_wallet,
 };

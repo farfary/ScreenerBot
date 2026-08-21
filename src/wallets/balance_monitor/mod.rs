@@ -37,6 +37,8 @@ pub use service::{
     initialize_wallet_database,
     // Dashboard cache management
     refresh_dashboard_cache,
+    // Rebind the monitor subject after a main-wallet change
+    refresh_wallet_monitor_subject,
     start_wallet_monitoring_service,
 };
 

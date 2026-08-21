@@ -23,12 +23,7 @@ impl WalletDatabase {
 
         let result = stmt
             .query_row(
-                params![
-                    self.chain.as_str(),
-                    crate::utils::get_wallet_address()
-                        .map_err(|e| format!("Failed to get wallet address: {e}"))?,
-                    window_key
-                ],
+                params![self.chain.as_str(), self.subject, window_key],
                 |row| {
                     let computed_at_str: String = row.get(6)?;
                     let valid_until_str: String = row.get(7)?;
@@ -97,7 +92,7 @@ impl WalletDatabase {
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, datetime('now'))",
             params![
                 self.chain.as_str(),
-                crate::utils::get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?,
+                self.subject,
                 metrics.window_key,
                 metrics.window_hours,
                 metrics.snapshot_limit as i64,
@@ -125,7 +120,7 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
         conn.execute(
             "DELETE FROM wallet_dashboard_metrics WHERE chain_id = ?1 AND wallet_address = ?2 AND window_key = ?3",
-            params![self.chain.as_str(), crate::utils::get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?, window_key],
+            params![self.chain.as_str(), self.subject, window_key],
         )
         .map_err(|e| format!("Failed to invalidate dashboard metrics: {e}"))?;
         Ok(())
@@ -136,7 +131,7 @@ impl WalletDatabase {
         let deleted = conn
             .execute(
                 "DELETE FROM wallet_dashboard_metrics WHERE chain_id = ?1 AND wallet_address = ?2 AND valid_until < datetime('now')",
-                params![self.chain.as_str(), crate::utils::get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?],
+                params![self.chain.as_str(), self.subject],
             )
             .map_err(|e| format!("Failed to cleanup dashboard metrics: {e}"))?;
         Ok(deleted.max(0) as u64)

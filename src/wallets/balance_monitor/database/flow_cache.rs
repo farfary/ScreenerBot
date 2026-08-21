@@ -23,11 +23,9 @@ impl WalletDatabase {
              WHERE chain_id = ?1 AND wallet_address = ?2 AND timestamp >= ?3",
         );
 
-        let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![
             Box::new(self.chain.as_str().to_owned()),
-            Box::new(wallet_address),
+            Box::new(self.subject.clone()),
             Box::new(from.to_rfc3339()),
         ];
         if let Some(to_ts) = to {
@@ -68,8 +66,7 @@ impl WalletDatabase {
             for (sig, ts, delta) in rows.iter() {
                 stmt.execute(params![
                     self.chain.as_str(),
-                    crate::utils::get_wallet_address()
-                        .map_err(|e| format!("Failed to get wallet address: {e}"))?,
+                    self.subject,
                     sig,
                     ts.to_rfc3339(),
                     *delta
@@ -89,14 +86,7 @@ impl WalletDatabase {
             .prepare("SELECT MAX(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
             .map_err(|e| format!("Failed to prepare max timestamp query: {e}"))?;
         let ts: Option<String> = stmt
-            .query_row(
-                params![
-                    self.chain.as_str(),
-                    crate::utils::get_wallet_address()
-                        .map_err(|e| format!("Failed to get wallet address: {e}"))?
-                ],
-                |row| row.get(0),
-            )
+            .query_row(params![self.chain.as_str(), self.subject], |row| row.get(0))
             .optional()
             .map_err(|e| format!("Failed to query max timestamp: {e}"))?
             .flatten();
@@ -117,14 +107,7 @@ impl WalletDatabase {
             .prepare("SELECT MIN(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
             .map_err(|e| format!("Failed to prepare min timestamp query: {e}"))?;
         let ts: Option<String> = stmt
-            .query_row(
-                params![
-                    self.chain.as_str(),
-                    crate::utils::get_wallet_address()
-                        .map_err(|e| format!("Failed to get wallet address: {e}"))?
-                ],
-                |row| row.get(0),
-            )
+            .query_row(params![self.chain.as_str(), self.subject], |row| row.get(0))
             .optional()
             .map_err(|e| format!("Failed to query min timestamp: {e}"))?
             .flatten();
@@ -144,11 +127,7 @@ impl WalletDatabase {
         let rows: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2",
-                params![
-                    self.chain.as_str(),
-                    crate::utils::get_wallet_address()
-                        .map_err(|e| format!("Failed to get wallet address: {e}"))?
-                ],
+                params![self.chain.as_str(), self.subject],
                 |row| row.get(0),
             )
             .unwrap_or_default();

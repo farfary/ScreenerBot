@@ -7,6 +7,20 @@ use super::super::types::{
 };
 use crate::logger::{self, LogTag};
 
+/// Rebind the wallet-monitor's stable subject after a mutation that can
+/// change which wallet is main. Never decrypts anything and never fails the
+/// wallet mutation itself — a failure here just means the monitor keeps
+/// scoping to its previous subject until the next successful rebind, so it
+/// is logged and swallowed rather than propagated.
+async fn refresh_wallet_monitor_subject() {
+    if let Err(err) = crate::wallets::balance_monitor::refresh_wallet_monitor_subject().await {
+        logger::warning(
+            LogTag::Wallet,
+            &format!("Failed to refresh wallet-monitor subject: {err}"),
+        );
+    }
+}
+
 /// Create a new wallet
 pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, String> {
     let db_guard = super::WALLETS_DB.read().await;
@@ -43,6 +57,7 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Strin
         drop(db_guard);
         super::cache::refresh_main_wallet_cache().await?;
         crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
+        refresh_wallet_monitor_subject().await;
     } else {
         db.insert_wallet(
             &request.name,
@@ -106,6 +121,7 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Strin
         drop(db_guard);
         super::cache::refresh_main_wallet_cache().await?;
         crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
+        refresh_wallet_monitor_subject().await;
     } else {
         db.insert_wallet(
             &request.name,
@@ -175,6 +191,7 @@ pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Resu
         drop(db_guard);
         super::cache::refresh_main_wallet_cache().await?;
         crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
+        refresh_wallet_monitor_subject().await;
     }
 
     super::WALLETS_DB
@@ -198,6 +215,7 @@ pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
     drop(db_guard);
     super::cache::refresh_main_wallet_cache().await?;
     crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
+    refresh_wallet_monitor_subject().await;
 
     logger::info(
         LogTag::Wallet,
