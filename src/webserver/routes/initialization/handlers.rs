@@ -4,16 +4,17 @@ use super::types::*;
 use super::validation::{
     clear_setup_validation, consume_setup_validation, store_setup_validation, validate_rpc_url_list,
 };
+use crate::chains::solana::solana_sdk::signature::Signer;
 use crate::{
     arguments,
+    chains::solana::rpc,
     config::{self, schemas::Config},
     global,
     logger::{self, LogTag},
-    rpc, services,
+    services,
     webserver::utils::{error_response, success_response},
 };
 use axum::{extract::Json, http::StatusCode, response::Response};
-use solana_sdk::signature::Signer;
 
 /// GET /api/initialization/status
 /// Check if initialization is required

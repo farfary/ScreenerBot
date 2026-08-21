@@ -20,10 +20,16 @@ impl WalletDatabase {
                 COALESCE(SUM(CASE WHEN sol_delta < 0 THEN -sol_delta ELSE 0 END), 0), \
                 COUNT(signature) \
              FROM sol_flow_cache \
-             WHERE timestamp >= ?1",
+             WHERE chain_id = ?1 AND wallet_address = ?2 AND timestamp >= ?3",
         );
 
-        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(from.to_rfc3339())];
+        let wallet_address = crate::utils::get_wallet_address()
+            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![
+            Box::new(self.chain.as_str().to_owned()),
+            Box::new(wallet_address),
+            Box::new(from.to_rfc3339()),
+        ];
         if let Some(to_ts) = to {
             query.push_str(&format!(" AND timestamp <= ?{}", params_vec.len() + 1));
             params_vec.push(Box::new(to_ts.to_rfc3339()));
@@ -56,12 +62,19 @@ impl WalletDatabase {
         {
             let mut stmt = tx
                 .prepare(
-                    "INSERT OR REPLACE INTO sol_flow_cache(signature, timestamp, sol_delta) VALUES (?1, ?2, ?3)",
+                    "INSERT OR REPLACE INTO sol_flow_cache(chain_id, wallet_address, signature, timestamp, sol_delta) VALUES (?1, ?2, ?3, ?4, ?5)",
                 )
                 .map_err(|e| format!("Failed to prepare flow cache upsert: {e}"))?;
             for (sig, ts, delta) in rows.iter() {
-                stmt.execute(params![sig, ts.to_rfc3339(), *delta])
-                    .map_err(|e| format!("Failed to upsert flow row: {e}"))?;
+                stmt.execute(params![
+                    self.chain.as_str(),
+                    crate::utils::get_wallet_address()
+                        .map_err(|e| format!("Failed to get wallet address: {e}"))?,
+                    sig,
+                    ts.to_rfc3339(),
+                    *delta
+                ])
+                .map_err(|e| format!("Failed to upsert flow row: {e}"))?;
             }
         }
         tx.commit()
@@ -73,10 +86,17 @@ impl WalletDatabase {
     pub fn get_flow_cache_max_ts(&self) -> Result<Option<DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
         let mut stmt = conn
-            .prepare("SELECT MAX(timestamp) FROM sol_flow_cache")
+            .prepare("SELECT MAX(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
             .map_err(|e| format!("Failed to prepare max timestamp query: {e}"))?;
         let ts: Option<String> = stmt
-            .query_row([], |row| row.get(0))
+            .query_row(
+                params![
+                    self.chain.as_str(),
+                    crate::utils::get_wallet_address()
+                        .map_err(|e| format!("Failed to get wallet address: {e}"))?
+                ],
+                |row| row.get(0),
+            )
             .optional()
             .map_err(|e| format!("Failed to query max timestamp: {e}"))?
             .flatten();
@@ -94,10 +114,17 @@ impl WalletDatabase {
     pub fn get_flow_cache_min_ts(&self) -> Result<Option<DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
         let mut stmt = conn
-            .prepare("SELECT MIN(timestamp) FROM sol_flow_cache")
+            .prepare("SELECT MIN(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
             .map_err(|e| format!("Failed to prepare min timestamp query: {e}"))?;
         let ts: Option<String> = stmt
-            .query_row([], |row| row.get(0))
+            .query_row(
+                params![
+                    self.chain.as_str(),
+                    crate::utils::get_wallet_address()
+                        .map_err(|e| format!("Failed to get wallet address: {e}"))?
+                ],
+                |row| row.get(0),
+            )
             .optional()
             .map_err(|e| format!("Failed to query min timestamp: {e}"))?
             .flatten();
@@ -115,7 +142,15 @@ impl WalletDatabase {
     pub fn get_flow_cache_stats(&self) -> Result<WalletFlowCacheStats, String> {
         let conn = self.get_connection()?;
         let rows: i64 = conn
-            .query_row("SELECT COUNT(*) FROM sol_flow_cache", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![
+                    self.chain.as_str(),
+                    crate::utils::get_wallet_address()
+                        .map_err(|e| format!("Failed to get wallet address: {e}"))?
+                ],
+                |row| row.get(0),
+            )
             .unwrap_or_default();
         let max_ts = self.get_flow_cache_max_ts()?.map(|dt| dt.to_rfc3339());
         Ok(WalletFlowCacheStats {

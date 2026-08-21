@@ -5,7 +5,7 @@
 //! category via `is_category_enabled` before doing any work.
 
 use super::maintenance::is_category_enabled;
-use crate::constants::SOL_MINT;
+use crate::chains::solana::constants::SOL_MINT;
 use crate::events::{Event, EventCategory, Severity};
 use chrono::Utc;
 use serde_json::{json, Map, Value};

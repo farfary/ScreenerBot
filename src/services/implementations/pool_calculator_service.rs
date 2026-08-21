@@ -47,12 +47,13 @@ impl Service for PoolCalculatorService {
         );
 
         // Get the PriceCalculator component from global state
-        let calculator = crate::pools::get_price_calculator().ok_or_else(|| {
-            crate::Error::Service(ServiceError::Start {
-                service: self.name().to_string(),
-                message: "PriceCalculator component not initialized".to_owned(),
-            })
-        })?;
+        let calculator =
+            crate::chains::solana::pools::service::get_price_calculator().ok_or_else(|| {
+                crate::Error::Service(ServiceError::Start {
+                    service: self.name().to_string(),
+                    message: "PriceCalculator component not initialized".to_owned(),
+                })
+            })?;
 
         // Spawn calculator task
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -76,7 +77,7 @@ impl Service for PoolCalculatorService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::pools::get_price_calculator().is_some() {
+        if crate::chains::solana::pools::service::get_price_calculator().is_some() {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy("PriceCalculator component not available".to_owned())
@@ -87,7 +88,7 @@ impl Service for PoolCalculatorService {
         let mut metrics = ServiceMetrics::default();
 
         // Get metrics from the component if available
-        if let Some(calculator) = crate::pools::get_price_calculator() {
+        if let Some(calculator) = crate::chains::solana::pools::service::get_price_calculator() {
             let (operations, errors, prices_calculated) = calculator.get_metrics();
             metrics.operations_total = operations;
             metrics.errors_total = errors;

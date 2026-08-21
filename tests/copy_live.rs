@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
+use screenerbot::chains::ChainId;
 use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::admission::EntryBlock;
 use screenerbot::trader::copy::{
@@ -18,6 +19,7 @@ fn task(exit_mode: ExitMode) -> CopyTask {
     let now = Utc.timestamp_opt(10, 0).unwrap();
     CopyTask {
         id: 7,
+        chain: ChainId::Solana,
         target_address: "target-wallet".to_owned(),
         label: None,
         enabled: true,
@@ -107,15 +109,15 @@ fn live_arming_requires_the_dedicated_confirmation_and_crud_cannot_bypass_it() {
         Ok(CopyMode::Live)
     );
     assert_eq!(
-        input(CopyMode::Live).into_task(Utc::now()),
+        input(CopyMode::Live).into_task(ChainId::Solana, Utc::now()),
         Err(CopySkip::ModeTransitionRequired)
     );
     assert_eq!(
-        input(CopyMode::Live).into_task_for_update(Utc::now(), CopyMode::Paper),
+        input(CopyMode::Live).into_task_for_update(ChainId::Solana, Utc::now(), CopyMode::Paper),
         Err(CopySkip::ModeTransitionRequired)
     );
     assert!(input(CopyMode::Live)
-        .into_task_for_update(Utc::now(), CopyMode::Live)
+        .into_task_for_update(ChainId::Solana, Utc::now(), CopyMode::Live)
         .is_ok());
 }
 

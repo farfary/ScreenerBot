@@ -22,38 +22,40 @@ impl TransactionDatabase {
 
         let raw_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM raw_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .unwrap_or_default();
 
         let processed_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM processed_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .unwrap_or_default();
 
         let known_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM known_signatures WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .unwrap_or_default();
 
         let retries_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM deferred_retries", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM deferred_retries WHERE chain_id = ?1",
+                params![self.chain.as_str()],
+                |row| row.get(0),
+            )
             .unwrap_or_default();
 
         let pending_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM pending_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .unwrap_or_default();
@@ -92,16 +94,16 @@ impl TransactionDatabase {
         // Cleanup old pending transactions (older than 1 day)
         let cleaned_pending = conn
             .execute(
-                "DELETE FROM pending_transactions WHERE added_at < datetime('now', '-1 day')",
-                [],
+                "DELETE FROM pending_transactions WHERE chain_id = ?1 AND added_at < datetime('now', '-1 day')",
+                params![self.chain.as_str()],
             )
             .map_err(|e| format!("Failed to cleanup old pending transactions: {e}"))?;
 
         // Cleanup old deferred retries (older than 1 day with 0 attempts)
         let cleaned_retries = conn
             .execute(
-                "DELETE FROM deferred_retries WHERE remaining_attempts = 0 AND created_at < datetime('now', '-1 day')",
-                []
+                "DELETE FROM deferred_retries WHERE chain_id = ?1 AND remaining_attempts = 0 AND created_at < datetime('now', '-1 day')",
+                params![self.chain.as_str()]
             )
             .map_err(|e| format!("Failed to cleanup old deferred retries: {e}"))?;
 
@@ -136,9 +138,9 @@ impl TransactionDatabase {
             .execute(
                 &format!(
                     "DELETE FROM processed_transactions \
-                     WHERE wallet_address != ?1 AND processed_at < {cutoff_expr}"
+                     WHERE chain_id = ?1 AND wallet_address != ?2 AND processed_at < {cutoff_expr}"
                 ),
-                params![own_wallet_address],
+                params![self.chain.as_str(), own_wallet_address],
             )
             .map_err(|e| format!("Failed to cleanup stale target processed_transactions: {e}"))?;
 
@@ -146,9 +148,9 @@ impl TransactionDatabase {
             .execute(
                 &format!(
                     "DELETE FROM raw_transactions \
-                     WHERE wallet_address != ?1 AND created_at < {cutoff_expr}"
+                     WHERE chain_id = ?1 AND wallet_address != ?2 AND created_at < {cutoff_expr}"
                 ),
-                params![own_wallet_address],
+                params![self.chain.as_str(), own_wallet_address],
             )
             .map_err(|e| format!("Failed to cleanup stale target raw_transactions: {e}"))?;
 
@@ -173,24 +175,24 @@ impl TransactionDatabase {
 
         let raw_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM raw_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .unwrap_or_default();
 
         let processed_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM processed_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .unwrap_or_default();
 
         let orphaned: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1 AND signature NOT IN (SELECT signature FROM raw_transactions WHERE wallet_address = ?1)",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM processed_transactions WHERE chain_id = ?1 AND wallet_address = ?2 AND signature NOT IN (SELECT signature FROM raw_transactions WHERE chain_id = ?1 AND wallet_address = ?2)",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0)
             )
             .unwrap_or_default();
@@ -199,8 +201,8 @@ impl TransactionDatabase {
 
         let pending_count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM pending_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .unwrap_or_default();
@@ -239,9 +241,12 @@ mod tests {
     #[tokio::test]
     async fn target_retention_never_deletes_own_wallet_rows() {
         let dir = tempfile::tempdir().unwrap();
-        let db = TransactionDatabase::new_with_path(dir.path().join("transactions.db"))
-            .await
-            .unwrap();
+        let db = TransactionDatabase::new_with_path(
+            dir.path().join("transactions.db"),
+            crate::chains::ChainId::Solana,
+        )
+        .await
+        .unwrap();
         let connection = db.get_connection().unwrap();
         for (signature, wallet, created_at) in [
             ("own-old", "own", "2020-01-01 00:00:00"),

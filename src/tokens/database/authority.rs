@@ -15,11 +15,15 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut stmt = conn
-            .prepare("SELECT address FROM authority_reputation WHERE is_blocked = 1")
+            .prepare(
+                "SELECT address FROM authority_reputation WHERE chain_id = ?1 AND is_blocked = 1",
+            )
             .map_err(|e| TokenError::Database(format!("Prepare error: {e}")))?;
 
         let rows = stmt
-            .query_map([], |row| row.get::<_, String>(0))
+            .query_map(rusqlite::params![self.chain_id()], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|e| TokenError::Database(format!("Query error: {e}")))?;
 
         let mut addresses = Vec::new();
@@ -55,10 +59,10 @@ impl TokenDatabase {
                 COUNT(DISTINCT sr.mint) AS total_tokens,
                 COUNT(DISTINCT CASE WHEN ut.last_rejection_at IS NOT NULL THEN sr.mint END) AS flagged_tokens
             FROM security_rugcheck sr
-            LEFT JOIN update_tracking ut ON sr.mint = ut.mint
-            WHERE sr.freeze_authority IS NOT NULL AND sr.freeze_authority != ''
+            LEFT JOIN update_tracking ut ON sr.chain_id = ut.chain_id AND sr.mint = ut.mint
+            WHERE sr.chain_id = ?1 AND sr.freeze_authority IS NOT NULL AND sr.freeze_authority != ''
             GROUP BY sr.freeze_authority
-            HAVING total_tokens >= ?1
+            HAVING total_tokens >= ?2
 
             UNION ALL
 
@@ -68,10 +72,10 @@ impl TokenDatabase {
                 COUNT(DISTINCT sr.mint) AS total_tokens,
                 COUNT(DISTINCT CASE WHEN ut.last_rejection_at IS NOT NULL THEN sr.mint END) AS flagged_tokens
             FROM security_rugcheck sr
-            LEFT JOIN update_tracking ut ON sr.mint = ut.mint
-            WHERE sr.update_authority IS NOT NULL AND sr.update_authority != ''
+            LEFT JOIN update_tracking ut ON sr.chain_id = ut.chain_id AND sr.mint = ut.mint
+            WHERE sr.chain_id = ?1 AND sr.update_authority IS NOT NULL AND sr.update_authority != ''
             GROUP BY sr.update_authority
-            HAVING total_tokens >= ?1
+            HAVING total_tokens >= ?2
 
             UNION ALL
 
@@ -81,10 +85,10 @@ impl TokenDatabase {
                 COUNT(DISTINCT sr.mint) AS total_tokens,
                 COUNT(DISTINCT CASE WHEN ut.last_rejection_at IS NOT NULL THEN sr.mint END) AS flagged_tokens
             FROM security_rugcheck sr
-            LEFT JOIN update_tracking ut ON sr.mint = ut.mint
-            WHERE sr.mint_authority IS NOT NULL AND sr.mint_authority != ''
+            LEFT JOIN update_tracking ut ON sr.chain_id = ut.chain_id AND sr.mint = ut.mint
+            WHERE sr.chain_id = ?1 AND sr.mint_authority IS NOT NULL AND sr.mint_authority != ''
             GROUP BY sr.mint_authority
-            HAVING total_tokens >= ?1
+            HAVING total_tokens >= ?2
         "#;
 
         let mut stmt = conn
@@ -92,7 +96,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Prepare discovery SQL error: {e}")))?;
 
         let rows = stmt
-            .query_map(rusqlite::params![min_tokens], |row| {
+            .query_map(rusqlite::params![self.chain_id(), min_tokens], |row| {
                 Ok((
                     row.get::<_, String>(0)?, // authority
                     row.get::<_, String>(1)?, // authority_type
@@ -114,17 +118,17 @@ impl TokenDatabase {
 
                 // Upsert using the same connection (no lock reentry needed)
                 conn.execute(
-                    "INSERT INTO authority_reputation (address, authority_type, total_token_count, flagged_token_count, confidence, is_blocked, source, first_seen_at, last_updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'auto', ?7, ?7)
-                     ON CONFLICT(address) DO UPDATE SET
-                         authority_type = ?2,
-                         total_token_count = ?3,
-                         flagged_token_count = ?4,
-                         confidence = ?5,
-                         is_blocked = MAX(is_blocked, ?6),
-                         last_updated_at = ?7",
+                    "INSERT INTO authority_reputation (chain_id, address, authority_type, total_token_count, flagged_token_count, confidence, is_blocked, source, first_seen_at, last_updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'auto', ?8, ?8)
+                     ON CONFLICT(chain_id, address) DO UPDATE SET
+                         authority_type = excluded.authority_type,
+                         total_token_count = excluded.total_token_count,
+                         flagged_token_count = excluded.flagged_token_count,
+                         confidence = excluded.confidence,
+                         is_blocked = MAX(is_blocked, excluded.is_blocked),
+                         last_updated_at = excluded.last_updated_at",
                     rusqlite::params![
-                        authority,
+                        self.chain_id(), authority,
                         authority_type,
                         total,
                         flagged,

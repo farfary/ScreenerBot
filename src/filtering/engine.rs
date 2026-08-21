@@ -111,7 +111,7 @@ pub async fn compute_snapshot(
         }
     }
 
-    match crate::pools::db::list_blacklisted_pools(None).await {
+    match crate::pools::db::list_blacklisted_pools(crate::chains::ChainId::Solana, None).await {
         Ok(records) => {
             for record in records {
                 let crate::pools::db::BlacklistedPoolRecord {
@@ -155,7 +155,7 @@ pub async fn compute_snapshot(
         }
     }
 
-    match crate::pools::db::list_blacklisted_accounts(None).await {
+    match crate::pools::db::list_blacklisted_accounts(crate::chains::ChainId::Solana, None).await {
         Ok(records) => {
             for record in records {
                 let crate::pools::db::BlacklistedAccountRecord {
@@ -544,7 +544,7 @@ pub async fn compute_snapshot(
         updated_at: snapshot.updated_at,
     };
 
-    crate::tokens::store_filtered_results(filtered_lists);
+    crate::tokens::store_filtered_results(crate::chains::ChainId::Solana, filtered_lists);
 
     Ok(snapshot)
 }

@@ -21,16 +21,19 @@ impl OhlcvDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT MIN(timestamp), MAX(timestamp) FROM ohlcv_candles WHERE mint = ?1 AND pool_address = ?2 AND timeframe = ?3",
+                "SELECT MIN(timestamp), MAX(timestamp) FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3 AND timeframe = ?4",
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
 
         let bounds = stmt
-            .query_row(params![mint, pool_address, timeframe.as_str()], |row| {
-                let min_ts: Option<i64> = row.get(0)?;
-                let max_ts: Option<i64> = row.get(1)?;
-                Ok((min_ts, max_ts))
-            })
+            .query_row(
+                params![self.chain_id(), mint, pool_address, timeframe.as_str()],
+                |row| {
+                    let min_ts: Option<i64> = row.get(0)?;
+                    let max_ts: Option<i64> = row.get(1)?;
+                    Ok((min_ts, max_ts))
+                },
+            )
             .optional()
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
 
@@ -96,11 +99,11 @@ impl OhlcvDatabase {
             };
             let result = tx.execute(
                 "INSERT INTO ohlcv_candles
-                 (mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-                 ON CONFLICT(mint, pool_address, timeframe, timestamp) DO NOTHING",
+                 (chain_id, mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 ON CONFLICT(chain_id, mint, pool_address, timeframe, timestamp) DO NOTHING",
                 params![
-                    mint,
+                    self.chain_id(), mint,
                     pool_address,
                     timeframe_str,
                     aligned_ts,
@@ -144,11 +147,12 @@ impl OhlcvDatabase {
         let mut query = String::from(
             "SELECT timestamp, open, high, low, close, volume 
              FROM ohlcv_candles 
-             WHERE mint = ? AND timeframe = ?",
+             WHERE chain_id = ? AND mint = ? AND timeframe = ?",
         );
 
-        let mut param_index = 3;
+        let mut param_index = 4;
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![
+            Box::new(self.chain_id().to_string()),
             Box::new(mint.to_string()),
             Box::new(timeframe_str.to_string()),
         ];
@@ -234,13 +238,13 @@ impl OhlcvDatabase {
             .prepare(
                 "SELECT timeframe, COUNT(*) AS cnt, MAX(timestamp) AS latest
                  FROM ohlcv_candles
-                 WHERE mint = ?1 AND pool_address = ?2
+                 WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3
                  GROUP BY timeframe",
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
 
         let rows = stmt
-            .query_map(params![mint, pool_address], |row| {
+            .query_map(params![self.chain_id(), mint, pool_address], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, i64>(1)?,
@@ -265,8 +269,8 @@ impl OhlcvDatabase {
 
         let removed = conn
             .execute(
-                "DELETE FROM ohlcv_candles WHERE mint = ?1 AND pool_address = ?2",
-                params![mint, pool_address],
+                "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3",
+                params![self.chain_id(), mint, pool_address],
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Delete failed: {e}")))?;
 
@@ -286,13 +290,13 @@ impl OhlcvDatabase {
             .prepare(
                 "SELECT timeframe, CAST(strftime('%s', MAX(fetched_at)) AS INTEGER) AS last_new
                  FROM ohlcv_candles
-                 WHERE mint = ?1
+                 WHERE chain_id = ?1 AND mint = ?2
                  GROUP BY timeframe",
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
 
         let rows = stmt
-            .query_map(params![mint], |row| {
+            .query_map(params![self.chain_id(), mint], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
             })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
@@ -319,8 +323,8 @@ impl OhlcvDatabase {
         let res: Option<i64> = conn
             .query_row(
                 "SELECT CAST(strftime('%s', last_fetch) AS INTEGER)
-                 FROM ohlcv_monitor_config WHERE mint = ?1",
-                params![mint],
+                 FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |r| r.get(0),
             )
             .ok()
@@ -338,12 +342,12 @@ impl OhlcvDatabase {
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
         let query = format!(
-            "SELECT {} FROM ohlcv_monitor_config WHERE mint = ?1",
+            "SELECT {} FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
             column
         );
 
         let result: i32 = conn
-            .query_row(&query, params![mint], |row| row.get(0))
+            .query_row(&query, params![self.chain_id(), mint], |row| row.get(0))
             .optional()
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
             .unwrap_or_default();
@@ -361,11 +365,11 @@ impl OhlcvDatabase {
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
         let query = format!(
-            "UPDATE ohlcv_monitor_config SET {} = 1, updated_at = CURRENT_TIMESTAMP WHERE mint = ?1",
+            "UPDATE ohlcv_monitor_config SET {} = 1, updated_at = CURRENT_TIMESTAMP WHERE chain_id = ?1 AND mint = ?2",
             column
         );
 
-        conn.execute(&query, params![mint])
+        conn.execute(&query, params![self.chain_id(), mint])
             .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
 
         Ok(())
@@ -381,11 +385,11 @@ impl OhlcvDatabase {
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
         let query = format!(
-            "UPDATE ohlcv_monitor_config SET {} = 0, updated_at = CURRENT_TIMESTAMP WHERE mint = ?1",
+            "UPDATE ohlcv_monitor_config SET {} = 0, updated_at = CURRENT_TIMESTAMP WHERE chain_id = ?1 AND mint = ?2",
             column
         );
 
-        conn.execute(&query, params![mint])
+        conn.execute(&query, params![self.chain_id(), mint])
             .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
 
         Ok(())
@@ -409,8 +413,8 @@ impl OhlcvDatabase {
              backfill_1d_complete = 1,
              backfill_completed_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP
-             WHERE mint = ?1",
-            params![mint],
+             WHERE chain_id = ?1 AND mint = ?2",
+            params![self.chain_id(), mint],
         )
         .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
 

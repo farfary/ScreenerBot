@@ -27,12 +27,12 @@ impl TokenDatabase {
         {
             let mut stmt = tx
                 .prepare(
-                    "SELECT pool_address, pool_data_first_seen_at FROM token_pools WHERE mint = ?1",
+                    "SELECT pool_address, pool_data_first_seen_at FROM token_pools WHERE chain_id = ?1 AND mint = ?2",
                 )
                 .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
 
             let rows = stmt
-                .query_map(params![&snapshot.mint], |row| {
+                .query_map(params![self.chain_id(), &snapshot.mint], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
                 })
                 .map_err(|e| {
@@ -47,8 +47,8 @@ impl TokenDatabase {
         }
 
         tx.execute(
-            "DELETE FROM token_pools WHERE mint = ?1",
-            params![&snapshot.mint],
+            "DELETE FROM token_pools WHERE chain_id = ?1 AND mint = ?2",
+            params![self.chain_id(), &snapshot.mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to clear token pools: {e}")))?;
 
@@ -65,13 +65,13 @@ impl TokenDatabase {
 
             tx.execute(
                 "INSERT INTO token_pools (
-                    mint, pool_address, dex, base_mint, quote_mint, is_sol_pair,
+                    chain_id, mint, pool_address, dex, base_mint, quote_mint, is_sol_pair,
                     liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
                     price_usd, price_sol, price_native, sources_json,
                     pool_data_last_fetched_at, pool_data_first_seen_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
                 params![
-                    &snapshot.mint,
+                    self.chain_id(), &snapshot.mint,
                     &pool.pool_address,
                     &pool.dex,
                     &pool.base_mint,
@@ -108,12 +108,12 @@ impl TokenDatabase {
                         liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
                         price_usd, price_sol, price_native, sources_json,
                         pool_data_last_fetched_at, pool_data_first_seen_at
-                 FROM token_pools WHERE mint = ?1",
+                 FROM token_pools WHERE chain_id = ?1 AND mint = ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mut rows = stmt
-            .query(params![mint])
+            .query(params![self.chain_id(), mint])
             .map_err(|e| TokenError::Database(format!("Failed to query pools: {e}")))?;
 
         let mut pools: Vec<TokenPoolInfo> = Vec::new();

@@ -7,13 +7,17 @@ use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
 use super::database::WalletsDatabase;
-use crate::logger::{self, LogTag};
+use crate::{
+    chains::ChainId,
+    logger::{self, LogTag},
+};
 
 mod cache;
 use cache::refresh_main_wallet_cache;
 
 mod main_wallet;
-pub use main_wallet::{get_main_address, get_main_keypair, get_main_wallet, has_main_wallet};
+pub(crate) use main_wallet::get_main_wallet_encrypted_key;
+pub use main_wallet::{get_main_address, get_main_wallet, has_main_wallet};
 
 mod balance_queries;
 pub use balance_queries::{get_all_wallet_balances, get_wallets_with_token};
@@ -36,7 +40,7 @@ static WALLETS_DB: LazyLock<Arc<RwLock<Option<WalletsDatabase>>>> =
 ///
 /// Must be called once at startup before using any wallet functions
 pub async fn initialize() -> Result<(), String> {
-    let db = WalletsDatabase::new()?;
+    let db = WalletsDatabase::new(ChainId::Solana)?;
 
     {
         let mut guard = WALLETS_DB.write().await;
@@ -69,9 +73,8 @@ pub use crud::{
 };
 
 mod access;
-pub use access::{
-    get_wallet, get_wallet_by_address, get_wallet_keypair, list_active_wallets, list_wallets,
-};
+pub(crate) use access::get_wallet_encrypted_key;
+pub use access::{get_wallet, get_wallet_by_address, list_active_wallets, list_wallets};
 
 // =============================================================================
 // BULK IMPORT/EXPORT
@@ -97,4 +100,4 @@ pub use balance_ops::{
 // =============================================================================
 
 mod tools;
-pub use tools::{get_wallets_summary, get_wallets_with_keys};
+pub use tools::get_wallets_summary;

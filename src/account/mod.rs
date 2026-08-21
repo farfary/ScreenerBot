@@ -414,20 +414,14 @@ pub async fn sign_in_with_wallet(create: bool) -> Result<()> {
         }));
     }
 
-    let keypair = crate::wallets::get_main_keypair()
-        .await
-        .map_err(|message| Error::Account(AccountError::Generic { message }))?;
-
     // A signature over TEXT. It is not a transaction, cannot be replayed as
     // one, costs nothing and moves nothing — the message the user sees says so
     // in as many words, and this is the only place the bot ever signs anything
     // that is not a trade.
-    let signature = {
-        use solana_sdk::signer::Signer;
-        keypair
-            .sign_message(challenge.message.as_bytes())
-            .to_string()
-    };
+    let signature =
+        crate::chains::solana::accounts::sign_message_with_main_wallet(&challenge.message)
+            .await
+            .map_err(|message| Error::Account(AccountError::Generic { message }))?;
 
     let tokens =
         client::sign_in_with_wallet(&address, &signature, &challenge.message, create).await?;

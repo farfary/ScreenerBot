@@ -224,24 +224,27 @@ pub async fn resolve_exit_policy(position: &Position) -> ExitPolicy {
     let PositionOrigin::Copy { task_id, .. } = &position.origin else {
         return policy;
     };
-    let database =
-        match tokio::task::spawn_blocking(crate::trader::copy::CopyDatabase::shared).await {
-            Ok(Ok(database)) => database,
-            Ok(Err(error)) => {
-                crate::logger::warning(
-                    crate::logger::LogTag::Trader,
-                    &format!("Copy exit-policy database unavailable for task {task_id}: {error}"),
-                );
-                return policy;
-            }
-            Err(error) => {
-                crate::logger::warning(
-                    crate::logger::LogTag::Trader,
-                    &format!("Copy exit-policy lookup failed for task {task_id}: {error}"),
-                );
-                return policy;
-            }
-        };
+    let database = match tokio::task::spawn_blocking(|| {
+        crate::trader::copy::CopyDatabase::shared(crate::chains::ChainId::Solana)
+    })
+    .await
+    {
+        Ok(Ok(database)) => database,
+        Ok(Err(error)) => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                &format!("Copy exit-policy database unavailable for task {task_id}: {error}"),
+            );
+            return policy;
+        }
+        Err(error) => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                &format!("Copy exit-policy lookup failed for task {task_id}: {error}"),
+            );
+            return policy;
+        }
+    };
     match database.get_task(*task_id).await {
         Ok(Some(task)) => policy.apply_overrides(&task.exit_policy_overrides),
         Ok(None) => {}

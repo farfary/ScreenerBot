@@ -34,8 +34,9 @@ pub use types::{
     WalletOpResult, WalletPlan,
 };
 
-// Re-export transfer functions
-pub use transfer::{close_ata, collect_sol, fund_wallets, transfer_sol, transfer_token};
+// Re-export bulk transfer orchestration. Single-transfer/close mechanics live
+// at crate::chains::solana::assets::transfer.
+pub use transfer::{collect_sol, fund_wallets};
 
 // Re-export operations
 pub use buy::execute_multi_buy;

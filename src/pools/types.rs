@@ -3,17 +3,41 @@
 //! This file contains all the essential data structures used throughout the pools system.
 //! These types are designed to be minimal, efficient, and focused on the core functionality.
 
+use crate::chains::{AccountId, AssetId, PoolId};
 use crate::config::with_config;
-use crate::constants::{
-    FLUXBEAM_AMM_PROGRAM_ID, METEORA_DAMM_PROGRAM_ID, METEORA_DBC_PROGRAM_ID,
-    METEORA_DLMM_PROGRAM_ID, MOONIT_AMM_PROGRAM_ID, ORCA_WHIRLPOOL_PROGRAM_ID,
-    PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID,
-    RAYDIUM_CPMM_PROGRAM_ID, RAYDIUM_LEGACY_AMM_PROGRAM_ID,
-};
 use serde::{Deserialize, Serialize};
-use solana_sdk::pubkey::Pubkey;
 use std::collections::VecDeque;
+use std::fmt;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+/// Chain-neutral protocol identity for a pool's DEX/AMM implementation.
+///
+/// This is the smallest normalized identity `PoolDescriptor` needs for
+/// persistence, display and routing — concrete DEX program recognition
+/// (Solana program IDs, byte-layout classification) stays owned by the
+/// Solana adapter's `ProgramKind` enum (under `chains::solana::pools`),
+/// which converts to and from this type at the Solana boundary
+/// (`ProgramKind::protocol_id` / `ProgramKind::from_protocol_id`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ProtocolId(String);
+
+impl ProtocolId {
+    /// Creates a protocol identity from its display/persistence string.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    /// Returns the canonical identity string.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ProtocolId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// The main price result structure - this is the primary data exchange format
 ///
@@ -190,94 +214,21 @@ pub enum PoolError {
     DecodeError(String),
 }
 
-/// Program types for different DEX implementations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ProgramKind {
-    RaydiumCpmm,
-    RaydiumLegacyAmm,
-    RaydiumClmm,
-    OrcaWhirlpool,
-    MeteoraDamm,
-    MeteoraDlmm,
-    MeteoraDbc,
-    PumpFunAmm,
-    PumpFunLegacy,
-    Moonit,
-    FluxbeamAmm,
-    Unknown,
-}
-
-impl ProgramKind {
-    /// Get the program ID for this pool type
-    pub fn program_id(&self) -> &'static str {
-        match self {
-            ProgramKind::RaydiumCpmm => RAYDIUM_CPMM_PROGRAM_ID,
-            ProgramKind::RaydiumLegacyAmm => RAYDIUM_LEGACY_AMM_PROGRAM_ID,
-            ProgramKind::RaydiumClmm => RAYDIUM_CLMM_PROGRAM_ID,
-            ProgramKind::OrcaWhirlpool => ORCA_WHIRLPOOL_PROGRAM_ID,
-            ProgramKind::MeteoraDamm => METEORA_DAMM_PROGRAM_ID,
-            ProgramKind::MeteoraDlmm => METEORA_DLMM_PROGRAM_ID,
-            ProgramKind::MeteoraDbc => METEORA_DBC_PROGRAM_ID,
-            ProgramKind::PumpFunAmm => PUMP_FUN_AMM_PROGRAM_ID,
-            ProgramKind::PumpFunLegacy => PUMP_FUN_LEGACY_PROGRAM_ID,
-            ProgramKind::Moonit => MOONIT_AMM_PROGRAM_ID,
-            ProgramKind::FluxbeamAmm => FLUXBEAM_AMM_PROGRAM_ID,
-            ProgramKind::Unknown => "",
-        }
-    }
-
-    /// Get display name for this program kind
-    pub fn display_name(&self) -> &'static str {
-        match self {
-            ProgramKind::RaydiumCpmm => "RAYDIUM CPMM",
-            ProgramKind::RaydiumLegacyAmm => "RAYDIUM LEGACY AMM",
-            ProgramKind::RaydiumClmm => "RAYDIUM CLMM",
-            ProgramKind::OrcaWhirlpool => "ORCA WHIRLPOOL",
-            ProgramKind::MeteoraDamm => "METEORA DAMM v2",
-            ProgramKind::MeteoraDlmm => "METEORA DLMM",
-            ProgramKind::MeteoraDbc => "METEORA DBC",
-            ProgramKind::PumpFunAmm => "PUMP.FUN AMM",
-            ProgramKind::PumpFunLegacy => "PUMP.FUN",
-            ProgramKind::Moonit => "MOONIT AMM",
-            ProgramKind::FluxbeamAmm => "FLUXBEAM AMM",
-            ProgramKind::Unknown => "UNKNOWN",
-        }
-    }
-
-    /// Create ProgramKind from program ID string
-    pub fn from_program_id(program_id: &str) -> Self {
-        match program_id {
-            RAYDIUM_CPMM_PROGRAM_ID => ProgramKind::RaydiumCpmm,
-            RAYDIUM_LEGACY_AMM_PROGRAM_ID => ProgramKind::RaydiumLegacyAmm,
-            RAYDIUM_CLMM_PROGRAM_ID => ProgramKind::RaydiumClmm,
-            ORCA_WHIRLPOOL_PROGRAM_ID => ProgramKind::OrcaWhirlpool,
-            METEORA_DAMM_PROGRAM_ID => ProgramKind::MeteoraDamm,
-            METEORA_DLMM_PROGRAM_ID => ProgramKind::MeteoraDlmm,
-            METEORA_DBC_PROGRAM_ID => ProgramKind::MeteoraDbc,
-            PUMP_FUN_AMM_PROGRAM_ID => ProgramKind::PumpFunAmm,
-            PUMP_FUN_LEGACY_PROGRAM_ID => ProgramKind::PumpFunLegacy,
-            MOONIT_AMM_PROGRAM_ID => ProgramKind::Moonit,
-            FLUXBEAM_AMM_PROGRAM_ID => ProgramKind::FluxbeamAmm,
-            _ => ProgramKind::Unknown,
-        }
-    }
-
-    /// Classify a program id (Pubkey) quickly without allocations
-    /// This is a lightweight helper intended for debug / analysis tools to avoid
-    /// duplicating the mapping logic scattered across modules.
-    pub fn classify(program_pubkey: &solana_sdk::pubkey::Pubkey) -> Self {
-        Self::from_program_id(&program_pubkey.to_string())
-    }
-}
-
-/// Pool descriptor containing metadata about a discovered pool
+/// Pool descriptor containing metadata about a discovered pool.
+///
+/// Chain-neutral: identities are typed `chains::types` value objects, not
+/// any chain's concrete address type. Chain adapters (e.g.
+/// `crate::chains::solana::pools`) construct these through explicit
+/// conversions from their own concrete representation; nothing outside a
+/// chain adapter should need to parse or format a raw address to work with
+/// this struct.
 #[derive(Debug, Clone)]
 pub struct PoolDescriptor {
-    pub pool_id: Pubkey,
-    pub program_kind: ProgramKind,
-    pub base_mint: Pubkey,
-    pub quote_mint: Pubkey,
-    pub reserve_accounts: Vec<Pubkey>,
+    pub pool_id: PoolId,
+    pub program_kind: ProtocolId,
+    pub base_mint: AssetId,
+    pub quote_mint: AssetId,
+    pub reserve_accounts: Vec<AccountId>,
     pub liquidity_usd: f64,
     pub volume_h24_usd: f64,
     pub last_updated: Instant,
@@ -486,4 +437,63 @@ pub struct PoolMintVaultInfo {
     pub mint2: String,
     pub vault1: String,
     pub vault2: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chains::ChainId;
+
+    fn sample_descriptor() -> PoolDescriptor {
+        PoolDescriptor {
+            pool_id: PoolId::new(ChainId::Solana, "PoolAddr111").unwrap(),
+            program_kind: ProtocolId::new("RAYDIUM CPMM"),
+            base_mint: AssetId::new(ChainId::Solana, "TokenMint111").unwrap(),
+            quote_mint: AssetId::new(
+                ChainId::Solana,
+                "So11111111111111111111111111111111111111112",
+            )
+            .unwrap(),
+            reserve_accounts: vec![
+                AccountId::new(ChainId::Solana, "Vault1").unwrap(),
+                AccountId::new(ChainId::Solana, "Vault2").unwrap(),
+            ],
+            liquidity_usd: 12_345.0,
+            volume_h24_usd: 6789.0,
+            last_updated: Instant::now(),
+        }
+    }
+
+    #[test]
+    fn pool_descriptor_carries_only_chain_neutral_identities() {
+        let descriptor = sample_descriptor();
+        assert_eq!(descriptor.pool_id.address(), "PoolAddr111");
+        assert_eq!(descriptor.pool_id.chain(), ChainId::Solana);
+        assert_eq!(descriptor.base_mint.address(), "TokenMint111");
+        assert_eq!(descriptor.reserve_accounts.len(), 2);
+        assert_eq!(descriptor.reserve_accounts[0].address(), "Vault1");
+    }
+
+    #[test]
+    fn protocol_id_equality_and_hash_are_string_identity() {
+        let a = ProtocolId::new("RAYDIUM CPMM");
+        let b = ProtocolId::new("RAYDIUM CPMM");
+        let c = ProtocolId::new("ORCA WHIRLPOOL");
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_eq!(a.to_string(), "RAYDIUM CPMM");
+
+        let mut set = std::collections::HashSet::new();
+        set.insert(a);
+        assert!(set.contains(&b));
+        assert!(!set.contains(&c));
+    }
+
+    #[test]
+    fn pool_descriptor_pool_id_survives_json_round_trip() {
+        let descriptor = sample_descriptor();
+        let json = serde_json::to_value(&descriptor.pool_id).unwrap();
+        let restored: PoolId = serde_json::from_value(json).unwrap();
+        assert_eq!(restored, descriptor.pool_id);
+    }
 }

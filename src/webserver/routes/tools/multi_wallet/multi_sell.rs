@@ -3,13 +3,11 @@
 //! Handles preview, start, status, and abort for multi-sell operations.
 
 use axum::{extract::Path, http::StatusCode, response::Response, Json};
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::tokens::decimals;
 use crate::tools::multi_wallet::{
     execute_multi_sell, MultiSellConfig, SessionResult, SessionStatus,
@@ -39,7 +37,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     );
 
     // Validate token mint
-    if Pubkey::from_str(&request.token_mint).is_err() {
+    if wallets::validate_address(&request.token_mint).is_err() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",
@@ -49,7 +47,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     }
 
     // Get wallets with their balances
-    let all_wallets = match wallets::get_wallets_with_keys().await {
+    let all_wallets = match wallets::list_active_wallets().await {
         Ok(w) => w,
         Err(e) => {
             return error_response(
@@ -65,12 +63,12 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     let secondary_wallets: Vec<_> = all_wallets
         .into_iter()
         .filter(|w| {
-            if w.wallet.role != wallets::WalletRole::Secondary || !w.wallet.is_active {
+            if w.role != wallets::WalletRole::Secondary {
                 return false;
             }
             // Filter by specific IDs if provided
             if let Some(ref ids) = request.wallet_ids {
-                return ids.contains(&w.wallet.id);
+                return ids.contains(&w.id);
             }
             true
         })
@@ -95,13 +93,15 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     let mut total_token_balance = 0.0;
 
     // Fetch token decimals once for display conversion
-    let token_decimals = decimals::get(&request.token_mint).await.unwrap_or(9);
+    let token_decimals = decimals::get(crate::chains::ChainId::Solana, &request.token_mint)
+        .await
+        .unwrap_or(9);
     let divisor = 10f64.powi(token_decimals as i32);
 
     for wallet in secondary_wallets {
         // Get token balance (returns raw amount in smallest units)
         let token_balance_raw = match rpc
-            .get_token_balance(&wallet.wallet.address, &request.token_mint)
+            .get_token_balance(&wallet.address, &request.token_mint)
             .await
         {
             Ok(amount) => amount,
@@ -116,14 +116,14 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
 
             // Get SOL balance
             let sol_balance = rpc
-                .get_sol_balance(&wallet.wallet.address)
+                .get_sol_balance(&wallet.address)
                 .await
                 .unwrap_or_default();
 
             wallets_with_balance.push(WalletTokenBalanceResponse {
-                wallet_id: wallet.wallet.id,
-                wallet_address: wallet.wallet.address.clone(),
-                wallet_name: wallet.wallet.name.clone(),
+                wallet_id: wallet.id,
+                wallet_address: wallet.address.clone(),
+                wallet_name: wallet.name.clone(),
                 sol_balance,
                 token_balance,
                 needs_sol_topup: sol_balance < 0.01,
@@ -175,7 +175,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
     cleanup_old_sessions().await;
 
     // Validate token mint
-    if Pubkey::from_str(&request.token_mint).is_err() {
+    if wallets::validate_address(&request.token_mint).is_err() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",

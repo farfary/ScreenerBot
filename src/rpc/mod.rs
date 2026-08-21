@@ -1,11 +1,18 @@
-//! RPC Module - Centralized RPC client management
+//! RPC Module - Chain-neutral RPC infrastructure
 //!
-//! This module provides:
+//! This module provides the reusable, chain-agnostic machinery that any chain
+//! adapter's RPC client sits on top of:
 //! - Multi-provider support with automatic failover
 //! - Per-provider rate limiting with Governor (GCRA)
 //! - Circuit breaker pattern for reliability
 //! - SQLite-based statistics
 //! - Connection pooling
+//!
+//! Solana's RPC client, its global composition, its request/response types
+//! and its `logsSubscribe` WebSocket transport live at
+//! `crate::chains::solana::rpc` and are built on top of this module. This
+//! module must never depend on `crate::chains::solana` or any Solana SDK
+//! type — see `CLAUDE.md`'s chain-adapter organization rule.
 //!
 //! # Architecture
 //!
@@ -22,30 +29,25 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use crate::rpc::{get_rpc_client, RpcClientMethods};
+//! use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 //!
 //! let client = get_rpc_client();
 //! let balance = client.get_sol_balance("wallet_address").await?;
 //! ```
 
 // ============================================================================
-// Core Modules - New Architecture
+// Core Modules - Chain-neutral infrastructure
 // ============================================================================
 
 pub mod circuit_breaker;
-pub mod client;
 pub mod errors;
 pub mod gateway;
-pub mod global;
 pub mod manager;
 pub mod provider;
 pub mod rate_limiter;
 pub mod selector;
 pub mod stats;
-pub mod subscriptions;
-pub mod testing;
 pub mod types;
-pub mod utils;
 
 // ============================================================================
 // Re-exports - Circuit Breaker
@@ -53,24 +55,6 @@ pub mod utils;
 
 pub use circuit_breaker::{
     CircuitBreakerConfig, CircuitBreakerManager, CircuitBreakerStatus, ProviderCircuitBreaker,
-};
-
-// ============================================================================
-// Re-exports - Client
-// ============================================================================
-
-// The RpcClient is available as `rpc::client::RpcClient` (not re-exported at top level)
-// Access via get_rpc_client() helper which returns the global RpcClient instance
-pub use client::{
-    ProviderHealthInfo,
-    RpcClientMethods,
-    // Program account types
-    RpcFilterType,
-    // Token supply types
-    RpcTokenAccountBalance,
-    // Transaction history types
-    SignatureInfo,
-    TokenSupply,
 };
 
 // ============================================================================
@@ -114,10 +98,10 @@ pub use selector::{create_selector, ProviderSelector};
 // ============================================================================
 
 pub use stats::{
-    get_global_rpc_stats, get_rpc_stats_db_path, parse_pubkey, spl_token_program_id,
-    start_rpc_stats_auto_save_service, MethodStats, ProviderStats, RpcCallRecord, RpcMinuteBucket,
-    RpcSessionSnapshot, RpcStats, RpcStatsDatabase, RpcStatsResponse, SessionStats, StatsCollector,
-    StatsManager, StatsMessage, StatsSnapshot, TimeBucketStats,
+    get_global_rpc_stats, get_rpc_stats_db_path, start_rpc_stats_auto_save_service, MethodStats,
+    ProviderStats, RpcCallRecord, RpcMinuteBucket, RpcSessionSnapshot, RpcStats, RpcStatsDatabase,
+    RpcStatsResponse, SessionStats, StatsCollector, StatsManager, StatsMessage, StatsSnapshot,
+    TimeBucketStats,
 };
 
 // ============================================================================
@@ -128,112 +112,3 @@ pub use types::{
     mask_url, CircuitState, ProviderKind, ProviderState, RpcCallResult, RpcMethod,
     SelectionStrategy,
 };
-
-// ============================================================================
-// Re-exports - Subscription Transport
-// ============================================================================
-
-pub use subscriptions::{
-    connection_state, get_websocket_url, get_websocket_url_from_http, get_websocket_urls,
-    subscribe_logs_mentions, subscription_metrics, websocket_url_for_attempt, ConnectionState,
-    LogsSubscription, SubscriptionEvent, SubscriptionMetrics,
-};
-
-// ============================================================================
-// Re-exports - Testing Utilities
-// ============================================================================
-
-pub use testing::{
-    get_rpc_version, test_rpc_endpoint, test_rpc_endpoints, validate_mainnet, RpcEndpointTestResult,
-};
-
-// ============================================================================
-// Re-exports - Utility Functions
-// ============================================================================
-
-pub use utils::{
-    get_ata_rent_from_chain, get_ata_rent_lamports, parse_pubkey_string, sol_to_lamports,
-    AtaRentInfo, DEFAULT_ATA_RENT_LAMPORTS,
-};
-
-// ============================================================================
-// Re-exports - Global Access Layer (get_rpc_client, etc.)
-// ============================================================================
-
-pub use global::{get_rpc_client, init_rpc_client, try_get_rpc_client};
-
-// ============================================================================
-// Re-exports - Client Type
-// ============================================================================
-
-pub use client::RpcClient;
-
-// ============================================================================
-// Re-exports - Transaction & Account Types
-// ============================================================================
-
-pub use types::{
-    // Transaction types used throughout the codebase
-    PaginatedAccountsResponse,
-    SignatureStatusData,
-    SignatureStatusResponse,
-    SignatureStatusResult,
-    TokenAccountInfo,
-    TokenBalance,
-    TransactionData,
-    TransactionDetails,
-    TransactionMeta,
-    UiTokenAmount,
-};
-
-// ============================================================================
-// Convenience Functions
-// ============================================================================
-
-/// Get primary RPC URL (masked for security)
-///
-/// Returns the primary configured RPC URL with sensitive parts masked.
-pub async fn get_rpc_url() -> String {
-    if let Some(client) = global::try_get_rpc_client() {
-        client.primary_url_masked().await
-    } else {
-        "(not initialized)".to_owned()
-    }
-}
-
-/// Get WebSocket URL derived from primary RPC
-///
-/// Converts the primary HTTP RPC URL to its WebSocket equivalent.
-pub fn get_ws_url() -> crate::Result<String> {
-    subscriptions::get_websocket_url()
-}
-
-/// Test if RPC is healthy
-///
-/// Performs a health check on the RPC connection.
-pub async fn is_rpc_healthy() -> bool {
-    if let Some(client) = global::try_get_rpc_client() {
-        client.get_health().await.is_ok()
-    } else {
-        false
-    }
-}
-
-/// Get RPC stats for API response
-///
-/// Returns aggregated RPC statistics suitable for API responses.
-pub async fn get_rpc_stats() -> Option<stats::RpcStatsResponse> {
-    let client = global::try_get_rpc_client()?;
-    Some(client.get_stats().await)
-}
-
-/// Get health info for all RPC providers
-///
-/// Returns detailed health information for each configured provider.
-pub async fn get_all_provider_health() -> Vec<client::ProviderHealthInfo> {
-    if let Some(client) = global::try_get_rpc_client() {
-        client.get_provider_health().await
-    } else {
-        Vec::new()
-    }
-}

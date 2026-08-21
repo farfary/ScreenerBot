@@ -26,8 +26,8 @@ impl TransactionDatabase {
 
         let result = conn
             .query_row(
-                "SELECT backfill_before_cursor, full_history_completed FROM bootstrap_state WHERE id = 1",
-                [],
+                "SELECT backfill_before_cursor, full_history_completed FROM bootstrap_state WHERE chain_id = ?1 AND id = 1",
+                params![self.chain.as_str()],
                 |row| {
                     let cursor: Option<String> = row.get(0)?;
                     let completed_i: i64 = row.get(1)?;
@@ -49,15 +49,15 @@ impl TransactionDatabase {
     pub async fn set_backfill_cursor(&self, cursor: Option<&str>) -> Result<(), String> {
         let conn = self.get_connection()?;
         conn.execute(
-            "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
-            [],
+            "INSERT OR IGNORE INTO bootstrap_state (chain_id, id, full_history_completed) VALUES (?1, 1, 0)",
+            params![self.chain.as_str()],
         )
         .map_err(|e| format!("Failed to ensure bootstrap_state row: {e}"))?;
 
         conn
             .execute(
-                "UPDATE bootstrap_state SET backfill_before_cursor = ?1, updated_at = datetime('now') WHERE id = 1",
-                params![cursor]
+                "UPDATE bootstrap_state SET backfill_before_cursor = ?1, updated_at = datetime('now') WHERE chain_id = ?2 AND id = 1",
+                params![cursor, self.chain.as_str()]
             )
             .map_err(|e| format!("Failed to update backfill cursor: {e}"))?;
         Ok(())
@@ -73,8 +73,8 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
         conn
             .execute(
-                "UPDATE bootstrap_state SET full_history_completed = 1, updated_at = datetime('now') WHERE id = 1",
-                []
+                "UPDATE bootstrap_state SET full_history_completed = 1, updated_at = datetime('now') WHERE chain_id = ?1 AND id = 1",
+                params![self.chain.as_str()]
             )
             .map_err(|e| format!("Failed to mark full history completed: {e}"))?;
         Ok(())
@@ -89,8 +89,8 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
         let affected = conn
             .execute(
-                "INSERT OR IGNORE INTO known_signatures(signature, wallet_address) SELECT signature, wallet_address FROM processed_transactions",
-                []
+                "INSERT OR IGNORE INTO known_signatures(chain_id, signature, wallet_address) SELECT chain_id, signature, wallet_address FROM processed_transactions WHERE chain_id = ?1",
+                params![self.chain.as_str()]
             )
             .map_err(|e| format!("Failed to reconcile known signatures: {e}"))?;
         Ok(affected as usize)

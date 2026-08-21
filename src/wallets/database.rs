@@ -5,8 +5,8 @@
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 
-use crate::database;
 use crate::paths::get_wallets_db_path;
+use crate::{chains::ChainId, database};
 
 mod schema;
 mod token_balances;
@@ -17,11 +17,12 @@ use schema::{TOKEN_BALANCES_SCHEMA, WALLETS_INDEXES, WALLETS_SCHEMA};
 /// Wallets database with connection pooling
 pub struct WalletsDatabase {
     pool: Pool<SqliteConnectionManager>,
+    chain: ChainId,
 }
 
 impl WalletsDatabase {
     /// Create or open the wallets database
-    pub fn new() -> Result<Self, String> {
+    pub fn new(chain: ChainId) -> Result<Self, String> {
         let db_path = get_wallets_db_path();
 
         // Ensure data directory exists
@@ -39,7 +40,7 @@ impl WalletsDatabase {
             .build(manager)
             .map_err(|e| format!("Failed to create wallets connection pool: {e}"))?;
 
-        let db = Self { pool };
+        let db = Self { pool, chain };
         db.initialize()?;
 
         Ok(db)
@@ -54,11 +55,13 @@ impl WalletsDatabase {
 
     /// Initialize database schema
     fn initialize(&self) -> Result<(), String> {
-        let conn = self.conn()?;
+        let mut conn = self.conn()?;
 
         // Create tables
         conn.execute(WALLETS_SCHEMA, [])
             .map_err(|e| format!("Failed to create wallets table: {e}"))?;
+
+        self.migrate_chain_identity(&mut conn)?;
 
         conn.execute(TOKEN_BALANCES_SCHEMA, [])
             .map_err(|e| format!("Failed to create token_balances table: {e}"))?;
@@ -70,5 +73,146 @@ impl WalletsDatabase {
         }
 
         Ok(())
+    }
+
+    fn migrate_chain_identity(&self, conn: &mut rusqlite::Connection) -> Result<(), String> {
+        let has_chain: bool = conn
+            .prepare("PRAGMA table_info(wallets)")
+            .map_err(|e| format!("Failed to inspect wallets schema: {e}"))?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("Failed to inspect wallets schema: {e}"))?
+            .filter_map(Result::ok)
+            .any(|column| column == "chain_id");
+        if has_chain {
+            return Ok(());
+        }
+        conn.execute("PRAGMA foreign_keys = OFF", [])
+            .map_err(|e| format!("Failed to disable wallet foreign keys: {e}"))?;
+        let result = (|| -> Result<(), String> {
+            let tx = conn
+                .transaction()
+                .map_err(|e| format!("Failed to begin wallets chain migration: {e}"))?;
+            tx.execute(
+                "CREATE TABLE wallets__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', name TEXT NOT NULL, address TEXT NOT NULL, encrypted_key TEXT NOT NULL, nonce TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'secondary', wallet_type TEXT NOT NULL DEFAULT 'generated', created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT, notes TEXT, is_active INTEGER NOT NULL DEFAULT 1, UNIQUE(chain_id, address))",
+                [],
+            ).map_err(|e| format!("Failed to create chain-aware wallets table: {e}"))?;
+            let before: i64 = tx
+                .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
+                .map_err(|e| format!("Failed to count wallets: {e}"))?;
+            tx.execute("INSERT INTO wallets__chain_v1 (id, chain_id, name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active) SELECT id, 'solana', name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active FROM wallets", [])
+                .map_err(|e| format!("Failed to copy wallets into chain-aware schema: {e}"))?;
+            let after: i64 = tx
+                .query_row("SELECT COUNT(*) FROM wallets__chain_v1", [], |row| {
+                    row.get(0)
+                })
+                .map_err(|e| format!("Failed to count migrated wallets: {e}"))?;
+            if before != after {
+                return Err(format!(
+                    "Wallet chain migration row count mismatch: {before} != {after}"
+                ));
+            }
+            tx.execute("DROP TABLE wallets", [])
+                .map_err(|e| format!("Failed to drop legacy wallets table: {e}"))?;
+            tx.execute("ALTER TABLE wallets__chain_v1 RENAME TO wallets", [])
+                .map_err(|e| format!("Failed to rename migrated wallets table: {e}"))?;
+            let fk_errors: i64 = tx
+                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                    row.get(0)
+                })
+                .map_err(|e| format!("Failed to verify wallet foreign keys: {e}"))?;
+            if fk_errors != 0 {
+                return Err(format!(
+                    "Wallet chain migration foreign key check found {fk_errors} errors"
+                ));
+            }
+            tx.commit()
+                .map_err(|e| format!("Failed to commit wallets chain migration: {e}"))
+        })();
+        conn.execute("PRAGMA foreign_keys = ON", [])
+            .map_err(|e| format!("Failed to re-enable wallet foreign keys: {e}"))?;
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::{Connection, OptionalExtension};
+
+    fn legacy_connection() -> Connection {
+        let conn = Connection::open_in_memory().expect("open test database");
+        conn.execute_batch(
+            "CREATE TABLE wallets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                address TEXT NOT NULL UNIQUE,
+                encrypted_key TEXT NOT NULL,
+                nonce TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'secondary',
+                wallet_type TEXT NOT NULL DEFAULT 'generated',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_used_at TEXT,
+                notes TEXT,
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+            INSERT INTO wallets (id, name, address, encrypted_key, nonce, role, wallet_type, is_active)
+            VALUES (1, 'main', 'AAAA', 'enc', 'nonce', 'primary', 'imported', 1),
+                   (2, 'sub', 'BBBB', 'enc2', 'nonce2', 'secondary', 'generated', 1);",
+        )
+        .expect("seed legacy wallets schema");
+        conn
+    }
+
+    #[test]
+    fn legacy_wallets_migrate_to_chain_scoped_schema_losslessly_and_idempotently() {
+        let mut conn = legacy_connection();
+        let db = WalletsDatabase {
+            pool: Pool::builder()
+                .max_size(1)
+                .build(SqliteConnectionManager::memory())
+                .expect("build unused pool for migration helper"),
+            chain: ChainId::Solana,
+        };
+
+        db.migrate_chain_identity(&mut conn)
+            .expect("migrate legacy wallets database");
+        // Idempotent: a second pass over the already-migrated schema is a no-op.
+        db.migrate_chain_identity(&mut conn)
+            .expect("repeat wallets chain migration");
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
+            .expect("count migrated wallets");
+        assert_eq!(count, 2, "row count must survive migration");
+
+        let addresses: Vec<(String, String)> = conn
+            .prepare("SELECT chain_id, address FROM wallets ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            addresses,
+            vec![
+                ("solana".to_owned(), "AAAA".to_owned()),
+                ("solana".to_owned(), "BBBB".to_owned()),
+            ],
+            "every legacy row is assigned chain_id = solana, address preserved"
+        );
+
+        // Chain-aware uniqueness: same address under a different (hypothetical)
+        // chain is not a conflict — the UNIQUE index is (chain_id, address).
+        conn.execute(
+            "INSERT INTO wallets (chain_id, name, address, encrypted_key, nonce) VALUES ('other-chain', 'x', 'AAAA', 'enc', 'nonce')",
+            [],
+        )
+        .expect("chain-scoped unique index allows the same address under a different chain");
+
+        assert!(conn
+            .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
+            .optional()
+            .unwrap()
+            .is_none());
     }
 }

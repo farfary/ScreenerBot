@@ -1,7 +1,7 @@
 //! Core Swap Operations - High-level swap functions
 //! Provides get_best_quote() and execute_swap_with_fallback()
 
-use crate::constants::SOL_MINT;
+use crate::chains::solana::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::swaps::registry::get_registry;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};

@@ -146,7 +146,7 @@ pub fn set_config<F: FnOnce(&mut screenerbot::config::schemas::Config)>(f: F) {
 /// Never touches a real key: the keypair is generated here and encrypted into the
 /// in-memory test config only.
 pub fn configure_own_wallet() -> String {
-    use solana_sdk::signature::{Keypair, Signer};
+    use screenerbot::chains::solana::solana_sdk::signature::{Keypair, Signer};
 
     let keypair = Keypair::new();
     let address = keypair.pubkey().to_string();
@@ -174,7 +174,7 @@ pub const TEST_MINT: &str = "TestMint1111111111111111111111111111111111";
 /// position whose decimals are unknown deliberately returns a ZERO P&L, so without this
 /// the interesting branches are never exercised.
 pub fn seed_decimals(mint: &str, decimals: u8) {
-    screenerbot::tokens::cache_decimals(mint, decimals);
+    screenerbot::tokens::cache_decimals(screenerbot::chains::ChainId::Solana, mint, decimals);
 }
 
 /// A minimal OPEN buy position: entry at `entry_price`, `size_sol` invested, no DCA,
@@ -600,7 +600,11 @@ pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase
 
     let path = screenerbot::paths::get_tokens_db_path();
     let db = std::sync::Arc::new(
-        TokenDatabase::new(&path.to_string_lossy()).expect("open cloned tokens.db"),
+        TokenDatabase::new(
+            &path.to_string_lossy(),
+            screenerbot::chains::ChainId::Solana,
+        )
+        .expect("open cloned tokens.db"),
     );
     init_global_database(db.clone()).expect("register global token database");
 
@@ -610,7 +614,7 @@ pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase
         .expect("preload decimals");
     let count = decimals.len();
     for (mint, value) in decimals {
-        cache_decimals(&mint, value);
+        cache_decimals(screenerbot::chains::ChainId::Solana, &mint, value);
     }
     eprintln!(
         "real-db: preloaded {count} decimals in {:?}",

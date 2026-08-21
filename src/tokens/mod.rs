@@ -74,10 +74,10 @@ pub use database::{
     TokenDatabase,
 };
 pub use filtered::{
-    get_blacklisted_tokens, get_counts as get_filtered_counts, get_filtered_lists,
-    get_last_update_time as get_filtered_last_update, get_passed_tokens, get_rejected_tokens,
-    get_tokens_with_open_positions, get_tokens_with_pool_price, store_filtered_results,
-    FilteredListCounts, FilteredTokenLists,
+    clear_filtered_results, get_blacklisted_tokens, get_counts as get_filtered_counts,
+    get_filtered_lists, get_last_update_time as get_filtered_last_update, get_passed_tokens,
+    get_rejected_tokens, get_tokens_with_open_positions, get_tokens_with_pool_price,
+    store_filtered_results, FilteredListCounts, FilteredTokenLists,
 };
 pub use market::{dexscreener, geckoterminal};
 pub use security::rugcheck;
@@ -186,7 +186,10 @@ pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
 pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
     // Fast path: token already known (discovered, has market data) — covers
     // not-pool-tracked and filter-failed tokens shown in the dashboard.
-    if let Some(token) = store::get_full_token_async(mint).await? {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let chain = db.chain();
+    if let Some(token) = store::get_full_token_async(chain, mint).await? {
         return Ok(token);
     }
 
@@ -197,7 +200,9 @@ pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
 
     // Stamp a metadata row so the token is persisted, fetching decimals from chain.
     if let Some(db) = get_global_database() {
-        let decimals = decimals::get_token_decimals_from_chain(mint).await.ok();
+        let decimals = decimals::get_token_decimals_from_chain(db.chain(), mint)
+            .await
+            .ok();
         let _ = db.upsert_token(mint, None, None, decimals);
     }
 
@@ -210,9 +215,11 @@ pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
     }
 
     // Retry assembly now that market data may exist.
-    store::get_full_token_async(mint).await?.ok_or_else(|| {
-        TokenError::Database(format!(
-            "Token {mint} has no market data available (cannot price/swap)"
-        ))
-    })
+    store::get_full_token_async(chain, mint)
+        .await?
+        .ok_or_else(|| {
+            TokenError::Database(format!(
+                "Token {mint} has no market data available (cannot price/swap)"
+            ))
+        })
 }

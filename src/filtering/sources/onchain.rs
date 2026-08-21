@@ -45,17 +45,26 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
     // H4: Known scam authority detection (auto-discovered, no hardcoding)
     if config.reject_known_scam_authorities {
         if let Some(ref freeze_auth) = token.freeze_authority {
-            if crate::tokens::authority_cache::is_blocked_authority(freeze_auth) {
+            if crate::tokens::authority_cache::is_blocked_authority(
+                crate::chains::ChainId::Solana,
+                freeze_auth,
+            ) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }
         if let Some(ref update_auth) = token.update_authority {
-            if crate::tokens::authority_cache::is_blocked_authority(update_auth) {
+            if crate::tokens::authority_cache::is_blocked_authority(
+                crate::chains::ChainId::Solana,
+                update_auth,
+            ) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }
         if let Some(ref mint_auth) = token.mint_authority {
-            if crate::tokens::authority_cache::is_blocked_authority(mint_auth) {
+            if crate::tokens::authority_cache::is_blocked_authority(
+                crate::chains::ChainId::Solana,
+                mint_auth,
+            ) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }

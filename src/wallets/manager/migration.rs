@@ -2,7 +2,7 @@
 
 use crate::logger::{self, LogTag};
 
-use super::super::crypto::{decrypt_to_keypair, keypair_to_address};
+use super::super::crypto::address_from_encrypted_key;
 use super::super::types::{WalletRole, WalletType};
 use super::WALLETS_DB;
 
@@ -30,10 +30,9 @@ pub(super) async fn migrate_from_config() -> Result<(), String> {
         return Ok(());
     }
 
-    // Decrypt to get address
-    let keypair = decrypt_to_keypair(&encrypted, &nonce)
+    // Decrypt to get address (the key material itself is re-stored encrypted, unchanged)
+    let address = address_from_encrypted_key(&encrypted, &nonce)
         .map_err(|e| format!("Failed to decrypt config wallet: {e}"))?;
-    let address = keypair_to_address(&keypair);
 
     // Insert as main wallet
     db.insert_wallet(

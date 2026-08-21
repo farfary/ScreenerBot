@@ -1,8 +1,11 @@
-//! Swap execution — routing, quoting, and transaction building for token trades.
+//! Swap routing, quoting and fallback orchestration — chain-neutral. The concrete
+//! DEX adapters implementing `SwapRouter` (Jupiter, GMGN, Raydium) live under
+//! `crate::chains::solana::swaps::routers`; this module owns only the
+//! `SwapRouter` contract, the registry that wires adapters up, and the
+//! router-agnostic quote/execute-with-fallback policy.
 pub mod operations;
 pub mod registry;
 pub mod router;
-pub mod routers;
 pub mod types;
 
 // Re-export router system

@@ -1,14 +1,14 @@
 //! Close position operations — full position exit with swap execution and verification.
 
+use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
-use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{acquire_position_lock, add_signature_to_index};
 use crate::positions::types::VerificationKind;
 use crate::positions::PENDING_VERIFICATION_SUFFIX;
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::{get_token_balance, get_total_token_balance, get_wallet_address};
 use serde_json::json;

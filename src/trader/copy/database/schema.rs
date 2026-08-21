@@ -1,6 +1,6 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
-pub(super) const SCHEMA_VERSION: i64 = 3;
+pub(super) const SCHEMA_VERSION: i64 = 4;
 
 pub(super) const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS copy_metadata (
@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS copy_metadata (
 );
 CREATE TABLE IF NOT EXISTS copy_tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chain_id TEXT NOT NULL,
     target_address TEXT NOT NULL,
     label TEXT,
     enabled INTEGER NOT NULL,
@@ -141,6 +142,37 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
                 [],
             )
             .map_err(|error| format!("Failed to backfill copy claim update time: {error}"))?;
+    }
+    let mut statement = connection
+        .prepare("PRAGMA table_info(copy_tasks)")
+        .map_err(|error| format!("Failed to inspect copy task identity schema: {error}"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| format!("Failed to query copy task identity schema: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to decode copy task identity schema: {error}"))?;
+    drop(statement);
+    if !columns.iter().any(|column| column == "chain_id") {
+        let transaction = connection
+            .unchecked_transaction()
+            .map_err(|error| format!("Failed to begin copy chain migration: {error}"))?;
+        transaction
+            .execute(
+                "ALTER TABLE copy_tasks ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+                [],
+            )
+            .map_err(|error| format!("Failed to add copy task chain identity: {error}"))?;
+        let invalid = transaction
+            .query_row("PRAGMA foreign_key_check", [], |_| Ok(1_i64))
+            .optional()
+            .map_err(|error| format!("Failed to validate copy chain migration: {error}"))?
+            .unwrap_or(0);
+        if invalid != 0 {
+            return Err("Copy chain migration failed foreign-key validation".to_owned());
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("Failed to commit copy chain migration: {error}"))?;
     }
     Ok(())
 }

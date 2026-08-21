@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
+use crate::chains::solana::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 use super::{

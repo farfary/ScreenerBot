@@ -1,6 +1,7 @@
 //! Pure copy sizing and risk-cap contracts.
 
 use chrono::Utc;
+use screenerbot::chains::ChainId;
 use screenerbot::trader::copy::{
     precheck, size_for, CopyMode, CopySkip, CopyTask, CopyTaskInput, ExitMode, PipelinePolicy,
     RiskContext, SizingMode, SpendState,
@@ -10,6 +11,7 @@ use screenerbot::trader::{MAX_MANUAL_SLIPPAGE_PCT, MAX_TRADE_SIZE_MULTIPLIER};
 fn task(sizing: SizingMode) -> CopyTask {
     CopyTask {
         id: 1,
+        chain: ChainId::Solana,
         target_address: "target".to_owned(),
         label: None,
         enabled: true,
@@ -203,29 +205,29 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
     };
 
     assert_eq!(
-        input(SizingMode::Fixed { sol: f64::NAN }).into_task(Utc::now()),
+        input(SizingMode::Fixed { sol: f64::NAN }).into_task(ChainId::Solana, Utc::now()),
         Err(CopySkip::InvalidSizing)
     );
     assert_eq!(
-        input(SizingMode::RatioOfTarget { pct: 0.0 }).into_task(Utc::now()),
+        input(SizingMode::RatioOfTarget { pct: 0.0 }).into_task(ChainId::Solana, Utc::now()),
         Err(CopySkip::InvalidSizing)
     );
     let mut invalid_range = input(SizingMode::Fixed { sol: 0.1 });
     invalid_range.min_target_trade_sol = Some(-1.0);
     assert_eq!(
-        invalid_range.into_task(Utc::now()),
+        invalid_range.into_task(ChainId::Solana, Utc::now()),
         Err(CopySkip::InvalidSizing)
     );
     let mut live = input(SizingMode::Fixed { sol: 0.1 });
     live.mode = CopyMode::Live;
     assert_eq!(
-        live.into_task(Utc::now()),
+        live.into_task(ChainId::Solana, Utc::now()),
         Err(CopySkip::ModeTransitionRequired)
     );
     let mut invalid_policy = input(SizingMode::Fixed { sol: 0.1 });
     invalid_policy.exit_policy_overrides.trailing.distance_pct = Some(150.0);
     assert_eq!(
-        invalid_policy.into_task(Utc::now()),
+        invalid_policy.into_task(ChainId::Solana, Utc::now()),
         Err(CopySkip::InvalidExitPolicy)
     );
 }

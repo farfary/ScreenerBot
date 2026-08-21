@@ -1,8 +1,6 @@
 //! Manual trading operations
 
 use axum::{extract::Query, http::StatusCode, response::Response, Json};
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 
 use crate::config::with_config;
 use crate::global::{are_core_services_ready, get_pending_services};
@@ -66,7 +64,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     }
 
     // Validate mint
-    if Pubkey::from_str(&req.mint).is_err() {
+    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
         let error_msg = "Invalid token mint address";
         crate::trader::actions::create_failed_buy_action(&req.mint, error_msg).await;
         return error_response(
@@ -199,7 +197,7 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
     }
 
     // Validate mint
-    if Pubkey::from_str(&req.mint).is_err() {
+    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
         let error_msg = "Invalid token mint address";
         crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
         return error_response(
@@ -296,7 +294,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
     }
 
     // Validate mint
-    if Pubkey::from_str(&req.mint).is_err() {
+    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
         let error_msg = "Invalid token mint address";
         crate::trader::actions::create_failed_sell_action(&req.mint, error_msg).await;
         return error_response(
@@ -404,14 +402,14 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 /// For BUY: requires amount_sol (SOL to spend), returns tokens received
 /// For SELL: requires amount_tokens (tokens to sell), returns SOL received
 pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Response {
-    use crate::constants::SOL_MINT;
+    use crate::chains::solana::constants::SOL_MINT;
     use crate::swaps::operations::get_best_quote;
     use crate::swaps::types::{QuoteRequest, SwapMode};
     use crate::tokens::database::get_token_async;
     use crate::utils::get_wallet_address;
 
     // Validate mint
-    if Pubkey::from_str(&req.mint).is_err() {
+    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "InvalidMint",

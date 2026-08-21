@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{types::FromSql, Row};
 
+use crate::chains::ChainId;
 use crate::tokens::types::{
     DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, Token, TokenError,
     TokenMetadata, TokenResult,
@@ -14,6 +15,7 @@ pub(super) enum MarketDataType {
 }
 
 pub(super) fn assemble_token(
+    chain: ChainId,
     metadata: TokenMetadata,
     market_data: MarketDataType,
     data_source: DataSource,
@@ -123,7 +125,9 @@ pub(super) fn assemble_token(
         let rc_freeze = security_ref.and_then(|sec| sec.freeze_authority.clone());
         if rc_mint.is_some() || rc_freeze.is_some() {
             (rc_mint, rc_freeze)
-        } else if let Some(cached) = crate::tokens::authority_cache::get_cached(&metadata.mint) {
+        } else if let Some(cached) =
+            crate::tokens::authority_cache::get_cached(chain, &metadata.mint)
+        {
             (cached.mint_authority, cached.freeze_authority)
         } else {
             (None, None)
@@ -274,6 +278,7 @@ pub(super) fn read_row_value<T: FromSql>(
 }
 
 pub(super) fn assemble_token_without_market_data(
+    chain: ChainId,
     metadata: TokenMetadata,
     security: Option<RugcheckData>,
     is_blacklisted: bool,
@@ -296,7 +301,9 @@ pub(super) fn assemble_token_without_market_data(
         let rc_freeze = security_ref.and_then(|sec| sec.freeze_authority.clone());
         if rc_mint.is_some() || rc_freeze.is_some() {
             (rc_mint, rc_freeze)
-        } else if let Some(cached) = crate::tokens::authority_cache::get_cached(&metadata.mint) {
+        } else if let Some(cached) =
+            crate::tokens::authority_cache::get_cached(chain, &metadata.mint)
+        {
             (cached.mint_authority, cached.freeze_authority)
         } else {
             (None, None)

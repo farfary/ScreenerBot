@@ -4,8 +4,6 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use solana_sdk::signature::Keypair;
-use solana_sdk::signer::Signer;
 
 // =============================================================================
 // ENUMS
@@ -117,21 +115,6 @@ impl Wallet {
     /// Check if wallet can be used for operations
     pub fn is_usable(&self) -> bool {
         self.is_active && self.role != WalletRole::Archive
-    }
-}
-
-/// Wallet with decrypted keypair (for operations requiring signing)
-pub struct WalletWithKey {
-    /// Wallet metadata
-    pub wallet: Wallet,
-    /// Decrypted Solana keypair
-    pub keypair: Keypair,
-}
-
-impl WalletWithKey {
-    /// Get the public key address
-    pub fn address(&self) -> String {
-        self.keypair.pubkey().to_string()
     }
 }
 

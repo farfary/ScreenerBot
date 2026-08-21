@@ -8,12 +8,14 @@ use std::sync::atomic::Ordering;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::tools::swap_executor::tool_sell;
-use crate::wallets::{self, WalletRole, WalletWithKey};
+use crate::wallets::{self, Wallet, WalletRole};
 
-use super::transfer::{close_ata, collect_sol, transfer_sol};
+use crate::chains::solana::assets::transfer::{close_ata_for_wallet, transfer_sol_from_main};
+
+use super::transfer::collect_sol;
 use super::types::{MultiSellConfig, SessionResult, WalletOpResult, WalletPlan};
 
 /// Execute a multi-sell operation across multiple wallets
@@ -68,15 +70,9 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
             .collect();
 
         if !topup_needed.is_empty() {
-            let main_keypair = wallets::get_main_keypair()
-                .await
-                .map_err(|e| format!("Failed to get main wallet keypair: {e}"))?;
-
             for plan in topup_needed {
                 let topup_amount = config.min_sol_for_fee - plan.sol_balance + 0.001;
-                if let Err(e) =
-                    transfer_sol(&main_keypair, &plan.wallet_address, topup_amount).await
-                {
+                if let Err(e) = transfer_sol_from_main(&plan.wallet_address, topup_amount).await {
                     logger::warning(
                         LogTag::Tools,
                         &format!(
@@ -94,10 +90,8 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
     }
 
     // Execute sells - track successful sells for ATA closure
-    let wallet_map: HashMap<String, &WalletWithKey> = wallets
-        .iter()
-        .map(|w| (w.wallet.address.clone(), w))
-        .collect();
+    let wallet_map: HashMap<String, &Wallet> =
+        wallets.iter().map(|w| (w.address.clone(), w)).collect();
 
     // Track wallets that successfully sold 100% (for ATA closure)
     let mut successful_full_sells: HashSet<String> = HashSet::new();
@@ -153,12 +147,13 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
             if let Some(wallet) = wallet_map.get(wallet_address) {
                 // Verify balance is actually zero before closing
                 let remaining_balance = rpc_client
-                    .get_token_balance(&wallet.wallet.address, &config.token_mint)
+                    .get_token_balance(&wallet.address, &config.token_mint)
                     .await
                     .unwrap_or_default();
 
                 if remaining_balance == 0 {
-                    if let Err(e) = close_ata(&wallet.keypair, &config.token_mint, false).await {
+                    if let Err(e) = close_ata_for_wallet(wallet.id, &config.token_mint, false).await
+                    {
                         logger::debug(
                             LogTag::Tools,
                             &format!("Failed to close ATA for {}: {}", &wallet_address[..8], e),
@@ -190,9 +185,9 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
             .map_err(|e| format!("Failed to get main wallet: {e}"))?
             .ok_or("No main wallet configured")?;
 
-        let wallets_to_consolidate: Vec<WalletWithKey> = wallets
+        let wallets_to_consolidate: Vec<Wallet> = wallets
             .into_iter()
-            .filter(|w| w.wallet.role == WalletRole::Secondary)
+            .filter(|w| w.role == WalletRole::Secondary)
             .collect();
 
         let collect_results =
@@ -222,28 +217,28 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
 }
 
 /// Load wallets for multi-sell operation
-async fn load_wallets_for_sell(config: &MultiSellConfig) -> Result<Vec<WalletWithKey>, String> {
-    let all_wallets = wallets::get_wallets_with_keys().await?;
+async fn load_wallets_for_sell(config: &MultiSellConfig) -> Result<Vec<Wallet>, String> {
+    let all_wallets = wallets::list_active_wallets().await?;
     let rpc_client = get_rpc_client();
 
     let mut wallets_with_balance = Vec::new();
 
     for wallet in all_wallets {
         // Skip main wallet unless explicitly included
-        if wallet.wallet.role == WalletRole::Main {
+        if wallet.role == WalletRole::Main {
             continue;
         }
 
         // Filter by wallet IDs if specified
         if let Some(ref ids) = config.wallet_ids {
-            if !ids.contains(&wallet.wallet.id) {
+            if !ids.contains(&wallet.id) {
                 continue;
             }
         }
 
         // Check token balance
         let token_balance = rpc_client
-            .get_token_balance(&wallet.wallet.address, &config.token_mint)
+            .get_token_balance(&wallet.address, &config.token_mint)
             .await
             .unwrap_or_default();
 
@@ -258,19 +253,19 @@ async fn load_wallets_for_sell(config: &MultiSellConfig) -> Result<Vec<WalletWit
 /// Create sell plans for each wallet
 async fn create_sell_plans(
     config: &MultiSellConfig,
-    wallets: &[WalletWithKey],
+    wallets: &[Wallet],
 ) -> Result<Vec<WalletPlan>, String> {
     let rpc_client = get_rpc_client();
     let mut plans = Vec::new();
 
     for wallet in wallets {
         let sol_balance = rpc_client
-            .get_sol_balance(&wallet.wallet.address)
+            .get_sol_balance(&wallet.address)
             .await
             .unwrap_or_default();
 
         let token_balance = rpc_client
-            .get_token_balance(&wallet.wallet.address, &config.token_mint)
+            .get_token_balance(&wallet.address, &config.token_mint)
             .await
             .unwrap_or_default();
 
@@ -279,9 +274,9 @@ async fn create_sell_plans(
         }
 
         plans.push(WalletPlan {
-            wallet_id: wallet.wallet.id,
-            wallet_address: wallet.wallet.address.clone(),
-            wallet_name: wallet.wallet.name.clone(),
+            wallet_id: wallet.id,
+            wallet_address: wallet.address.clone(),
+            wallet_name: wallet.name.clone(),
             sol_balance,
             token_balance: Some(token_balance as f64),
             planned_amount_sol: 0.0, // Will be determined by swap output
@@ -299,14 +294,14 @@ async fn create_sell_plans(
 
 /// Execute a single sell operation
 async fn execute_single_sell(
-    wallet: &WalletWithKey,
+    wallet: &Wallet,
     token_mint: &str,
     amount: u64,
     slippage_bps: u64,
     _router: Option<&str>,
 ) -> WalletOpResult {
-    let wallet_id = wallet.wallet.id;
-    let wallet_address = wallet.wallet.address.clone();
+    let wallet_id = wallet.id;
+    let wallet_address = wallet.address.clone();
 
     logger::debug(
         LogTag::Tools,

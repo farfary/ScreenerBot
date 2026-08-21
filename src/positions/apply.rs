@@ -746,8 +746,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // hardcoded to 10^9 (SOL's), so for any token that is not 9-decimal
                             // the cost basis was off by orders of magnitude, and the number went
                             // to the events log AND the Telegram notification.
-                            let sold_tokens = match crate::tokens::get_decimals(&position.mint)
-                                .await
+                            let sold_tokens = match crate::tokens::get_decimals(
+                                crate::chains::ChainId::Solana,
+                                &position.mint,
+                            )
+                            .await
                             {
                                 Some(decimals) => exit_amount as f64 / 10_f64.powi(decimals as i32),
                                 None => 0.0,
@@ -973,7 +976,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             let mint = find_mint_by_position_id(position_id).await?;
 
             // Get token decimals for accurate price calculation
-            let decimals = crate::tokens::get_decimals(&mint).await.unwrap_or(9); // Default to 9 if not found
+            let decimals = crate::tokens::get_decimals(crate::chains::ChainId::Solana, &mint)
+                .await
+                .unwrap_or(9); // Default to 9 if not found
 
             let updated =
         update_position_state_by_id(position_id, |pos| {

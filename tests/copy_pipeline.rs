@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use chrono::{TimeZone, Utc};
+use screenerbot::chains::ChainId;
 use screenerbot::trader::copy::{
     run_paper_pipeline, CopyMode, CopyOutcome, CopyTask, ExitMode, PaperCosts, PipelinePolicy,
     RiskContext, SizingMode, SpendState,
@@ -16,6 +17,7 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
     let decided = Utc.timestamp_opt(12, 0).unwrap();
     let task = CopyTask {
         id: 7,
+        chain: ChainId::Solana,
         target_address: "target".to_owned(),
         label: Some("Paper target".to_owned()),
         enabled: true,

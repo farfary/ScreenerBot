@@ -30,7 +30,7 @@ pub const RETRY_BASE_DELAY_SECS: u64 = 2;
 #[derive(Debug, Clone)]
 pub struct ServiceConfig {
     /// Wallet public key to monitor
-    pub wallet_pubkey: solana_sdk::pubkey::Pubkey,
+    pub wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
     /// Interval for expired-pending cleanup. Real-time
     /// detection (WebSocket + poll fallback + gap-fill) is owned by
     /// `wallets::watch`, not this service -- see `processing.rs`.
@@ -40,7 +40,7 @@ pub struct ServiceConfig {
 impl Default for ServiceConfig {
     fn default() -> Self {
         Self {
-            wallet_pubkey: solana_sdk::pubkey::Pubkey::default(),
+            wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey::default(),
             check_interval_secs: NORMAL_CHECK_INTERVAL_SECS,
         }
     }

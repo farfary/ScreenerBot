@@ -1,0 +1,1461 @@
+//! RPC client methods implementation
+//!
+//! Implementation of `RpcClientMethods` trait for `RpcClient`.
+//! Type definitions and trait signatures are in `methods.rs`.
+
+use super::methods::{
+    ProviderHealthInfo, RpcClientMethods, RpcFilterType, RpcTokenAccountBalance, SignatureInfo,
+    TokenSupply,
+};
+use super::RpcClient;
+use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
+use crate::chains::solana::rpc::types::{TokenAccountInfo, TransactionDetails};
+use crate::chains::solana::solana_sdk::{
+    account::Account,
+    commitment_config::CommitmentLevel,
+    hash::Hash,
+    pubkey::Pubkey,
+    signature::{Keypair, Signature},
+    signer::Signer,
+    transaction::VersionedTransaction,
+};
+use crate::chains::solana::solana_transaction_status::{
+    EncodedConfirmedTransactionWithStatusMeta, TransactionStatus,
+};
+use crate::rpc::stats::RpcStatsResponse;
+use crate::rpc::RpcError;
+use base64::Engine;
+use std::str::FromStr;
+use std::time::Duration;
+
+// =============================================================================
+// Helper functions for error conversion
+// =============================================================================
+
+/// Convert a string error message into a DataError::ParseError
+#[inline]
+fn parse_err(data_type: &str, error: &str) -> crate::Error {
+    crate::Error::Data(crate::errors::DataError::ParseError {
+        data_type: data_type.to_string(),
+        error: error.to_string(),
+    })
+}
+
+/// Convert a string error message into a DataError::InvalidFormat
+#[inline]
+fn format_err(expected: &str, received: &str) -> crate::Error {
+    crate::Error::Data(crate::errors::DataError::InvalidFormat {
+        expected: expected.to_string(),
+        received: received.to_string(),
+    })
+}
+
+impl RpcClientMethods for RpcClient {
+    async fn get_account(&self, pubkey: &Pubkey) -> crate::Result<Option<Account>> {
+        self.get_account_with_commitment(pubkey, CommitmentLevel::Confirmed)
+            .await
+    }
+
+    async fn get_account_with_commitment(
+        &self,
+        pubkey: &Pubkey,
+        commitment: CommitmentLevel,
+    ) -> crate::Result<Option<Account>> {
+        let params = serde_json::json!([
+            pubkey.to_string(),
+            {
+                "encoding": "base64",
+                "commitment": commitment_to_string(commitment)
+            }
+        ]);
+
+        let result = self.manager.execute_raw("getAccountInfo", params).await?;
+
+        // Parse the response
+        let value = result.get("value");
+        if value.is_none() || value == Some(&serde_json::Value::Null) {
+            return Ok(None);
+        }
+
+        let value = value.unwrap();
+        parse_account_from_json(value)
+    }
+
+    async fn get_multiple_accounts(
+        &self,
+        pubkeys: &[Pubkey],
+    ) -> crate::Result<Vec<Option<Account>>> {
+        if pubkeys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Batch in chunks of 100 (Solana limit)
+        let mut all_accounts = Vec::with_capacity(pubkeys.len());
+
+        for chunk in pubkeys.chunks(100) {
+            let keys: Vec<String> = chunk.iter().map(|p| p.to_string()).collect();
+            let params = serde_json::json!([
+                keys,
+                {
+                    "encoding": "base64",
+                    "commitment": "confirmed"
+                }
+            ]);
+
+            let result = self
+                .manager
+                .execute_raw("getMultipleAccounts", params)
+                .await?;
+
+            let values = result
+                .get("value")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| parse_err("response", "missing value array"))?;
+
+            for value in values {
+                if value.is_null() {
+                    all_accounts.push(None);
+                } else {
+                    all_accounts.push(parse_account_from_json(value)?);
+                }
+            }
+        }
+
+        Ok(all_accounts)
+    }
+
+    async fn get_sol_balance(&self, wallet: &str) -> crate::Result<f64> {
+        let params = serde_json::json!([wallet]);
+
+        let result = self.manager.execute_raw("getBalance", params).await?;
+
+        let lamports = result
+            .get("value")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| parse_err("balance", "invalid response format"))?;
+
+        Ok(lamports as f64 / 1_000_000_000.0)
+    }
+
+    async fn get_token_account_balance(&self, token_account: &str) -> crate::Result<f64> {
+        let params = serde_json::json!([token_account]);
+
+        let result = self
+            .manager
+            .execute_raw("getTokenAccountBalance", params)
+            .await?;
+
+        let ui_amount = result
+            .get("value")
+            .and_then(|v| v.get("uiAmount"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or_default();
+
+        Ok(ui_amount)
+    }
+
+    async fn get_token_balance(&self, wallet_address: &str, mint: &str) -> crate::Result<u64> {
+        // Use getTokenAccountsByOwner to find token accounts for this wallet+mint
+        let params = serde_json::json!([
+            wallet_address,
+            { "mint": mint },
+            { "encoding": "jsonParsed", "commitment": "confirmed" }
+        ]);
+
+        let result = self
+            .manager
+            .execute_raw("getTokenAccountsByOwner", params)
+            .await?;
+
+        // Parse the response - look for token accounts and sum their balances
+        let value = result.get("value").and_then(|v| v.as_array());
+
+        if let Some(accounts) = value {
+            if let Some(account) = accounts.first() {
+                if let Some(amount_str) = account
+                    .get("account")
+                    .and_then(|a| a.get("data"))
+                    .and_then(|d| d.get("parsed"))
+                    .and_then(|p| p.get("info"))
+                    .and_then(|i| i.get("tokenAmount"))
+                    .and_then(|t| t.get("amount"))
+                    .and_then(|a| a.as_str())
+                {
+                    return amount_str.parse::<u64>().map_err(|e| {
+                        parse_err(
+                            "token amount",
+                            &format!("Failed to parse '{amount_str}': {e}"),
+                        )
+                    });
+                }
+            }
+        }
+
+        // No token account found - return 0
+        Ok(0)
+    }
+
+    async fn get_latest_blockhash(&self) -> crate::Result<Hash> {
+        let (hash, _) = self
+            .get_latest_blockhash_with_commitment(CommitmentLevel::Finalized)
+            .await?;
+        Ok(hash)
+    }
+
+    async fn get_latest_blockhash_with_commitment(
+        &self,
+        commitment: CommitmentLevel,
+    ) -> crate::Result<(Hash, u64)> {
+        let params = serde_json::json!([{
+            "commitment": commitment_to_string(commitment)
+        }]);
+
+        let result = self
+            .manager
+            .execute_raw("getLatestBlockhash", params)
+            .await?;
+
+        let value = result
+            .get("value")
+            .ok_or_else(|| parse_err("response", "missing value field"))?;
+        let blockhash = value
+            .get("blockhash")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| parse_err("blockhash", "missing blockhash field"))?;
+        let last_valid_block_height = value
+            .get("lastValidBlockHeight")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| parse_err("blockhash", "missing lastValidBlockHeight"))?;
+
+        let hash = Hash::from_str(blockhash)
+            .map_err(|e| parse_err("blockhash", &format!("Invalid hash \'{blockhash}\': {e}")))?;
+
+        Ok((hash, last_valid_block_height))
+    }
+
+    async fn get_block_height(&self) -> crate::Result<u64> {
+        let params = serde_json::json!([]);
+
+        let result = self.manager.execute_raw("getBlockHeight", params).await?;
+
+        result
+            .as_u64()
+            .ok_or_else(|| parse_err("block height", "invalid response format"))
+    }
+
+    async fn send_transaction(
+        &self,
+        transaction: &VersionedTransaction,
+    ) -> crate::Result<Signature> {
+        // Serialize transaction
+        let tx_bytes = bincode::serialize(transaction)
+            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {e}")))?;
+        let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+        let params = serde_json::json!([
+            tx_base64,
+            {
+                "encoding": "base64",
+                "skipPreflight": false,
+                "preflightCommitment": "confirmed",
+                "maxRetries": 3
+            }
+        ]);
+
+        let result = self.manager.execute_raw("sendTransaction", params).await?;
+
+        let sig_str = result
+            .as_str()
+            .ok_or_else(|| parse_err("signature", "invalid response format"))?;
+
+        Signature::from_str(sig_str).map_err(|e| {
+            parse_err(
+                "signature",
+                &format!("Invalid signature \'{sig_str}\': {e}"),
+            )
+        })
+    }
+
+    async fn get_transaction(
+        &self,
+        signature: &Signature,
+    ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
+        let params = serde_json::json!([
+            signature.to_string(),
+            {
+                "encoding": "jsonParsed",
+                "commitment": "confirmed",
+                "maxSupportedTransactionVersion": 0
+            }
+        ]);
+
+        let result = self.manager.execute_raw("getTransaction", params).await;
+
+        match result {
+            Ok(value) => {
+                if value.is_null() {
+                    return Ok(None);
+                }
+                let tx: EncodedConfirmedTransactionWithStatusMeta =
+                    serde_json::from_value(value)
+                        .map_err(|e| parse_err("transaction", &e.to_string()))?;
+                Ok(Some(tx))
+            }
+            Err(RpcError::AccountNotFound { .. }) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    async fn get_signature_statuses(
+        &self,
+        signatures: &[Signature],
+    ) -> crate::Result<Vec<Option<TransactionStatus>>> {
+        let sig_strings: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
+        let params = serde_json::json!([sig_strings, { "searchTransactionHistory": true }]);
+
+        let result = self
+            .manager
+            .execute_raw("getSignatureStatuses", params)
+            .await?;
+
+        let values = result
+            .get("value")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| parse_err("response", "invalid format"))?;
+
+        let mut statuses = Vec::with_capacity(values.len());
+        for value in values {
+            if value.is_null() {
+                statuses.push(None);
+            } else {
+                let status: TransactionStatus =
+                    serde_json::from_value(value.clone()).map_err(|e| {
+                        crate::Error::Data(crate::errors::DataError::ParseError {
+                            data_type: "TransactionStatus".to_owned(),
+                            error: e.to_string(),
+                        })
+                    })?;
+                statuses.push(Some(status));
+            }
+        }
+
+        Ok(statuses)
+    }
+
+    async fn get_token_accounts_by_owner(
+        &self,
+        owner: &Pubkey,
+    ) -> crate::Result<Vec<(Pubkey, Account)>> {
+        let params = serde_json::json!([
+            owner.to_string(),
+            { "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
+            { "encoding": "base64" }
+        ]);
+
+        let result = self
+            .manager
+            .execute_raw("getTokenAccountsByOwner", params)
+            .await?;
+
+        let values = result
+            .get("value")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| parse_err("response", "invalid format"))?;
+
+        let mut accounts = Vec::with_capacity(values.len());
+        for item in values {
+            let pubkey_str = item
+                .get("pubkey")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
+            let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
+                parse_err("pubkey", &format!("Invalid pubkey \'{pubkey_str}\': {e}"))
+            })?;
+
+            if let Some(account) =
+                parse_account_from_json(item.get("account").unwrap_or(&serde_json::Value::Null))?
+            {
+                accounts.push((pubkey, account));
+            }
+        }
+
+        Ok(accounts)
+    }
+
+    async fn get_slot(&self) -> crate::Result<u64> {
+        let params = serde_json::json!([]);
+
+        let result = self.manager.execute_raw("getSlot", params).await?;
+
+        result
+            .as_u64()
+            .ok_or_else(|| parse_err("slot", "invalid response format"))
+    }
+
+    async fn get_minimum_balance_for_rent_exemption(&self, data_len: usize) -> crate::Result<u64> {
+        let params = serde_json::json!([data_len]);
+
+        let result = self
+            .manager
+            .execute_raw("getMinimumBalanceForRentExemption", params)
+            .await?;
+
+        result
+            .as_u64()
+            .ok_or_else(|| parse_err("rent", "invalid response format"))
+    }
+
+    async fn get_health(&self) -> crate::Result<()> {
+        let params = serde_json::json!([]);
+
+        self.manager.execute_raw("getHealth", params).await?;
+
+        Ok(())
+    }
+
+    async fn url(&self) -> String {
+        self.manager.primary_url().await.unwrap_or_default()
+    }
+
+    // =========================================================================
+    // Advanced Transaction Methods Implementation
+    // =========================================================================
+
+    async fn sign_and_send_transaction(
+        &self,
+        transaction_base64: &str,
+        keypair: &Keypair,
+    ) -> crate::Result<Signature> {
+        // Decode the base64 transaction
+        let tx_bytes = base64::engine::general_purpose::STANDARD
+            .decode(transaction_base64)
+            .map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "base64 transaction".to_owned(),
+                    error: e.to_string(),
+                })
+            })?;
+
+        // Deserialize the VersionedTransaction
+        let mut transaction: VersionedTransaction =
+            bincode::deserialize(&tx_bytes).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "VersionedTransaction".to_owned(),
+                    error: e.to_string(),
+                })
+            })?;
+
+        // Sign the transaction (first signature index is the fee payer)
+        let sig = keypair.sign_message(&transaction.message.serialize());
+        if transaction.signatures.is_empty() {
+            transaction.signatures.push(sig);
+        } else {
+            transaction.signatures[0] = sig;
+        }
+
+        // Serialize and send
+        self.send_transaction(&transaction).await
+    }
+
+    async fn sign_send_and_confirm_transaction(
+        &self,
+        transaction_base64: &str,
+        keypair: &Keypair,
+        commitment: CommitmentLevel,
+        timeout: Duration,
+    ) -> crate::Result<Signature> {
+        // Sign and send the transaction
+        let signature = self
+            .sign_and_send_transaction(transaction_base64, keypair)
+            .await?;
+
+        // Confirm the transaction
+        let confirmed = self
+            .confirm_transaction(&signature, commitment, timeout)
+            .await?;
+
+        if confirmed {
+            Ok(signature)
+        } else {
+            Err(parse_err(
+                "transaction",
+                &format!("Transaction {signature} not confirmed within timeout"),
+            ))
+        }
+    }
+
+    async fn send_raw_transaction(&self, transaction_base64: &str) -> crate::Result<Signature> {
+        let params = serde_json::json!([
+            transaction_base64,
+            {
+                "encoding": "base64",
+                "skipPreflight": false,
+                "preflightCommitment": "confirmed",
+                "maxRetries": 3
+            }
+        ]);
+
+        let result = self.manager.execute_raw("sendTransaction", params).await?;
+
+        let sig_str = result
+            .as_str()
+            .ok_or_else(|| parse_err("signature", "invalid response format"))?;
+        Signature::from_str(sig_str).map_err(|e| {
+            parse_err(
+                "signature",
+                &format!("Invalid signature \'{sig_str}\': {e}"),
+            )
+        })
+    }
+
+    async fn confirm_transaction(
+        &self,
+        signature: &Signature,
+        commitment: CommitmentLevel,
+        timeout: Duration,
+    ) -> crate::Result<bool> {
+        let start = std::time::Instant::now();
+        let poll_interval = Duration::from_millis(500);
+        let commitment_str = commitment_to_string(commitment);
+
+        loop {
+            // Check if we've exceeded the timeout
+            if start.elapsed() >= timeout {
+                return Ok(false);
+            }
+
+            // Query signature status
+            let params = serde_json::json!([
+                [signature.to_string()],
+                { "searchTransactionHistory": false }
+            ]);
+
+            match self
+                .manager
+                .execute_raw("getSignatureStatuses", params)
+                .await
+            {
+                Ok(result) => {
+                    if let Some(values) = result.get("value").and_then(|v| v.as_array()) {
+                        if let Some(status) = values.first() {
+                            if !status.is_null() {
+                                // Check for error
+                                if let Some(err) = status.get("err") {
+                                    if !err.is_null() {
+                                        return Err(parse_err(
+                                            "transaction",
+                                            &format!(
+                                                "Transaction failed: {}",
+                                                serde_json::to_string(err).unwrap_or_default()
+                                            ),
+                                        ));
+                                    }
+                                }
+
+                                // Check confirmation status
+                                if let Some(conf_status) =
+                                    status.get("confirmationStatus").and_then(|v| v.as_str())
+                                {
+                                    let is_confirmed = match commitment_str {
+                                        "processed" => {
+                                            conf_status == "processed"
+                                                || conf_status == "confirmed"
+                                                || conf_status == "finalized"
+                                        }
+                                        "confirmed" => {
+                                            conf_status == "confirmed" || conf_status == "finalized"
+                                        }
+                                        "finalized" => conf_status == "finalized",
+                                        _ => false,
+                                    };
+
+                                    if is_confirmed {
+                                        return Ok(true);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    // Transient error, continue polling
+                }
+            }
+
+            // Wait before next poll
+            tokio::time::sleep(poll_interval).await;
+        }
+    }
+
+    // =========================================================================
+    // Token Account Utility Methods Implementation
+    // =========================================================================
+
+    async fn get_all_token_accounts(&self, owner: &Pubkey) -> crate::Result<Vec<TokenAccountInfo>> {
+        let mut all_accounts = Vec::new();
+
+        // Fetch SPL Token accounts
+        let spl_params = serde_json::json!([
+            owner.to_string(),
+            { "programId": SPL_TOKEN_PROGRAM_ID },
+            { "encoding": "jsonParsed" }
+        ]);
+
+        if let Ok(result) = self
+            .manager
+            .execute_raw("getTokenAccountsByOwner", spl_params)
+            .await
+        {
+            if let Some(values) = result.get("value").and_then(|v| v.as_array()) {
+                for item in values {
+                    if let Some(info) = parse_token_account_info(item, false) {
+                        all_accounts.push(info);
+                    }
+                }
+            }
+        }
+
+        // Fetch Token-2022 accounts
+        let token2022_params = serde_json::json!([
+            owner.to_string(),
+            { "programId": TOKEN_2022_PROGRAM_ID },
+            { "encoding": "jsonParsed" }
+        ]);
+
+        if let Ok(result) = self
+            .manager
+            .execute_raw("getTokenAccountsByOwner", token2022_params)
+            .await
+        {
+            if let Some(values) = result.get("value").and_then(|v| v.as_array()) {
+                for item in values {
+                    if let Some(info) = parse_token_account_info(item, true) {
+                        all_accounts.push(info);
+                    }
+                }
+            }
+        }
+
+        Ok(all_accounts)
+    }
+
+    async fn is_token_2022_mint(&self, mint: &Pubkey) -> crate::Result<bool> {
+        let params = serde_json::json!([
+            mint.to_string(),
+            { "encoding": "jsonParsed" }
+        ]);
+
+        let result = self.manager.execute_raw("getAccountInfo", params).await?;
+
+        let value = result.get("value");
+        if value.is_none() || value == Some(&serde_json::Value::Null) {
+            return Err(parse_err(
+                "mint account",
+                &format!("Account not found: {mint}"),
+            ));
+        }
+
+        let value = value.unwrap();
+        if let Some(owner) = value.get("owner").and_then(|v| v.as_str()) {
+            Ok(owner == TOKEN_2022_PROGRAM_ID)
+        } else {
+            Err(parse_err("account", "Missing owner field"))
+        }
+    }
+
+    fn get_associated_token_address(wallet: &Pubkey, mint: &Pubkey) -> Pubkey {
+        let token_program_id =
+            Pubkey::from_str(SPL_TOKEN_PROGRAM_ID).expect("Invalid SPL Token program ID");
+        Self::get_associated_token_address_with_program(wallet, mint, &token_program_id)
+    }
+
+    fn get_associated_token_address_with_program(
+        wallet: &Pubkey,
+        mint: &Pubkey,
+        token_program_id: &Pubkey,
+    ) -> Pubkey {
+        let associated_token_program_id =
+            Pubkey::from_str(crate::chains::solana::constants::ASSOCIATED_TOKEN_PROGRAM_ID)
+                .expect("Invalid Associated Token program ID");
+
+        // PDA derivation: [wallet, token_program, mint]
+        let seeds = &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()];
+
+        let (address, _bump) = Pubkey::find_program_address(seeds, &associated_token_program_id);
+        address
+    }
+
+    // =========================================================================
+    // String-based Convenience Methods Implementation
+    // =========================================================================
+
+    async fn get_all_token_accounts_str(
+        &self,
+        owner: &str,
+    ) -> crate::Result<Vec<TokenAccountInfo>> {
+        let owner_pubkey = Pubkey::from_str(owner)
+            .map_err(|e| parse_err("pubkey", &format!("Invalid owner \'{owner}\': {e}")))?;
+        self.get_all_token_accounts(&owner_pubkey).await
+    }
+
+    async fn is_token_2022_mint_str(&self, mint: &str) -> crate::Result<bool> {
+        let mint_pubkey = Pubkey::from_str(mint)
+            .map_err(|e| parse_err("pubkey", &format!("Invalid mint '{mint}': {e}")))?;
+        self.is_token_2022_mint(&mint_pubkey).await
+    }
+
+    async fn is_token_account_token_2022(&self, token_account: &str) -> crate::Result<bool> {
+        let account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
+            parse_err(
+                "pubkey",
+                &format!("Invalid token account \'{token_account}\': {e}"),
+            )
+        })?;
+
+        let params = serde_json::json!([
+            account_pubkey.to_string(),
+            { "encoding": "jsonParsed" }
+        ]);
+
+        let result = self.manager.execute_raw("getAccountInfo", params).await?;
+
+        let value = result.get("value");
+        if value.is_none() || value == Some(&serde_json::Value::Null) {
+            return Err(parse_err(
+                "token account",
+                &format!("Account not found: {token_account}"),
+            ));
+        }
+
+        let value = value.unwrap();
+        if let Some(owner) = value.get("owner").and_then(|v| v.as_str()) {
+            Ok(owner == TOKEN_2022_PROGRAM_ID)
+        } else {
+            Err(parse_err("account", "Missing owner field"))
+        }
+    }
+
+    async fn get_associated_token_account(
+        &self,
+        wallet_address: &str,
+        mint: &str,
+    ) -> crate::Result<String> {
+        let wallet_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
+            parse_err(
+                "pubkey",
+                &format!("Invalid wallet \'{wallet_address}\': {e}"),
+            )
+        })?;
+        let mint_pubkey = Pubkey::from_str(mint)
+            .map_err(|e| parse_err("pubkey", &format!("Invalid mint \'{mint}\': {e}")))?;
+
+        // First try standard SPL Token ATA
+        let spl_ata = Self::get_associated_token_address(&wallet_pubkey, &mint_pubkey);
+
+        // Check if ATA exists
+        if let Ok(Some(_)) = self.get_account(&spl_ata).await {
+            return Ok(spl_ata.to_string());
+        }
+
+        // Try Token-2022 ATA
+        let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
+            .map_err(|e| parse_err("pubkey", &format!("Invalid Token-2022 program ID: {e}")))?;
+        let token_2022_ata = Self::get_associated_token_address_with_program(
+            &wallet_pubkey,
+            &mint_pubkey,
+            &token_2022_program_id,
+        );
+
+        if let Ok(Some(_)) = self.get_account(&token_2022_ata).await {
+            return Ok(token_2022_ata.to_string());
+        }
+
+        // Return the SPL ATA address even if it doesn't exist (for creation)
+        Ok(spl_ata.to_string())
+    }
+
+    async fn send_and_confirm_signed_transaction(
+        &self,
+        transaction: &crate::chains::solana::solana_sdk::transaction::Transaction,
+    ) -> crate::Result<Signature> {
+        use bincode;
+
+        // Serialize the transaction
+        let serialized = bincode::serialize(transaction)
+            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {e}")))?;
+
+        // Encode to base64
+        let transaction_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized);
+
+        // Send the transaction
+        let params = serde_json::json!([
+            transaction_base64,
+            {
+                "encoding": "base64",
+                "skipPreflight": false,
+                "preflightCommitment": "confirmed",
+                "maxRetries": 3
+            }
+        ]);
+
+        let result = self.manager.execute_raw("sendTransaction", params).await?;
+
+        let signature_str = result
+            .as_str()
+            .ok_or_else(|| parse_err("signature", "expected signature string"))?;
+
+        let signature = Signature::from_str(signature_str).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "Signature".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
+
+        // Poll for confirmation with timeout
+        let timeout = Duration::from_secs(60);
+        let confirmed = self
+            .confirm_transaction(&signature, CommitmentLevel::Confirmed, timeout)
+            .await?;
+
+        if confirmed {
+            Ok(signature)
+        } else {
+            Err(parse_err(
+                "transaction",
+                &format!("Transaction {signature} not confirmed within timeout"),
+            ))
+        }
+    }
+
+    // =========================================================================
+    // Transaction History Methods Implementation
+    // =========================================================================
+
+    async fn get_signatures_for_address(
+        &self,
+        address: &Pubkey,
+        limit: Option<usize>,
+        before: Option<&Signature>,
+        until: Option<&Signature>,
+    ) -> crate::Result<Vec<SignatureInfo>> {
+        let mut config = serde_json::Map::new();
+
+        if let Some(limit_val) = limit {
+            config.insert(
+                "limit".to_owned(),
+                serde_json::Value::Number(limit_val.into()),
+            );
+        }
+
+        if let Some(before_sig) = before {
+            config.insert(
+                "before".to_owned(),
+                serde_json::Value::String(before_sig.to_string()),
+            );
+        }
+
+        if let Some(until_sig) = until {
+            config.insert(
+                "until".to_owned(),
+                serde_json::Value::String(until_sig.to_string()),
+            );
+        }
+
+        config.insert(
+            "commitment".to_owned(),
+            serde_json::Value::String("confirmed".to_owned()),
+        );
+
+        let params = serde_json::json!([address.to_string(), serde_json::Value::Object(config)]);
+
+        let result = self
+            .manager
+            .execute_raw("getSignaturesForAddress", params)
+            .await?;
+
+        let signatures_array = result
+            .as_array()
+            .ok_or_else(|| parse_err("response", "expected array"))?;
+
+        let mut signatures = Vec::with_capacity(signatures_array.len());
+
+        for item in signatures_array {
+            let sig_str = item
+                .get("signature")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| parse_err("signature", "missing signature field"))?;
+
+            let signature = Signature::from_str(sig_str).map_err(|e| {
+                parse_err(
+                    "signature",
+                    &format!("Invalid signature \'{sig_str}\': {e}"),
+                )
+            })?;
+
+            let slot = item
+                .get("slot")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| parse_err("slot", "missing slot field"))?;
+
+            let err = item.get("err").and_then(|v| {
+                if v.is_null() {
+                    None
+                } else {
+                    Some(serde_json::to_string(v).unwrap_or_default())
+                }
+            });
+
+            let memo = item.get("memo").and_then(|v| v.as_str()).map(String::from);
+
+            let block_time = item.get("blockTime").and_then(|v| v.as_i64());
+
+            let confirmation_status = item
+                .get("confirmationStatus")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+
+            signatures.push(SignatureInfo {
+                signature,
+                slot,
+                err,
+                memo,
+                block_time,
+                confirmation_status,
+            });
+        }
+
+        Ok(signatures)
+    }
+
+    async fn get_transactions(
+        &self,
+        signatures: &[Signature],
+    ) -> crate::Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>> {
+        if signatures.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Process in chunks to avoid overwhelming RPC
+        let mut all_transactions = Vec::with_capacity(signatures.len());
+
+        for chunk in signatures.chunks(20) {
+            // Fetch in parallel within chunk
+            let mut futures = Vec::with_capacity(chunk.len());
+
+            for sig in chunk {
+                futures.push(self.get_transaction(sig));
+            }
+
+            // Execute all futures in the chunk concurrently
+            let results = futures::future::join_all(futures).await;
+
+            for result in results {
+                match result {
+                    Ok(tx) => all_transactions.push(tx),
+                    Err(_) => all_transactions.push(None),
+                }
+            }
+        }
+
+        Ok(all_transactions)
+    }
+
+    // =========================================================================
+    // Program Account Methods Implementation
+    // =========================================================================
+
+    async fn get_program_accounts(
+        &self,
+        program_id: &Pubkey,
+        filters: Option<Vec<RpcFilterType>>,
+    ) -> crate::Result<Vec<(Pubkey, Account)>> {
+        self.get_program_accounts_with_config(
+            program_id,
+            filters,
+            Some("base64"),
+            None,
+            Some(CommitmentLevel::Confirmed),
+        )
+        .await
+    }
+
+    async fn get_program_accounts_with_config(
+        &self,
+        program_id: &Pubkey,
+        filters: Option<Vec<RpcFilterType>>,
+        encoding: Option<&str>,
+        data_slice: Option<(usize, usize)>,
+        commitment: Option<CommitmentLevel>,
+    ) -> crate::Result<Vec<(Pubkey, Account)>> {
+        let mut config = serde_json::Map::new();
+
+        config.insert(
+            "encoding".to_owned(),
+            serde_json::Value::String(encoding.unwrap_or("base64").to_string()),
+        );
+
+        if let Some(commitment_level) = commitment {
+            config.insert(
+                "commitment".to_owned(),
+                serde_json::Value::String(commitment_to_string(commitment_level).to_string()),
+            );
+        }
+
+        if let Some((offset, length)) = data_slice {
+            config.insert(
+                "dataSlice".to_owned(),
+                serde_json::json!({
+                    "offset": offset,
+                    "length": length
+                }),
+            );
+        }
+
+        if let Some(filter_list) = filters {
+            let filters_json: Vec<serde_json::Value> = filter_list
+                .into_iter()
+                .map(|f| match f {
+                    RpcFilterType::DataSize(size) => serde_json::json!({ "dataSize": size }),
+                    RpcFilterType::Memcmp { offset, bytes } => serde_json::json!({
+                        "memcmp": {
+                            "offset": offset,
+                            "bytes": bytes
+                        }
+                    }),
+                })
+                .collect();
+
+            config.insert("filters".to_owned(), serde_json::Value::Array(filters_json));
+        }
+
+        let params = serde_json::json!([program_id.to_string(), serde_json::Value::Object(config)]);
+
+        let result = self
+            .manager
+            .execute_raw("getProgramAccounts", params)
+            .await?;
+
+        let accounts_array = result
+            .as_array()
+            .ok_or_else(|| parse_err("response", "expected array"))?;
+
+        let mut accounts = Vec::with_capacity(accounts_array.len());
+
+        for item in accounts_array {
+            let pubkey_str = item
+                .get("pubkey")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
+
+            let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
+                parse_err("pubkey", &format!("Invalid pubkey \'{pubkey_str}\': {e}"))
+            })?;
+
+            let account_data = item
+                .get("account")
+                .ok_or_else(|| parse_err("account", "missing account field"))?;
+
+            if let Some(account) = parse_account_from_json(account_data)? {
+                accounts.push((pubkey, account));
+            }
+        }
+
+        Ok(accounts)
+    }
+
+    // =========================================================================
+    // Token Supply Methods Implementation
+    // =========================================================================
+
+    async fn get_token_supply(&self, mint: &Pubkey) -> crate::Result<TokenSupply> {
+        let params = serde_json::json!([
+            mint.to_string(),
+            { "commitment": "confirmed" }
+        ]);
+
+        let result = self.manager.execute_raw("getTokenSupply", params).await?;
+
+        let value = result
+            .get("value")
+            .ok_or_else(|| parse_err("response", "missing value field"))?;
+
+        let amount = value
+            .get("amount")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| parse_err("amount", "missing amount field"))?
+            .to_string();
+
+        let decimals = value
+            .get("decimals")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| parse_err("decimals", "missing decimals field"))?
+            as u8;
+
+        let ui_amount = value.get("uiAmount").and_then(|v| v.as_f64());
+
+        let ui_amount_string = value
+            .get("uiAmountString")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0")
+            .to_string();
+
+        Ok(TokenSupply {
+            amount,
+            decimals,
+            ui_amount,
+            ui_amount_string,
+        })
+    }
+
+    async fn get_token_largest_accounts(
+        &self,
+        mint: &Pubkey,
+    ) -> crate::Result<Vec<RpcTokenAccountBalance>> {
+        let params = serde_json::json!([
+            mint.to_string(),
+            { "commitment": "confirmed" }
+        ]);
+
+        let result = self
+            .manager
+            .execute_raw("getTokenLargestAccounts", params)
+            .await?;
+
+        let values = result
+            .get("value")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::InvalidFormat {
+                    expected: "value array".to_owned(),
+                    received: "missing or not an array".to_owned(),
+                })
+            })?;
+
+        let mut accounts = Vec::with_capacity(values.len());
+
+        for item in values {
+            let address_str = item
+                .get("address")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    crate::Error::Data(crate::errors::DataError::InvalidFormat {
+                        expected: "address field".to_owned(),
+                        received: "missing or not a string".to_owned(),
+                    })
+                })?;
+
+            let address = Pubkey::from_str(address_str).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "Pubkey".to_owned(),
+                    error: e.to_string(),
+                })
+            })?;
+
+            let amount = item
+                .get("amount")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| parse_err("amount", "missing amount field"))?
+                .to_string();
+
+            let decimals = item
+                .get("decimals")
+                .and_then(|v| v.as_u64())
+                .ok_or_else(|| parse_err("decimals", "missing decimals field"))?
+                as u8;
+
+            let ui_amount = item.get("uiAmount").and_then(|v| v.as_f64());
+
+            let ui_amount_string = item
+                .get("uiAmountString")
+                .and_then(|v| v.as_str())
+                .unwrap_or("0")
+                .to_string();
+
+            accounts.push(RpcTokenAccountBalance {
+                address,
+                amount,
+                decimals,
+                ui_amount,
+                ui_amount_string,
+            });
+        }
+
+        Ok(accounts)
+    }
+
+    // =========================================================================
+    // Statistics and Health Methods Implementation
+    // =========================================================================
+
+    async fn get_stats(&self) -> RpcStatsResponse {
+        self.manager.get_stats().await
+    }
+
+    async fn get_provider_health(&self) -> Vec<ProviderHealthInfo> {
+        // Delegate to the RpcClient method
+        RpcClient::get_provider_health(self).await
+    }
+
+    // =========================================================================
+    // Convenience Methods Implementation
+    // =========================================================================
+
+    async fn sign_and_send_with_main_wallet(
+        &self,
+        transaction_base64: &str,
+    ) -> crate::Result<Signature> {
+        // Load main wallet keypair from config
+        let keypair = crate::chains::solana::accounts::configured_keypair().map_err(|e| {
+            crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
+                message: format!("Failed to load wallet keypair: {e}"),
+            })
+        })?;
+
+        // Delegate to sign_and_send_transaction
+        self.sign_and_send_transaction(transaction_base64, &keypair)
+            .await
+    }
+
+    async fn sign_send_and_confirm_with_main_wallet(
+        &self,
+        transaction_base64: &str,
+        commitment: CommitmentLevel,
+        timeout: Duration,
+    ) -> crate::Result<Signature> {
+        // Load main wallet keypair from config
+        let keypair = crate::chains::solana::accounts::configured_keypair().map_err(|e| {
+            crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
+                message: format!("Failed to load wallet keypair: {e}"),
+            })
+        })?;
+
+        // Delegate to sign_send_and_confirm_transaction
+        self.sign_send_and_confirm_transaction(transaction_base64, &keypair, commitment, timeout)
+            .await
+    }
+
+    // =========================================================================
+    // Convenience Implementations
+    // =========================================================================
+
+    async fn get_wallet_signatures_main_rpc(
+        &self,
+        wallet_pubkey: &Pubkey,
+        limit: usize,
+        before: Option<&str>,
+        until: Option<&str>,
+    ) -> crate::Result<Vec<SignatureInfo>> {
+        let parse_sig = |sig_str: &str| -> crate::Result<Signature> {
+            Signature::from_str(sig_str).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "Signature".to_owned(),
+                    error: e.to_string(),
+                })
+            })
+        };
+        let before_sig = before.map(parse_sig).transpose()?;
+        let until_sig = until.map(parse_sig).transpose()?;
+        self.get_signatures_for_address(
+            wallet_pubkey,
+            Some(limit),
+            before_sig.as_ref(),
+            until_sig.as_ref(),
+        )
+        .await
+    }
+
+    async fn get_transaction_details(&self, signature: &str) -> crate::Result<TransactionDetails> {
+        // Use jsonParsed encoding for proper decoding (required for v0 transactions with LUTs)
+        let params = serde_json::json!([
+            signature,
+            {
+                "encoding": "jsonParsed",
+                "maxSupportedTransactionVersion": 0
+            }
+        ]);
+
+        let result = self.manager.execute_raw("getTransaction", params).await?;
+
+        if result.is_null() {
+            return Err(parse_err(
+                "transaction",
+                &format!("Transaction not found: {signature}"),
+            ));
+        }
+
+        serde_json::from_value(result).map_err(|e| parse_err("transaction", &e.to_string()))
+    }
+
+    async fn sign_send_and_confirm_transaction_simple(
+        &self,
+        transaction_base64: &str,
+    ) -> crate::Result<Signature> {
+        // Use default commitment and timeout
+        self.sign_send_and_confirm_with_main_wallet(
+            transaction_base64,
+            CommitmentLevel::Confirmed,
+            Duration::from_secs(60),
+        )
+        .await
+    }
+
+    async fn sign_send_and_confirm_with_keypair(
+        &self,
+        transaction_base64: &str,
+        keypair: &Keypair,
+    ) -> crate::Result<Signature> {
+        // Use default commitment and timeout
+        self.sign_send_and_confirm_transaction(
+            transaction_base64,
+            keypair,
+            CommitmentLevel::Confirmed,
+            Duration::from_secs(60),
+        )
+        .await
+    }
+}
+
+// Helper functions
+
+fn commitment_to_string(commitment: CommitmentLevel) -> &'static str {
+    match commitment {
+        CommitmentLevel::Finalized => "finalized",
+        CommitmentLevel::Confirmed => "confirmed",
+        CommitmentLevel::Processed => "processed",
+    }
+}
+
+fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Account>> {
+    use crate::errors::{DataError, Error};
+
+    if value.is_null() {
+        return Ok(None);
+    }
+
+    let data = value.get("data").ok_or_else(|| {
+        Error::Data(DataError::ParseError {
+            data_type: "account".to_owned(),
+            error: "Missing data field".to_owned(),
+        })
+    })?;
+
+    let data_bytes = if let Some(arr) = data.as_array() {
+        // [data_base64, encoding]
+        let encoded = arr.first().and_then(|v| v.as_str()).ok_or_else(|| {
+            Error::Data(DataError::ParseError {
+                data_type: "account".to_owned(),
+                error: "Invalid data array format".to_owned(),
+            })
+        })?;
+        let encoding = arr.get(1).and_then(|v| v.as_str()).unwrap_or("base64");
+
+        if encoding == "base64" {
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|e| {
+                    Error::Data(DataError::ParseError {
+                        data_type: "account base64".to_owned(),
+                        error: e.to_string(),
+                    })
+                })?
+        } else {
+            return Err(Error::Data(DataError::InvalidFormat {
+                expected: "base64 encoding".to_owned(),
+                received: encoding.to_string(),
+            }));
+        }
+    } else if let Some(s) = data.as_str() {
+        // Direct base64 string
+        base64::engine::general_purpose::STANDARD
+            .decode(s)
+            .map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: "account base64".to_owned(),
+                    error: e.to_string(),
+                })
+            })?
+    } else {
+        return Err(Error::Data(DataError::InvalidFormat {
+            expected: "base64 string or array".to_owned(),
+            received: format!("{:?}", data),
+        }));
+    };
+
+    let lamports = value
+        .get("lamports")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| {
+            Error::Data(DataError::ParseError {
+                data_type: "account".to_owned(),
+                error: "Missing or invalid lamports field".to_owned(),
+            })
+        })?;
+
+    let owner_str = value.get("owner").and_then(|v| v.as_str()).ok_or_else(|| {
+        Error::Data(DataError::ParseError {
+            data_type: "account".to_owned(),
+            error: "Missing owner field".to_owned(),
+        })
+    })?;
+
+    let owner = Pubkey::from_str(owner_str).map_err(|e| {
+        Error::Data(DataError::ParseError {
+            data_type: "pubkey".to_owned(),
+            error: format!("Invalid owner pubkey '{owner_str}': {e}"),
+        })
+    })?;
+
+    let executable = value
+        .get("executable")
+        .and_then(|v| v.as_bool())
+        .unwrap_or_default();
+
+    let rent_epoch = value
+        .get("rentEpoch")
+        .and_then(|v| v.as_u64())
+        .unwrap_or_default();
+
+    Ok(Some(Account {
+        lamports,
+        data: data_bytes,
+        owner,
+        executable,
+        rent_epoch,
+    }))
+}
+
+/// Parse token account info from jsonParsed response
+fn parse_token_account_info(
+    item: &serde_json::Value,
+    is_token_2022: bool,
+) -> Option<TokenAccountInfo> {
+    let pubkey_str = item.get("pubkey")?.as_str()?;
+    let account = item.get("account")?;
+    let data = account.get("data")?;
+    let parsed = data.get("parsed")?;
+    let info = parsed.get("info")?;
+
+    let mint_str = info.get("mint")?.as_str()?;
+    let token_amount = info.get("tokenAmount")?;
+    let amount_str = token_amount.get("amount")?.as_str()?;
+    let decimals = token_amount.get("decimals")?.as_u64()? as u8;
+    let balance = amount_str.parse::<u64>().ok()?;
+
+    // NFT detection: decimals=0 and balance=1 typically indicates an NFT
+    let is_nft = decimals == 0 && balance == 1;
+
+    // jsonParsed reports "initialized" | "frozen" | "uninitialized". Anything we cannot
+    // read is treated as NOT frozen: claiming a sellable holding is frozen would hide a
+    // real position behind a warning.
+    let is_frozen = info.get("state").and_then(|v| v.as_str()) == Some("frozen");
+
+    Some(TokenAccountInfo {
+        account: pubkey_str.to_string(),
+        mint: mint_str.to_string(),
+        balance,
+        decimals,
+        is_token_2022,
+        is_nft,
+        is_frozen,
+    })
+}

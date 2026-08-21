@@ -9,11 +9,12 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 
+use crate::chains::solana::transactions::{
+    fetcher::TransactionFetcher, processor::TransactionProcessor,
+};
 use crate::logger::{self, LogTag};
 use crate::transactions::{
-    fetcher::TransactionFetcher,
     manager::TransactionsManager,
-    processor::TransactionProcessor,
     types::Subject,
     utils::{add_signature_to_known_globally, is_signature_known_globally, RPC_BATCH_SIZE},
 };
@@ -60,7 +61,7 @@ pub async fn perform_initial_transaction_bootstrap(
             mgr.transaction_database.clone(),
         )
     };
-    let subject = Subject(wallet_pubkey);
+    let subject = Subject::solana(wallet_pubkey);
     let fetcher = TransactionFetcher::new();
     let processor = Arc::new(TransactionProcessor::new(wallet_pubkey));
 

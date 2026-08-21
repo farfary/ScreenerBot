@@ -10,6 +10,7 @@
 
 use chrono::{Duration, Utc};
 
+use crate::chains::ChainId;
 use crate::trader::copy::{
     ArrivalDistanceStats, CopyActivityRow, CopyMode, CopyOutcome, CopySkip, CopyTask,
     CopyTaskStats, CopyTelemetry, ExitMode, PaperDecision, PaperFill, SizingMode,
@@ -103,6 +104,7 @@ fn task(entry: &PromoTask) -> CopyTask {
     let created_at = Utc::now() - Duration::days(id + 3);
     CopyTask {
         id,
+        chain: ChainId::Solana,
         target_address: address.to_owned(),
         label: Some(label.to_owned()),
         enabled: true,

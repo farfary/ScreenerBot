@@ -101,7 +101,8 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64, String> 
                 "SELECT legacy.id, imported.id, imported.round_key
                  FROM positions legacy
                  JOIN positions imported
-                   ON imported.wallet_address = legacy.wallet_address
+                   ON imported.chain_id = legacy.chain_id
+                  AND imported.wallet_address = legacy.wallet_address
                   AND imported.mint = legacy.mint
                   AND imported.entry_transaction_signature = legacy.entry_transaction_signature
                   AND imported.origin_kind = 'external'
@@ -189,6 +190,7 @@ mod tests {
         conn.execute_batch(
             "CREATE TABLE positions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chain_id TEXT NOT NULL DEFAULT 'solana',
                 wallet_address TEXT NOT NULL,
                 mint TEXT NOT NULL,
                 entry_time TEXT NOT NULL,
@@ -197,7 +199,7 @@ mod tests {
                 round_key TEXT
              );
              CREATE UNIQUE INDEX idx_positions_round_key
-                ON positions(wallet_address, round_key) WHERE round_key IS NOT NULL;
+                ON positions(chain_id, wallet_address, round_key) WHERE round_key IS NOT NULL;
              CREATE TABLE position_states (position_id INTEGER, state TEXT);
              CREATE TABLE position_entries (position_id INTEGER);
              CREATE TABLE position_exits (position_id INTEGER);

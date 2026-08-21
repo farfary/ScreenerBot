@@ -22,9 +22,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 
-pub use crate::constants::{SOL_DECIMALS, SOL_MINT};
+pub use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
 
 use tokio::sync::Mutex as AsyncMutex;
 
@@ -53,19 +54,25 @@ pub const PRELOAD_CAPACITY: usize = (CACHE_CAPACITY as usize) * 4 / 5;
 
 // In-memory decimals cache — bounded moka cache for fast synchronous lookups.
 // Populated at startup + updated on every DB write.
-static DECIMALS_CACHE: LazyLock<moka::sync::Cache<String, u8>> = LazyLock::new(|| {
+type CacheKey = (ChainId, String);
+
+fn cache_key(chain: ChainId, mint: &str) -> CacheKey {
+    (chain, mint.to_owned())
+}
+
+static DECIMALS_CACHE: LazyLock<moka::sync::Cache<CacheKey, u8>> = LazyLock::new(|| {
     moka::sync::Cache::builder()
         .max_capacity(CACHE_CAPACITY)
         .build()
 });
 
 // Single-flight locks to prevent duplicate fetches
-static FETCH_LOCKS: LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
+static FETCH_LOCKS: LazyLock<Mutex<HashMap<CacheKey, Arc<AsyncMutex<()>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // Track mints with unresolved decimals to avoid repeated expensive lookups
 // Bounded moka cache (max 50K entries, 24-hour TTL) to prevent unbounded growth
-static FAILED_CACHE: LazyLock<moka::sync::Cache<String, ()>> = LazyLock::new(|| {
+static FAILED_CACHE: LazyLock<moka::sync::Cache<CacheKey, ()>> = LazyLock::new(|| {
     moka::sync::Cache::builder()
         .max_capacity(50_000)
         .time_to_live(Duration::from_secs(86400)) // 24 hours
@@ -74,12 +81,12 @@ static FAILED_CACHE: LazyLock<moka::sync::Cache<String, ()>> = LazyLock::new(|| 
 
 // Cache for Token2022 detection — bounded moka cache (max 100K entries).
 // true = Token2022, false = standard SPL token
-static TOKEN_2022_CACHE: LazyLock<moka::sync::Cache<String, bool>> =
+static TOKEN_2022_CACHE: LazyLock<moka::sync::Cache<CacheKey, bool>> =
     LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
 
 // Mints we have already warned about for invalid (>18) decimals, so the warning
 // fires once per mint instead of on every token upsert. Bounded + TTL'd.
-static INVALID_DECIMALS_WARNED: LazyLock<moka::sync::Cache<String, ()>> = LazyLock::new(|| {
+static INVALID_DECIMALS_WARNED: LazyLock<moka::sync::Cache<CacheKey, ()>> = LazyLock::new(|| {
     moka::sync::Cache::builder()
         .max_capacity(50_000)
         .time_to_live(Duration::from_secs(86400)) // 24 hours
@@ -98,17 +105,17 @@ static INVALID_DECIMALS_WARNED: LazyLock<moka::sync::Cache<String, ()>> = LazyLo
 /// - Filtering where decimals must already exist
 ///
 /// Returns None if not in cache - caller should handle appropriately
-pub fn get_cached(mint: &str) -> Option<u8> {
+pub fn get_cached(chain: ChainId, mint: &str) -> Option<u8> {
     // SOL always has 9 decimals
     if mint == SOL_MINT {
         return Some(SOL_DECIMALS);
     }
 
-    if is_marked_failure(mint) {
+    if is_marked_failure(chain, mint) {
         return None;
     }
 
-    let result = DECIMALS_CACHE.get(&mint.to_string());
+    let result = DECIMALS_CACHE.get(&cache_key(chain, mint));
 
     result
 }
@@ -116,76 +123,54 @@ pub fn get_cached(mint: &str) -> Option<u8> {
 /// Check if a mint is Token2022 from cache only (sync, instant)
 ///
 /// Returns None if not in cache - caller should use is_token_2022() for async check
-pub fn is_token_2022_cached(mint: &str) -> Option<bool> {
+pub fn is_token_2022_cached(chain: ChainId, mint: &str) -> Option<bool> {
     // SOL/WSOL is always standard SPL
     if mint == SOL_MINT {
         return Some(false);
     }
 
-    TOKEN_2022_CACHE.get(&mint.to_string())
+    TOKEN_2022_CACHE.get(&cache_key(chain, mint))
 }
 
 /// Check if a mint is Token2022 (async with RPC fallback)
 ///
 /// Checks cache first, then fetches from chain if needed.
 /// Result is cached for future calls.
-pub async fn is_token_2022(mint: &str) -> bool {
-    use crate::constants::TOKEN_2022_PROGRAM_ID;
-    use crate::rpc::{get_rpc_client, RpcClientMethods};
-    use solana_sdk::pubkey::Pubkey;
-    use std::str::FromStr;
-
+pub async fn is_token_2022(chain: ChainId, mint: &str) -> bool {
     // SOL/WSOL is always standard SPL
     if mint == SOL_MINT {
         return false;
     }
 
     // Check cache first
-    if let Some(is_2022) = is_token_2022_cached(mint) {
+    if let Some(is_2022) = is_token_2022_cached(chain, mint) {
         return is_2022;
     }
 
-    // Fetch from chain
-    let mint_pubkey = match Pubkey::from_str(mint) {
-        Ok(pk) => pk,
-        Err(_) => {
-            // Invalid mint, assume standard SPL
-            cache_token_2022(mint, false);
-            return false;
-        }
-    };
-
-    let rpc_client = get_rpc_client();
-    match rpc_client.get_account(&mint_pubkey).await {
-        Ok(Some(account)) => {
-            let is_2022 = account.owner.to_string() == TOKEN_2022_PROGRAM_ID;
-            cache_token_2022(mint, is_2022);
+    match crate::chains::solana::assets::mint::is_token_2022_mint(mint).await {
+        Ok(is_2022) => {
+            cache_token_2022(chain, mint, is_2022);
             if is_2022 {
                 logger::debug(LogTag::Tokens, &format!("Token2022 detected: mint={mint}"));
             }
             is_2022
-        }
-        Ok(None) => {
-            logger::warning(
-                LogTag::Tokens,
-                &format!("Mint account not found: mint={mint}"),
-            );
-            false
         }
         Err(e) => {
             logger::warning(
                 LogTag::Tokens,
                 &format!("Failed to check Token2022 status: mint={mint} err={e}"),
             );
-            // On error, assume standard SPL (safer for fee collection)
+            // On error (including invalid mint / not found), assume standard
+            // SPL — safer default for fee collection — without caching a
+            // guess so a transient RPC failure gets re-checked next time.
             false
         }
     }
 }
 
 /// Cache Token2022 detection result
-fn cache_token_2022(mint: &str, is_2022: bool) {
-    TOKEN_2022_CACHE.insert(mint.to_string(), is_2022);
+fn cache_token_2022(chain: ChainId, mint: &str, is_2022: bool) {
+    TOKEN_2022_CACHE.insert(cache_key(chain, mint), is_2022);
 }
 
 /// Get decimals with fallback chain (cache → DB → chain)
@@ -196,30 +181,30 @@ fn cache_token_2022(mint: &str, is_2022: bool) {
 ///
 /// Tries: memory cache → database → on-chain RPC
 /// Returns None only if all methods fail
-pub async fn get(mint: &str) -> Option<u8> {
+pub async fn get(chain: ChainId, mint: &str) -> Option<u8> {
     // Try cache first
-    if let Some(d) = get_cached(mint) {
+    if let Some(d) = get_cached(chain, mint) {
         return Some(d);
     }
 
-    if is_marked_failure(mint) {
+    if is_marked_failure(chain, mint) {
         return None;
     }
 
     // Try database
-    if let Some(d) = get_from_db(mint).await {
-        cache(mint, d);
+    if let Some(d) = get_from_db(chain, mint).await {
+        cache(chain, mint, d);
         return Some(d);
     }
 
     // Acquire single-flight lock to avoid duplicate chain fetches
-    let lock = fetch_lock_for(mint);
+    let lock = fetch_lock_for(chain, mint);
     let guard = lock.lock().await;
 
     // Double-check cache after acquiring lock
-    if let Some(d) = get_cached(mint) {
+    if let Some(d) = get_cached(chain, mint) {
         drop(guard);
-        release_lock_if_idle(mint);
+        release_lock_if_idle(chain, mint);
         return Some(d);
     }
 
@@ -228,30 +213,30 @@ pub async fn get(mint: &str) -> Option<u8> {
     // we fall through to on-chain extraction below. This path never touches a
     // provider rate limiter (the server enforces its own per-IP limit).
     if let Some(d) = get_from_server(mint).await {
-        cache(mint, d);
-        if let Err(e) = persist_to_db(mint, d).await {
+        cache(chain, mint, d);
+        if let Err(e) = persist_to_db(chain, mint, d).await {
             logger::warning(
                 LogTag::Tokens,
                 &format!("Failed to persist server decimals to DB: mint={mint} err={e}"),
             );
         }
         drop(guard);
-        release_lock_if_idle(mint);
+        release_lock_if_idle(chain, mint);
         return Some(d);
     }
 
     // Fetch from chain (self-extraction) as fallback after the server.
-    let chain_result = get_token_decimals_from_chain(mint).await;
+    let chain_result = get_token_decimals_from_chain(chain, mint).await;
     if let Ok(d) = chain_result {
-        cache(mint, d);
-        if let Err(e) = persist_to_db(mint, d).await {
+        cache(chain, mint, d);
+        if let Err(e) = persist_to_db(chain, mint, d).await {
             logger::warning(
                 LogTag::Tokens,
                 &format!("Failed to persist decimals to DB: mint={mint} err={e}"),
             );
         }
         drop(guard);
-        release_lock_if_idle(mint);
+        release_lock_if_idle(chain, mint);
         return Some(d);
     }
 
@@ -265,7 +250,7 @@ pub async fn get(mint: &str) -> Option<u8> {
         );
     }
 
-    if let Some(d) = get_from_rugcheck(mint).await {
+    if let Some(d) = get_from_rugcheck(chain, mint).await {
         logger::debug(
             LogTag::Tokens,
             &format!(
@@ -273,8 +258,8 @@ pub async fn get(mint: &str) -> Option<u8> {
                 mint, d
             ),
         );
-        cache(mint, d);
-        if let Err(e) = persist_to_db(mint, d).await {
+        cache(chain, mint, d);
+        if let Err(e) = persist_to_db(chain, mint, d).await {
             logger::warning(
                 LogTag::Tokens,
                 &format!(
@@ -284,7 +269,7 @@ pub async fn get(mint: &str) -> Option<u8> {
             );
         }
         drop(guard);
-        release_lock_if_idle(mint);
+        release_lock_if_idle(chain, mint);
         return Some(d);
     }
 
@@ -295,104 +280,37 @@ pub async fn get(mint: &str) -> Option<u8> {
             mint
         ),
     );
-    mark_failure(mint);
+    mark_failure(chain, mint);
     drop(guard);
-    release_lock_if_idle(mint);
+    release_lock_if_idle(chain, mint);
     None
 }
 
 /// Fetch token decimals directly from Solana blockchain (public for debug bins)
-pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
-    use crate::rpc::{get_rpc_client, RpcClientMethods};
-    use solana_program::program_pack::Pack;
-    use solana_sdk::pubkey::Pubkey;
-    use spl_token::state::Mint as SplMint;
-    use spl_token_2022::state::Mint as Mint2022;
-    use std::str::FromStr;
-
+pub async fn get_token_decimals_from_chain(chain: ChainId, mint: &str) -> Result<u8, String> {
     // SOL always has 9 decimals
     if mint == SOL_MINT {
         return Ok(SOL_DECIMALS);
     }
 
-    // Parse mint address
-    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {e}"))?;
+    let mint_data = crate::chains::solana::assets::mint::fetch_mint_account(mint).await?;
 
-    // Get RPC client
-    let rpc_client = get_rpc_client();
+    // Cache authority data as a side effect of the fetch we already paid for
+    // (zero extra RPC cost).
+    cache_authorities(chain, mint, &mint_data);
 
-    // Fetch account data
-    let account_opt = rpc_client.get_account(&mint_pubkey).await.map_err(|e| {
-        let e_str = e.to_string();
-        if e_str.contains("could not find account") || e_str.contains("Account not found") {
-            "Account not found".to_owned()
-        } else if e_str.contains("429") || e_str.to_lowercase().contains("rate limit") {
-            format!("Rate limited: {e_str}")
-        } else {
-            format!("Failed to fetch account: {e_str}")
-        }
-    })?;
-
-    let account = account_opt.ok_or_else(|| "Account not found".to_owned())?;
-
-    // Check account data
-    if account.data.is_empty() {
-        return Err("Account data is empty".to_owned());
-    }
-
-    // Check if it's an SPL Token mint
-    if account.owner == spl_token::id() {
-        let mint_data = SplMint::unpack(&account.data)
-            .map_err(|e| format!("Failed to unpack SPL Token mint: {e}"))?;
-
-        // Cache authority data as side effect (zero extra RPC cost)
-        cache_authorities_from_spl_mint(mint, &mint_data);
-
-        return Ok(mint_data.decimals);
-    }
-
-    // Check if it's a Token-2022 mint
-    if account.owner == spl_token_2022::id() {
-        // First, try unpack via the Token-2022 Mint directly
-        if let Ok(mint_data) = Mint2022::unpack(&account.data) {
-            // Cache authority data (Token-2022 has same fields)
-            cache_authorities_from_token2022_mint(mint, &mint_data);
-            return Ok(mint_data.decimals);
-        }
-
-        // Fallback: unpack with extensions-aware parser and read base.decimals
-        // Some Token-2022 mints include extensions that require this API.
-        match spl_token_2022::extension::StateWithExtensionsOwned::<Mint2022>::unpack(
-            account.data.clone(),
-        ) {
-            Ok(state) => {
-                cache_authorities_from_token2022_mint(mint, &state.base);
-                return Ok(state.base.decimals);
-            }
-            Err(e) => {
-                return Err(format!(
-                    "Failed to unpack Token-2022 mint with extensions: {}",
-                    e
-                ))
-            }
-        }
-    }
-
-    Err(format!(
-        "Account owner is not a supported token program: {}",
-        account.owner
-    ))
+    Ok(mint_data.decimals)
 }
 
 /// Manually cache a decimals value (used when fetched from other sources)
-pub fn cache(mint: &str, decimals: u8) {
+pub fn cache(chain: ChainId, mint: &str, decimals: u8) {
     // Validate decimals is within reasonable bounds (SOL tokens use max 18 decimals)
     if decimals > MAX_DECIMALS {
         // Warn once per mint — this is called on every token upsert, so a token
         // carrying a junk decimals value (from a bad data source) would otherwise
         // re-log on every market update and flood the log (observed 1800+ lines).
-        if !INVALID_DECIMALS_WARNED.contains_key(mint) {
-            INVALID_DECIMALS_WARNED.insert(mint.to_string(), ());
+        if !INVALID_DECIMALS_WARNED.contains_key(&cache_key(chain, mint)) {
+            INVALID_DECIMALS_WARNED.insert(cache_key(chain, mint), ());
             crate::logger::warning(
                 crate::logger::LogTag::Tokens,
                 &format!(
@@ -404,14 +322,14 @@ pub fn cache(mint: &str, decimals: u8) {
         return;
     }
 
-    DECIMALS_CACHE.insert(mint.to_string(), decimals);
-    clear_failure(mint);
+    DECIMALS_CACHE.insert(cache_key(chain, mint), decimals);
+    clear_failure(chain, mint);
 }
 
 /// Clear cached decimals for a specific mint
-pub fn clear_cache(mint: &str) {
-    DECIMALS_CACHE.invalidate(&mint.to_string());
-    clear_failure(mint);
+pub fn clear_cache(chain: ChainId, mint: &str) {
+    DECIMALS_CACHE.invalidate(&cache_key(chain, mint));
+    clear_failure(chain, mint);
 }
 
 /// Clear all cached decimals
@@ -425,10 +343,13 @@ pub fn clear_all_cache() {
 // =============================================================================
 
 /// Try to get decimals from database
-async fn get_from_db(mint: &str) -> Option<u8> {
+async fn get_from_db(chain: ChainId, mint: &str) -> Option<u8> {
     use crate::tokens::database::get_global_database;
 
     let db = get_global_database()?;
+    if db.chain() != chain {
+        return None;
+    }
     let mint_owned = mint.to_string();
     let db_clone = db.clone();
 
@@ -487,10 +408,13 @@ async fn get_from_server(mint: &str) -> Option<u8> {
     (value <= u8::MAX as u64).then_some(value as u8)
 }
 
-async fn get_from_rugcheck(mint: &str) -> Option<u8> {
+async fn get_from_rugcheck(chain: ChainId, mint: &str) -> Option<u8> {
     use crate::tokens::database::get_global_database;
 
     let db = get_global_database()?;
+    if db.chain() != chain {
+        return None;
+    }
     let mint_owned = mint.to_string();
     let db_clone = db.clone();
 
@@ -511,10 +435,16 @@ async fn get_from_rugcheck(mint: &str) -> Option<u8> {
 ///
 /// NOTE: This calls upsert_token() which will ALSO update the cache automatically.
 /// This ensures cache and DB stay synchronized.
-async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
+async fn persist_to_db(chain: ChainId, mint: &str, decimals: u8) -> Result<(), String> {
     use crate::tokens::database::get_global_database;
 
     let db = get_global_database().ok_or("Database not initialized")?;
+    if db.chain() != chain {
+        return Err(format!(
+            "Token database is scoped to {}, not {chain}",
+            db.chain()
+        ));
+    }
     let mint = mint.to_string();
 
     // Use spawn_blocking for synchronous database access
@@ -524,7 +454,7 @@ async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
         .map_err(|e| format!("Database error: {e}"))
 }
 
-fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {
+fn fetch_lock_for(chain: ChainId, mint: &str) -> Arc<AsyncMutex<()>> {
     let mut map = FETCH_LOCKS.lock().expect("decimals fetch locks poisoned");
 
     // Periodic cleanup to prevent unbounded growth
@@ -540,74 +470,45 @@ fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {
     }
 
     Arc::clone(
-        map.entry(mint.to_string())
+        map.entry(cache_key(chain, mint))
             .or_insert_with(|| Arc::new(AsyncMutex::new(()))),
     )
 }
 
-fn release_lock_if_idle(mint: &str) {
+fn release_lock_if_idle(chain: ChainId, mint: &str) {
     if let Ok(mut map) = FETCH_LOCKS.lock() {
-        map.remove(mint);
+        map.remove(&cache_key(chain, mint));
     }
 }
 
-fn mark_failure(mint: &str) {
-    FAILED_CACHE.insert(mint.to_string(), ());
+fn mark_failure(chain: ChainId, mint: &str) {
+    FAILED_CACHE.insert(cache_key(chain, mint), ());
 }
 
-fn clear_failure(mint: &str) {
-    FAILED_CACHE.invalidate(&mint.to_string());
+fn clear_failure(chain: ChainId, mint: &str) {
+    FAILED_CACHE.invalidate(&cache_key(chain, mint));
 }
 
-fn is_marked_failure(mint: &str) -> bool {
-    FAILED_CACHE.contains_key(mint)
+fn is_marked_failure(chain: ChainId, mint: &str) -> bool {
+    FAILED_CACHE.contains_key(&cache_key(chain, mint))
 }
 
 // ============================================================================
 // AUTHORITY CACHING — side effect of chain fetch, zero extra RPC cost
 // ============================================================================
 
-/// Extract and cache authority data from an SPL Token Mint struct
-fn cache_authorities_from_spl_mint(mint: &str, mint_data: &spl_token::state::Mint) {
-    use solana_program::program_option::COption;
-
-    let mint_authority = match mint_data.mint_authority {
-        COption::Some(pk) => Some(pk.to_string()),
-        COption::None => None,
-    };
-    let freeze_authority = match mint_data.freeze_authority {
-        COption::Some(pk) => Some(pk.to_string()),
-        COption::None => None,
-    };
-
+/// Cache the mint/freeze authority data a chain fetch already carried.
+fn cache_authorities(
+    chain: ChainId,
+    mint: &str,
+    mint_data: &crate::chains::solana::assets::MintAccountData,
+) {
     crate::tokens::authority_cache::cache_mint_authorities(
+        chain,
         mint,
         crate::tokens::authority_cache::MintAuthorities {
-            mint_authority,
-            freeze_authority,
-            supply: mint_data.supply,
-        },
-    );
-}
-
-/// Extract and cache authority data from a Token-2022 Mint struct
-fn cache_authorities_from_token2022_mint(mint: &str, mint_data: &spl_token_2022::state::Mint) {
-    use solana_program::program_option::COption;
-
-    let mint_authority = match mint_data.mint_authority {
-        COption::Some(pk) => Some(pk.to_string()),
-        COption::None => None,
-    };
-    let freeze_authority = match mint_data.freeze_authority {
-        COption::Some(pk) => Some(pk.to_string()),
-        COption::None => None,
-    };
-
-    crate::tokens::authority_cache::cache_mint_authorities(
-        mint,
-        crate::tokens::authority_cache::MintAuthorities {
-            mint_authority,
-            freeze_authority,
+            mint_authority: mint_data.mint_authority.clone(),
+            freeze_authority: mint_data.freeze_authority.clone(),
             supply: mint_data.supply,
         },
     );

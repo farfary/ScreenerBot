@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
+use screenerbot::chains::ChainId;
 use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::copy::{
     execute_copy_sell_with, paper_sell_outcome, prepare_copy_sell, CopyMode, CopyOutcome,
@@ -18,6 +19,7 @@ fn task(exit_mode: ExitMode, mode: CopyMode) -> CopyTask {
     let now = Utc.timestamp_opt(10, 0).unwrap();
     CopyTask {
         id: 7,
+        chain: ChainId::Solana,
         target_address: "target-wallet".to_owned(),
         label: None,
         enabled: true,

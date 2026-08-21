@@ -5,8 +5,11 @@
 // INVARIANT: All cached data MUST be stored in ASC timestamp order.
 // This ensures consistent behavior across cache hits, DB queries, and aggregations.
 
-use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
+use crate::{
+    chains::ChainId,
+    events::{record_ohlcv_event, Severity},
+};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -41,9 +44,10 @@ impl CacheEntry {
     }
 }
 
-type CacheKey = (String, Option<String>, Timeframe); // (mint, pool_address, timeframe)
+type CacheKey = (ChainId, String, Option<String>, Timeframe); // (chain, mint, pool_address, timeframe)
 
 pub struct OhlcvCache {
+    chain: ChainId,
     hot_cache: Arc<Mutex<HashMap<CacheKey, CacheEntry>>>,
     access_order: Arc<Mutex<VecDeque<CacheKey>>>,
     hit_count: Arc<Mutex<u64>>,
@@ -51,8 +55,9 @@ pub struct OhlcvCache {
 }
 
 impl OhlcvCache {
-    pub fn new() -> Self {
+    pub fn new(chain: ChainId) -> Self {
         Self {
+            chain,
             hot_cache: Arc::new(Mutex::new(HashMap::new())),
             access_order: Arc::new(Mutex::new(VecDeque::new())),
             hit_count: Arc::new(Mutex::new(0)),
@@ -68,6 +73,7 @@ impl OhlcvCache {
         timeframe: Timeframe,
     ) -> OhlcvResult<Option<Vec<Candle>>> {
         let key = (
+            self.chain,
             mint.to_string(),
             pool_address.map(|s| s.to_string()),
             timeframe,
@@ -157,6 +163,7 @@ impl OhlcvCache {
         }
 
         let key = (
+            self.chain,
             mint.to_string(),
             pool_address.map(|s| s.to_string()),
             timeframe,
@@ -192,8 +199,9 @@ impl OhlcvCache {
 
         let keys_to_remove: Vec<CacheKey> = cache
             .keys()
-            .filter(|(m, p, tf)| {
-                m == mint
+            .filter(|(chain, m, p, tf)| {
+                *chain == self.chain
+                    && m == mint
                     && (pool_address.is_none() || pool_address == p.as_deref())
                     && (timeframe.is_none() || timeframe == Some(*tf))
             })
@@ -331,6 +339,6 @@ impl OhlcvCache {
 
 impl Default for OhlcvCache {
     fn default() -> Self {
-        Self::new()
+        Self::new(ChainId::Solana)
     }
 }

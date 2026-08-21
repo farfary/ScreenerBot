@@ -1,7 +1,8 @@
 //! Partial close operations — sell a percentage of remaining tokens without closing the position.
 
+use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
-use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -9,7 +10,6 @@ use crate::positions::state::{
     register_pending_partial_exit,
 };
 use crate::positions::types::PendingPartialExit;
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{
     calculate_partial_amount, execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode,
 };

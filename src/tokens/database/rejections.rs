@@ -25,8 +25,8 @@ impl TokenDatabase {
                 last_rejection_reason = ?1, 
                 last_rejection_source = ?2, 
                 last_rejection_at = ?3 
-             WHERE mint = ?4",
-            params![reason, source, rejected_at, mint],
+             WHERE chain_id = ?4 AND mint = ?5",
+            params![reason, source, rejected_at, self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to update rejection status: {e}")))?;
 
@@ -42,8 +42,8 @@ impl TokenDatabase {
                 last_rejection_reason = NULL, 
                 last_rejection_source = NULL, 
                 last_rejection_at = NULL 
-             WHERE mint = ?1",
-            params![mint],
+             WHERE chain_id = ?1 AND mint = ?2",
+            params![self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to clear rejection status: {e}")))?;
 
@@ -72,12 +72,12 @@ impl TokenDatabase {
                         last_rejection_reason = NULL, 
                         last_rejection_source = NULL, 
                         last_rejection_at = NULL 
-                     WHERE mint = ?1",
+                     WHERE chain_id = ?1 AND mint = ?2",
                 )
                 .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for mint in mints {
-                match stmt.execute(params![mint]) {
+                match stmt.execute(params![self.chain_id(), mint]) {
                     Ok(rows) => updated += rows,
                     Err(e) => {
                         // Log but continue - don't fail entire batch
@@ -121,12 +121,12 @@ impl TokenDatabase {
                         last_rejection_reason = ?1, 
                         last_rejection_source = ?2, 
                         last_rejection_at = ?3 
-                     WHERE mint = ?4",
+                     WHERE chain_id = ?4 AND mint = ?5",
                 )
                 .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for (mint, reason, source, rejected_at) in updates {
-                match stmt.execute(params![reason, source, rejected_at, mint]) {
+                match stmt.execute(params![reason, source, rejected_at, self.chain_id(), mint]) {
                     Ok(rows) => updated += rows,
                     Err(e) => {
                         logger::warning(
@@ -164,18 +164,24 @@ impl TokenDatabase {
         {
             let mut stmt = tx
                 .prepare_cached(
-                    "INSERT INTO rejection_stats (bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
-                     VALUES (?1, ?2, ?3, 1, 1, ?4, ?4)
-                     ON CONFLICT(bucket_hour, reason, source) DO UPDATE SET
+                    "INSERT INTO rejection_stats (chain_id, bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
+                     VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?5)
+                     ON CONFLICT(chain_id, bucket_hour, reason, source) DO UPDATE SET
                          rejection_count = rejection_count + 1,
-                         last_seen = ?4",
+                         last_seen = ?5",
                 )
                 .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for (reason, source, timestamp) in stats {
                 // Round timestamp to hour bucket
                 let bucket_hour = (timestamp / 3600) * 3600;
-                match stmt.execute(params![bucket_hour, reason, source, timestamp]) {
+                match stmt.execute(params![
+                    self.chain_id(),
+                    bucket_hour,
+                    reason,
+                    source,
+                    timestamp
+                ]) {
                     Ok(_) => updated += 1,
                     Err(e) => {
                         logger::warning(
@@ -216,7 +222,7 @@ impl TokenDatabase {
                     last_rejection_source, 
                     COUNT(*) as count 
                  FROM update_tracking 
-                 WHERE last_rejection_reason IS NOT NULL"
+                 WHERE chain_id = :chain_id AND last_rejection_reason IS NOT NULL"
             .to_string();
 
         if start_time.is_some() {
@@ -234,7 +240,8 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         // Bind parameters
-        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        let chain_id = self.chain_id();
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![(":chain_id", &chain_id)];
         if let Some(ref start) = start_time {
             params.push((":start_time", start));
         }
@@ -283,21 +290,22 @@ impl TokenDatabase {
         let query = "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at,
                             t.symbol, t.name,
                             COALESCE(
-                              (SELECT image_url FROM market_dexscreener WHERE mint = ut.mint AND image_url IS NOT NULL AND image_url != '' LIMIT 1),
-                              (SELECT image_url FROM market_geckoterminal WHERE mint = ut.mint AND image_url IS NOT NULL AND image_url != '' LIMIT 1)
+                              (SELECT image_url FROM market_dexscreener WHERE chain_id = ut.chain_id AND mint = ut.mint AND image_url IS NOT NULL AND image_url != '' LIMIT 1),
+                              (SELECT image_url FROM market_geckoterminal WHERE chain_id = ut.chain_id AND mint = ut.mint AND image_url IS NOT NULL AND image_url != '' LIMIT 1)
                             ) AS image_url
                      FROM update_tracking ut
-                     LEFT JOIN tokens t ON ut.mint = t.mint
-                     WHERE ut.last_rejection_reason IS NOT NULL
-                     ORDER BY ut.last_rejection_at DESC LIMIT :limit";
+                     LEFT JOIN tokens t ON ut.chain_id = t.chain_id AND ut.mint = t.mint
+                     WHERE ut.chain_id = ?1 AND ut.last_rejection_reason IS NOT NULL
+                     ORDER BY ut.last_rejection_at DESC LIMIT ?2";
 
         let mut stmt = conn
             .prepare(query)
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
+        let chain_id = self.chain_id();
         let limit_i64 = limit as i64;
         let rows = stmt
-            .query_map(&[(":limit", &limit_i64)], |row| {
+            .query_map(params![chain_id, limit_i64], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
@@ -332,12 +340,12 @@ impl TokenDatabase {
         let mut query = if search_filter.is_some() {
             "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at 
              FROM update_tracking ut 
-             LEFT JOIN tokens t ON ut.mint = t.mint 
-             WHERE ut.last_rejection_reason IS NOT NULL".to_owned()
+             LEFT JOIN tokens t ON ut.chain_id = t.chain_id AND ut.mint = t.mint
+             WHERE ut.chain_id = :chain_id AND ut.last_rejection_reason IS NOT NULL".to_owned()
         } else {
             "SELECT mint, last_rejection_reason, last_rejection_source, last_rejection_at 
              FROM update_tracking 
-             WHERE last_rejection_reason IS NOT NULL"
+             WHERE chain_id = :chain_id AND last_rejection_reason IS NOT NULL"
                 .to_string()
         };
 
@@ -374,7 +382,8 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         // Build params dynamically - only include params that are in the query
-        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        let chain_id = self.chain_id();
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![(":chain_id", &chain_id)];
         if let Some(ref reason) = reason_filter {
             params.push((":reason", reason));
         }
@@ -426,8 +435,8 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         conn.execute(
-            "INSERT INTO rejection_history (mint, reason, source, rejected_at) VALUES (?1, ?2, ?3, ?4)",
-            params![mint, reason, source, rejected_at],
+            "INSERT INTO rejection_history (chain_id, mint, reason, source, rejected_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![self.chain_id(), mint, reason, source, rejected_at],
         )
         .map_err(|e| TokenError::Database(format!("Failed to insert rejection history: {e}")))?;
 
@@ -450,7 +459,7 @@ impl TokenDatabase {
 
         // Query rejection_history table for time-range stats
         let mut query =
-            "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE 1=1".to_owned();
+            "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE chain_id = :chain_id".to_owned();
 
         if start_time.is_some() {
             query.push_str(" AND rejected_at >= :start_time");
@@ -465,7 +474,8 @@ impl TokenDatabase {
             .prepare(&query)
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        let chain_id = self.chain_id();
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![(":chain_id", &chain_id)];
         if let Some(ref start) = start_time {
             params.push((":start_time", start));
         }
@@ -503,8 +513,8 @@ impl TokenDatabase {
 
         let deleted = conn
             .execute(
-                "DELETE FROM rejection_history WHERE rejected_at < ?1",
-                params![cutoff],
+                "DELETE FROM rejection_history WHERE chain_id = ?1 AND rejected_at < ?2",
+                params![self.chain_id(), cutoff],
             )
             .map_err(|e| {
                 TokenError::Database(format!("Failed to cleanup rejection history: {e}"))
@@ -528,12 +538,12 @@ impl TokenDatabase {
         let bucket_hour = (timestamp / 3600) * 3600;
 
         conn.execute(
-            "INSERT INTO rejection_stats (bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
-             VALUES (?1, ?2, ?3, 1, 1, ?4, ?4)
-             ON CONFLICT(bucket_hour, reason, source) DO UPDATE SET
+            "INSERT INTO rejection_stats (chain_id, bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
+             VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, ?5)
+             ON CONFLICT(chain_id, bucket_hour, reason, source) DO UPDATE SET
                  rejection_count = rejection_count + 1,
-                 last_seen = ?4",
-            params![bucket_hour, reason, source, timestamp],
+                 last_seen = ?5",
+            params![self.chain_id(), bucket_hour, reason, source, timestamp],
         )
         .map_err(|e| TokenError::Database(format!("Upsert rejection stat failed: {e}")))?;
 
@@ -550,7 +560,7 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut query =
-            "SELECT reason, source, SUM(rejection_count) as total FROM rejection_stats WHERE 1=1"
+            "SELECT reason, source, SUM(rejection_count) as total FROM rejection_stats WHERE chain_id = :chain_id"
                 .to_string();
 
         if start_time.is_some() {
@@ -566,7 +576,8 @@ impl TokenDatabase {
             .prepare(&query)
             .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
-        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        let chain_id = self.chain_id();
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![(":chain_id", &chain_id)];
         if let Some(ref start) = start_time {
             params.push((":start_time", start));
         }
@@ -602,8 +613,8 @@ impl TokenDatabase {
 
         let deleted = conn
             .execute(
-                "DELETE FROM rejection_stats WHERE bucket_hour < ?1",
-                params![cutoff],
+                "DELETE FROM rejection_stats WHERE chain_id = ?1 AND bucket_hour < ?2",
+                params![self.chain_id(), cutoff],
             )
             .map_err(|e| TokenError::Database(format!("Delete rejection stats failed: {e}")))?;
 

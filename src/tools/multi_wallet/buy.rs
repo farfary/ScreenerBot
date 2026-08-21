@@ -8,10 +8,10 @@ use std::sync::atomic::Ordering;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::tools::swap_executor::tool_buy;
-use crate::wallets::{self, WalletRole, WalletWithKey};
+use crate::wallets::{self, Wallet, WalletRole};
 
 use super::transfer::fund_wallets;
 use super::types::{MultiBuyConfig, SessionResult, SessionStatus, WalletOpResult, WalletPlan};
@@ -69,16 +69,12 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
         .collect();
 
     if !funding_needed.is_empty() {
-        let main_keypair = wallets::get_main_keypair()
-            .await
-            .map_err(|e| format!("Failed to get main wallet keypair: {e}"))?;
-
         logger::info(
             LogTag::Tools,
             &format!("Funding {} wallets before buy", funding_needed.len()),
         );
 
-        let funding_results = fund_wallets(&main_keypair, funding_needed, 3).await;
+        let funding_results = fund_wallets(funding_needed, 3).await;
         let failed_funding: Vec<_> = funding_results.iter().filter(|r| !r.success).collect();
 
         if !failed_funding.is_empty() {
@@ -93,10 +89,8 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
     }
 
     // Execute buys
-    let wallet_map: HashMap<String, &WalletWithKey> = wallets
-        .iter()
-        .map(|w| (w.wallet.address.clone(), w))
-        .collect();
+    let wallet_map: HashMap<String, &Wallet> =
+        wallets.iter().map(|w| (w.address.clone(), w)).collect();
 
     for plan in plans {
         // Check abort flag before each operation
@@ -149,13 +143,13 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
 }
 
 /// Load wallets for multi-buy operation
-async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<WalletWithKey>, String> {
-    let all_wallets = wallets::get_wallets_with_keys().await?;
+async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<Wallet>, String> {
+    let all_wallets = wallets::list_active_wallets().await?;
 
     // Filter to secondary wallets only
-    let secondary_wallets: Vec<WalletWithKey> = all_wallets
+    let secondary_wallets: Vec<Wallet> = all_wallets
         .into_iter()
-        .filter(|w| w.wallet.role == WalletRole::Secondary && w.wallet.is_active)
+        .filter(|w| w.role == WalletRole::Secondary)
         .take(config.wallet_count)
         .collect();
 
@@ -169,14 +163,14 @@ async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<WalletWithK
 /// Create buy plans for each wallet
 async fn create_buy_plans(
     config: &MultiBuyConfig,
-    wallets: &[WalletWithKey],
+    wallets: &[Wallet],
 ) -> Result<Vec<WalletPlan>, String> {
     let rpc_client = get_rpc_client();
     let mut plans = Vec::new();
 
     for wallet in wallets {
         let balance = rpc_client
-            .get_sol_balance(&wallet.wallet.address)
+            .get_sol_balance(&wallet.address)
             .await
             .unwrap_or_default();
 
@@ -199,9 +193,9 @@ async fn create_buy_plans(
         };
 
         plans.push(WalletPlan {
-            wallet_id: wallet.wallet.id,
-            wallet_address: wallet.wallet.address.clone(),
-            wallet_name: wallet.wallet.name.clone(),
+            wallet_id: wallet.id,
+            wallet_address: wallet.address.clone(),
+            wallet_name: wallet.name.clone(),
             sol_balance: balance,
             token_balance: None,
             planned_amount_sol: buy_amount,
@@ -228,14 +222,14 @@ async fn create_buy_plans(
 
 /// Execute a single buy operation
 async fn execute_single_buy(
-    wallet: &WalletWithKey,
+    wallet: &Wallet,
     token_mint: &str,
     amount_sol: f64,
     slippage_bps: u64,
     _router: Option<&str>,
 ) -> WalletOpResult {
-    let wallet_id = wallet.wallet.id;
-    let wallet_address = wallet.wallet.address.clone();
+    let wallet_id = wallet.id;
+    let wallet_address = wallet.address.clone();
 
     logger::debug(
         LogTag::Tools,

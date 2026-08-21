@@ -140,6 +140,15 @@ pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
         return None;
     }
 
+    // The wallet-monitor database opens synchronously in `WalletService::initialize`,
+    // but the webserver is up (and pollable) long before that — during the
+    // no-config and full-mode-starting windows. "No snapshot yet" there is the
+    // expected pre-initialization state, not a failure, so stay quiet instead of
+    // warning; a query failure AFTER readiness still warns below.
+    if !crate::wallet::is_wallet_database_ready() {
+        return None;
+    }
+
     match get_current_wallet_status().await {
         Ok(Some(snapshot)) => {
             let mut token_balances = Vec::new();
@@ -251,41 +260,43 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
     let monitored_tokens_count = crate::pools::get_available_tokens().len();
     let price_subscribers = 0;
 
-    let analyzer_snapshot = crate::pools::get_pool_analyzer().and_then(|analyzer| {
-        let directory = analyzer.get_pool_directory();
-        let guard = directory.read().ok()?;
+    let analyzer_snapshot =
+        crate::chains::solana::pools::service::get_pool_analyzer().and_then(|analyzer| {
+            let directory = analyzer.get_pool_directory();
+            let guard = directory.read().ok()?;
 
-        let total_pools = guard.len();
-        let mut program_counts: HashMap<String, usize> = HashMap::new();
-        for descriptor in guard.values() {
-            let label = descriptor.program_kind.display_name().to_string();
-            *program_counts.entry(label).or_default() += 1;
-        }
+            let total_pools = guard.len();
+            let mut program_counts: HashMap<String, usize> = HashMap::new();
+            for descriptor in guard.values() {
+                let label = descriptor.program_kind.as_str().to_string();
+                *program_counts.entry(label).or_default() += 1;
+            }
 
-        let mut program_distribution: Vec<PoolProgramCount> = program_counts
-            .into_iter()
-            .map(|(program, count)| PoolProgramCount { program, count })
-            .collect();
-        program_distribution.sort_by(|a, b| {
-            b.count
-                .cmp(&a.count)
-                .then_with(|| a.program.cmp(&b.program))
+            let mut program_distribution: Vec<PoolProgramCount> = program_counts
+                .into_iter()
+                .map(|(program, count)| PoolProgramCount { program, count })
+                .collect();
+            program_distribution.sort_by(|a, b| {
+                b.count
+                    .cmp(&a.count)
+                    .then_with(|| a.program.cmp(&b.program))
+            });
+
+            Some(PoolAnalyzerSnapshot {
+                total_pools,
+                program_distribution,
+            })
         });
 
-        Some(PoolAnalyzerSnapshot {
-            total_pools,
-            program_distribution,
-        })
-    });
-
-    let fetcher_snapshot = crate::pools::get_account_fetcher().map(|fetcher| {
-        let stats = fetcher.get_fetch_stats();
-        PoolFetcherSnapshot {
-            total_bundles: stats.total_bundles,
-            bundles_with_data: stats.bundles_with_data,
-            total_accounts_tracked: stats.total_accounts_tracked,
-        }
-    });
+    let fetcher_snapshot =
+        crate::chains::solana::pools::service::get_account_fetcher().map(|fetcher| {
+            let stats = fetcher.get_fetch_stats();
+            PoolFetcherSnapshot {
+                total_bundles: stats.total_bundles,
+                bundles_with_data: stats.bundles_with_data,
+                total_accounts_tracked: stats.total_accounts_tracked,
+            }
+        });
 
     let debug_override_tokens = crate::pools::get_debug_token_override();
     let debug_override_count = debug_override_tokens
@@ -294,7 +305,7 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
         .unwrap_or_default();
 
     let (dexs_enabled, gecko_enabled, raydium_enabled) =
-        crate::pools::PoolDiscovery::get_source_config();
+        crate::chains::solana::pools::discovery::PoolDiscovery::get_source_config();
     let mut sources_enabled = Vec::new();
     if dexs_enabled {
         sources_enabled.push("DexScreener".to_owned());

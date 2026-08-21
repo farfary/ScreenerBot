@@ -5,11 +5,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 
-use crate::config::with_config;
+use crate::chains::solana::assets::fetch_nft_metadata_batch;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::nfts::fetch_nft_metadata_batch;
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::utils::get_wallet_address;
+use crate::{chains::ChainId, config::with_config};
 
 use crate::transactions::get_transaction_database;
 
@@ -21,7 +21,7 @@ use super::cache::{
 use super::dashboard::clamp_window_hours;
 use super::database::{
     get_wallet_service_metrics, increment_errors, increment_flow_syncs, increment_operations,
-    increment_snapshots, GLOBAL_WALLET_DB,
+    increment_snapshots, mark_wallet_db_ready, GLOBAL_WALLET_DB,
 };
 use super::types::*;
 use super::worth::{
@@ -39,7 +39,7 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
         return Ok(()); // Already initialized
     }
 
-    let db = super::database::WalletDatabase::new().await?;
+    let db = super::database::WalletDatabase::new(ChainId::Solana).await?;
     let latest_snapshot_time = db.get_latest_snapshot_time()?;
 
     // Hydrate the live worth cache from the last persisted snapshot so the header and
@@ -55,6 +55,7 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
     }
 
     *db_lock = Some(db);
+    mark_wallet_db_ready();
 
     hydrate_wallet_snapshot_status(latest_snapshot_time);
 

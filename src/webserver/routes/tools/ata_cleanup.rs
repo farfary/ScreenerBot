@@ -1,7 +1,7 @@
 //! ATA cleanup and wallet generator handlers
 
+use crate::chains::solana::solana_sdk::signer::Signer;
 use axum::{http::StatusCode, response::Response, Json};
-use solana_sdk::signer::Signer;
 
 use crate::logger::{self, LogTag};
 use crate::tools::ata_cleanup::{
@@ -163,11 +163,7 @@ pub async fn clear_ata_cache() -> Response {
 
 /// Generate a single new Solana keypair
 pub async fn generate_keypair() -> Response {
-    use solana_sdk::signature::Keypair;
-
-    let keypair = Keypair::new();
-    let pubkey = keypair.pubkey().to_string();
-    let secret = bs58::encode(keypair.to_bytes()).into_string();
+    let (pubkey, secret) = crate::chains::solana::accounts::generate_keypair_strings();
 
     logger::info(
         LogTag::Wallet,
@@ -179,18 +175,13 @@ pub async fn generate_keypair() -> Response {
 
 /// Generate multiple new Solana keypairs
 pub async fn generate_keypairs(Json(request): Json<GenerateKeypairsRequest>) -> Response {
-    use solana_sdk::signature::Keypair;
-
     // Limit to reasonable number
     let count = request.count.min(10);
 
     let keypairs: Vec<KeypairResponse> = (0..count)
         .map(|_| {
-            let keypair = Keypair::new();
-            KeypairResponse {
-                pubkey: keypair.pubkey().to_string(),
-                secret: bs58::encode(keypair.to_bytes()).into_string(),
-            }
+            let (pubkey, secret) = crate::chains::solana::accounts::generate_keypair_strings();
+            KeypairResponse { pubkey, secret }
         })
         .collect();
 

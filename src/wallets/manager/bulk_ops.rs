@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use super::super::bulk::{
     BulkImportResult, ImportOptions, ImportRowResult, ParsedWalletRow, WalletExportRow,
 };
-use super::super::crypto::keypair_to_address;
+use super::super::crypto::address_from_private_key;
 use super::super::types::{CreateWalletRequest, ImportWalletRequest, Wallet, WalletRole};
 use crate::logger::{self, LogTag};
 
@@ -49,8 +49,8 @@ pub async fn bulk_import_wallets(
 
     for row in rows {
         // Validate and derive address without logging key
-        let keypair = match super::super::crypto::parse_private_key(&row.private_key) {
-            Ok(kp) => kp,
+        let address = match address_from_private_key(&row.private_key) {
+            Ok(addr) => addr,
             Err(e) => {
                 result.rows.push(ImportRowResult {
                     row_num: row.row_num,
@@ -63,8 +63,6 @@ pub async fn bulk_import_wallets(
                 continue;
             }
         };
-
-        let address = keypair_to_address(&keypair);
 
         // Check for duplicates
         if existing_addresses.contains(&address) {

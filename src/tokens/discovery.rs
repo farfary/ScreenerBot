@@ -17,9 +17,7 @@ use crate::tokens::updates::RateLimitCoordinator;
 use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 use chrono::Utc;
 use futures::future::{join_all, BoxFuture};
-use solana_sdk::pubkey::Pubkey;
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;
@@ -532,7 +530,7 @@ fn normalize_mint(candidate: &str) -> Option<String> {
         return None;
     }
 
-    if Pubkey::from_str(trimmed).is_err() {
+    if crate::chains::solana::accounts::validate_address(trimmed).is_err() {
         return None;
     }
 

@@ -1,7 +1,8 @@
 //! DCA (Dollar Cost Averaging) operations — add to an existing position.
 
+use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
-use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
@@ -9,7 +10,6 @@ use crate::positions::state::{
     acquire_position_lock, clear_pending_dca_swap, register_pending_dca_swap,
 };
 use crate::positions::types::{PendingDcaSwap, TradeOrigin};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
 };

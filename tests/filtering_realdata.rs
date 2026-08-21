@@ -616,7 +616,10 @@ async fn realdata_decimals_preload_survives_its_own_cache() {
 
     let evicted = preloaded
         .iter()
-        .filter(|(mint, _)| screenerbot::tokens::get_cached_decimals(mint).is_none())
+        .filter(|(mint, _)| {
+            screenerbot::tokens::get_cached_decimals(screenerbot::chains::ChainId::Solana, mint)
+                .is_none()
+        })
         .count();
 
     eprintln!(

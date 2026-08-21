@@ -1,9 +1,9 @@
 //! Solana RPC health monitor — checks blockchain node responsiveness and slot freshness.
 
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use async_trait::async_trait;
 
 /// RPC endpoint monitor - checks health of all configured RPC providers

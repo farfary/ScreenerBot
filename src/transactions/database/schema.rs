@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::LazyLock;
 
 /// Database schema version for migration management
-pub(super) const DATABASE_SCHEMA_VERSION: u32 = 6;
+pub(super) const DATABASE_SCHEMA_VERSION: u32 = 7;
 
 /// Static flag to track if database has been initialized (to reduce log noise)
 pub(super) static DATABASE_INITIALIZED: LazyLock<AtomicBool> =
@@ -20,6 +20,7 @@ pub(super) static DATABASE_INITIALIZED: LazyLock<AtomicBool> =
 /// own row. See `TransactionDatabase::migrate_signature_wallet_tables` (v5).
 pub(super) const SCHEMA_RAW_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS raw_transactions (
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     slot INTEGER,
@@ -35,7 +36,7 @@ CREATE TABLE IF NOT EXISTS raw_transactions (
     raw_transaction_data TEXT, -- JSON blob of raw Solana transaction data
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (signature, wallet_address)
+    PRIMARY KEY (chain_id, signature, wallet_address)
 );
 "#;
 
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS raw_transactions (
 /// `signature` column alone.
 pub(super) const SCHEMA_PROCESSED_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS processed_transactions (
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     transaction_type TEXT NOT NULL, -- Serialized TransactionType enum
@@ -80,25 +82,27 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     processed_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
 
-    PRIMARY KEY (signature, wallet_address),
-    FOREIGN KEY (signature, wallet_address) REFERENCES raw_transactions(signature, wallet_address) ON DELETE CASCADE
+    PRIMARY KEY (chain_id, signature, wallet_address),
+    FOREIGN KEY (chain_id, signature, wallet_address) REFERENCES raw_transactions(chain_id, signature, wallet_address) ON DELETE CASCADE
 );
 "#;
 
 /// Known signatures tracking table
 pub(super) const SCHEMA_KNOWN_SIGNATURES: &str = r#"
 CREATE TABLE IF NOT EXISTS known_signatures (
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'known',
     added_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (signature, wallet_address)
+    PRIMARY KEY (chain_id, signature, wallet_address)
 );
 "#;
 
 /// Deferred retries tracking table
 pub(super) const SCHEMA_DEFERRED_RETRIES: &str = r#"
 CREATE TABLE IF NOT EXISTS deferred_retries (
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     next_retry_at TEXT NOT NULL,
@@ -107,19 +111,20 @@ CREATE TABLE IF NOT EXISTS deferred_retries (
     last_error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    PRIMARY KEY (signature, wallet_address)
+    PRIMARY KEY (chain_id, signature, wallet_address)
 );
 "#;
 
 /// Pending transactions tracking table
 pub(super) const SCHEMA_PENDING_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS pending_transactions (
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
     added_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_checked_at TEXT,
     check_count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (signature, wallet_address)
+    PRIMARY KEY (chain_id, signature, wallet_address)
 );
 "#;
 
@@ -135,10 +140,12 @@ CREATE TABLE IF NOT EXISTS db_metadata (
 /// Bootstrap state table to persist resume cursor and completion flag across restarts
 pub(super) const SCHEMA_BOOTSTRAP_STATE: &str = r#"
 CREATE TABLE IF NOT EXISTS bootstrap_state (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
+    chain_id TEXT NOT NULL DEFAULT 'solana',
+    id INTEGER NOT NULL CHECK (id = 1),
     backfill_before_cursor TEXT,
     full_history_completed INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (chain_id, id)
 );
 "#;
 
@@ -147,6 +154,7 @@ CREATE TABLE IF NOT EXISTS bootstrap_state (
 /// `CREATE TABLE IF NOT EXISTS` is the whole migration; no ALTER needed (v6).
 pub(super) const SCHEMA_SUBJECT_ASSET_DELTAS: &str = r#"
 CREATE TABLE IF NOT EXISTS subject_asset_deltas (
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     wallet_address TEXT NOT NULL,
     signature TEXT NOT NULL,
     mint TEXT NOT NULL,          -- SPL mint, or the literal 'native' for native SOL
@@ -161,26 +169,26 @@ CREATE TABLE IF NOT EXISTS subject_asset_deltas (
     venue TEXT,                  -- router name when a known DEX program is present
     fee_lamports INTEGER,
     success BOOLEAN NOT NULL DEFAULT 1,
-    PRIMARY KEY (wallet_address, signature, mint)
+    PRIMARY KEY (chain_id, wallet_address, signature, mint)
 );
 "#;
 
 /// Performance indexes for efficient queries
 pub(super) const INDEXES: &[&str] = &[
-    "CREATE INDEX IF NOT EXISTS idx_raw_transactions_wallet ON raw_transactions(wallet_address);",
-    "CREATE INDEX IF NOT EXISTS idx_raw_transactions_timestamp ON raw_transactions(timestamp DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_raw_transactions_chain_wallet ON raw_transactions(chain_id, wallet_address);",
+    "CREATE INDEX IF NOT EXISTS idx_raw_transactions_chain_timestamp ON raw_transactions(chain_id, timestamp DESC);",
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_status ON raw_transactions(status);",
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_slot ON raw_transactions(slot DESC);",
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_success ON raw_transactions(success);",
-    "CREATE INDEX IF NOT EXISTS idx_processed_transactions_wallet ON processed_transactions(wallet_address);",
+    "CREATE INDEX IF NOT EXISTS idx_processed_transactions_chain_wallet ON processed_transactions(chain_id, wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_type ON processed_transactions(transaction_type);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_direction ON processed_transactions(direction);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_analysis_version ON processed_transactions(analysis_version);",
     "CREATE INDEX IF NOT EXISTS idx_deferred_retries_next_retry ON deferred_retries(next_retry_at);",
-    "CREATE INDEX IF NOT EXISTS idx_known_signatures_wallet ON known_signatures(wallet_address);",
+    "CREATE INDEX IF NOT EXISTS idx_known_signatures_chain_wallet ON known_signatures(chain_id, wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_known_signatures_added_at ON known_signatures(added_at DESC);",
-    "CREATE INDEX IF NOT EXISTS idx_pending_transactions_wallet ON pending_transactions(wallet_address);",
+    "CREATE INDEX IF NOT EXISTS idx_pending_transactions_chain_wallet ON pending_transactions(chain_id, wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_pending_transactions_added_at ON pending_transactions(added_at DESC);",
-    "CREATE INDEX IF NOT EXISTS idx_subject_deltas_wallet_mint ON subject_asset_deltas(wallet_address, mint, slot, tx_index);",
-    "CREATE INDEX IF NOT EXISTS idx_subject_deltas_wallet_order ON subject_asset_deltas(wallet_address, slot, tx_index, signature);",
+    "CREATE INDEX IF NOT EXISTS idx_subject_deltas_chain_wallet_mint ON subject_asset_deltas(chain_id, wallet_address, mint, slot, tx_index);",
+    "CREATE INDEX IF NOT EXISTS idx_subject_deltas_chain_wallet_order ON subject_asset_deltas(chain_id, wallet_address, slot, tx_index, signature);",
 ];

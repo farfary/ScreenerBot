@@ -13,7 +13,10 @@ impl PositionsDatabase {
         let conn = self.get_connection()?;
 
         let rows_affected = conn
-            .execute("DELETE FROM positions WHERE id = ?1", params![id])
+            .execute(
+                "DELETE FROM positions WHERE id = ?1 AND chain_id = ?2",
+                params![id, self.chain.as_str()],
+            )
             .map_err(|e| format!("Failed to delete position: {e}"))?;
 
         Ok(rows_affected > 0)
@@ -37,8 +40,8 @@ impl PositionsDatabase {
 
         let rows_affected = conn
             .execute(
-                "UPDATE positions SET archived = ?2, archived_at = ?3, updated_at = datetime('now') WHERE id = ?1",
-                params![id, archived, archived_at],
+                "UPDATE positions SET archived = ?2, archived_at = ?3, updated_at = datetime('now') WHERE id = ?1 AND chain_id=?4",
+                params![id, archived, archived_at, self.chain.as_str()],
             )
             .map_err(|e| format!("Failed to set position archived flag: {e}"))?;
 
@@ -70,8 +73,8 @@ impl PositionsDatabase {
 
         let rows_affected = conn
             .execute(
-                "UPDATE positions SET management = ?2, updated_at = datetime('now') WHERE id = ?1",
-                params![id, management.as_str()],
+                "UPDATE positions SET management = ?2, updated_at = datetime('now') WHERE id = ?1 AND chain_id=?3",
+                params![id, management.as_str(), self.chain.as_str()],
             )
             .map_err(|e| format!("Failed to set position management: {e}"))?;
 
@@ -98,7 +101,10 @@ impl PositionsDatabase {
         let conn = self.get_connection()?;
 
         let rows_affected = conn
-            .execute("DELETE FROM positions WHERE archived = 1", [])
+            .execute(
+                "DELETE FROM positions WHERE archived = 1 AND chain_id=?1",
+                params![self.chain.as_str()],
+            )
             .map_err(|e| format!("Failed to delete archived positions: {e}"))?;
 
         if rows_affected > 0 {
@@ -120,8 +126,8 @@ impl PositionsDatabase {
 
         let rows_affected = conn
             .execute(
-                "DELETE FROM positions WHERE entry_transaction_signature = ?1",
-                params![signature],
+                "DELETE FROM positions WHERE entry_transaction_signature = ?1 AND chain_id=?2",
+                params![signature, self.chain.as_str()],
             )
             .map_err(|e| format!("Failed to delete position by entry signature: {e}"))?;
 
@@ -317,32 +323,32 @@ impl PositionsDatabase {
 
         let total_positions: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND chain_id=?2",
+                params![wallet_address, self.chain.as_str()],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count total positions: {e}"))?;
 
         let open_positions: i64 = conn
       .query_row(
-        "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 0",
-        params![wallet_address],
+        "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND chain_id=?2 AND transaction_exit_verified = 0",
+        params![wallet_address, self.chain.as_str()],
         |row| row.get(0),
       )
       .map_err(|e| format!("Failed to count open positions: {e}"))?;
 
         let closed_positions: i64 = conn
       .query_row(
-        "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 1",
-        params![wallet_address],
+        "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND chain_id=?2 AND transaction_exit_verified = 1",
+        params![wallet_address, self.chain.as_str()],
         |row| row.get(0),
       )
       .map_err(|e| format!("Failed to count closed positions: {e}"))?;
 
         let phantom_positions: i64 = conn
       .query_row(
-        "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND phantom_confirmations > 0",
-        params![wallet_address],
+        "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND chain_id=?2 AND phantom_confirmations > 0",
+        params![wallet_address, self.chain.as_str()],
         |row| row.get(0),
       )
       .map_err(|e| format!("Failed to count phantom positions: {e}"))?;

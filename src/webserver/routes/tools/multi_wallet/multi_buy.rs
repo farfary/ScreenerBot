@@ -3,13 +3,11 @@
 //! Handles preview, start, status, and abort for multi-buy operations.
 
 use axum::{extract::Path, http::StatusCode, response::Response, Json};
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::tools::multi_wallet::{execute_multi_buy, MultiBuyConfig, SessionResult, SessionStatus};
 use crate::tools::DelayConfig;
 use crate::wallets;
@@ -39,7 +37,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     );
 
     // Validate token mint
-    if Pubkey::from_str(&request.token_mint).is_err() {
+    if wallets::validate_address(&request.token_mint).is_err() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",
@@ -84,10 +82,10 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     };
 
     // Get existing secondary wallets
-    let existing_wallets = match wallets::get_wallets_with_keys().await {
+    let existing_wallets = match wallets::list_active_wallets().await {
         Ok(w) => w
             .into_iter()
-            .filter(|w| w.wallet.role == wallets::WalletRole::Secondary && w.wallet.is_active)
+            .filter(|w| w.role == wallets::WalletRole::Secondary)
             .collect::<Vec<_>>(),
         Err(e) => {
             return error_response(
@@ -134,10 +132,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     // Build wallet plans (preview) - fetch balances for each wallet
     let mut wallet_plans = Vec::new();
     for w in existing_wallets.iter().take(request.wallet_count) {
-        let sol_balance = rpc
-            .get_sol_balance(&w.wallet.address)
-            .await
-            .unwrap_or_default();
+        let sol_balance = rpc.get_sol_balance(&w.address).await.unwrap_or_default();
         let needs_funding = sol_balance < per_wallet_sol;
         let funding_amount = if needs_funding {
             per_wallet_sol - sol_balance
@@ -145,9 +140,9 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
             0.0
         };
         wallet_plans.push(WalletPlanResponse {
-            wallet_id: w.wallet.id,
-            wallet_address: w.wallet.address.clone(),
-            wallet_name: w.wallet.name.clone(),
+            wallet_id: w.id,
+            wallet_address: w.address.clone(),
+            wallet_name: w.name.clone(),
             current_sol_balance: sol_balance,
             planned_buy_amount: avg_buy,
             needs_funding,
@@ -194,7 +189,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
     cleanup_old_sessions().await;
 
     // Validate token mint
-    if Pubkey::from_str(&request.token_mint).is_err() {
+    if wallets::validate_address(&request.token_mint).is_err() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",

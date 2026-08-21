@@ -6,10 +6,9 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 use tokio::sync::{Mutex, Notify};
 
+use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
-use crate::transactions::{
-    manager::TransactionsManager, processor::TransactionProcessor, types::Transaction,
-};
+use crate::transactions::{manager::TransactionsManager, types::Transaction};
 
 use super::bootstrap::perform_initial_transaction_bootstrap;
 use super::config::ServiceConfig;
@@ -38,7 +37,7 @@ pub static SHUTDOWN_NOTIFY: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(No
 ///
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_global_transaction_service(
-    wallet_pubkey: solana_sdk::pubkey::Pubkey,
+    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
     monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     let mut running = SERVICE_RUNNING.lock().await;

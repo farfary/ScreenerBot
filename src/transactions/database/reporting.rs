@@ -39,6 +39,7 @@ impl TransactionDatabase {
     ) -> Result<TransactionListResult, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         // Limit page size to max 200 for performance
         let effective_limit = limit.min(200);
@@ -52,11 +53,12 @@ impl TransactionDatabase {
                 p.token_transfers, p.ata_operations,
                 p.fee_sol, p.sol_delta
             FROM raw_transactions r
-            LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1
-            WHERE r.wallet_address = ?1",
+            LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2
+            WHERE r.chain_id = ?1 AND r.wallet_address = ?2",
         );
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        params_vec.push(Box::new(chain_id));
         params_vec.push(Box::new(wallet_address));
 
         // Apply cursor for pagination (timestamp desc, signature desc)
@@ -389,11 +391,13 @@ impl TransactionDatabase {
     ) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let mut query =
-            "SELECT COUNT(*) FROM raw_transactions r WHERE r.wallet_address = ?1".to_owned();
+            "SELECT COUNT(*) FROM raw_transactions r WHERE r.chain_id = ?1 AND r.wallet_address = ?2".to_owned();
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        params_vec.push(Box::new(chain_id));
         params_vec.push(Box::new(wallet_address));
 
         // Apply coarse filters (can't filter by JSON columns efficiently)
@@ -536,7 +540,7 @@ mod tests {
     async fn upsert_and_fetch_transaction_caches_raw_and_processed() {
         let dir = tempdir().expect("create temp dir");
         let db_path = dir.path().join("transactions.db");
-        let db = TransactionDatabase::new_with_path(&db_path)
+        let db = TransactionDatabase::new_with_path(&db_path, crate::chains::ChainId::Solana)
             .await
             .expect("create database");
 
@@ -563,7 +567,8 @@ mod tests {
         let raw_json_string = raw_json.to_string();
         transaction.raw_transaction_data = Some(raw_json);
 
-        let subject = Subject(solana_sdk::pubkey::Pubkey::new_unique());
+        let subject =
+            Subject::solana(crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique());
         db.upsert_full_transaction(subject, &transaction)
             .await
             .expect("upsert transaction");

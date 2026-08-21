@@ -26,9 +26,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::chains::solana::solana_sdk::signer::Signer;
 use async_trait::async_trait;
 use serde::Serialize;
-use solana_sdk::signer::Signer;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -166,18 +166,18 @@ async fn announce_once() {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0);
-    let proofs = match crate::wallets::get_wallets_with_keys().await {
-        Ok(wallets) => wallets
+    let proofs = match crate::chains::solana::accounts::sign_message_for_active_wallets(|address| {
+        activation_message(address, &code, issued_at)
+    })
+    .await
+    {
+        Ok(signed) => signed
             .into_iter()
             .take(25)
-            .map(|wallet| {
-                let address = wallet.wallet.address;
-                let message = activation_message(&address, &code, issued_at);
-                ActivationProof {
-                    wallet: address,
-                    issued_at,
-                    signature: wallet.keypair.sign_message(message.as_bytes()).to_string(),
-                }
+            .map(|(address, signature)| ActivationProof {
+                wallet: address,
+                issued_at,
+                signature,
             })
             .collect::<Vec<_>>(),
         Err(error) => {
@@ -232,7 +232,7 @@ async fn announce_once() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use solana_sdk::signature::Keypair;
+    use crate::chains::solana::solana_sdk::signature::Keypair;
 
     #[test]
     fn activation_proof_is_bound_to_wallet_code_and_time() {

@@ -2,6 +2,7 @@
 
 use super::helpers::{clear_in_flight, handle_market_failure, try_mark_in_flight};
 use super::rate_limiter::RateLimitCoordinator;
+use crate::chains::ChainId;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools;
@@ -24,7 +25,7 @@ pub(super) struct PoolPriorityState {
 }
 
 pub(super) struct PoolPriorityManager {
-    pub(super) state: Mutex<HashMap<String, PoolPriorityState>>,
+    pub(super) state: Mutex<HashMap<(ChainId, String), PoolPriorityState>>,
     pub(super) demote_after: Duration,
 }
 
@@ -38,6 +39,7 @@ impl PoolPriorityManager {
 
     pub(super) async fn sync(&self, db: &TokenDatabase) {
         let now = Instant::now();
+        let chain = db.chain();
         let pool_tokens = pools::get_available_tokens();
         let pool_set: HashSet<String> = pool_tokens.iter().cloned().collect();
 
@@ -65,16 +67,17 @@ impl PoolPriorityManager {
                     .unwrap_or(Priority::Standard.to_value());
 
                 if current_priority == Priority::OpenPosition.to_value() {
-                    state.remove(mint);
+                    state.remove(&(chain, mint.clone()));
                     continue;
                 }
 
-                let entry = state
-                    .entry(mint.clone())
-                    .or_insert_with(|| PoolPriorityState {
-                        last_seen: now,
-                        previous_priority: current_priority,
-                    });
+                let entry =
+                    state
+                        .entry((chain, mint.clone()))
+                        .or_insert_with(|| PoolPriorityState {
+                            last_seen: now,
+                            previous_priority: current_priority,
+                        });
 
                 if current_priority != Priority::PoolTracked.to_value() {
                     entry.previous_priority = current_priority;
@@ -86,8 +89,11 @@ impl PoolPriorityManager {
 
             let demote_after = self.demote_after;
             // Collect demotion candidates WITHOUT removing from state yet
-            for (mint, info) in state.iter() {
-                if !pool_set.contains(mint) && now.duration_since(info.last_seen) >= demote_after {
+            for ((state_chain, mint), info) in state.iter() {
+                if *state_chain == chain
+                    && !pool_set.contains(mint)
+                    && now.duration_since(info.last_seen) >= demote_after
+                {
                     demotion_candidates.push((mint.clone(), info.previous_priority));
                 }
             }
@@ -180,7 +186,7 @@ impl PoolPriorityManager {
         if !demoted.is_empty() {
             let mut state = self.state.lock().await;
             for (mint, _) in &demoted {
-                state.remove(mint);
+                state.remove(&(chain, mint.clone()));
             }
 
             let count = demoted.len();
@@ -357,7 +363,7 @@ pub async fn update_tokens_batch(
     // Filter out tokens already being fetched by other loops
     let mints_to_fetch: Vec<String> = mints
         .iter()
-        .filter(|mint| try_mark_in_flight(mint))
+        .filter(|mint| try_mark_in_flight(db.chain(), mint))
         .cloned()
         .collect();
 
@@ -435,7 +441,7 @@ pub async fn update_tokens_batch(
 
     // Clear in-flight markers for all tokens
     for mint in &mints_to_fetch {
-        clear_in_flight(mint);
+        clear_in_flight(db.chain(), mint);
     }
 
     Ok(results)
@@ -506,7 +512,7 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
         .collect();
 
     for mint in &misses {
-        if !try_mark_in_flight(mint) {
+        if !try_mark_in_flight(db.chain(), mint) {
             continue; // Another loop is already fetching this token
         }
         match coordinator.acquire_rugcheck().await {
@@ -545,7 +551,7 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
                 logger::error(LogTag::Tokens, &format!("Rugcheck rate limit: {e}"));
             }
         }
-        clear_in_flight(mint);
+        clear_in_flight(db.chain(), mint);
     }
 }
 

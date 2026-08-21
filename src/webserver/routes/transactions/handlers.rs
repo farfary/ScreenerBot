@@ -1,12 +1,12 @@
 //! Route handlers for transactions API.
 
+use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Response,
     Json,
 };
-use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -239,7 +239,7 @@ async fn resolve_subject(requested: Option<&str>) -> Result<Subject, Response> {
         )
     })?;
     match crate::wallets::watch::get_target_by_address(address).await {
-        Ok(Some(_)) => Ok(Subject(pubkey)),
+        Ok(Some(_)) => Ok(Subject::solana(pubkey)),
         Ok(None) => Err(error_response(
             StatusCode::FORBIDDEN,
             "SUBJECT_NOT_WATCHED",

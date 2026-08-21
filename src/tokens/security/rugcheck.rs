@@ -128,7 +128,7 @@ pub async fn fetch_rugcheck_data(
     }
 
     // 1. Check cache first (fastest path)
-    if let Some(data) = store::get_cached_rugcheck(mint) {
+    if let Some(data) = store::get_cached_rugcheck(db.chain(), mint) {
         return Ok(Some(data));
     }
 
@@ -141,8 +141,8 @@ pub async fn fetch_rugcheck_data(
 
         if age < 1800 {
             // 30 minutes
-            store::store_rugcheck(mint, &db_data);
-            if let Err(err) = store::refresh_token_snapshot(mint).await {
+            store::store_rugcheck(db.chain(), mint, &db_data);
+            if let Err(err) = store::refresh_token_snapshot(db.chain(), mint).await {
                 logger::error(
                     LogTag::Tokens,
                     &format!(
@@ -228,8 +228,8 @@ pub(crate) async fn persist_rugcheck(
     db.upsert_rugcheck_data(mint, &data)?;
 
     // Cache it in store and refresh token snapshot
-    store::store_rugcheck(mint, &data);
-    if let Err(err) = store::refresh_token_snapshot(mint).await {
+    store::store_rugcheck(db.chain(), mint, &data);
+    if let Err(err) = store::refresh_token_snapshot(db.chain(), mint).await {
         logger::error(
             LogTag::Tokens,
             &format!(

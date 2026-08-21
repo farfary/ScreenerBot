@@ -21,10 +21,10 @@ impl TokenDatabase {
         let count: usize = conn
             .query_row(
                 "SELECT COUNT(*) FROM tokens t \
-                 LEFT JOIN market_dexscreener d ON t.mint = d.mint \
-                 LEFT JOIN market_geckoterminal g ON t.mint = g.mint \
-                 WHERE d.mint IS NULL AND g.mint IS NULL",
-                [],
+                 LEFT JOIN market_dexscreener d ON t.chain_id = d.chain_id AND t.mint = d.mint \
+                 LEFT JOIN market_geckoterminal g ON t.chain_id = g.chain_id AND t.mint = g.mint \
+                 WHERE t.chain_id = ?1 AND d.mint IS NULL AND g.mint IS NULL",
+                params![self.chain_id()],
                 |row| row.get(0),
             )
             .map_err(|e| TokenError::Database(format!("Count no-market failed: {e}")))?;
@@ -77,12 +77,12 @@ impl TokenDatabase {
                         sr.security_data_last_fetched_at, \
                         ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at \
                     FROM tokens t \
-                    LEFT JOIN security_rugcheck sr ON t.mint = sr.mint \
-                    LEFT JOIN blacklist bl ON t.mint = bl.mint \
-                    LEFT JOIN update_tracking ut ON t.mint = ut.mint \
-                    LEFT JOIN market_dexscreener d ON t.mint = d.mint \
-                    LEFT JOIN market_geckoterminal g ON t.mint = g.mint \
-                    WHERE d.mint IS NULL AND g.mint IS NULL";
+                    LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint \
+                    LEFT JOIN blacklist bl ON t.chain_id = bl.chain_id AND t.mint = bl.mint \
+                    LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint \
+                    LEFT JOIN market_dexscreener d ON t.chain_id = d.chain_id AND t.mint = d.mint \
+                    LEFT JOIN market_geckoterminal g ON t.chain_id = g.chain_id AND t.mint = g.mint \
+                    WHERE t.chain_id = ?1 AND d.mint IS NULL AND g.mint IS NULL";
 
         let query = if limit == 0 {
             format!("{base} ORDER BY {order_column} {direction}")
@@ -98,7 +98,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let rows = stmt
-            .query_map(params![], |row| {
+            .query_map(params![self.chain_id()], |row| {
                 let metadata = TokenMetadata {
                     mint: row.get::<_, String>(0)?,
                     symbol: row.get::<_, Option<String>>(1)?,
@@ -205,6 +205,7 @@ impl TokenDatabase {
                 blockchain_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
 
             let token = assemble_token_without_market_data(
+                self.chain(),
                 meta,
                 security,
                 is_blacklisted,
@@ -233,8 +234,8 @@ impl TokenDatabase {
         // Check if this is first insert (for first_fetched_at tracking)
         let is_first_insert: bool = conn
             .query_row(
-                "SELECT COUNT(*) FROM market_dexscreener WHERE mint = ?1",
-                params![mint],
+                "SELECT COUNT(*) FROM market_dexscreener WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| {
                     let count: i64 = row.get(0)?;
                     Ok(count == 0)
@@ -248,8 +249,8 @@ impl TokenDatabase {
         } else {
             // Preserve existing first_fetched_at on updates
             conn.query_row(
-                "SELECT market_data_first_fetched_at FROM market_dexscreener WHERE mint = ?1",
-                params![mint],
+                "SELECT market_data_first_fetched_at FROM market_dexscreener WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| row.get::<_, i64>(0),
             )
             .unwrap_or(now_ts)
@@ -257,27 +258,27 @@ impl TokenDatabase {
 
         conn.execute(
             "INSERT INTO market_dexscreener (
-                mint, price_usd, price_sol, price_native,
+                chain_id, mint, price_usd, price_sol, price_native,
                 price_change_5m, price_change_1h, price_change_6h, price_change_24h,
                 market_cap, fdv, liquidity_usd,
                 volume_5m, volume_1h, volume_6h, volume_24h,
                 txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                 txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                pair_address, chain_id, dex_id, url, pair_blockchain_created_at, image_url, header_image_url,
+                pair_address, provider_chain_id, dex_id, url, pair_blockchain_created_at, image_url, header_image_url,
                 market_data_last_fetched_at, market_data_first_fetched_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                       ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)
-             ON CONFLICT(mint) DO UPDATE SET
-                price_usd = ?2, price_sol = ?3, price_native = ?4,
-                price_change_5m = ?5, price_change_1h = ?6, price_change_6h = ?7, price_change_24h = ?8,
-                market_cap = ?9, fdv = ?10, liquidity_usd = ?11,
-                volume_5m = ?12, volume_1h = ?13, volume_6h = ?14, volume_24h = ?15,
-                txns_5m_buys = ?16, txns_5m_sells = ?17, txns_1h_buys = ?18, txns_1h_sells = ?19,
-                txns_6h_buys = ?20, txns_6h_sells = ?21, txns_24h_buys = ?22, txns_24h_sells = ?23,
-                pair_address = ?24, chain_id = ?25, dex_id = ?26, url = ?27, pair_blockchain_created_at = ?28,
-                image_url = ?29, header_image_url = ?30, market_data_last_fetched_at = ?31",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                       ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33)
+             ON CONFLICT(chain_id, mint) DO UPDATE SET
+                price_usd = excluded.price_usd, price_sol = excluded.price_sol, price_native = excluded.price_native,
+                price_change_5m = excluded.price_change_5m, price_change_1h = excluded.price_change_1h, price_change_6h = excluded.price_change_6h, price_change_24h = excluded.price_change_24h,
+                market_cap = excluded.market_cap, fdv = excluded.fdv, liquidity_usd = excluded.liquidity_usd,
+                volume_5m = excluded.volume_5m, volume_1h = excluded.volume_1h, volume_6h = excluded.volume_6h, volume_24h = excluded.volume_24h,
+                txns_5m_buys = excluded.txns_5m_buys, txns_5m_sells = excluded.txns_5m_sells, txns_1h_buys = excluded.txns_1h_buys, txns_1h_sells = excluded.txns_1h_sells,
+                txns_6h_buys = excluded.txns_6h_buys, txns_6h_sells = excluded.txns_6h_sells, txns_24h_buys = excluded.txns_24h_buys, txns_24h_sells = excluded.txns_24h_sells,
+                pair_address = excluded.pair_address, provider_chain_id = excluded.provider_chain_id, dex_id = excluded.dex_id, url = excluded.url, pair_blockchain_created_at = excluded.pair_blockchain_created_at,
+                image_url = excluded.image_url, header_image_url = excluded.header_image_url, market_data_last_fetched_at = excluded.market_data_last_fetched_at",
             params![
-                mint, data.price_usd, data.price_sol, &data.price_native,
+                self.chain_id(), mint, data.price_usd, data.price_sol, &data.price_native,
                 data.price_change_5m, data.price_change_1h, data.price_change_6h, data.price_change_24h,
                 data.market_cap, data.fdv, data.liquidity_usd,
                 data.volume_5m, data.volume_1h, data.volume_6h, data.volume_24h,
@@ -295,7 +296,7 @@ impl TokenDatabase {
         ).map_err(|e| TokenError::Database(format!("Failed to upsert DexScreener data: {e}")))?;
 
         // Update in-memory cache
-        store::store_dexscreener(mint, data);
+        store::store_dexscreener(self.chain(), mint, data);
 
         Ok(())
     }
@@ -312,13 +313,13 @@ impl TokenDatabase {
                     volume_5m, volume_1h, volume_6h, volume_24h,
                     txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                     txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                    pair_address, chain_id, dex_id, url, pair_blockchain_created_at, image_url, header_image_url,
+                    pair_address, provider_chain_id, dex_id, url, pair_blockchain_created_at, image_url, header_image_url,
                     market_data_last_fetched_at, market_data_first_fetched_at
-             FROM market_dexscreener WHERE mint = ?1",
+             FROM market_dexscreener WHERE chain_id = ?1 AND mint = ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let result = stmt.query_row(params![mint], |row| {
+        let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             let txns_5m_buys: Option<i64> = row.get(14)?;
             let txns_5m_sells: Option<i64> = row.get(15)?;
             let txns_1h_buys: Option<i64> = row.get(16)?;
@@ -392,8 +393,8 @@ impl TokenDatabase {
         // Check if this is first insert (for first_fetched_at tracking)
         let is_first_insert: bool = conn
             .query_row(
-                "SELECT COUNT(*) FROM market_geckoterminal WHERE mint = ?1",
-                params![mint],
+                "SELECT COUNT(*) FROM market_geckoterminal WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| {
                     let count: i64 = row.get(0)?;
                     Ok(count == 0)
@@ -407,8 +408,8 @@ impl TokenDatabase {
         } else {
             // Preserve existing first_fetched_at on updates
             conn.query_row(
-                "SELECT market_data_first_fetched_at FROM market_geckoterminal WHERE mint = ?1",
-                params![mint],
+                "SELECT market_data_first_fetched_at FROM market_geckoterminal WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| row.get::<_, i64>(0),
             )
             .unwrap_or(now_ts)
@@ -417,21 +418,21 @@ impl TokenDatabase {
         // Clean schema insert (image_url column included)
         let insert_result = conn.execute(
             "INSERT INTO market_geckoterminal (
-                mint, price_usd, price_sol, price_native,
+                chain_id, mint, price_usd, price_sol, price_native,
                 price_change_5m, price_change_1h, price_change_6h, price_change_24h,
                 market_cap, fdv, liquidity_usd,
                 volume_5m, volume_1h, volume_6h, volume_24h,
                 pool_count, top_pool_address, reserve_in_usd, image_url,
                 market_data_last_fetched_at, market_data_first_fetched_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
-             ON CONFLICT(mint) DO UPDATE SET
-                price_usd = ?2, price_sol = ?3, price_native = ?4,
-                price_change_5m = ?5, price_change_1h = ?6, price_change_6h = ?7, price_change_24h = ?8,
-                market_cap = ?9, fdv = ?10, liquidity_usd = ?11,
-                volume_5m = ?12, volume_1h = ?13, volume_6h = ?14, volume_24h = ?15,
-                pool_count = ?16, top_pool_address = ?17, reserve_in_usd = ?18, image_url = ?19, market_data_last_fetched_at = ?20",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
+             ON CONFLICT(chain_id, mint) DO UPDATE SET
+                price_usd = excluded.price_usd, price_sol = excluded.price_sol, price_native = excluded.price_native,
+                price_change_5m = excluded.price_change_5m, price_change_1h = excluded.price_change_1h, price_change_6h = excluded.price_change_6h, price_change_24h = excluded.price_change_24h,
+                market_cap = excluded.market_cap, fdv = excluded.fdv, liquidity_usd = excluded.liquidity_usd,
+                volume_5m = excluded.volume_5m, volume_1h = excluded.volume_1h, volume_6h = excluded.volume_6h, volume_24h = excluded.volume_24h,
+                pool_count = excluded.pool_count, top_pool_address = excluded.top_pool_address, reserve_in_usd = excluded.reserve_in_usd, image_url = excluded.image_url, market_data_last_fetched_at = excluded.market_data_last_fetched_at",
             params![
-                mint, data.price_usd, data.price_sol, &data.price_native,
+                self.chain_id(), mint, data.price_usd, data.price_sol, &data.price_native,
                 data.price_change_5m, data.price_change_1h, data.price_change_6h, data.price_change_24h,
                 data.market_cap, data.fdv, data.liquidity_usd,
                 data.volume_5m, data.volume_1h, data.volume_6h, data.volume_24h,
@@ -445,7 +446,7 @@ impl TokenDatabase {
         })?;
 
         // Update in-memory cache
-        store::store_geckoterminal(mint, data);
+        store::store_geckoterminal(self.chain(), mint, data);
 
         Ok(())
     }
@@ -462,11 +463,11 @@ impl TokenDatabase {
                     volume_5m, volume_1h, volume_6h, volume_24h,
                     pool_count, top_pool_address, reserve_in_usd, image_url,
                     market_data_last_fetched_at, market_data_first_fetched_at
-             FROM market_geckoterminal WHERE mint = ?1",
+             FROM market_geckoterminal WHERE chain_id = ?1 AND mint = ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let result = stmt.query_row(params![mint], |row| {
+        let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             let last_fetched_ts: i64 = row.get(18)?;
             let first_fetched_ts: i64 = row.get(19)?;
 
@@ -515,10 +516,11 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut stmt = conn
-            .prepare("SELECT market_data_last_updated_at FROM update_tracking WHERE mint = ?1")
+            .prepare("SELECT market_data_last_updated_at FROM update_tracking WHERE chain_id = ?1 AND mint = ?2")
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let result: Result<i64, rusqlite::Error> = stmt.query_row(params![mint], |row| row.get(0));
+        let result: Result<i64, rusqlite::Error> =
+            stmt.query_row(params![self.chain_id(), mint], |row| row.get(0));
 
         match result {
             Ok(last_update) => {
@@ -538,21 +540,21 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT t.mint FROM tokens t
-                 INNER JOIN update_tracking u ON t.mint = u.mint
-                 LEFT JOIN market_dexscreener md ON t.mint = md.mint
-                 LEFT JOIN market_geckoterminal mg ON t.mint = mg.mint
-                 WHERE u.market_data_update_count = 0
+                 INNER JOIN update_tracking u ON t.chain_id = u.chain_id AND t.mint = u.mint
+                 LEFT JOIN market_dexscreener md ON t.chain_id = md.chain_id AND t.mint = md.mint
+                 LEFT JOIN market_geckoterminal mg ON t.chain_id = mg.chain_id AND t.mint = mg.mint
+                 WHERE t.chain_id = ?1 AND u.market_data_update_count = 0
                  AND md.mint IS NULL
                  AND mg.mint IS NULL
                  AND (u.last_error_at IS NULL OR u.last_error_at < strftime('%s','now') - 180)
                  AND (u.market_error_type IS NULL OR u.market_error_type != 'permanent')
                  ORDER BY u.priority DESC, t.first_discovered_at ASC
-                 LIMIT ?1",
+                 LIMIT ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mints = stmt
-            .query_map(params![limit], |row| row.get(0))
+            .query_map(params![self.chain_id(), limit], |row| row.get(0))
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         mints
@@ -567,8 +569,8 @@ impl TokenDatabase {
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM update_tracking WHERE market_error_type = 'permanent'",
-                [],
+                "SELECT COUNT(*) FROM update_tracking WHERE chain_id = ?1 AND market_error_type = 'permanent'",
+                params![self.chain_id()],
                 |row| row.get(0),
             )
             .map_err(|e| TokenError::Database(format!("Failed to count: {e}")))?;
@@ -594,16 +596,16 @@ impl TokenDatabase {
                 last_error_at = ?2, 
                 market_error_count = market_error_count + 1,
                 market_error_type = ?3
-             WHERE mint = ?4",
-            params![message, now, error_type, mint],
+             WHERE chain_id = ?4 AND mint = ?5",
+            params![message, now, error_type, self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to record market error: {e}")))?;
 
         // Get the new error count
         let error_count: u32 = conn
             .query_row(
-                "SELECT market_error_count FROM update_tracking WHERE mint = ?1",
-                params![mint],
+                "SELECT market_error_count FROM update_tracking WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| row.get(0),
             )
             .unwrap_or(1);
@@ -618,8 +620,8 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         conn.execute(
-            "UPDATE update_tracking SET market_error_type = 'permanent' WHERE mint = ?1",
-            params![mint],
+            "UPDATE update_tracking SET market_error_type = 'permanent' WHERE chain_id = ?1 AND mint = ?2",
+            params![self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to mark market permanent: {e}")))?;
 
@@ -641,8 +643,8 @@ impl TokenDatabase {
                 last_error_at = NULL,
                 market_error_count = 0,
                 market_error_type = NULL
-             WHERE mint = ?2",
-            params![now, mint],
+             WHERE chain_id = ?2 AND mint = ?3",
+            params![now, self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to mark market data updated: {e}")))?;
 

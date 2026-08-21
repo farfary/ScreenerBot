@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use super::RpcStatsResponse;
-use crate::rpc::global::try_get_rpc_client;
+use crate::rpc::manager::get_rpc_manager;
 
 /// Aggregated call information for a single minute
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,11 +144,11 @@ impl RpcStats {
 /// Returns statistics using the RpcStats struct,
 /// backed by the SQLite-based stats system.
 pub fn get_global_rpc_stats() -> Option<RpcStats> {
-    let client = try_get_rpc_client()?;
+    let manager = get_rpc_manager()?;
 
     // Get stats using block_in_place for sync access
     let response = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(client.get_stats())
+        tokio::runtime::Handle::current().block_on(manager.get_stats())
     });
 
     // Estimate startup time from uptime
@@ -182,8 +182,8 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
             _ = interval.tick() => {
                 // Stats are automatically persisted to SQLite by StatsManager
                 // This loop now just monitors health
-                if let Some(client) = try_get_rpc_client() {
-                    let stats = client.get_stats().await;
+                if let Some(manager) = get_rpc_manager() {
+                    let stats = manager.get_stats().await;
 
                     if stats.success_rate < 90.0 {
                         logger::warning(
@@ -199,7 +199,7 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
                     cleanup_counter += 1;
                     if cleanup_counter >= CLEANUP_EVERY_TICKS {
                         cleanup_counter = 0;
-                        client.manager().cleanup_stats(RETENTION_HOURS).await;
+                        manager.cleanup_stats(RETENTION_HOURS).await;
                         logger::info(LogTag::Rpc, "RPC stats cleanup completed");
                     }
                 }
@@ -208,14 +208,4 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
     }
 
     logger::info(LogTag::Rpc, "RPC stats monitoring service stopped");
-}
-
-/// Parse pubkey helper (delegate to utils)
-pub fn parse_pubkey(address: &str) -> Result<solana_sdk::pubkey::Pubkey, String> {
-    crate::utils::parse_pubkey_safe(address)
-}
-
-/// Return the SPL Token program id (use constant)
-pub fn spl_token_program_id() -> &'static str {
-    crate::constants::SPL_TOKEN_PROGRAM_ID
 }

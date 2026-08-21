@@ -1,9 +1,9 @@
 //! GMGN API health monitor — checks DEX aggregator endpoint availability.
 
+use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
-use crate::constants::{SOL_MINT, USDC_MINT};
 use crate::utils::get_wallet_address;
 use async_trait::async_trait;
 use serde_json::Value;

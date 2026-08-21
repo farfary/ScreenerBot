@@ -1,5 +1,6 @@
 //! OHLCV manager — coordinates candle fetching, caching, and priority management.
 
+use crate::chains::ChainId;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::database::OhlcvDatabase;
@@ -175,11 +176,11 @@ impl PoolManager {
         // pool_data fetch queries the data server as the PRIMARY source (see
         // tokens/pool_data/server.rs), so the wSOL pools it registers here already
         // include the server's centrally-resolved pools — no OHLCV-specific hook.
-        let snapshot = match fetch_token_pools_immediate(mint).await {
+        let snapshot = match fetch_token_pools_immediate(ChainId::Solana, mint).await {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => {
                 // Try stale fallback
-                match get_token_pools_snapshot_allow_stale(mint).await {
+                match get_token_pools_snapshot_allow_stale(ChainId::Solana, mint).await {
                     Ok(Some(snapshot)) => snapshot,
                     Ok(None) | Err(_) => {
                         record_ohlcv_event(

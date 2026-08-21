@@ -14,13 +14,15 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-            "SELECT {} FROM positions WHERE id = ?1 AND wallet_address = ?2",
+            "SELECT {} FROM positions WHERE id = ?1 AND wallet_address = ?2 AND chain_id = ?3",
             POSITION_SELECT_COLUMNS
         );
         let result = conn
-            .query_row(&query, params![id, wallet_address], |row| {
-                self.row_to_position(row)
-            })
+            .query_row(
+                &query,
+                params![id, wallet_address, self.chain.as_str()],
+                |row| self.row_to_position(row),
+            )
             .optional()
             .map_err(|e| format!("Failed to get position by ID: {e}"))?;
 
@@ -39,13 +41,15 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE mint = ?1 AND wallet_address = ?2 ORDER BY entry_time DESC LIMIT 1",
+      "SELECT {} FROM positions WHERE mint = ?1 AND wallet_address = ?2 AND chain_id = ?3 ORDER BY entry_time DESC LIMIT 1",
       POSITION_SELECT_COLUMNS
     );
         let result = conn
-            .query_row(&query, params![mint, wallet_address], |row| {
-                self.row_to_position(row)
-            })
+            .query_row(
+                &query,
+                params![mint, wallet_address, self.chain.as_str()],
+                |row| self.row_to_position(row),
+            )
             .optional()
             .map_err(|e| format!("Failed to get position by mint: {e}"))?;
 
@@ -65,7 +69,7 @@ impl PositionsDatabase {
 
         let query = format!(
             "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
-             WHERE mint = ?1 AND wallet_address = ?2 ORDER BY entry_time ASC"
+             WHERE mint = ?1 AND wallet_address = ?2 AND chain_id = ?3 ORDER BY entry_time ASC"
         );
 
         let mut stmt = conn
@@ -73,7 +77,7 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare positions-for-mint query: {e}"))?;
 
         let rows = stmt
-            .query_map(params![mint, wallet_address], |row| {
+            .query_map(params![mint, wallet_address, self.chain.as_str()], |row| {
                 self.row_to_position(row)
             })
             .map_err(|e| format!("Failed to execute positions-for-mint query: {e}"))?;
@@ -95,13 +99,15 @@ impl PositionsDatabase {
 
         let query = format!(
             "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
-             WHERE entry_transaction_signature = ?1 AND wallet_address = ?2"
+             WHERE entry_transaction_signature = ?1 AND wallet_address = ?2 AND chain_id = ?3"
         );
 
         let result = conn
-            .query_row(&query, params![signature, wallet_address], |row| {
-                self.row_to_position(row)
-            })
+            .query_row(
+                &query,
+                params![signature, wallet_address, self.chain.as_str()],
+                |row| self.row_to_position(row),
+            )
             .optional()
             .map_err(|e| format!("Failed to get position by entry signature: {e}"))?;
 
@@ -117,14 +123,16 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE exit_transaction_signature = ?1 AND wallet_address = ?2",
+      "SELECT {} FROM positions WHERE exit_transaction_signature = ?1 AND wallet_address = ?2 AND chain_id = ?3",
       POSITION_SELECT_COLUMNS
     );
 
         let result = conn
-            .query_row(&query, params![signature, wallet_address], |row| {
-                self.row_to_position(row)
-            })
+            .query_row(
+                &query,
+                params![signature, wallet_address, self.chain.as_str()],
+                |row| self.row_to_position(row),
+            )
             .optional()
             .map_err(|e| format!("Failed to get position by exit signature: {e}"))?;
 
@@ -140,7 +148,7 @@ impl PositionsDatabase {
         let conn = self.get_connection()?;
 
         let mut query = format!(
-            "SELECT {} FROM positions ORDER BY entry_time DESC",
+            "SELECT {} FROM positions WHERE chain_id = ?1 ORDER BY entry_time DESC",
             POSITION_SELECT_COLUMNS
         );
 
@@ -156,7 +164,9 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare positions query: {e}"))?;
 
         let position_iter = stmt
-            .query_map([], |row| self.row_to_position(row))
+            .query_map(params![self.chain.as_str()], |row| {
+                self.row_to_position(row)
+            })
             .map_err(|e| format!("Failed to execute positions query: {e}"))?;
 
         let mut positions = Vec::new();
@@ -175,7 +185,7 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND exit_time IS NULL AND transaction_exit_verified = 0 ORDER BY entry_time DESC",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND archived = 0 AND exit_time IS NULL AND transaction_exit_verified = 0 ORDER BY entry_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
@@ -184,7 +194,9 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare open positions query: {e}"))?;
 
         let position_iter = stmt
-            .query_map(params![wallet_address], |row| self.row_to_position(row))
+            .query_map(params![wallet_address, self.chain.as_str()], |row| {
+                self.row_to_position(row)
+            })
             .map_err(|e| format!("Failed to execute open positions query: {e}"))?;
 
         let mut positions = Vec::new();
@@ -203,7 +215,7 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND transaction_exit_verified = 1 ORDER BY exit_time DESC",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND archived = 0 AND transaction_exit_verified = 1 ORDER BY exit_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
@@ -212,7 +224,9 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare closed positions query: {e}"))?;
 
         let position_iter = stmt
-            .query_map(params![wallet_address], |row| self.row_to_position(row))
+            .query_map(params![wallet_address, self.chain.as_str()], |row| {
+                self.row_to_position(row)
+            })
             .map_err(|e| format!("Failed to execute closed positions query: {e}"))?;
 
         let mut positions = Vec::new();
@@ -233,7 +247,7 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND archived = 0 AND transaction_exit_verified = 1 AND origin_kind != 'external' AND datetime(exit_time) >= datetime(?2) ORDER BY exit_time DESC",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND archived = 0 AND transaction_exit_verified = 1 AND origin_kind != 'external' AND datetime(exit_time) >= datetime(?3) ORDER BY exit_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
@@ -243,9 +257,10 @@ impl PositionsDatabase {
 
         let since_str = since.to_rfc3339();
         let position_iter = stmt
-            .query_map(params![wallet_address, since_str], |row| {
-                self.row_to_position(row)
-            })
+            .query_map(
+                params![wallet_address, self.chain.as_str(), since_str],
+                |row| self.row_to_position(row),
+            )
             .map_err(|e| format!("Failed to execute closed positions since query: {e}"))?;
 
         let mut positions = Vec::new();
@@ -267,19 +282,22 @@ impl PositionsDatabase {
                 r#"
       SELECT COUNT(1)
       FROM positions
-      WHERE wallet_address = ?1
+      WHERE wallet_address = ?1 AND chain_id = ?2
        AND archived = 0
        AND transaction_exit_verified = 1
        AND origin_kind != 'external'
        AND exit_time IS NOT NULL
-       AND datetime(exit_time) >= datetime(?2)
+       AND datetime(exit_time) >= datetime(?3)
       "#,
             )
             .map_err(|e| format!("Failed to prepare closed position count query: {e}"))?;
 
         let since_str = since.to_rfc3339();
         let count: i64 = stmt
-            .query_row(params![wallet_address, since_str], |row| row.get(0))
+            .query_row(
+                params![wallet_address, self.chain.as_str(), since_str],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to execute closed position count query: {e}"))?;
 
         Ok(count)
@@ -317,12 +335,12 @@ impl PositionsDatabase {
         END), 0) as total_sells,
         COALESCE(MAX(CASE WHEN pnl_percent < 0 THEN ABS(pnl_percent) ELSE 0 END), 0) as max_dd
       FROM positions 
-      WHERE wallet_address = ?1 
+      WHERE wallet_address = ?1 AND chain_id = ?2
         AND transaction_exit_verified = 1
         AND origin_kind != 'external'
         AND exit_time IS NOT NULL
-        AND datetime(exit_time) >= datetime(?2)
-        AND datetime(exit_time) < datetime(?3)
+        AND datetime(exit_time) >= datetime(?3)
+        AND datetime(exit_time) < datetime(?4)
       "#
         } else {
             r#"
@@ -340,11 +358,11 @@ impl PositionsDatabase {
         END), 0) as total_sells,
         COALESCE(MAX(CASE WHEN pnl_percent < 0 THEN ABS(pnl_percent) ELSE 0 END), 0) as max_dd
       FROM positions 
-      WHERE wallet_address = ?1 
+      WHERE wallet_address = ?1 AND chain_id = ?2
         AND transaction_exit_verified = 1
         AND origin_kind != 'external'
         AND exit_time IS NOT NULL
-        AND datetime(exit_time) >= datetime(?2)
+        AND datetime(exit_time) >= datetime(?3)
       "#
         };
 
@@ -352,60 +370,68 @@ impl PositionsDatabase {
 
         let stats = if let Some(end) = period_end {
             let end_str = end.to_rfc3339();
-            conn.query_row(query, params![wallet_address, start_str, end_str], |row| {
-                let trade_count: i64 = row.get(0)?;
-                let wins: Option<i64> = row.get(1)?;
-                let profit: f64 = row.get(2)?;
-                let loss: f64 = row.get(3)?;
-                let total_pnl: f64 = row.get(4)?;
-                let total_buys: i64 = row.get(5)?;
-                let total_sells: i64 = row.get(6)?;
-                let max_dd: f64 = row.get(7)?;
+            conn.query_row(
+                query,
+                params![wallet_address, self.chain.as_str(), start_str, end_str],
+                |row| {
+                    let trade_count: i64 = row.get(0)?;
+                    let wins: Option<i64> = row.get(1)?;
+                    let profit: f64 = row.get(2)?;
+                    let loss: f64 = row.get(3)?;
+                    let total_pnl: f64 = row.get(4)?;
+                    let total_buys: i64 = row.get(5)?;
+                    let total_sells: i64 = row.get(6)?;
+                    let max_dd: f64 = row.get(7)?;
 
-                let win_rate = if trade_count > 0 {
-                    (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
-                } else {
-                    0.0
-                };
+                    let win_rate = if trade_count > 0 {
+                        (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
+                    } else {
+                        0.0
+                    };
 
-                Ok(PeriodTradingStats {
-                    buys: total_buys,
-                    sells: total_sells,
-                    profit_sol: profit,
-                    loss_sol: loss,
-                    net_pnl_sol: total_pnl,
-                    drawdown_percent: max_dd,
-                    win_rate,
-                })
-            })
+                    Ok(PeriodTradingStats {
+                        buys: total_buys,
+                        sells: total_sells,
+                        profit_sol: profit,
+                        loss_sol: loss,
+                        net_pnl_sol: total_pnl,
+                        drawdown_percent: max_dd,
+                        win_rate,
+                    })
+                },
+            )
             .map_err(|e| format!("Failed to execute period stats query: {e}"))?
         } else {
-            conn.query_row(query, params![wallet_address, start_str], |row| {
-                let trade_count: i64 = row.get(0)?;
-                let wins: Option<i64> = row.get(1)?;
-                let profit: f64 = row.get(2)?;
-                let loss: f64 = row.get(3)?;
-                let total_pnl: f64 = row.get(4)?;
-                let total_buys: i64 = row.get(5)?;
-                let total_sells: i64 = row.get(6)?;
-                let max_dd: f64 = row.get(7)?;
+            conn.query_row(
+                query,
+                params![wallet_address, self.chain.as_str(), start_str],
+                |row| {
+                    let trade_count: i64 = row.get(0)?;
+                    let wins: Option<i64> = row.get(1)?;
+                    let profit: f64 = row.get(2)?;
+                    let loss: f64 = row.get(3)?;
+                    let total_pnl: f64 = row.get(4)?;
+                    let total_buys: i64 = row.get(5)?;
+                    let total_sells: i64 = row.get(6)?;
+                    let max_dd: f64 = row.get(7)?;
 
-                let win_rate = if trade_count > 0 {
-                    (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
-                } else {
-                    0.0
-                };
+                    let win_rate = if trade_count > 0 {
+                        (wins.unwrap_or_default() as f64 / trade_count as f64) * 100.0
+                    } else {
+                        0.0
+                    };
 
-                Ok(PeriodTradingStats {
-                    buys: total_buys,
-                    sells: total_sells,
-                    profit_sol: profit,
-                    loss_sol: loss,
-                    net_pnl_sol: total_pnl,
-                    drawdown_percent: max_dd,
-                    win_rate,
-                })
-            })
+                    Ok(PeriodTradingStats {
+                        buys: total_buys,
+                        sells: total_sells,
+                        profit_sol: profit,
+                        loss_sol: loss,
+                        net_pnl_sol: total_pnl,
+                        drawdown_percent: max_dd,
+                        win_rate,
+                    })
+                },
+            )
             .map_err(|e| format!("Failed to execute period stats query: {e}"))?
         };
 
@@ -434,12 +460,12 @@ impl PositionsDatabase {
           COALESCE(SUM(CASE WHEN pnl < 0 THEN ABS(pnl) ELSE 0 END), 0) as loss,
           COALESCE(SUM(pnl), 0) as total_pnl
         FROM positions
-        WHERE wallet_address = ?1
+        WHERE wallet_address = ?1 AND chain_id = ?2
           AND transaction_exit_verified = 1
           AND origin_kind != 'external'
           AND exit_time IS NOT NULL
-          AND datetime(exit_time) >= datetime(?2)
-          AND datetime(exit_time) < datetime(?3)
+          AND datetime(exit_time) >= datetime(?3)
+          AND datetime(exit_time) < datetime(?4)
         GROUP BY day
         ORDER BY day ASC
         "#,
@@ -450,6 +476,7 @@ impl PositionsDatabase {
             .query_map(
                 params![
                     wallet_address,
+                    self.chain.as_str(),
                     period_start.to_rfc3339(),
                     period_end.to_rfc3339()
                 ],
@@ -484,7 +511,7 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-      "SELECT {} FROM positions WHERE wallet_address = ?1 AND mint = ?2 AND transaction_exit_verified = 1 AND exit_price IS NOT NULL AND exit_time IS NOT NULL ORDER BY exit_time DESC LIMIT ?3",
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND mint = ?3 AND transaction_exit_verified = 1 AND exit_price IS NOT NULL AND exit_time IS NOT NULL ORDER BY exit_time DESC LIMIT ?4",
       POSITION_SELECT_COLUMNS
     );
 
@@ -493,9 +520,10 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare recent closed positions query: {e}"))?;
 
         let rows = stmt
-            .query_map(params![wallet_address, mint, limit as i64], |row| {
-                self.row_to_position(row)
-            })
+            .query_map(
+                params![wallet_address, self.chain.as_str(), mint, limit as i64],
+                |row| self.row_to_position(row),
+            )
             .map_err(|e| format!("Failed to execute recent closed positions query: {e}"))?;
 
         let mut positions = Vec::new();
@@ -522,21 +550,24 @@ impl PositionsDatabase {
                 r#"
       SELECT exit_price, effective_exit_price
       FROM positions
-      WHERE wallet_address = ?1 AND mint = ?2 AND transaction_exit_verified = 1
+      WHERE wallet_address = ?1 AND chain_id = ?2 AND mint = ?3 AND transaction_exit_verified = 1
        AND exit_price IS NOT NULL AND exit_time IS NOT NULL
       ORDER BY datetime(exit_time) DESC
-      LIMIT ?3
+      LIMIT ?4
       "#,
             )
             .map_err(|e| format!("Failed to prepare recent closed exit prices query: {e}"))?;
 
         let mut out: Vec<(Option<f64>, Option<f64>)> = Vec::new();
         let rows = stmt
-            .query_map(params![wallet_address, mint, limit as i64], |row| {
-                let exit_p: Option<f64> = row.get(0).ok();
-                let eff_exit_p: Option<f64> = row.get(1).ok();
-                Ok((exit_p, eff_exit_p))
-            })
+            .query_map(
+                params![wallet_address, self.chain.as_str(), mint, limit as i64],
+                |row| {
+                    let exit_p: Option<f64> = row.get(0).ok();
+                    let eff_exit_p: Option<f64> = row.get(1).ok();
+                    Ok((exit_p, eff_exit_p))
+                },
+            )
             .map_err(|e| format!("Failed to execute recent closed exit prices query: {e}"))?;
         for r in rows {
             if let Ok(v) = r {
@@ -556,7 +587,7 @@ impl PositionsDatabase {
 
         let query = format!(
             "SELECT {POSITION_SELECT_COLUMNS} FROM positions p \
-             WHERE EXISTS ( \
+             WHERE p.chain_id = ?2 AND EXISTS ( \
                SELECT 1 FROM position_states ps \
                WHERE ps.position_id = p.id \
                  AND ps.state = ?1 \
@@ -573,7 +604,9 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare positions by state query: {e}"))?;
 
         let position_iter = stmt
-            .query_map(params![state.to_string()], |row| self.row_to_position(row))
+            .query_map(params![state.to_string(), self.chain.as_str()], |row| {
+                self.row_to_position(row)
+            })
             .map_err(|e| format!("Failed to execute positions by state query: {e}"))?;
 
         let mut positions = Vec::new();
@@ -591,9 +624,9 @@ impl PositionsDatabase {
 
         let query = format!(
             "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
-             WHERE transaction_entry_verified = false \
+             WHERE chain_id = ?1 AND (transaction_entry_verified = false \
                 OR (exit_transaction_signature IS NOT NULL AND transaction_exit_verified = false) \
-             ORDER BY entry_time DESC"
+             ) ORDER BY entry_time DESC"
         );
 
         let mut stmt = conn
@@ -601,7 +634,9 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare unverified positions query: {e}"))?;
 
         let position_iter = stmt
-            .query_map([], |row| self.row_to_position(row))
+            .query_map(params![self.chain.as_str()], |row| {
+                self.row_to_position(row)
+            })
             .map_err(|e| format!("Failed to execute unverified positions query: {e}"))?;
 
         let mut positions = Vec::new();

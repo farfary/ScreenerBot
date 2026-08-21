@@ -14,10 +14,8 @@ use super::{
     types::{VerificationKind, VerificationOutcome},
     verifier::verify_transaction,
 };
-use crate::{
-    logger::{self, LogTag},
-    rpc::{get_rpc_client, RpcClientMethods},
-};
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::logger::{self, LogTag};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;

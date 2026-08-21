@@ -30,8 +30,8 @@ impl TokenDatabase {
         // Check if this is first insert (for first_fetched_at tracking)
         let is_first_insert: bool = conn
             .query_row(
-                "SELECT COUNT(*) FROM security_rugcheck WHERE mint = ?1",
-                params![mint],
+                "SELECT COUNT(*) FROM security_rugcheck WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| {
                     let count: i64 = row.get(0)?;
                     Ok(count == 0)
@@ -45,8 +45,8 @@ impl TokenDatabase {
         } else {
             // Preserve existing first_fetched_at on updates
             conn.query_row(
-                "SELECT security_data_first_fetched_at FROM security_rugcheck WHERE mint = ?1",
-                params![mint],
+                "SELECT security_data_first_fetched_at FROM security_rugcheck WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| row.get::<_, i64>(0),
             )
             .unwrap_or(now_ts)
@@ -56,7 +56,7 @@ impl TokenDatabase {
 
         conn.execute(
             "INSERT INTO security_rugcheck (
-                mint,
+                chain_id, mint,
                 token_type,
                 token_decimals,
                 score,
@@ -84,10 +84,10 @@ impl TokenDatabase {
                 security_data_last_fetched_at,
                 security_data_first_fetched_at
              ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+                ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28
              )
-             ON CONFLICT(mint) DO UPDATE SET
+             ON CONFLICT(chain_id, mint) DO UPDATE SET
                 token_type = excluded.token_type,
                 token_decimals = excluded.token_decimals,
                 score = excluded.score,
@@ -114,6 +114,7 @@ impl TokenDatabase {
                 markets = excluded.markets,
                 security_data_last_fetched_at = excluded.security_data_last_fetched_at",
             params![
+                self.chain_id(),
                 mint,
                 &data.token_type,
                 data.token_decimals,
@@ -146,7 +147,7 @@ impl TokenDatabase {
         .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {e}")))?;
 
         // Update in-memory cache
-        store::store_rugcheck(mint, data);
+        store::store_rugcheck(self.chain(), mint, data);
 
         Ok(())
     }
@@ -184,11 +185,11 @@ impl TokenDatabase {
                     security_data_first_fetched_at,
                     update_authority,
                     is_mutable
-                 FROM security_rugcheck WHERE mint = ?1",
+                 FROM security_rugcheck WHERE chain_id = ?1 AND mint = ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let result = stmt.query_row(params![mint], |row| {
+        let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             let risks_json: String = row.get(19)?;
             let holders_json: String = row.get(20)?;
             let markets_json: Option<String> = row.get(21)?;
@@ -258,25 +259,25 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT t.mint FROM tokens t
-             LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
-             LEFT JOIN blacklist b ON t.mint = b.mint
-             LEFT JOIN update_tracking ut ON t.mint = ut.mint
-             WHERE sr.mint IS NULL
+             LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint
+             LEFT JOIN blacklist b ON t.chain_id = b.chain_id AND t.mint = b.mint
+             LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint
+             WHERE t.chain_id = ?1 AND sr.mint IS NULL
              AND b.mint IS NULL
              AND (
                  -- Never tried
                  ut.security_error_type IS NULL
                  -- Temporary errors with exponential backoff
                  OR (ut.security_error_type = 'temporary' 
-                     AND ut.last_security_error_at < ?1 - (120 * (1 << MIN(ut.security_error_count - 1, 10))))
+                     AND ut.last_security_error_at < ?2 - (120 * (1 << MIN(ut.security_error_count - 1, 10))))
                  -- Permanent errors retry after 7 days
                  OR (ut.security_error_type = 'permanent' 
-                     AND ut.last_security_error_at < ?1 - 604800)
+                     AND ut.last_security_error_at < ?2 - 604800)
              )
              ORDER BY 
                  CASE 
                      -- Priority 1: New tokens (discovered in last 24h, no errors)
-                     WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?1 - 86400 THEN 1
+                     WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?2 - 86400 THEN 1
                      -- Priority 2: Tokens without errors
                      WHEN ut.security_error_type IS NULL THEN 2
                      -- Priority 3: Temporary errors (with backoff)
@@ -285,12 +286,12 @@ impl TokenDatabase {
                      ELSE 4
                  END,
                  t.first_discovered_at ASC
-             LIMIT ?2",
+             LIMIT ?3",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mints = stmt
-            .query_map(params![now, limit], |row| row.get(0))
+            .query_map(params![self.chain_id(), now, limit], |row| row.get(0))
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         mints
@@ -321,8 +322,8 @@ impl TokenDatabase {
                 last_security_error = ?1,
                 last_security_error_at = ?2,
                 security_error_type = ?3
-             WHERE mint = ?4",
-            params![message, now, error_type, mint],
+             WHERE chain_id = ?4 AND mint = ?5",
+            params![message, now, error_type, self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to record security error: {e}")))?;
 
@@ -339,8 +340,8 @@ impl TokenDatabase {
                 last_security_error = NULL,
                 last_security_error_at = NULL,
                 security_error_type = NULL
-             WHERE mint = ?1",
-            params![mint],
+             WHERE chain_id = ?1 AND mint = ?2",
+            params![self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to clear security error: {e}")))?;
 

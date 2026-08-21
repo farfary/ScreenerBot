@@ -84,7 +84,7 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
         std::fs::create_dir_all(parent).expect("create the temp data directory");
     }
 
-    let db = TransactionDatabase::new()
+    let db = TransactionDatabase::new(screenerbot::chains::ChainId::Solana)
         .await
         .expect("open the transactions database");
 

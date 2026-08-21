@@ -1,0 +1,149 @@
+//! Program IDs for transaction analysis and router detection
+//!
+//! This module contains all program IDs needed for analyzing transactions
+//! and detecting which platform/router was used for swaps. This is separate
+//! from the pools module to maintain clean separation of concerns.
+//!
+//! The DEX/aggregator program IDs shared with pool decoding are re-exported
+//! from `crate::chains::solana::constants` (the single source of truth) so
+//! this module and `crate::chains::solana::pools::types` never drift.
+
+pub use crate::chains::solana::constants::{
+    FLUXBEAM_AMM_PROGRAM_ID, JUPITER_V4_PROGRAM_ID, JUPITER_V6_PROGRAM_ID, METEORA_DAMM_PROGRAM_ID,
+    METEORA_DBC_PROGRAM_ID, METEORA_DLMM_PROGRAM_ID, MOONIT_AMM_PROGRAM_ID,
+    ORCA_WHIRLPOOL_PROGRAM_ID, PUMP_FUN_AMM_PROGRAM_ID, PUMP_FUN_LEGACY_PROGRAM_ID,
+    RAYDIUM_CLMM_PROGRAM_ID, RAYDIUM_CPMM_PROGRAM_ID, RAYDIUM_LEGACY_AMM_PROGRAM_ID,
+};
+
+// =============================================================================
+// DEX AGGREGATOR PROGRAM IDS
+// =============================================================================
+
+pub const JUPITER_V3_PROGRAM_ID: &str = "JUP3c2Uh3WA4Ng34tw6kPd2G4C5BB21Xo36Je1s32Ph";
+
+/// GMGN - Gaming and social trading platform
+pub const GMGN_PROGRAM_ID: &str = "GMGNjvGr7ddxt2u1XSf8Zo6LLnDjDm9mJahGfhq7j6gk";
+
+// =============================================================================
+// DIRECT DEX PROGRAM IDS
+// =============================================================================
+
+/// Orca DEX (legacy variant not shared with pool decoding)
+pub const ORCA_V1_PROGRAM_ID: &str = "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP";
+
+// =============================================================================
+// ROUTER DETECTION FUNCTIONS
+// =============================================================================
+
+/// Detect router/platform from program ID
+pub fn detect_router_from_program_id(program_id: &str) -> Option<&'static str> {
+    match program_id {
+        // Jupiter variants
+        JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID => Some("jupiter"),
+
+        // GMGN
+        GMGN_PROGRAM_ID => Some("gmgn"),
+
+        // Raydium variants
+        RAYDIUM_CPMM_PROGRAM_ID | RAYDIUM_LEGACY_AMM_PROGRAM_ID | RAYDIUM_CLMM_PROGRAM_ID => {
+            Some("raydium")
+        }
+
+        // Orca variants
+        ORCA_WHIRLPOOL_PROGRAM_ID | ORCA_V1_PROGRAM_ID => Some("orca"),
+
+        // Meteora variants
+        METEORA_DAMM_PROGRAM_ID | METEORA_DLMM_PROGRAM_ID | METEORA_DBC_PROGRAM_ID => {
+            Some("meteora")
+        }
+
+        // PumpFun variants
+        PUMP_FUN_AMM_PROGRAM_ID | PUMP_FUN_LEGACY_PROGRAM_ID => Some("pumpfun"),
+
+        // Other DEXes
+        MOONIT_AMM_PROGRAM_ID => Some("moonshot"),
+        FLUXBEAM_AMM_PROGRAM_ID => Some("fluxbeam"),
+
+        _ => None,
+    }
+}
+
+/// Detect router from log messages (fallback when program ID detection fails)
+pub fn detect_router_from_logs(log_messages: &[String]) -> Option<&'static str> {
+    for log_line in log_messages {
+        let log_lower = log_line.to_lowercase();
+
+        if log_lower.contains("jupiter") {
+            return Some("jupiter");
+        }
+        if log_lower.contains("gmgn") {
+            return Some("gmgn");
+        }
+        if log_lower.contains("raydium") {
+            return Some("raydium");
+        }
+        if log_lower.contains("orca") {
+            return Some("orca");
+        }
+        if log_lower.contains("meteora") {
+            return Some("meteora");
+        }
+        if log_lower.contains("pumpfun") || log_lower.contains("pump.fun") {
+            return Some("pumpfun");
+        }
+        if log_lower.contains("moonshot") {
+            return Some("moonshot");
+        }
+        if log_lower.contains("fluxbeam") {
+            return Some("fluxbeam");
+        }
+    }
+
+    None
+}
+
+/// Get all known Jupiter program IDs for validation
+pub fn get_jupiter_program_ids() -> &'static [&'static str] {
+    &[
+        JUPITER_V6_PROGRAM_ID,
+        JUPITER_V4_PROGRAM_ID,
+        JUPITER_V3_PROGRAM_ID,
+    ]
+}
+
+/// Check if a program ID belongs to Jupiter
+pub fn is_jupiter_program_id(program_id: &str) -> bool {
+    matches!(
+        program_id,
+        JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID
+    )
+}
+
+/// Check if a program ID belongs to any known DEX aggregator
+pub fn is_dex_aggregator_program_id(program_id: &str) -> bool {
+    matches!(
+        program_id,
+        JUPITER_V6_PROGRAM_ID | JUPITER_V4_PROGRAM_ID | JUPITER_V3_PROGRAM_ID | GMGN_PROGRAM_ID
+    )
+}
+
+// =============================================================================
+// MEV AND PRIORITY FEE ADDRESSES
+// =============================================================================
+
+/// Known MEV/Jito tip addresses that should be excluded from swap calculations
+pub const KNOWN_MEV_TIP_ADDRESSES: &[&str] = &[
+    "BB5dnY55FXS1e1NXqZDwCzgdYJdMCj3B92PU6Q5Fb6DT", // Jito tip address
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5", // Jito tip address
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe", // Jito tip address
+    "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY", // Jito tip address
+    "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49", // Jito tip address
+    "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh", // Jito tip address
+    "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt", // Jito tip address
+    "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL", // Jito tip address
+];
+
+/// Check if an address is a known MEV/Jito tip address
+pub fn is_mev_tip_address(address: &str) -> bool {
+    KNOWN_MEV_TIP_ADDRESSES.contains(&address)
+}

@@ -35,8 +35,8 @@ impl AtaInfo {
     }
 }
 
-impl From<&crate::rpc::TokenAccountInfo> for AtaInfo {
-    fn from(info: &crate::rpc::TokenAccountInfo) -> Self {
+impl From<&crate::chains::solana::rpc::TokenAccountInfo> for AtaInfo {
+    fn from(info: &crate::chains::solana::rpc::TokenAccountInfo) -> Self {
         Self {
             ata_address: info.account.clone(),
             mint: info.mint.clone(),

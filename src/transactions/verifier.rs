@@ -5,12 +5,13 @@
 // This module provides transaction verification functionality specifically
 // designed for integration with the positions system to verify entry and exit transactions.
 
+use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use chrono::{DateTime, Utc};
-use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
+use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
-use crate::transactions::{processor::TransactionProcessor, types::*, utils::*};
+use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
 // VERIFICATION RESULT STRUCTURES

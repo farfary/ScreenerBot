@@ -1,22 +1,19 @@
 //! Shared utility functions — formatting, parsing, and conversions.
 
 use crate::Error;
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::Notify;
 
 // =============================================================================
-// SOLANA-SPECIFIC UTILITIES (Consolidated from multiple files)
+// NATIVE-UNIT CONVERSIONS
 // =============================================================================
+//
+// Pubkey parsing lives in `crate::chains::solana::accounts` (concrete chain
+// mechanics). Lamports/SOL conversion stays here: its signature carries no
+// chain-specific type, and SOL is, per the app mission, the single monetary
+// unit in trading logic today.
 
-/// Parse a pubkey string with consistent error formatting
-pub fn parse_pubkey_safe(address: &str) -> Result<Pubkey, String> {
-    Pubkey::from_str(address).map_err(|e| format!("Invalid pubkey '{address}': {e}"))
-}
-
-/// SOL lamports conversion functions
-use crate::constants::LAMPORTS_PER_SOL;
+use crate::chains::solana::constants::LAMPORTS_PER_SOL;
 
 /// Convert lamports to SOL with consistent precision
 pub fn lamports_to_sol(lamports: u64) -> f64 {
@@ -140,10 +137,10 @@ where
 // =============================================================================
 // ATA (ASSOCIATED TOKEN ACCOUNT) OPERATIONS
 // =============================================================================
-// All ATA-related functions have been moved to src/ata_operations.rs
-// Re-exported here for backward compatibility
+// ATA mechanics live at crate::chains::solana::assets::ata (Solana-specific).
+// Re-exported here as the chain-neutral call surface the rest of the app uses.
 
-pub use crate::ata_operations::{
+pub use crate::chains::solana::assets::ata::{
     cleanup_all_empty_atas, close_all_empty_atas, close_single_ata, close_token_account,
     close_token_account_with_context, get_all_token_accounts, get_sol_balance, get_token_balance,
     get_total_token_balance,

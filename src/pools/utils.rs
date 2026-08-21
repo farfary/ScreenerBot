@@ -7,10 +7,9 @@
 //! - Handling all possible base/quote token combinations
 
 use super::types::{PoolMintVaultInfo, TokenPairInfo};
-use crate::constants::{SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT, USDT_MINT};
+use crate::chains::solana::constants::SYSTEM_PROGRAM_ID;
+use crate::chains::solana::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
 use crate::logger::{self, LogTag};
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 
 impl TokenPairInfo {
     /// Create a new TokenPairInfo for invalid pairs (non-SOL)
@@ -139,100 +138,6 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
 
 /// Data reading utilities for consistent parsing across all decoders
 /// These functions provide centralized, safe data extraction with proper bounds checking
-pub fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo> {
-    if data.len() < 200 {
-        logger::error(
-            LogTag::PoolService,
-            &format!("PumpFun pool data too short: {} bytes", data.len()),
-        );
-        return None;
-    }
-
-    logger::debug(
-        LogTag::PoolService,
-        &format!("Extracting PumpFun pool data ({} bytes)", data.len()),
-    );
-
-    // PumpFun AMM structure (confirmed via structure analysis):
-    // discriminator(8) + pool_bump(1) + index(2) + creator(32) + base_mint(32) + quote_mint(32) + lp_mint(32) + vault1(32) + vault2(32) + ...
-    let mut offset = 8 + 1 + 2 + 32; // Skip discriminator, bump, index, and creator
-
-    // Read base mint and quote mint
-    let mint1 = read_pubkey_at_offset(data, &mut offset).ok()?; // base_mint
-    let mint2 = read_pubkey_at_offset(data, &mut offset).ok()?; // quote_mint
-
-    // Skip lp_mint
-    offset += 32;
-
-    // Read vault addresses
-    let vault1 = read_pubkey_at_offset(data, &mut offset).ok()?;
-    let vault2 = read_pubkey_at_offset(data, &mut offset).ok()?;
-
-    logger::debug(
-        LogTag::PoolService,
-        &format!(
-            "Extracted PumpFun: mint1={}, mint2={}, vault1={}, vault2={}",
-            &mint1[..8],
-            &mint2[..8],
-            &vault1[..8],
-            &vault2[..8]
-        ),
-    );
-
-    Some(PoolMintVaultInfo {
-        mint1,
-        mint2,
-        vault1,
-        vault2,
-    })
-}
-
-/// Data reading utilities for consistent parsing across all decoders
-/// These functions provide centralized, safe data extraction with proper bounds checking
-
-/// Read a pubkey from data at given offset, advancing the offset
-pub fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
-    if *offset + 32 > data.len() {
-        return Err(format!(
-            "Offset {} + 32 exceeds data length {}",
-            *offset,
-            data.len()
-        ));
-    }
-
-    let pubkey_bytes = &data[*offset..*offset + 32];
-    *offset += 32;
-
-    let pubkey = Pubkey::new_from_array(
-        pubkey_bytes
-            .try_into()
-            .map_err(|_| "Invalid pubkey bytes".to_owned())?,
-    );
-
-    Ok(pubkey.to_string())
-}
-
-/// Read a pubkey from data at fixed offset without advancing
-pub fn read_pubkey_at(data: &[u8], offset: usize) -> Option<String> {
-    if offset + 32 > data.len() {
-        return None;
-    }
-    let pk = Pubkey::new_from_array(data[offset..offset + 32].try_into().ok()?);
-    Some(pk.to_string())
-}
-
-/// Read a pubkey as Pubkey struct from data at given offset, advancing the offset
-pub fn read_pubkey_struct_at_offset(
-    data: &[u8],
-    offset: &mut usize,
-) -> Result<Pubkey, &'static str> {
-    if data.len() < *offset + 32 {
-        return Err("Insufficient data for pubkey");
-    }
-    let pubkey_bytes = &data[*offset..*offset + 32];
-    *offset += 32;
-    Pubkey::try_from(pubkey_bytes).map_err(|_| "Invalid pubkey")
-}
 
 /// Read a u8 value from data at given offset, advancing the offset
 pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> {

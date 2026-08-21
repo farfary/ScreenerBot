@@ -1,6 +1,7 @@
 //! Database structures and conversion utilities
 
 use super::super::types::PriceResult;
+use crate::chains::ChainId;
 use chrono::{DateTime, Utc};
 use rusqlite::Row;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -13,6 +14,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[derive(Debug, Clone)]
 pub struct DbPriceResult {
     pub id: Option<i64>,
+    pub chain_id: ChainId,
     pub mint: String,
     pub pool_address: String,
     pub price_usd: f64,
@@ -28,11 +30,12 @@ pub struct DbPriceResult {
 
 impl DbPriceResult {
     /// Create from PriceResult
-    pub fn from_price_result(price: &PriceResult) -> Self {
+    pub fn from_price_result(chain_id: ChainId, price: &PriceResult) -> Self {
         let timestamp_unix = Self::approximate_unix_timestamp(price.timestamp);
 
         Self {
             id: None,
+            chain_id,
             mint: price.mint.clone(),
             pool_address: price.pool_address.clone(),
             price_usd: price.price_usd,
@@ -78,6 +81,10 @@ impl DbPriceResult {
 
         Ok(Self {
             id: Some(row.get("id")?),
+            chain_id: row
+                .get::<_, String>("chain_id")?
+                .parse()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?,
             mint: row.get("mint")?,
             pool_address: row.get("pool_address")?,
             price_usd: row.get("price_usd")?,
@@ -130,6 +137,7 @@ impl DbPriceResult {
 
 #[derive(Debug, Clone)]
 pub struct BlacklistedAccountRecord {
+    pub chain_id: ChainId,
     pub account_pubkey: String,
     pub reason: String,
     pub source: Option<String>,
@@ -143,6 +151,7 @@ pub struct BlacklistedAccountRecord {
 
 #[derive(Debug, Clone)]
 pub struct BlacklistedPoolRecord {
+    pub chain_id: ChainId,
     pub pool_id: String,
     pub reason: String,
     pub token_mint: Option<String>,

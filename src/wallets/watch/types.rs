@@ -60,7 +60,7 @@ pub enum TransferDirection {
 #[derive(Debug, Clone)]
 pub enum ActivityKind {
     /// A DEX/aggregator swap with exactly one resolved primary mint, SOL-quoted (see
-    /// `classify::classify_transaction_activity`).
+    /// `crate::chains::solana::wallets::classify::classify_transaction_activity`).
     Swap {
         mint: String,
         side: SwapSide,

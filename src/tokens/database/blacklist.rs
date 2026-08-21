@@ -15,9 +15,9 @@ impl TokenDatabase {
         let now = Utc::now().timestamp();
 
         conn.execute(
-            "INSERT OR REPLACE INTO blacklist (mint, reason, source, added_at) 
-             VALUES (?1, ?2, ?3, ?4)",
-            params![mint, reason, source, now],
+            "INSERT OR REPLACE INTO blacklist (chain_id, mint, reason, source, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![self.chain_id(), mint, reason, source, now],
         )
         .map_err(|e| TokenError::Database(format!("Failed to add to blacklist: {e}")))?;
 
@@ -31,13 +31,13 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT mint, reason, source, added_at \
-                 FROM blacklist \
+                 FROM blacklist WHERE chain_id = ?1 \
                  ORDER BY added_at DESC",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare blacklist query: {e}")))?;
 
         let rows = stmt
-            .query_map([], |row| {
+            .query_map(params![self.chain_id()], |row| {
                 Ok(TokenBlacklistRecord {
                     mint: row.get(0)?,
                     reason: row.get(1)?,
@@ -64,11 +64,11 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut stmt = conn
-            .prepare("SELECT 1 FROM blacklist WHERE mint = ?1")
+            .prepare("SELECT 1 FROM blacklist WHERE chain_id = ?1 AND mint = ?2")
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let exists = stmt
-            .exists(params![mint])
+            .exists(params![self.chain_id(), mint])
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         Ok(exists)
@@ -78,8 +78,11 @@ impl TokenDatabase {
     pub fn remove_from_blacklist(&self, mint: &str) -> TokenResult<()> {
         let conn = self.conn()?;
 
-        conn.execute("DELETE FROM blacklist WHERE mint = ?1", params![mint])
-            .map_err(|e| TokenError::Database(format!("Failed to remove from blacklist: {e}")))?;
+        conn.execute(
+            "DELETE FROM blacklist WHERE chain_id = ?1 AND mint = ?2",
+            params![self.chain_id(), mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to remove from blacklist: {e}")))?;
 
         Ok(())
     }
@@ -89,10 +92,12 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut stmt = conn
-            .prepare("SELECT reason, source FROM blacklist WHERE mint = ?1")
+            .prepare("SELECT reason, source FROM blacklist WHERE chain_id = ?1 AND mint = ?2")
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let result = stmt.query_row(params![mint], |row| Ok((row.get(0)?, row.get(1)?)));
+        let result = stmt.query_row(params![self.chain_id(), mint], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        });
 
         match result {
             Ok(data) => Ok(Some(data)),

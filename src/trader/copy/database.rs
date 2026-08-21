@@ -25,32 +25,39 @@ use schema::{migrate, SCHEMA, SCHEMA_VERSION};
 #[derive(Clone)]
 pub struct CopyDatabase {
     pool: Pool<SqliteConnectionManager>,
+    chain: crate::chains::ChainId,
 }
 
 static SHARED_COPY_DATABASE: OnceLock<CopyDatabase> = OnceLock::new();
 
 impl CopyDatabase {
-    pub fn new() -> Result<Self, String> {
-        Self::open(crate::paths::get_copy_trading_db_path())
+    pub fn new(chain: crate::chains::ChainId) -> Result<Self, String> {
+        Self::open(crate::paths::get_copy_trading_db_path(), chain)
     }
 
     /// Process-wide pool for runtime consumers. Exit evaluation runs every few
     /// seconds, so opening a new r2d2 pool for each policy lookup would churn WAL
     /// connections and defeat the centralized connection configuration.
-    pub fn shared() -> Result<Self, String> {
+    pub fn shared(chain: crate::chains::ChainId) -> Result<Self, String> {
         if let Some(database) = SHARED_COPY_DATABASE.get() {
-            return Ok(database.clone());
+            return (database.chain == chain)
+                .then(|| database.clone())
+                .ok_or_else(|| "Copy database is already bound to another chain".to_owned());
         }
-        let database = Self::new()?;
+        let database = Self::new(chain)?;
         let _ = SHARED_COPY_DATABASE.set(database);
-        SHARED_COPY_DATABASE
+        let database = SHARED_COPY_DATABASE
             .get()
             .cloned()
-            .ok_or_else(|| "Failed to initialize shared copy database".to_owned())
+            .ok_or_else(|| "Failed to initialize shared copy database".to_owned())?;
+        (database.chain == chain)
+            .then_some(database)
+            .ok_or_else(|| "Copy database was initialized for another chain".to_owned())
     }
 
     /// Explicit-path constructor for isolated tests and offline tools.
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, String> {
+    /// Opens one chain-bound repository against the shared copy-trading database.
+    pub fn open(path: impl AsRef<Path>, chain: crate::chains::ChainId) -> Result<Self, String> {
         let path = PathBuf::from(path.as_ref());
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
@@ -65,7 +72,7 @@ impl CopyDatabase {
             .max_lifetime(None)
             .build(manager)
             .map_err(|e| format!("Failed to create copy database pool: {e}"))?;
-        let db = Self { pool };
+        let db = Self { pool, chain };
         db.initialize()?;
         Ok(db)
     }
@@ -100,6 +107,9 @@ impl CopyDatabase {
     }
 
     fn insert_task_sync(&self, mut task: CopyTask) -> Result<CopyTask, String> {
+        if task.chain != self.chain {
+            return Err("Copy task chain does not match this repository".to_owned());
+        }
         if task.mode != CopyMode::Paper {
             return Err(
                 "New copy tasks must start in paper mode; use the confirmed mode transition"
@@ -117,13 +127,13 @@ impl CopyDatabase {
             .map_err(|e| format!("Failed to serialize copy exit policy: {e}"))?;
         connection
             .execute(
-                "INSERT INTO copy_tasks (target_address, label, enabled, mode_json, sizing_json, \
+                "INSERT INTO copy_tasks (chain_id, target_address, label, enabled, mode_json, sizing_json, \
                  exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, \
                  min_target_trade_sol, max_target_trade_sol, buy_once_per_token, slippage_pct, \
                  created_at, updated_at) VALUES \
-                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
                 params![
-                    task.target_address,
+                    self.chain.as_str(), task.target_address,
                     task.label,
                     task.enabled,
                     mode,
@@ -168,14 +178,14 @@ impl CopyDatabase {
         let connection = self.connection()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
+                "SELECT id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
                  exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
                  max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
-                 FROM copy_tasks ORDER BY id DESC",
+                 FROM copy_tasks WHERE chain_id=?1 ORDER BY id DESC",
             )
             .map_err(|e| format!("Failed to prepare copy task list: {e}"))?;
         let rows = statement
-            .query_map([], row_to_task)
+            .query_map(params![self.chain.as_str()], row_to_task)
             .map_err(|e| format!("Failed to query copy tasks: {e}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to decode copy task: {e}"))?;
@@ -193,11 +203,11 @@ impl CopyDatabase {
         let connection = self.connection()?;
         connection
             .query_row(
-                "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
+                "SELECT id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
                  exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
                  max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
-                 FROM copy_tasks WHERE id = ?1",
-                params![id],
+                 FROM copy_tasks WHERE id = ?1 AND chain_id=?2",
+                params![id, self.chain.as_str()],
                 row_to_task,
             )
             .optional()
@@ -215,8 +225,8 @@ impl CopyDatabase {
         let connection = self.connection()?;
         let (current_mode, current_address): (String, String) = connection
             .query_row(
-                "SELECT mode_json, target_address FROM copy_tasks WHERE id=?1",
-                params![task.id],
+                "SELECT mode_json, target_address FROM copy_tasks WHERE id=?1 AND chain_id=?2",
+                params![task.id, self.chain.as_str()],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
@@ -235,7 +245,7 @@ impl CopyDatabase {
                 "UPDATE copy_tasks SET target_address=?1, label=?2, enabled=?3, mode_json=?4, \
                  sizing_json=?5, exit_mode_json=?6, exit_policy_json=?7, max_sol_per_trade=?8, max_sol_per_token=?9, \
                  total_budget_sol=?10, min_target_trade_sol=?11, max_target_trade_sol=?12, \
-                 buy_once_per_token=?13, slippage_pct=?14, updated_at=?15 WHERE id=?16",
+                 buy_once_per_token=?13, slippage_pct=?14, updated_at=?15 WHERE id=?16 AND chain_id=?17",
                 params![
                     task.target_address,
                     task.label,
@@ -256,7 +266,7 @@ impl CopyDatabase {
                     task.buy_once_per_token,
                     task.slippage_pct,
                     task.updated_at.to_rfc3339(),
-                    task.id,
+                    task.id, self.chain.as_str(),
                 ],
             )
             .map_err(|e| format!("Failed to update copy task {}: {e}", task.id))?;
@@ -303,8 +313,8 @@ impl CopyDatabase {
         let connection = self.connection()?;
         let current_json: String = connection
             .query_row(
-                "SELECT mode_json FROM copy_tasks WHERE id=?1",
-                params![id],
+                "SELECT mode_json FROM copy_tasks WHERE id=?1 AND chain_id=?2",
+                params![id, self.chain.as_str()],
                 |row| row.get(0),
             )
             .optional()
@@ -316,12 +326,13 @@ impl CopyDatabase {
             .map_err(|reason| format!("Copy mode transition rejected: {reason:?}"))?;
         let affected = connection
             .execute(
-                "UPDATE copy_tasks SET mode_json=?2, updated_at=?3 WHERE id=?1",
+                "UPDATE copy_tasks SET mode_json=?2, updated_at=?3 WHERE id=?1 AND chain_id=?4",
                 params![
                     id,
                     serde_json::to_string(&mode)
                         .map_err(|e| format!("Failed to serialize copy mode: {e}"))?,
-                    Utc::now().to_rfc3339()
+                    Utc::now().to_rfc3339(),
+                    self.chain.as_str()
                 ],
             )
             .map_err(|e| format!("Failed to set copy task {id} mode: {e}"))?;
@@ -337,7 +348,10 @@ impl CopyDatabase {
         let db = self.clone();
         tokio::task::spawn_blocking(move || {
             db.connection()?
-                .execute("DELETE FROM copy_tasks WHERE id = ?1", params![id])
+                .execute(
+                    "DELETE FROM copy_tasks WHERE id = ?1 AND chain_id=?2",
+                    params![id, db.chain.as_str()],
+                )
                 .map(|affected| affected > 0)
                 .map_err(|e| format!("Failed to delete copy task {id}: {e}"))
         })
@@ -350,8 +364,8 @@ impl CopyDatabase {
         tokio::task::spawn_blocking(move || {
             db.connection()?
                 .execute(
-                    "UPDATE copy_tasks SET enabled=0, updated_at=?2 WHERE id=?1 AND enabled=1",
-                    params![id, Utc::now().to_rfc3339()],
+                    "UPDATE copy_tasks SET enabled=0, updated_at=?2 WHERE id=?1 AND chain_id=?3 AND enabled=1",
+                    params![id, Utc::now().to_rfc3339(), db.chain.as_str()],
                 )
                 .map(|affected| affected > 0)
                 .map_err(|e| format!("Failed to pause copy task {id}: {e}"))
@@ -467,14 +481,14 @@ impl CopyDatabase {
         let connection = self.connection()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
+                "SELECT id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
                  exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
                  max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
-                 FROM copy_tasks WHERE target_address = ?1 AND enabled = 1 ORDER BY id",
+                 FROM copy_tasks WHERE target_address = ?1 AND chain_id=?2 AND enabled = 1 ORDER BY id",
             )
             .map_err(|e| format!("Failed to prepare copy task query: {e}"))?;
         let rows = statement
-            .query_map(params![address], row_to_task)
+            .query_map(params![address, self.chain.as_str()], row_to_task)
             .map_err(|e| format!("Failed to query copy tasks: {e}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to decode copy task: {e}"))?;

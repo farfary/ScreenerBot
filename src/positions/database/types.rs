@@ -10,7 +10,7 @@ pub(super) static POSITIONS_DB_INITIALIZED: LazyLock<AtomicBool> =
     LazyLock::new(|| AtomicBool::new(false));
 
 // Database schema version
-pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 4;
+pub(super) const POSITIONS_SCHEMA_VERSION: u32 = 5;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
@@ -42,6 +42,7 @@ pub(super) const POSITION_SELECT_COLUMNS: &str = r#"
 pub(super) const SCHEMA_POSITIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS positions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  chain_id TEXT NOT NULL,
   wallet_address TEXT NOT NULL,
   mint TEXT NOT NULL,
   symbol TEXT NOT NULL,
@@ -250,16 +251,16 @@ ALTER TABLE positions ADD COLUMN archived_at TEXT;
 
 // Performance indexes
 pub(super) const POSITIONS_INDEXES: &[&str] = &[
-    "CREATE INDEX IF NOT EXISTS idx_positions_wallet ON positions(wallet_address);",
-    "CREATE INDEX IF NOT EXISTS idx_positions_mint ON positions(mint);",
+    "CREATE INDEX IF NOT EXISTS idx_positions_chain_wallet ON positions(chain_id, wallet_address);",
+    "CREATE INDEX IF NOT EXISTS idx_positions_chain_mint ON positions(chain_id, mint);",
     "CREATE INDEX IF NOT EXISTS idx_positions_entry_time ON positions(entry_time DESC);",
     "CREATE INDEX IF NOT EXISTS idx_positions_exit_time ON positions(exit_time DESC);",
     "CREATE INDEX IF NOT EXISTS idx_positions_mint_exit_time ON positions(mint, exit_time DESC);",
-    "CREATE INDEX IF NOT EXISTS idx_positions_entry_signature ON positions(entry_transaction_signature);",
-    "CREATE INDEX IF NOT EXISTS idx_positions_exit_signature ON positions(exit_transaction_signature);",
+    "CREATE INDEX IF NOT EXISTS idx_positions_chain_entry_signature ON positions(chain_id, entry_transaction_signature);",
+    "CREATE INDEX IF NOT EXISTS idx_positions_chain_exit_signature ON positions(chain_id, exit_transaction_signature);",
     "CREATE INDEX IF NOT EXISTS idx_positions_state ON positions(id, position_type, exit_time);",
     "CREATE INDEX IF NOT EXISTS idx_positions_archived ON positions(archived);",
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_round_key ON positions(wallet_address, round_key) WHERE round_key IS NOT NULL;",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_round_key ON positions(chain_id, wallet_address, round_key) WHERE round_key IS NOT NULL;",
     "CREATE INDEX IF NOT EXISTS idx_position_states_position_id ON position_states(position_id, changed_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_states_state ON position_states(state, changed_at DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_tracking_position_id ON position_tracking(position_id, tracked_at DESC);",
@@ -443,4 +444,5 @@ pub struct PositionsDatabase {
     pub(super) pool: r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
     pub(super) database_path: String,
     pub(super) schema_version: u32,
+    pub(super) chain: crate::chains::ChainId,
 }

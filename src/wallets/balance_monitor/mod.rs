@@ -42,7 +42,7 @@ pub use service::{
 
 pub use cache::get_cached_wallet_snapshot_status;
 pub use dashboard::get_wallet_dashboard_data;
-pub use database::get_wallet_service_metrics;
+pub use database::{get_wallet_service_metrics, is_wallet_database_ready};
 
 // The single source of truth for what the wallet is worth, and the hook that keeps
 // it live. Every user-facing wallet figure goes through `get_wallet_worth()`.

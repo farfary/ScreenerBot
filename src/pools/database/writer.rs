@@ -2,6 +2,7 @@
 
 use super::super::types::PriceResult;
 use super::types::DbPriceResult;
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 
 use rusqlite::{params, Connection};
@@ -23,6 +24,7 @@ const DB_WRITE_INTERVAL_SECONDS: u64 = 10;
 pub(super) async fn run_database_writer(
     mut rx: mpsc::UnboundedReceiver<PriceResult>,
     db_connection: Arc<Mutex<Option<Connection>>>,
+    chain_id: ChainId,
 ) {
     let mut write_buffer = Vec::with_capacity(DB_BATCH_SIZE);
     let mut interval =
@@ -38,12 +40,12 @@ pub(super) async fn run_database_writer(
 
                 // Flush if buffer is full
                 if write_buffer.len() >= DB_BATCH_SIZE {
-                  flush_write_buffer(&mut write_buffer, &db_connection).await;
+                  flush_write_buffer(&mut write_buffer, &db_connection, chain_id).await;
                 }
               }
               None => {
                 // Channel closed, flush remaining and exit
-                flush_write_buffer(&mut write_buffer, &db_connection).await;
+                flush_write_buffer(&mut write_buffer, &db_connection, chain_id).await;
                 break;
               }
             }
@@ -52,7 +54,7 @@ pub(super) async fn run_database_writer(
           // Periodic flush
           _ = interval.tick() => {
             if !write_buffer.is_empty() {
-              flush_write_buffer(&mut write_buffer, &db_connection).await;
+              flush_write_buffer(&mut write_buffer, &db_connection, chain_id).await;
             }
           }
         }
@@ -63,6 +65,7 @@ pub(super) async fn run_database_writer(
 async fn flush_write_buffer(
     buffer: &mut Vec<PriceResult>,
     db_connection: &Arc<Mutex<Option<Connection>>>,
+    chain_id: ChainId,
 ) {
     if buffer.is_empty() {
         return;
@@ -92,17 +95,18 @@ async fn flush_write_buffer(
             let mut stmt = tx
                 .prepare(
                     "INSERT OR REPLACE INTO price_history 
-           (mint, pool_address, price_usd, price_sol, confidence, slot, 
+           (chain_id, mint, pool_address, price_usd, price_sol, confidence, slot,
            timestamp_unix, sol_reserves, token_reserves, source_pool, created_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .map_err(|e| format!("Failed to prepare price history insert: {e}"))?;
 
             for price in &entries_for_task {
-                let db_price = DbPriceResult::from_price_result(price);
+                let db_price = DbPriceResult::from_price_result(chain_id, price);
 
                 inserted += stmt
                     .execute(params![
+                        db_price.chain_id.as_str(),
                         db_price.mint,
                         db_price.pool_address,
                         db_price.price_usd,

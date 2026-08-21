@@ -1,11 +1,10 @@
 //! Wallet balance operations — fetch and refresh on-chain token balances via RPC.
 
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use super::super::types::TokenBalance;
+use crate::chains::solana::accounts::fetch_wallet_token_balances;
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 
 /// Update token balances for a wallet by fetching from RPC
 ///
@@ -17,36 +16,7 @@ pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, String> {
         .await?
         .ok_or("Wallet not found")?;
 
-    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet.address)
-        .map_err(|e| format!("Invalid wallet address: {e}"))?;
-
-    let rpc_client = get_rpc_client();
-    let token_accounts = rpc_client
-        .get_all_token_accounts(&wallet_pubkey)
-        .await
-        .map_err(|e| format!("Failed to fetch token accounts: {e}"))?;
-
-    // Convert to TokenBalance structs
-    let now = chrono::Utc::now();
-    let balances: Vec<TokenBalance> = token_accounts
-        .iter()
-        .filter(|acc| !acc.is_nft) // Exclude NFTs
-        .map(|acc| {
-            let ui_amount = acc.balance as f64 / 10f64.powi(acc.decimals as i32);
-            TokenBalance {
-                wallet_id,
-                mint: acc.mint.clone(),
-                balance: acc.balance,
-                ui_amount,
-                decimals: acc.decimals,
-                symbol: None, // Will be populated by token service if available
-                name: None,
-                is_token_2022: acc.is_token_2022,
-                updated_at: now,
-            }
-        })
-        .collect();
-
+    let balances = fetch_wallet_token_balances(wallet_id, &wallet.address).await?;
     let count = balances.len();
 
     // Bulk update in database

@@ -1,8 +1,8 @@
 //! Transactions service — monitors on-chain transactions for the configured wallet.
 
+use crate::chains::solana::solana_sdk::signer::Signer;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
-use solana_sdk::signer::Signer;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
@@ -37,7 +37,7 @@ impl Service for TransactionsService {
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         // Get wallet pubkey from config
-        let wallet_pubkey = crate::config::get_wallet_pubkey().map_err(|e| {
+        let wallet_pubkey = crate::chains::solana::accounts::configured_pubkey().map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Start {
                 service: "transactions".to_owned(),
                 message: format!("Failed to load wallet: {e}"),

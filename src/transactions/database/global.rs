@@ -6,7 +6,10 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
-use crate::logger::{self, LogTag};
+use crate::{
+    chains::ChainId,
+    logger::{self, LogTag},
+};
 
 use super::operations::TransactionDatabase;
 
@@ -20,7 +23,7 @@ static GLOBAL_TRANSACTION_DATABASE: LazyLock<Arc<Mutex<Option<Arc<TransactionDat
 
 /// Initialize global transaction database
 pub async fn init_transaction_database() -> Result<Arc<TransactionDatabase>, String> {
-    let db = TransactionDatabase::new().await?;
+    let db = TransactionDatabase::new(ChainId::Solana).await?;
     let db_arc = Arc::new(db);
 
     let mut global = GLOBAL_TRANSACTION_DATABASE.lock().await;

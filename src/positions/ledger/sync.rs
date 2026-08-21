@@ -665,7 +665,7 @@ pub async fn sync_wallet_history() -> Result<SyncSummary, String> {
     // On-chain balances win over anything we inferred. A failure here is not fatal: the
     // reduced rounds are still the best truth we have, they simply keep their observed
     // balances (and `reconcile_with_wallet` is what would have flagged a mismatch).
-    let holdings = match crate::ata_operations::get_all_token_accounts(&wallet_address).await {
+    let holdings = match crate::utils::get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
             logger::warning(

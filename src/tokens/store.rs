@@ -1,5 +1,6 @@
 //! Token store — central in-memory store for all discovered tokens with thread-safe access.
 
+use crate::chains::ChainId;
 use crate::tokens::database;
 use crate::tokens::types::{DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult};
 use std::collections::HashMap;
@@ -43,7 +44,7 @@ struct TokenEntry {
 
 struct TokenStore {
     ttl: Duration,
-    entries: RwLock<HashMap<String, TokenEntry>>,
+    entries: RwLock<HashMap<(ChainId, String), TokenEntry>>,
 }
 
 impl TokenStore {
@@ -54,12 +55,12 @@ impl TokenStore {
         }
     }
 
-    fn get(&self, mint: &str) -> Option<Token> {
+    fn get(&self, chain: ChainId, mint: &str) -> Option<Token> {
         let mut stale_marker: Option<Instant> = None;
 
         {
             let guard = self.entries.read().expect("token store poisoned");
-            let entry = match guard.get(mint) {
+            let entry = match guard.get(&(chain, mint.to_owned())) {
                 Some(entry) => entry,
                 None => return None,
             };
@@ -73,11 +74,11 @@ impl TokenStore {
 
         if let Some(expected_refreshed_at) = stale_marker {
             let mut guard = self.entries.write().expect("token store poisoned");
-            if let Some(entry) = guard.get(mint) {
+            if let Some(entry) = guard.get(&(chain, mint.to_owned())) {
                 let is_same_entry = entry.refreshed_at == expected_refreshed_at;
                 let still_expired = entry.refreshed_at.elapsed() > self.ttl;
                 if is_same_entry && still_expired {
-                    guard.remove(mint);
+                    guard.remove(&(chain, mint.to_owned()));
                 }
             }
         }
@@ -85,10 +86,10 @@ impl TokenStore {
         None
     }
 
-    fn set(&self, token: Token) {
+    fn set(&self, chain: ChainId, token: Token) {
         let mut guard = self.entries.write().expect("token store poisoned");
         guard.insert(
-            token.mint.clone(),
+            (chain, token.mint.clone()),
             TokenEntry {
                 token,
                 refreshed_at: Instant::now(),
@@ -96,16 +97,22 @@ impl TokenStore {
         );
     }
 
-    fn invalidate(&self, mint: &str) {
+    fn invalidate(&self, chain: ChainId, mint: &str) {
         let mut guard = self.entries.write().expect("token store poisoned");
-        guard.remove(mint);
+        guard.remove(&(chain, mint.to_owned()));
     }
 }
 
 static TOKEN_STORE: LazyLock<TokenStore> =
     LazyLock::new(|| TokenStore::new(Duration::from_secs(TOKEN_SNAPSHOT_TTL_SECS)));
 
-static DEXSCREENER_CACHE: LazyLock<moka::sync::Cache<String, DexScreenerData>> =
+type CacheKey = (ChainId, String);
+
+fn cache_key(chain: ChainId, mint: &str) -> CacheKey {
+    (chain, mint.to_owned())
+}
+
+static DEXSCREENER_CACHE: LazyLock<moka::sync::Cache<CacheKey, DexScreenerData>> =
     LazyLock::new(|| {
         moka::sync::Cache::builder()
             .max_capacity(MARKET_CACHE_CAPACITY)
@@ -113,7 +120,7 @@ static DEXSCREENER_CACHE: LazyLock<moka::sync::Cache<String, DexScreenerData>> =
             .build()
     });
 
-static GECKOTERMINAL_CACHE: LazyLock<moka::sync::Cache<String, GeckoTerminalData>> =
+static GECKOTERMINAL_CACHE: LazyLock<moka::sync::Cache<CacheKey, GeckoTerminalData>> =
     LazyLock::new(|| {
         moka::sync::Cache::builder()
             .max_capacity(MARKET_CACHE_CAPACITY)
@@ -121,7 +128,7 @@ static GECKOTERMINAL_CACHE: LazyLock<moka::sync::Cache<String, GeckoTerminalData
             .build()
     });
 
-static RUGCHECK_CACHE: LazyLock<moka::sync::Cache<String, RugcheckData>> = LazyLock::new(|| {
+static RUGCHECK_CACHE: LazyLock<moka::sync::Cache<CacheKey, RugcheckData>> = LazyLock::new(|| {
     moka::sync::Cache::builder()
         .max_capacity(SECURITY_CACHE_CAPACITY)
         .time_to_live(Duration::from_secs(RUGCHECK_TTL_SECS))
@@ -129,13 +136,13 @@ static RUGCHECK_CACHE: LazyLock<moka::sync::Cache<String, RugcheckData>> = LazyL
 });
 
 /// Retrieve cached DexScreener data for a token mint
-pub fn get_cached_dexscreener(mint: &str) -> Option<DexScreenerData> {
-    DEXSCREENER_CACHE.get(&mint.to_string())
+pub fn get_cached_dexscreener(chain: ChainId, mint: &str) -> Option<DexScreenerData> {
+    DEXSCREENER_CACHE.get(&cache_key(chain, mint))
 }
 
 /// Cache DexScreener data for a token mint
-pub fn store_dexscreener(mint: &str, data: &DexScreenerData) {
-    DEXSCREENER_CACHE.insert(mint.to_string(), data.clone());
+pub fn store_dexscreener(chain: ChainId, mint: &str, data: &DexScreenerData) {
+    DEXSCREENER_CACHE.insert(cache_key(chain, mint), data.clone());
 }
 
 /// Get DexScreener cache usage metrics
@@ -155,13 +162,13 @@ pub fn dexscreener_cache_size() -> usize {
 }
 
 /// Retrieve cached GeckoTerminal data for a token mint
-pub fn get_cached_geckoterminal(mint: &str) -> Option<GeckoTerminalData> {
-    GECKOTERMINAL_CACHE.get(&mint.to_string())
+pub fn get_cached_geckoterminal(chain: ChainId, mint: &str) -> Option<GeckoTerminalData> {
+    GECKOTERMINAL_CACHE.get(&cache_key(chain, mint))
 }
 
 /// Cache GeckoTerminal data for a token mint
-pub fn store_geckoterminal(mint: &str, data: &GeckoTerminalData) {
-    GECKOTERMINAL_CACHE.insert(mint.to_string(), data.clone());
+pub fn store_geckoterminal(chain: ChainId, mint: &str, data: &GeckoTerminalData) {
+    GECKOTERMINAL_CACHE.insert(cache_key(chain, mint), data.clone());
 }
 
 /// Get GeckoTerminal cache usage metrics
@@ -181,13 +188,13 @@ pub fn geckoterminal_cache_size() -> usize {
 }
 
 /// Retrieve cached Rugcheck data for a token mint
-pub fn get_cached_rugcheck(mint: &str) -> Option<RugcheckData> {
-    RUGCHECK_CACHE.get(&mint.to_string())
+pub fn get_cached_rugcheck(chain: ChainId, mint: &str) -> Option<RugcheckData> {
+    RUGCHECK_CACHE.get(&cache_key(chain, mint))
 }
 
 /// Cache Rugcheck data for a token mint
-pub fn store_rugcheck(mint: &str, data: &RugcheckData) {
-    RUGCHECK_CACHE.insert(mint.to_string(), data.clone());
+pub fn store_rugcheck(chain: ChainId, mint: &str, data: &RugcheckData) {
+    RUGCHECK_CACHE.insert(cache_key(chain, mint), data.clone());
 }
 
 /// Get Rugcheck cache usage metrics
@@ -207,36 +214,36 @@ pub fn rugcheck_cache_size() -> usize {
 }
 
 /// Retrieve a cached assembled token snapshot
-pub fn get_cached_token(mint: &str) -> Option<Token> {
-    TOKEN_STORE.get(mint)
+pub fn get_cached_token(chain: ChainId, mint: &str) -> Option<Token> {
+    TOKEN_STORE.get(chain, mint)
 }
 
 /// Cache an assembled token snapshot
-pub fn store_token_snapshot(token: Token) {
-    TOKEN_STORE.set(token);
+pub fn store_token_snapshot(chain: ChainId, token: Token) {
+    TOKEN_STORE.set(chain, token);
 }
 
 /// Remove a token snapshot from the cache
-pub fn invalidate_token_snapshot(mint: &str) {
-    TOKEN_STORE.invalidate(mint);
+pub fn invalidate_token_snapshot(chain: ChainId, mint: &str) {
+    TOKEN_STORE.invalidate(chain, mint);
 }
 
 /// Rebuild and cache a token snapshot from database
-pub async fn refresh_token_snapshot(mint: &str) -> TokenResult<Option<Token>> {
+pub async fn refresh_token_snapshot(chain: ChainId, mint: &str) -> TokenResult<Option<Token>> {
     let token = database::get_full_token_async(mint).await?;
     match token.clone() {
-        Some(snapshot) => store_token_snapshot(snapshot),
-        None => invalidate_token_snapshot(mint),
+        Some(snapshot) => store_token_snapshot(chain, snapshot),
+        None => invalidate_token_snapshot(chain, mint),
     }
     Ok(token)
 }
 
 /// Get a full token, using cache if available or rebuilding from database
-pub async fn get_full_token_async(mint: &str) -> TokenResult<Option<Token>> {
-    if let Some(token) = get_cached_token(mint) {
+pub async fn get_full_token_async(chain: ChainId, mint: &str) -> TokenResult<Option<Token>> {
+    if let Some(token) = get_cached_token(chain, mint) {
         return Ok(Some(token));
     }
-    refresh_token_snapshot(mint).await
+    refresh_token_snapshot(chain, mint).await
 }
 
 /// Invalidate all DexScreener and GeckoTerminal cache entries

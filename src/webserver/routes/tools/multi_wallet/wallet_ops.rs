@@ -4,8 +4,8 @@
 
 use axum::{http::StatusCode, response::Response, Json};
 
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::tools::multi_wallet::{execute_consolidation, ConsolidateConfig};
 use crate::wallets;
 use crate::webserver::utils::{error_response, success_response};

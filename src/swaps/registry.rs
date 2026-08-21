@@ -1,5 +1,11 @@
 //! Router Registry - Manages all available swap routers
 //! Provides router discovery, fallback chains, and global access
+//!
+//! Chain-neutral: this registry holds `Arc<dyn SwapRouter>` injected by the
+//! application composition root (`src/run/services.rs`, via
+//! `set_router_factory`) — it never imports `crate::chains::solana`. The
+//! concrete Solana router set lives in
+//! `crate::chains::solana::swaps::routers::build_routers`.
 
 use crate::swaps::router::SwapRouter;
 use std::sync::Arc;
@@ -16,19 +22,11 @@ pub struct RouterRegistry {
 }
 
 impl RouterRegistry {
-    /// Create registry with all routers
-    /// Add new routers here - this is the ONLY place that needs changing
-    pub fn new() -> Self {
-        use crate::swaps::routers::{GmgnRouter, JupiterRouter, RaydiumRouter};
-
-        Self {
-            routers: vec![
-                Arc::new(JupiterRouter::new()),
-                Arc::new(GmgnRouter::new()),
-                Arc::new(RaydiumRouter::new()),
-                // Add new routers here - ONLY change needed to add router
-            ],
-        }
+    /// Create a registry from an already-built router set. Chain selection
+    /// happens at the call site (the composition root's registered factory),
+    /// not here.
+    pub fn new(routers: Vec<Arc<dyn SwapRouter>>) -> Self {
+        Self { routers }
     }
 
     /// Get all enabled routers
@@ -84,8 +82,24 @@ impl RouterRegistry {
 /// Global registry instance (lazy initialized)
 static REGISTRY: OnceLock<RouterRegistry> = OnceLock::new();
 
+/// Factory that builds the concrete router set, registered once by the
+/// application composition root before any swap activity can occur.
+static ROUTER_FACTORY: OnceLock<fn() -> Vec<Arc<dyn SwapRouter>>> = OnceLock::new();
+
+/// Register the chain-owned router factory. Must be called once during boot
+/// (see `crate::run::services::register_all_services`) before `get_registry()`
+/// is ever called.
+pub fn set_router_factory(factory: fn() -> Vec<Arc<dyn SwapRouter>>) {
+    let _ = ROUTER_FACTORY.set(factory);
+}
+
 /// Get global router registry
-/// Initializes on first access
+/// Initializes on first access, using the registered router factory.
 pub fn get_registry() -> &'static RouterRegistry {
-    REGISTRY.get_or_init(|| RouterRegistry::new())
+    REGISTRY.get_or_init(|| {
+        let factory = ROUTER_FACTORY
+            .get()
+            .expect("swaps::registry::set_router_factory must be called before get_registry()");
+        RouterRegistry::new(factory())
+    })
 }

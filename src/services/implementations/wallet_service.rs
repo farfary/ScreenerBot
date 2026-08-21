@@ -1,5 +1,6 @@
 //! Wallet service — monitors wallet balances, token holdings, and flow tracking.
 
+use crate::errors::ServiceError;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -26,8 +27,22 @@ impl Service for WalletService {
         crate::global::is_initialization_complete()
     }
 
+    // Opens the wallet-monitor database (and flips it readable-ready) before
+    // the service is allowed to start, so the webserver never has to guess
+    // whether "no snapshot yet" is startup or a real failure — see
+    // `crate::webserver::snapshot::collectors::collect_wallet_snapshot`.
+    // `initialize_wallet_database()` is idempotent, so this is the one path
+    // even though `start_wallet_monitoring_service` also calls it as a
+    // belt-and-suspenders guard for the monitoring loop itself.
     async fn initialize(&mut self) -> crate::Result<()> {
-        Ok(())
+        crate::wallet::initialize_wallet_database()
+            .await
+            .map_err(|message| {
+                crate::Error::Service(ServiceError::Initialize {
+                    service: self.name().to_owned(),
+                    message,
+                })
+            })
     }
 
     async fn start(
@@ -41,7 +56,11 @@ impl Service for WalletService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        ServiceHealth::Healthy
+        if crate::wallet::is_wallet_database_ready() {
+            ServiceHealth::Healthy
+        } else {
+            ServiceHealth::Starting
+        }
     }
 
     async fn metrics(&self) -> ServiceMetrics {

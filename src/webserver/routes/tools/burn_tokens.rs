@@ -1,19 +1,14 @@
 //! Burn tokens handlers
 
 use axum::{http::StatusCode, response::Response, Json};
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signer::Signer;
-use solana_sdk::transaction::Transaction;
-use spl_token::instruction as spl_instruction;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::time::Duration;
 
-use crate::constants::SOL_MINT;
+use crate::chains::solana::assets::burn_configured_wallet_token;
+use crate::chains::solana::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::tokens::decimals;
 use crate::utils::{get_all_token_accounts, get_wallet_address};
 use crate::webserver::utils::{error_response, success_response};
@@ -232,7 +227,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         );
     }
 
-    // Get wallet address and keypair
+    // Get wallet address
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
@@ -240,18 +235,6 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallet address",
-                Some(&e.to_string()),
-            );
-        }
-    };
-
-    let wallet_keypair = match crate::config::get_wallet_keypair() {
-        Ok(kp) => kp,
-        Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "KEYPAIR_ERROR",
-                "Failed to load wallet keypair",
                 Some(&e.to_string()),
             );
         }
@@ -281,7 +264,6 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         .map(|acc| (acc.mint.clone(), acc))
         .collect();
 
-    let rpc_client = get_rpc_client();
     let mut results: Vec<BurnResult> = Vec::new();
     let mut successful = 0;
     let mut failed = 0;
@@ -339,105 +321,17 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
             continue;
         }
 
-        // Parse addresses
-        let wallet_pubkey = match Pubkey::from_str(&wallet_address) {
-            Ok(pk) => pk,
-            Err(e) => {
-                results.push(BurnResult {
-                    mint: mint.clone(),
-                    success: false,
-                    signature: None,
-                    error: Some(format!("Invalid wallet address: {e}")),
-                });
-                failed += 1;
-                continue;
-            }
-        };
-
-        let mint_pubkey = match Pubkey::from_str(mint) {
-            Ok(pk) => pk,
-            Err(e) => {
-                results.push(BurnResult {
-                    mint: mint.clone(),
-                    success: false,
-                    signature: None,
-                    error: Some(format!("Invalid mint address: {e}")),
-                });
-                failed += 1;
-                continue;
-            }
-        };
-
-        let ata_pubkey = match Pubkey::from_str(&account.account) {
-            Ok(pk) => pk,
-            Err(e) => {
-                results.push(BurnResult {
-                    mint: mint.clone(),
-                    success: false,
-                    signature: None,
-                    error: Some(format!("Invalid ATA address: {e}")),
-                });
-                failed += 1;
-                continue;
-            }
-        };
-
-        // Determine token program
-        let token_program_id = if account.is_token_2022 {
-            spl_token_2022::id()
-        } else {
-            spl_token::id()
-        };
-
-        // Create burn instruction
-        let burn_instruction = match spl_instruction::burn(
-            &token_program_id,
-            &ata_pubkey,
-            &mint_pubkey,
-            &wallet_pubkey,
-            &[&wallet_pubkey],
+        // Build, sign and submit the burn — resolving and using the
+        // configured wallet's keypair happens inside crate::chains::solana;
+        // this handler never sees it.
+        match burn_configured_wallet_token(
+            &wallet_address,
+            &account.account,
+            mint,
             account.balance,
-        ) {
-            Ok(ix) => ix,
-            Err(e) => {
-                results.push(BurnResult {
-                    mint: mint.clone(),
-                    success: false,
-                    signature: None,
-                    error: Some(format!("Failed to create burn instruction: {e}")),
-                });
-                failed += 1;
-                continue;
-            }
-        };
-
-        // Get recent blockhash
-        let recent_blockhash = match rpc_client.get_latest_blockhash().await {
-            Ok(bh) => bh,
-            Err(e) => {
-                results.push(BurnResult {
-                    mint: mint.clone(),
-                    success: false,
-                    signature: None,
-                    error: Some(format!("Failed to get blockhash: {e}")),
-                });
-                failed += 1;
-                continue;
-            }
-        };
-
-        // Create and sign transaction
-        let transaction = Transaction::new_signed_with_payer(
-            &[burn_instruction],
-            Some(&wallet_pubkey),
-            &[&wallet_keypair],
-            recent_blockhash,
-        );
-
-        // Send and confirm transaction
-        match rpc_client
-            .send_and_confirm_signed_transaction(&transaction)
-            .await
+            account.is_token_2022,
+        )
+        .await
         {
             Ok(signature) => {
                 logger::info(
@@ -450,7 +344,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 results.push(BurnResult {
                     mint: mint.clone(),
                     success: true,
-                    signature: Some(signature.to_string()),
+                    signature: Some(signature),
                     error: None,
                 });
                 successful += 1;

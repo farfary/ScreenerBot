@@ -7,8 +7,8 @@
 
 mod common;
 
+use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::transactions::Subject;
-use solana_sdk::pubkey::Pubkey;
 
 #[test]
 fn address_matches_the_pubkeys_base58_string() {

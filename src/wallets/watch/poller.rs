@@ -6,9 +6,8 @@
 //! memory across ticks; a restart may re-page from the durable cursor, but cannot
 //! skip signatures.
 
-use solana_sdk::pubkey::Pubkey;
-
-use crate::transactions::fetcher::TransactionFetcher;
+use crate::chains::solana::solana_sdk::pubkey::Pubkey;
+use crate::chains::solana::transactions::fetcher::TransactionFetcher;
 
 /// Signatures per RPC page.
 pub const PAGE_SIZE: usize = 100;

@@ -12,6 +12,7 @@ use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{TokenError, TokenResult};
 use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
+use rusqlite::params;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -222,7 +223,11 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
     let conn = db.conn()?;
 
     let total_count: usize = conn
-        .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM blacklist WHERE chain_id = ?1",
+            params![db.chain_id()],
+            |row| row.get(0),
+        )
         .unwrap_or_default();
 
     let mut authority_mint_count = 0;
@@ -232,11 +237,11 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
     let mut non_authority_breakdown: HashMap<String, usize> = HashMap::new();
 
     let mut stmt = conn
-        .prepare("SELECT reason, source FROM blacklist")
+        .prepare("SELECT reason, source FROM blacklist WHERE chain_id = ?1")
         .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
     let reasons = stmt
-        .query_map([], |row| {
+        .query_map(params![db.chain_id()], |row| {
             let reason: String = row.get(0)?;
             let source: String = row.get(1)?;
             Ok((reason, source))

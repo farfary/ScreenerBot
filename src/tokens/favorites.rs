@@ -47,7 +47,11 @@ pub struct UpdateFavoriteRequest {
 // =============================================================================
 
 /// Add a token to favorites
-pub fn add_favorite(conn: &Connection, request: &AddFavoriteRequest) -> TokenResult<FavoriteToken> {
+pub fn add_favorite(
+    conn: &Connection,
+    chain_id: &str,
+    request: &AddFavoriteRequest,
+) -> TokenResult<FavoriteToken> {
     // Reject blank mints up front — an empty-mint favorite is unaddressable (it
     // can never map to a real token and can't be deleted by mint afterwards).
     if request.mint.trim().is_empty() {
@@ -56,9 +60,9 @@ pub fn add_favorite(conn: &Connection, request: &AddFavoriteRequest) -> TokenRes
 
     conn.execute(
         r#"
-        INSERT INTO token_favorites (mint, name, symbol, logo_url, notes, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now'))
-        ON CONFLICT(mint) DO UPDATE SET
+        INSERT INTO token_favorites (chain_id, mint, name, symbol, logo_url, notes, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))
+        ON CONFLICT(chain_id, mint) DO UPDATE SET
             name = COALESCE(excluded.name, token_favorites.name),
             symbol = COALESCE(excluded.symbol, token_favorites.symbol),
             logo_url = COALESCE(excluded.logo_url, token_favorites.logo_url),
@@ -66,7 +70,7 @@ pub fn add_favorite(conn: &Connection, request: &AddFavoriteRequest) -> TokenRes
             updated_at = datetime('now')
         "#,
         params![
-            request.mint,
+            chain_id, request.mint,
             request.name,
             request.symbol,
             request.logo_url,
@@ -76,26 +80,29 @@ pub fn add_favorite(conn: &Connection, request: &AddFavoriteRequest) -> TokenRes
     .map_err(|e| TokenError::Database(format!("Failed to add favorite: {e}")))?;
 
     // Fetch the newly created/updated favorite
-    get_favorite_internal(&conn, &request.mint)?
+    get_favorite_internal(&conn, chain_id, &request.mint)?
         .ok_or_else(|| TokenError::Database("Failed to retrieve favorite after insert".to_owned()))
 }
 
 /// Remove a token from favorites
-pub fn remove_favorite(conn: &Connection, mint: &str) -> TokenResult<bool> {
+pub fn remove_favorite(conn: &Connection, chain_id: &str, mint: &str) -> TokenResult<bool> {
     let rows_affected = conn
-        .execute("DELETE FROM token_favorites WHERE mint = ?1", params![mint])
+        .execute(
+            "DELETE FROM token_favorites WHERE chain_id = ?1 AND mint = ?2",
+            params![chain_id, mint],
+        )
         .map_err(|e| TokenError::Database(format!("Failed to remove favorite: {e}")))?;
 
     Ok(rows_affected > 0)
 }
 
 /// Get all favorites ordered by creation date (newest first)
-pub fn get_favorites(conn: &Connection) -> TokenResult<Vec<FavoriteToken>> {
+pub fn get_favorites(conn: &Connection, chain_id: &str) -> TokenResult<Vec<FavoriteToken>> {
     // Self-heal: purge any corrupt rows with a blank mint (legacy bad data that
     // can't be removed by mint and would otherwise show as an unremovable row).
     let _ = conn.execute(
-        "DELETE FROM token_favorites WHERE mint IS NULL OR TRIM(mint) = ''",
-        [],
+        "DELETE FROM token_favorites WHERE chain_id = ?1 AND (mint IS NULL OR TRIM(mint) = '')",
+        params![chain_id],
     );
 
     let mut stmt = conn
@@ -103,14 +110,14 @@ pub fn get_favorites(conn: &Connection) -> TokenResult<Vec<FavoriteToken>> {
             r#"
             SELECT id, mint, name, symbol, logo_url, notes, created_at, updated_at
             FROM token_favorites
-            WHERE mint IS NOT NULL AND TRIM(mint) != ''
+            WHERE chain_id = ?1 AND mint IS NOT NULL AND TRIM(mint) != ''
             ORDER BY created_at DESC
             "#,
         )
         .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
 
     let favorites = stmt
-        .query_map([], |row| {
+        .query_map(params![chain_id], |row| {
             Ok(FavoriteToken {
                 id: row.get(0)?,
                 mint: row.get(1)?,
@@ -130,19 +137,23 @@ pub fn get_favorites(conn: &Connection) -> TokenResult<Vec<FavoriteToken>> {
 }
 
 /// Get a single favorite by mint address (internal helper, conn already locked)
-fn get_favorite_internal(conn: &Connection, mint: &str) -> TokenResult<Option<FavoriteToken>> {
+fn get_favorite_internal(
+    conn: &Connection,
+    chain_id: &str,
+    mint: &str,
+) -> TokenResult<Option<FavoriteToken>> {
     let mut stmt = conn
         .prepare(
             r#"
             SELECT id, mint, name, symbol, logo_url, notes, created_at, updated_at
             FROM token_favorites
-            WHERE mint = ?1
+            WHERE chain_id = ?1 AND mint = ?2
             "#,
         )
         .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
 
     let favorite = stmt
-        .query_row(params![mint], |row| {
+        .query_row(params![chain_id, mint], |row| {
             Ok(FavoriteToken {
                 id: row.get(0)?,
                 mint: row.get(1)?,
@@ -161,13 +172,18 @@ fn get_favorite_internal(conn: &Connection, mint: &str) -> TokenResult<Option<Fa
 }
 
 /// Get a single favorite by mint address
-pub fn get_favorite(conn: &Connection, mint: &str) -> TokenResult<Option<FavoriteToken>> {
-    get_favorite_internal(&conn, mint)
+pub fn get_favorite(
+    conn: &Connection,
+    chain_id: &str,
+    mint: &str,
+) -> TokenResult<Option<FavoriteToken>> {
+    get_favorite_internal(&conn, chain_id, mint)
 }
 
 /// Update a favorite's metadata/notes
 pub fn update_favorite(
     conn: &Connection,
+    chain_id: &str,
     mint: &str,
     request: &UpdateFavoriteRequest,
 ) -> TokenResult<Option<FavoriteToken>> {
@@ -190,14 +206,15 @@ pub fn update_favorite(
 
     if updates.is_empty() {
         // No updates provided, just return current favorite
-        return get_favorite_internal(&conn, mint);
+        return get_favorite_internal(&conn, chain_id, mint);
     }
 
     updates.push("updated_at = datetime('now')");
+    values.push(Box::new(chain_id.to_string()));
     values.push(Box::new(mint.to_string()));
 
     let sql = format!(
-        "UPDATE token_favorites SET {} WHERE mint = ?",
+        "UPDATE token_favorites SET {} WHERE chain_id = ? AND mint = ?",
         updates.join(", ")
     );
 
@@ -206,23 +223,27 @@ pub fn update_favorite(
     conn.execute(&sql, params.as_slice())
         .map_err(|e| TokenError::Database(format!("Failed to update favorite: {e}")))?;
 
-    get_favorite_internal(&conn, mint)
+    get_favorite_internal(&conn, chain_id, mint)
 }
 
 /// Check if a token is in favorites
-pub fn is_favorite(conn: &Connection, mint: &str) -> bool {
+pub fn is_favorite(conn: &Connection, chain_id: &str, mint: &str) -> bool {
     conn.query_row(
-        "SELECT 1 FROM token_favorites WHERE mint = ?1",
-        params![mint],
+        "SELECT 1 FROM token_favorites WHERE chain_id = ?1 AND mint = ?2",
+        params![chain_id, mint],
         |_| Ok(()),
     )
     .is_ok()
 }
 
 /// Get count of favorites
-pub fn get_favorites_count(conn: &Connection) -> TokenResult<usize> {
+pub fn get_favorites_count(conn: &Connection, chain_id: &str) -> TokenResult<usize> {
     let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM token_favorites", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM token_favorites WHERE chain_id = ?1",
+            params![chain_id],
+            |row| row.get(0),
+        )
         .map_err(|e| TokenError::Database(format!("Failed to count favorites: {e}")))?;
 
     Ok(count as usize)
@@ -239,7 +260,7 @@ pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<Favo
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
-        add_favorite(&conn, &request)
+        add_favorite(&conn, db.chain_id(), &request)
     })
     .await
     .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
@@ -252,7 +273,7 @@ pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
-        remove_favorite(&conn, &mint)
+        remove_favorite(&conn, db.chain_id(), &mint)
     })
     .await
     .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
@@ -265,7 +286,7 @@ pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
-        get_favorites(&conn)
+        get_favorites(&conn, db.chain_id())
     })
     .await
     .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
@@ -278,7 +299,7 @@ pub async fn get_favorite_async(mint: String) -> TokenResult<Option<FavoriteToke
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
-        get_favorite(&conn, &mint)
+        get_favorite(&conn, db.chain_id(), &mint)
     })
     .await
     .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
@@ -294,7 +315,7 @@ pub async fn update_favorite_async(
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
-        update_favorite(&conn, &mint, &request)
+        update_favorite(&conn, db.chain_id(), &mint, &request)
     })
     .await
     .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
@@ -307,7 +328,7 @@ pub async fn is_favorite_async(mint: String) -> bool {
     };
 
     tokio::task::spawn_blocking(move || match db.conn() {
-        Ok(conn) => is_favorite(&conn, &mint),
+        Ok(conn) => is_favorite(&conn, db.chain_id(), &mint),
         Err(_) => false,
     })
     .await
@@ -321,7 +342,7 @@ pub async fn get_favorites_count_async() -> TokenResult<usize> {
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
-        get_favorites_count(&conn)
+        get_favorites_count(&conn, db.chain_id())
     })
     .await
     .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?

@@ -1,8 +1,8 @@
 //! Initialization route types — request/response structs for onboarding endpoints.
 
-use crate::rpc::RpcEndpointTestResult;
+use crate::chains::solana::rpc::RpcEndpointTestResult;
+use crate::chains::solana::solana_sdk::signature::Keypair;
 use serde::{Deserialize, Serialize};
-use solana_sdk::signature::Keypair;
 
 #[derive(Debug, Serialize)]
 pub struct InitializationStatusResponse {

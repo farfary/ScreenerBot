@@ -15,10 +15,12 @@
 //!   poller.rs      # getSignaturesForAddress cursor paging (the HTTP fallback)
 //!   dedupe.rs      # durable per-subject seen-signature set
 //!   recorder.rs    # per-subject persistence policy (§5.4)
-//!   classify.rs    # decoded transaction -> ActivityKind (§6.4)
+//!
+//! Decoded-transaction -> ActivityKind classification (§6.4) is Solana wire
+//! interpretation, so it lives in `crate::chains::solana::wallets::classify`
+//! and is re-exported here for the rest of the watch pipeline.
 //! ```
 
-mod classify;
 mod database;
 mod dedupe;
 mod poller;
@@ -27,7 +29,7 @@ mod service;
 mod source_registry;
 mod types;
 
-pub use classify::classify_transaction_activity;
+pub use crate::chains::solana::wallets::classify::classify_transaction_activity;
 pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp};
 pub use service::subscribe_activity;
 pub use types::{
@@ -39,8 +41,8 @@ use std::sync::{Arc, OnceLock};
 
 use tokio::sync::Notify;
 
-use crate::config::with_config;
 use crate::transactions::types::Subject;
+use crate::{chains::ChainId, config::with_config};
 
 use database::WatchDatabase;
 
@@ -60,7 +62,7 @@ pub async fn start(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>,
     let own_subject =
         Subject::own().map_err(|e| format!("Cannot resolve own wallet for watch service: {e}"))?;
 
-    let db = WatchDatabase::new()?;
+    let db = WatchDatabase::new(ChainId::Solana)?;
     let _ = GLOBAL_WATCH_DB.set(db.clone());
 
     Ok(tokio::spawn(service::run(shutdown, db, own_subject)))
@@ -214,8 +216,8 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, String> {
 
     let last_signature = db.get_cursor(&target.address).await?;
     let last_activity_at = db.get_cursor_updated_at(&target.address).await?;
-    let subscribed =
-        *crate::rpc::connection_state().borrow() == crate::rpc::ConnectionState::Connected;
+    let subscribed = *crate::chains::solana::rpc::connection_state().borrow()
+        == crate::chains::solana::rpc::ConnectionState::Connected;
 
     Ok(WatchStatus {
         target,

@@ -26,6 +26,8 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(subject)?;
 
         let tx = conn
             .unchecked_transaction()
@@ -33,8 +35,8 @@ impl TransactionDatabase {
 
         for (signature, timestamp) in pending {
             tx.execute(
-                "INSERT OR REPLACE INTO pending_transactions (signature, wallet_address, added_at) VALUES (?1, ?2, ?3)",
-                params![signature, wallet_address, timestamp.to_rfc3339()],
+                "INSERT OR REPLACE INTO pending_transactions (chain_id, signature, wallet_address, added_at) VALUES (?1, ?2, ?3, ?4)",
+                params![chain_id, signature, wallet_address, timestamp.to_rfc3339()],
             )
             .map_err(|e| format!("Failed to save pending transaction: {e}"))?;
         }
@@ -52,15 +54,16 @@ impl TransactionDatabase {
     ) -> Result<HashMap<String, DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let mut stmt = conn
             .prepare(
-                "SELECT signature, added_at FROM pending_transactions WHERE wallet_address = ?1",
+                "SELECT signature, added_at FROM pending_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
             )
             .map_err(|e| format!("Failed to prepare pending transactions query: {e}"))?;
 
         let rows = stmt
-            .query_map(params![wallet_address], |row| {
+            .query_map(params![chain_id, wallet_address], |row| {
                 let signature: String = row.get(0)?;
                 let timestamp_str: String = row.get(1)?;
                 let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
@@ -94,11 +97,12 @@ impl TransactionDatabase {
     ) -> Result<bool, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let affected = conn
             .execute(
-                "DELETE FROM pending_transactions WHERE signature = ?1 AND wallet_address = ?2",
-                params![signature, wallet_address],
+                "DELETE FROM pending_transactions WHERE chain_id = ?1 AND signature = ?2 AND wallet_address = ?3",
+                params![chain_id, signature, wallet_address],
             )
             .map_err(|e| format!("Failed to remove pending transaction: {e}"))?;
 
@@ -109,11 +113,12 @@ impl TransactionDatabase {
     pub async fn get_pending_transactions_count(&self, subject: Subject) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM pending_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![chain_id, wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get pending transactions count: {e}"))?;
@@ -127,18 +132,20 @@ impl TransactionDatabase {
 // =============================================================================
 
 impl TransactionDatabase {
-    /// Load raw transaction JSON blob and deserialize into TransactionDetails (cache-first path)
-    pub async fn get_raw_transaction_details(
+    /// Load the cached raw transaction JSON blob (cache-first path). Returned as a
+    /// generic `Value` -- deserializing it into a chain-specific wire type is the
+    /// caller's job, so this shared persistence layer owns no Solana vendor types.
+    pub async fn get_raw_transaction_json(
         &self,
         signature: &str,
-    ) -> Result<Option<crate::rpc::TransactionDetails>, String> {
+    ) -> Result<Option<serde_json::Value>, String> {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let result: rusqlite::Result<Option<String>> = conn
             .query_row(
-                "SELECT raw_transaction_data FROM raw_transactions WHERE signature = ?1 AND wallet_address = ?2",
-                params![signature, wallet_address],
+                "SELECT raw_transaction_data FROM raw_transactions WHERE chain_id = ?1 AND signature = ?2 AND wallet_address = ?3",
+                params![self.chain.as_str(), signature, wallet_address],
                 |row| row.get(0),
             )
             .optional();
@@ -148,10 +155,10 @@ impl TransactionDatabase {
                 if json_str.trim().is_empty() {
                     return Ok(None);
                 }
-                match serde_json::from_str::<crate::rpc::TransactionDetails>(&json_str) {
-                    Ok(details) => Ok(Some(details)),
+                match serde_json::from_str::<serde_json::Value>(&json_str) {
+                    Ok(value) => Ok(Some(value)),
                     Err(e) => Err(format!(
-                        "Failed to deserialize cached raw transaction for {}: {}",
+                        "Failed to parse cached raw transaction for {}: {}",
                         signature, e
                     )),
                 }
@@ -169,6 +176,7 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let status_str = match &transaction.status {
             TransactionStatus::Pending => "Pending",
@@ -185,10 +193,11 @@ impl TransactionDatabase {
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO raw_transactions
-               (signature, wallet_address, slot, block_time, timestamp, status, success, error_message,
+               (chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message,
                 fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'))"#,
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'))"#,
                 params![
+                    chain_id,
                     transaction.signature,
                     wallet_address,
                     transaction.slot,
@@ -217,6 +226,7 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         // Serialize complex fields as JSON strings
         let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
@@ -252,12 +262,13 @@ impl TransactionDatabase {
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO processed_transactions
-                   (signature, wallet_address, transaction_type, direction, sol_balance_change, token_balance_changes,
+                   (chain_id, signature, wallet_address, transaction_type, direction, sol_balance_change, token_balance_changes,
                     token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info,
                     analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, updated_at)
                  VALUES
-                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, datetime('now'))"#,
+                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, datetime('now'))"#,
                 params![
+                    chain_id,
                     transaction.signature,
                     wallet_address,
                     tx_type,
@@ -307,11 +318,12 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         conn
             .execute(
-                "UPDATE raw_transactions SET status = ?1, success = ?2, error_message = ?3, updated_at = datetime('now') WHERE signature = ?4 AND wallet_address = ?5",
-                params![status, success, error_message, signature, wallet_address]
+                "UPDATE raw_transactions SET status = ?1, success = ?2, error_message = ?3, updated_at = datetime('now') WHERE chain_id = ?4 AND signature = ?5 AND wallet_address = ?6",
+                params![status, success, error_message, chain_id, signature, wallet_address]
             )
             .map_err(|e| format!("Failed to update transaction status: {e}"))?;
 
@@ -332,6 +344,7 @@ impl TransactionDatabase {
     ) -> Result<Option<Transaction>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         // Join raw_transactions with processed_transactions to get full data
         let result = conn.query_row(
@@ -343,9 +356,9 @@ impl TransactionDatabase {
                 p.token_swap_info, p.swap_pnl_info, p.ata_operations, p.token_transfers,
                 p.instruction_info, p.analysis_duration_ms, p.cached_analysis, p.fee_sol, p.sol_delta
             FROM raw_transactions r
-            LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?2
-            WHERE r.signature = ?1 AND r.wallet_address = ?2"#,
-            params![signature, wallet_address],
+            LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?3
+            WHERE r.chain_id = ?1 AND r.signature = ?2 AND r.wallet_address = ?3"#,
+            params![chain_id, signature, wallet_address],
             |row| {
                 let timestamp_str: String = row.get(3)?;
                 let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
@@ -514,11 +527,12 @@ impl TransactionDatabase {
     ) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1 AND success = true AND status != 'Failed'",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM raw_transactions WHERE chain_id = ?1 AND wallet_address = ?2 AND success = true AND status != 'Failed'",
+                params![chain_id, wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get successful transactions count: {e}"))?;
@@ -539,11 +553,12 @@ impl TransactionDatabase {
     ) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1 AND (success = false OR status = 'Failed')",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM raw_transactions WHERE chain_id = ?1 AND wallet_address = ?2 AND (success = false OR status = 'Failed')",
+                params![chain_id, wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get failed transactions count: {e}"))?;
@@ -567,10 +582,10 @@ impl TransactionDatabase {
         let row: Option<(Option<i64>, String)> = conn
             .query_row(
                 "SELECT block_time, timestamp FROM raw_transactions
-                 WHERE wallet_address = ?1
+                 WHERE chain_id = ?1 AND wallet_address = ?2
                  ORDER BY COALESCE(block_time, 0) DESC, timestamp DESC
                  LIMIT 1",
-                params![wallet_address],
+                params![self.chain.as_str(), wallet_address],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()

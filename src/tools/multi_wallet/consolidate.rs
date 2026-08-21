@@ -2,18 +2,16 @@
 //!
 //! Manage and cleanup sub-wallets by consolidating funds back to main wallet.
 
-use std::str::FromStr;
-
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signer::Signer;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
-use crate::wallets::{self, WalletRole, WalletWithKey};
+use crate::wallets::{self, Wallet, WalletRole};
 
-use super::transfer::{close_ata, collect_sol, transfer_token};
+use crate::chains::solana::assets::transfer::{close_ata_for_wallet, transfer_token_for_wallet};
+
+use super::transfer::collect_sol;
 use super::types::{ConsolidateConfig, SessionResult, WalletOpResult};
 
 /// Execute a consolidation operation
@@ -128,21 +126,19 @@ pub async fn execute_consolidation(config: ConsolidateConfig) -> Result<SessionR
 }
 
 /// Load wallets for consolidation
-async fn load_wallets_for_consolidation(
-    config: &ConsolidateConfig,
-) -> Result<Vec<WalletWithKey>, String> {
-    let all_wallets = wallets::get_wallets_with_keys().await?;
+async fn load_wallets_for_consolidation(config: &ConsolidateConfig) -> Result<Vec<Wallet>, String> {
+    let all_wallets = wallets::list_active_wallets().await?;
 
-    let mut selected: Vec<WalletWithKey> = all_wallets
+    let selected: Vec<Wallet> = all_wallets
         .into_iter()
         .filter(|w| {
             // Only secondary wallets
-            if w.wallet.role != WalletRole::Secondary {
+            if w.role != WalletRole::Secondary {
                 return false;
             }
             // Filter by ID if specified
             if let Some(ref ids) = config.wallet_ids {
-                return ids.contains(&w.wallet.id);
+                return ids.contains(&w.id);
             }
             true
         })
@@ -153,14 +149,14 @@ async fn load_wallets_for_consolidation(
 
 /// Transfer all tokens of a specific mint from wallet to main
 async fn transfer_token_to_main(
-    wallet: &WalletWithKey,
+    wallet: &Wallet,
     main_address: &str,
     mint: &str,
     include_token_2022: bool,
 ) -> Option<WalletOpResult> {
     let rpc_client = get_rpc_client();
-    let wallet_id = wallet.wallet.id;
-    let wallet_address = wallet.wallet.address.clone();
+    let wallet_id = wallet.id;
+    let wallet_address = wallet.address.clone();
 
     // Get token balance
     let balance = match rpc_client.get_token_balance(&wallet_address, mint).await {
@@ -172,21 +168,17 @@ async fn transfer_token_to_main(
         return None;
     }
 
-    // Check if Token-2022
-    let mint_pubkey = match Pubkey::from_str(mint) {
-        Ok(p) => p,
-        Err(_) => {
-            return Some(WalletOpResult::failure(
-                wallet_id,
-                wallet_address,
-                "Invalid mint address".to_owned(),
-            ))
-        }
-    };
+    if wallets::validate_address(mint).is_err() {
+        return Some(WalletOpResult::failure(
+            wallet_id,
+            wallet_address,
+            "Invalid mint address".to_owned(),
+        ));
+    }
 
     let is_token_2022 = if include_token_2022 {
         rpc_client
-            .is_token_2022_mint(&mint_pubkey)
+            .is_token_2022_mint_str(mint)
             .await
             .unwrap_or_default()
     } else {
@@ -194,7 +186,7 @@ async fn transfer_token_to_main(
     };
 
     // transfer_token now fetches decimals directly from the mint account
-    match transfer_token(&wallet.keypair, main_address, mint, balance, is_token_2022).await {
+    match transfer_token_for_wallet(wallet_id, main_address, mint, balance, is_token_2022).await {
         Ok(sig) => Some(WalletOpResult::success(
             wallet_id,
             wallet_address,
@@ -207,18 +199,14 @@ async fn transfer_token_to_main(
 }
 
 /// Close all empty ATAs for a wallet
-async fn close_wallet_atas(
-    wallet: &WalletWithKey,
-    include_token_2022: bool,
-) -> Vec<WalletOpResult> {
+async fn close_wallet_atas(wallet: &Wallet, include_token_2022: bool) -> Vec<WalletOpResult> {
     let rpc_client = get_rpc_client();
-    let wallet_id = wallet.wallet.id;
-    let wallet_address = wallet.wallet.address.clone();
+    let wallet_id = wallet.id;
+    let wallet_address = wallet.address.clone();
     let mut results = Vec::new();
 
     // Get all token accounts
-    let owner_pubkey = wallet.keypair.pubkey();
-    let token_accounts = match rpc_client.get_all_token_accounts(&owner_pubkey).await {
+    let token_accounts = match rpc_client.get_all_token_accounts_str(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
             logger::debug(
@@ -244,12 +232,7 @@ async fn close_wallet_atas(
             continue;
         }
 
-        match close_ata(
-            &wallet.keypair,
-            &account_info.mint,
-            account_info.is_token_2022,
-        )
-        .await
+        match close_ata_for_wallet(wallet_id, &account_info.mint, account_info.is_token_2022).await
         {
             Ok(sig) => {
                 // Rent reclaimed is approximately 0.00203 SOL

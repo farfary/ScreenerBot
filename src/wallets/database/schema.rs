@@ -5,8 +5,9 @@
 pub(super) const WALLETS_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS wallets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     name TEXT NOT NULL,
-    address TEXT NOT NULL UNIQUE,
+    address TEXT NOT NULL,
     encrypted_key TEXT NOT NULL,
     nonce TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'secondary',
@@ -14,7 +15,8 @@ CREATE TABLE IF NOT EXISTS wallets (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_used_at TEXT,
     notes TEXT,
-    is_active INTEGER NOT NULL DEFAULT 1
+    is_active INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (chain_id, address)
 );
 "#;
 
@@ -35,7 +37,7 @@ CREATE TABLE IF NOT EXISTS wallet_token_balances (
 "#;
 
 pub(super) const WALLETS_INDEXES: &[&str] = &[
-    "CREATE INDEX IF NOT EXISTS idx_wallets_address ON wallets(address);",
+    "CREATE INDEX IF NOT EXISTS idx_wallets_chain_address ON wallets(chain_id, address);",
     "CREATE INDEX IF NOT EXISTS idx_wallets_role ON wallets(role);",
     "CREATE INDEX IF NOT EXISTS idx_wallets_active ON wallets(is_active, role);",
     "CREATE INDEX IF NOT EXISTS idx_token_balances_wallet ON wallet_token_balances(wallet_id);",

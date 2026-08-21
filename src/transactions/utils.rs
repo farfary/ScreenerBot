@@ -58,12 +58,12 @@ pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 
 /// Global known signatures cache — bounded moka cache with LRU eviction (max 50K entries).
 /// Prevents unbounded growth (was ~2 MB/day with HashSet).
-/// Keyed by `"<subject address>:<signature>"` — see `subject_key`.
+/// Keyed by `"<chain>:<subject address>:<signature>"` — see `subject_key`.
 static GLOBAL_KNOWN_SIGNATURES: LazyLock<moka::sync::Cache<String, ()>> =
     LazyLock::new(|| moka::sync::Cache::builder().max_capacity(50_000).build());
 
 /// Global pending transactions tracking.
-/// Keyed by `"<subject address>:<signature>"` — see `subject_key`.
+/// Keyed by `"<chain>:<subject address>:<signature>"` — see `subject_key`.
 static GLOBAL_PENDING_TRANSACTIONS: LazyLock<Arc<Mutex<HashMap<String, DateTime<Utc>>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
 
@@ -75,7 +75,7 @@ static GLOBAL_PENDING_TRANSACTIONS: LazyLock<Arc<Mutex<HashMap<String, DateTime<
 /// every watched wallet, so the subject has to be part of the key -- otherwise one
 /// wallet's signature would mark another wallet's dedupe entry as already seen.
 fn subject_key(subject: Subject, signature: &str) -> String {
-    format!("{}:{}", subject.address(), signature)
+    format!("{}:{}:{}", subject.chain(), subject.address(), signature)
 }
 
 /// Check if signature is known globally across all managers, for the given subject
@@ -261,8 +261,8 @@ mod tests {
     /// itself instead.
     fn subjects() -> (Subject, Subject) {
         (
-            Subject(solana_sdk::pubkey::Pubkey::new_unique()),
-            Subject(solana_sdk::pubkey::Pubkey::new_unique()),
+            Subject::solana(crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique()),
+            Subject::solana(crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique()),
         )
     }
 

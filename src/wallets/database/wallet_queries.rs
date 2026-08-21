@@ -25,11 +25,11 @@ impl WalletsDatabase {
 
         conn.execute(
             r#"
-            INSERT INTO wallets (name, address, encrypted_key, nonce, role, wallet_type, created_at, notes)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            INSERT INTO wallets (chain_id, name, address, encrypted_key, nonce, role, wallet_type, created_at, notes)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             "#,
             params![
-                name,
+                self.chain.as_str(), name,
                 address,
                 encrypted_key,
                 nonce,
@@ -57,9 +57,9 @@ impl WalletsDatabase {
         conn.query_row(
             r#"
             SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
-            FROM wallets WHERE id = ?1
+            FROM wallets WHERE chain_id = ?1 AND id = ?2
             "#,
-            params![id],
+            params![self.chain.as_str(), id],
             |row| Self::row_to_wallet(row),
         )
         .optional()
@@ -73,9 +73,9 @@ impl WalletsDatabase {
         conn.query_row(
             r#"
             SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
-            FROM wallets WHERE address = ?1
+            FROM wallets WHERE chain_id = ?1 AND address = ?2
             "#,
-            params![address],
+            params![self.chain.as_str(), address],
             |row| Self::row_to_wallet(row),
         )
         .optional()
@@ -89,9 +89,9 @@ impl WalletsDatabase {
         conn.query_row(
             r#"
             SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
-            FROM wallets WHERE role = 'main' AND is_active = 1
+            FROM wallets WHERE chain_id = ?1 AND role = 'main' AND is_active = 1
             "#,
-            [],
+            params![self.chain.as_str()],
             |row| Self::row_to_wallet(row),
         )
         .optional()
@@ -103,8 +103,8 @@ impl WalletsDatabase {
         let conn = self.conn()?;
 
         conn.query_row(
-            "SELECT encrypted_key, nonce FROM wallets WHERE id = ?1 AND is_active = 1",
-            params![id],
+            "SELECT encrypted_key, nonce FROM wallets WHERE chain_id = ?1 AND id = ?2 AND is_active = 1",
+            params![self.chain.as_str(), id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
@@ -116,8 +116,8 @@ impl WalletsDatabase {
         let conn = self.conn()?;
 
         conn.query_row(
-            "SELECT encrypted_key, nonce FROM wallets WHERE role = 'main' AND is_active = 1",
-            [],
+            "SELECT encrypted_key, nonce FROM wallets WHERE chain_id = ?1 AND role = 'main' AND is_active = 1",
+            params![self.chain.as_str()],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
@@ -131,12 +131,12 @@ impl WalletsDatabase {
         let sql = if include_inactive {
             r#"
             SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
-            FROM wallets ORDER BY role = 'main' DESC, created_at DESC
+            FROM wallets WHERE chain_id = ?1 ORDER BY role = 'main' DESC, created_at DESC
             "#
         } else {
             r#"
             SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
-            FROM wallets WHERE is_active = 1 ORDER BY role = 'main' DESC, created_at DESC
+            FROM wallets WHERE chain_id = ?1 AND is_active = 1 ORDER BY role = 'main' DESC, created_at DESC
             "#
         };
 
@@ -145,7 +145,7 @@ impl WalletsDatabase {
             .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let wallets = stmt
-            .query_map([], |row| Self::row_to_wallet(row))
+            .query_map(params![self.chain.as_str()], |row| Self::row_to_wallet(row))
             .map_err(|e| format!("Failed to query wallets: {e}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to collect wallets: {e}"))?;
@@ -161,14 +161,14 @@ impl WalletsDatabase {
             .prepare(
                 r#"
             SELECT id, name, address, role, wallet_type, created_at, last_used_at, notes, is_active
-            FROM wallets WHERE is_active = 1 AND role != 'archive'
+            FROM wallets WHERE chain_id = ?1 AND is_active = 1 AND role != 'archive'
             ORDER BY role = 'main' DESC, created_at DESC
             "#,
             )
             .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let wallets = stmt
-            .query_map([], |row| Self::row_to_wallet(row))
+            .query_map(params![self.chain.as_str()], |row| Self::row_to_wallet(row))
             .map_err(|e| format!("Failed to query wallets: {e}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to collect wallets: {e}"))?;
@@ -186,8 +186,8 @@ impl WalletsDatabase {
 
         // Unset current main wallet
         if let Err(e) = conn.execute(
-            "UPDATE wallets SET role = 'secondary' WHERE role = 'main'",
-            [],
+            "UPDATE wallets SET role = 'secondary' WHERE chain_id = ?1 AND role = 'main'",
+            params![self.chain.as_str()],
         ) {
             let _ = conn.execute("ROLLBACK", []);
             return Err(format!("Failed to unset main wallet: {e}"));
@@ -196,8 +196,8 @@ impl WalletsDatabase {
         // Set new main wallet
         let updated = conn
             .execute(
-                "UPDATE wallets SET role = 'main' WHERE id = ?1 AND is_active = 1",
-                params![id],
+                "UPDATE wallets SET role = 'main' WHERE chain_id = ?1 AND id = ?2 AND is_active = 1",
+                params![self.chain.as_str(), id],
             )
             .map_err(|e| {
                 let _ = conn.execute("ROLLBACK", []);
@@ -248,8 +248,12 @@ impl WalletsDatabase {
             return Ok(());
         }
 
+        values.push(Box::new(self.chain.as_str().to_owned()));
         values.push(Box::new(id));
-        let sql = format!("UPDATE wallets SET {} WHERE id = ?", updates.join(", "));
+        let sql = format!(
+            "UPDATE wallets SET {} WHERE chain_id = ? AND id = ?",
+            updates.join(", ")
+        );
 
         // If changing role to main, wrap in transaction like set_main_wallet does
         if changing_to_main {
@@ -258,8 +262,8 @@ impl WalletsDatabase {
 
             // Unset current main wallet
             if let Err(e) = conn.execute(
-                "UPDATE wallets SET role = 'secondary' WHERE role = 'main'",
-                [],
+                "UPDATE wallets SET role = 'secondary' WHERE chain_id = ?1 AND role = 'main'",
+                params![self.chain.as_str()],
             ) {
                 let _ = conn.execute("ROLLBACK", []);
                 return Err(format!("Failed to unset main: {e}"));
@@ -290,8 +294,8 @@ impl WalletsDatabase {
         // Check if it's the main wallet
         let is_main: bool = conn
             .query_row(
-                "SELECT role = 'main' FROM wallets WHERE id = ?1",
-                params![id],
+                "SELECT role = 'main' FROM wallets WHERE chain_id = ?1 AND id = ?2",
+                params![self.chain.as_str(), id],
                 |row| row.get(0),
             )
             .optional()
@@ -305,8 +309,8 @@ impl WalletsDatabase {
         }
 
         conn.execute(
-            "UPDATE wallets SET is_active = 0, role = 'archive' WHERE id = ?1",
-            params![id],
+            "UPDATE wallets SET is_active = 0, role = 'archive' WHERE chain_id = ?1 AND id = ?2",
+            params![self.chain.as_str(), id],
         )
         .map_err(|e| format!("Failed to archive wallet: {e}"))?;
 
@@ -320,8 +324,8 @@ impl WalletsDatabase {
         // Check if wallet exists and is archived
         let (exists, is_archived): (bool, bool) = conn
             .query_row(
-                "SELECT 1, is_active = 0 FROM wallets WHERE id = ?1",
-                params![id],
+                "SELECT 1, is_active = 0 FROM wallets WHERE chain_id = ?1 AND id = ?2",
+                params![self.chain.as_str(), id],
                 |row| Ok((row.get::<_, i32>(0)? == 1, row.get::<_, bool>(1)?)),
             )
             .optional()
@@ -337,8 +341,8 @@ impl WalletsDatabase {
         }
 
         conn.execute(
-            "UPDATE wallets SET is_active = 1, role = 'secondary' WHERE id = ?1",
-            params![id],
+            "UPDATE wallets SET is_active = 1, role = 'secondary' WHERE chain_id = ?1 AND id = ?2",
+            params![self.chain.as_str(), id],
         )
         .map_err(|e| format!("Failed to restore wallet: {e}"))?;
 
@@ -352,8 +356,8 @@ impl WalletsDatabase {
         // Check if it's the main wallet
         let is_main: bool = conn
             .query_row(
-                "SELECT role = 'main' FROM wallets WHERE id = ?1",
-                params![id],
+                "SELECT role = 'main' FROM wallets WHERE chain_id = ?1 AND id = ?2",
+                params![self.chain.as_str(), id],
                 |row| row.get(0),
             )
             .optional()
@@ -366,8 +370,11 @@ impl WalletsDatabase {
             );
         }
 
-        conn.execute("DELETE FROM wallets WHERE id = ?1", params![id])
-            .map_err(|e| format!("Failed to delete wallet: {e}"))?;
+        conn.execute(
+            "DELETE FROM wallets WHERE chain_id = ?1 AND id = ?2",
+            params![self.chain.as_str(), id],
+        )
+        .map_err(|e| format!("Failed to delete wallet: {e}"))?;
 
         Ok(())
     }
@@ -377,13 +384,17 @@ impl WalletsDatabase {
         let conn = self.conn()?;
 
         let total: u32 = conn
-            .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM wallets WHERE chain_id = ?1",
+                params![self.chain.as_str()],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to count wallets: {e}"))?;
 
         let active: u32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM wallets WHERE is_active = 1",
-                [],
+                "SELECT COUNT(*) FROM wallets WHERE chain_id = ?1 AND is_active = 1",
+                params![self.chain.as_str()],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count active wallets: {e}"))?;
@@ -397,8 +408,8 @@ impl WalletsDatabase {
 
         let count: u32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM wallets WHERE address = ?1",
-                params![address],
+                "SELECT COUNT(*) FROM wallets WHERE chain_id = ?1 AND address = ?2",
+                params![self.chain.as_str(), address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to check wallet existence: {e}"))?;

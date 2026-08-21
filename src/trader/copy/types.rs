@@ -3,6 +3,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::chains::ChainId;
 use crate::trader::policy::ExitPolicyOverrides;
 
 /// Execution mode. Entering `Live` requires the dedicated confirmation-gated mode
@@ -44,6 +45,7 @@ pub enum ExitMode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CopyTask {
     pub id: i64,
+    pub chain: ChainId,
     pub target_address: String,
     pub label: Option<String>,
     pub enabled: bool,
@@ -84,25 +86,31 @@ pub struct CopyTaskInput {
 }
 
 impl CopyTaskInput {
-    pub fn into_task(self, now: DateTime<Utc>) -> Result<CopyTask, CopySkip> {
+    pub fn into_task(self, chain: ChainId, now: DateTime<Utc>) -> Result<CopyTask, CopySkip> {
         if self.mode != CopyMode::Paper {
             return Err(CopySkip::ModeTransitionRequired);
         }
-        self.into_task_with_mode(now, CopyMode::Paper)
+        self.into_task_with_mode(chain, now, CopyMode::Paper)
     }
 
     pub fn into_task_for_update(
         self,
+        chain: ChainId,
         now: DateTime<Utc>,
         current_mode: CopyMode,
     ) -> Result<CopyTask, CopySkip> {
         if self.mode != current_mode {
             return Err(CopySkip::ModeTransitionRequired);
         }
-        self.into_task_with_mode(now, current_mode)
+        self.into_task_with_mode(chain, now, current_mode)
     }
 
-    fn into_task_with_mode(self, now: DateTime<Utc>, mode: CopyMode) -> Result<CopyTask, CopySkip> {
+    fn into_task_with_mode(
+        self,
+        chain: ChainId,
+        now: DateTime<Utc>,
+        mode: CopyMode,
+    ) -> Result<CopyTask, CopySkip> {
         if self.target_address.trim().is_empty()
             || !self.max_sol_per_trade.is_finite()
             || self.max_sol_per_trade <= 0.0
@@ -151,6 +159,7 @@ impl CopyTaskInput {
         }
         Ok(CopyTask {
             id: 0,
+            chain,
             target_address: self.target_address,
             label: self.label,
             enabled: self.enabled,

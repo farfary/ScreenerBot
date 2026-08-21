@@ -19,12 +19,12 @@ impl WalletDatabase {
             .query_row(
                 r#"
             INSERT INTO wallet_snapshots (
-                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol,
+                chain_id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol,
                 total_tokens_count, total_nfts_count
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING id
             "#,
                 params![
-                    snapshot.wallet_address,
+                    self.chain.as_str(), snapshot.wallet_address,
                     snapshot.snapshot_time.to_rfc3339(),
                     snapshot.sol_balance,
                     snapshot.sol_balance_lamports as i64,
@@ -109,11 +109,11 @@ impl WalletDatabase {
                 r#"
             SELECT COALESCE(total_equity_sol, sol_balance)
             FROM wallet_snapshots
-            WHERE datetime(snapshot_time) <= datetime(?1)
+            WHERE chain_id = ?1 AND datetime(snapshot_time) <= datetime(?2)
             ORDER BY snapshot_time DESC
             LIMIT 1
             "#,
-                params![target_time.to_rfc3339()],
+                params![self.chain.as_str(), target_time.to_rfc3339()],
                 |row| row.get(0),
             )
             .optional()
@@ -137,11 +137,12 @@ impl WalletDatabase {
                 r#"
             SELECT strftime('%Y-%m-%d', snapshot_time) AS day, COALESCE(total_equity_sol, sol_balance)
             FROM wallet_snapshots
-            WHERE id IN (
+            WHERE chain_id = ?1 AND id IN (
                 SELECT MAX(id)
                 FROM wallet_snapshots
-                WHERE datetime(snapshot_time) >= datetime(?1)
-                  AND datetime(snapshot_time) < datetime(?2)
+                WHERE chain_id = ?1
+                  AND datetime(snapshot_time) >= datetime(?2)
+                  AND datetime(snapshot_time) < datetime(?3)
                 GROUP BY strftime('%Y-%m-%d', snapshot_time)
             )
             ORDER BY day ASC
@@ -150,9 +151,10 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to prepare daily balances query: {e}"))?;
 
         let rows = stmt
-            .query_map(params![start.to_rfc3339(), end.to_rfc3339()], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
-            })
+            .query_map(
+                params![self.chain.as_str(), start.to_rfc3339(), end.to_rfc3339()],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
+            )
             .map_err(|e| format!("Failed to execute daily balances query: {e}"))?;
 
         let mut result = Vec::new();
@@ -171,10 +173,11 @@ impl WalletDatabase {
                 r#"
             SELECT snapshot_time
             FROM wallet_snapshots
+            WHERE chain_id = ?1
             ORDER BY snapshot_time DESC
             LIMIT 1
             "#,
-                [],
+                params![self.chain.as_str()],
                 |row| row.get(0),
             )
             .optional()

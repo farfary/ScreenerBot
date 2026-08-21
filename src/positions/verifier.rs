@@ -506,7 +506,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             // Convert token amount to integer units with rounding
-            let decimals = match get_decimals(&item.mint).await {
+            let decimals = match get_decimals(crate::chains::ChainId::Solana, &item.mint).await {
                 Some(dec) => dec,
                 None => {
                     return VerificationOutcome::RetryTransient(
@@ -635,7 +635,9 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             };
 
             // Calculate exit amount from transaction
-            let exit_amount = if let Some(decimals) = get_decimals(&item.mint).await {
+            let exit_amount = if let Some(decimals) =
+                get_decimals(crate::chains::ChainId::Solana, &item.mint).await
+            {
                 let scale = (10_f64).powi(decimals as i32);
                 let units = (swap_info.token_amount.abs() * scale).round();
                 units.max(0.0) as u64

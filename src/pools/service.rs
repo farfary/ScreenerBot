@@ -1,23 +1,21 @@
-//! Pool service supervisor - manages the lifecycle of all pool-related tasks
+//! Pool service supervisor - chain-neutral lifecycle for the pool runtime
 //!
-//! This module provides the main entry points for starting and stopping the pool service.
-//! It coordinates all the background tasks needed for price discovery and calculation.
+//! Owns the running flag, shutdown protocol, event recording and the shared
+//! db/cache initialization that every chain's pool runtime needs. The concrete
+//! runtime components (discovery/analyzer/fetcher/calculator) are chain-owned —
+//! for Solana that is `crate::chains::solana::pools::service`. The composition
+//! root (`src/services/implementations/pools_service.rs`) selects that
+//! implementation and passes its `initialize_components`/`clear_components`
+//! functions in here, so this module never imports `crate::chains::solana`.
 
-use super::analyzer::PoolAnalyzer;
-use super::calculator::PriceCalculator;
-use super::discovery::{is_dexscreener_discovery_enabled, PoolDiscovery};
-use super::fetcher::AccountFetcher;
 use super::types::max_watched_tokens;
 use super::{cache, db, PoolError};
-
+use crate::chains::ChainId;
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
-use crate::rpc::get_rpc_client;
 
-use solana_sdk::pubkey::Pubkey;
-use std::collections::HashMap;
-use std::str::FromStr;
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 use std::sync::{Arc, RwLock};
@@ -34,53 +32,22 @@ static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 static GLOBAL_SHUTDOWN_HANDLE: LazyLock<RwLock<Option<Arc<Notify>>>> =
     LazyLock::new(|| RwLock::new(None));
 
-// =============================================================================
-// POOL MONITORING CONFIGURATION
-// =============================================================================
-
 // Debug override for token monitoring (used by debug tools)
 static DEBUG_TOKEN_OVERRIDE: LazyLock<RwLock<Option<Vec<String>>>> =
     LazyLock::new(|| RwLock::new(None));
 
-// Service components (will be initialized when service starts)
-static POOL_DISCOVERY: LazyLock<RwLock<Option<Arc<PoolDiscovery>>>> =
-    LazyLock::new(|| RwLock::new(None));
-static POOL_ANALYZER: LazyLock<RwLock<Option<Arc<PoolAnalyzer>>>> =
-    LazyLock::new(|| RwLock::new(None));
-static ACCOUNT_FETCHER: LazyLock<RwLock<Option<Arc<AccountFetcher>>>> =
-    LazyLock::new(|| RwLock::new(None));
-static PRICE_CALCULATOR: LazyLock<RwLock<Option<Arc<PriceCalculator>>>> =
-    LazyLock::new(|| RwLock::new(None));
-
-// Public accessors for service manager (used by individual service implementations)
-
-/// Get the shared pool discovery component, if initialized.
-pub fn get_pool_discovery() -> Option<Arc<PoolDiscovery>> {
-    POOL_DISCOVERY.read().ok()?.clone()
-}
-
-/// Get the shared account fetcher component, if initialized.
-pub fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
-    ACCOUNT_FETCHER.read().ok()?.clone()
-}
-
-/// Get the shared price calculator component, if initialized.
-pub fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
-    PRICE_CALCULATOR.read().ok()?.clone()
-}
-
-/// Get the shared pool analyzer component, if initialized.
-pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
-    POOL_ANALYZER.read().ok()?.clone()
-}
-
 /// Initialize pool components only (no background tasks)
 ///
-/// This function initializes the pool service components (database, cache, RPC client, components)
-/// without starting any background tasks. Background tasks are now managed by separate services.
+/// Initializes the chain-neutral pool service state (database, cache, shutdown
+/// handle) and then runs `init_chain_components` to bring up the concrete
+/// runtime for whichever chain the composition root selected.
 ///
 /// Returns an error if already initialized or if initialization fails.
-pub async fn initialize_pool_components() -> Result<(), PoolError> {
+pub async fn initialize_pool_components<F, Fut>(init_chain_components: F) -> Result<(), PoolError>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = Result<u32, String>>,
+{
     let (single_pool_mode, dexscreener_enabled, fetch_interval_ms) = with_config(|cfg| {
         (
             cfg.pools.enable_single_pool_mode,
@@ -131,7 +98,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
     logger::info(LogTag::PoolService, "Starting pool service...");
 
     // Initialize database first
-    if let Err(e) = db::initialize_database().await {
+    if let Err(e) = db::initialize_database(ChainId::Solana).await {
         logger::error(
             LogTag::PoolService,
             &format!("Failed to initialize database: {e}"),
@@ -168,9 +135,33 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
         *handle = Some(shutdown.clone());
     }
 
-    // Initialize service components
-    match initialize_service_components().await {
-        Ok(_) => {
+    // Initialize the chain-specific runtime components
+    record_safe(Event::info(
+        EventCategory::System,
+        Some("pool_components_init_start".to_owned()),
+        None,
+        None,
+        serde_json::json!({
+          "dexscreener_enabled": dexscreener_enabled,
+          "action": "component_initialization"
+        }),
+    ))
+    .await;
+
+    match init_chain_components().await {
+        Ok(rpc_urls_count) => {
+            record_safe(Event::info(
+                EventCategory::System,
+                Some("pool_components_initialized".to_owned()),
+                None,
+                None,
+                serde_json::json!({
+                  "components": ["pool_discovery", "pool_analyzer", "account_fetcher", "price_calculator"],
+                  "rpc_urls_count": rpc_urls_count,
+                  "status": "ready"
+                }),
+            ))
+            .await;
             logger::info(
                 LogTag::PoolService,
                 "Service components initialized successfully",
@@ -241,9 +232,16 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
 
 /// Stop the pool service and all background tasks
 ///
-/// This function gracefully shuts down all background tasks and cleans up resources.
-/// It waits for tasks to complete within the specified timeout.
-pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
+/// Gracefully shuts down all background tasks and clears the chain-neutral
+/// state, calling `clear_chain_components` to release the concrete runtime
+/// the composition root selected.
+pub async fn stop_pool_service<F>(
+    timeout_seconds: u64,
+    clear_chain_components: F,
+) -> Result<(), PoolError>
+where
+    F: FnOnce(),
+{
     record_safe(Event::info(
         EventCategory::System,
         Some("pool_service_stop_attempt".to_owned()),
@@ -299,18 +297,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
             if let Ok(mut handle) = GLOBAL_SHUTDOWN_HANDLE.write() {
                 *handle = None;
             }
-            if let Ok(mut discovery) = POOL_DISCOVERY.write() {
-                *discovery = None;
-            }
-            if let Ok(mut analyzer) = POOL_ANALYZER.write() {
-                *analyzer = None;
-            }
-            if let Ok(mut fetcher) = ACCOUNT_FETCHER.write() {
-                *fetcher = None;
-            }
-            if let Ok(mut calculator) = PRICE_CALCULATOR.write() {
-                *calculator = None;
-            }
+            clear_chain_components();
 
             logger::info(LogTag::PoolService, "Pool service stopped successfully");
 
@@ -419,74 +406,6 @@ pub async fn start_helper_tasks(
     handles
 }
 
-/// Initialize all service components
-async fn initialize_service_components() -> Result<(), String> {
-    let dexscreener_enabled = is_dexscreener_discovery_enabled();
-    logger::debug(LogTag::PoolService, "Initializing service components...");
-
-    record_safe(Event::info(
-        EventCategory::System,
-        Some("pool_components_init_start".to_owned()),
-        None,
-        None,
-        serde_json::json!({
-          "dexscreener_enabled": dexscreener_enabled,
-          "action": "component_initialization"
-        }),
-    ))
-    .await;
-
-    if dexscreener_enabled {
-        logger::debug(
-            LogTag::PoolService,
-            "DexScreener discovery enabled (no global init required)",
-        );
-    }
-
-    // Get RPC provider count for logging
-    let rpc_client = get_rpc_client();
-    let rpc_urls_count = rpc_client.provider_count().await;
-
-    // Initialize pool directory (shared between components)
-    let pool_directory = Arc::new(RwLock::new(HashMap::new()));
-
-    // Initialize components in dependency order
-    let pool_discovery = Arc::new(PoolDiscovery::new());
-    let pool_analyzer = Arc::new(PoolAnalyzer::new(pool_directory.clone()));
-    let account_fetcher = Arc::new(AccountFetcher::new(pool_directory.clone()));
-    let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone()));
-
-    // Store components globally using thread-safe RwLock pattern
-    if let Ok(mut discovery) = POOL_DISCOVERY.write() {
-        *discovery = Some(pool_discovery);
-    }
-    if let Ok(mut analyzer) = POOL_ANALYZER.write() {
-        *analyzer = Some(pool_analyzer);
-    }
-    if let Ok(mut fetcher) = ACCOUNT_FETCHER.write() {
-        *fetcher = Some(account_fetcher);
-    }
-    if let Ok(mut calculator) = PRICE_CALCULATOR.write() {
-        *calculator = Some(price_calculator);
-    }
-
-    logger::debug(LogTag::PoolService, "Service components initialized");
-
-    record_safe(Event::info(
-        EventCategory::System,
-        Some("pool_components_initialized".to_owned()),
-        None,
-        None,
-        serde_json::json!({
-          "components": ["pool_discovery", "pool_analyzer", "account_fetcher", "price_calculator"],
-          "rpc_urls_count": rpc_urls_count,
-          "status": "ready"
-        }),
-    ))
-    .await;
-    Ok(())
-}
-
 /// Service health monitor
 async fn run_service_health_monitor(shutdown: Arc<Notify>) {
     logger::info(LogTag::PoolService, "Starting service health monitor");
@@ -534,7 +453,7 @@ async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
             break;
           }
           _ = interval.tick() => {
-            if let Err(e) = db::cleanup_old_entries().await {
+            if let Err(e) = db::cleanup_old_entries(ChainId::Solana).await {
               logger::error(LogTag::PoolService, &format!("Database cleanup failed: {e}"));
             } else {
               logger::info(LogTag::PoolService, "Database cleanup completed successfully");
@@ -562,7 +481,7 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
             cleanup_memory_gaps().await;
 
             // Clean up gapped data from database
-            match db::cleanup_all_gapped_data().await {
+            match db::cleanup_all_gapped_data(ChainId::Solana).await {
               Ok(deleted) => {
                 if deleted > 0 {
                   logger::info(
@@ -619,7 +538,7 @@ async fn warm_cache_for_open_positions() {
     );
 
     // Use the tokens module prefetch to warm pool data cache
-    crate::tokens::prefetch_token_pools(&open_mints).await;
+    crate::tokens::prefetch_token_pools(ChainId::Solana, &open_mints).await;
 
     logger::info(
         LogTag::PoolService,

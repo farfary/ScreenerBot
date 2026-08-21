@@ -44,8 +44,8 @@ impl OhlcvDatabase {
 
         let deleted = conn
             .execute(
-                "DELETE FROM ohlcv_gaps WHERE filled = 1 AND created_at < ?1",
-                params![cutoff],
+                "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND filled = 1 AND created_at < ?2",
+                params![self.chain_id(), cutoff],
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Gap cleanup failed: {e}")))?;
 
@@ -61,9 +61,11 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ohlcv_candles", params![], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM ohlcv_candles WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
 
         Ok(count as usize)
@@ -77,8 +79,8 @@ impl OhlcvDatabase {
 
         let exists: i64 = conn
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM ohlcv_candles WHERE mint = ?1 LIMIT 1)",
-                params![mint],
+                "SELECT EXISTS(SELECT 1 FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2 LIMIT 1)",
+                params![self.chain_id(), mint],
                 |row| row.get(0),
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
@@ -102,7 +104,7 @@ impl OhlcvDatabase {
         for chunk in mints.chunks(CHUNK_SIZE) {
             let placeholders = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
             let query = format!(
-                "SELECT DISTINCT mint FROM ohlcv_candles WHERE mint IN ({})",
+                "SELECT DISTINCT mint FROM ohlcv_candles WHERE chain_id = ? AND mint IN ({})",
                 placeholders
             );
 
@@ -110,10 +112,11 @@ impl OhlcvDatabase {
                 .prepare(&query)
                 .map_err(|e| OhlcvError::DatabaseError(format!("Query prep failed: {e}")))?;
 
-            let params: Vec<&dyn rusqlite::ToSql> = chunk
-                .iter()
-                .map(|mint| mint as &dyn rusqlite::ToSql)
-                .collect();
+            let chain_id = self.chain_id().to_owned();
+            let params: Vec<&dyn rusqlite::ToSql> =
+                std::iter::once(&chain_id as &dyn rusqlite::ToSql)
+                    .chain(chunk.iter().map(|mint| mint as &dyn rusqlite::ToSql))
+                    .collect();
 
             let rows = stmt
                 .query_map(params_from_iter(params.iter().copied()), |row| {
@@ -138,9 +141,11 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ohlcv_pools", params![], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM ohlcv_pools WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
 
         Ok(count as usize)
@@ -154,8 +159,8 @@ impl OhlcvDatabase {
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(DISTINCT mint) FROM ohlcv_monitor_config WHERE is_active = 1",
-                params![],
+                "SELECT COUNT(DISTINCT mint) FROM ohlcv_monitor_config WHERE chain_id = ?1 AND is_active = 1",
+                params![self.chain_id()],
                 |row| row.get(0),
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
@@ -171,8 +176,8 @@ impl OhlcvDatabase {
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM ohlcv_gaps WHERE filled = ?1",
-                params![filled as i32],
+                "SELECT COUNT(*) FROM ohlcv_gaps WHERE chain_id = ?1 AND filled = ?2",
+                params![self.chain_id(), filled as i32],
                 |row| row.get(0),
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
@@ -216,30 +221,31 @@ impl OhlcvDatabase {
                 COALESCE(p.pool_count, 0) as pool_count
             FROM ohlcv_monitor_config m
             LEFT JOIN (
-                SELECT mint, COUNT(*) as candle_count, 
+                SELECT chain_id, mint, COUNT(*) as candle_count,
                        MIN(timestamp) as earliest_ts, 
                        MAX(timestamp) as latest_ts 
                 FROM ohlcv_candles 
-                GROUP BY mint
-            ) c ON m.mint = c.mint
+                GROUP BY chain_id, mint
+            ) c ON m.chain_id = c.chain_id AND m.mint = c.mint
             LEFT JOIN (
-                SELECT mint, COUNT(*) as open_gaps 
+                SELECT chain_id, mint, COUNT(*) as open_gaps
                 FROM ohlcv_gaps 
                 WHERE filled = 0 
-                GROUP BY mint
-            ) g ON m.mint = g.mint
+                GROUP BY chain_id, mint
+            ) g ON m.chain_id = g.chain_id AND m.mint = g.mint
             LEFT JOIN (
-                SELECT mint, COUNT(*) as pool_count 
+                SELECT chain_id, mint, COUNT(*) as pool_count
                 FROM ohlcv_pools 
-                GROUP BY mint
-            ) p ON m.mint = p.mint
+                GROUP BY chain_id, mint
+            ) p ON m.chain_id = p.chain_id AND m.mint = p.mint
+            WHERE m.chain_id = ?1
             ORDER BY m.is_active DESC, m.priority DESC, m.last_activity DESC
             "#,
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
 
         let tokens = stmt
-            .query_map(params![], |row| {
+            .query_map(params![self.chain_id()], |row| {
                 Ok(OhlcvTokenStatus {
                     mint: row.get(0)?,
                     priority: row.get(1)?,
@@ -280,21 +286,30 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
 
         let candles_deleted: usize = conn
-            .execute("DELETE FROM ohlcv_candles WHERE mint = ?1", params![mint])
+            .execute(
+                "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
+            )
             .map_err(|e| OhlcvError::DatabaseError(format!("Delete candles failed: {e}")))?;
 
         let gaps_deleted: usize = conn
-            .execute("DELETE FROM ohlcv_gaps WHERE mint = ?1", params![mint])
+            .execute(
+                "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
+            )
             .map_err(|e| OhlcvError::DatabaseError(format!("Delete gaps failed: {e}")))?;
 
         let pools_deleted: usize = conn
-            .execute("DELETE FROM ohlcv_pools WHERE mint = ?1", params![mint])
+            .execute(
+                "DELETE FROM ohlcv_pools WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
+            )
             .map_err(|e| OhlcvError::DatabaseError(format!("Delete pools failed: {e}")))?;
 
         let config_deleted: usize = conn
             .execute(
-                "DELETE FROM ohlcv_monitor_config WHERE mint = ?1",
-                params![mint],
+                "DELETE FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Delete config failed: {e}")))?;
 
@@ -320,12 +335,12 @@ impl OhlcvDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT mint FROM ohlcv_monitor_config 
-                 WHERE is_active = 0 AND last_activity < ?1",
+                 WHERE chain_id = ?1 AND is_active = 0 AND last_activity < ?2",
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
 
         let mints: Vec<String> = stmt
-            .query_map(params![cutoff_str], |row| row.get(0))
+            .query_map(params![self.chain_id(), cutoff_str], |row| row.get(0))
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?
             .collect::<SqliteResult<Vec<_>>>()
             .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))?;
@@ -334,15 +349,24 @@ impl OhlcvDatabase {
 
         // Delete each token's data
         for mint in &mints {
-            conn.execute("DELETE FROM ohlcv_candles WHERE mint = ?1", params![mint])
-                .ok();
-            conn.execute("DELETE FROM ohlcv_gaps WHERE mint = ?1", params![mint])
-                .ok();
-            conn.execute("DELETE FROM ohlcv_pools WHERE mint = ?1", params![mint])
-                .ok();
             conn.execute(
-                "DELETE FROM ohlcv_monitor_config WHERE mint = ?1",
-                params![mint],
+                "DELETE FROM ohlcv_candles WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
+            )
+            .ok();
+            conn.execute(
+                "DELETE FROM ohlcv_gaps WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
+            )
+            .ok();
+            conn.execute(
+                "DELETE FROM ohlcv_pools WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
+            )
+            .ok();
+            conn.execute(
+                "DELETE FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
             )
             .ok();
         }
@@ -358,35 +382,41 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
 
         let total_candles: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ohlcv_candles", params![], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM ohlcv_candles WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .unwrap_or_default();
 
         let total_gaps: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ohlcv_gaps", params![], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM ohlcv_gaps WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .unwrap_or_default();
 
         let total_pools: i64 = conn
-            .query_row("SELECT COUNT(*) FROM ohlcv_pools", params![], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM ohlcv_pools WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .unwrap_or_default();
 
         let total_configs: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM ohlcv_monitor_config",
-                params![],
+                "SELECT COUNT(*) FROM ohlcv_monitor_config WHERE chain_id = ?1",
+                params![self.chain_id()],
                 |row| row.get(0),
             )
             .unwrap_or_default();
 
         let active_configs: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM ohlcv_monitor_config WHERE is_active = 1",
-                params![],
+                "SELECT COUNT(*) FROM ohlcv_monitor_config WHERE chain_id = ?1 AND is_active = 1",
+                params![self.chain_id()],
                 |row| row.get(0),
             )
             .unwrap_or_default();

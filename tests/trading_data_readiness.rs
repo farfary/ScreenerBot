@@ -841,6 +841,12 @@ async fn a_disabled_security_monitor_does_not_block_automated_entry() {
     // `Skip` fallback, saying so only at info level, per token. The bot stopped buying
     // and nothing named the cause.
     let _cfg = common::config_guard();
+    // Global connectivity state outlives this test and is shared with the other
+    // tests in this file that drive the same endpoint names ("rpc",
+    // "dexscreener", "rugcheck") — reset it under the same mutex so
+    // "rugcheck deliberately left unregistered" below is true regardless of
+    // which order the config_guard-serialized tests actually ran in.
+    connectivity_state::reset_all_for_tests().await;
     screenerbot::global::set_force_stopped(false, None);
 
     mark_healthy("rpc").await;
@@ -860,6 +866,7 @@ async fn a_failing_security_endpoint_blocks_entries_and_names_itself() {
     // still stops entries — the relaxation above is about absence of data, not about
     // trading through a known outage.
     let _cfg = common::config_guard();
+    connectivity_state::reset_all_for_tests().await;
     screenerbot::global::set_force_stopped(false, None);
 
     mark_healthy("rpc").await;
@@ -882,6 +889,7 @@ async fn force_stop_is_answered_before_any_data_source_is_consulted() {
     // being reachable — it is the one answer that has to work when everything else is
     // broken.
     let _cfg = common::config_guard();
+    connectivity_state::reset_all_for_tests().await;
     mark_unhealthy("rpc").await;
     screenerbot::global::set_force_stopped(true, Some("test"));
 

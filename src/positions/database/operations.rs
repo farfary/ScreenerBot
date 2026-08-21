@@ -3,7 +3,7 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::atomic::Ordering;
 
 use crate::database;
@@ -15,7 +15,7 @@ use super::types::*;
 
 impl PositionsDatabase {
     /// Create new PositionsDatabase with connection pooling
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new(chain: crate::chains::ChainId) -> Result<Self, String> {
         let database_path = crate::paths::get_positions_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
@@ -45,6 +45,7 @@ impl PositionsDatabase {
             pool,
             database_path: database_path_str.clone(),
             schema_version: POSITIONS_SCHEMA_VERSION,
+            chain,
         };
 
         // Initialize database schema
@@ -64,6 +65,8 @@ impl PositionsDatabase {
     /// Initialize database schema with all tables and indexes
     async fn initialize_schema(&mut self, log_initialization: bool) -> Result<(), String> {
         let conn = self.get_connection()?;
+
+        Self::migrate_chain_identity(&conn)?;
 
         // Create all tables
         conn.execute(SCHEMA_POSITIONS, [])
@@ -174,15 +177,6 @@ impl PositionsDatabase {
         )
         .map_err(|e| format!("Failed to set positions schema version: {e}"))?;
 
-        // Store current wallet address in metadata
-        let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
-        conn.execute(
-            "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('current_wallet', ?1)",
-            params![wallet_address],
-        )
-        .map_err(|e| format!("Failed to set current_wallet in metadata: {e}"))?;
-
         // Run migrations for existing positions (one-time data migration)
         self.run_data_migrations(&conn, log_initialization)?;
 
@@ -194,6 +188,69 @@ impl PositionsDatabase {
         }
 
         Ok(())
+    }
+
+    /// Upgrades legacy shared storage in one transaction. Position IDs remain stable so
+    /// every state, entry, exit, tracking and snapshot row continues to belong to its root.
+    fn migrate_chain_identity(conn: &Connection) -> Result<(), String> {
+        let has_positions: bool = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='positions'",
+                [],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to inspect positions schema: {e}"))?
+            .is_some();
+        if !has_positions {
+            return Ok(());
+        }
+        let has_chain: bool = conn
+            .prepare("PRAGMA table_info(positions)")
+            .and_then(|mut statement| {
+                statement
+                    .query_map([], |row| row.get::<_, String>(1))?
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .map_err(|e| format!("Failed to inspect positions identity columns: {e}"))?
+            .iter()
+            .any(|column| column == "chain_id");
+        if has_chain {
+            return Ok(());
+        }
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| format!("Failed to begin positions chain migration: {e}"))?;
+        tx.execute(
+            "ALTER TABLE positions ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+            [],
+        )
+        .map_err(|e| format!("Failed to add positions chain identity: {e}"))?;
+        tx.execute("DROP INDEX IF EXISTS idx_positions_round_key", [])
+            .map_err(|e| format!("Failed to replace legacy round index: {e}"))?;
+        for index in [
+            "idx_positions_wallet",
+            "idx_positions_mint",
+            "idx_positions_entry_signature",
+            "idx_positions_exit_signature",
+        ] {
+            tx.execute(&format!("DROP INDEX IF EXISTS {index}"), [])
+                .map_err(|e| format!("Failed to replace legacy positions index: {e}"))?;
+        }
+        tx.execute(
+            "CREATE UNIQUE INDEX idx_positions_round_key ON positions(chain_id, wallet_address, round_key) WHERE round_key IS NOT NULL",
+            [],
+        ).map_err(|e| format!("Failed to create chain-qualified round index: {e}"))?;
+        let violations: i64 = tx
+            .query_row("PRAGMA foreign_key_check", [], |_| Ok(1_i64))
+            .optional()
+            .map_err(|e| format!("Failed to validate positions foreign keys: {e}"))?
+            .unwrap_or(0);
+        if violations != 0 {
+            return Err("Positions chain migration failed foreign-key validation".to_owned());
+        }
+        tx.commit()
+            .map_err(|e| format!("Failed to commit positions chain migration: {e}"))
     }
 
     /// Run data migrations for existing positions
@@ -209,9 +266,10 @@ impl PositionsDatabase {
       WHERE remaining_token_amount IS NULL 
        AND token_amount IS NOT NULL
        AND exit_time IS NULL
+       AND chain_id = ?1
        AND position_type = 'buy'
       "#,
-            [],
+            params![self.chain.as_str()],
         );
 
         match migration_result {
@@ -302,7 +360,7 @@ impl PositionsDatabase {
             .query_row(
                 r#"
       INSERT INTO positions (
-        wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
+        chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
         position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
         entry_transaction_signature, exit_transaction_signature, token_amount,
         effective_entry_price, effective_exit_price, sol_received,
@@ -315,13 +373,14 @@ impl PositionsDatabase {
         dca_count, average_entry_price, last_dca_time, origin_kind, origin_ref, management,
         round_key, basis_complete, history_complete, holding_state
       ) VALUES (
-        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-        ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32,
-        ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46,
-        ?47, ?48, ?49, ?50
+        ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
+        ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33,
+        ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47,
+        ?48, ?49, ?50, ?51
       ) RETURNING id
       "#,
                 params![
+                    self.chain.as_str(),
                     wallet_address,
                     position.mint,
                     position.symbol,
@@ -442,7 +501,7 @@ impl PositionsDatabase {
         partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
         round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
         updated_at = datetime('now')
-      WHERE id = ?1
+      WHERE id = ?1 AND chain_id = ?48
       "#,
                 params![
                     position_id,
@@ -492,6 +551,7 @@ impl PositionsDatabase {
                     position.basis_complete,
                     position.history_complete,
                     position.holding_state,
+                    self.chain.as_str(),
                 ],
             )
             .map_err(|e| format!("Failed to update position: {e}"))?;
@@ -545,14 +605,15 @@ impl PositionsDatabase {
         price_highest = ?4,
         price_lowest = ?5,
         updated_at = datetime('now')
-      WHERE id = ?1
+      WHERE id = ?1 AND chain_id = ?6
       "#,
                 params![
                     position_id,
                     current_price,
                     current_price_updated.map(|t| t.to_rfc3339()),
                     price_highest,
-                    price_lowest
+                    price_lowest,
+                    self.chain.as_str(),
                 ],
             )
             .map_err(|e| format!("Failed to update position prices: {e}"))?;
@@ -816,5 +877,59 @@ impl PositionsDatabase {
                 .unwrap_or(true),
             holding_state: row.get("holding_state")?,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::{params, Connection};
+
+    use super::PositionsDatabase;
+
+    #[test]
+    fn chain_migration_preserves_legacy_roots_and_children_and_is_idempotent() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(
+            "PRAGMA foreign_keys = ON;
+             CREATE TABLE positions (id INTEGER PRIMARY KEY, wallet_address TEXT NOT NULL, round_key TEXT);
+             CREATE TABLE position_states (id INTEGER PRIMARY KEY, position_id INTEGER NOT NULL REFERENCES positions(id));
+             INSERT INTO positions (id, wallet_address, round_key) VALUES (41, 'wallet', 'round');
+             INSERT INTO position_states (id, position_id) VALUES (7, 41);
+             CREATE UNIQUE INDEX idx_positions_round_key ON positions(wallet_address, round_key) WHERE round_key IS NOT NULL;",
+        ).unwrap();
+
+        PositionsDatabase::migrate_chain_identity(&connection).unwrap();
+        PositionsDatabase::migrate_chain_identity(&connection).unwrap();
+
+        assert_eq!(
+            connection
+                .query_row("SELECT chain_id FROM positions WHERE id=41", [], |row| {
+                    row.get::<_, String>(0)
+                })
+                .unwrap(),
+            "solana"
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT position_id FROM position_states WHERE id=7",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+            41
+        );
+        connection.execute(
+            "INSERT INTO positions (id, wallet_address, round_key, chain_id) VALUES (?1, ?2, ?3, ?4)",
+            params![42, "wallet", "round", "future-chain"],
+        ).unwrap();
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            0
+        );
     }
 }

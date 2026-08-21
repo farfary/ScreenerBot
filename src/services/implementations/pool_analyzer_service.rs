@@ -47,12 +47,13 @@ impl Service for PoolAnalyzerService {
         );
 
         // Get the PoolAnalyzer component from global state
-        let analyzer = crate::pools::get_pool_analyzer().ok_or_else(|| {
-            crate::Error::Service(ServiceError::Start {
-                service: self.name().to_string(),
-                message: "PoolAnalyzer component not initialized".to_owned(),
-            })
-        })?;
+        let analyzer =
+            crate::chains::solana::pools::service::get_pool_analyzer().ok_or_else(|| {
+                crate::Error::Service(ServiceError::Start {
+                    service: self.name().to_string(),
+                    message: "PoolAnalyzer component not initialized".to_owned(),
+                })
+            })?;
 
         // Spawn analyzer task
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -76,7 +77,7 @@ impl Service for PoolAnalyzerService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::pools::get_pool_analyzer().is_some() {
+        if crate::chains::solana::pools::service::get_pool_analyzer().is_some() {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy("PoolAnalyzer component not available".to_owned())
@@ -87,7 +88,7 @@ impl Service for PoolAnalyzerService {
         let mut metrics = ServiceMetrics::default();
 
         // Get metrics from the component if available
-        if let Some(analyzer) = crate::pools::get_pool_analyzer() {
+        if let Some(analyzer) = crate::chains::solana::pools::service::get_pool_analyzer() {
             let (operations, errors, pools_analyzed) = analyzer.get_metrics();
             metrics.operations_total = operations;
             metrics.errors_total = errors;

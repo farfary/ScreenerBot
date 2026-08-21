@@ -56,18 +56,15 @@ pub use ata_cleanup::{
     FailedAta,
 };
 
-// Re-export multi-wallet types and operations
+// Re-export multi-wallet types and operations. Single-transfer/ATA-close
+// mechanics live at crate::chains::solana::assets::transfer, not here.
 pub use multi_wallet::{
-    close_ata as close_token_ata,
     collect_sol,
     execute_consolidation,
     // Operations
     execute_multi_buy,
     execute_multi_sell,
     fund_wallets,
-    // Transfer utilities
-    transfer_sol,
-    transfer_token,
     ConsolidateConfig,
     // Configuration types
     MultiBuyConfig,

@@ -12,7 +12,6 @@ use super::types::{
 use crate::logger::{self, LogTag};
 
 use dashmap::DashMap;
-use solana_sdk::pubkey::Pubkey;
 use std::sync::LazyLock;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -84,7 +83,9 @@ pub fn update_price(price: PriceResult) {
     // Queue for database storage (async, non-blocking)
     let price_for_db = price.clone();
     tokio::spawn(async move {
-        if let Err(e) = db::queue_price_for_storage(price_for_db).await {
+        if let Err(e) =
+            db::queue_price_for_storage(crate::chains::ChainId::Solana, price_for_db).await
+        {
             logger::error(
                 LogTag::PoolCache,
                 &format!("Failed to queue price for storage: {e}"),
@@ -118,7 +119,12 @@ pub fn update_price(price: PriceResult) {
         if removed_count > 0 {
             let mint_for_cleanup = mint.clone();
             tokio::spawn(async move {
-                if let Err(e) = db::cleanup_gapped_data_for_token(&mint_for_cleanup).await {
+                if let Err(e) = db::cleanup_gapped_data_for_token(
+                    crate::chains::ChainId::Solana,
+                    &mint_for_cleanup,
+                )
+                .await
+                {
                     logger::error(
                         LogTag::PoolCache,
                         &format!(
@@ -320,7 +326,7 @@ async fn load_historical_data_into_cache() {
     let mut failed_count = 0;
 
     for mint in &open_mints {
-        match db::load_historical_data_for_token(mint).await {
+        match db::load_historical_data_for_token(crate::chains::ChainId::Solana, mint).await {
             Ok(historical_prices) => {
                 if !historical_prices.is_empty() {
                     // Create history entry - DashMap is thread-safe

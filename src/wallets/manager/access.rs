@@ -1,6 +1,7 @@
-//! Wallet access helpers — keypair loading and address resolution.
-
-use solana_sdk::signature::Keypair;
+//! Wallet access helpers — record lookup and encrypted-credential resolution.
+//!
+//! Never decrypts. Returns ciphertext/nonce (chain-neutral) so only
+//! `crate::chains::solana::accounts` ever holds a decrypted `Keypair`.
 
 use super::super::types::Wallet;
 
@@ -20,16 +21,15 @@ pub async fn get_wallet_by_address(address: &str) -> Result<Option<Wallet>, Stri
     db.get_wallet_by_address(address)
 }
 
-/// Get a wallet's keypair by ID
-pub async fn get_wallet_keypair(wallet_id: i64) -> Result<Keypair, String> {
+/// Get a wallet's encrypted key material (ciphertext, nonce) by ID.
+/// Chain-neutral — only `crate::chains::solana::accounts` decrypts this.
+pub(crate) async fn get_wallet_encrypted_key(wallet_id: i64) -> Result<(String, String), String> {
     let db_guard = super::WALLETS_DB.read().await;
     let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
-    let (encrypted, nonce) = db
-        .get_wallet_encrypted_key(wallet_id)?
-        .ok_or("Wallet not found")?;
-
-    super::super::crypto::decrypt_to_keypair(&encrypted, &nonce)
+    db.get_wallet_encrypted_key(wallet_id)?
+        .ok_or("Wallet not found")
+        .map_err(|e| e.to_owned())
 }
 
 /// List all wallets

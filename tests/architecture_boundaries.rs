@@ -1,0 +1,434 @@
+//! Source-scanning guards for the chain-ownership boundary.
+//!
+//! Shared domain modules (everything outside `src/chains/solana/`) define
+//! chain-neutral intent/models/contracts; `src/chains/solana` implements
+//! concrete Solana mechanics; app/service composition selects it through
+//! `ChainId` or the router/discovery registries. These tests fail fast if
+//! that boundary regresses — e.g. a new file bypassing the
+//! `crate::chains::solana` vendor façade, or a shared module re-exporting a
+//! chain-specific type as its own public API.
+//!
+//! Pure source-text scans: no network, no DB, no compilation.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// Walks `src/`, yielding `(relative_path, file_contents)` for every `.rs` file.
+fn walk_src() -> Vec<(PathBuf, String)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut out = Vec::new();
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).expect("read_dir(src) must succeed") {
+            let entry = entry.expect("dir entry must be readable");
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let contents = fs::read_to_string(&path).expect("read .rs file");
+                let relative = path.strip_prefix(&root).unwrap().to_path_buf();
+                out.push((relative, contents));
+            }
+        }
+    }
+    out
+}
+
+fn is_solana_owned(relative: &Path) -> bool {
+    relative.starts_with("chains/solana")
+}
+
+/// Strips doc-comment lines (`//!`, `///`), which are free to name Solana
+/// concepts in prose when explaining the chain boundary — only code lines
+/// are a real import/reference.
+fn code_lines(contents: &str) -> String {
+    contents
+        .lines()
+        .filter(|line| {
+            let trimmed = line.trim_start();
+            !trimmed.starts_with("//!") && !trimmed.starts_with("///")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Vendor crates that must be reached through `crate::chains::solana` (the
+/// single façade declared in `src/chains/solana/mod.rs`), never imported raw.
+const VENDOR_CRATES: &[&str] = &[
+    "solana_sdk",
+    "solana_client",
+    "solana_program",
+    "solana_transaction_status",
+    "solana_account_decoder",
+    "spl_token_2022",
+    "spl_associated_token_account",
+    "spl_token",
+];
+
+#[test]
+fn shared_modules_never_import_solana_vendor_crates_raw() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_solana_owned(&relative) {
+            continue; // the façade itself is allowed to name the vendor crates.
+        }
+        for line in contents.lines() {
+            let trimmed = line.trim_start();
+            let Some(rest) = trimmed.strip_prefix("use ") else {
+                continue;
+            };
+            for crate_name in VENDOR_CRATES {
+                let raw_prefix = format!("{crate_name}::");
+                let raw_bare = format!("{crate_name};");
+                if rest.starts_with(&raw_prefix) || rest.starts_with(&raw_bare) {
+                    violations.push(format!(
+                        "src/{}: raw `use {crate_name}` — import via `crate::chains::solana::{crate_name}` instead",
+                        relative.display()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "shared (non-Solana-owned) modules must reach Solana vendor crates through the \
+         crate::chains::solana façade, never import them raw:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// DEX/aggregator program-ID literals owned by `chains/solana/constants.rs`.
+/// Kept in sync manually with that file — this is a small, explicit
+/// allowlist of exact base58 strings, not a pattern match, so it only ever
+/// fires on a genuine reintroduced duplicate.
+const OWNED_PROGRAM_ID_LITERALS: &[(&str, &str)] = &[
+    (
+        "METAPLEX_PROGRAM_ID",
+        "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",
+    ),
+    ("SYSTEM_PROGRAM_ID", "11111111111111111111111111111111"),
+    (
+        "SPL_TOKEN_PROGRAM_ID",
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    ),
+    (
+        "TOKEN_2022_PROGRAM_ID",
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    ),
+    (
+        "ASSOCIATED_TOKEN_PROGRAM_ID",
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+    ),
+    (
+        "MEMO_PROGRAM_ID",
+        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
+    ),
+    (
+        "JUPITER_V6_PROGRAM_ID",
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+    ),
+    (
+        "JUPITER_V4_PROGRAM_ID",
+        "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",
+    ),
+    (
+        "RAYDIUM_LEGACY_AMM_PROGRAM_ID",
+        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",
+    ),
+    (
+        "RAYDIUM_CPMM_PROGRAM_ID",
+        "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C",
+    ),
+    (
+        "RAYDIUM_CLMM_PROGRAM_ID",
+        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+    ),
+    (
+        "ORCA_WHIRLPOOL_PROGRAM_ID",
+        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+    ),
+    (
+        "METEORA_DAMM_PROGRAM_ID",
+        "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG",
+    ),
+    (
+        "METEORA_DLMM_PROGRAM_ID",
+        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+    ),
+    (
+        "METEORA_DBC_PROGRAM_ID",
+        "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
+    ),
+    (
+        "PUMP_FUN_AMM_PROGRAM_ID",
+        "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA",
+    ),
+    (
+        "PUMP_FUN_LEGACY_PROGRAM_ID",
+        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+    ),
+    (
+        "MOONIT_AMM_PROGRAM_ID",
+        "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG",
+    ),
+    (
+        "FLUXBEAM_AMM_PROGRAM_ID",
+        "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X",
+    ),
+];
+
+/// The one file allowed to define each literal, plus its re-export site.
+const PROGRAM_ID_OWNER: &str = "chains/solana/constants.rs";
+const PROGRAM_ID_REEXPORTER: &str = "chains/solana/transactions/program_ids.rs";
+
+/// True if `line` is a `const NAME: &str = "<literal>";` definition (any
+/// visibility) — not merely a line that happens to mention the literal
+/// (e.g. matching it against transaction program IDs, or a placeholder
+/// all-ones address used for an unrelated purpose).
+fn defines_const_literal(line: &str, literal: &str) -> bool {
+    let trimmed = line.trim_start();
+    (trimmed.starts_with("const ") || trimmed.starts_with("pub const "))
+        && trimmed.contains(": &str")
+        && trimmed.trim_end().ends_with(&format!("\"{literal}\";"))
+}
+
+#[test]
+fn dex_program_id_literals_have_exactly_one_owner() {
+    let files = walk_src();
+    let mut violations = Vec::new();
+    for (name, literal) in OWNED_PROGRAM_ID_LITERALS {
+        for (relative, contents) in &files {
+            let path_str = relative.to_string_lossy();
+            if path_str == PROGRAM_ID_OWNER || path_str == PROGRAM_ID_REEXPORTER {
+                continue;
+            }
+            if contents
+                .lines()
+                .any(|line| defines_const_literal(line, literal))
+            {
+                violations.push(format!(
+                    "src/{path_str}: redefines {name} ({literal}) instead of importing it \
+                     from crate::chains::solana::constants"
+                ));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "DEX/aggregator program IDs must have exactly one literal `const` definition, in \
+         crate::chains::solana::constants:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Chain-specific discovery/fetcher types must not leak into the shared
+/// `crate::pools` public surface — callers that need them import
+/// `crate::chains::solana::pools` directly (regression guard, see
+/// `src/pools/mod.rs` doc comment).
+#[test]
+fn shared_pools_module_does_not_reexport_solana_discovery_types() {
+    let pools_mod =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/pools/mod.rs"))
+            .expect("src/pools/mod.rs must exist");
+
+    for banned_reexport in [
+        "pub use crate::chains::solana::pools::discovery",
+        "pub use crate::chains::solana::pools::fetcher::AccountData",
+    ] {
+        assert!(
+            !pools_mod.contains(banned_reexport),
+            "src/pools/mod.rs must not re-export Solana-specific discovery/fetcher types \
+             (`{banned_reexport}`) — callers should import crate::chains::solana::pools directly"
+        );
+    }
+}
+
+/// `PoolDescriptor` and the rest of the shared pool domain
+/// (`src/pools/types.rs`, `cache.rs`, `api.rs`, `utils.rs`, `database/`) must
+/// stay chain-neutral: no `Pubkey`, no `crate::chains::solana::pools::types`
+/// (the Solana `ProgramKind` enum), and no vendor-crate façade for Solana
+/// address types. This is a regression guard for the leak fixed by moving
+/// `PoolDescriptor` to typed `PoolId`/`AssetId`/`AccountId`/`ProtocolId`
+/// identities and relocating the `Pubkey`-driven pool price calculator to
+/// `crate::chains::solana::pools::calculator`.
+#[test]
+fn shared_pools_domain_never_names_a_solana_address_type() {
+    let banned_needles = [
+        "Pubkey",
+        "solana_sdk",
+        "chains::solana::pools::types::ProgramKind",
+        "chains::solana::solana_sdk",
+    ];
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        if !path_str.starts_with("pools/") {
+            continue;
+        }
+        // Only scan code lines — doc comments (`//!`, `///`) are free to name
+        // Solana concepts in prose when explaining the chain boundary.
+        let code_only: String = contents
+            .lines()
+            .filter(|line| {
+                let trimmed = line.trim_start();
+                !trimmed.starts_with("//!") && !trimmed.starts_with("///")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        for needle in banned_needles {
+            if code_only.contains(needle) {
+                violations.push(format!("src/{path_str}: names `{needle}`"));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "the shared pool domain (src/pools/) must stay chain-neutral — Solana address \
+         types belong under src/chains/solana/pools instead, with PoolDescriptor's \
+         PoolId/AssetId/AccountId/ProtocolId converted at that boundary:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Wallet ownership boundary: shared wallet records, manager APIs,
+/// configuration and multi-wallet tooling must never hold a decrypted
+/// `Keypair` or a `Pubkey` — only `crate::chains::solana::accounts` (and the
+/// concrete swap/asset executors it hands a resolved keypair to) may. Shared
+/// code passes a `wallet_id`, an address string, or relies on "the main
+/// wallet"; it gets back signatures and addresses, never key material.
+///
+/// Scoped to the exact files audited when this boundary was introduced, not
+/// a whole-directory ban: `src/wallets/watch/**` still parses a `Pubkey`
+/// inline for the observation pipeline's own use (RPC subscriptions,
+/// `Subject::solana`) and is out of scope. `balance_ops.rs`/
+/// `balance_queries.rs` are IN scope — their RPC balance reads were moved
+/// behind `crate::chains::solana::accounts::{fetch_wallet_sol_balance,
+/// fetch_wallet_token_balances}`.
+#[test]
+fn wallet_ownership_never_names_a_solana_key_type() {
+    const SCOPED_FILES: &[&str] = &[
+        "wallets/types.rs",
+        "wallets/mod.rs",
+        "wallets/manager.rs",
+        "wallets/manager/access.rs",
+        "wallets/manager/cache.rs",
+        "wallets/manager/main_wallet.rs",
+        "wallets/manager/tools.rs",
+        "wallets/manager/crud.rs",
+        "wallets/manager/bulk_ops.rs",
+        "wallets/manager/migration.rs",
+        "wallets/manager/balance_ops.rs",
+        "wallets/manager/balance_queries.rs",
+        "config/wallet.rs",
+        "tools/swap_executor.rs",
+        "tools/multi_wallet/buy.rs",
+        "tools/multi_wallet/sell.rs",
+        "tools/multi_wallet/consolidate.rs",
+        "tools/multi_wallet/transfer.rs",
+    ];
+    let banned_needles = ["Keypair", "Pubkey", "solana_sdk"];
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        if !SCOPED_FILES.contains(&path_str.as_ref()) {
+            continue;
+        }
+        // Only scan code lines — doc comments are free to name Solana
+        // concepts in prose when explaining the chain boundary.
+        let code_only: String = contents
+            .lines()
+            .filter(|line| {
+                let trimmed = line.trim_start();
+                !trimmed.starts_with("//!") && !trimmed.starts_with("///")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        for needle in banned_needles {
+            if code_only.contains(needle) {
+                violations.push(format!("src/{path_str}: names `{needle}`"));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "shared wallet ownership code must never hold a decrypted Keypair or a Pubkey — \
+         resolve/sign through crate::chains::solana::accounts (by wallet_id or \"the main \
+         wallet\") instead:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Pool runtime composition boundary: `src/pools/service.rs` (the
+/// chain-neutral supervisor: running flag, shutdown protocol, event
+/// recording, db/cache init) must never import the concrete Solana pool
+/// runtime — it selects an implementation via an injected closure instead
+/// (see `initialize_pool_components`/`stop_pool_service` and their caller in
+/// `src/services/implementations/pools_service.rs`). Regression guard for
+/// the leak fixed by moving `PoolAnalyzer`/`PoolDiscovery`/`AccountFetcher`/
+/// `PriceCalculator` management to `crate::chains::solana::pools::service`.
+#[test]
+fn shared_pools_service_never_imports_solana_runtime() {
+    let path = "pools/service.rs";
+    let contents = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path))
+        .expect("src/pools/service.rs must exist");
+
+    assert!(
+        !code_lines(&contents).contains("chains::solana"),
+        "src/{path} must not import crate::chains::solana — it orchestrates lifecycle \
+         generically and takes the concrete runtime as an injected closure"
+    );
+}
+
+/// Swap router registry boundary: `src/swaps/registry.rs` must hold only
+/// `Arc<dyn SwapRouter>` injected via `set_router_factory`, never construct a
+/// concrete Solana router itself. Regression guard for the leak fixed by
+/// moving `JupiterRouter`/`GmgnRouter`/`RaydiumRouter` construction to
+/// `crate::chains::solana::swaps::routers::build_routers`, registered once by
+/// the composition root (`src/run/services.rs`).
+#[test]
+fn shared_swaps_registry_never_imports_solana_routers() {
+    let path = "swaps/registry.rs";
+    let contents = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path))
+        .expect("src/swaps/registry.rs must exist");
+
+    assert!(
+        !code_lines(&contents).contains("chains::solana"),
+        "src/{path} must not import crate::chains::solana — the router factory is injected \
+         by the composition root, never constructed here"
+    );
+}
+
+/// SOL/WSOL/USDC/USDT mint addresses, decimals and lamport conversion
+/// constants have exactly one owner: `crate::chains::solana::constants`.
+/// `crate::constants` (the chain-neutral home for a future second chain)
+/// must never re-export a Solana address literal back through itself.
+#[test]
+fn chain_neutral_constants_module_never_reexports_solana_literals() {
+    let path = "constants.rs";
+    let contents = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path))
+        .expect("src/constants.rs must exist");
+
+    let banned_needles = [
+        "SOL_MINT",
+        "USDC_MINT",
+        "USDT_MINT",
+        "SOL_DECIMALS",
+        "LAMPORTS_PER_SOL",
+    ];
+    let mut violations = Vec::new();
+    for needle in banned_needles {
+        if contents.contains(needle) {
+            violations.push(needle);
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "src/{path} must not define or re-export Solana mint/native-unit constants \
+         ({violations:?}) — they belong solely to crate::chains::solana::constants"
+    );
+}

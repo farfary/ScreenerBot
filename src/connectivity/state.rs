@@ -37,6 +37,22 @@ impl ConnectivityState {
         }
     }
 
+    /// Forget every registered endpoint and its health/failure/success counters.
+    /// Test-only: production code discovers endpoints once at monitor startup
+    /// and never needs to un-know one. Integration tests that drive real
+    /// endpoint names (e.g. "rpc", "dexscreener", "rugcheck") through this
+    /// global state must call this before each test to avoid inheriting
+    /// registration/health left behind by a previous test — this state is
+    /// process-global and outlives any single `#[tokio::test]`.
+    pub fn reset_all_for_tests(&mut self) {
+        self.health.clear();
+        self.criticality.clear();
+        self.fallback.clear();
+        self.failures.clear();
+        self.successes.clear();
+        INTERNET_OFFLINE.store(false, Ordering::Relaxed);
+    }
+
     /// Register an endpoint with its metadata
     pub fn register_endpoint(
         &mut self,
@@ -237,6 +253,14 @@ static GLOBAL_STATE: LazyLock<Arc<RwLock<ConnectivityState>>> =
 /// Get reference to global connectivity state
 pub fn get_state() -> Arc<RwLock<ConnectivityState>> {
     GLOBAL_STATE.clone()
+}
+
+/// Forget every registered endpoint. Test-only — see
+/// `ConnectivityState::reset_all_for_tests`.
+pub async fn reset_all_for_tests() {
+    let state_arc = get_state();
+    let mut state = state_arc.write().await;
+    state.reset_all_for_tests();
 }
 
 /// Register an endpoint with the global state

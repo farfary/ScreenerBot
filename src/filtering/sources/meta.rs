@@ -58,5 +58,7 @@ async fn has_decimals(token: &Token) -> bool {
     // Unresolved: fall back to the full chain (cache → DB → data server → RPC), which also
     // persists what it finds, so a token only ever pays this once.
     // Single-flight dedup prevents duplicate chain fetches; failures cached for 24h.
-    get_decimals(&token.mint).await.is_some()
+    get_decimals(crate::chains::ChainId::Solana, &token.mint)
+        .await
+        .is_some()
 }

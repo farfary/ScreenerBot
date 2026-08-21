@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
-use crate::database;
 use crate::logger::{self, LogTag};
 use crate::transactions::{types::*, utils::*};
+use crate::{chains::ChainId, database};
 
 use super::schema::*;
 
@@ -33,6 +33,7 @@ pub struct TransactionDatabase {
     pub(super) pool: Pool<SqliteConnectionManager>,
     pub(super) database_path: String,
     pub(super) schema_version: u32,
+    pub(super) chain: ChainId,
 }
 
 /// Minimal row for wallet flow cache export
@@ -45,10 +46,10 @@ pub struct WalletFlowExportRow {
 
 impl TransactionDatabase {
     /// Create new TransactionDatabase with connection pooling
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new(chain: ChainId) -> Result<Self, String> {
         let database_path = crate::paths::get_transactions_db_path();
         let is_first_init = !DATABASE_INITIALIZED.load(Ordering::Relaxed);
-        let db = Self::create_database(database_path, is_first_init, true).await?;
+        let db = Self::create_database(database_path, is_first_init, true, chain).await?;
 
         DATABASE_INITIALIZED.store(true, Ordering::Relaxed);
 
@@ -59,6 +60,7 @@ impl TransactionDatabase {
         database_path: PathBuf,
         log_details: bool,
         record_current_wallet: bool,
+        chain: ChainId,
     ) -> Result<Self, String> {
         let database_path_str = database_path.to_string_lossy().to_string();
 
@@ -83,6 +85,7 @@ impl TransactionDatabase {
             pool,
             database_path: database_path_str,
             schema_version: DATABASE_SCHEMA_VERSION,
+            chain,
         };
 
         db.initialize_schema(record_current_wallet).await?;
@@ -98,7 +101,10 @@ impl TransactionDatabase {
     }
 
     #[cfg(test)]
-    pub(crate) async fn new_with_path<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+    pub(crate) async fn new_with_path<P: AsRef<Path>>(
+        path: P,
+        chain: ChainId,
+    ) -> Result<Self, String> {
         let database_path = path.as_ref().to_path_buf();
 
         if let Some(parent) = database_path.parent() {
@@ -109,7 +115,7 @@ impl TransactionDatabase {
         // Explicit-path databases are used for isolated tests and offline
         // migration validation. A fresh composite-schema database has no need to
         // resolve process-global wallet configuration merely to write metadata.
-        Self::create_database(database_path, true, false).await
+        Self::create_database(database_path, true, false, chain).await
     }
 
     /// Initialize database schema and indexes
@@ -135,11 +141,12 @@ impl TransactionDatabase {
                 .map_err(|e| format!("Failed to create table: {e}"))?;
         }
 
-        // Apply lightweight migrations for existing databases (fee_sol/sol_delta
-        // columns, bootstrap_state row). Must run before the composite-key migration
-        // below: that migration copies every column of `processed_transactions`, and
-        // depends on fee_sol/sol_delta already existing on the pre-v5 table.
-        self.apply_migrations(&mut conn)?;
+        // Apply the legacy processed-transaction column migrations before the v5
+        // rebuild below: that rebuild copies every column of
+        // `processed_transactions`, and therefore needs fee_sol/sol_delta to exist
+        // on the pre-v5 shape. This deliberately does not query chain-aware state;
+        // legacy bootstrap_state has no chain_id until the v7 rebuild.
+        let needs_sol_delta_backfill = self.apply_pre_chain_migrations(&mut conn)?;
 
         // §7.1: rebuild the signature-keyed tables onto a composite
         // (signature, wallet_address) primary key so a second subject's perspective
@@ -148,6 +155,14 @@ impl TransactionDatabase {
         // must run after table creation above (a table has to exist to migrate) and
         // before index creation below (rebuilding a table drops its indexes with it).
         self.migrate_signature_wallet_tables(&mut conn)?;
+        self.migrate_chain_identity_tables(&mut conn)?;
+
+        // Chain-aware bootstrap state and queries are valid only after every legacy
+        // transaction table, including bootstrap_state, has been rebuilt to v7.
+        self.initialize_chain_bootstrap_state(&mut conn)?;
+        if needs_sol_delta_backfill {
+            self.backfill_processed_sol_delta(&mut conn)?;
+        }
 
         // Create all indexes (fresh for anything just rebuilt above)
         for index_sql in INDEXES {
@@ -175,8 +190,8 @@ impl TransactionDatabase {
         Ok(())
     }
 
-    /// Apply schema migrations when upgrading versions
-    fn apply_migrations(&self, conn: &mut Connection) -> Result<(), String> {
+    /// Apply schema migrations that are safe before chain identity exists.
+    fn apply_pre_chain_migrations(&self, conn: &mut Connection) -> Result<bool, String> {
         // Ensure processed_transactions has fee_sol column for MCP tools compatibility
         let mut has_fee_sol = false;
         let mut has_sol_delta = false;
@@ -212,20 +227,19 @@ impl TransactionDatabase {
                 [],
             )
             .map_err(|e| format!("Failed to add sol_delta column: {e}"))?;
-
-            self.backfill_processed_sol_delta(conn)?;
         }
 
-        // Ensure bootstrap_state table exists (idempotent)
-        conn.execute(SCHEMA_BOOTSTRAP_STATE, [])
-            .map_err(|e| format!("Failed to ensure bootstrap_state table: {e}"))?;
+        Ok(!has_sol_delta)
+    }
 
-        // Ensure the single row exists
+    /// Ensure the chain-scoped bootstrap row after the v7 table rebuild.
+    fn initialize_chain_bootstrap_state(&self, conn: &mut Connection) -> Result<(), String> {
         conn.execute(
-            "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
-            [],
+            "INSERT OR IGNORE INTO bootstrap_state (chain_id, id, full_history_completed) VALUES (?1, 1, 0)",
+            params![self.chain.as_str()],
         )
         .map_err(|e| format!("Failed to initialize bootstrap_state row: {e}"))?;
+
         Ok(())
     }
 
@@ -359,6 +373,103 @@ impl TransactionDatabase {
             .count();
 
         Ok(pk_columns >= 2)
+    }
+
+    /// Rebuilds every chain-owned transaction table into the v7 key shape. Legacy
+    /// rows are Solana rows by definition; copying is transactional and is verified
+    /// before the schema version advances so a crash leaves the prior database intact.
+    fn migrate_chain_identity_tables(&self, conn: &mut Connection) -> Result<(), String> {
+        let stored_version = Self::read_schema_version(conn)?;
+        if stored_version.unwrap_or(0) >= 7 {
+            return Ok(());
+        }
+        let has_chain = |table: &str| -> Result<bool, String> {
+            let mut stmt = conn
+                .prepare(&format!("PRAGMA table_info({table})"))
+                .map_err(|e| format!("Failed to inspect {table}: {e}"))?;
+            let columns = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .map_err(|e| format!("Failed to inspect {table}: {e}"))?;
+            let has_chain = columns
+                .filter_map(Result::ok)
+                .any(|name| name == "chain_id");
+            Ok(has_chain)
+        };
+        if has_chain("raw_transactions")?
+            && has_chain("processed_transactions")?
+            && has_chain("known_signatures")?
+            && has_chain("deferred_retries")?
+            && has_chain("pending_transactions")?
+            && has_chain("bootstrap_state")?
+            && has_chain("subject_asset_deltas")?
+        {
+            return Ok(());
+        }
+
+        conn.execute("PRAGMA foreign_keys = OFF", [])
+            .map_err(|e| format!("Failed to disable foreign keys for v7 migration: {e}"))?;
+        let result = (|| -> Result<(), String> {
+            let tx = conn
+                .transaction()
+                .map_err(|e| format!("Failed to begin v7 chain identity migration: {e}"))?;
+            let tables = [
+                ("raw_transactions", SCHEMA_RAW_TRANSACTIONS, "chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message, fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, created_at, updated_at"),
+                ("processed_transactions", SCHEMA_PROCESSED_TRANSACTIONS, "chain_id, signature, wallet_address, transaction_type, direction, sol_balance_change, token_balance_changes, token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info, analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, processed_at, updated_at"),
+                ("known_signatures", SCHEMA_KNOWN_SIGNATURES, "chain_id, signature, wallet_address, status, added_at"),
+                ("deferred_retries", SCHEMA_DEFERRED_RETRIES, "chain_id, signature, wallet_address, next_retry_at, remaining_attempts, current_delay_secs, last_error, created_at, updated_at"),
+                ("pending_transactions", SCHEMA_PENDING_TRANSACTIONS, "chain_id, signature, wallet_address, added_at, last_checked_at, check_count"),
+                ("bootstrap_state", SCHEMA_BOOTSTRAP_STATE, "chain_id, id, backfill_before_cursor, full_history_completed, updated_at"),
+                ("subject_asset_deltas", SCHEMA_SUBJECT_ASSET_DELTAS, "chain_id, wallet_address, signature, mint, slot, block_time, tx_index, delta_raw, before_raw, after_raw, decimals, kind, venue, fee_lamports, success"),
+            ];
+            for (table, schema, columns) in tables {
+                let create = schema.replacen(
+                    &format!("CREATE TABLE IF NOT EXISTS {table} ("),
+                    &format!("CREATE TABLE {table}__v7 ("),
+                    1,
+                );
+                tx.execute(&create, [])
+                    .map_err(|e| format!("Failed to create {table}__v7: {e}"))?;
+                let legacy_columns = columns.strip_prefix("chain_id, ").unwrap_or(columns);
+                tx.execute(
+                    &format!("INSERT INTO {table}__v7 ({columns}) SELECT 'solana', {legacy_columns} FROM {table}"),
+                    [],
+                ).map_err(|e| format!("Failed to copy {table} into v7: {e}"))?;
+                let before: i64 = tx
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                        row.get(0)
+                    })
+                    .map_err(|e| format!("Failed to count {table}: {e}"))?;
+                let after: i64 = tx
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}__v7"), [], |row| {
+                        row.get(0)
+                    })
+                    .map_err(|e| format!("Failed to count {table}__v7: {e}"))?;
+                if before != after {
+                    return Err(format!(
+                        "v7 migration row count mismatch for {table}: {before} != {after}"
+                    ));
+                }
+                tx.execute(&format!("DROP TABLE {table}"), [])
+                    .map_err(|e| format!("Failed to drop {table}: {e}"))?;
+                tx.execute(&format!("ALTER TABLE {table}__v7 RENAME TO {table}"), [])
+                    .map_err(|e| format!("Failed to rename {table}__v7: {e}"))?;
+            }
+            let fk_errors: i64 = tx
+                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                    row.get(0)
+                })
+                .map_err(|e| format!("Failed to run foreign_key_check for v7 migration: {e}"))?;
+            if fk_errors != 0 {
+                return Err(format!(
+                    "v7 migration foreign key check found {fk_errors} errors"
+                ));
+            }
+            tx.commit()
+                .map_err(|e| format!("Failed to commit v7 chain identity migration: {e}"))
+        })();
+        conn.execute("PRAGMA foreign_keys = ON", [])
+            .map_err(|e| format!("Failed to re-enable foreign keys after v7 migration: {e}"))?;
+        result
     }
 
     /// Rebuild `raw_transactions` in place: create the v5 shape, copy every row
@@ -629,16 +740,19 @@ impl TransactionDatabase {
         loop {
             let mut stmt = conn
                 .prepare(
-                    "SELECT signature, sol_balance_change FROM processed_transactions WHERE wallet_address = ?1 AND sol_delta IS NULL LIMIT ?2",
+                    "SELECT signature, sol_balance_change FROM processed_transactions WHERE chain_id = ?1 AND wallet_address = ?2 AND sol_delta IS NULL LIMIT ?3",
                 )
                 .map_err(|e| format!("Failed to prepare sol_delta backfill query: {e}"))?;
 
             let rows = stmt
-                .query_map(params![wallet_address, BATCH_SIZE], |row| {
-                    let signature: String = row.get(0)?;
-                    let change_json: Option<String> = row.get(1)?;
-                    Ok((signature, change_json))
-                })
+                .query_map(
+                    params![self.chain.as_str(), wallet_address, BATCH_SIZE],
+                    |row| {
+                        let signature: String = row.get(0)?;
+                        let change_json: Option<String> = row.get(1)?;
+                        Ok((signature, change_json))
+                    },
+                )
                 .map_err(|e| format!("Failed to iterate sol_delta backfill rows: {e}"))?;
 
             let mut batch: Vec<(String, Option<String>)> = Vec::new();
@@ -661,8 +775,8 @@ impl TransactionDatabase {
             for (signature, change_json) in batch.into_iter() {
                 let delta = Self::compute_sol_delta_from_json(change_json.as_deref());
                 tx.execute(
-                    "UPDATE processed_transactions SET sol_delta = ?1 WHERE signature = ?2 AND wallet_address = ?3",
-                    params![delta, signature, wallet_address],
+                    "UPDATE processed_transactions SET sol_delta = ?1 WHERE chain_id = ?2 AND signature = ?3 AND wallet_address = ?4",
+                    params![delta, self.chain.as_str(), signature, wallet_address],
                 )
                 .map_err(|e| format!("Failed to update sol_delta: {e}"))?;
                 total_updated += 1;
@@ -715,6 +829,17 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to get database connection from pool: {e}"))
     }
 
+    pub(super) fn require_subject_chain(&self, subject: Subject) -> Result<&'static str, String> {
+        if subject.chain() != self.chain {
+            return Err(format!(
+                "Transaction subject chain {} does not match database chain {}",
+                subject.chain(),
+                self.chain
+            ));
+        }
+        Ok(self.chain.as_str())
+    }
+
     /// Health check - verify database connectivity and basic operations
     pub async fn health_check(&self) -> Result<(), String> {
         let conn = self.get_connection()?;
@@ -749,11 +874,13 @@ impl TransactionDatabase {
     ) -> Result<bool, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(subject)?;
 
         let exists: bool = conn
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM known_signatures WHERE signature = ?1 AND wallet_address = ?2)",
-                params![signature, wallet_address],
+                "SELECT EXISTS(SELECT 1 FROM known_signatures WHERE chain_id = ?1 AND signature = ?2 AND wallet_address = ?3)",
+                params![chain_id, signature, wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to check known signature: {e}"))?;
@@ -769,10 +896,11 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         conn.execute(
-            "INSERT OR IGNORE INTO known_signatures (signature, wallet_address) VALUES (?1, ?2)",
-            params![signature, wallet_address],
+            "INSERT OR IGNORE INTO known_signatures (chain_id, signature, wallet_address) VALUES (?1, ?2, ?3)",
+            params![chain_id, signature, wallet_address],
         )
         .map_err(|e| format!("Failed to add known signature: {e}"))?;
 
@@ -783,11 +911,12 @@ impl TransactionDatabase {
     pub async fn get_known_signatures_count(&self, subject: Subject) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM known_signatures WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![chain_id, wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get known signatures count: {e}"))?;
@@ -802,11 +931,12 @@ impl TransactionDatabase {
     ) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let result: Option<String> = conn
             .query_row(
-                "SELECT signature FROM known_signatures WHERE wallet_address = ?1 ORDER BY added_at DESC LIMIT 1",
-                params![wallet_address],
+                "SELECT signature FROM known_signatures WHERE chain_id = ?1 AND wallet_address = ?2 ORDER BY added_at DESC LIMIT 1",
+                params![chain_id, wallet_address],
                 |row| row.get(0),
             )
             .optional()
@@ -826,11 +956,12 @@ impl TransactionDatabase {
     ) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
+        let chain_id = self.require_subject_chain(subject)?;
 
         let result: Option<String> = conn
             .query_row(
-                "SELECT signature FROM known_signatures WHERE wallet_address = ?1 ORDER BY added_at ASC LIMIT 1",
-                params![wallet_address],
+                "SELECT signature FROM known_signatures WHERE chain_id = ?1 AND wallet_address = ?2 ORDER BY added_at ASC LIMIT 1",
+                params![chain_id, wallet_address],
                 |row| row.get(0),
             )
             .optional()
@@ -845,8 +976,8 @@ impl TransactionDatabase {
 
         let affected = conn
             .execute(
-                "DELETE FROM known_signatures WHERE added_at < datetime('now', '-' || ?1 || ' days')",
-                params![days]
+                "DELETE FROM known_signatures WHERE chain_id = ?1 AND added_at < datetime('now', '-' || ?2 || ' days')",
+                params![self.chain.as_str(), days]
             )
             .map_err(|e| format!("Failed to cleanup old known signatures: {e}"))?;
 

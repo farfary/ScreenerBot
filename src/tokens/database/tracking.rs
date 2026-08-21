@@ -19,8 +19,8 @@ impl TokenDatabase {
             "UPDATE update_tracking SET 
                 pool_price_last_calculated_at = ?1,
                 pool_price_last_used_pool_address = ?2
-             WHERE mint = ?3",
-            params![now, pool_address, mint],
+             WHERE chain_id = ?3 AND mint = ?4",
+            params![now, pool_address, self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to mark pool price calculated: {e}")))?;
 
@@ -36,7 +36,11 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM tokens WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .map_err(|e| TokenError::Database(format!("Failed to count tokens: {e}")))?;
 
         Ok(count.max(0) as u64)
@@ -47,7 +51,11 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM update_tracking", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM update_tracking WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .map_err(|e| TokenError::Database(format!("Failed to count tracked tokens: {e}")))?;
 
         Ok(count.max(0) as u64)
@@ -58,7 +66,11 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM blacklist", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM blacklist WHERE chain_id = ?1",
+                params![self.chain_id()],
+                |row| row.get(0),
+            )
             .map_err(|e| {
                 TokenError::Database(format!("Failed to count blacklisted tokens: {e}"))
             })?;
@@ -80,11 +92,11 @@ impl TokenDatabase {
                         last_error, last_error_at, market_error_count, market_error_type,
                         last_security_error, last_security_error_at, security_error_count
                  FROM update_tracking
-                 WHERE mint = ?1",
+                 WHERE chain_id = ?1 AND mint = ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let result = stmt.query_row(params![mint], |row| map_tracking_row(row));
+        let result = stmt.query_row(params![self.chain_id(), mint], |row| map_tracking_row(row));
 
         match result {
             Ok(info) => Ok(Some(info)),
@@ -112,15 +124,17 @@ impl TokenDatabase {
                             last_error, last_error_at, market_error_count, market_error_type,
                             last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
-                     WHERE priority = ?1
+                     WHERE chain_id = ?1 AND priority = ?2
                        AND (market_error_type IS NULL OR market_error_type != 'permanent')
                      ORDER BY COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
-                     LIMIT ?2",
+                     LIMIT ?3",
                 )
                 .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
             let rows = stmt
-                .query_map(params![priority, limit as i64], |row| map_tracking_row(row))
+                .query_map(params![self.chain_id(), priority, limit as i64], |row| {
+                    map_tracking_row(row)
+                })
                 .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
@@ -137,14 +151,16 @@ impl TokenDatabase {
                             last_error, last_error_at, market_error_count, market_error_type,
                             last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
-                     WHERE (market_error_type IS NULL OR market_error_type != 'permanent')
+                     WHERE chain_id = ?1 AND (market_error_type IS NULL OR market_error_type != 'permanent')
                      ORDER BY priority DESC, COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
-                     LIMIT ?1",
+                     LIMIT ?2",
                 )
                 .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
             let rows = stmt
-                .query_map(params![limit as i64], |row| map_tracking_row(row))
+                .query_map(params![self.chain_id(), limit as i64], |row| {
+                    map_tracking_row(row)
+                })
                 .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| {

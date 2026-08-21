@@ -1,7 +1,8 @@
 //! Open position operations — new position entry with swap execution and verification.
 
+use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
-use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::positions::db as positions_db;
 use crate::positions::price_resolution::get_price_with_api_fallback;
@@ -13,7 +14,6 @@ use crate::positions::state::{
 use crate::positions::types::{
     EntrySubmission, Position, PositionManagement, PositionOrigin, VerificationKind,
 };
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
 };

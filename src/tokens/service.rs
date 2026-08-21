@@ -60,12 +60,13 @@ impl Service for TokensServiceNew {
     async fn initialize(&mut self) -> crate::Result<()> {
         // Initialize database (schema initialized automatically in new())
         let db_path = crate::paths::get_tokens_db_path();
-        let db = TokenDatabase::new(&db_path.to_string_lossy()).map_err(|e| {
-            crate::Error::Service(crate::errors::ServiceError::Initialize {
-                service: "tokens_new".to_owned(),
-                message: format!("Failed to create database: {e}"),
-            })
-        })?;
+        let db = TokenDatabase::new(&db_path.to_string_lossy(), crate::chains::ChainId::Solana)
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Initialize {
+                    service: "tokens_new".to_owned(),
+                    message: format!("Failed to create database: {e}"),
+                })
+            })?;
 
         let db_arc = Arc::new(db);
 
@@ -85,8 +86,10 @@ impl Service for TokensServiceNew {
         // is capped at the cache capacity and ordered so pool-backed mints are inserted last;
         // loading the whole table (405k rows against a 100k cache) evicted most of them.
         let preload_start = std::time::Instant::now();
+        let db_for_preload = db_arc.clone();
         let all_decimals = tokio::task::spawn_blocking(move || {
-            db_arc.get_tokens_with_decimals_for_preload(crate::tokens::decimals::PRELOAD_CAPACITY)
+            db_for_preload
+                .get_tokens_with_decimals_for_preload(crate::tokens::decimals::PRELOAD_CAPACITY)
         })
         .await
         .map_err(|e| {
@@ -104,9 +107,10 @@ impl Service for TokensServiceNew {
 
         // The query already excluded invalid values, and its order is load-bearing —
         // insert as returned so pool-backed mints end up most recently used.
+        let chain = db_arc.chain();
         let preloaded_count = all_decimals.len();
         for (mint, decimals) in all_decimals {
-            crate::tokens::decimals::cache(&mint, decimals);
+            crate::tokens::decimals::cache(chain, &mint, decimals);
         }
 
         logger::info(
@@ -130,11 +134,16 @@ impl Service for TokensServiceNew {
                     })
                 })?
                 .clone();
-            match tokio::task::spawn_blocking(move || db_for_auth.load_blocked_authorities()).await
+            let db_for_auth_loader = db_for_auth.clone();
+            match tokio::task::spawn_blocking(move || db_for_auth_loader.load_blocked_authorities())
+                .await
             {
                 Ok(Ok(blocked)) => {
                     let count = blocked.len();
-                    crate::tokens::authority_cache::refresh_blocked_from_db(blocked);
+                    crate::tokens::authority_cache::refresh_blocked_from_db(
+                        db_for_auth.chain(),
+                        blocked,
+                    );
                     if count > 0 {
                         logger::info(
                             LogTag::Tokens,
@@ -255,7 +264,10 @@ impl Service for TokensServiceNew {
                         })
                         .await
                         {
-                            crate::tokens::authority_cache::refresh_blocked_from_db(blocked);
+                            crate::tokens::authority_cache::refresh_blocked_from_db(
+                                auth_db.chain(),
+                                blocked,
+                            );
                         }
                     }
                     Ok(Err(e)) => {

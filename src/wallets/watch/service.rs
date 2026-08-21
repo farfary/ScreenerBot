@@ -17,27 +17,27 @@ use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
+use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use chrono::Utc;
-use solana_sdk::pubkey::Pubkey;
 use tokio::sync::{broadcast, mpsc, Notify};
 use tokio::time::interval;
 
+use crate::chains::solana::rpc::{self, ConnectionState, SubscriptionEvent};
+use crate::chains::solana::transactions::fetcher::TransactionFetcher;
+use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
-use crate::rpc::{self, ConnectionState, SubscriptionEvent};
-use crate::transactions::fetcher::TransactionFetcher;
-use crate::transactions::processor::TransactionProcessor;
 use crate::transactions::types::Subject;
 use crate::transactions::utils::{
     add_pending_transaction_globally, remove_pending_transaction_globally,
 };
 
-use super::classify;
 use super::database::WatchDatabase;
 use super::dedupe;
 use super::poller;
 use super::recorder;
 use super::types::{WalletActivity, WatchSource, WatchTarget};
+use crate::chains::solana::wallets::classify;
 
 /// Bound generous enough that a burst across every watched target cannot fill the
 /// channel before the slowest consumer (a Telegram send) catches up. Bounded so a
@@ -334,7 +334,7 @@ async fn process_signature(
     let Ok(pubkey) = Pubkey::from_str(&target.address) else {
         return ProcessOutcome::Terminal;
     };
-    let subject = Subject(pubkey);
+    let subject = Subject::solana(pubkey);
 
     let already_seen = match dedupe::has_seen(subject, signature).await {
         Ok(seen) => seen,

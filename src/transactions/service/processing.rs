@@ -120,7 +120,7 @@ async fn handle_own_wallet_activity(
     metrics: &mut ServiceMetrics,
     activity: &WalletActivity,
 ) {
-    let subject = Subject(config.wallet_pubkey);
+    let subject = Subject::solana(config.wallet_pubkey);
     add_signature_to_known_globally(subject, activity.signature.clone()).await;
     metrics.update_activity();
 

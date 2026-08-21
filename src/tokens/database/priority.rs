@@ -16,16 +16,16 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT mint FROM update_tracking 
-                 WHERE priority = ?1
+                 WHERE chain_id = ?1 AND priority = ?2
                  AND (last_error_at IS NULL OR last_error_at < strftime('%s','now') - 180)
                  AND (market_error_type IS NULL OR market_error_type != 'permanent')
                  ORDER BY market_data_last_updated_at ASC NULLS FIRST 
-                 LIMIT ?2",
+                 LIMIT ?3",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mints = stmt
-            .query_map(params![priority, limit], |row| row.get(0))
+            .query_map(params![self.chain_id(), priority, limit], |row| row.get(0))
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         mints
@@ -41,17 +41,17 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT t.mint FROM tokens t
-             LEFT JOIN blacklist b ON t.mint = b.mint
-             LEFT JOIN update_tracking u ON t.mint = u.mint
-             WHERE b.mint IS NULL
+             LEFT JOIN blacklist b ON t.chain_id = b.chain_id AND t.mint = b.mint
+             LEFT JOIN update_tracking u ON t.chain_id = u.chain_id AND t.mint = u.mint
+             WHERE t.chain_id = ?1 AND b.mint IS NULL
              AND (u.market_error_type IS NULL OR u.market_error_type != 'permanent')
              ORDER BY COALESCE(u.market_data_last_updated_at, 0) ASC
-             LIMIT ?1",
+             LIMIT ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let mints = stmt
-            .query_map(params![limit], |row| row.get(0))
+            .query_map(params![self.chain_id(), limit], |row| row.get(0))
             .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
 
         mints
@@ -74,8 +74,8 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         conn.execute(
-            "UPDATE update_tracking SET priority = ?1 WHERE mint = ?2",
-            params![priority, mint],
+            "UPDATE update_tracking SET priority = ?1 WHERE chain_id = ?2 AND mint = ?3",
+            params![priority, self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to update priority: {e}")))?;
 
@@ -106,11 +106,13 @@ impl TokenDatabase {
         let mut updated = 0;
         {
             let mut stmt = tx
-                .prepare_cached("UPDATE update_tracking SET priority = ?1 WHERE mint = ?2")
+                .prepare_cached(
+                    "UPDATE update_tracking SET priority = ?1 WHERE chain_id = ?2 AND mint = ?3",
+                )
                 .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
 
             for mint in mints {
-                match stmt.execute(params![priority, mint]) {
+                match stmt.execute(params![priority, self.chain_id(), mint]) {
                     Ok(rows) => updated += rows,
                     Err(e) => {
                         logger::warning(
@@ -147,11 +149,13 @@ impl TokenDatabase {
         }
 
         let query = format!(
-            "SELECT mint, priority FROM update_tracking WHERE mint IN ({})",
+            "SELECT mint, priority FROM update_tracking WHERE chain_id = ? AND mint IN ({})",
             placeholders
         );
 
-        let mint_refs: Vec<&str> = mints.iter().map(String::as_str).collect();
+        let mint_refs: Vec<&str> = std::iter::once(self.chain_id())
+            .chain(mints.iter().map(String::as_str))
+            .collect();
 
         let mut stmt = conn
             .prepare(&query)
@@ -181,12 +185,12 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT priority, COUNT(*) FROM update_tracking GROUP BY priority ORDER BY priority DESC",
+                "SELECT priority, COUNT(*) FROM update_tracking WHERE chain_id = ?1 GROUP BY priority ORDER BY priority DESC",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let rows = stmt
-            .query_map([], |row| {
+            .query_map(params![self.chain_id()], |row| {
                 let priority: i32 = row.get(0)?;
                 let count: i64 = row.get(1)?;
                 Ok((priority, count.max(0) as u64))
@@ -202,11 +206,11 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut stmt = conn
-            .prepare("SELECT priority FROM update_tracking WHERE mint = ?1")
+            .prepare("SELECT priority FROM update_tracking WHERE chain_id = ?1 AND mint = ?2")
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let priority: i32 = stmt
-            .query_row(params![mint], |row| row.get(0))
+            .query_row(params![self.chain_id(), mint], |row| row.get(0))
             .unwrap_or(10); // Default to Low priority
 
         Ok(Priority::from_value(priority))

@@ -69,14 +69,14 @@ async fn commit_to_database(
 
 #[cfg(test)]
 mod tests {
-    use solana_sdk::pubkey::Pubkey;
+    use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
     use super::*;
     use crate::transactions::utils::remove_signature_from_known_globally;
 
     #[tokio::test]
     async fn in_memory_admission_is_subject_scoped() {
-        let subject = Subject(Pubkey::new_unique());
+        let subject = Subject::solana(Pubkey::new_unique());
         let signature = "dedupe-admission-signature";
 
         remove_signature_from_known_globally(subject, signature).await;
@@ -92,10 +92,10 @@ mod tests {
     async fn durable_admission_survives_database_reopen() {
         let dir = tempfile::tempdir().expect("temp database directory");
         let path = dir.path().join("transactions.db");
-        let subject = Subject(Pubkey::new_unique());
+        let subject = Subject::solana(Pubkey::new_unique());
         let signature = "durable-dedupe-signature";
 
-        let db = TransactionDatabase::new_with_path(&path)
+        let db = TransactionDatabase::new_with_path(&path, crate::chains::ChainId::Solana)
             .await
             .expect("create transaction database");
         commit_to_database(&db, subject, signature)
@@ -103,7 +103,7 @@ mod tests {
             .expect("persist dedupe admission");
         drop(db);
 
-        let reopened = TransactionDatabase::new_with_path(&path)
+        let reopened = TransactionDatabase::new_with_path(&path, crate::chains::ChainId::Solana)
             .await
             .expect("reopen transaction database");
         assert!(has_seen_in_database(&reopened, subject, signature)

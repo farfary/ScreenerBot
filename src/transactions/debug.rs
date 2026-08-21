@@ -12,8 +12,9 @@ use chrono::{DateTime, Utc};
 use std::time::Instant;
 use tabled::Tabled;
 
+use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
-use crate::transactions::{processor::TransactionProcessor, types::*};
+use crate::transactions::types::*;
 
 use super::debug_helpers::{perform_debug_validations, print_debug_analysis};
 
@@ -108,7 +109,7 @@ pub struct DebugValidation {
 /// Debug a single transaction with comprehensive analysis
 pub async fn debug_transaction(
     signature: &str,
-    wallet_pubkey: solana_sdk::pubkey::Pubkey,
+    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
     verbose: bool,
 ) -> Result<DebugAnalysisResult, String> {
     logger::info(
@@ -189,7 +190,7 @@ pub async fn debug_transaction(
 /// Debug multiple transactions and generate summary
 pub async fn debug_transactions_batch(
     signatures: Vec<String>,
-    wallet_pubkey: solana_sdk::pubkey::Pubkey,
+    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
 ) -> Result<Vec<DebugAnalysisResult>, String> {
     logger::info(
         LogTag::Transactions,

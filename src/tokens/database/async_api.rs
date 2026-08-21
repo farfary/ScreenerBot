@@ -106,13 +106,14 @@ pub async fn replace_token_pools_async(snapshot: TokenPoolsSnapshot) -> TokenRes
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     let mint = snapshot.mint.clone();
+    let chain = db.chain();
 
     tokio::task::spawn_blocking(move || db.replace_token_pools(&snapshot))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))??;
 
     // Invalidate cache after successful pool replacement
-    store::invalidate_token_snapshot(&mint);
+    store::invalidate_token_snapshot(chain, &mint);
 
     Ok(())
 }
@@ -146,7 +147,11 @@ pub async fn count_tokens_async() -> TokenResult<usize> {
         let conn = db.conn()?;
 
         let count: usize = conn
-            .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM tokens WHERE chain_id = ?1",
+                rusqlite::params![db.chain_id()],
+                |row| row.get(0),
+            )
             .map_err(|e| TokenError::Database(format!("Count query failed: {e}")))?;
 
         Ok(count)

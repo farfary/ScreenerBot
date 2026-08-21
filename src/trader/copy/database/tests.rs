@@ -6,6 +6,7 @@ use crate::trader::copy::{CopyMode, ExitMode, SizingMode};
 fn task() -> CopyTask {
     CopyTask {
         id: 0,
+        chain: crate::chains::ChainId::Solana,
         target_address: "target".to_owned(),
         label: Some("Paper".to_owned()),
         enabled: true,
@@ -28,7 +29,11 @@ fn task() -> CopyTask {
 #[tokio::test]
 async fn task_and_outcome_round_trip_with_idempotent_spend() {
     let dir = tempfile::tempdir().unwrap();
-    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
     let task = db.insert_task(task()).await.unwrap();
     assert_eq!(
         db.enabled_tasks_for_subject("target").await.unwrap(),
@@ -112,7 +117,11 @@ fn live_outcome(task: &CopyTask, pending: bool) -> CopyOutcome {
 #[tokio::test]
 async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_status() {
     let dir = tempfile::tempdir().unwrap();
-    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
     let configured = db.insert_task(task()).await.unwrap();
     let configured = db
         .set_task_mode(
@@ -162,7 +171,11 @@ async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_stat
 #[tokio::test]
 async fn generic_task_update_cannot_change_mode() {
     let dir = tempfile::tempdir().unwrap();
-    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
     let mut configured = db.insert_task(task()).await.unwrap();
     assert!(db
         .set_task_mode(configured.id, CopyMode::Live, None)
@@ -175,7 +188,11 @@ async fn generic_task_update_cannot_change_mode() {
 #[tokio::test]
 async fn live_activity_claim_is_atomic_and_idempotent() {
     let dir = tempfile::tempdir().unwrap();
-    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
     let configured = db.insert_task(task()).await.unwrap();
     assert!(db
         .claim_live_activity(configured.id, "target-signature")
@@ -190,7 +207,11 @@ async fn live_activity_claim_is_atomic_and_idempotent() {
 #[tokio::test]
 async fn target_inventory_is_idempotent_and_returns_pre_sell_holding() {
     let dir = tempfile::tempdir().unwrap();
-    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
     let task = db.insert_task(task()).await.unwrap();
 
     assert_eq!(
@@ -215,7 +236,11 @@ async fn target_inventory_is_idempotent_and_returns_pre_sell_holding() {
 #[tokio::test]
 async fn stale_claim_reconciliation_is_fail_closed_and_idempotent() {
     let dir = tempfile::tempdir().unwrap();
-    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
     let task = db.insert_task(task()).await.unwrap();
     assert!(db.claim_live_activity(task.id, "orphan").await.unwrap());
     assert_eq!(db.reconcile_stale_claims(0).await.unwrap(), 1);
@@ -252,7 +277,7 @@ async fn schema_v1_backfills_explicit_empty_exit_policy_overrides() {
             )
             .unwrap();
     }
-    let db = CopyDatabase::open(&path).unwrap();
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
     let inserted = db.insert_task(task()).await.unwrap();
     assert_eq!(
         db.get_task(inserted.id)
@@ -265,9 +290,65 @@ async fn schema_v1_backfills_explicit_empty_exit_policy_overrides() {
 }
 
 #[tokio::test]
+async fn chain_migration_preserves_legacy_task_children_and_allows_chain_qualified_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    {
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection.execute_batch(
+            "PRAGMA foreign_keys = ON;
+             CREATE TABLE copy_tasks (
+                id INTEGER PRIMARY KEY, target_address TEXT NOT NULL, label TEXT, enabled INTEGER NOT NULL,
+                mode_json TEXT NOT NULL, sizing_json TEXT NOT NULL, exit_mode_json TEXT NOT NULL,
+                max_sol_per_trade REAL NOT NULL, max_sol_per_token REAL NOT NULL, total_budget_sol REAL NOT NULL,
+                min_target_trade_sol REAL, max_target_trade_sol REAL, buy_once_per_token INTEGER NOT NULL,
+                slippage_pct REAL NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+             );
+             CREATE TABLE copy_spend (task_id INTEGER NOT NULL, mint TEXT NOT NULL, spent_sol REAL NOT NULL DEFAULT 0,
+                buy_count INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, PRIMARY KEY(task_id, mint),
+                FOREIGN KEY(task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE);",
+        ).unwrap();
+        connection.execute(
+            "INSERT INTO copy_tasks VALUES (9, 'target', NULL, 1, '\"paper\"', '{\"kind\":\"fixed\",\"sol\":1.0}', '\"buy_only\"', 1, 1, 1, NULL, NULL, 0, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+            [],
+        ).unwrap();
+        connection
+            .execute(
+                "INSERT INTO copy_spend VALUES (9, 'mint', 0.5, 1, '2026-01-01T00:00:00Z')",
+                [],
+            )
+            .unwrap();
+    }
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    assert_eq!(
+        db.get_task(9).await.unwrap().unwrap().chain,
+        crate::chains::ChainId::Solana
+    );
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute(
+        "INSERT INTO copy_tasks (id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, buy_once_per_token, slippage_pct, created_at, updated_at) VALUES (10, 'future-chain', 'target', NULL, 1, '\"paper\"', '{\"kind\":\"fixed\",\"sol\":1.0}', '\"buy_only\"', '{}', 1, 1, 1, 0, 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
+        [],
+    ).unwrap();
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT task_id FROM copy_spend WHERE mint='mint'",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+        9
+    );
+}
+
+#[tokio::test]
 async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
     let dir = tempfile::tempdir().unwrap();
-    let db = CopyDatabase::open(dir.path().join("copy_trading.db")).unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
     let configured = db.insert_task(task()).await.unwrap();
     let now = Utc::now();
     let outcome = CopyOutcome::PaperSellObserved(super::super::types::CopySellDecision {

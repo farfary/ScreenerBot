@@ -11,6 +11,11 @@ pub(super) fn register_all_services(manager: &mut ServiceManager) {
 
     logger::info(LogTag::System, "Registering services...");
 
+    // Select the Solana swap router set before any service can trigger a swap.
+    crate::swaps::registry::set_router_factory(
+        crate::chains::solana::swaps::routers::build_routers,
+    );
+
     // Core infrastructure services
     manager.register(Box::new(ConnectivityService::new()));
     manager.register(Box::new(EventsService));

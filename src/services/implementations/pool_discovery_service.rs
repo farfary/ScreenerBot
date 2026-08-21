@@ -44,12 +44,13 @@ impl Service for PoolDiscoveryService {
         logger::debug(LogTag::PoolService, "Starting pool discovery service...");
 
         // Get the PoolDiscovery component from global state
-        let discovery = crate::pools::get_pool_discovery().ok_or_else(|| {
-            crate::Error::Service(ServiceError::Start {
-                service: self.name().to_string(),
-                message: "PoolDiscovery component not initialized".to_owned(),
-            })
-        })?;
+        let discovery =
+            crate::chains::solana::pools::service::get_pool_discovery().ok_or_else(|| {
+                crate::Error::Service(ServiceError::Start {
+                    service: self.name().to_string(),
+                    message: "PoolDiscovery component not initialized".to_owned(),
+                })
+            })?;
 
         // Spawn discovery task (instrumented) - component tracks its own metrics
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -73,7 +74,7 @@ impl Service for PoolDiscoveryService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::pools::get_pool_discovery().is_some() {
+        if crate::chains::solana::pools::service::get_pool_discovery().is_some() {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy("PoolDiscovery component not available".to_owned())
@@ -84,7 +85,7 @@ impl Service for PoolDiscoveryService {
         let mut metrics = ServiceMetrics::default();
 
         // Get metrics from the component if available
-        if let Some(discovery) = crate::pools::get_pool_discovery() {
+        if let Some(discovery) = crate::chains::solana::pools::service::get_pool_discovery() {
             let (operations, errors, pools_discovered) = discovery.get_metrics();
             metrics.operations_total = operations;
             metrics.errors_total = errors;

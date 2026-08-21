@@ -19,44 +19,49 @@ use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 
-use crate::database;
 use crate::paths::get_wallets_db_path;
+use crate::{chains::ChainId, database};
 
 use super::types::{WatchSource, WatchTarget};
 
 const SCHEMA_WATCH_TARGETS: &str = r#"
 CREATE TABLE IF NOT EXISTS watch_targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    address TEXT NOT NULL UNIQUE,
+    chain_id TEXT NOT NULL DEFAULT 'solana',
+    address TEXT NOT NULL,
     label TEXT,
     sources TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (chain_id, address)
 );
 "#;
 
 const SCHEMA_WATCH_CURSORS: &str = r#"
 CREATE TABLE IF NOT EXISTS watch_cursors (
-    address TEXT PRIMARY KEY,
+    chain_id TEXT NOT NULL DEFAULT 'solana',
+    address TEXT NOT NULL,
     last_signature TEXT,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (chain_id, address)
 );
 "#;
 
 const INDEXES: &[&str] =
-    &["CREATE INDEX IF NOT EXISTS idx_watch_targets_enabled ON watch_targets(enabled);"];
+    &["CREATE INDEX IF NOT EXISTS idx_watch_targets_chain_enabled ON watch_targets(chain_id, enabled);"];
 
 /// Owns `watch_targets` and `watch_cursors`.
 #[derive(Clone)]
 pub struct WatchDatabase {
     pool: Pool<SqliteConnectionManager>,
+    pub(super) chain: ChainId,
 }
 
 impl WatchDatabase {
     /// Create or open the database at its real location and ensure its schema exists.
-    pub fn new() -> Result<Self, String> {
-        Self::open(get_wallets_db_path())
+    pub fn new(chain: ChainId) -> Result<Self, String> {
+        Self::open(get_wallets_db_path(), chain)
     }
 
     /// Create or open the database at an explicit path. Test-only: unit tests must
@@ -67,11 +72,14 @@ impl WatchDatabase {
     /// new_with_path` exists to avoid for the same reason. See `tests/common/mod.rs`'s
     /// `real_data_dir` doc for the same footgun from the integration-test side.
     #[cfg(test)]
-    pub(crate) fn new_with_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, String> {
-        Self::open(path.as_ref().to_path_buf())
+    pub(crate) fn new_with_path<P: AsRef<std::path::Path>>(
+        path: P,
+        chain: ChainId,
+    ) -> Result<Self, String> {
+        Self::open(path.as_ref().to_path_buf(), chain)
     }
 
-    fn open(db_path: std::path::PathBuf) -> Result<Self, String> {
+    fn open(db_path: std::path::PathBuf, chain: ChainId) -> Result<Self, String> {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("Failed to create data directory: {e}"))?;
@@ -86,7 +94,7 @@ impl WatchDatabase {
             .build(manager)
             .map_err(|e| format!("Failed to create watch connection pool: {e}"))?;
 
-        let db = Self { pool };
+        let db = Self { pool, chain };
         db.initialize_sync()?;
         Ok(db)
     }
@@ -126,11 +134,11 @@ impl WatchDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT id, address, label, sources, enabled, created_at, updated_at \
-                 FROM watch_targets ORDER BY created_at DESC",
+                 FROM watch_targets WHERE chain_id = ?1 ORDER BY created_at DESC",
             )
             .map_err(|e| format!("Failed to prepare list_targets: {e}"))?;
         let rows = stmt
-            .query_map([], Self::row_to_target)
+            .query_map(params![self.chain.as_str()], Self::row_to_target)
             .map_err(|e| format!("Failed to query watch_targets: {e}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to read watch_targets: {e}"))?;
@@ -148,8 +156,8 @@ impl WatchDatabase {
         let conn = self.conn()?;
         conn.query_row(
             "SELECT id, address, label, sources, enabled, created_at, updated_at \
-             FROM watch_targets WHERE id = ?1",
-            params![id],
+             FROM watch_targets WHERE chain_id = ?1 AND id = ?2",
+            params![self.chain.as_str(), id],
             Self::row_to_target,
         )
         .optional()
@@ -171,8 +179,8 @@ impl WatchDatabase {
         let conn = self.conn()?;
         conn.query_row(
             "SELECT id, address, label, sources, enabled, created_at, updated_at \
-             FROM watch_targets WHERE address = ?1",
-            params![address],
+             FROM watch_targets WHERE chain_id = ?1 AND address = ?2",
+            params![self.chain.as_str(), address],
             Self::row_to_target,
         )
         .optional()
@@ -210,9 +218,9 @@ impl WatchDatabase {
             .transaction()
             .map_err(|e| format!("Failed to begin watch-target insert: {e}"))?;
         tx.execute(
-            "INSERT INTO watch_targets (address, label, sources, enabled, created_at, updated_at) \
-             VALUES (?1, ?2, '[]', 1, ?3, ?3)",
-            params![address, label, now],
+            "INSERT INTO watch_targets (chain_id, address, label, sources, enabled, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, '[]', 1, ?4, ?4)",
+            params![self.chain.as_str(), address, label, now],
         )
         .map_err(|e| {
             if e.to_string().contains("UNIQUE constraint failed") {
@@ -227,8 +235,8 @@ impl WatchDatabase {
         let sources_json = serde_json::to_string(&sources)
             .map_err(|e| format!("Failed to serialize watch sources: {e}"))?;
         tx.execute(
-            "UPDATE watch_targets SET sources = ?1 WHERE id = ?2",
-            params![sources_json, id],
+            "UPDATE watch_targets SET sources = ?1 WHERE chain_id = ?2 AND id = ?3",
+            params![sources_json, self.chain.as_str(), id],
         )
         .map_err(|e| format!("Failed to set watch target sources: {e}"))?;
         tx.commit()
@@ -251,8 +259,8 @@ impl WatchDatabase {
         let now = Utc::now().to_rfc3339();
         let affected = conn
             .execute(
-                "UPDATE watch_targets SET enabled = ?1, updated_at = ?2 WHERE id = ?3",
-                params![enabled, now, id],
+                "UPDATE watch_targets SET enabled = ?1, updated_at = ?2 WHERE chain_id = ?3 AND id = ?4",
+                params![enabled, now, self.chain.as_str(), id],
             )
             .map_err(|e| format!("Failed to update watch target {id}: {e}"))?;
         if affected == 0 {
@@ -275,8 +283,8 @@ impl WatchDatabase {
             .map_err(|e| format!("Failed to begin watch-target delete: {e}"))?;
         let address: Option<String> = tx
             .query_row(
-                "SELECT address FROM watch_targets WHERE id = ?1",
-                params![id],
+                "SELECT address FROM watch_targets WHERE chain_id = ?1 AND id = ?2",
+                params![self.chain.as_str(), id],
                 |row| row.get(0),
             )
             .optional()
@@ -285,11 +293,14 @@ impl WatchDatabase {
             return Err(format!("Watch target {id} not found"));
         };
 
-        tx.execute("DELETE FROM watch_targets WHERE id = ?1", params![id])
-            .map_err(|e| format!("Failed to delete watch target {id}: {e}"))?;
         tx.execute(
-            "DELETE FROM watch_cursors WHERE address = ?1",
-            params![address],
+            "DELETE FROM watch_targets WHERE chain_id = ?1 AND id = ?2",
+            params![self.chain.as_str(), id],
+        )
+        .map_err(|e| format!("Failed to delete watch target {id}: {e}"))?;
+        tx.execute(
+            "DELETE FROM watch_cursors WHERE chain_id = ?1 AND address = ?2",
+            params![self.chain.as_str(), address],
         )
         .map_err(|e| format!("Failed to delete watch cursor for {address}: {e}"))?;
         tx.commit()
@@ -339,8 +350,8 @@ impl WatchDatabase {
         tokio::task::spawn_blocking(move || {
             let conn = db.conn()?;
             conn.query_row(
-                "SELECT EXISTS(SELECT 1 FROM watch_cursors WHERE address = ?1)",
-                params![address],
+                "SELECT EXISTS(SELECT 1 FROM watch_cursors WHERE chain_id = ?1 AND address = ?2)",
+                params![db.chain.as_str(), address],
                 |row| row.get::<_, bool>(0),
             )
             .map_err(|e| format!("Failed to inspect watch cursor for {address}: {e}"))
@@ -358,9 +369,9 @@ impl WatchDatabase {
         tokio::task::spawn_blocking(move || {
             let conn = db.conn()?;
             conn.execute(
-                "INSERT OR IGNORE INTO watch_cursors (address, last_signature, updated_at) \
-                 VALUES (?1, NULL, ?2)",
-                params![address, Utc::now().to_rfc3339()],
+                "INSERT OR IGNORE INTO watch_cursors (chain_id, address, last_signature, updated_at) \
+                 VALUES (?1, ?2, NULL, ?3)",
+                params![db.chain.as_str(), address, Utc::now().to_rfc3339()],
             )
             .map_err(|e| format!("Failed to initialize watch cursor for {address}: {e}"))?;
             Ok(())
@@ -373,8 +384,8 @@ impl WatchDatabase {
         let conn = self.conn()?;
         let cursor = conn
             .query_row(
-                "SELECT last_signature FROM watch_cursors WHERE address = ?1",
-                params![address],
+                "SELECT last_signature FROM watch_cursors WHERE chain_id = ?1 AND address = ?2",
+                params![self.chain.as_str(), address],
                 |row| row.get::<_, Option<String>>(0),
             )
             .optional()
@@ -400,8 +411,8 @@ impl WatchDatabase {
         let conn = self.conn()?;
         let raw: Option<String> = conn
             .query_row(
-                "SELECT updated_at FROM watch_cursors WHERE address = ?1",
-                params![address],
+                "SELECT updated_at FROM watch_cursors WHERE chain_id = ?1 AND address = ?2",
+                params![self.chain.as_str(), address],
                 |row| row.get(0),
             )
             .optional()
@@ -426,9 +437,9 @@ impl WatchDatabase {
         let conn = self.conn()?;
         let now = Utc::now().to_rfc3339();
         conn.execute(
-            "INSERT INTO watch_cursors (address, last_signature, updated_at) VALUES (?1, ?2, ?3) \
-             ON CONFLICT(address) DO UPDATE SET last_signature = excluded.last_signature, updated_at = excluded.updated_at",
-            params![address, last_signature, now],
+            "INSERT INTO watch_cursors (chain_id, address, last_signature, updated_at) VALUES (?1, ?2, ?3, ?4) \
+             ON CONFLICT(chain_id, address) DO UPDATE SET last_signature = excluded.last_signature, updated_at = excluded.updated_at",
+            params![self.chain.as_str(), address, last_signature, now],
         )
         .map_err(|e| format!("Failed to set watch cursor for {address}: {e}"))?;
         Ok(())
@@ -441,7 +452,7 @@ mod tests {
 
     fn temp_db() -> (WatchDatabase, tempfile::TempDir) {
         let dir = tempfile::tempdir().expect("create temp dir");
-        let db = WatchDatabase::new_with_path(dir.path().join("wallets.db"))
+        let db = WatchDatabase::new_with_path(dir.path().join("wallets.db"), ChainId::Solana)
             .expect("create watch database");
         (db, dir)
     }

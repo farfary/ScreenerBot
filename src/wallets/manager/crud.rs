@@ -1,6 +1,6 @@
 //! Wallet CRUD — create, read, update, and delete wallet operations.
 
-use super::super::crypto::{generate_and_encrypt_keypair, import_and_encrypt, keypair_to_address};
+use super::super::crypto::{generate_wallet_material, import_wallet_material};
 use super::super::types::{
     CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, UpdateWalletRequest, Wallet,
     WalletRole, WalletType,
@@ -12,9 +12,9 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Strin
     let db_guard = super::WALLETS_DB.read().await;
     let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
-    // Generate new keypair
-    let (keypair, encrypted) = generate_and_encrypt_keypair()?;
-    let address = keypair_to_address(&keypair);
+    // Generate new wallet material (address + encrypted key) without ever
+    // holding the intermediate keypair here.
+    let (address, encrypted) = generate_wallet_material()?;
 
     // Determine role
     let role = if request.set_as_main {
@@ -42,6 +42,7 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Strin
         // Refresh cache
         drop(db_guard);
         super::cache::refresh_main_wallet_cache().await?;
+        crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
     } else {
         db.insert_wallet(
             &request.name,
@@ -74,8 +75,7 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Strin
     let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     // Parse and encrypt the private key
-    let (keypair, encrypted) = import_and_encrypt(&request.private_key)?;
-    let address = keypair_to_address(&keypair);
+    let (address, encrypted) = import_wallet_material(&request.private_key)?;
 
     // Check if wallet already exists
     if db.wallet_exists(&address)? {
@@ -105,6 +105,7 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Strin
 
         drop(db_guard);
         super::cache::refresh_main_wallet_cache().await?;
+        crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
     } else {
         db.insert_wallet(
             &request.name,
@@ -173,6 +174,7 @@ pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Resu
     if request.role == Some(WalletRole::Main) {
         drop(db_guard);
         super::cache::refresh_main_wallet_cache().await?;
+        crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
     }
 
     super::WALLETS_DB
@@ -195,6 +197,7 @@ pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
 
     drop(db_guard);
     super::cache::refresh_main_wallet_cache().await?;
+    crate::chains::solana::accounts::invalidate_main_wallet_cache().await;
 
     logger::info(
         LogTag::Wallet,

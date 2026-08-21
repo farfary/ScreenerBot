@@ -60,7 +60,7 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to start subject deltas transaction: {e}"))?;
 
         for delta in deltas {
-            if let Err(e) = Self::insert_subject_delta(&tx, delta) {
+            if let Err(e) = self.insert_subject_delta(&tx, delta) {
                 logger::warning(
                     LogTag::Transactions,
                     &format!(
@@ -91,14 +91,20 @@ impl TransactionDatabase {
         wallet_address: &str,
         transaction: &crate::transactions::types::Transaction,
     ) -> Result<usize, String> {
-        let deltas =
-            crate::transactions::deltas::extract_subject_deltas(wallet_address, transaction);
+        let deltas = crate::chains::solana::transactions::deltas::extract_subject_deltas(
+            wallet_address,
+            transaction,
+        );
         let count = deltas.len();
         self.store_subject_deltas(&deltas).await?;
         Ok(count)
     }
 
-    fn insert_subject_delta(tx: &SqlTransaction, delta: &SubjectAssetDelta) -> Result<(), String> {
+    fn insert_subject_delta(
+        &self,
+        tx: &SqlTransaction,
+        delta: &SubjectAssetDelta,
+    ) -> Result<(), String> {
         let delta_raw = i64::try_from(delta.delta_raw)
             .map_err(|_| format!("delta_raw {} does not fit in i64", delta.delta_raw))?;
         let before_raw = delta.before_raw.and_then(|v| i64::try_from(v).ok());
@@ -106,11 +112,12 @@ impl TransactionDatabase {
 
         tx.execute(
             "INSERT OR REPLACE INTO subject_asset_deltas (
-                wallet_address, signature, mint, slot, block_time, tx_index,
+                chain_id, wallet_address, signature, mint, slot, block_time, tx_index,
                 delta_raw, before_raw, after_raw, decimals, kind, venue,
                 fee_lamports, success
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
+                self.chain.as_str(),
                 delta.wallet_address,
                 delta.signature,
                 delta.mint,
@@ -146,13 +153,13 @@ impl TransactionDatabase {
                     delta_raw, before_raw, after_raw, decimals, kind, venue,
                     fee_lamports, success
                  FROM subject_asset_deltas
-                 WHERE wallet_address = ?1
+                 WHERE chain_id = ?1 AND wallet_address = ?2
                  ORDER BY slot IS NULL, slot ASC, tx_index ASC, signature ASC",
             )
             .map_err(|e| format!("Failed to prepare subject deltas query: {e}"))?;
 
         let rows = stmt
-            .query_map(params![wallet_address], |row| {
+            .query_map(params![self.chain.as_str(), wallet_address], |row| {
                 let kind_str: String = row.get(10)?;
                 let kind = DeltaKind::parse(&kind_str).map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
@@ -237,15 +244,20 @@ impl TransactionDatabase {
                     .prepare(
                         "SELECT signature, raw_transaction_data, slot, block_time, success
                          FROM raw_transactions
-                         WHERE wallet_address = ?1 AND raw_transaction_data IS NOT NULL
+                         WHERE chain_id = ?1 AND wallet_address = ?2 AND raw_transaction_data IS NOT NULL
                          ORDER BY signature
-                         LIMIT ?2 OFFSET ?3",
+                         LIMIT ?3 OFFSET ?4",
                     )
                     .map_err(|e| format!("Failed to prepare subject deltas backfill query: {e}"))?;
 
                 let rows = stmt
                     .query_map(
-                        params![wallet_address, BACKFILL_BATCH_SIZE, offset],
+                        params![
+                            self.chain.as_str(),
+                            wallet_address,
+                            BACKFILL_BATCH_SIZE,
+                            offset
+                        ],
                         |row| {
                             Ok((
                                 row.get(0)?,
@@ -277,7 +289,7 @@ impl TransactionDatabase {
                     continue;
                 };
 
-                let deltas = crate::transactions::deltas::extract_subject_deltas(
+                let deltas = crate::chains::solana::transactions::deltas::extract_subject_deltas(
                     wallet_address,
                     &transaction,
                 );
@@ -337,8 +349,8 @@ impl TransactionDatabase {
         let watermark: i64 = {
             let conn = self.get_connection()?;
             conn.query_row(
-                "SELECT COALESCE(MAX(slot), 0) FROM subject_asset_deltas WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COALESCE(MAX(slot), 0) FROM subject_asset_deltas WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to read subject deltas watermark: {e}"))?
@@ -354,23 +366,30 @@ impl TransactionDatabase {
                     .prepare(
                         "SELECT r.signature, r.raw_transaction_data, r.slot, r.block_time, r.success
                          FROM raw_transactions r
-                         WHERE r.wallet_address = ?1
+                         WHERE r.chain_id = ?1 AND r.wallet_address = ?2
                            AND r.raw_transaction_data IS NOT NULL
-                           AND (r.slot IS NULL OR r.slot >= ?2)
-                           AND r.signature > ?3
+                           AND (r.slot IS NULL OR r.slot >= ?3)
+                           AND r.signature > ?4
                            AND NOT EXISTS (
                              SELECT 1 FROM subject_asset_deltas d
-                             WHERE d.wallet_address = r.wallet_address
+                             WHERE d.chain_id = r.chain_id
+                               AND d.wallet_address = r.wallet_address
                                AND d.signature = r.signature
                            )
                          ORDER BY r.signature
-                         LIMIT ?4",
+                         LIMIT ?5",
                     )
                     .map_err(|e| format!("Failed to prepare subject deltas gap query: {e}"))?;
 
                 let rows = stmt
                     .query_map(
-                        params![wallet_address, watermark, cursor, BACKFILL_BATCH_SIZE],
+                        params![
+                            self.chain.as_str(),
+                            wallet_address,
+                            watermark,
+                            cursor,
+                            BACKFILL_BATCH_SIZE
+                        ],
                         |row| {
                             Ok((
                                 row.get(0)?,
@@ -406,7 +425,7 @@ impl TransactionDatabase {
                     continue;
                 };
 
-                let deltas = crate::transactions::deltas::extract_subject_deltas(
+                let deltas = crate::chains::solana::transactions::deltas::extract_subject_deltas(
                     wallet_address,
                     &transaction,
                 );
@@ -439,8 +458,8 @@ impl TransactionDatabase {
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM subject_asset_deltas WHERE wallet_address = ?1",
-                params![wallet_address],
+                "SELECT COUNT(*) FROM subject_asset_deltas WHERE chain_id = ?1 AND wallet_address = ?2",
+                params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count subject deltas: {e}"))?;

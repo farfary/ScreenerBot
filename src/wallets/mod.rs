@@ -20,8 +20,8 @@
 //! // Initialize (call once at startup)
 //! wallets::initialize().await?;
 //!
-//! // Get main wallet keypair (cached for performance)
-//! let keypair = wallets::get_main_keypair().await?;
+//! // Actual signing goes through the chain-owned adapter, never this module:
+//! // crate::chains::solana::accounts::main_keypair().await?;
 //!
 //! // Create a new wallet
 //! let wallet = wallets::create_wallet(CreateWalletRequest {
@@ -30,10 +30,22 @@
 //!     set_as_main: true,
 //! }).await?;
 //! ```
+//!
+//! This module owns wallet records, roles and encrypted-at-rest key
+//! material — never a decrypted `Keypair`/`Pubkey`. Signing, address
+//! generation and key decryption are `crate::chains::solana::accounts`'
+//! job; this module hands it a `wallet_id` or ciphertext/nonce pair and
+//! gets back a String, never the reverse. See `tests/architecture_boundaries.rs`.
 
 pub mod balance_monitor;
 pub mod bulk;
-mod crypto;
+/// Solana keypair generation/parsing/signing mechanics live at
+/// `crate::chains::solana::accounts::keypair`; this alias keeps every
+/// internal `super::super::crypto::*` call site working without churning
+/// the wallet management submodules. Only chain-neutral helpers from that
+/// module (address/material derivation, never a `Keypair`-returning one)
+/// are used through it — see the doc comment above.
+use crate::chains::solana::accounts::keypair as crypto;
 mod database;
 mod manager;
 pub mod recovery;
@@ -45,7 +57,7 @@ pub mod watch;
 pub use types::{
     CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, SimpleTokenBalance,
     TokenBalance, UpdateWalletRequest, Wallet, WalletBalanceSummary, WalletRole, WalletType,
-    WalletWithKey, WalletWithTokenBalance, WalletsSummary,
+    WalletWithTokenBalance, WalletsSummary,
 };
 
 // Re-export manager functions
@@ -67,16 +79,13 @@ pub use manager::{
     get_existing_wallet_addresses,
     // Main wallet (fast path)
     get_main_address,
-    get_main_keypair,
     get_main_wallet,
     get_token_balances,
     // Access
     get_wallet,
     get_wallet_by_address,
-    get_wallet_keypair,
     // Tools & summary
     get_wallets_summary,
-    get_wallets_with_keys,
     get_wallets_with_token,
     has_main_wallet,
     import_wallet,
@@ -93,5 +102,11 @@ pub use manager::{
     upsert_token_balance,
 };
 
-// Re-export crypto utilities
-pub use crypto::{generate_keypair, parse_private_key, validate_address};
+// Chain-neutral encrypted-credential accessors. Crate-internal only — the
+// one consumer is `crate::chains::solana::accounts::signing`, which decrypts
+// them. No other module may hold a wallet's ciphertext/nonce pair.
+pub(crate) use manager::{get_main_wallet_encrypted_key, get_wallet_encrypted_key};
+
+// Re-export crypto utilities — chain-neutral surface only (never a
+// concrete-Solana-typed return; those stay under `crate::chains::solana`).
+pub use crypto::validate_address;

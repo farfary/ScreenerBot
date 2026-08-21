@@ -1,5 +1,5 @@
 //! Database schema for tokens system
-//! Clean slate implementation (no migrations/ALTER fallbacks)
+//! Versioned, transactional SQLite schema for the chain-scoped token store.
 //!
 //! TIMESTAMP NAMING CONVENTION: {what}_{when}_{action}_at
 //! - {what}: Specific data type (market_data, security_data, metadata, pool_price, etc.)
@@ -8,27 +8,45 @@
 //! - _at: Suffix for all timestamps (consistent)
 
 use crate::database;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension, Transaction};
+
+const SCHEMA_VERSION: i64 = 2;
+const TOKEN_TABLES: &[&str] = &[
+    "tokens",
+    "market_dexscreener",
+    "market_geckoterminal",
+    "token_pools",
+    "security_rugcheck",
+    "blacklist",
+    "update_tracking",
+    "token_favorites",
+    "rejection_history",
+    "rejection_stats",
+    "authority_reputation",
+];
 
 /// All CREATE TABLE statements
 pub const CREATE_TABLES: &[&str] = &[
     // Core token metadata
     r#"
     CREATE TABLE IF NOT EXISTS tokens (
-        mint TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
         symbol TEXT,
         name TEXT,
         decimals INTEGER,
         first_discovered_at INTEGER NOT NULL,
         blockchain_created_at INTEGER,
         metadata_last_fetched_at INTEGER NOT NULL,
-        decimals_last_fetched_at INTEGER NOT NULL
+        decimals_last_fetched_at INTEGER NOT NULL,
+        PRIMARY KEY (chain_id, mint)
     )
     "#,
     // DexScreener market data (per token, per source)
     r#"
     CREATE TABLE IF NOT EXISTS market_dexscreener (
-        mint TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
         price_usd REAL,
         price_sol REAL,
         price_native TEXT,
@@ -52,7 +70,7 @@ pub const CREATE_TABLES: &[&str] = &[
         txns_24h_buys INTEGER,
         txns_24h_sells INTEGER,
         pair_address TEXT,
-        chain_id TEXT,
+        provider_chain_id TEXT,
         dex_id TEXT,
         url TEXT,
         pair_blockchain_created_at INTEGER,
@@ -60,13 +78,15 @@ pub const CREATE_TABLES: &[&str] = &[
         header_image_url TEXT,
         market_data_last_fetched_at INTEGER NOT NULL,
         market_data_first_fetched_at INTEGER NOT NULL,
-        FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
+        PRIMARY KEY (chain_id, mint),
+        FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint) ON DELETE RESTRICT
     )
     "#,
     // GeckoTerminal market data (per token, per source)
     r#"
     CREATE TABLE IF NOT EXISTS market_geckoterminal (
-        mint TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
         price_usd REAL,
         price_sol REAL,
         price_native TEXT,
@@ -87,12 +107,14 @@ pub const CREATE_TABLES: &[&str] = &[
         image_url TEXT,
         market_data_last_fetched_at INTEGER NOT NULL,
         market_data_first_fetched_at INTEGER NOT NULL,
-        FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
+        PRIMARY KEY (chain_id, mint),
+        FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint) ON DELETE RESTRICT
     )
     "#,
     // Aggregated token pool data (multi-source, per pool)
     r#"
     CREATE TABLE IF NOT EXISTS token_pools (
+        chain_id TEXT NOT NULL DEFAULT 'solana',
         mint TEXT NOT NULL,
         pool_address TEXT NOT NULL,
         dex TEXT,
@@ -109,14 +131,15 @@ pub const CREATE_TABLES: &[&str] = &[
         sources_json TEXT,
         pool_data_last_fetched_at INTEGER NOT NULL,
         pool_data_first_seen_at INTEGER NOT NULL,
-        PRIMARY KEY (mint, pool_address),
-        FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE CASCADE
+        PRIMARY KEY (chain_id, mint, pool_address),
+        FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint) ON DELETE CASCADE
     )
     "#,
     // Rugcheck security data (per token)
     r#"
     CREATE TABLE IF NOT EXISTS security_rugcheck (
-        mint TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
         token_type TEXT,
         token_decimals INTEGER,
         score INTEGER,
@@ -143,22 +166,26 @@ pub const CREATE_TABLES: &[&str] = &[
         markets TEXT,
         security_data_last_fetched_at INTEGER NOT NULL,
         security_data_first_fetched_at INTEGER NOT NULL,
-        FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
+        PRIMARY KEY (chain_id, mint),
+        FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint) ON DELETE RESTRICT
     )
     "#,
     // Blacklist
     r#"
     CREATE TABLE IF NOT EXISTS blacklist (
-        mint TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
         reason TEXT NOT NULL,
         source TEXT,
-        added_at INTEGER NOT NULL
+        added_at INTEGER NOT NULL,
+        PRIMARY KEY (chain_id, mint)
     )
     "#,
     // Update tracking and priority
     r#"
     CREATE TABLE IF NOT EXISTS update_tracking (
-        mint TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
         priority INTEGER NOT NULL DEFAULT 10,
         market_data_last_updated_at INTEGER,
         market_data_update_count INTEGER DEFAULT 0,
@@ -179,26 +206,30 @@ pub const CREATE_TABLES: &[&str] = &[
         last_rejection_reason TEXT,
         last_rejection_source TEXT,
         last_rejection_at INTEGER,
-        FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
+        PRIMARY KEY (chain_id, mint),
+        FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint) ON DELETE RESTRICT
     )
     "#,
     // Token favorites (user-saved tokens)
     r#"
     CREATE TABLE IF NOT EXISTS token_favorites (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mint TEXT NOT NULL UNIQUE,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
         name TEXT,
         symbol TEXT,
         logo_url TEXT,
         notes TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (chain_id, mint)
     )
     "#,
     // Rejection history table for time-range analytics
     r#"
     CREATE TABLE IF NOT EXISTS rejection_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
         mint TEXT NOT NULL,
         reason TEXT NOT NULL,
         source TEXT NOT NULL,
@@ -208,6 +239,7 @@ pub const CREATE_TABLES: &[&str] = &[
     // Aggregated rejection stats table (hourly buckets) - replaces per-event logging
     r#"
     CREATE TABLE IF NOT EXISTS rejection_stats (
+        chain_id TEXT NOT NULL DEFAULT 'solana',
         bucket_hour INTEGER NOT NULL,
         reason TEXT NOT NULL,
         source TEXT NOT NULL,
@@ -215,14 +247,15 @@ pub const CREATE_TABLES: &[&str] = &[
         unique_tokens INTEGER NOT NULL DEFAULT 0,
         first_seen INTEGER NOT NULL,
         last_seen INTEGER NOT NULL,
-        PRIMARY KEY (bucket_hour, reason, source)
+        PRIMARY KEY (chain_id, bucket_hour, reason, source)
     )
     "#,
     // Authority reputation — auto-growing scam authority detection
     // Populated by background discovery task from filtering results
     r#"
     CREATE TABLE IF NOT EXISTS authority_reputation (
-        address TEXT PRIMARY KEY,
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        address TEXT NOT NULL,
         authority_type TEXT NOT NULL DEFAULT 'unknown',
         total_token_count INTEGER NOT NULL DEFAULT 0,
         flagged_token_count INTEGER NOT NULL DEFAULT 0,
@@ -230,7 +263,8 @@ pub const CREATE_TABLES: &[&str] = &[
         is_blocked INTEGER NOT NULL DEFAULT 0,
         source TEXT NOT NULL DEFAULT 'auto',
         first_seen_at INTEGER NOT NULL,
-        last_updated_at INTEGER NOT NULL
+        last_updated_at INTEGER NOT NULL,
+        PRIMARY KEY (chain_id, address)
     )
     "#,
 ];
@@ -238,9 +272,9 @@ pub const CREATE_TABLES: &[&str] = &[
 /// All CREATE INDEX statements
 pub const CREATE_INDEXES: &[&str] = &[
     // Core token metadata indexes
-    "CREATE INDEX IF NOT EXISTS idx_tokens_discovered ON tokens(first_discovered_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_tokens_blockchain_created ON tokens(blockchain_created_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_tokens_metadata_fetched ON tokens(metadata_last_fetched_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_discovered ON tokens(chain_id, first_discovered_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_blockchain_created ON tokens(chain_id, blockchain_created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_metadata_fetched ON tokens(chain_id, metadata_last_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)",
     // Case-insensitive search indexes for symbol and name (improves dashboard search performance)
     "CREATE INDEX IF NOT EXISTS idx_tokens_symbol_nocase ON tokens(symbol COLLATE NOCASE)",
@@ -257,10 +291,10 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_liquidity ON market_geckoterminal(liquidity_usd DESC)",
 
     // Rejection stats index (hourly buckets)
-    "CREATE INDEX IF NOT EXISTS idx_rejection_stats_hour ON rejection_stats(bucket_hour DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_rejection_stats_hour ON rejection_stats(chain_id, bucket_hour DESC)",
 
     // Token pools indexes
-    "CREATE INDEX IF NOT EXISTS idx_token_pools_mint ON token_pools(mint)",
+    "CREATE INDEX IF NOT EXISTS idx_token_pools_mint ON token_pools(chain_id, mint)",
     "CREATE INDEX IF NOT EXISTS idx_token_pools_last_fetch ON token_pools(pool_data_last_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_token_pools_first_seen ON token_pools(pool_data_first_seen_at DESC)",
 
@@ -274,10 +308,10 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_blacklist_source ON blacklist(source)",
 
     // Update tracking indexes (for priority queries and sorting)
-    "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(market_data_last_updated_at ASC)",
-    "CREATE INDEX IF NOT EXISTS idx_tracking_security_update ON update_tracking(security_data_last_updated_at ASC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(chain_id, market_data_last_updated_at ASC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_security_update ON update_tracking(chain_id, security_data_last_updated_at ASC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_pool_calc ON update_tracking(pool_price_last_calculated_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_tracking_priority_market ON update_tracking(priority DESC, market_data_last_updated_at ASC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_priority_market ON update_tracking(chain_id, priority DESC, market_data_last_updated_at ASC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority_calc ON update_tracking(priority DESC, pool_price_last_calculated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_error_type ON update_tracking(market_error_type)",
 
@@ -290,12 +324,12 @@ pub const CREATE_INDEXES: &[&str] = &[
     //   * `_at` drives the unfiltered "most recently rejected" reads (Analytics' recent
     //     rejections, unfiltered Explore paging): 1104ms -> <1ms.
     //   * `_reason_at` drives Explore, which always pages within one reason: 41ms -> <1ms.
-    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_reason ON update_tracking(last_rejection_reason, last_rejection_source) WHERE last_rejection_reason IS NOT NULL",
-    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_at ON update_tracking(last_rejection_at DESC) WHERE last_rejection_reason IS NOT NULL",
-    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_reason_at ON update_tracking(last_rejection_reason, last_rejection_at DESC) WHERE last_rejection_reason IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_reason ON update_tracking(chain_id, last_rejection_reason, last_rejection_source) WHERE last_rejection_reason IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_at ON update_tracking(chain_id, last_rejection_at DESC) WHERE last_rejection_reason IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_rejection_reason_at ON update_tracking(chain_id, last_rejection_reason, last_rejection_at DESC) WHERE last_rejection_reason IS NOT NULL",
 
     // Composite indexes for common sorting patterns
-    "CREATE INDEX IF NOT EXISTS idx_tokens_discovery_mint ON tokens(first_discovered_at DESC, mint)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_discovery_mint ON tokens(chain_id, first_discovered_at DESC, mint)",
 
     // Token favorites indexes
     "CREATE INDEX IF NOT EXISTS idx_favorites_mint ON token_favorites(mint)",
@@ -307,7 +341,7 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_rejection_history_mint ON rejection_history(mint)",
 
     // Unique constraint to prevent duplicate rejection history entries
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_rejection_history_unique ON rejection_history(mint, source, rejected_at)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_rejection_history_unique ON rejection_history(chain_id, mint, source, rejected_at)",
 
     // Partial index for active (non-blacklisted) tokens by priority (common query pattern)
     "CREATE INDEX IF NOT EXISTS idx_tracking_active_priority ON update_tracking(priority DESC, market_data_last_updated_at ASC) WHERE last_rejection_at IS NULL",
@@ -317,49 +351,283 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_authority_rep_confidence ON authority_reputation(confidence DESC)",
 ];
 
-/// ALTER TABLE statements for schema migrations (existing databases)
-pub const ALTER_STATEMENTS: &[&str] = &[
-    // Add score_normalised column to security_rugcheck (0-100, HIGHER = MORE RISKY)
-    "ALTER TABLE security_rugcheck ADD COLUMN score_normalised INTEGER",
-    // Add rejection tracking columns to update_tracking
-    "ALTER TABLE update_tracking ADD COLUMN last_rejection_reason TEXT",
-    "ALTER TABLE update_tracking ADD COLUMN last_rejection_source TEXT",
-    "ALTER TABLE update_tracking ADD COLUMN last_rejection_at INTEGER",
-    // Add mutable metadata tracking to security_rugcheck
-    "ALTER TABLE security_rugcheck ADD COLUMN update_authority TEXT",
-    "ALTER TABLE security_rugcheck ADD COLUMN is_mutable INTEGER",
-    // Add permanent failure tracking for market data (similar to security_error_type)
-    "ALTER TABLE update_tracking ADD COLUMN market_error_type TEXT",
-];
-
 /// Initialize database schema
 pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     // Apply centralized PRAGMA configuration
     database::configure_connection(conn, database::TOKENS_DB)
         .map_err(|e| format!("Failed to configure connection: {e}"))?;
 
-    // Create tables
+    let version = conn
+        .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+        .map_err(|error| format!("Failed to read tokens schema version: {error}"))?;
+
+    if version < SCHEMA_VERSION && table_needs_chain_rebuild(conn)? {
+        migrate_legacy_schema(conn)?;
+    }
+
     for statement in CREATE_TABLES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create table: {e}"))?;
     }
 
-    // Apply ALTER statements BEFORE indexes (for existing databases - columns must exist before indexes)
-    // Ignore errors if column already exists
-    for statement in ALTER_STATEMENTS {
-        let _ = conn.execute(statement, []);
-    }
-
-    // Create indexes (after ALTERs so new columns exist)
     for statement in CREATE_INDEXES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create index: {e}"))?;
     }
 
+    conn.pragma_update(None, "user_version", SCHEMA_VERSION)
+        .map_err(|error| format!("Failed to record tokens schema version: {error}"))
+}
+
+fn table_needs_chain_rebuild(conn: &Connection) -> Result<bool, String> {
+    let exists = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tokens'",
+            [],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|error| format!("Failed to inspect tokens schema: {error}"))?
+        .is_some();
+    if !exists {
+        return Ok(false);
+    }
+    let mut statement = conn
+        .prepare("PRAGMA table_info(tokens)")
+        .map_err(|error| format!("Failed to inspect token columns: {error}"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| format!("Failed to read token columns: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Failed to decode token columns: {error}"))?;
+    Ok(!columns.iter().any(|column| column == "chain_id"))
+}
+
+fn migrate_legacy_schema(conn: &Connection) -> Result<(), String> {
+    let transaction = conn
+        .unchecked_transaction()
+        .map_err(|error| format!("Failed to begin tokens chain migration: {error}"))?;
+    transaction
+        .execute_batch("PRAGMA defer_foreign_keys = ON")
+        .map_err(|error| format!("Failed to defer tokens foreign keys for migration: {error}"))?;
+
+    let legacy_indexes = TOKEN_TABLES
+        .iter()
+        .map(|table| -> Result<Vec<String>, String> {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT name FROM sqlite_master \
+                     WHERE type = 'index' AND tbl_name = ?1 AND sql IS NOT NULL",
+                )
+                .map_err(|error| {
+                    format!("Failed to inspect legacy tokens indexes for {table}: {error}")
+                })?;
+            let indexes = statement
+                .query_map([table], |row| row.get::<_, String>(0))
+                .map_err(|error| {
+                    format!("Failed to read legacy tokens indexes for {table}: {error}")
+                })?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| {
+                    format!("Failed to decode legacy tokens indexes for {table}: {error}")
+                })?;
+            Ok(indexes)
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+
+    for index in legacy_indexes {
+        // SQLite does not bind identifiers. Metadata supplies the name, and quoting it prevents a
+        // malformed legacy index name from changing the migration statement.
+        let quoted_index = format!("\"{}\"", index.replace('"', "\"\""));
+        transaction
+            .execute(&format!("DROP INDEX {quoted_index}"), [])
+            .map_err(|error| format!("Failed to drop legacy tokens index {index}: {error}"))?;
+    }
+    for table in TOKEN_TABLES {
+        transaction
+            .execute(
+                &format!("ALTER TABLE {table} RENAME TO {table}_legacy_chain"),
+                [],
+            )
+            .map_err(|error| format!("Failed to stage legacy tokens table {table}: {error}"))?;
+    }
+    for statement in CREATE_TABLES {
+        transaction
+            .execute(statement, [])
+            .map_err(|error| format!("Failed to create chain-scoped tokens table: {error}"))?;
+    }
+    for table in TOKEN_TABLES {
+        copy_legacy_rows(&transaction, table)?;
+    }
+    for table in TOKEN_TABLES {
+        let legacy = format!("{table}_legacy_chain");
+        let old_count: i64 = transaction
+            .query_row(&format!("SELECT COUNT(*) FROM {legacy}"), [], |row| {
+                row.get(0)
+            })
+            .map_err(|error| format!("Failed to count legacy {table} rows: {error}"))?;
+        let new_count: i64 = transaction
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .map_err(|error| format!("Failed to count migrated {table} rows: {error}"))?;
+        if old_count != new_count {
+            return Err(format!(
+                "Tokens chain migration changed {table} row count: {old_count} -> {new_count}"
+            ));
+        }
+        transaction
+            .execute(&format!("DROP TABLE {legacy}"), [])
+            .map_err(|error| format!("Failed to remove staged legacy table {legacy}: {error}"))?;
+    }
+    transaction
+        .commit()
+        .map_err(|error| format!("Failed to commit tokens chain migration: {error}"))?;
+    if conn
+        .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
+        .optional()
+        .map_err(|error| format!("Failed to validate tokens foreign keys: {error}"))?
+        .is_some()
+    {
+        return Err("Tokens chain migration failed foreign-key validation".to_owned());
+    }
+    Ok(())
+}
+
+fn copy_legacy_rows(transaction: &Transaction<'_>, table: &str) -> Result<(), String> {
+    let legacy = format!("{table}_legacy_chain");
+    let columns = |name: &str| -> Result<Vec<String>, String> {
+        let mut statement = transaction
+            .prepare(&format!("PRAGMA table_info({name})"))
+            .map_err(|error| format!("Failed to inspect {name}: {error}"))?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|error| format!("Failed to read {name} columns: {error}"))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Failed to decode {name} columns: {error}"))
+    };
+    let old = columns(&legacy)?;
+    let new = columns(table)?;
+    let mut shared = new
+        .into_iter()
+        .filter(|column| column != "chain_id" && old.contains(column))
+        .collect::<Vec<_>>();
+    if table == "market_dexscreener" {
+        shared.retain(|column| column != "provider_chain_id");
+    }
+    let mut target = vec!["chain_id".to_owned()];
+    let mut source = vec!["'solana'".to_owned()];
+    if table == "market_dexscreener" {
+        target.push("provider_chain_id".to_owned());
+        source.push(if old.contains(&"chain_id".to_owned()) {
+            "chain_id".to_owned()
+        } else {
+            "NULL".to_owned()
+        });
+    }
+    target.extend(shared.iter().cloned());
+    source.extend(shared);
+    transaction
+        .execute(
+            &format!(
+                "INSERT INTO {table} ({}) SELECT {} FROM {legacy}",
+                target.join(", "),
+                source.join(", ")
+            ),
+            [],
+        )
+        .map_err(|error| format!("Failed to copy legacy {table} rows: {error}"))?;
     Ok(())
 }
 
 /// Check if database is initialized
 pub fn is_initialized(conn: &Connection) -> bool {
     conn.prepare("SELECT 1 FROM tokens LIMIT 1").is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn legacy_statement(statement: &str) -> String {
+        statement
+            .replace("chain_id TEXT NOT NULL DEFAULT 'solana',", "")
+            .replace(
+                "PRIMARY KEY (chain_id, mint, pool_address)",
+                "PRIMARY KEY (mint, pool_address)",
+            )
+            .replace("PRIMARY KEY (chain_id, mint)", "PRIMARY KEY (mint)")
+            .replace("UNIQUE (chain_id, mint)", "UNIQUE (mint)")
+            .replace(
+                "PRIMARY KEY (chain_id, bucket_hour, reason, source)",
+                "PRIMARY KEY (bucket_hour, reason, source)",
+            )
+            .replace("PRIMARY KEY (chain_id, address)", "PRIMARY KEY (address)")
+            .replace(
+                "FOREIGN KEY (chain_id, mint) REFERENCES tokens(chain_id, mint)",
+                "FOREIGN KEY (mint) REFERENCES tokens(mint)",
+            )
+    }
+
+    #[test]
+    fn legacy_tokens_schema_migrates_losslessly_and_idempotently() {
+        let conn = Connection::open_in_memory().unwrap();
+        for statement in CREATE_TABLES {
+            conn.execute(&legacy_statement(statement), []).unwrap();
+        }
+        conn.execute(
+            "INSERT INTO tokens (mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at) VALUES ('legacy-mint', 'OLD', 'Legacy', 9, 1, 1, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "CREATE INDEX \"legacy index \"\"quoted\"\"\" ON tokens(symbol)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+
+        initialize_schema(&conn).unwrap();
+        initialize_schema(&conn).unwrap();
+
+        let migrated: (String, String) = conn
+            .query_row(
+                "SELECT chain_id, mint FROM tokens WHERE mint = 'legacy-mint'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(migrated, ("solana".to_owned(), "legacy-mint".to_owned()));
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tokens WHERE mint = 'legacy-mint'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn raw_foreign_chain_rows_do_not_match_solana_queries() {
+        let conn = Connection::open_in_memory().unwrap();
+        initialize_schema(&conn).unwrap();
+        conn.execute(
+            "INSERT INTO tokens (chain_id, mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at) VALUES ('foreign', 'shared-mint', 'X', 'Foreign', 9, 1, 1, 1)",
+            [],
+        )
+        .unwrap();
+
+        let solana_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM tokens WHERE chain_id = ?1 AND mint = ?2",
+                ["solana", "shared-mint"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(solana_rows, 0);
+    }
 }

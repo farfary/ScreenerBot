@@ -32,11 +32,12 @@ impl TransactionDatabase {
                 COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) < 0 THEN -p.sol_delta ELSE 0 END), 0), \
                 COUNT(r.signature) \
              FROM raw_transactions r \
-             LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1 \
-             WHERE r.wallet_address = ?1 AND r.status IN ('Confirmed', 'Finalized')",
+             LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2 \
+             WHERE r.chain_id = ?1 AND r.wallet_address = ?2 AND r.status IN ('Confirmed', 'Finalized')",
         );
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        params_vec.push(Box::new(self.chain.as_str().to_owned()));
         params_vec.push(Box::new(wallet_address.clone()));
 
         // Only add timestamp filter if NOT all-time query
@@ -198,11 +199,12 @@ impl TransactionDatabase {
                 r.signature, \
                 p.sol_balance_change \
              FROM raw_transactions r \
-             LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1 \
-             WHERE r.wallet_address = ?1 AND r.status IN ('Confirmed', 'Finalized')",
+             LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2 \
+             WHERE r.chain_id = ?1 AND r.wallet_address = ?2 AND r.status IN ('Confirmed', 'Finalized')",
         );
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        params_vec.push(Box::new(self.chain.as_str().to_owned()));
         params_vec.push(Box::new(wallet_address.clone()));
 
         if !is_all_time {
@@ -286,15 +288,16 @@ impl TransactionDatabase {
             .prepare(
                 "SELECT r.signature, r.timestamp, COALESCE(p.sol_delta, 0) as sol_delta \
                  FROM raw_transactions r \
-                 LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1 \
-                 WHERE r.wallet_address = ?1 AND r.timestamp >= ?2 AND r.status IN ('Confirmed', 'Finalized') \
+                 LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2 \
+                 WHERE r.chain_id = ?1 AND r.wallet_address = ?2 AND r.timestamp >= ?3 AND r.status IN ('Confirmed', 'Finalized') \
                  ORDER BY r.timestamp ASC, r.signature ASC \
-                 LIMIT ?3",
+                 LIMIT ?4",
             )
             .map_err(|e| format!("Failed to prepare wallet flow export: {e}"))?;
 
         let mut rows = stmt
             .query(params![
+                self.chain.as_str(),
                 wallet_address,
                 from.to_rfc3339(),
                 (limit as i64).max(1)

@@ -1,23 +1,22 @@
-//! Transaction processing — fetching, decoding, analysis, and persistence.
+//! Transaction processing — chain-neutral persistence, orchestration and reporting.
 //
 // Architecture:
 // - `manager`: Core TransactionsManager struct and lifecycle management
 // - `service`: Background monitoring service and coordination
-// - `analyzer`: Transaction analysis, classification, and pattern detection
-// - `processor`: Transaction processing pipeline and batch operations
-// - `fetcher`: RPC batching, caching, and blockchain data retrieval
 // - `verifier`: Transaction verification logic for positions integration
 // - `database`: High-performance SQLite-based caching and persistence
 // - `debug`: Debug utilities, diagnostics, and troubleshooting tools
 // - `types`: Core type definitions, enums, and data structures
 // - `utils`: Helper functions, constants, and utility code
+// - `deltas`: The chain-neutral subject-relative balance delta shape
+//
+// Chain-specific decoding (RPC fetching, wire-format analysis/classification,
+// program ID recognition) lives under `crate::chains::solana::transactions` — this
+// module consumes its output (`Transaction`, `SubjectAssetDelta`) but owns no Solana
+// vendor types itself.
 //
 // Key Features:
 // - Real-time transaction monitoring via WebSocket integration
-// - High-performance batch RPC operations (50-account limit compliance)
-// - Comprehensive DEX transaction analysis (Jupiter, Raydium, Orca, etc.)
-// - Advanced swap detection and P&L calculation
-// - ATA operation tracking and rent calculation
 // - Position integration for entry/exit transaction verification
 // - Events system integration for analytics and debugging
 // - Structured logging with full address visibility
@@ -32,15 +31,11 @@
 // manager.start_service().await?;
 // ```
 
-pub mod analyzer;
 pub mod database;
 pub mod debug;
 mod debug_helpers;
 pub mod deltas;
-pub mod fetcher;
 pub mod manager;
-pub mod processor;
-pub mod program_ids;
 pub mod service;
 pub mod types;
 pub mod utils;
@@ -53,8 +48,9 @@ pub use service::{
     reprocess_transaction, start_global_transaction_service, stop_global_transaction_service,
 };
 
-// Public API exports - Subject-relative balance deltas
-pub use deltas::{extract_subject_deltas, DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
+// Public API exports - Subject-relative balance deltas (chain-neutral shape; extraction
+// from a decoded transaction is chain-specific, see `chains::solana::transactions::deltas`)
+pub use deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 // Public API exports - Types
 pub use types::{
@@ -66,12 +62,7 @@ pub use types::{
 // Public API exports - Constants from types
 pub use types::ANALYSIS_CACHE_VERSION;
 
-// Public API exports - Analysis and verification
-pub use analyzer::{
-    confidence_to_score, is_analysis_reliable, AnalysisConfidence, CompleteAnalysis,
-    TransactionAnalyzer,
-};
-
+// Public API exports - Verification
 pub use verifier::{
     verify_entry_transaction, verify_exit_transaction, verify_transaction_for_position,
 };
@@ -81,13 +72,6 @@ pub use database::{
     get_transaction_database, init_transaction_database, DatabaseStats, IntegrityReport,
     TransactionCursor, TransactionDatabase, TransactionListFilters, TransactionListResult,
     TransactionListRow, WalletFlowExportRow,
-};
-
-// Public API exports - Program IDs and router detection
-pub use program_ids::{
-    detect_router_from_logs, detect_router_from_program_id, is_dex_aggregator_program_id,
-    is_jupiter_program_id, is_mev_tip_address, JUPITER_V6_PROGRAM_ID, PUMP_FUN_AMM_PROGRAM_ID,
-    PUMP_FUN_LEGACY_PROGRAM_ID,
 };
 
 // Public API exports - Utilities

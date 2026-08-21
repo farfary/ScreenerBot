@@ -1,8 +1,6 @@
 //! Token detail, analysis, and refresh handlers
 
 use axum::{extract::Path, http::StatusCode, Json};
-use solana_sdk::pubkey::Pubkey;
-use std::str::FromStr;
 
 use super::types::*;
 use crate::{
@@ -122,9 +120,10 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Extract token from snapshot for processing
     let token = &snapshot;
 
-    let pool_descriptors = pools::get_token_pools(&mint);
-    let canonical_pool_id = pool_descriptors.first().map(|pool| pool.pool_id);
-    let mint_pubkey = Pubkey::from_str(&mint).ok();
+    let pool_descriptors = crate::chains::solana::pools::service::get_token_pools(&mint);
+    let canonical_pool_id = pool_descriptors
+        .first()
+        .map(|pool| pool.pool_id.address().to_owned());
     let now_unix_opt = match std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
         Ok(duration) => Some(duration.as_secs() as i64),
         Err(_) => None,
@@ -132,22 +131,18 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let mut pool_infos: Vec<TokenPoolInfo> = pool_descriptors
         .into_iter()
         .map(|pool| {
-            let token_role = if let Some(mint_key) = mint_pubkey {
-                if pool.base_mint == mint_key {
-                    "base"
-                } else if pool.quote_mint == mint_key {
-                    "quote"
-                } else {
-                    "unknown"
-                }
+            let token_role = if pool.base_mint.address() == mint.as_str() {
+                "base"
+            } else if pool.quote_mint.address() == mint.as_str() {
+                "quote"
             } else {
                 "unknown"
             };
 
             let paired_mint = if token_role == "base" {
-                pool.quote_mint.to_string()
+                pool.quote_mint.address().to_owned()
             } else {
-                pool.base_mint.to_string()
+                pool.base_mint.address().to_owned()
             };
 
             let age_secs = pool.last_updated.elapsed().as_secs();
@@ -159,11 +154,13 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
 
             let last_updated_unix = now_unix_opt.map(|now| now.saturating_sub(age_i64));
 
+            let is_canonical = canonical_pool_id.as_deref() == Some(pool.pool_id.address());
+
             TokenPoolInfo {
-                pool_id: pool.pool_id.to_string(),
-                program: pool.program_kind.display_name().to_string(),
-                base_mint: pool.base_mint.to_string(),
-                quote_mint: pool.quote_mint.to_string(),
+                pool_id: pool.pool_id.address().to_owned(),
+                program: pool.program_kind.as_str().to_owned(),
+                base_mint: pool.base_mint.address().to_owned(),
+                quote_mint: pool.quote_mint.address().to_owned(),
                 token_role: token_role.to_string(),
                 paired_mint,
                 liquidity_usd: if pool.liquidity_usd.is_finite() {
@@ -179,11 +176,9 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 reserve_accounts: pool
                     .reserve_accounts
                     .iter()
-                    .map(|account| account.to_string())
+                    .map(|account| account.address().to_owned())
                     .collect(),
-                is_canonical: canonical_pool_id
-                    .map(|canonical| canonical == pool.pool_id)
-                    .unwrap_or_default(),
+                is_canonical,
                 last_updated_unix,
             }
         })
@@ -282,7 +277,10 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
 
             let (base_mint, quote_mint) = match matched {
                 Some(p) => (p.base_mint, p.quote_mint),
-                None => (mint.clone(), crate::constants::SOL_MINT.to_string()),
+                None => (
+                    mint.clone(),
+                    crate::chains::solana::constants::SOL_MINT.to_string(),
+                ),
             };
 
             let token_role = if base_mint == mint {
@@ -845,8 +843,10 @@ pub async fn get_token_analysis(
     };
 
     // Get pool data for liquidity analysis
-    let pool_descriptors = pools::get_token_pools(&mint);
-    let canonical_pool_id = pool_descriptors.first().map(|p| p.pool_id);
+    let pool_descriptors = crate::chains::solana::pools::service::get_token_pools(&mint);
+    let canonical_pool_id = pool_descriptors
+        .first()
+        .map(|p| p.pool_id.address().to_owned());
 
     // Get real-time pool price
     let pool_price = pools::get_pool_price(&mint);
@@ -976,10 +976,10 @@ pub async fn get_token_analysis(
                     0.0
                 };
                 AnalysisPoolInfo {
-                    address: p.pool_id.to_string(),
-                    dex: p.program_kind.display_name().to_string(),
+                    address: p.pool_id.address().to_owned(),
+                    dex: p.program_kind.as_str().to_owned(),
                     liquidity_sol,
-                    is_canonical: canonical_pool_id.is_some_and(|c| c == p.pool_id),
+                    is_canonical: canonical_pool_id.as_deref() == Some(p.pool_id.address()),
                 }
             })
             .collect();

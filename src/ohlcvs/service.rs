@@ -1,6 +1,5 @@
 //! OHLCV service — public API for querying candle data with cache and database fallback.
 
-use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
@@ -11,6 +10,10 @@ use crate::ohlcvs::monitor::OhlcvMonitor;
 use crate::ohlcvs::types::{
     Candle, OhlcvError, OhlcvResult, OhlcvStatus, OhlcvTimeframeStatus, Timeframe, TimeframeBundle,
     BUNDLE_CANDLE_COUNT,
+};
+use crate::{
+    chains::ChainId,
+    logger::{self, LogTag},
 };
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
@@ -47,9 +50,9 @@ pub(super) struct OhlcvServiceImpl {
 
 impl OhlcvServiceImpl {
     fn new(db_path: PathBuf) -> OhlcvResult<Self> {
-        let db = Arc::new(OhlcvDatabase::new(db_path)?);
+        let db = Arc::new(OhlcvDatabase::new(db_path, ChainId::Solana)?);
         let fetcher = Arc::new(OhlcvFetcher::new());
-        let cache = Arc::new(OhlcvCache::new());
+        let cache = Arc::new(OhlcvCache::new(ChainId::Solana));
         let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db)));
         let gap_manager = Arc::new(GapManager::new(Arc::clone(&db), Arc::clone(&fetcher)));
         let monitor = Arc::new(OhlcvMonitor::new(

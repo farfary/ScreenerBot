@@ -47,12 +47,13 @@ impl Service for PoolFetcherService {
         );
 
         // Get the AccountFetcher component from global state
-        let fetcher = crate::pools::get_account_fetcher().ok_or_else(|| {
-            crate::Error::Service(ServiceError::Start {
-                service: self.name().to_string(),
-                message: "AccountFetcher component not initialized".to_owned(),
-            })
-        })?;
+        let fetcher =
+            crate::chains::solana::pools::service::get_account_fetcher().ok_or_else(|| {
+                crate::Error::Service(ServiceError::Start {
+                    service: self.name().to_string(),
+                    message: "AccountFetcher component not initialized".to_owned(),
+                })
+            })?;
 
         // Spawn fetcher task
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -76,7 +77,7 @@ impl Service for PoolFetcherService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        if crate::pools::get_account_fetcher().is_some() {
+        if crate::chains::solana::pools::service::get_account_fetcher().is_some() {
             ServiceHealth::Healthy
         } else {
             ServiceHealth::Unhealthy("AccountFetcher component not available".to_owned())
@@ -87,7 +88,7 @@ impl Service for PoolFetcherService {
         let mut metrics = ServiceMetrics::default();
 
         // Get metrics from the component if available
-        if let Some(fetcher) = crate::pools::get_account_fetcher() {
+        if let Some(fetcher) = crate::chains::solana::pools::service::get_account_fetcher() {
             let (operations, errors, accounts_fetched, rpc_batches) = fetcher.get_metrics();
             metrics.operations_total = operations;
             metrics.errors_total = errors;

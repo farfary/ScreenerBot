@@ -27,22 +27,22 @@ impl TokenDatabase {
         let now = Utc::now().timestamp();
 
         conn.execute(
-            "INSERT INTO tokens (mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?5)
-             ON CONFLICT(mint) DO UPDATE SET
-                symbol = COALESCE(?2, symbol),
-                name = COALESCE(?3, name),
-                decimals = COALESCE(?4, decimals),
-                metadata_last_fetched_at = ?5,
-                decimals_last_fetched_at = CASE WHEN ?4 IS NOT NULL THEN ?5 ELSE decimals_last_fetched_at END",
-            params![mint, symbol, name, decimals.map(|d| d as i64), now],
+            "INSERT INTO tokens (chain_id, mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?6)
+             ON CONFLICT(chain_id, mint) DO UPDATE SET
+                symbol = COALESCE(?3, symbol),
+                name = COALESCE(?4, name),
+                decimals = COALESCE(?5, decimals),
+                metadata_last_fetched_at = ?6,
+                decimals_last_fetched_at = CASE WHEN ?5 IS NOT NULL THEN ?6 ELSE decimals_last_fetched_at END",
+            params![self.chain_id(), mint, symbol, name, decimals.map(|d| d as i64), now],
         )
         .map_err(|e| TokenError::Database(format!("Failed to upsert token: {e}")))?;
 
         // Ensure tracking entry exists
         conn.execute(
-            "INSERT OR IGNORE INTO update_tracking (mint, priority) VALUES (?1, 10)",
-            params![mint],
+            "INSERT OR IGNORE INTO update_tracking (chain_id, mint, priority) VALUES (?1, ?2, 10)",
+            params![self.chain_id(), mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to create tracking: {e}")))?;
 
@@ -51,7 +51,7 @@ impl TokenDatabase {
         // Pool decoders rely on cached decimals being available
         if let Some(d) = decimals {
             if d > 0 {
-                crate::tokens::decimals::cache(mint, d);
+                crate::tokens::decimals::cache(self.chain(), mint, d);
             }
         }
 
@@ -63,10 +63,10 @@ impl TokenDatabase {
         let conn = self.conn()?;
 
         let mut stmt = conn.prepare(
-            "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at FROM tokens WHERE mint = ?1"
+            "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at FROM tokens WHERE chain_id = ?1 AND mint = ?2"
         ).map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
-        let result = stmt.query_row(params![mint], |row| {
+        let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             Ok(TokenMetadata {
                 mint: row.get(0)?,
                 symbol: row.get(1)?,
@@ -96,14 +96,14 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at 
-             FROM tokens 
+             FROM tokens WHERE chain_id = ?1
              ORDER BY metadata_last_fetched_at DESC 
-             LIMIT ?1",
+             LIMIT ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
 
         let tokens = stmt
-            .query_map(params![limit], |row| {
+            .query_map(params![self.chain_id(), limit], |row| {
                 Ok(TokenMetadata {
                     mint: row.get(0)?,
                     symbol: row.get(1)?,
@@ -143,12 +143,12 @@ impl TokenDatabase {
                 "SELECT mint, decimals FROM (
                      SELECT t.mint AS mint,
                             t.decimals AS decimals,
-                            EXISTS(SELECT 1 FROM token_pools p WHERE p.mint = t.mint) AS pooled,
+                            EXISTS(SELECT 1 FROM token_pools p WHERE p.chain_id = t.chain_id AND p.mint = t.mint) AS pooled,
                             t.metadata_last_fetched_at AS refreshed
                      FROM tokens t
-                     WHERE t.decimals IS NOT NULL AND t.decimals > 0 AND t.decimals <= ?1
+                     WHERE t.chain_id = ?1 AND t.decimals IS NOT NULL AND t.decimals > 0 AND t.decimals <= ?2
                      ORDER BY pooled DESC, refreshed DESC
-                     LIMIT ?2
+                     LIMIT ?3
                  )
                  ORDER BY pooled ASC, refreshed ASC",
             )
@@ -156,7 +156,11 @@ impl TokenDatabase {
 
         let rows = stmt
             .query_map(
-                rusqlite::params![crate::tokens::MAX_DECIMALS as i64, limit as i64],
+                rusqlite::params![
+                    self.chain_id(),
+                    crate::tokens::MAX_DECIMALS as i64,
+                    limit as i64
+                ],
                 |row| {
                     let mint: String = row.get(0)?;
                     let decimals: i64 = row.get(1)?;
@@ -200,14 +204,14 @@ impl TokenDatabase {
         let query = format!(
             r#"
             SELECT mint, image_url FROM market_dexscreener 
-            WHERE mint IN ({}) AND image_url IS NOT NULL AND image_url != ''
+            WHERE chain_id = ? AND mint IN ({}) AND image_url IS NOT NULL AND image_url != ''
             UNION ALL
             SELECT g.mint, g.image_url FROM market_geckoterminal g
-            WHERE g.mint IN ({}) 
+            WHERE g.chain_id = ? AND g.mint IN ({})
               AND g.image_url IS NOT NULL AND g.image_url != ''
               AND g.mint NOT IN (
                 SELECT mint FROM market_dexscreener 
-                WHERE mint IN ({}) AND image_url IS NOT NULL AND image_url != ''
+                WHERE chain_id = ? AND mint IN ({}) AND image_url IS NOT NULL AND image_url != ''
               )
             "#,
             placeholders, placeholders, placeholders
@@ -218,11 +222,12 @@ impl TokenDatabase {
         })?;
 
         // Build params: mints repeated 3 times for the 3 IN clauses
-        let all_mints: Vec<&str> = mints
-            .iter()
-            .chain(mints.iter())
-            .chain(mints.iter())
-            .map(String::as_str)
+        let all_mints: Vec<&str> = std::iter::once(self.chain_id())
+            .chain(mints.iter().map(String::as_str))
+            .chain(std::iter::once(self.chain_id()))
+            .chain(mints.iter().map(String::as_str))
+            .chain(std::iter::once(self.chain_id()))
+            .chain(mints.iter().map(String::as_str))
             .collect();
 
         let rows = stmt
@@ -254,14 +259,16 @@ impl TokenDatabase {
 
         let placeholders: String = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let query = format!(
-            "SELECT mint, decimals FROM tokens WHERE mint IN ({placeholders}) AND decimals IS NOT NULL"
+            "SELECT mint, decimals FROM tokens WHERE chain_id = ? AND mint IN ({placeholders}) AND decimals IS NOT NULL"
         );
 
         let mut stmt = conn.prepare(&query).map_err(|e| {
             TokenError::Database(format!("Failed to prepare batch decimals query: {e}"))
         })?;
 
-        let mint_refs: Vec<&str> = mints.iter().map(String::as_str).collect();
+        let mint_refs: Vec<&str> = std::iter::once(self.chain_id())
+            .chain(mints.iter().map(String::as_str))
+            .collect();
         let rows = stmt
             .query_map(params_from_iter(mint_refs), |row| {
                 let mint: String = row.get(0)?;
@@ -304,9 +311,9 @@ impl TokenDatabase {
                 t.name,
                 COALESCE(d.image_url, g.image_url) as image_url
             FROM tokens t
-            LEFT JOIN market_dexscreener d ON t.mint = d.mint
-            LEFT JOIN market_geckoterminal g ON t.mint = g.mint
-            WHERE t.mint IN ({})
+            LEFT JOIN market_dexscreener d ON t.chain_id = d.chain_id AND t.mint = d.mint
+            LEFT JOIN market_geckoterminal g ON t.chain_id = g.chain_id AND t.mint = g.mint
+            WHERE t.chain_id = ? AND t.mint IN ({})
             "#,
             placeholders
         );
@@ -315,7 +322,9 @@ impl TokenDatabase {
             TokenError::Database(format!("Failed to prepare batch token info query: {e}"))
         })?;
 
-        let mint_refs: Vec<&str> = mints.iter().map(String::as_str).collect();
+        let mint_refs: Vec<&str> = std::iter::once(self.chain_id())
+            .chain(mints.iter().map(String::as_str))
+            .collect();
 
         let rows = stmt
             .query_map(params_from_iter(mint_refs), |row| {

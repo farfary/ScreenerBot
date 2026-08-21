@@ -186,7 +186,7 @@ pub async fn cleanup_empty_atas(wallet_address: &str) -> Result<AtaCleanupResult
                 result.signatures.push(signature);
 
                 // Query actual ATA rent from chain
-                let rent = match crate::rpc::get_ata_rent_lamports().await {
+                let rent = match crate::chains::solana::rpc::get_ata_rent_lamports().await {
                     Ok(lamports) => (lamports as f64) / 1_000_000_000.0,
                     Err(_) => 0.00203928, // Fallback to standard ATA rent
                 };

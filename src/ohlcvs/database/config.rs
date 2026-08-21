@@ -19,9 +19,9 @@ impl OhlcvDatabase {
 
         conn
             .execute(
-                "INSERT INTO ohlcv_monitor_config (mint, priority, fetch_interval_seconds, last_fetch, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT(mint) DO UPDATE SET
+                "INSERT INTO ohlcv_monitor_config (chain_id, mint, priority, fetch_interval_seconds, last_fetch, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(chain_id, mint) DO UPDATE SET
                 priority = excluded.priority,
                 fetch_interval_seconds = excluded.fetch_interval_seconds,
                 last_fetch = excluded.last_fetch,
@@ -31,7 +31,7 @@ impl OhlcvDatabase {
                 last_pool_discovery_attempt = excluded.last_pool_discovery_attempt,
                 consecutive_pool_failures = excluded.consecutive_pool_failures",
                 params![
-                    &config.mint,
+                    self.chain_id(), &config.mint,
                     config.priority.as_str(),
                     config.fetch_frequency.as_secs() as i64,
                     last_fetch,
@@ -56,8 +56,8 @@ impl OhlcvDatabase {
         let config: Option<TokenOhlcvConfig> = conn
             .query_row(
                 "SELECT priority, fetch_interval_seconds, last_fetch, last_activity, consecutive_empty_fetches, is_active, last_pool_discovery_attempt, consecutive_pool_failures
-                 FROM ohlcv_monitor_config WHERE mint = ?1",
-                params![mint],
+                 FROM ohlcv_monitor_config WHERE chain_id = ?1 AND mint = ?2",
+                params![self.chain_id(), mint],
                 |row| {
                     let priority_str: String = row.get(0)?;
                     let priority = Priority::from_str(&priority_str).unwrap_or(Priority::Low);
@@ -104,13 +104,13 @@ impl OhlcvDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT mint, priority, fetch_interval_seconds, last_fetch, last_activity, consecutive_empty_fetches, last_pool_discovery_attempt, consecutive_pool_failures
-                 FROM ohlcv_monitor_config WHERE is_active = 1
+                 FROM ohlcv_monitor_config WHERE chain_id = ?1 AND is_active = 1
                  ORDER BY priority DESC"
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to prepare: {e}")))?;
 
         let configs = stmt
-            .query_map(params![], |row| {
+            .query_map(params![self.chain_id()], |row| {
                 let mint: String = row.get(0)?;
                 let priority_str: String = row.get(1)?;
                 let priority = Priority::from_str(&priority_str).unwrap_or(Priority::Low);

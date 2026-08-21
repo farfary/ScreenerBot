@@ -31,15 +31,18 @@ impl Service for PoolsService {
     async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(LogTag::PoolService, "Initializing pool components...");
 
-        // Initialize all pool components (database, cache, RPC, components)
-        crate::pools::initialize_pool_components()
-            .await
-            .map_err(|e| {
-                crate::Error::Service(crate::errors::ServiceError::Initialize {
-                    service: "pools".to_owned(),
-                    message: format!("Failed to initialize pool components: {:?}", e),
-                })
-            })?;
+        // Initialize all pool components (database, cache, RPC, components),
+        // selecting the Solana runtime as the concrete implementation.
+        crate::pools::initialize_pool_components(
+            crate::chains::solana::pools::service::initialize_components,
+        )
+        .await
+        .map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Initialize {
+                service: "pools".to_owned(),
+                message: format!("Failed to initialize pool components: {:?}", e),
+            })
+        })?;
 
         logger::info(LogTag::PoolService, "Pool components initialized");
         Ok(())
@@ -71,13 +74,15 @@ impl Service for PoolsService {
     async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::PoolService, "Stopping pool service...");
 
-        // Stop pool service gracefully
-        crate::pools::stop_pool_service(5).await.map_err(|e| {
-            crate::Error::Service(crate::errors::ServiceError::Stop {
-                service: "pools".to_owned(),
-                message: format!("Failed to stop pool service: {:?}", e),
-            })
-        })?;
+        // Stop pool service gracefully, releasing the Solana runtime components.
+        crate::pools::stop_pool_service(5, crate::chains::solana::pools::service::clear_components)
+            .await
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Stop {
+                    service: "pools".to_owned(),
+                    message: format!("Failed to stop pool service: {:?}", e),
+                })
+            })?;
 
         Ok(())
     }

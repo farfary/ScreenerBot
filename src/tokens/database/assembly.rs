@@ -122,6 +122,7 @@ impl TokenDatabase {
         };
 
         let token = assemble_token(
+            self.chain(),
             metadata,
             market_data,
             data_source,
@@ -261,11 +262,11 @@ impl TokenDatabase {
         "#;
 
         let joins = r#"
-            LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
-            LEFT JOIN blacklist bl ON t.mint = bl.mint
-            LEFT JOIN update_tracking ut ON t.mint = ut.mint
-            LEFT JOIN market_dexscreener d ON t.mint = d.mint
-            LEFT JOIN market_geckoterminal g ON t.mint = g.mint
+            LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint
+            LEFT JOIN blacklist bl ON t.chain_id = bl.chain_id AND t.mint = bl.mint
+            LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint
+            LEFT JOIN market_dexscreener d ON t.chain_id = d.chain_id AND t.mint = d.mint
+            LEFT JOIN market_geckoterminal g ON t.chain_id = g.chain_id AND t.mint = g.mint
         "#;
 
         // PERF: When require_market_data=true, only load tokens with market data AND
@@ -288,18 +289,18 @@ impl TokenDatabase {
             let freshness = if stale_days > 0 {
                 let cutoff_secs =
                     chrono::Utc::now().timestamp() - (stale_days as i64 * 24 * 60 * 60);
-                format!(" WHERE market_data_last_fetched_at > {cutoff_secs}")
+                format!(" AND market_data_last_fetched_at > {cutoff_secs}")
             } else {
                 String::new()
             };
 
             format!(
-                " FROM (SELECT mint FROM market_dexscreener{freshness} \
-                   UNION SELECT mint FROM market_geckoterminal{freshness}) c \
-                 JOIN tokens t ON t.mint = c.mint{joins}"
+                " FROM (SELECT mint FROM market_dexscreener WHERE chain_id = ?1{freshness} \
+                   UNION SELECT mint FROM market_geckoterminal WHERE chain_id = ?1{freshness}) c \
+                 JOIN tokens t ON t.chain_id = ?1 AND t.mint = c.mint{joins}"
             )
         } else {
-            format!(" FROM tokens t{joins}")
+            format!(" FROM tokens t{joins} WHERE t.chain_id = ?1")
         };
 
         // Stable tiebreaker: many tokens share the same (or NULL) value for the
@@ -327,7 +328,7 @@ impl TokenDatabase {
 
         // Parse row data
         let tokens_iter = stmt
-            .query_map(params![], |row| {
+            .query_map(params![self.chain_id()], |row| {
                 let mint: String = row.get(0)?;
                 let symbol: Option<String> = row.get(1)?;
                 let name: Option<String> = row.get(2)?;

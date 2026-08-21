@@ -57,8 +57,10 @@ pub(super) async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
 }
 
 pub(super) async fn get_blacklist_details() -> Json<BlacklistDetailsResponse> {
-    let pool_records = list_blacklisted_pools(Some(200)).await.unwrap_or_default();
-    let account_records = list_blacklisted_accounts(Some(200))
+    let pool_records = list_blacklisted_pools(crate::chains::ChainId::Solana, Some(200))
+        .await
+        .unwrap_or_default();
+    let account_records = list_blacklisted_accounts(crate::chains::ChainId::Solana, Some(200))
         .await
         .unwrap_or_default();
 

@@ -18,7 +18,7 @@
 //!
 //! No database, no network, no clock: `SubjectAssetDelta` values are built inline.
 
-use screenerbot::constants::{SOL_MINT, USDC_MINT};
+use screenerbot::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use screenerbot::positions::ledger::{
     reconcile_with_wallet, reduce_rounds, LedgerEventKind, LedgerRound, QuoteAsset, WalletHolding,
 };

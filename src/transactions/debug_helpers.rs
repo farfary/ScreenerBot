@@ -6,9 +6,8 @@
 use chrono::{DateTime, Utc};
 use std::time::Instant;
 
-use crate::transactions::{
-    database::get_transaction_database, processor::TransactionProcessor, types::*,
-};
+use crate::chains::solana::transactions::processor::TransactionProcessor;
+use crate::transactions::{database::get_transaction_database, types::*};
 
 use super::debug::{DebugAnalysisResult, DebugValidation, TransactionDebugStats};
 
@@ -349,7 +348,7 @@ pub async fn debug_database_connection() -> Result<(), String> {
 /// Profile transaction processing performance
 pub async fn profile_transaction_processing(
     signatures: Vec<String>,
-    wallet_pubkey: solana_sdk::pubkey::Pubkey,
+    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
 ) -> Result<PerformanceProfile, String> {
     let start_time = Instant::now();
     let processor = TransactionProcessor::new(wallet_pubkey);

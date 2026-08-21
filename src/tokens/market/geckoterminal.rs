@@ -49,7 +49,7 @@ pub async fn fetch_geckoterminal_data_batch(
     // Check cache and database for each token
     for mint in mints {
         // 1. Check in-memory cache
-        if let Some(data) = store::get_cached_geckoterminal(mint) {
+        if let Some(data) = store::get_cached_geckoterminal(db.chain(), mint) {
             results.insert(mint.clone(), Some(data));
             continue;
         }
@@ -61,8 +61,8 @@ pub async fn fetch_geckoterminal_data_batch(
                 .num_seconds();
 
             if age_secs >= 0 && age_secs <= 60 {
-                store::store_geckoterminal(mint, &db_data);
-                if let Err(err) = store::refresh_token_snapshot(mint).await {
+                store::store_geckoterminal(db.chain(), mint, &db_data);
+                if let Err(err) = store::refresh_token_snapshot(db.chain(), mint).await {
                     logger::error(
                         LogTag::Tokens,
                         &format!(
@@ -182,8 +182,8 @@ pub async fn fetch_geckoterminal_data_batch(
         }
 
         // Cache it
-        store::store_geckoterminal(mint, &data);
-        store::refresh_token_snapshot(mint).await.ok();
+        store::store_geckoterminal(db.chain(), mint, &data);
+        store::refresh_token_snapshot(db.chain(), mint).await.ok();
 
         results.insert(mint.clone(), Some(data));
     }

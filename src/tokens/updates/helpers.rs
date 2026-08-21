@@ -1,5 +1,6 @@
 //! Token update helpers — utility functions for token data enrichment and merging.
 
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use std::collections::HashSet;
@@ -11,22 +12,22 @@ use std::sync::Mutex as StdMutex;
 pub(super) const PERMANENT_FAILURE_THRESHOLD: u32 = 3;
 
 /// In-flight token tracking to prevent duplicate fetches across loops
-pub(super) static IN_FLIGHT_TOKENS: LazyLock<StdMutex<HashSet<String>>> =
+pub(super) static IN_FLIGHT_TOKENS: LazyLock<StdMutex<HashSet<(ChainId, String)>>> =
     LazyLock::new(|| StdMutex::new(HashSet::new()));
 
 /// Try to mark a token as in-flight. Returns true if marked, false if already in-flight.
-pub(super) fn try_mark_in_flight(mint: &str) -> bool {
+pub(super) fn try_mark_in_flight(chain: ChainId, mint: &str) -> bool {
     if let Ok(mut set) = IN_FLIGHT_TOKENS.lock() {
-        set.insert(mint.to_string())
+        set.insert((chain, mint.to_string()))
     } else {
         true // If lock poisoned, allow fetch
     }
 }
 
 /// Clear in-flight marker for a token
-pub(super) fn clear_in_flight(mint: &str) {
+pub(super) fn clear_in_flight(chain: ChainId, mint: &str) {
     if let Ok(mut set) = IN_FLIGHT_TOKENS.lock() {
-        set.remove(mint);
+        set.remove(&(chain, mint.to_string()));
     }
 }
 

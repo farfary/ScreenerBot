@@ -29,6 +29,7 @@ use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use std::sync::{Arc, Mutex};
 
+use crate::chains::ChainId;
 use crate::tokens::types::{TokenError, TokenResult};
 
 // Global database instance for easy access
@@ -69,6 +70,7 @@ pub fn clear_global_database() {
 /// concurrently with each other and with a writer; `busy_timeout` covers writer overlap.
 pub struct TokenDatabase {
     pool: Pool<SqliteConnectionManager>,
+    chain: ChainId,
 }
 
 /// Token-level blacklist entry with metadata for diagnostics and UI
@@ -82,7 +84,7 @@ pub struct TokenBlacklistRecord {
 
 impl TokenDatabase {
     /// Create new database instance
-    pub fn new(path: &str) -> TokenResult<Self> {
+    pub fn new(path: &str, chain: ChainId) -> TokenResult<Self> {
         let manager = SqliteConnectionManager::file(path).with_init(|conn| {
             crate::database::configure_connection(conn, crate::database::TOKENS_DB)
         });
@@ -94,7 +96,7 @@ impl TokenDatabase {
             .build(manager)
             .map_err(|e| TokenError::Database(format!("Failed to create database pool: {e}")))?;
 
-        let db = Self { pool };
+        let db = Self { pool, chain };
 
         // Initialize schema
         let conn = db.conn()?;
@@ -109,6 +111,15 @@ impl TokenDatabase {
         self.pool
             .get()
             .map_err(|e| TokenError::Database(format!("Failed to get connection: {e}")))
+    }
+
+    /// The explicit canonical chain scope for every operation issued by this repository.
+    pub const fn chain(&self) -> ChainId {
+        self.chain
+    }
+
+    pub(crate) const fn chain_id(&self) -> &'static str {
+        self.chain.as_str()
     }
 }
 

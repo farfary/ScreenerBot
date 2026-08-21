@@ -1,21 +1,16 @@
 //! Tool Swap Executor
 //!
-//! Execute swaps using the swaps module but with custom keypairs.
-//! These functions are for tools that need
-//! to execute swaps WITHOUT creating positions in the position tracker.
+//! Execute swaps for a specific wallet (identified by ID), without creating
+//! positions in the position tracker. Resolving and signing with that
+//! wallet's key happens inside `crate::chains::solana` — this module never
+//! holds a `Keypair`.
 
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::Keypair;
-use solana_sdk::signer::Signer;
-use std::str::FromStr;
-
+use crate::chains::solana::constants::SOL_MINT;
 use crate::config::with_config;
-use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::registry::get_registry;
-use crate::swaps::types::{Quote, QuoteRequest, SwapMode};
-use crate::wallets::WalletWithKey;
+use crate::swaps::types::{QuoteRequest, SwapMode};
+use crate::wallets::Wallet;
 
 /// Result of a tool swap execution
 #[derive(Debug, Clone)]
@@ -37,13 +32,13 @@ pub struct ToolSwapResult {
 /// This function gets a quote and executes the swap using the provided wallet.
 /// Unlike regular swaps, this does NOT create positions or track in position system.
 pub async fn execute_tool_swap(
-    wallet: &WalletWithKey,
+    wallet: &Wallet,
     input_mint: &str,
     output_mint: &str,
     input_amount: u64,
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
-    let wallet_address = wallet.wallet.address.clone();
+    let wallet_address = wallet.address.clone();
     let slippage =
         slippage_pct.unwrap_or_else(|| with_config(|cfg| cfg.swaps.slippage.quote_default_pct));
 
@@ -85,8 +80,10 @@ pub async fn execute_tool_swap(
         ),
     );
 
-    // Execute the swap with custom keypair
-    let signature = execute_swap_with_keypair(&quote, &wallet.keypair).await?;
+    // Execute the swap, resolving and signing with this wallet's key inside
+    // crate::chains::solana — this function never sees the keypair itself.
+    let signature =
+        crate::chains::solana::swaps::routers::execute_for_wallet(&quote, wallet.id).await?;
 
     Ok(ToolSwapResult {
         signature,
@@ -102,13 +99,13 @@ pub async fn execute_tool_swap(
 /// Executes a SOL -> Token swap using the provided wallet.
 /// Does NOT create positions - for tool use only.
 pub async fn tool_buy(
-    wallet: &WalletWithKey,
+    wallet: &Wallet,
     token_mint: &str,
     amount_sol: f64,
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
     // Validate token mint
-    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
+    crate::wallets::validate_address(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
 
     // Convert SOL to lamports
     let lamports = (amount_sol * 1_000_000_000.0) as u64;
@@ -123,7 +120,7 @@ pub async fn tool_buy(
             "Tool buy: {} SOL -> {} via wallet {}",
             amount_sol,
             &token_mint[..8],
-            &wallet.wallet.address[..8]
+            &wallet.address[..8]
         ),
     );
 
@@ -135,13 +132,13 @@ pub async fn tool_buy(
 /// Executes a Token -> SOL swap using the provided wallet.
 /// Does NOT create positions - for tool use only.
 pub async fn tool_sell(
-    wallet: &WalletWithKey,
+    wallet: &Wallet,
     token_mint: &str,
     token_amount: u64,
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
     // Validate token mint
-    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
+    crate::wallets::validate_address(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
 
     if token_amount == 0 {
         return Err("Token amount cannot be zero".to_owned());
@@ -153,84 +150,9 @@ pub async fn tool_sell(
             "Tool sell: {} tokens of {} -> SOL via wallet {}",
             token_amount,
             &token_mint[..8],
-            &wallet.wallet.address[..8]
+            &wallet.address[..8]
         ),
     );
 
     execute_tool_swap(wallet, token_mint, SOL_MINT, token_amount, slippage_pct).await
-}
-
-/// Execute a swap transaction signed with a specific keypair
-async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<String, String> {
-    // Deserialize quote response from execution_data
-    let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
-        .map_err(|e| format!("Quote deserialization failed: {e}"))?;
-
-    // Resolve the referral fee account so multi-wallet tool swaps ALSO collect
-    // the 0.5% referral revenue (same mechanism as the main router). The quote
-    // was fetched with platformFeeBps set, so feeAccount must be provided here.
-    let fee_account =
-        crate::swaps::routers::referral_fee_account(&quote.input_mint, &quote.output_mint);
-
-    // Build swap request for Jupiter API
-    let mut swap_req = serde_json::json!({
-        "userPublicKey": keypair.pubkey().to_string(),
-        "quoteResponse": quote_response,
-        "dynamicComputeUnitLimit": true,
-        "prioritizationFeeLamports": with_config(|cfg| cfg.swaps.jupiter.default_priority_fee),
-    });
-    if let Some(ref account) = fee_account {
-        swap_req["feeAccount"] = serde_json::Value::String(account.clone());
-    }
-
-    // Mark a swap in flight so background Jupiter pollers defer to it.
-    let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
-
-    // Call Jupiter swap endpoint (API key only if configured)
-    let client = crate::net::client();
-    let api_key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
-    let api_base = if api_key.is_empty() {
-        "https://lite-api.jup.ag"
-    } else {
-        "https://api.jup.ag"
-    };
-    let mut req = client.post(format!("{api_base}/swap/v1/swap"));
-    if !api_key.is_empty() {
-        req = req.header("x-api-key", api_key);
-    }
-    let response = req
-        .header("Content-Type", "application/json")
-        .json(&swap_req)
-        .send()
-        .await
-        .map_err(|e| format!("Jupiter swap request failed: {e}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown".to_owned());
-        return Err(format!("Jupiter swap failed ({status}): {error_text}"));
-    }
-
-    #[derive(serde::Deserialize)]
-    struct JupiterSwapResponse {
-        #[serde(rename = "swapTransaction")]
-        swap_transaction: String,
-    }
-
-    let swap_response: JupiterSwapResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Jupiter swap response parse failed: {e}"))?;
-
-    // Sign and send using the provided keypair
-    let rpc_client = get_rpc_client();
-    let signature = rpc_client
-        .sign_send_and_confirm_with_keypair(&swap_response.swap_transaction, keypair)
-        .await
-        .map_err(|e| format!("Transaction failed: {e}"))?;
-
-    Ok(signature.to_string())
 }
