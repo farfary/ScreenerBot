@@ -33,6 +33,30 @@ fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool
     Ok(has_column)
 }
 
+/// Compares row counts between a legacy table and its migrated replacement inside
+/// the same transaction. Propagates the count query's own failure instead of
+/// treating it as zero rows — a `COUNT(*)` failure (locked table, missing table)
+/// must never be silently read as "0 rows, counts match" and let the integrity
+/// guard pass vacuously.
+fn verify_migrated_row_count(
+    tx: &rusqlite::Transaction,
+    old: &str,
+    new: &str,
+) -> Result<(), String> {
+    let old_count: i64 = tx
+        .query_row(&format!("SELECT COUNT(*) FROM {old}"), [], |row| row.get(0))
+        .map_err(|e| format!("Failed to read {old} row count for migration validation: {e}"))?;
+    let new_count: i64 = tx
+        .query_row(&format!("SELECT COUNT(*) FROM {new}"), [], |row| row.get(0))
+        .map_err(|e| format!("Failed to validate migrated {new} row count: {e}"))?;
+    if old_count != new_count {
+        return Err(format!(
+            "Pools migration row-count mismatch for {old}: {old_count} != {new_count}"
+        ));
+    }
+    Ok(())
+}
+
 fn migrate_schema(conn: &mut Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS price_history (
@@ -52,17 +76,29 @@ fn migrate_schema(conn: &mut Connection) -> Result<(), String> {
         );",
     )
     .map_err(|e| format!("Failed to create legacy pools tables for migration: {e}"))?;
-    let price_history_has_chain = table_has_column(conn, "price_history", "chain_id")?;
-    let accounts_has_chain = table_has_column(conn, "blacklist_accounts", "chain_id")?;
-    let pools_has_chain = table_has_column(conn, "blacklist_pools", "chain_id")?;
 
-    if !price_history_has_chain || !accounts_has_chain || !pools_has_chain {
-        let tx = conn
-            .unchecked_transaction()
-            .map_err(|e| format!("Failed to start pools schema migration: {e}"))?;
+    // `user_version` gates the structural column check below: once it records
+    // the current schema version, every later boot skips straight past this
+    // block instead of re-running `PRAGMA table_info` on three tables. It is
+    // only a fast-path — the structural check (not the version number alone)
+    // is still what decides whether a real migration is needed the first time,
+    // so a DB whose version was never bumped is migrated correctly regardless.
+    let schema_version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .map_err(|e| format!("Failed to read pools schema version: {e}"))?;
 
-        tx.execute_batch(
-            "CREATE TABLE price_history_new (
+    if schema_version < POOLS_SCHEMA_VERSION {
+        let price_history_has_chain = table_has_column(conn, "price_history", "chain_id")?;
+        let accounts_has_chain = table_has_column(conn, "blacklist_accounts", "chain_id")?;
+        let pools_has_chain = table_has_column(conn, "blacklist_pools", "chain_id")?;
+
+        if !price_history_has_chain || !accounts_has_chain || !pools_has_chain {
+            let tx = conn
+                .unchecked_transaction()
+                .map_err(|e| format!("Failed to start pools schema migration: {e}"))?;
+
+            tx.execute_batch(
+                "CREATE TABLE price_history_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 chain_id TEXT NOT NULL,
                 mint TEXT NOT NULL,
@@ -103,10 +139,10 @@ fn migrate_schema(conn: &mut Connection) -> Result<(), String> {
                 added_at INTEGER NOT NULL,
                 PRIMARY KEY(chain_id, pool_id)
             );",
-        )
-        .map_err(|e| format!("Failed to create chain-aware pools tables: {e}"))?;
+            )
+            .map_err(|e| format!("Failed to create chain-aware pools tables: {e}"))?;
 
-        if price_history_has_chain {
+            if price_history_has_chain {
             tx.execute("INSERT INTO price_history_new SELECT * FROM price_history", [])
         } else {
             tx.execute(
@@ -116,7 +152,7 @@ fn migrate_schema(conn: &mut Connection) -> Result<(), String> {
             )
         }
         .map_err(|e| format!("Failed to migrate price history: {e}"))?;
-        if accounts_has_chain {
+            if accounts_has_chain {
             tx.execute("INSERT INTO blacklist_accounts_new SELECT * FROM blacklist_accounts", [])
         } else {
             tx.execute(
@@ -126,7 +162,7 @@ fn migrate_schema(conn: &mut Connection) -> Result<(), String> {
             )
         }
         .map_err(|e| format!("Failed to migrate account blacklist: {e}"))?;
-        if pools_has_chain {
+            if pools_has_chain {
             tx.execute("INSERT INTO blacklist_pools_new SELECT * FROM blacklist_pools", [])
         } else {
             tx.execute(
@@ -137,35 +173,26 @@ fn migrate_schema(conn: &mut Connection) -> Result<(), String> {
         }
         .map_err(|e| format!("Failed to migrate pool blacklist: {e}"))?;
 
-        for (old, new) in [
-            ("price_history", "price_history_new"),
-            ("blacklist_accounts", "blacklist_accounts_new"),
-            ("blacklist_pools", "blacklist_pools_new"),
-        ] {
-            let old_count: i64 = tx
-                .query_row(&format!("SELECT COUNT(*) FROM {old}"), [], |row| row.get(0))
-                .unwrap_or(0);
-            let new_count: i64 = tx
-                .query_row(&format!("SELECT COUNT(*) FROM {new}"), [], |row| row.get(0))
-                .map_err(|e| format!("Failed to validate migrated {new} row count: {e}"))?;
-            if old_count != new_count {
-                return Err(format!(
-                    "Pools migration row-count mismatch for {old}: {old_count} != {new_count}"
-                ));
+            for (old, new) in [
+                ("price_history", "price_history_new"),
+                ("blacklist_accounts", "blacklist_accounts_new"),
+                ("blacklist_pools", "blacklist_pools_new"),
+            ] {
+                verify_migrated_row_count(&tx, old, new)?;
             }
-        }
 
-        tx.execute_batch(
-            "DROP TABLE IF EXISTS price_history;
+            tx.execute_batch(
+                "DROP TABLE IF EXISTS price_history;
              DROP TABLE IF EXISTS blacklist_accounts;
              DROP TABLE IF EXISTS blacklist_pools;
              ALTER TABLE price_history_new RENAME TO price_history;
              ALTER TABLE blacklist_accounts_new RENAME TO blacklist_accounts;
              ALTER TABLE blacklist_pools_new RENAME TO blacklist_pools;",
-        )
-        .map_err(|e| format!("Failed to replace legacy pools tables: {e}"))?;
-        tx.commit()
-            .map_err(|e| format!("Failed to commit pools schema migration: {e}"))?;
+            )
+            .map_err(|e| format!("Failed to replace legacy pools tables: {e}"))?;
+            tx.commit()
+                .map_err(|e| format!("Failed to commit pools schema migration: {e}"))?;
+        }
     }
 
     conn.execute_batch(
@@ -749,6 +776,38 @@ mod tests {
             .optional()
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn verify_migrated_row_count_propagates_the_count_querys_own_failure() {
+        let mut conn = Connection::open_in_memory().expect("open test database");
+        conn.execute_batch("CREATE TABLE new_table (id INTEGER PRIMARY KEY);")
+            .expect("create replacement table");
+        let tx = conn.unchecked_transaction().expect("start transaction");
+
+        // "old_table" was never created, so the COUNT(*) query itself fails.
+        // Before the fix, `.unwrap_or(0)` treated that failure as "0 rows",
+        // which would have matched the empty new_table and passed vacuously.
+        let err = verify_migrated_row_count(&tx, "old_table", "new_table")
+            .expect_err("a failed row-count query must propagate, not read as zero");
+        assert!(err.contains("old_table"));
+    }
+
+    #[test]
+    fn verify_migrated_row_count_rejects_a_genuine_mismatch() {
+        let mut conn = Connection::open_in_memory().expect("open test database");
+        conn.execute_batch(
+            "CREATE TABLE old_table (id INTEGER PRIMARY KEY);
+             CREATE TABLE new_table (id INTEGER PRIMARY KEY);
+             INSERT INTO old_table VALUES (1), (2);
+             INSERT INTO new_table VALUES (1);",
+        )
+        .expect("seed mismatched tables");
+        let tx = conn.unchecked_transaction().expect("start transaction");
+
+        let err = verify_migrated_row_count(&tx, "old_table", "new_table")
+            .expect_err("a real row-count mismatch must be rejected");
+        assert!(err.contains("mismatch"));
     }
 
     #[tokio::test]

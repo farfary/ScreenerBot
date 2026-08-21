@@ -7,7 +7,11 @@ use super::fetcher::{
     AccountFetcher, ACCOUNT_BATCH_SIZE, ACCOUNT_STALE_THRESHOLD_SECONDS,
     OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS,
 };
-use super::fetcher_types::{AccountData, MissingAccountState, MissingPoolState, PoolAccountBundle};
+use super::fetcher_types::{
+    AccountData, MissingAccountState, MissingPoolState, PoolAccountBundle, SOL_MINT_PUBKEY,
+    SYSTEM_PROGRAM_PUBKEY,
+};
+use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
@@ -21,7 +25,6 @@ use crate::pools::utils::is_sol_mint;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use futures::future::join_all;
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -117,9 +120,17 @@ impl AccountFetcher {
                 ACCOUNT_STALE_THRESHOLD_SECONDS
             };
 
-            for account in &pool.reserve_accounts {
-                if let Ok(pubkey) = Pubkey::from_str(account.address()) {
-                    accounts_to_check.push((pubkey, threshold));
+            match reserve_pubkeys(pool) {
+                Ok(pubkeys) => {
+                    for pubkey in pubkeys {
+                        accounts_to_check.push((pubkey, threshold));
+                    }
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::PoolFetcher,
+                        &format!("Skipping stale-account scan for pool {}: {e}", pool.pool_id),
+                    );
                 }
             }
         }
@@ -201,12 +212,9 @@ impl AccountFetcher {
 
         // Convert to vector and batch, filtering out native SOL mint which is not a
         // real on-chain account (RPC returns null for it, wasting batch slots)
-        let sol_mint_pubkey = Pubkey::from_str(crate::chains::solana::constants::SOL_MINT).unwrap();
-        let system_program_pubkey =
-            Pubkey::from_str(crate::chains::solana::constants::SYSTEM_PROGRAM_ID).unwrap();
         let drained_accounts: Vec<Pubkey> = pending_accounts
             .drain()
-            .filter(|key| *key != sol_mint_pubkey && *key != system_program_pubkey)
+            .filter(|key| *key != *SOL_MINT_PUBKEY && *key != *SYSTEM_PROGRAM_PUBKEY)
             .collect();
 
         if drained_accounts.is_empty() {
@@ -697,20 +705,28 @@ impl AccountFetcher {
             directory.clone()
         };
 
-        // Parse each pool's chain-neutral reserve accounts to `Pubkey` once per
+        // Convert each pool's chain-neutral reserve accounts to `Pubkey` once per
         // cycle (not once per account lookup below) — this is the hot ~500ms
         // fetch loop, so address parsing is amortized over pools, not accounts.
-        let reserve_pubkeys: HashMap<Pubkey, Vec<Pubkey>> = pools
-            .iter()
-            .map(|(pool_id, descriptor)| {
-                let reserves = descriptor
-                    .reserve_accounts
-                    .iter()
-                    .filter_map(|account| Pubkey::from_str(account.address()).ok())
-                    .collect();
-                (*pool_id, reserves)
-            })
-            .collect();
+        // All-or-error per pool: a pool with a malformed reserve address is
+        // omitted entirely rather than bundled with a shrunken reserve set,
+        // which would let it wrongly report itself complete and price a
+        // partial pool.
+        let mut pool_reserve_pubkeys: HashMap<Pubkey, Vec<Pubkey>> =
+            HashMap::with_capacity(pools.len());
+        for (pool_id, descriptor) in pools.iter() {
+            match reserve_pubkeys(descriptor) {
+                Ok(reserves) => {
+                    pool_reserve_pubkeys.insert(*pool_id, reserves);
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::PoolFetcher,
+                        &format!("Skipping bundle organization for pool {pool_id}: {e}"),
+                    );
+                }
+            }
+        }
 
         // Phase 2: Build local updates without holding any locks
         // Maps pool_id -> (bundle, pool_descriptor, needs_calculation)
@@ -726,7 +742,7 @@ impl AccountFetcher {
         // Build updates locally
         for account_data in account_data_list {
             for (pool_id, pool_descriptor) in &pools {
-                let reserves = reserve_pubkeys
+                let reserves = pool_reserve_pubkeys
                     .get(pool_id)
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);

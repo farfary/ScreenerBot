@@ -17,5 +17,6 @@ pub mod discovery;
 pub mod fetcher;
 mod fetcher_ops;
 mod fetcher_types;
+pub mod reserve_accounts;
 pub mod service;
 pub mod types;

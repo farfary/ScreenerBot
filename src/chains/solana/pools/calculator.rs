@@ -14,6 +14,7 @@
 
 use super::decoders;
 use super::fetcher::{AccountData, PoolAccountBundle};
+use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
 use crate::pools::cache;
 use crate::pools::types::{PoolDescriptor, PriceResult};
@@ -25,7 +26,6 @@ use crate::tokens::database::get_global_database;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::{mpsc, Notify};
@@ -321,13 +321,36 @@ impl PriceCalculator {
             );
         }
 
-        // Reserve accounts are chain-neutral on `PoolDescriptor`; parse to `Pubkey`
-        // once per calculation (not per account lookup) to check bundle completeness.
-        let reserve_pubkeys: Vec<Pubkey> = pool_descriptor
-            .reserve_accounts
-            .iter()
-            .filter_map(|account| Pubkey::from_str(account.address()).ok())
-            .collect();
+        // Reserve accounts are chain-neutral on `PoolDescriptor`; convert to
+        // `Pubkey` once per calculation (not per account lookup) to check bundle
+        // completeness. This is all-or-error: a malformed reserve address must
+        // reject the calculation, never shrink the required set and price a
+        // partial pool.
+        let reserve_pubkeys: Vec<Pubkey> = match reserve_pubkeys(pool_descriptor) {
+            Ok(pubkeys) => pubkeys,
+            Err(err) => {
+                record_safe(Event::error(
+                    EventCategory::Pool,
+                    Some("invalid_reserve_accounts".to_owned()),
+                    Some(target_mint.to_owned()),
+                    Some(pool_id.to_string()),
+                    serde_json::json!({
+                        "pool_id": pool_id.to_string(),
+                        "program_kind": pool_descriptor.program_kind.as_str(),
+                        "target_mint": target_mint,
+                        "required_accounts": pool_descriptor.reserve_accounts.len(),
+                        "error": err.to_string()
+                    }),
+                ))
+                .await;
+
+                return PoolCalculationResult {
+                    pool_id,
+                    price_result: None,
+                    error: Some(format!("Invalid reserve accounts: {err}")),
+                };
+            }
+        };
 
         // Check if bundle has required accounts
         if !account_bundle.is_complete(&reserve_pubkeys) {
@@ -543,5 +566,38 @@ mod tests {
         let directory = Arc::new(RwLock::new(HashMap::new()));
         let calculator = PriceCalculator::new(directory);
         assert!(calculator.get_canonical_pool(SOL_MINT).is_none());
+    }
+
+    #[tokio::test]
+    async fn calculate_pool_price_rejects_malformed_reserve_without_partial_decode() {
+        // record_safe() reads config; point at a nonexistent path so it
+        // initializes from defaults (ignore Err: another test may have
+        // already set the process-wide CONFIG OnceLock).
+        let _ = crate::config::load_config_from_path("/nonexistent/screenerbot-test-config.toml");
+
+        let mut descriptor = descriptor("TokenA", SOL_MINT, 100.0);
+        descriptor.reserve_accounts =
+            vec![AccountId::new(ChainId::Solana, "not-a-valid-pubkey").unwrap()];
+
+        let pool_id = Pubkey::new_unique();
+        let bundle = PoolAccountBundle::new(pool_id);
+        let sol_reference_price = Arc::new(RwLock::new(100.0));
+
+        let result = PriceCalculator::calculate_pool_price_static(
+            pool_id,
+            &descriptor,
+            &bundle,
+            &sol_reference_price,
+        )
+        .await;
+
+        assert!(
+            result.price_result.is_none(),
+            "a malformed required reserve must never yield a partial price"
+        );
+        let error = result
+            .error
+            .expect("malformed reserve must report an error");
+        assert!(!error.is_empty());
     }
 }

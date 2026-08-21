@@ -8,7 +8,17 @@ use crate::chains::solana::constants::SYSTEM_PROGRAM_ID;
 use crate::chains::solana::solana_sdk::{account::Account, pubkey::Pubkey};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use std::time::Instant;
+
+/// Parsed once and reused across the ~500ms fetch/completeness hot loop —
+/// re-parsing these fixed strings per account/bundle check showed up in
+/// profiling as avoidable work on the pool fetcher's hottest path.
+pub(crate) static SOL_MINT_PUBKEY: LazyLock<Pubkey> =
+    LazyLock::new(|| Pubkey::from_str(SOL_MINT).expect("SOL_MINT is a valid pubkey"));
+pub(crate) static SYSTEM_PROGRAM_PUBKEY: LazyLock<Pubkey> = LazyLock::new(|| {
+    Pubkey::from_str(SYSTEM_PROGRAM_ID).expect("SYSTEM_PROGRAM_ID is a valid pubkey")
+});
 
 #[derive(Debug, Clone)]
 pub(crate) struct MissingAccountState {
@@ -104,11 +114,9 @@ impl PoolAccountBundle {
     /// Skips the native SOL mint since it's not a real on-chain account and
     /// RPC returns null for it, which would prevent bundles from ever completing.
     pub fn is_complete(&self, required_accounts: &[Pubkey]) -> bool {
-        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).unwrap();
-        let system_program_pubkey = Pubkey::from_str(SYSTEM_PROGRAM_ID).unwrap();
         required_accounts
             .iter()
-            .filter(|key| **key != sol_mint_pubkey && **key != system_program_pubkey)
+            .filter(|key| **key != *SOL_MINT_PUBKEY && **key != *SYSTEM_PROGRAM_PUBKEY)
             .all(|key| self.accounts.contains_key(key))
     }
 
