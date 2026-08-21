@@ -75,6 +75,7 @@ Bot/
 _backup/
 
 # Agent instructions (private)
+.claude/
 .github/*
 !.github/workflows/
 .folderinfo
