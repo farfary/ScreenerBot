@@ -6,7 +6,7 @@ use crate::{
 };
 
 /// Register all available services with the service manager.
-pub(super) fn register_all_services(manager: &mut ServiceManager) {
+pub fn register_all_services(manager: &mut ServiceManager) {
     use crate::services::implementations::*;
 
     logger::info(LogTag::System, "Registering services...");

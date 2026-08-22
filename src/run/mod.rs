@@ -5,7 +5,7 @@
 
 mod bootstrap;
 mod llm_init;
-mod services;
+pub mod services;
 mod shutdown;
 
 use bootstrap::{initialize_ai_runtime_if_enabled, initialize_full_runtime};
