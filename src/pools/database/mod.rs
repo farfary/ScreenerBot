@@ -7,6 +7,7 @@
 // Sub-modules
 mod blacklist;
 mod global;
+mod migrations;
 mod operations;
 mod types;
 mod writer;

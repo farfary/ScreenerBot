@@ -15,6 +15,8 @@ mod bootstrap;
 mod deltas;
 mod global;
 mod maintenance;
+mod migrations;
+mod migrations_rebuild;
 mod operations;
 mod operations_queries;
 mod reporting;
