@@ -166,7 +166,20 @@ impl PoolAnalyzer {
                                                 })
                                                 .collect();
                                             if let Err(e) = fetcher.request_pool_fetch(pool_id, reserve_accounts) {
-                                                logger::warning(LogTag::PoolAnalyzer, &format!("Failed to request fetch for analyzed pool {pool_id}: {e}"));
+                                                // The analyzer and the fetcher wake on the SAME
+                                                // shutdown broadcast, so the fetcher can drop its
+                                                // receiver while the analyzer is still finishing
+                                                // the batch in hand. A closed channel is then the
+                                                // expected outcome, not a fault: the work is
+                                                // deliberately being abandoned because the process
+                                                // is exiting. Logging it at warning buried the
+                                                // real shutdown sequence under a dozen identical
+                                                // lines every run.
+                                                if crate::is_shutdown_requested() {
+                                                    logger::debug(LogTag::PoolAnalyzer, &format!("Dropping fetch request for pool {pool_id} during shutdown: {e}"));
+                                                } else {
+                                                    logger::warning(LogTag::PoolAnalyzer, &format!("Failed to request fetch for analyzed pool {pool_id}: {e}"));
+                                                }
                                             }
                                         }
 

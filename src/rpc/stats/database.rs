@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use super::types::*;
 use crate::database;
+use crate::database::WriteTransaction;
 use crate::errors::{DatabaseError, Error};
 use crate::rpc::types::{CircuitState, ProviderKind};
 
@@ -262,7 +263,7 @@ impl RpcStatsDatabase {
         }
 
         let mut conn = self.conn()?;
-        let tx = conn.transaction()?;
+        let tx = conn.write_tx()?;
 
         {
             let mut stmt = tx.prepare(

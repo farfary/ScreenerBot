@@ -23,6 +23,7 @@ use crate::paths::get_wallets_db_path;
 use crate::{chains::ChainId, database};
 
 use super::types::{WatchSource, WatchTarget};
+use crate::database::WriteTransaction;
 
 const SCHEMA_WATCH_TARGETS: &str = r#"
 CREATE TABLE IF NOT EXISTS watch_targets (
@@ -50,31 +51,6 @@ CREATE TABLE IF NOT EXISTS watch_cursors (
 
 const INDEXES: &[&str] =
     &["CREATE INDEX IF NOT EXISTS idx_watch_targets_chain_enabled ON watch_targets(chain_id, enabled);"];
-
-/// Columns the live tables must carry but `CREATE TABLE IF NOT EXISTS` can never
-/// add: it is a no-op on a table that already exists, so a `wallets.db` written
-/// before chain identity keeps its original `watch_targets` / `watch_cursors`
-/// shape forever. Without this repair the chain-scoped index above fails with
-/// `no such column: chain_id`, `wallet_watch` fails to start, and the process
-/// exits during boot — leaving an already-loaded dashboard waiting on a backend
-/// that is gone. Every column here must be nullable or carry a DEFAULT; SQLite
-/// rejects `ALTER TABLE ADD COLUMN` for a NOT NULL column without one.
-///
-/// The legacy tables keep their narrower `UNIQUE (address)` / `PRIMARY KEY
-/// (address)` constraints, which is stricter than the chain-scoped shape and
-/// therefore safe for a single-chain build.
-const ADDITIVE_COLUMNS: &[(&str, &str, &str)] = &[
-    (
-        "watch_targets",
-        "chain_id",
-        "chain_id TEXT NOT NULL DEFAULT 'solana'",
-    ),
-    (
-        "watch_cursors",
-        "chain_id",
-        "chain_id TEXT NOT NULL DEFAULT 'solana'",
-    ),
-];
 
 /// Owns `watch_targets` and `watch_cursors`.
 #[derive(Clone)]
@@ -127,7 +103,7 @@ impl WatchDatabase {
     /// Whether a live table already declares a column. `PRAGMA table_info` is the
     /// only honest answer — a schema version stamp cannot know what an older
     /// build actually wrote.
-    fn column_exists(
+    pub(super) fn column_exists(
         conn: &rusqlite::Connection,
         table: &str,
         column: &str,
@@ -156,15 +132,19 @@ impl WatchDatabase {
             .map_err(|e| format!("Failed to create watch_targets table: {e}"))?;
         conn.execute(SCHEMA_WATCH_CURSORS, [])
             .map_err(|e| format!("Failed to create watch_cursors table: {e}"))?;
-        // Structural presence is the gate, so this is idempotent and runs before
-        // anything that names the column.
-        for (table, column, definition) in ADDITIVE_COLUMNS {
-            if Self::column_exists(&conn, table, column)? {
-                continue;
-            }
-            conn.execute(&format!("ALTER TABLE {table} ADD COLUMN {definition}"), [])
-                .map_err(|e| format!("Failed to add {table}.{column}: {e}"))?;
-        }
+        // Bring a database written before chain identity onto the chain-scoped
+        // keys the queries in this module name. `CREATE TABLE IF NOT EXISTS` is
+        // a no-op on an existing table, and `ALTER TABLE ADD COLUMN` cannot
+        // change a key, so only a rebuild can: see `migrations`. Both steps are
+        // gated on the live schema and run before anything names the column.
+        let mut conn = conn;
+        let tx = conn
+            .write_tx()
+            .map_err(|e| format!("Failed to begin watch schema migration: {e}"))?;
+        Self::rebuild_watch_targets(&tx)?;
+        Self::rebuild_watch_cursors(&tx)?;
+        tx.commit()
+            .map_err(|e| format!("Failed to commit watch schema migration: {e}"))?;
         for index_sql in INDEXES {
             conn.execute(index_sql, [])
                 .map_err(|e| format!("Failed to create watch index: {e}"))?;
@@ -269,7 +249,7 @@ impl WatchDatabase {
         let now = Utc::now().to_rfc3339();
 
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to begin watch-target insert: {e}"))?;
         tx.execute(
             "INSERT INTO watch_targets (chain_id, address, label, sources, enabled, created_at, updated_at) \
@@ -333,7 +313,7 @@ impl WatchDatabase {
     fn delete_target_sync(&self, id: i64) -> Result<(), String> {
         let mut conn = self.conn()?;
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to begin watch-target delete: {e}"))?;
         let address: Option<String> = tx
             .query_row(
@@ -518,49 +498,98 @@ mod tests {
          last_signature TEXT,\n\
          updated_at TEXT NOT NULL DEFAULT (datetime('now')))";
 
-    /// Opening a `wallets.db` written before chain identity must widen its watch
-    /// tables, not fail.
+    /// The half-migrated shape a real `wallets.db` carries today: the legacy
+    /// key, plus the `chain_id` column the previous `ALTER TABLE ADD COLUMN`
+    /// repair bolted on. `ALTER TABLE` cannot change a key, so this database
+    /// still has `PRIMARY KEY (address)` / `UNIQUE (address)`.
+    const BOLTED_ON_CHAIN_COLUMN: &[&str] = &[
+        "ALTER TABLE watch_targets ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+        "ALTER TABLE watch_cursors ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+    ];
+
+    /// Opening a `wallets.db` written before chain identity must rebuild its
+    /// watch tables onto the chain-scoped keys, not merely add the column.
     ///
-    /// `CREATE TABLE IF NOT EXISTS` is a no-op on a table that already exists, so
-    /// the legacy tables kept their original columns and
-    /// `idx_watch_targets_chain_enabled` failed with `no such column: chain_id`.
-    /// That error came back as `Service start failed (service=wallet_watch)`, the
-    /// process exited during boot, and the dashboard window it had already handed
-    /// over sat in its loading state waiting on a backend that was gone.
+    /// Adding `chain_id` with `ALTER TABLE` leaves `watch_cursors` on its
+    /// original `PRIMARY KEY (address)`. SQLite resolves an upsert's
+    /// `ON CONFLICT (<columns>)` against a real unique index, so `set_cursor`'s
+    /// `ON CONFLICT(chain_id, address)` matched nothing and every cursor write
+    /// failed with `ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE
+    /// constraint`. The poller could never persist a resume point, so it
+    /// re-read the same signature page on every pass forever.
+    ///
+    /// Both legacy shapes are exercised: never-migrated, and the half-migrated
+    /// one the additive repair produced.
     #[tokio::test]
-    async fn a_pre_chain_identity_database_is_widened_instead_of_failing_startup() {
-        let dir = tempfile::tempdir().expect("create temp dir");
-        let path = dir.path().join("wallets.db");
-        {
-            let conn = rusqlite::Connection::open(&path).expect("create legacy fixture");
-            conn.execute(LEGACY_WATCH_TARGETS, [])
-                .expect("create legacy watch_targets");
-            conn.execute(LEGACY_WATCH_CURSORS, [])
-                .expect("create legacy watch_cursors");
-            conn.execute(
-                "INSERT INTO watch_targets (address, label, sources) VALUES ('Addr1111', 'KOL', '[]')",
-                [],
-            )
-            .expect("seed a legacy target");
+    async fn a_pre_chain_identity_database_is_rebuilt_so_the_cursor_upsert_works() {
+        for bolt_on_chain_column in [false, true] {
+            let dir = tempfile::tempdir().expect("create temp dir");
+            let path = dir.path().join("wallets.db");
+            {
+                let conn = rusqlite::Connection::open(&path).expect("create legacy fixture");
+                conn.execute(LEGACY_WATCH_TARGETS, [])
+                    .expect("create legacy watch_targets");
+                conn.execute(LEGACY_WATCH_CURSORS, [])
+                    .expect("create legacy watch_cursors");
+                conn.execute(
+                    "INSERT INTO watch_targets (address, label, sources) VALUES ('Addr1111', 'KOL', '[]')",
+                    [],
+                )
+                .expect("seed a legacy target");
+                conn.execute(
+                    "INSERT INTO watch_cursors (address, last_signature) VALUES ('Addr1111', 'Sig0000')",
+                    [],
+                )
+                .expect("seed a legacy cursor");
+                if bolt_on_chain_column {
+                    for statement in BOLTED_ON_CHAIN_COLUMN {
+                        conn.execute(statement, []).expect("bolt on chain_id");
+                    }
+                }
+            }
+
+            let db = WatchDatabase::new_with_path(&path, ChainId::Solana).unwrap_or_else(|error| {
+                panic!(
+                    "opening a pre-chain-identity wallets.db failed: {error}. The wallet_watch \
+                     service starts with this call, so the whole process exits during boot."
+                )
+            });
+
+            // Rows survive the rebuild and are adopted onto the active chain.
+            let targets = db.list_targets().await.expect("list rebuilt targets");
+            assert_eq!(targets.len(), 1, "the legacy row must survive the rebuild");
+            assert_eq!(targets[0].address, "Addr1111");
+            assert_eq!(
+                db.get_cursor("Addr1111").await.expect("read legacy cursor"),
+                Some("Sig0000".to_owned()),
+                "the legacy cursor must survive the rebuild"
+            );
+
+            // The upsert that could never run on the legacy key: it must both
+            // insert a new address and update an existing one.
+            db.set_cursor("Addr2222", "Sig1111")
+                .await
+                .expect("insert a cursor for an address that has none");
+            db.set_cursor("Addr1111", "Sig2222")
+                .await
+                .expect("advance an existing cursor -- this is the write that always failed");
+            assert_eq!(
+                db.get_cursor("Addr1111")
+                    .await
+                    .expect("read advanced cursor"),
+                Some("Sig2222".to_owned()),
+                "advancing a cursor must overwrite, not duplicate or fail"
+            );
+
+            // Re-opening is a clean no-op: the live key is the gate.
+            let reopened = WatchDatabase::new_with_path(&path, ChainId::Solana)
+                .expect("second open is a no-op");
+            assert_eq!(reopened.list_targets().await.expect("list again").len(), 1);
+            reopened
+                .set_cursor("Addr1111", "Sig3333")
+                .await
+                .expect("cursor writes still work after a no-op reopen");
         }
-
-        let db = WatchDatabase::new_with_path(&path, ChainId::Solana).unwrap_or_else(|error| {
-            panic!(
-                "opening a pre-chain-identity wallets.db failed: {error}. The wallet_watch \
-                 service starts with this call, so the whole process exits during boot."
-            )
-        });
-
-        // Chain-scoped reads must work against the widened table, and the legacy
-        // row must have been adopted onto the active chain by the column default.
-        let targets = db.list_targets().await.expect("list widened targets");
-        assert_eq!(targets.len(), 1, "the legacy row must survive widening");
-        assert_eq!(targets[0].address, "Addr1111");
-
-        // Re-opening is a clean no-op: presence of the column is the gate.
-        let reopened =
-            WatchDatabase::new_with_path(&path, ChainId::Solana).expect("second open is a no-op");
-        assert_eq!(reopened.list_targets().await.expect("list again").len(), 1);
     }
 
     fn temp_db() -> (WatchDatabase, tempfile::TempDir) {

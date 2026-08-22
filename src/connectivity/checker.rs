@@ -328,7 +328,7 @@ impl ConnectivityChecker {
 
             // Surface critical outages — only when the unhealthy set changes, so
             // the fast cadence doesn't spam an identical line every couple seconds.
-            let unhealthy = state::get_unhealthy_critical_endpoints().await;
+            let unhealthy = state::get_confirmed_unhealthy_critical_endpoints().await;
             let sig = if unhealthy.is_empty() {
                 None
             } else {

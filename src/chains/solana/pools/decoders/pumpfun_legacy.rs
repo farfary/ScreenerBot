@@ -30,6 +30,12 @@ const BONDING_CURVE_SIZE_FULL: usize = 256;
 const BONDING_CURVE_SIZE_MIGRATED: usize = 150;
 const BONDING_CURVE_MIN_SIZE: usize = 48; // Minimum to read reserves
 
+/// Offset of the curve's `complete` flag, immediately after the five u64
+/// reserve/supply fields. Set by the program when the curve graduates and its
+/// liquidity migrates to the PumpFun AMM (see `pumpfun_amm`), at which point
+/// the curve is drained and every reserve reads zero.
+const BONDING_CURVE_COMPLETE_OFFSET: usize = 48;
+
 /// PumpFun Legacy pool decoder and calculator
 pub struct PumpFunLegacyDecoder;
 
@@ -178,15 +184,37 @@ impl PumpFunLegacyDecoder {
             ),
         );
 
+        // A graduated curve is drained by design: the program moves the
+        // liquidity to the PumpFun AMM and every reserve reads zero. That is a
+        // routine lifecycle transition, not corrupt account data, so it must
+        // not be reported as a decoder error -- doing so filed two ERROR lines
+        // per graduating token into the same stream real decode failures use.
+        // The curve simply no longer prices this token; the AMM pool does.
+        let graduated = data
+            .get(BONDING_CURVE_COMPLETE_OFFSET)
+            .is_some_and(|flag| *flag != 0);
+
         // Validate reserves
         if virtual_token_reserves == 0 || virtual_sol_reserves == 0 {
-            logger::error(
-                LogTag::PoolDecoder,
-                &format!(
-                    "PumpFun bonding curve {} has zero virtual reserves: token={}, sol={}",
-                    pool_account, virtual_token_reserves, virtual_sol_reserves
-                ),
-            );
+            if graduated {
+                logger::debug(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "PumpFun bonding curve {pool_account} has graduated to the AMM; \
+                         it no longer prices {token_mint}"
+                    ),
+                );
+            } else {
+                // Zero reserves on a curve that has NOT graduated is genuinely
+                // anomalous and stays an error.
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "PumpFun bonding curve {} has zero virtual reserves but is not complete: token={}, sol={}",
+                        pool_account, virtual_token_reserves, virtual_sol_reserves
+                    ),
+                );
+            }
             return None;
         }
 

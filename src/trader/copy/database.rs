@@ -19,6 +19,7 @@ mod rows;
 #[path = "database/schema.rs"]
 mod schema;
 
+use crate::database::WriteTransaction;
 use rows::{json_error, parse_datetime, row_to_task};
 use schema::{migrate, SCHEMA, SCHEMA_VERSION};
 
@@ -569,7 +570,7 @@ impl CopyDatabase {
         let mint = mint.to_owned();
         tokio::task::spawn_blocking(move || {
             let mut connection = db.connection()?;
-            let transaction = connection.transaction().map_err(|e| format!("Failed to begin target inventory update: {e}"))?;
+            let transaction = connection.write_tx().map_err(|e| format!("Failed to begin target inventory update: {e}"))?;
             let before = transaction.query_row(
                 "SELECT token_amount FROM copy_target_holdings WHERE task_id=?1 AND mint=?2",
                 params![task_id, mint],
@@ -601,7 +602,7 @@ impl CopyDatabase {
     fn reconcile_stale_claims_sync(&self, grace_seconds: u64) -> Result<usize, String> {
         let mut connection = self.connection()?;
         let transaction = connection
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to begin claim reconciliation: {e}"))?;
         transaction.execute(
             "UPDATE copy_live_claims SET state='settled', updated_at=?1 WHERE state='claimed' AND EXISTS (SELECT 1 FROM copy_decisions d WHERE d.task_id=copy_live_claims.task_id AND d.signature=copy_live_claims.signature)",
@@ -689,7 +690,7 @@ impl CopyDatabase {
     fn record_outcome_sync(&self, outcome: CopyOutcome) -> Result<(), String> {
         let mut connection = self.connection()?;
         let transaction = connection
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to begin copy outcome transaction: {e}"))?;
         let (task_id, signature, mint, decided_at, kind) = match &outcome {
             CopyOutcome::PaperFilled(decision) => (

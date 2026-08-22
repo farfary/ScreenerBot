@@ -5,6 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::super::types::WalletFlowCacheStats;
 use super::WalletDatabase;
+use crate::database::WriteTransaction;
 
 impl WalletDatabase {
     /// Aggregate pre-cached SOL flows for a given time window
@@ -55,7 +56,7 @@ impl WalletDatabase {
         }
         let mut conn = self.get_connection()?;
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to start flow cache transaction: {e}"))?;
         {
             let mut stmt = tx

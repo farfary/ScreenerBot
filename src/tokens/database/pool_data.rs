@@ -12,6 +12,7 @@ use crate::tokens::types::{
 
 use super::helpers::read_row_value;
 use super::TokenDatabase;
+use crate::database::WriteTransaction;
 
 impl TokenDatabase {
     /// Replace all pool records for a token with the given snapshot
@@ -19,7 +20,7 @@ impl TokenDatabase {
         let mut conn = self.conn()?;
 
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| TokenError::Database(format!("Failed to start transaction: {e}")))?;
 
         // Query existing first_seen_ts values BEFORE delete to preserve them

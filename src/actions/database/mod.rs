@@ -10,6 +10,7 @@ mod queries;
 
 use super::types::{Action, ActionId, ActionState, ActionStep, ActionType, StepStatus};
 use crate::database;
+use crate::database::WriteTransaction;
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
 use chrono::{DateTime, Utc};
@@ -281,7 +282,7 @@ impl ActionsDatabase {
 
         // Use transaction to ensure atomicity of action + steps insertion
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
         tx.execute(

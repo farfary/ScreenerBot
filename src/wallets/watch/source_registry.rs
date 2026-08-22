@@ -5,6 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use super::database::WatchDatabase;
 use super::{WatchSource, WatchTarget};
+use crate::database::WriteTransaction;
 
 impl WatchDatabase {
     pub async fn upsert_source(
@@ -18,7 +19,7 @@ impl WatchDatabase {
         let label = label.map(str::to_owned);
         tokio::task::spawn_blocking(move || {
             let mut conn = db.conn()?;
-            let tx = conn.transaction().map_err(|e| format!("Failed to begin watch-source update: {e}"))?;
+            let tx = conn.write_tx().map_err(|e| format!("Failed to begin watch-source update: {e}"))?;
             let existing: Option<(i64, String)> = tx.query_row("SELECT id, sources FROM watch_targets WHERE chain_id = ?1 AND address = ?2", params![db.chain.as_str(), address], |row| Ok((row.get(0)?, row.get(1)?))).optional().map_err(|e| format!("Failed to read watch sources: {e}"))?;
             let now = Utc::now().to_rfc3339();
             let id = if let Some((id, json)) = existing {
@@ -44,7 +45,7 @@ impl WatchDatabase {
         tokio::task::spawn_blocking(move || {
             let mut conn = db.conn()?;
             let tx = conn
-                .transaction()
+                .write_tx()
                 .map_err(|e| format!("Failed to begin watch-source removal: {e}"))?;
             let json: Option<String> = tx
                 .query_row(

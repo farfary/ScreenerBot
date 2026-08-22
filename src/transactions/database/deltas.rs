@@ -12,6 +12,7 @@ use crate::logger::{self, LogTag};
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, SUBJECT_DELTAS_VERSION};
 
 use super::operations::TransactionDatabase;
+use crate::database::WriteTransaction;
 
 /// `db_metadata` key guarding the once-only historical backfill.
 const BACKFILL_METADATA_KEY: &str = "subject_deltas_backfill_version";
@@ -57,7 +58,7 @@ impl TransactionDatabase {
 
         let mut conn = self.get_connection()?;
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to start subject deltas transaction: {e}"))?;
 
         for delta in deltas {

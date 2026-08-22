@@ -11,6 +11,7 @@ use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 
 use super::ActionsDatabase;
+use crate::database::WriteTransaction;
 
 impl ActionsDatabase {
     /// Get a single action by ID
@@ -474,7 +475,7 @@ impl ActionsDatabase {
 
         // Use transaction to ensure both deletes succeed or both roll back
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
         // CHILD ROWS FIRST. `action_steps.action_id` is a FOREIGN KEY into `actions(id)`
@@ -665,7 +666,7 @@ impl ActionsDatabase {
             .map_err(|e| format!("Failed to serialize failed state: {e}"))?;
 
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
         for id in &ids {

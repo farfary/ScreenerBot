@@ -8,6 +8,7 @@ use crate::logger::{self, LogTag};
 use crate::tokens::types::{TokenError, TokenResult};
 
 use super::TokenDatabase;
+use crate::database::WriteTransaction;
 
 impl TokenDatabase {
     /// Update or insert a rejection record for a token
@@ -61,7 +62,7 @@ impl TokenDatabase {
         let mut conn = self.conn()?;
 
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;
@@ -110,7 +111,7 @@ impl TokenDatabase {
         let mut conn = self.conn()?;
 
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;
@@ -157,7 +158,7 @@ impl TokenDatabase {
         let mut conn = self.conn()?;
 
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;

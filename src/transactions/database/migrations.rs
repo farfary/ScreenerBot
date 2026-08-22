@@ -8,6 +8,7 @@ use crate::transactions::types::*;
 
 use super::operations::TransactionDatabase;
 use super::schema::*;
+use crate::database::WriteTransaction;
 
 impl TransactionDatabase {
     /// Apply schema migrations that are safe before chain identity exists.
@@ -134,7 +135,7 @@ impl TransactionDatabase {
 
         let migration_result = (|| -> Result<(), String> {
             let tx = conn
-                .transaction()
+                .write_tx()
                 .map_err(|e| format!("Failed to begin v5 schema migration: {e}"))?;
 
             Self::rebuild_raw_transactions(&tx, &own_wallet_address)?;
@@ -242,7 +243,7 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to disable foreign keys for v7 migration: {e}"))?;
         let result = (|| -> Result<(), String> {
             let tx = conn
-                .transaction()
+                .write_tx()
                 .map_err(|e| format!("Failed to begin v7 chain identity migration: {e}"))?;
             let tables = [
                 ("raw_transactions", SCHEMA_RAW_TRANSACTIONS, "chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message, fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, created_at, updated_at"),
@@ -344,7 +345,7 @@ impl TransactionDatabase {
             drop(stmt);
 
             let tx = conn
-                .transaction()
+                .write_tx()
                 .map_err(|e| format!("Failed to start sol_delta backfill transaction: {e}"))?;
 
             for (signature, change_json) in batch.into_iter() {

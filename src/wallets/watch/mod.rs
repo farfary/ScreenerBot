@@ -27,6 +27,7 @@
 
 mod database;
 mod dedupe;
+mod migrations;
 mod poller;
 mod recorder;
 pub mod runtime;

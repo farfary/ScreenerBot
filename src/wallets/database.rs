@@ -12,6 +12,7 @@ mod schema;
 mod token_balances;
 mod wallet_queries;
 
+use crate::database::WriteTransaction;
 use schema::{TOKEN_BALANCES_SCHEMA, WALLETS_INDEXES, WALLETS_SCHEMA};
 
 /// Wallets database with connection pooling
@@ -90,7 +91,7 @@ impl WalletsDatabase {
             .map_err(|e| format!("Failed to disable wallet foreign keys: {e}"))?;
         let result = (|| -> Result<(), String> {
             let tx = conn
-                .transaction()
+                .write_tx()
                 .map_err(|e| format!("Failed to begin wallets chain migration: {e}"))?;
             tx.execute(
                 "CREATE TABLE wallets__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', name TEXT NOT NULL, address TEXT NOT NULL, encrypted_key TEXT NOT NULL, nonce TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'secondary', wallet_type TEXT NOT NULL DEFAULT 'generated', created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT, notes TEXT, is_active INTEGER NOT NULL DEFAULT 1, UNIQUE(chain_id, address))",

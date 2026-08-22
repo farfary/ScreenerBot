@@ -5,6 +5,8 @@
 
 pub mod configure;
 pub mod maintenance;
+pub mod transaction;
 
 pub use configure::*;
 pub use maintenance::start_maintenance_task as start_db_maintenance_task;
+pub use transaction::WriteTransaction;

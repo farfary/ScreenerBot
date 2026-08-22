@@ -7,6 +7,7 @@ use crate::logger::{self, LogTag};
 use crate::tokens::types::{Priority, TokenError, TokenResult};
 
 use super::TokenDatabase;
+use crate::database::WriteTransaction;
 
 impl TokenDatabase {
     /// Fetch token mints with the given priority level
@@ -100,7 +101,7 @@ impl TokenDatabase {
         let mut conn = self.conn()?;
 
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
 
         let mut updated = 0;

@@ -243,11 +243,32 @@ impl RpcManager {
             .collect();
 
         if available.is_empty() {
-            // Fallback: try any enabled provider
-            return providers
+            // Fallback: any enabled provider, healthy or not.
+            if let Some(provider) = providers
                 .iter()
                 .find(|p| p.enabled && !excluded.contains(&p.id))
-                .cloned();
+            {
+                return Some(provider.clone());
+            }
+
+            // Every enabled provider has already been tried on this request.
+            //
+            // `excluded` is a failover PREFERENCE -- "spread retries across
+            // providers" -- not a constraint, and treating it as one silently
+            // disabled retrying altogether for a single-provider deployment:
+            // attempt 0 tried the only provider, attempt 1 found nothing left
+            // and returned `NoProvidersAvailable`, so `max_retries` and the
+            // whole exponential-backoff ladder in `execute_raw` were dead code.
+            // A transient 429 became a hard failure ~100ms later, reported as
+            // the contradictory "No providers available: Rate limited by ...".
+            //
+            // Falling back to the highest-priority enabled provider (the same
+            // one `Priority` selection would pick fresh) restores the intended
+            // behaviour. It is not a busy-loop: `execute_raw` sleeps
+            // its backoff before re-selecting, the per-provider rate limiter
+            // gates acquisition, and the circuit breaker is still checked, so a
+            // genuinely dead provider still fails fast through those.
+            return providers.iter().find(|p| p.enabled).cloned();
         }
 
         match strategy {

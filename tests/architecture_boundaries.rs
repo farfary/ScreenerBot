@@ -692,3 +692,52 @@ fn wallet_watch_production_code_never_reaches_solana_directly() {
         violations.join("\n")
     );
 }
+
+/// Every SQLite write path must open its transaction through
+/// `database::WriteTransaction::write_tx` (IMMEDIATE), never through
+/// rusqlite's bare `Connection::transaction()` (DEFERRED).
+///
+/// A DEFERRED transaction that reads before it writes must upgrade its lock on
+/// the first write statement, and in WAL mode SQLite fails that upgrade with
+/// `SQLITE_BUSY` **immediately, ignoring `busy_timeout`** — because another
+/// connection may have committed since the read snapshot was taken. That is
+/// what produced `Failed to clear token pools: database is locked` under the
+/// eight concurrent `TOKEN_POOLS` refresh workers, and it was latent in every
+/// other read-then-write transaction in the tree.
+///
+/// Every transaction in this codebase writes, so there is no legitimate bare
+/// `.transaction()` call site. See `src/database/transaction.rs`.
+#[test]
+fn sqlite_writers_use_immediate_transactions() {
+    let mut offenders: Vec<String> = Vec::new();
+
+    for (relative, contents) in walk_src() {
+        // The trait's own unit test calls `.transaction()` deliberately, to
+        // demonstrate the upgrade failure it exists to prevent.
+        if relative == Path::new("database/transaction.rs") {
+            continue;
+        }
+        for (idx, line) in contents.lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//!") || trimmed.starts_with("///") {
+                continue;
+            }
+            if line.contains(".transaction()") {
+                offenders.push(format!(
+                    "{}:{} -> {}",
+                    relative.display(),
+                    idx + 1,
+                    line.trim()
+                ));
+            }
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "bare DEFERRED `.transaction()` is forbidden — use `write_tx()` from \
+         `crate::database::WriteTransaction` so the write lock is taken before \
+         the first read and `busy_timeout` actually applies:\n{}",
+        offenders.join("\n")
+    );
+}

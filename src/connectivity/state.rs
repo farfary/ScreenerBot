@@ -244,6 +244,29 @@ impl ConnectivityState {
         }
         unhealthy
     }
+
+    /// Critical endpoints that are CONFIRMED down — the aggregate counterpart
+    /// of [`Self::is_confirmed_unhealthy`], and the only honest basis for an
+    /// alarm that tells the operator to pause trading.
+    ///
+    /// [`Self::get_unhealthy_critical_endpoints`] negates `is_healthy`, which
+    /// reports `Unknown` (registered, never probed) as unhealthy. That is the
+    /// right reading for "is this endpoint usable yet?" and the wrong one for
+    /// "has this endpoint failed?": on every boot the first pass ran before any
+    /// probe had landed, so the checker logged
+    /// `CRITICAL: 2 critical endpoint(s) unhealthy: ["rpc", "internet"]` one
+    /// second into startup and never again, on a machine that was online the
+    /// whole time. An alarm that cries wolf at every launch trains the operator
+    /// to ignore the real one.
+    pub fn get_confirmed_unhealthy_critical_endpoints(&self) -> Vec<&'static str> {
+        let mut unhealthy = Vec::new();
+        for (name, criticality) in &self.criticality {
+            if *criticality == EndpointCriticality::Critical && self.is_confirmed_unhealthy(name) {
+                unhealthy.push(*name);
+            }
+        }
+        unhealthy
+    }
 }
 
 /// Global connectivity state instance
@@ -358,6 +381,14 @@ pub async fn get_unhealthy_critical_endpoints() -> Vec<&'static str> {
     let state_arc = get_state();
     let state = state_arc.read().await;
     state.get_unhealthy_critical_endpoints()
+}
+
+/// Critical endpoints confirmed down — see
+/// [`ConnectivityState::get_confirmed_unhealthy_critical_endpoints`].
+pub async fn get_confirmed_unhealthy_critical_endpoints() -> Vec<&'static str> {
+    let state_arc = get_state();
+    let state = state_arc.read().await;
+    state.get_confirmed_unhealthy_critical_endpoints()
 }
 
 /// Get all endpoint health statuses

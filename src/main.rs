@@ -26,18 +26,11 @@ use std::sync::Arc;
 /// A distinct exit code separates an intentional restart from a crash.
 const RESTART_EXIT_CODE: i32 = 75;
 
-/// Global flag to signal shutdown
-static SHUTDOWN_FLAG: AtomicBool = AtomicBool::new(false);
-
-/// Check if shutdown was requested
-pub fn is_shutdown_requested() -> bool {
-    SHUTDOWN_FLAG.load(Ordering::SeqCst)
-}
-
-/// Request application shutdown
-pub fn request_shutdown() {
-    SHUTDOWN_FLAG.store(true, Ordering::SeqCst);
-}
+// The shutdown flag itself lives in the library (`screenerbot::is_shutdown_requested`
+// / `request_shutdown`) so that library modules can distinguish "this failed" from
+// "we are exiting". Re-exported here because the binary's own call sites read
+// naturally unqualified.
+pub use screenerbot::{is_shutdown_requested, request_shutdown};
 
 /// Set up panic hook to send Telegram notification when bot crashes
 fn setup_panic_hook() {
