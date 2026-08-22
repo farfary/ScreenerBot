@@ -10,7 +10,7 @@
 
 use super::types::max_watched_tokens;
 use super::{cache, db, PoolError};
-use crate::chains::ChainId;
+use crate::chains::active_chain;
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
@@ -98,7 +98,7 @@ where
     logger::info(LogTag::PoolService, "Starting pool service...");
 
     // Initialize database first
-    if let Err(e) = db::initialize_database(ChainId::Solana).await {
+    if let Err(e) = db::initialize_database(active_chain()).await {
         logger::error(
             LogTag::PoolService,
             &format!("Failed to initialize database: {e}"),
@@ -453,7 +453,7 @@ async fn run_database_cleanup_task(shutdown: Arc<Notify>) {
             break;
           }
           _ = interval.tick() => {
-            if let Err(e) = db::cleanup_old_entries(ChainId::Solana).await {
+            if let Err(e) = db::cleanup_old_entries(active_chain()).await {
               logger::error(LogTag::PoolService, &format!("Database cleanup failed: {e}"));
             } else {
               logger::info(LogTag::PoolService, "Database cleanup completed successfully");
@@ -481,7 +481,7 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
             cleanup_memory_gaps().await;
 
             // Clean up gapped data from database
-            match db::cleanup_all_gapped_data(ChainId::Solana).await {
+            match db::cleanup_all_gapped_data(active_chain()).await {
               Ok(deleted) => {
                 if deleted > 0 {
                   logger::info(
@@ -538,7 +538,7 @@ async fn warm_cache_for_open_positions() {
     );
 
     // Use the tokens module prefetch to warm pool data cache
-    crate::tokens::prefetch_token_pools(ChainId::Solana, &open_mints).await;
+    crate::tokens::prefetch_token_pools(active_chain(), &open_mints).await;
 
     logger::info(
         LogTag::PoolService,

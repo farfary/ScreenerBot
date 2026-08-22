@@ -7,13 +7,14 @@ use super::{
     types::{VerificationKind, VerificationOutcome},
 };
 use crate::{
+    chains::solana::assets::ata::{get_token_balance, get_total_token_balance},
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{
         get_global_transaction_manager, get_transaction, reprocess_transaction, Transaction,
         TransactionStatus,
     },
-    utils::{get_token_balance, get_total_token_balance, get_wallet_address, sol_to_lamports},
+    utils::{get_wallet_address, sol_to_lamports},
 };
 use chrono::Utc;
 use std::sync::LazyLock;
@@ -506,7 +507,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             // Convert token amount to integer units with rounding
-            let decimals = match get_decimals(crate::chains::ChainId::Solana, &item.mint).await {
+            let decimals = match get_decimals(crate::chains::active_chain(), &item.mint).await {
                 Some(dec) => dec,
                 None => {
                     return VerificationOutcome::RetryTransient(
@@ -636,7 +637,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
 
             // Calculate exit amount from transaction
             let exit_amount = if let Some(decimals) =
-                get_decimals(crate::chains::ChainId::Solana, &item.mint).await
+                get_decimals(crate::chains::active_chain(), &item.mint).await
             {
                 let scale = (10_f64).powi(decimals as i32);
                 let units = (swap_info.token_amount.abs() * scale).round();

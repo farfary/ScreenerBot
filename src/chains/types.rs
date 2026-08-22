@@ -4,10 +4,7 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    chains::solana::constants::{SOL_DECIMALS, SOL_MINT},
-    chains::ChainError,
-};
+use crate::chains::ChainError;
 
 /// A blockchain supported by this build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -188,13 +185,6 @@ pub struct NativeAsset {
     pub address: &'static str,
 }
 
-/// The native asset descriptor for Solana.
-pub const SOLANA_NATIVE_ASSET: NativeAsset = NativeAsset {
-    symbol: "SOL",
-    decimals: SOL_DECIMALS,
-    address: SOL_MINT,
-};
-
 /// Read-only metadata for a supported blockchain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct ChainMetadata {
@@ -202,16 +192,6 @@ pub struct ChainMetadata {
     pub id: ChainId,
     /// Metadata for the native asset of this chain.
     pub native_asset: NativeAsset,
-}
-
-impl ChainMetadata {
-    /// The metadata for Solana.
-    pub const fn solana() -> Self {
-        Self {
-            id: ChainId::Solana,
-            native_asset: SOLANA_NATIVE_ASSET,
-        }
-    }
 }
 
 #[cfg(test)]

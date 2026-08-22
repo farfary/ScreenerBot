@@ -89,7 +89,7 @@ fn default_limit() -> usize {
 }
 
 async fn open_database() -> Result<CopyDatabase, String> {
-    tokio::task::spawn_blocking(|| CopyDatabase::shared(crate::chains::ChainId::Solana))
+    tokio::task::spawn_blocking(|| CopyDatabase::shared(crate::chains::active_chain()))
         .await
         .map_err(|e| format!("Copy database task failed: {e}"))?
 }
@@ -223,11 +223,11 @@ async fn get_task(Path(id): Path<i64>) -> Response {
 }
 
 async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
-    let task = match input.into_task(crate::chains::ChainId::Solana, Utc::now()) {
+    let task = match input.into_task(crate::chains::active_chain(), Utc::now()) {
         Ok(task) => task,
         Err(reason) => return invalid_task(reason),
     };
-    if let Err(error) = crate::wallets::validate_address(&task.target_address) {
+    if let Err(error) = crate::chains::solana::accounts::validate_address(&task.target_address) {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_ADDRESS",
@@ -287,12 +287,14 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
         Ok(None) => return not_found(id),
         Err(error) => return internal_error(error),
     };
-    let mut task =
-        match input.into_task_for_update(crate::chains::ChainId::Solana, Utc::now(), original.mode)
-        {
-            Ok(task) => task,
-            Err(reason) => return invalid_task(reason),
-        };
+    let mut task = match input.into_task_for_update(
+        crate::chains::active_chain(),
+        Utc::now(),
+        original.mode,
+    ) {
+        Ok(task) => task,
+        Err(reason) => return invalid_task(reason),
+    };
     task.id = id;
     task.created_at = original.created_at;
     if task.enabled && !original.enabled {

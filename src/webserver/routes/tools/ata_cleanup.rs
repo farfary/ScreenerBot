@@ -3,12 +3,13 @@
 use crate::chains::solana::solana_sdk::signer::Signer;
 use axum::{http::StatusCode, response::Response, Json};
 
+use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::logger::{self, LogTag};
 use crate::tools::ata_cleanup::{
     clear_failed_ata_cache, get_ata_cleanup_statistics, get_failed_ata_count,
     trigger_immediate_ata_cleanup,
 };
-use crate::utils::{get_all_token_accounts, get_wallet_address};
+use crate::utils::get_wallet_address;
 use crate::webserver::utils::{error_response, success_response};
 
 use super::types::*;

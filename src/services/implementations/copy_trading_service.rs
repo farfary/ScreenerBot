@@ -34,7 +34,7 @@ impl Service for CopyTradingService {
         shutdown: Arc<Notify>,
         _monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        let database = crate::trader::copy::CopyDatabase::shared(crate::chains::ChainId::Solana)
+        let database = crate::trader::copy::CopyDatabase::shared(crate::chains::active_chain())
             .map_err(|message| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
                     service: "copy_trading".to_owned(),

@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use super::super::bulk::{
     BulkImportResult, ImportOptions, ImportRowResult, ParsedWalletRow, WalletExportRow,
 };
-use super::super::crypto::address_from_private_key;
 use super::super::types::{CreateWalletRequest, ImportWalletRequest, Wallet, WalletRole};
+use crate::chains::solana::accounts::address_from_private_key;
 use crate::logger::{self, LogTag};
 
 /// Bulk import wallets from parsed rows
@@ -171,10 +171,11 @@ pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRo
         };
 
         // Decrypt private key
-        let private_key = match super::super::crypto::export_private_key(&encrypted, &nonce) {
-            Ok(key) => key,
-            Err(_) => continue, // Skip wallets we can't decrypt
-        };
+        let private_key =
+            match crate::chains::solana::accounts::export_private_key(&encrypted, &nonce) {
+                Ok(key) => key,
+                Err(_) => continue, // Skip wallets we can't decrypt
+            };
 
         result.push(WalletExportRow {
             name: wallet.name,

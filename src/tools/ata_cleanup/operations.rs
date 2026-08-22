@@ -23,7 +23,7 @@ use super::types::{AtaCleanupResult, AtaCleanupStats, AtaInfo};
 ///
 /// Returns a list of all Associated Token Accounts for the wallet
 pub async fn scan_wallet_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, String> {
-    let token_accounts = crate::utils::get_all_token_accounts(wallet_address)
+    let token_accounts = crate::chains::solana::assets::ata::get_all_token_accounts(wallet_address)
         .await
         .map_err(|e| format!("Failed to get token accounts: {e}"))?;
 
@@ -107,7 +107,7 @@ pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, St
         ),
     );
 
-    match crate::utils::close_single_ata(wallet_address, &ata.mint).await {
+    match crate::chains::solana::assets::ata::close_single_ata(wallet_address, &ata.mint).await {
         Ok(signature) => {
             // Remove from failed cache if it was there
             let _ = remove_failed_ata(&ata.ata_address);

@@ -7,7 +7,7 @@
 
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use crate::{
-    chains::ChainId,
+    chains::{active_chain, ChainId},
     events::{record_ohlcv_event, Severity},
 };
 use serde_json::json;
@@ -339,6 +339,6 @@ impl OhlcvCache {
 
 impl Default for OhlcvCache {
     fn default() -> Self {
-        Self::new(ChainId::Solana)
+        Self::new(active_chain())
     }
 }

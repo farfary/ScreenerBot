@@ -46,7 +46,7 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
     if config.reject_known_scam_authorities {
         if let Some(ref freeze_auth) = token.freeze_authority {
             if crate::tokens::authority_cache::is_blocked_authority(
-                crate::chains::ChainId::Solana,
+                crate::chains::active_chain(),
                 freeze_auth,
             ) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
@@ -54,7 +54,7 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
         }
         if let Some(ref update_auth) = token.update_authority {
             if crate::tokens::authority_cache::is_blocked_authority(
-                crate::chains::ChainId::Solana,
+                crate::chains::active_chain(),
                 update_auth,
             ) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
@@ -62,7 +62,7 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
         }
         if let Some(ref mint_auth) = token.mint_authority {
             if crate::tokens::authority_cache::is_blocked_authority(
-                crate::chains::ChainId::Solana,
+                crate::chains::active_chain(),
                 mint_auth,
             ) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);

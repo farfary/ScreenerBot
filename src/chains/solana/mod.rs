@@ -1,7 +1,8 @@
 //! Solana chain adapter: vendor dependency boundary plus Solana RPC.
 //!
 //! Application code imports Solana SDK crates through this façade so the
-//! chain-specific dependency surface has one enforceable owner.
+//! chain-specific dependency surface has one enforceable owner. Native-asset
+//! metadata for the registry is constructed here from Solana constants.
 
 pub use solana_account_decoder;
 pub use solana_client;
@@ -20,3 +21,21 @@ pub mod rpc;
 pub mod swaps;
 pub mod transactions;
 pub mod wallets;
+
+use self::constants::{SOL_DECIMALS, SOL_MINT};
+use super::{ChainId, ChainMetadata, NativeAsset};
+
+/// Native-asset descriptor for Solana.
+pub const NATIVE_ASSET: NativeAsset = NativeAsset {
+    symbol: "SOL",
+    decimals: SOL_DECIMALS,
+    address: SOL_MINT,
+};
+
+/// Read-only metadata for the Solana chain.
+pub const fn chain_metadata() -> ChainMetadata {
+    ChainMetadata {
+        id: ChainId::Solana,
+        native_asset: NATIVE_ASSET,
+    }
+}

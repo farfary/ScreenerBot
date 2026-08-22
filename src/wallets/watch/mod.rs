@@ -17,8 +17,7 @@
 //!   recorder.rs    # per-subject persistence policy (§5.4)
 //!
 //! Decoded-transaction -> ActivityKind classification (§6.4) is Solana wire
-//! interpretation, so it lives in `crate::chains::solana::wallets::classify`
-//! and is re-exported here for the rest of the watch pipeline.
+//! interpretation, so it lives in `crate::chains::solana::wallets::classify`.
 //! ```
 
 mod database;
@@ -29,7 +28,6 @@ mod service;
 mod source_registry;
 mod types;
 
-pub use crate::chains::solana::wallets::classify::classify_transaction_activity;
 pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp};
 pub use service::subscribe_activity;
 pub use types::{
@@ -41,8 +39,9 @@ use std::sync::{Arc, OnceLock};
 
 use tokio::sync::Notify;
 
+use crate::chains::solana::accounts::validate_address;
 use crate::transactions::types::Subject;
-use crate::{chains::ChainId, config::with_config};
+use crate::{chains::active_chain, config::with_config};
 
 use database::WatchDatabase;
 
@@ -62,7 +61,7 @@ pub async fn start(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>,
     let own_subject =
         Subject::own().map_err(|e| format!("Cannot resolve own wallet for watch service: {e}"))?;
 
-    let db = WatchDatabase::new(ChainId::Solana)?;
+    let db = WatchDatabase::new(active_chain())?;
     let _ = GLOBAL_WATCH_DB.set(db.clone());
 
     Ok(tokio::spawn(service::run(shutdown, db, own_subject)))
@@ -109,7 +108,7 @@ pub async fn add_target(address: &str, label: Option<&str>) -> Result<WatchTarge
         );
     }
 
-    crate::wallets::validate_address(address)?;
+    validate_address(address)?;
 
     let own_wallets = crate::wallets::list_wallets(true).await?;
     let db = watch_db()?;
@@ -171,7 +170,7 @@ pub async fn add_copy_source(
     address: &str,
     label: Option<&str>,
 ) -> Result<WatchTarget, String> {
-    crate::wallets::validate_address(address)?;
+    validate_address(address)?;
     let own_wallets = crate::wallets::list_wallets(true).await?;
     if own_wallets.iter().any(|wallet| wallet.address == address) {
         return Err("This address is one of your own wallets and cannot be copied".to_owned());

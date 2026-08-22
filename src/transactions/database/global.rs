@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
 use crate::{
-    chains::ChainId,
+    chains::active_chain,
     logger::{self, LogTag},
 };
 
@@ -23,7 +23,7 @@ static GLOBAL_TRANSACTION_DATABASE: LazyLock<Arc<Mutex<Option<Arc<TransactionDat
 
 /// Initialize global transaction database
 pub async fn init_transaction_database() -> Result<Arc<TransactionDatabase>, String> {
-    let db = TransactionDatabase::new(ChainId::Solana).await?;
+    let db = TransactionDatabase::new(active_chain()).await?;
     let db_arc = Arc::new(db);
 
     let mut global = GLOBAL_TRANSACTION_DATABASE.lock().await;

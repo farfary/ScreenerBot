@@ -24,7 +24,7 @@ pub async fn is_blacklisted(mint: &str) -> bool {
         Some(db) => db.is_blacklisted(mint).unwrap_or(false),
         None => {
             // DB not initialized yet — fall back to in-memory filtered list
-            crate::tokens::get_blacklisted_tokens(crate::chains::ChainId::Solana)
+            crate::tokens::get_blacklisted_tokens(crate::chains::active_chain())
                 .contains(&mint.to_string())
         }
     }

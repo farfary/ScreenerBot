@@ -1,7 +1,9 @@
-//! Chain-neutral identities and metadata.
+//! Chain-neutral identities, metadata, and the active-chain seam.
 //!
-//! This module is the sole owner of chain identity primitives. Chain-specific
-//! clients and capabilities intentionally do not live here yet.
+//! `ChainId` and the identity/metadata types live here. Solana-specific
+//! metadata construction lives under `solana`. Operational shared code must
+//! call [`active_chain`] rather than naming a `ChainId` variant at the call
+//! site.
 
 mod error;
 mod registry;
@@ -10,7 +12,13 @@ mod types;
 
 pub use error::ChainError;
 pub use registry::ChainRegistry;
-pub use types::{
-    AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId,
-    SOLANA_NATIVE_ASSET,
-};
+pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
+
+/// The chain this process operates on.
+///
+/// This is the single operational selection seam. With one supported chain
+/// it returns Solana; call sites outside `src/chains` and the composition
+/// root must not hardcode that choice.
+pub const fn active_chain() -> ChainId {
+    ChainRegistry::active_chain()
+}

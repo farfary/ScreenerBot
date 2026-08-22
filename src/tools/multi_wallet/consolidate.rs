@@ -168,7 +168,7 @@ async fn transfer_token_to_main(
         return None;
     }
 
-    if wallets::validate_address(mint).is_err() {
+    if crate::chains::solana::accounts::validate_address(mint).is_err() {
         return Some(WalletOpResult::failure(
             wallet_id,
             wallet_address,

@@ -470,9 +470,10 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         // and can be stale, so trusting it (and re-scaling by decimals) produced a
         // wildly inflated, misleading quote. Execution is already percentage-based
         // against the real balance — the preview now matches it exactly.
-        let actual_balance = crate::utils::get_total_token_balance(&wallet_address, &req.mint)
-            .await
-            .unwrap_or(0);
+        let actual_balance =
+            crate::chains::solana::assets::ata::get_total_token_balance(&wallet_address, &req.mint)
+                .await
+                .unwrap_or(0);
         if actual_balance == 0 {
             return error_response(
                 StatusCode::UNPROCESSABLE_ENTITY,

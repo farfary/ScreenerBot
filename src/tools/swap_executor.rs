@@ -92,7 +92,7 @@ pub async fn tool_buy(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult> {
     // Validate token mint
-    crate::wallets::validate_address(token_mint).map_err(|e| {
+    crate::chains::solana::accounts::validate_address(token_mint).map_err(|e| {
         Error::Data(DataError::ValidationError {
             field: "token_mint".to_owned(),
             value: token_mint.to_owned(),
@@ -134,7 +134,7 @@ pub async fn tool_sell(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult> {
     // Validate token mint
-    crate::wallets::validate_address(token_mint).map_err(|e| {
+    crate::chains::solana::accounts::validate_address(token_mint).map_err(|e| {
         Error::Data(DataError::ValidationError {
             field: "token_mint".to_owned(),
             value: token_mint.to_owned(),

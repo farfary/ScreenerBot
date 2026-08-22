@@ -225,7 +225,7 @@ pub async fn resolve_exit_policy(position: &Position) -> ExitPolicy {
         return policy;
     };
     let database = match tokio::task::spawn_blocking(|| {
-        crate::trader::copy::CopyDatabase::shared(crate::chains::ChainId::Solana)
+        crate::trader::copy::CopyDatabase::shared(crate::chains::active_chain())
     })
     .await
     {

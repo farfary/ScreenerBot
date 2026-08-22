@@ -2,10 +2,9 @@
 
 use screenerbot::chains::solana::constants::USDC_MINT;
 use screenerbot::chains::solana::transactions::program_ids::JUPITER_V6_PROGRAM_ID;
+use screenerbot::chains::solana::wallets::classify::classify_transaction_activity;
 use screenerbot::transactions::Transaction;
-use screenerbot::wallets::watch::{
-    classify_transaction_activity, ActivityKind, SwapSide, TransferDirection,
-};
+use screenerbot::wallets::watch::{ActivityKind, SwapSide, TransferDirection};
 use serde_json::{json, Value};
 
 const SUBJECT: &str = "11111111111111111111111111111111";

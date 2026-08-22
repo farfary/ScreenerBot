@@ -455,33 +455,163 @@ fn tool_swap_executor_never_calls_jupiter_wallet_helper() {
     }
 }
 
-/// SOL/WSOL/USDC/USDT mint addresses, decimals and lamport conversion
-/// constants have exactly one owner: `crate::chains::solana::constants`.
-/// `crate::constants` (the chain-neutral home for a future second chain)
-/// must never re-export a Solana address literal back through itself.
+/// The empty `src/constants.rs` compatibility façade was removed. Solana
+/// mint/native-unit constants live in `crate::chains::solana::constants`;
+/// do not reintroduce a crate-root constants module as a re-export shim.
 #[test]
-fn chain_neutral_constants_module_never_reexports_solana_literals() {
-    let path = "constants.rs";
-    let contents = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path))
-        .expect("src/constants.rs must exist");
+fn crate_root_constants_facade_must_not_return() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/constants.rs");
+    assert!(
+        !path.exists(),
+        "src/constants.rs must not return — Solana literals belong in \
+         crate::chains::solana::constants, not a crate-root façade"
+    );
+}
 
-    let banned_needles = [
-        "SOL_MINT",
-        "USDC_MINT",
-        "USDT_MINT",
-        "SOL_DECIMALS",
-        "LAMPORTS_PER_SOL",
-    ];
-    let mut violations = Vec::new();
-    for needle in banned_needles {
-        if contents.contains(needle) {
-            violations.push(needle);
+fn production_text(contents: &str) -> &str {
+    contents.split("#[cfg(test)]").next().unwrap_or(contents)
+}
+
+fn is_chain_module(relative: &Path) -> bool {
+    relative.starts_with("chains")
+}
+
+fn is_composition_root(relative: &Path) -> bool {
+    relative.starts_with("run")
+}
+
+fn is_test_support_file(relative: &Path) -> bool {
+    relative
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "tests.rs")
+}
+
+/// Schema-evolution / backfill owners may name Solana as a historical data
+/// fact (unscoped rows inherited by the only chain that existed then).
+fn is_legacy_schema_evolution(relative: &Path) -> bool {
+    let path = relative.to_string_lossy();
+    path.contains("migration")
+        || relative
+            .file_name()
+            .is_some_and(|name| name == "data_version.rs")
+}
+
+fn is_solana_identity_constructor(previous_lines: &[&str]) -> bool {
+    for line in previous_lines.iter().rev() {
+        let trimmed = line.trim_start();
+        if trimmed.contains("fn solana(") {
+            return true;
+        }
+        if trimmed.starts_with("fn ")
+            || trimmed.starts_with("pub fn ")
+            || trimmed.starts_with("pub(crate) fn ")
+            || trimmed.starts_with("pub const fn ")
+            || trimmed.starts_with("const fn ")
+        {
+            return false;
         }
     }
+    false
+}
 
+/// Operational shared code selects the process chain through
+/// `crate::chains::active_chain()`. Direct `ChainId::Solana` literals are
+/// reserved for the chain module, the composition root, adapter tests,
+/// Solana-typed identity constructors (`fn solana`), and legacy schema
+/// backfills that record a historical unscoped-row default.
+#[test]
+fn operational_shared_code_uses_active_chain_seam() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative)
+            || is_composition_root(&relative)
+            || is_test_support_file(&relative)
+            || is_legacy_schema_evolution(&relative)
+        {
+            continue;
+        }
+        let production = production_text(&contents);
+        let mut previous = Vec::new();
+        for (idx, line) in production.lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("//!") || trimmed.starts_with("///") || trimmed.starts_with("//")
+            {
+                previous.push(line);
+                continue;
+            }
+            if line.contains("ChainId::Solana") && !is_solana_identity_constructor(&previous) {
+                violations.push(format!(
+                    "src/{}:{}: operational `ChainId::Solana` — call crate::chains::active_chain() \
+                     instead",
+                    relative.display(),
+                    idx + 1
+                ));
+            }
+            previous.push(line);
+        }
+    }
     assert!(
         violations.is_empty(),
-        "src/{path} must not define or re-export Solana mint/native-unit constants \
-         ({violations:?}) — they belong solely to crate::chains::solana::constants"
+        "shared operational code must select the process chain through \
+         crate::chains::active_chain(), not by naming ChainId::Solana:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Neutral modules must not re-export Solana-owned items. Callers that need
+/// ATA helpers, mint constants, classification, or address validation import
+/// `crate::chains::solana` directly.
+#[test]
+fn modules_outside_chains_must_not_reexport_solana_items() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative) {
+            continue;
+        }
+        for (idx, line) in code_lines(&contents).lines().enumerate() {
+            let trimmed = line.trim_start();
+            let is_pub_use = trimmed.starts_with("pub use ")
+                || trimmed.starts_with("pub(crate) use ")
+                || trimmed.starts_with("pub(super) use ");
+            if !is_pub_use {
+                continue;
+            }
+            if trimmed.contains("chains::solana")
+                || trimmed.contains("SOL_MINT")
+                || trimmed.contains("SOL_DECIMALS")
+            {
+                violations.push(format!("src/{}:{}: {trimmed}", relative.display(), idx + 1));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "modules outside src/chains must not pub-use Solana-owned items \
+         (`crate::chains::solana`, SOL_MINT, SOL_DECIMALS):\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Wallet management must not alias the Solana keypair module as a local
+/// `crypto` façade. Import `crate::chains::solana::accounts` at the call site.
+#[test]
+fn wallets_module_must_not_alias_solana_crypto() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative) {
+            continue;
+        }
+        for (idx, line) in code_lines(&contents).lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.contains("chains::solana") && trimmed.contains(" as crypto") {
+                violations.push(format!("src/{}:{}: {trimmed}", relative.display(), idx + 1));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "shared modules must not alias crate::chains::solana items as `crypto`:\n{}",
+        violations.join("\n")
     );
 }

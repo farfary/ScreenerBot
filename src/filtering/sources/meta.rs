@@ -2,6 +2,7 @@
 
 use chrono::Utc;
 
+use crate::chains::solana::constants::SOL_MINT;
 use crate::config::FilteringConfig;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::positions;
@@ -51,14 +52,14 @@ fn is_too_new(token: &Token, config: &FilteringConfig) -> bool {
 }
 
 async fn has_decimals(token: &Token) -> bool {
-    if token.mint == tokens::SOL_MINT || token.decimals.is_some_and(tokens::decimals_are_valid) {
+    if token.mint == SOL_MINT || token.decimals.is_some_and(tokens::decimals_are_valid) {
         return true;
     }
 
     // Unresolved: fall back to the full chain (cache → DB → data server → RPC), which also
     // persists what it finds, so a token only ever pays this once.
     // Single-flight dedup prevents duplicate chain fetches; failures cached for 24h.
-    get_decimals(crate::chains::ChainId::Solana, &token.mint)
+    get_decimals(crate::chains::active_chain(), &token.mint)
         .await
         .is_some()
 }

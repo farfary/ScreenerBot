@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 use super::database::WalletsDatabase;
 use crate::{
-    chains::ChainId,
+    chains::active_chain,
     logger::{self, LogTag},
 };
 
@@ -40,7 +40,7 @@ static WALLETS_DB: LazyLock<Arc<RwLock<Option<WalletsDatabase>>>> =
 ///
 /// Must be called once at startup before using any wallet functions
 pub async fn initialize() -> Result<(), String> {
-    let db = WalletsDatabase::new(ChainId::Solana)?;
+    let db = WalletsDatabase::new(active_chain())?;
 
     {
         let mut guard = WALLETS_DB.write().await;

@@ -22,7 +22,7 @@ pub async fn initialize_positions_database() -> Result<(), String> {
         return Ok(()); // Already initialized
     }
 
-    let db = PositionsDatabase::new(crate::chains::ChainId::Solana).await?;
+    let db = PositionsDatabase::new(crate::chains::active_chain()).await?;
     *db_lock = Some(db);
 
     logger::info(

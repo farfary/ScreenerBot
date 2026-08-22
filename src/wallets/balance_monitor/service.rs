@@ -9,7 +9,7 @@ use crate::chains::solana::assets::fetch_nft_metadata_batch;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
-use crate::{chains::ChainId, config::with_config};
+use crate::{chains::active_chain, config::with_config};
 
 use crate::transactions::get_transaction_database;
 
@@ -39,7 +39,7 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
         return Ok(()); // Already initialized
     }
 
-    let db = super::database::WalletDatabase::new(ChainId::Solana).await?;
+    let db = super::database::WalletDatabase::new(active_chain()).await?;
     let latest_snapshot_time = db.get_latest_snapshot_time()?;
 
     // Hydrate the live worth cache from the last persisted snapshot so the header and

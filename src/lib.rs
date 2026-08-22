@@ -13,7 +13,6 @@ pub mod arguments;
 pub mod chains;
 pub mod config;
 pub mod connectivity;
-pub mod constants;
 pub mod database;
 pub mod errors;
 pub use errors::Error;

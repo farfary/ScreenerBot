@@ -84,7 +84,7 @@ pub fn update_price(price: PriceResult) {
     let price_for_db = price.clone();
     tokio::spawn(async move {
         if let Err(e) =
-            db::queue_price_for_storage(crate::chains::ChainId::Solana, price_for_db).await
+            db::queue_price_for_storage(crate::chains::active_chain(), price_for_db).await
         {
             logger::error(
                 LogTag::PoolCache,
@@ -120,7 +120,7 @@ pub fn update_price(price: PriceResult) {
             let mint_for_cleanup = mint.clone();
             tokio::spawn(async move {
                 if let Err(e) = db::cleanup_gapped_data_for_token(
-                    crate::chains::ChainId::Solana,
+                    crate::chains::active_chain(),
                     &mint_for_cleanup,
                 )
                 .await
@@ -326,7 +326,7 @@ async fn load_historical_data_into_cache() {
     let mut failed_count = 0;
 
     for mint in &open_mints {
-        match db::load_historical_data_for_token(crate::chains::ChainId::Solana, mint).await {
+        match db::load_historical_data_for_token(crate::chains::active_chain(), mint).await {
             Ok(historical_prices) => {
                 if !historical_prices.is_empty() {
                     // Create history entry - DashMap is thread-safe

@@ -1,5 +1,6 @@
 //! Close position operations — full position exit with swap execution and verification.
 
+use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
@@ -10,7 +11,7 @@ use crate::positions::state::{acquire_position_lock, add_signature_to_index};
 use crate::positions::types::VerificationKind;
 use crate::positions::PENDING_VERIFICATION_SUFFIX;
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
-use crate::utils::{get_token_balance, get_total_token_balance, get_wallet_address};
+use crate::utils::get_wallet_address;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 

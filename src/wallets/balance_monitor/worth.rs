@@ -112,7 +112,7 @@ fn price_token_sol(mint: &str) -> Option<f64> {
         }
     }
 
-    crate::tokens::get_cached_token(crate::chains::ChainId::Solana, mint)
+    crate::tokens::get_cached_token(crate::chains::active_chain(), mint)
         .map(|token| token.price_sol)
         .filter(|price| price.is_finite() && *price > 0.0)
 }

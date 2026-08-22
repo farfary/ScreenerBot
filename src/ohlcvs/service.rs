@@ -12,7 +12,7 @@ use crate::ohlcvs::types::{
     BUNDLE_CANDLE_COUNT,
 };
 use crate::{
-    chains::ChainId,
+    chains::active_chain,
     logger::{self, LogTag},
 };
 use chrono::Utc;
@@ -50,9 +50,9 @@ pub(super) struct OhlcvServiceImpl {
 
 impl OhlcvServiceImpl {
     fn new(db_path: PathBuf) -> OhlcvResult<Self> {
-        let db = Arc::new(OhlcvDatabase::new(db_path, ChainId::Solana)?);
+        let db = Arc::new(OhlcvDatabase::new(db_path, active_chain())?);
         let fetcher = Arc::new(OhlcvFetcher::new());
-        let cache = Arc::new(OhlcvCache::new(ChainId::Solana));
+        let cache = Arc::new(OhlcvCache::new(active_chain()));
         let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db)));
         let gap_manager = Arc::new(GapManager::new(Arc::clone(&db), Arc::clone(&fetcher)));
         let monitor = Arc::new(OhlcvMonitor::new(

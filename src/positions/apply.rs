@@ -747,7 +747,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // the cost basis was off by orders of magnitude, and the number went
                             // to the events log AND the Telegram notification.
                             let sold_tokens = match crate::tokens::get_decimals(
-                                crate::chains::ChainId::Solana,
+                                crate::chains::active_chain(),
                                 &position.mint,
                             )
                             .await
@@ -976,7 +976,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             let mint = find_mint_by_position_id(position_id).await?;
 
             // Get token decimals for accurate price calculation
-            let decimals = crate::tokens::get_decimals(crate::chains::ChainId::Solana, &mint)
+            let decimals = crate::tokens::get_decimals(crate::chains::active_chain(), &mint)
                 .await
                 .unwrap_or(9); // Default to 9 if not found
 

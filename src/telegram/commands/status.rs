@@ -2,11 +2,11 @@
 //!
 //! Commands for viewing bot status, positions, balance, and stats.
 
+use crate::chains::solana::assets::ata::get_sol_balance;
 use crate::config::with_config;
 use crate::positions;
 use crate::sol_price;
 use crate::telegram::formatters::{format_duration, format_mint_display, format_sol};
-use crate::utils::get_sol_balance;
 use crate::version::VERSION;
 
 /// Handle /status command

@@ -1,10 +1,10 @@
 //! Wallet CRUD — create, read, update, and delete wallet operations.
 
-use super::super::crypto::{generate_wallet_material, import_wallet_material};
 use super::super::types::{
     CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, UpdateWalletRequest, Wallet,
     WalletRole, WalletType,
 };
+use crate::chains::solana::accounts::{generate_wallet_material, import_wallet_material};
 use crate::logger::{self, LogTag};
 
 /// Rebind the wallet-monitor's stable subject after a mutation that can
@@ -159,7 +159,7 @@ pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, Strin
         .get_wallet_encrypted_key(wallet_id)?
         .ok_or("Wallet encrypted key not found")?;
 
-    let private_key = super::super::crypto::export_private_key(&encrypted, &nonce)?;
+    let private_key = crate::chains::solana::accounts::export_private_key(&encrypted, &nonce)?;
 
     logger::warning(
         LogTag::Wallet,

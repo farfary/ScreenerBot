@@ -39,13 +39,6 @@
 
 pub mod balance_monitor;
 pub mod bulk;
-/// Solana keypair generation/parsing/signing mechanics live at
-/// `crate::chains::solana::accounts::keypair`; this alias keeps every
-/// internal `super::super::crypto::*` call site working without churning
-/// the wallet management submodules. Only chain-neutral helpers from that
-/// module (address/material derivation, never a `Keypair`-returning one)
-/// are used through it — see the doc comment above.
-use crate::chains::solana::accounts::keypair as crypto;
 mod database;
 mod manager;
 pub mod recovery;
@@ -106,7 +99,3 @@ pub use manager::{
 // one consumer is `crate::chains::solana::accounts::signing`, which decrypts
 // them. No other module may hold a wallet's ciphertext/nonce pair.
 pub(crate) use manager::{get_main_wallet_encrypted_key, get_wallet_encrypted_key};
-
-// Re-export crypto utilities — chain-neutral surface only (never a
-// concrete-Solana-typed return; those stay under `crate::chains::solana`).
-pub use crypto::validate_address;

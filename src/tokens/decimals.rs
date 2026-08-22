@@ -22,10 +22,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
+use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
-
-pub use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
 
 use tokio::sync::Mutex as AsyncMutex;
 

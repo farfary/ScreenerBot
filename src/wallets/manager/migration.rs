@@ -2,9 +2,9 @@
 
 use crate::logger::{self, LogTag};
 
-use super::super::crypto::address_from_encrypted_key;
 use super::super::types::{WalletRole, WalletType};
 use super::WALLETS_DB;
+use crate::chains::solana::accounts::address_from_encrypted_key;
 
 /// Migrate existing wallet from config.toml to wallets database
 pub(super) async fn migrate_from_config() -> Result<(), String> {

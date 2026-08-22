@@ -60,7 +60,7 @@ impl Service for TokensServiceNew {
     async fn initialize(&mut self) -> crate::Result<()> {
         // Initialize database (schema initialized automatically in new())
         let db_path = crate::paths::get_tokens_db_path();
-        let db = TokenDatabase::new(&db_path.to_string_lossy(), crate::chains::ChainId::Solana)
+        let db = TokenDatabase::new(&db_path.to_string_lossy(), crate::chains::active_chain())
             .map_err(|e| {
                 crate::Error::Service(crate::errors::ServiceError::Initialize {
                     service: "tokens_new".to_owned(),

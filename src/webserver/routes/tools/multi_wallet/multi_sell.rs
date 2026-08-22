@@ -37,7 +37,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     );
 
     // Validate token mint
-    if wallets::validate_address(&request.token_mint).is_err() {
+    if crate::chains::solana::accounts::validate_address(&request.token_mint).is_err() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",
@@ -93,7 +93,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     let mut total_token_balance = 0.0;
 
     // Fetch token decimals once for display conversion
-    let token_decimals = decimals::get(crate::chains::ChainId::Solana, &request.token_mint)
+    let token_decimals = decimals::get(crate::chains::active_chain(), &request.token_mint)
         .await
         .unwrap_or(9);
     let divisor = 10f64.powi(token_decimals as i32);
@@ -175,7 +175,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
     cleanup_old_sessions().await;
 
     // Validate token mint
-    if wallets::validate_address(&request.token_mint).is_err() {
+    if crate::chains::solana::accounts::validate_address(&request.token_mint).is_err() {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",

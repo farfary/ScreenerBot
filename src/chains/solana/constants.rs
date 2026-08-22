@@ -3,11 +3,9 @@
 //! Single source of truth for everything Solana-address-shaped: on-chain
 //! program identifiers used by decoders, swap builders and the RPC/
 //! transaction layers, and the SOL/WSOL/USDC/USDT mint addresses and
-//! lamport/decimals conversion constants used across the app. `crate::chains`
-//! consumes `SOL_MINT`/`SOL_DECIMALS` to build `SOLANA_NATIVE_ASSET` — the
-//! chain-neutral `NativeAsset`/`ChainMetadata` types are the shared surface;
-//! nothing here is re-exported back through `crate::constants` (empty until a
-//! second chain needs a genuinely chain-neutral constant).
+//! lamport/decimals conversion constants used across the app. The Solana
+//! adapter builds [`super::NATIVE_ASSET`] from `SOL_MINT`/`SOL_DECIMALS`;
+//! chain-neutral `NativeAsset`/`ChainMetadata` types stay in `crate::chains`.
 
 /// SOL token mint address (wrapped SOL = SOL on Solana). Per the app mission,
 /// SOL is the single monetary unit in trading logic today.

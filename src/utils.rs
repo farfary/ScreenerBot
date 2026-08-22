@@ -133,15 +133,3 @@ where
       out = work => Some(out),
     }
 }
-
-// =============================================================================
-// ATA (ASSOCIATED TOKEN ACCOUNT) OPERATIONS
-// =============================================================================
-// ATA mechanics live at crate::chains::solana::assets::ata (Solana-specific).
-// Re-exported here as the chain-neutral call surface the rest of the app uses.
-
-pub use crate::chains::solana::assets::ata::{
-    cleanup_all_empty_atas, close_all_empty_atas, close_single_ata, close_token_account,
-    close_token_account_with_context, get_all_token_accounts, get_sol_balance, get_token_balance,
-    get_total_token_balance,
-};

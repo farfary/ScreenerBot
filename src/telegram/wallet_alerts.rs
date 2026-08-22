@@ -31,7 +31,7 @@ pub(super) fn notification_for_activity(activity: &WalletActivity) -> Option<Not
         return None;
     };
 
-    let symbol = crate::tokens::get_cached_token(crate::chains::ChainId::Solana, mint)
+    let symbol = crate::tokens::get_cached_token(crate::chains::active_chain(), mint)
         .map(|token| token.symbol)
         .filter(|symbol| !symbol.trim().is_empty())
         .unwrap_or_else(|| "Unknown".to_owned());

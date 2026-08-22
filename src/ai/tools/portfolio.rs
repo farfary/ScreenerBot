@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
+use crate::chains::solana::assets::ata::get_sol_balance;
 use crate::positions;
-use crate::utils::get_sol_balance;
 
 // ============================================================================
 // GetPositionsTool - List all open positions

@@ -66,7 +66,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             // the wallet.
             if let Some(token_amount) = position.remaining_token_amount.or(position.token_amount) {
                 let token_decimals_opt =
-                    get_decimals(crate::chains::ChainId::Solana, &position.mint).await;
+                    get_decimals(crate::chains::active_chain(), &position.mint).await;
                 if let Some(token_decimals) = token_decimals_opt {
                     let ui_token_amount =
                         (token_amount as f64) / (10_f64).powi(token_decimals as i32);
@@ -154,7 +154,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         if let Some(token_amount) = position.token_amount {
             // Get token decimals from cache (async)
             let token_decimals_opt =
-                get_decimals(crate::chains::ChainId::Solana, &position.mint).await;
+                get_decimals(crate::chains::active_chain(), &position.mint).await;
 
             // CRITICAL: Skip P&L calculation if decimals are not available
             let token_decimals = match token_decimals_opt {
@@ -213,7 +213,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         if let Some(token_amount) = remaining_amount {
             // Get token decimals from cache (async)
             let token_decimals_opt =
-                get_decimals(crate::chains::ChainId::Solana, &position.mint).await;
+                get_decimals(crate::chains::active_chain(), &position.mint).await;
 
             // CRITICAL: Skip P&L calculation if decimals are not available
             let token_decimals = match token_decimals_opt {
@@ -386,7 +386,7 @@ pub async fn calculate_split_pnl(
     let unrealized_pnl_sol = if let Some(remaining) = position.remaining_token_amount {
         if let Some(current) = current_price {
             if let Some(decimals) =
-                get_decimals(crate::chains::ChainId::Solana, &position.mint).await
+                get_decimals(crate::chains::active_chain(), &position.mint).await
             {
                 let ui_remaining = (remaining as f64) / (10_f64).powi(decimals as i32);
                 let current_value = ui_remaining * current;
