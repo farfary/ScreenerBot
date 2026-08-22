@@ -65,6 +65,30 @@ pub fn from_dexscreener(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `TokenPoolInfo.dex` (persisted as `token_pools.dex`) is a third-party
+    /// diagnostic label sourced verbatim from DexScreener's own `dex_id` —
+    /// it is never routed through `ProgramKind`/`ProtocolId`. This pins that
+    /// boundary: an arbitrary/unknown upstream label must survive unchanged,
+    /// not get normalized, replaced or dropped by protocol-identity logic.
+    #[test]
+    fn dex_field_preserves_third_party_label_verbatim() {
+        let pool = DexScreenerPool {
+            pair_address: "PoolAddr111".to_string(),
+            base_token_address: "BaseMint111".to_string(),
+            quote_token_address: "QuoteMint111".to_string(),
+            dex_id: "some_future_unlisted_dex".to_string(),
+            ..DexScreenerPool::default()
+        };
+
+        let info = from_dexscreener(&pool).expect("valid pool converts");
+        assert_eq!(info.dex.as_deref(), Some("some_future_unlisted_dex"));
+    }
+}
+
 /// Convert GeckoTerminal pool to TokenPoolInfo
 pub fn from_geckoterminal(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Option<TokenPoolInfo> {
     if pool.pool_address.trim().is_empty() {

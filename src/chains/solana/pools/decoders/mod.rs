@@ -84,3 +84,81 @@ pub fn decode_pool(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pools::types::ProtocolId;
+
+    /// Every canonical `ProtocolId` slug must resolve, through the real
+    /// `ProgramKind::from_protocol_id` boundary, to the decoder family that
+    /// actually declares support for it — proving decoder selection still
+    /// reaches the intended known family after the slug/display-name split.
+    #[test]
+    fn from_protocol_id_boundary_reaches_the_intended_decoder_family() {
+        let cases: [(ProgramKind, Vec<ProgramKind>); 11] = [
+            (
+                ProgramKind::RaydiumCpmm,
+                raydium_cpmm::RaydiumCpmmDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::RaydiumLegacyAmm,
+                raydium_legacy_amm::RaydiumLegacyAmmDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::RaydiumClmm,
+                raydium_clmm::RaydiumClmmDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::OrcaWhirlpool,
+                orca_whirlpool::OrcaWhirlpoolDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::MeteoraDamm,
+                meteora_damm::MeteoraDammDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::MeteoraDlmm,
+                meteora_dlmm::MeteoraDlmmDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::MeteoraDbc,
+                meteora_dbc::MeteoraDbcDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::PumpFunAmm,
+                pumpfun_amm::PumpFunAmmDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::PumpFunLegacy,
+                pumpfun_legacy::PumpFunLegacyDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::Moonit,
+                moonit_amm::MoonitAmmDecoder::supported_programs(),
+            ),
+            (
+                ProgramKind::FluxbeamAmm,
+                fluxbeam_amm::FluxbeamAmmDecoder::supported_programs(),
+            ),
+        ];
+
+        for (kind, supported_by_owning_decoder) in cases {
+            let slug_id = kind.protocol_id();
+            assert_eq!(
+                ProgramKind::from_protocol_id(&slug_id),
+                kind,
+                "canonical slug for {kind:?} must route back to itself"
+            );
+            assert!(
+                supported_by_owning_decoder.contains(&kind),
+                "{kind:?}'s own decoder module must declare support for it"
+            );
+
+            // The exact historical display-name identity must dispatch to
+            // the same decoder family during the compatibility window.
+            let legacy_id = ProtocolId::new(kind.display_name());
+            assert_eq!(ProgramKind::from_protocol_id(&legacy_id), kind);
+        }
+    }
+}

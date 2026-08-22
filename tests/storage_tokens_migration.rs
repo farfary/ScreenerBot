@@ -201,6 +201,79 @@ fn assert_seeded_rows_survived(conn: &Connection) {
     );
 }
 
+/// `token_pools.dex` is a third-party diagnostic label (DexScreener/GeckoTerminal
+/// `dex_id`, or the Data Server's own "dex" field) — never a `ProgramKind`/`ProtocolId`
+/// value. Opening and migrating a token database must not rewrite it: a value that
+/// happens to collide with a historical `ProgramKind::display_name()` string (e.g. a
+/// pool whose upstream label really is "METEORA DAMM v2") stays byte-for-byte as
+/// persisted, alongside an arbitrary/unlisted upstream label. See
+/// `chains::solana::pools::types` for the protocol-identity slug/display split this
+/// pins the boundary of.
+#[test]
+fn token_pools_dex_column_survives_migration_unrewritten() {
+    let _guard = common::isolated_env();
+    let dir = tempfile::tempdir().expect("create fixture directory");
+    let db_path = dir.path().join("tokens.db");
+    let db_path_str = db_path.to_string_lossy().to_string();
+
+    {
+        let conn = Connection::open(&db_path).expect("create legacy fixture");
+        for statement in CREATE_TABLES.iter() {
+            conn.execute(statement, [])
+                .expect("create chain-scoped table from current schema");
+        }
+        conn.execute(
+            "INSERT INTO tokens (chain_id, mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at) \
+             VALUES ('solana', 'TOKEN_MINT', 'TOK', 'Token', 9, 1, 1, 1)",
+            [],
+        )
+        .expect("seed tokens");
+        conn.execute(
+            "INSERT INTO token_pools (chain_id, mint, pool_address, dex, base_mint, quote_mint, is_sol_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
+             VALUES ('solana', 'TOKEN_MINT', 'POOL_A', 'METEORA DAMM v2', 'TOKEN_MINT', 'So11111111111111111111111111111111111111112', 1, 1, 1)",
+            [],
+        )
+        .expect("seed pool with a label matching a historical ProgramKind display name");
+        conn.execute(
+            "INSERT INTO token_pools (chain_id, mint, pool_address, dex, base_mint, quote_mint, is_sol_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
+             VALUES ('solana', 'TOKEN_MINT', 'POOL_B', 'some_future_unlisted_dex', 'TOKEN_MINT', 'So11111111111111111111111111111111111111112', 1, 1, 1)",
+            [],
+        )
+        .expect("seed pool with an arbitrary unknown upstream label");
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)
+            .expect("stamp fixture at the current schema version");
+    }
+
+    let db = TokenDatabase::new(&db_path_str, ChainId::Solana).expect("open + migrate fixture");
+    drop(db);
+
+    let conn = Connection::open(&db_path).expect("reopen migrated database");
+    let dex_a: String = conn
+        .query_row(
+            "SELECT dex FROM token_pools WHERE pool_address = 'POOL_A'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("pool A survived");
+    let dex_b: String = conn
+        .query_row(
+            "SELECT dex FROM token_pools WHERE pool_address = 'POOL_B'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("pool B survived");
+    assert_eq!(dex_a, "METEORA DAMM v2");
+    assert_eq!(dex_b, "some_future_unlisted_dex");
+    assert_eq!(
+        table_count(
+            &conn,
+            "SELECT COUNT(*) FROM token_pools WHERE mint = 'TOKEN_MINT'"
+        ),
+        2
+    );
+    assert!(foreign_key_check_is_clean(&conn));
+}
+
 #[test]
 fn already_versioned_database_missing_an_additive_column_self_heals() {
     let _guard = common::isolated_env();
