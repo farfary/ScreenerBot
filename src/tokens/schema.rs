@@ -9,6 +9,7 @@
 
 use super::migrations;
 use crate::database;
+use crate::logger::{self, LogTag};
 use rusqlite::{Connection, OptionalExtension};
 
 /// Current tokens.db schema version recorded in `PRAGMA user_version`.
@@ -354,8 +355,24 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     database::configure_connection(conn, database::TOKENS_DB)
         .map_err(|e| format!("Failed to configure connection: {e}"))?;
 
+    // The chain rebuild copies every token table row-by-row. On a mature
+    // database that is minutes of silent work between "starting" and the next
+    // log line, so announce both ends: without them a stalled boot is
+    // indistinguishable from a hang.
     if migrations::table_needs_chain_rebuild(conn)? {
+        logger::info(
+            LogTag::Tokens,
+            "Tokens database predates chain identity — rebuilding every token table onto the chain-scoped schema (one time, may take several minutes on a large database)",
+        );
+        let started_at = std::time::Instant::now();
         migrations::migrate_legacy_schema(conn)?;
+        logger::info(
+            LogTag::Tokens,
+            &format!(
+                "Tokens chain-scoped rebuild completed in {:.1}s",
+                started_at.elapsed().as_secs_f64()
+            ),
+        );
     }
 
     for statement in CREATE_TABLES {

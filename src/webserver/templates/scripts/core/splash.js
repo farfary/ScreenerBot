@@ -23,6 +23,27 @@ class SplashController {
     this.initializationRequired = false;
     this.readyToTransition = false;
     this.transitionTarget = null;
+    this.launchFailed = false;
+  }
+
+  /**
+   * The bootstrap manager settles every launch. An unreachable backend must end
+   * the splash in a stated failure rather than in the retry loop below, which
+   * would otherwise show "Waiting for local core..." for as long as the window
+   * stays open.
+   */
+  watchLaunchOutcome() {
+    window.addEventListener("screenerbot:bootstrap-settled", (event) => {
+      if (event.detail?.outcome !== "unreachable") {
+        return;
+      }
+      this.launchFailed = true;
+      this.stopPhaseSequence();
+      if (this.statusEl) {
+        this.statusEl.textContent =
+          "ScreenerBot could not start. Check the log file, then restart the app.";
+      }
+    });
   }
 
   init() {
@@ -51,6 +72,8 @@ class SplashController {
       console.warn("[Splash] Splash screen element not found");
       return;
     }
+
+    this.watchLaunchOutcome();
 
     // Load and display version
     this.loadVersion();
@@ -148,6 +171,10 @@ class SplashController {
       this.checkReadyToTransition();
     } catch (error) {
       console.error("[Splash] Failed to check initialization:", error);
+      if (this.launchFailed) {
+        // The launch already settled as failed; retrying only hides the reason.
+        return;
+      }
       // Initialization state is authoritative. Never guess "dashboard" on a
       // transient failure because that can bypass first-run onboarding.
       if (this.statusEl) this.statusEl.textContent = "Waiting for local core...";

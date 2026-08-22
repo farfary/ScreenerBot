@@ -234,6 +234,12 @@ devtools = []
 
 [dev-dependencies]
 tempfile = "3"
+# Route-level launch tests drive the real Axum router in-process (tower's oneshot)
+# and assert the JSON contract the dashboard loader parses. Integration test crates
+# see only dev-dependencies, so these mirror the lib's own versions and compile once.
+axum = { version = "0.7", features = ["ws", "macros", "multipart"] }
+tower = { version = "0.4", features = ["util"] }
+serde_json = "1.0"
 # Async runtime for #[tokio::test] in the L1/L2 integration suite (tests/). Integration
 # test crates only see dev-dependencies, not the lib's regular deps; features match the
 # main tokio dep so cargo compiles it once.

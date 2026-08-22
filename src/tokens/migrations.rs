@@ -123,6 +123,14 @@ pub(super) fn migrate_legacy_schema(conn: &Connection) -> Result<(), String> {
     for table in TOKEN_TABLES {
         copy_legacy_rows(&transaction, table)?;
     }
+    // Verification must complete before ANY staged table is dropped, and the
+    // teardown must run children-first. `ALTER TABLE ... RENAME` rewrites a
+    // child's `REFERENCES tokens(...)` onto `tokens_legacy_chain`, and `DROP
+    // TABLE` fires that foreign key's `ON DELETE CASCADE` action (which
+    // `defer_foreign_keys` does not suppress — it defers constraint checking,
+    // not referential actions). Verifying and dropping in one forward pass
+    // therefore emptied `token_pools_legacy_chain` the moment the parent went,
+    // and the later count read `0 -> 14412` and aborted the whole migration.
     for table in TOKEN_TABLES {
         let legacy = format!("{table}_legacy_chain");
         let old_count: i64 = transaction
@@ -140,6 +148,12 @@ pub(super) fn migrate_legacy_schema(conn: &Connection) -> Result<(), String> {
                 "Tokens chain migration changed {table} row count: {old_count} -> {new_count}"
             ));
         }
+    }
+    // `tokens` is the first entry and the only foreign-key parent, so reverse
+    // order drops every child before it and no cascade can reach a staged table
+    // that is still needed.
+    for table in TOKEN_TABLES.iter().rev() {
+        let legacy = format!("{table}_legacy_chain");
         transaction
             .execute(&format!("DROP TABLE {legacy}"), [])
             .map_err(|error| format!("Failed to remove staged legacy table {legacy}: {error}"))?;

@@ -55,6 +55,7 @@ let isExitDialogOpen = false; // Guard flag to prevent multiple exit dialogs
 let backendReadyResolve = null; // Promise resolver for SCREENERBOT_READY signal
 let backendReadySignal = false; // Latches readiness if stdout wins the waitForBackend race
 let startupError = null; // Structured fatal startup error (SCREENERBOT_ERROR payload), if any
+let bootErrorShown = false; // True once a boot-error screen has actually been rendered
 let isRecovering = false; // True while a one-click recovery (e.g. wallet reset) is in progress
 let dashboardLoaded = false; // True once the dashboard URL has been loaded successfully
 let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in window-state.json
@@ -521,10 +522,18 @@ function startBackend(extraArgs = []) {
       // Ignore exits while a separate recovery relaunch is in flight.
       if (isRecovering) return;
 
-      // If the backend reported a structured startup error, the boot sequence
-      // renders the dedicated error screen — don't overwrite it here. Only
-      // surface a generic crash screen for an unexplained early exit.
+      // An error screen already on display is the terminal state — leave it.
+      if (bootErrorShown) {
+        return;
+      }
+
+      // A structured startup error is only rendered by the boot sequence when
+      // waitForBackend() fails. The webserver reports SCREENERBOT_READY before
+      // the services that can still fail, so a fatal error after that point let
+      // the dashboard load and then left it in its skeleton with the backend
+      // gone. Render the reported cause here instead of dropping it.
       if (startupError) {
+        showBootError(startupError);
         return;
       }
 
@@ -1224,6 +1233,7 @@ async function restartBackendFromDashboard(targetRoute) {
   if (isRecovering || isQuitting || !mainWindow) return;
   isRecovering = true;
   startupError = null;
+  bootErrorShown = false;
   dashboardLoaded = false;
 
   loadLoadingPage();
@@ -1279,6 +1289,7 @@ function genericBootError(detail) {
 function showBootError(payload) {
   if (!mainWindow) return;
   startupError = payload;
+  bootErrorShown = true;
 
   const send = () => {
     if (mainWindow && mainWindow.webContents) {
@@ -1475,6 +1486,7 @@ async function recoverAndRestart(extraArgs, statusLabel) {
   if (isRecovering) return;
   isRecovering = true;
   startupError = null;
+  bootErrorShown = false;
   dashboardLoaded = false;
 
   // Return to the splash page and show progress.
