@@ -269,7 +269,6 @@ function renderToolbar(sectionId) {
     return;
   }
 
-  const hasChanges = hasSectionChanges(sectionId);
   const sectionPending = countPendingChanges(sectionId);
   const totalPending = state.pendingChanges.size;
 
@@ -283,18 +282,6 @@ function renderToolbar(sectionId) {
     const globalChip = create("div", { className: "config-info-chip" });
     globalChip.innerHTML = `<strong>${totalPending}</strong> total change${totalPending === 1 ? "" : "s"}`;
     toolbar.appendChild(globalChip);
-  }
-
-  if (hasChanges) {
-    const revertBtn = create("button", {
-      type: "button",
-      className: "config-header-action ghost",
-    });
-    revertBtn.textContent = "Revert section";
-    on(revertBtn, "click", () => {
-      revertSection(sectionId);
-    });
-    toolbar.appendChild(revertBtn);
   }
 
   // One control for both directions — it applies to top-level categories and
@@ -410,16 +397,18 @@ function renderHeader(sectionId) {
   on(diffBtn, "click", handleDiff);
   actions.appendChild(diffBtn);
 
-  const resetBtn = create("button", {
+  // Discards this section's unsaved edits. Disabled while there is nothing to
+  // discard — a live-looking button that silently does nothing reads as broken.
+  const revertBtn = create("button", {
     type: "button",
     className: "config-header-action destructive",
-    disabled: state.saving,
+    disabled: state.saving || !hasSectionChanges(sectionId),
   });
-  resetBtn.textContent = "Reset Section";
-  on(resetBtn, "click", () => {
+  revertBtn.textContent = "Revert Section";
+  on(revertBtn, "click", () => {
     revertSection(sectionId);
   });
-  actions.appendChild(resetBtn);
+  actions.appendChild(revertBtn);
 
   header.appendChild(actions);
 }
@@ -612,7 +601,8 @@ function renderCategories(sectionId) {
         categoryHasMatch = true;
       }
 
-      if (!deepEqual(fieldValue, fieldOriginalValue)) {
+      let fieldWasChanged = !deepEqual(fieldValue, fieldOriginalValue);
+      if (fieldWasChanged) {
         fieldEl.classList.add("config-field--changed");
         pendingCount += 1;
       }
@@ -665,8 +655,13 @@ function renderCategories(sectionId) {
             resetBtn.disabled = atDefault;
           }
 
-          // Recount pending fields in this category + update the chip.
-          pendingCount = isChanged ? pendingCount + 1 : Math.max(0, pendingCount - 1);
+          // Recount pending fields in this category + update the chip. Only a
+          // real transition counts: every keystroke keeps isChanged true, and
+          // adding on each of them inflated the chip past the field count.
+          if (isChanged !== fieldWasChanged) {
+            pendingCount = isChanged ? pendingCount + 1 : Math.max(0, pendingCount - 1);
+            fieldWasChanged = isChanged;
+          }
           updateCategoryChip(categoryEl, fieldsList.length, pendingCount);
           renderToolbar(sectionId);
           syncExpandToggle();
@@ -977,13 +972,18 @@ function render() {
 }
 
 function revertSection(sectionId) {
-  if (!state.original?.[sectionId]) {
+  if (!sectionId) {
     return;
   }
-  const originalSection = deepClone(state.original[sectionId]);
+  const originalSection = deepClone(state.original?.[sectionId] ?? {});
   state.draft[sectionId] = deepClone(originalSection);
-  for (const key of Object.keys(originalSection)) {
-    markFieldChanged(sectionId, key, false);
+  // Clear every pending key of this section, not only the keys the original
+  // still has — a field added to the draft alone would otherwise stay pending
+  // forever and keep Save Changes enabled with nothing to save.
+  for (const key of [...state.pendingChanges.keys()]) {
+    if (key.startsWith(`${sectionId}.`)) {
+      state.pendingChanges.delete(key);
+    }
   }
   render();
 }

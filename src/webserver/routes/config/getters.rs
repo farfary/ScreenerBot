@@ -25,17 +25,45 @@ pub async fn get_full_config() -> Response {
         filtering: cfg.filtering.clone(),
         swaps: cfg.swaps.clone(),
         tokens: cfg.tokens.clone(),
+        pools: cfg.pools.clone(),
+        maintenance: cfg.maintenance.clone(),
         sol_price: cfg.sol_price.clone(),
         events: cfg.events.clone(),
         services: cfg.services.clone(),
         monitoring: cfg.monitoring.clone(),
         ohlcv: cfg.ohlcv.clone(),
+        webserver: sanitized_webserver(cfg),
+        wallet: cfg.wallet.clone(),
+        strategies: cfg.strategies.clone(),
+        holder_watch: cfg.holder_watch.clone(),
+        performance: cfg.performance.clone(),
         gui: cfg.gui.clone(),
         telegram: cfg.telegram.clone(),
         ai: cfg.ai.clone(),
         network: cfg.network.clone(),
         referral: cfg.referral.clone(),
         account: cfg.account.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// The webserver section carries auth secrets (password hash/salt, TOTP secret)
+/// that must never reach the dashboard. They are blanked here; PATCH merges only
+/// the fields the client sends, so a blanked field is never written back.
+fn sanitized_webserver(cfg: &config::Config) -> config::WebserverConfig {
+    let mut webserver = cfg.webserver.clone();
+    webserver.auth_password_hash = String::new();
+    webserver.auth_password_salt = String::new();
+    webserver.auth_totp_secret = String::new();
+    webserver
+}
+
+/// GET /api/config/webserver - Get webserver configuration (auth secrets blanked)
+pub async fn get_webserver_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: sanitized_webserver(cfg),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -348,6 +376,7 @@ where
             "StrategiesConfig" => serde_json::to_value(&cfg.strategies).ok(),
             "HolderWatchConfig" => serde_json::to_value(&cfg.holder_watch).ok(),
             "WalletConfig" => serde_json::to_value(&cfg.wallet).ok(),
+            "WebserverConfig" => serde_json::to_value(&cfg.webserver).ok(),
             "CopyTradingConfig" => serde_json::to_value(&cfg.copy_trading).ok(),
             "PerformanceConfig" => serde_json::to_value(&cfg.performance).ok(),
             "NetworkConfig" => serde_json::to_value(&cfg.network).ok(),
@@ -559,6 +588,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.wallet = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "WebserverConfig" => {
+                let new_config: config::WebserverConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid WebserverConfig: {e}"))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.webserver = new_config;
                     },
                     true,
                 )?;

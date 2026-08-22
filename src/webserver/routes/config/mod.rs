@@ -25,7 +25,8 @@ use getters::{
     get_ohlcv_config, get_performance_config, get_pools_config, get_positions_config,
     get_referral_config, get_rpc_config, get_services_config, get_sol_price_config,
     get_strategies_config, get_summary_config, get_swaps_config, get_telegram_config,
-    get_tokens_config, get_trader_config, get_wallet_config, patch_any_config,
+    get_tokens_config, get_trader_config, get_wallet_config, get_webserver_config,
+    patch_any_config,
 };
 use import_export::{export_config, import_config, import_config_preview};
 use operations::{get_config_diff, reload_config_from_disk, reset_config_to_defaults};
@@ -62,6 +63,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/strategies", get(get_strategies_config))
         .route("/config/holder_watch", get(get_holder_watch_config))
         .route("/config/wallet", get(get_wallet_config))
+        .route("/config/webserver", get(get_webserver_config))
         .route("/config/copy_trading", get(get_copy_trading_config))
         .route("/config/performance", get(get_performance_config))
         .route("/config/network", get(get_network_config))
@@ -135,6 +137,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route(
             "/config/wallet",
             patch(patch_any_config::<config::WalletConfig>),
+        )
+        .route(
+            "/config/webserver",
+            patch(patch_any_config::<config::WebserverConfig>),
         )
         .route(
             "/config/copy_trading",
