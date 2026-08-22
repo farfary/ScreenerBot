@@ -12,7 +12,9 @@ use std::sync::Arc;
 use crate::webserver::state::AppState;
 
 // Module declarations
-mod getters;
+// `getters` is public so `tests/config_api_surface.rs` can call the real
+// handlers instead of re-deriving what they return.
+pub mod getters;
 mod import_export;
 mod operations;
 pub mod types;
