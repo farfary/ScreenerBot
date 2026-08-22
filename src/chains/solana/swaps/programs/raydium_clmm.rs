@@ -515,4 +515,192 @@ mod tests {
         assert_eq!(RaydiumClmmSwap::sqrt_price_x64_to_price(one_x64), 1.0);
         assert_eq!(RaydiumClmmSwap::sqrt_price_x64_to_price(one_x64 * 2), 2.0);
     }
+
+    // ========================================================================
+    // Money-path instruction structure — the SwapV2 account order, signer/
+    // writable flags and discriminator are what a wrong-account send would
+    // silently corrupt. `build_clmm_swap_instruction` is private and pure (no
+    // `.await` in its body despite the `async fn` signature), so it is driven
+    // here co-located, matching this file's own `sqrt_price_x64_to_price` test
+    // and the documented convention in `tests/common/mod.rs` ("Internal /
+    // private pure logic is tested with co-located `#[cfg(test)] mod tests`").
+    // ========================================================================
+
+    fn pool_info() -> ClmmPoolInfo {
+        ClmmPoolInfo {
+            bump: 255,
+            amm_config: Pubkey::new_unique().to_string(),
+            owner: Pubkey::new_unique().to_string(),
+            token_mint_0: SOL_MINT.to_owned(),
+            token_mint_1: Pubkey::new_unique().to_string(),
+            token_vault_0: Pubkey::new_unique().to_string(),
+            token_vault_1: Pubkey::new_unique().to_string(),
+            observation_key: Pubkey::new_unique().to_string(),
+            mint_decimals_0: 9,
+            mint_decimals_1: 6,
+            tick_spacing: 60,
+            liquidity: 0,
+            sqrt_price_x64: 1u128 << 64,
+            tick_current: 0,
+            padding3: 0,
+            padding4: 0,
+            fee_growth_global_0_x64: 0,
+            fee_growth_global_1_x64: 0,
+            protocol_fees_token_0: 0,
+            protocol_fees_token_1: 0,
+            swap_in_amount_token_0: 0,
+            swap_out_amount_token_1: 0,
+            swap_in_amount_token_1: 0,
+            swap_out_amount_token_0: 0,
+            status: 0,
+            padding: [0; 7],
+            reward_infos: Vec::new(),
+            tick_array_bitmap: [0; 16],
+            total_fees_token_0: 0,
+            total_fees_claimed_token_0: 0,
+            total_fees_token_1: 0,
+            total_fees_claimed_token_1: 0,
+            fund_fees_token_0: 0,
+            fund_fees_token_1: 0,
+            open_time: 0,
+            recent_epoch: 0,
+            padding1: [0; 24],
+            padding2: [0; 32],
+        }
+    }
+
+    fn swap_params() -> SwapParams {
+        SwapParams {
+            input_amount: 1.0,
+            expected_output: 100.0,
+            minimum_output: 95.0,
+            input_amount_raw: 1_000_000_000,
+            minimum_output_raw: 95_000_000,
+        }
+    }
+
+    #[test]
+    fn buy_swap_v2_instruction_has_the_documented_account_order_and_discriminator() {
+        let user = Pubkey::new_unique();
+        let wsol_ata = Pubkey::new_unique();
+        let token_ata = Pubkey::new_unique();
+        let pool_address = Pubkey::new_unique();
+        let info = pool_info();
+        let params = swap_params();
+
+        // token_mint_0 == SOL_MINT in this fixture, so is_token_0_sol = false
+        // (mirrors the `else if pool_info.token_mint_1 == SOL_MINT` branch is
+        // NOT taken; token_mint_0 is SOL here so the caller passes `true`).
+        let ix = futures::executor::block_on(RaydiumClmmSwap::build_clmm_swap_instruction(
+            &user,
+            &info,
+            &wsol_ata,
+            &token_ata,
+            SwapDirection::Buy,
+            &params,
+            true, // is_token_0_sol
+            &pool_address,
+        ))
+        .expect("instruction must build from well-formed pool info");
+
+        assert_eq!(
+            ix.program_id,
+            Pubkey::from_str(RAYDIUM_CLMM_PROGRAM_ID).unwrap()
+        );
+        assert_eq!(ix.accounts.len(), 13);
+
+        // Documented SwapSingleV2 account order.
+        assert_eq!(ix.accounts[0].pubkey, user, "payer is the signer account");
+        assert!(ix.accounts[0].is_signer);
+        assert!(!ix.accounts[0].is_writable, "payer is readonly here");
+        assert_eq!(
+            ix.accounts[1].pubkey,
+            Pubkey::from_str(&info.amm_config).unwrap()
+        );
+        assert_eq!(ix.accounts[2].pubkey, pool_address, "pool_state");
+        assert!(ix.accounts[2].is_writable);
+        assert_eq!(
+            ix.accounts[3].pubkey, wsol_ata,
+            "buy, token_0=SOL: input_token_account is the WSOL ATA"
+        );
+        assert_eq!(
+            ix.accounts[4].pubkey, token_ata,
+            "buy: output_token_account is the target token ATA"
+        );
+        assert_eq!(
+            ix.accounts[7].pubkey,
+            Pubkey::from_str(&info.observation_key).unwrap()
+        );
+        // Both token programs are ALWAYS present (accounts 8 and 9), regardless
+        // of whether the traded mint is legacy SPL or Token-2022 — the ATA
+        // resolution picks the right program, but the instruction always lists
+        // both so Token-2022 transfer-fee mints validate correctly.
+        assert_eq!(
+            ix.accounts[8].pubkey,
+            crate::chains::solana::spl_token::id(),
+            "token_program (legacy) always present"
+        );
+        assert_eq!(
+            ix.accounts[9].pubkey,
+            crate::chains::solana::spl_token_2022::id(),
+            "token_program_2022 always present"
+        );
+        assert_eq!(
+            ix.accounts[10].pubkey,
+            Pubkey::from_str(MEMO_PROGRAM_ID).unwrap()
+        );
+        assert!(!ix.accounts[10].is_signer);
+
+        // SwapV2 discriminator, then raw in/min-out amounts, sqrt price limit,
+        // and the is_base_input flag.
+        assert_eq!(
+            &ix.data[0..8],
+            &[0x96, 0x43, 0x18, 0xcd, 0xc5, 0x65, 0x95, 0x7b]
+        );
+        assert_eq!(
+            u64::from_le_bytes(ix.data[8..16].try_into().unwrap()),
+            params.input_amount_raw
+        );
+        assert_eq!(
+            u64::from_le_bytes(ix.data[16..24].try_into().unwrap()),
+            params.minimum_output_raw
+        );
+        assert_eq!(
+            u128::from_le_bytes(ix.data[24..40].try_into().unwrap()),
+            0,
+            "sqrt_price_limit_x64 is 0 (no limit)"
+        );
+        assert_eq!(ix.data[40], 1u8, "is_base_input is always true (ExactIn)");
+    }
+
+    #[test]
+    fn sell_reverses_input_and_output_token_accounts_relative_to_buy() {
+        let user = Pubkey::new_unique();
+        let wsol_ata = Pubkey::new_unique();
+        let token_ata = Pubkey::new_unique();
+        let pool_address = Pubkey::new_unique();
+        let info = pool_info();
+        let params = swap_params();
+
+        let ix = futures::executor::block_on(RaydiumClmmSwap::build_clmm_swap_instruction(
+            &user,
+            &info,
+            &wsol_ata,
+            &token_ata,
+            SwapDirection::Sell,
+            &params,
+            true, // is_token_0_sol
+            &pool_address,
+        ))
+        .expect("instruction must build from well-formed pool info");
+
+        assert_eq!(
+            ix.accounts[3].pubkey, token_ata,
+            "sell: input_token_account is the target token ATA"
+        );
+        assert_eq!(
+            ix.accounts[4].pubkey, wsol_ata,
+            "sell: output_token_account is the WSOL ATA"
+        );
+    }
 }

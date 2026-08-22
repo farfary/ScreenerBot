@@ -96,6 +96,27 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
         .max_by_key(|q| q.output_amount)
         .expect("quotes is non-empty, guaranteed by check above");
 
+    // A router's response is untrusted input on a money path. A quote that
+    // would spend the input for nothing, or that prices a pair we never asked
+    // for, must never reach the builder — selection is the last point where
+    // either is still cheap to refuse.
+    if best.output_amount == 0 {
+        return Err(Error::api_error(format!(
+            "Router '{}' returned a zero-output quote for {} -> {}",
+            best.router_name, best.input_mint, best.output_mint
+        )));
+    }
+    if best.input_mint != request.input_mint || best.output_mint != request.output_mint {
+        return Err(Error::api_error(format!(
+            "Router '{}' quoted {} -> {} but {} -> {} was requested",
+            best.router_name,
+            best.input_mint,
+            best.output_mint,
+            request.input_mint,
+            request.output_mint
+        )));
+    }
+
     logger::info(
         LogTag::Swap,
         &format!(
