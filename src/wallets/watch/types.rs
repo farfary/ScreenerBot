@@ -103,6 +103,18 @@ pub struct WalletActivity {
     pub sources: Vec<WatchSource>,
 }
 
+/// One realtime notification from the injected chain runtime's subscription
+/// (`crate::wallets::watch::runtime::NotificationStream`). Chain-neutral shape:
+/// the adapter converts its own wire event into this before handing it to the
+/// shared funnel.
+#[derive(Debug, Clone)]
+pub struct WatchNotification {
+    pub signature: String,
+    /// Whether the runtime's notification metadata already indicates failure.
+    /// The funnel still decodes to confirm rather than trusting this alone.
+    pub failed: bool,
+}
+
 /// Per-target status, surfaced by `/api/wallets/watch/:id/status`.
 #[derive(Debug, Clone, Serialize)]
 pub struct WatchStatus {

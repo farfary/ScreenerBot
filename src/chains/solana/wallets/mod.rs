@@ -5,3 +5,4 @@
 //! that pipeline calls into.
 
 pub mod classify;
+pub mod runtime;

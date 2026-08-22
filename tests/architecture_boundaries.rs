@@ -646,3 +646,49 @@ fn wallets_module_must_not_alias_solana_crypto() {
         violations.join("\n")
     );
 }
+
+/// Wallet-watch execution boundary: `src/wallets/watch/**` production code
+/// owns targets, persistence, dedupe, scheduling and lifecycle, and must
+/// reach chain execution only through the injected `runtime::WalletWatchRuntime`
+/// seam (`crate::wallets::watch::runtime`) — never by importing
+/// `crate::chains::solana`, `solana_sdk`, or naming a concrete
+/// `TransactionFetcher`/`TransactionProcessor`/`Pubkey` directly. The concrete
+/// Solana runtime lives in `crate::chains::solana::wallets::runtime::
+/// build_runtime`, registered once by the composition root
+/// (`src/run/services.rs`). Test code is scanned too: a co-located unit test
+/// must build its fixtures from chain-neutral `AccountId`/`Subject`
+/// constructors or the `runtime::test_support::FakeRuntime`, never a
+/// Solana-typed constructor merely to satisfy a test helper.
+#[test]
+fn wallet_watch_production_code_never_reaches_solana_directly() {
+    let banned_needles = [
+        "chains::solana",
+        "solana_sdk",
+        "TransactionFetcher",
+        "TransactionProcessor",
+        "Pubkey",
+    ];
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        if !path_str.starts_with("wallets/watch/") {
+            continue;
+        }
+        for (idx, line) in code_lines(&contents).lines().enumerate() {
+            for needle in banned_needles {
+                if line.contains(needle) {
+                    violations.push(format!("src/{path_str}:{}: names `{needle}`", idx + 1));
+                }
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "src/wallets/watch must reach chain execution only through \
+         runtime::WalletWatchRuntime, injected by the composition root — never by \
+         importing crate::chains::solana or a concrete Solana type directly:\n{}",
+        violations.join("\n")
+    );
+}

@@ -6,8 +6,7 @@
 //! memory across ticks; a restart may re-page from the durable cursor, but cannot
 //! skip signatures.
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
-use crate::chains::solana::transactions::fetcher::TransactionFetcher;
+use super::runtime::WalletWatchRuntime;
 
 /// Signatures per RPC page.
 pub const PAGE_SIZE: usize = 100;
@@ -104,10 +103,12 @@ impl CatchUpState {
 }
 
 /// Advance one target by at most `MAX_PAGES`. Returns a replay batch only after
-/// the complete range back to the durable cursor is known.
+/// the complete range back to the durable cursor is known. Paging mechanics for
+/// the chain's wire format live behind the injected `runtime`; this function
+/// stays chain-neutral.
 pub(super) async fn advance_catch_up(
-    fetcher: &TransactionFetcher,
-    pubkey: Pubkey,
+    runtime: &dyn WalletWatchRuntime,
+    address: &str,
     state: &mut CatchUpState,
 ) -> Result<Option<CompletedCatchUp>, String> {
     if state.is_complete() {
@@ -115,9 +116,9 @@ pub(super) async fn advance_catch_up(
     }
 
     for _ in 0..MAX_PAGES {
-        let page = fetcher
+        let page = runtime
             .fetch_signatures_page(
-                pubkey,
+                address,
                 PAGE_SIZE,
                 state.before.as_deref(),
                 state.durable_until.as_deref(),
@@ -200,5 +201,40 @@ mod tests {
         assert!(needs_gap_fill(false, false, true));
         assert!(!needs_gap_fill(false, true, true));
         assert!(!needs_gap_fill(false, false, false));
+    }
+
+    #[tokio::test]
+    async fn advance_catch_up_pages_through_the_injected_runtime() {
+        use super::super::runtime::test_support::FakeRuntime;
+
+        let runtime = FakeRuntime::new(vec!["Addr1111".to_owned()]);
+        runtime.queue_page("Addr1111", vec!["newest".to_owned(), "older".to_owned()]);
+
+        let mut state = CatchUpState::new(Some("old-cursor".to_owned()));
+        let completed = advance_catch_up(runtime.as_ref(), "Addr1111", &mut state)
+            .await
+            .expect("fetch succeeds")
+            .expect("range completes in one short page");
+
+        assert_eq!(completed.signatures, ["older", "newest"]);
+        assert_eq!(completed.newest_signature.as_deref(), Some("newest"));
+    }
+
+    #[tokio::test]
+    async fn advance_catch_up_stops_at_max_pages_without_advancing_cursor() {
+        use super::super::runtime::test_support::FakeRuntime;
+
+        let runtime = FakeRuntime::new(vec!["Addr1111".to_owned()]);
+        for page in 0..MAX_PAGES {
+            runtime.queue_page("Addr1111", signatures(&format!("page-{page}"), PAGE_SIZE));
+        }
+
+        let mut state = CatchUpState::new(Some("durable".to_owned()));
+        let completed = advance_catch_up(runtime.as_ref(), "Addr1111", &mut state)
+            .await
+            .expect("fetch succeeds");
+
+        assert!(completed.is_none(), "range must stay open past MAX_PAGES");
+        assert!(!state.is_complete());
     }
 }

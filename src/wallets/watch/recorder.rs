@@ -2,12 +2,12 @@
 //!
 //! | Field | Own wallet | Watched target |
 //! |---|---|---|
-//! | `raw_transactions.raw_transaction_data` | stored | not stored (`TransactionProcessor::new_for_watch_target` skips it at decode time) |
+//! | `raw_transactions.raw_transaction_data` | stored | not stored (the injected runtime's `decode_transaction(is_own=false)` skips it) |
 //! | `processed_transactions` | stored | stored |
 //! | retention | unlimited | rolling window (`wallet.watch_retention_days`) |
 //! | `record_transaction_event` | yes | no -- the watch service emits its own `WalletActivity` |
 //!
-//! The raw-JSON split happens earlier, in the processor the funnel decodes with; this
+//! The raw-JSON split happens earlier, inside the runtime's decode step; this
 //! module only decides the two things that are actually about RECORDING: whether an
 //! event fires, and whether the failed-transaction path (which does not classify)
 //! still gets a row.

@@ -7,24 +7,20 @@
 //! gap-fill (on connect) ┘     -> record -> dedupe.commit -> broadcast
 //! ```
 //!
-//! WS is delivered per-target via a small forwarding task (the shared, multiplexed
-//! transport in `rpc::subscriptions` does the actual socket work -- this module never
-//! touches a socket). Poll/gap-fill both page `TransactionFetcher::fetch_signatures_page`
-//! with `until = watch_cursors` so a restart resumes instead of re-reading history.
+//! WS is delivered per-target via a small forwarding task, backed by the injected
+//! `runtime::WalletWatchRuntime::subscribe` -- this module never touches a chain
+//! wire format directly. Poll/gap-fill both page `WalletWatchRuntime::
+//! fetch_signatures_page` with `until = watch_cursors` so a restart resumes
+//! instead of re-reading history.
 
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use chrono::Utc;
 use tokio::sync::{broadcast, mpsc, Notify};
 use tokio::time::interval;
 
-use crate::chains::solana::rpc::{self, ConnectionState, SubscriptionEvent};
-use crate::chains::solana::transactions::fetcher::TransactionFetcher;
-use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::Subject;
@@ -36,8 +32,8 @@ use super::database::WatchDatabase;
 use super::dedupe;
 use super::poller;
 use super::recorder;
-use super::types::{WalletActivity, WatchSource, WatchTarget};
-use crate::chains::solana::wallets::classify;
+use super::runtime::WalletWatchRuntime;
+use super::types::{WalletActivity, WatchNotification, WatchSource, WatchTarget};
 
 /// Bound generous enough that a burst across every watched target cannot fill the
 /// channel before the slowest consumer (a Telegram send) catches up. Bounded so a
@@ -78,7 +74,7 @@ static SERVICE_STARTED_AT: LazyLock<std::sync::RwLock<Option<Instant>>> =
 /// once that window has passed and the transport is still down -- detection is
 /// running on polling alone.
 pub(super) fn is_healthy() -> bool {
-    if *rpc::connection_state().borrow() == ConnectionState::Connected {
+    if super::runtime::try_get_runtime().is_some_and(|runtime| runtime.is_connected()) {
         return true;
     }
     let baseline_secs = with_config(|cfg| cfg.wallet.watch_poll_interval_secs);
@@ -88,141 +84,47 @@ pub(super) fn is_healthy() -> bool {
     }
 }
 
-/// One watched address's runtime state: its WS forwarder (own-wallet and every
-/// target alike subscribe through the same shared transport) and when it was last
-/// polled.
-struct TargetRuntime {
-    target: WatchTarget,
-    ws_task: tokio::task::JoinHandle<()>,
-    last_poll: Instant,
-    catch_up: Option<poller::CatchUpState>,
-    /// First registration establishes a current head without replaying historical
-    /// trades as new alerts.
-    baseline_only: bool,
-}
-
-/// Spawn the per-target WS forwarder: subscribes through the shared transport and
-/// funnels every notification into `tx`, tagged with the address, until the
-/// subscription ends or the task is aborted (which drops the `LogsSubscription` and
-/// unsubscribes, same as any other holder of one).
-fn spawn_ws_forwarder(
-    address: String,
-    tx: mpsc::UnboundedSender<(String, SubscriptionEvent)>,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut sub = match rpc::subscribe_logs_mentions(&address).await {
-            Ok(sub) => sub,
-            Err(e) => {
-                logger::warning(
-                    LogTag::WalletWatch,
-                    &format!("Failed to subscribe to {address}: {e}"),
-                );
-                return;
-            }
-        };
-        while let Some(event) = sub.recv().await {
-            if tx.send((address.clone(), event)).is_err() {
-                break;
-            }
-        }
-    })
-}
-
-fn register(
-    runtimes: &mut HashMap<String, TargetRuntime>,
-    ws_tx: &mpsc::UnboundedSender<(String, SubscriptionEvent)>,
-    target: WatchTarget,
-) {
-    let address = target.address.clone();
-    let ws_task = spawn_ws_forwarder(address.clone(), ws_tx.clone());
-    runtimes.insert(
-        address,
-        TargetRuntime {
-            target,
-            ws_task,
-            last_poll: Instant::now(),
-            catch_up: None,
-            baseline_only: false,
-        },
-    );
-}
-
-/// Rebuild the runtime target set from the database: the own wallet (always present,
-/// never persisted) plus every enabled row in `watch_targets`. Simple full-rebuild
-/// rather than a diff -- target management is a low-frequency, human-driven action
-/// (`watch_max_targets` caps the whole set to single digits/low tens by default), so
-/// a brief resubscribe-everything on change is not a real cost.
-async fn reload_targets(
-    runtimes: &mut HashMap<String, TargetRuntime>,
-    ws_tx: &mpsc::UnboundedSender<(String, SubscriptionEvent)>,
-    watch_db: &WatchDatabase,
-    own_subject: Subject,
-) {
-    for runtime in runtimes.values() {
-        runtime.ws_task.abort();
-    }
-    runtimes.clear();
-
-    // The own wallet is always watched, regardless of `wallet.watch_enabled` -- that
-    // switch is the master control for TARGET watching (pasted addresses), not for
-    // the own-wallet observation `TransactionsService` now structurally depends on.
-    register(
-        runtimes,
-        ws_tx,
-        WatchTarget {
-            id: None,
-            address: own_subject.address(),
-            label: Some("Own wallet".to_owned()),
-            sources: vec![WatchSource::OwnWallet],
-            enabled: true,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        },
-    );
-
-    if !with_config(|cfg| cfg.wallet.watch_enabled) {
-        return;
-    }
-
-    match watch_db.list_targets().await {
-        Ok(targets) => {
-            for target in targets.into_iter().filter(|t| t.enabled) {
-                register(runtimes, ws_tx, target);
-            }
-        }
-        Err(e) => logger::warning(
-            LogTag::WalletWatch,
-            &format!("Failed to load watch targets: {e}"),
-        ),
-    }
-}
+use super::service_targets::{reload_targets, TargetRuntime};
 
 /// Poll one target's cursor forward. Used for the baseline poll, the escalated poll
 /// and gap-fill alike -- they differ only in WHEN this is called, never in what it
 /// does (§6.2: "every path converges on the same funnel").
-async fn poll_target(runtime: &mut TargetRuntime, watch_db: &WatchDatabase, own_subject: Subject) {
-    let Ok(pubkey) = Pubkey::from_str(&runtime.target.address) else {
+async fn poll_target(
+    target_runtime: &mut TargetRuntime,
+    chain_runtime: &Arc<dyn WalletWatchRuntime>,
+    watch_db: &WatchDatabase,
+    own_subject: Subject,
+) {
+    if chain_runtime
+        .resolve_subject(&target_runtime.target.address)
+        .is_err()
+    {
         return;
-    };
-
-    if runtime.catch_up.is_none() {
-        let cursor = watch_db
-            .get_cursor(&runtime.target.address)
-            .await
-            .unwrap_or_default();
-        runtime.baseline_only = !runtime.target.sources.contains(&WatchSource::OwnWallet)
-            && !watch_db
-                .has_cursor_row(&runtime.target.address)
-                .await
-                .unwrap_or(false);
-        runtime.catch_up = Some(poller::CatchUpState::new(cursor));
     }
 
-    let fetcher = TransactionFetcher::new();
+    if target_runtime.catch_up.is_none() {
+        let cursor = watch_db
+            .get_cursor(&target_runtime.target.address)
+            .await
+            .unwrap_or_default();
+        target_runtime.baseline_only = !target_runtime
+            .target
+            .sources
+            .contains(&WatchSource::OwnWallet)
+            && !watch_db
+                .has_cursor_row(&target_runtime.target.address)
+                .await
+                .unwrap_or(false);
+        target_runtime.catch_up = Some(poller::CatchUpState::new(cursor));
+    }
+
     let completed = match poller::advance_catch_up(
-        &fetcher,
-        pubkey,
-        runtime.catch_up.as_mut().expect("catch-up initialized"),
+        chain_runtime.as_ref(),
+        &target_runtime.target.address,
+        target_runtime
+            .catch_up
+            .as_mut()
+            .expect("catch-up initialized"),
     )
     .await
     {
@@ -231,18 +133,22 @@ async fn poll_target(runtime: &mut TargetRuntime, watch_db: &WatchDatabase, own_
         Err(e) => {
             logger::warning(
                 LogTag::WalletWatch,
-                &format!("Poll failed for {}: {e}", runtime.target.address),
+                &format!("Poll failed for {}: {e}", target_runtime.target.address),
             );
             return;
         }
     };
 
-    if runtime.baseline_only {
+    if target_runtime.baseline_only {
         let baseline_result = match completed.newest_signature.as_deref() {
-            Some(newest) => watch_db.set_cursor(&runtime.target.address, newest).await,
+            Some(newest) => {
+                watch_db
+                    .set_cursor(&target_runtime.target.address, newest)
+                    .await
+            }
             None => {
                 watch_db
-                    .mark_cursor_initialized(&runtime.target.address)
+                    .mark_cursor_initialized(&target_runtime.target.address)
                     .await
             }
         };
@@ -251,19 +157,26 @@ async fn poll_target(runtime: &mut TargetRuntime, watch_db: &WatchDatabase, own_
                 LogTag::WalletWatch,
                 &format!(
                     "Failed to establish watch baseline for {}: {e}",
-                    runtime.target.address
+                    target_runtime.target.address
                 ),
             );
             return;
         }
-        runtime.catch_up = None;
-        runtime.baseline_only = false;
+        target_runtime.catch_up = None;
+        target_runtime.baseline_only = false;
         return;
     }
 
     let mut replay_complete = true;
     for signature in &completed.signatures {
-        if process_signature(&runtime.target, own_subject.clone(), signature, Utc::now()).await
+        if process_signature(
+            chain_runtime,
+            &target_runtime.target,
+            own_subject.clone(),
+            signature,
+            Utc::now(),
+        )
+        .await
             == ProcessOutcome::Retryable
         {
             replay_complete = false;
@@ -275,19 +188,22 @@ async fn poll_target(runtime: &mut TargetRuntime, watch_db: &WatchDatabase, own_
     }
 
     if let Some(newest) = completed.newest_signature.as_deref() {
-        if let Err(e) = watch_db.set_cursor(&runtime.target.address, newest).await {
+        if let Err(e) = watch_db
+            .set_cursor(&target_runtime.target.address, newest)
+            .await
+        {
             logger::warning(
                 LogTag::WalletWatch,
                 &format!(
                     "Failed to advance watch cursor for {}: {e}",
-                    runtime.target.address
+                    target_runtime.target.address
                 ),
             );
             return;
         }
     }
 
-    runtime.catch_up = None;
+    target_runtime.catch_up = None;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -332,15 +248,15 @@ async fn clear_pending(subject: Subject, signature: &str) {
 /// The one funnel every trigger feeds: durable dedupe, pure decode, classify,
 /// record, dedupe-commit, broadcast.
 async fn process_signature(
+    chain_runtime: &Arc<dyn WalletWatchRuntime>,
     target: &WatchTarget,
     _own_subject: Subject,
     signature: &str,
     detected_at: chrono::DateTime<Utc>,
 ) -> ProcessOutcome {
-    let Ok(pubkey) = Pubkey::from_str(&target.address) else {
+    let Ok(subject) = chain_runtime.resolve_subject(&target.address) else {
         return ProcessOutcome::Terminal;
     };
-    let subject = crate::chains::solana::transactions::subject::from_pubkey(pubkey);
 
     let already_seen = match dedupe::has_seen(subject.clone(), signature).await {
         Ok(seen) => seen,
@@ -361,13 +277,11 @@ async fn process_signature(
     mark_pending(subject.clone(), signature, detected_at).await;
 
     let is_own = target.sources.contains(&WatchSource::OwnWallet);
-    let processor = if is_own {
-        TransactionProcessor::new(pubkey)
-    } else {
-        TransactionProcessor::new_for_watch_target(pubkey)
-    };
 
-    let transaction = match processor.decode(signature).await {
+    let transaction = match chain_runtime
+        .decode_transaction(&target.address, signature, is_own)
+        .await
+    {
         Ok(tx) => tx,
         Err(e) => {
             if crate::errors::is_rpc_indexing_delay(&e) || e.contains("RPC indexing delay") {
@@ -415,9 +329,7 @@ async fn process_signature(
         return ProcessOutcome::Terminal;
     }
 
-    let Some((kind, skip_reason)) =
-        classify::classify_transaction_activity(&target.address, &transaction)
-    else {
+    let Some((kind, skip_reason)) = chain_runtime.classify(&target.address, &transaction) else {
         if dedupe::commit(subject.clone(), signature).await.is_err() {
             return ProcessOutcome::Retryable;
         }
@@ -468,25 +380,43 @@ fn short(signature: &str) -> &str {
 }
 
 /// The service loop. Runs until `shutdown` is notified.
-pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subject: Subject) {
+pub(super) async fn run(
+    shutdown: Arc<Notify>,
+    chain_runtime: Arc<dyn WalletWatchRuntime>,
+    watch_db: WatchDatabase,
+    own_subject: Subject,
+) {
     *SERVICE_STARTED_AT
         .write()
         .unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
 
-    let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<(String, SubscriptionEvent)>();
+    let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<(String, WatchNotification)>();
     let mut runtimes: HashMap<String, TargetRuntime> = HashMap::new();
-    reload_targets(&mut runtimes, &ws_tx, &watch_db, own_subject.clone()).await;
+    reload_targets(
+        &mut runtimes,
+        &ws_tx,
+        &chain_runtime,
+        &watch_db,
+        own_subject.clone(),
+    )
+    .await;
 
     // Gap-fill at service start: catch up on anything that landed while the bot was
     // down, for every registered target including the own wallet.
     let startup_addresses: Vec<String> = runtimes.keys().cloned().collect();
     for address in startup_addresses {
-        if let Some(runtime) = runtimes.get_mut(&address) {
-            poll_target(runtime, &watch_db, own_subject.clone()).await;
+        if let Some(target_runtime) = runtimes.get_mut(&address) {
+            poll_target(
+                target_runtime,
+                &chain_runtime,
+                &watch_db,
+                own_subject.clone(),
+            )
+            .await;
         }
     }
 
-    let mut connection_state = rpc::connection_state();
+    let mut connection_watch = chain_runtime.connection_watch();
     let mut tick = interval(Duration::from_secs(1));
     let mut retention_tick = interval(Duration::from_secs(3600));
     retention_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -504,17 +434,17 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                 run_retention_cleanup(own_subject.clone()).await;
             }
             Some((address, event)) = ws_rx.recv() => {
-                if let Some(runtime) = runtimes.get(&address) {
+                if let Some(target_runtime) = runtimes.get(&address) {
                     if event.failed {
                         logger::debug(
                             LogTag::WalletWatch,
                             &format!("Notification for a failed transaction on {address}, decoding anyway to confirm"),
                         );
                     }
-                    process_signature(&runtime.target, own_subject.clone(), &event.signature, Utc::now()).await;
+                    process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &event.signature, Utc::now()).await;
                 }
             }
-            result = connection_state.changed() => {
+            result = connection_watch.changed() => {
                 if result.is_err() {
                     // Sender half of the transport's watch channel is gone (process
                     // shutting down) -- nothing left to react to.
@@ -523,22 +453,22 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                 if poller::needs_gap_fill(
                     false,
                     false,
-                    *connection_state.borrow() == ConnectionState::Connected,
+                    connection_watch.is_connected(),
                 ) {
                     logger::debug(LogTag::WalletWatch, "Subscription transport reconnected - gap-filling every target");
                     let addresses: Vec<String> = runtimes.keys().cloned().collect();
                     for address in addresses {
-                        if let Some(runtime) = runtimes.get_mut(&address) {
-                            poll_target(runtime, &watch_db, own_subject.clone()).await;
+                        if let Some(target_runtime) = runtimes.get_mut(&address) {
+                            poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone()).await;
                         }
                     }
                 }
             }
             _ = RELOAD_NOTIFY.notified() => {
-                reload_targets(&mut runtimes, &ws_tx, &watch_db, own_subject.clone()).await;
+                reload_targets(&mut runtimes, &ws_tx, &chain_runtime, &watch_db, own_subject.clone()).await;
             }
             _ = tick.tick() => {
-                let state = *connection_state.borrow();
+                let connected = connection_watch.is_connected();
                 let (baseline_secs, fallback_secs) = with_config(|cfg| {
                     (cfg.wallet.watch_poll_interval_secs, cfg.wallet.watch_poll_fallback_secs)
                 });
@@ -548,7 +478,7 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                     .filter_map(|runtime| {
                         let (address, runtime) = runtime;
                         let interval_secs = poller::cadence_secs(
-                            state == ConnectionState::Connected,
+                            connected,
                             baseline_secs,
                             fallback_secs,
                         );
@@ -561,8 +491,8 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                     })
                     .collect();
                 for address in due {
-                    if let Some(runtime) = runtimes.get_mut(&address) {
-                        poll_target(runtime, &watch_db, own_subject.clone()).await;
+                    if let Some(target_runtime) = runtimes.get_mut(&address) {
+                        poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone()).await;
                     }
                 }
             }
@@ -593,5 +523,193 @@ pub(super) async fn run_retention_cleanup(own_subject: Subject) {
                 &format!("Watch retention cleanup failed: {e}"),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wallets::watch::runtime::test_support::FakeRuntime;
+    use chrono::Utc;
+
+    fn own_watch_target(address: &str) -> WatchTarget {
+        WatchTarget {
+            id: None,
+            address: address.to_owned(),
+            label: None,
+            sources: vec![WatchSource::OwnWallet],
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn alert_watch_target(address: &str, rule_id: i64) -> WatchTarget {
+        WatchTarget {
+            id: Some(rule_id),
+            address: address.to_owned(),
+            label: None,
+            sources: vec![WatchSource::Alert { rule_id }],
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn idle_target_runtime(target: WatchTarget) -> TargetRuntime {
+        TargetRuntime {
+            target,
+            ws_task: tokio::spawn(async {}),
+            last_poll: Instant::now(),
+            catch_up: None,
+            baseline_only: false,
+        }
+    }
+
+    fn temp_watch_db() -> (WatchDatabase, tempfile::TempDir) {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = WatchDatabase::new_with_path(
+            dir.path().join("wallets.db"),
+            crate::chains::ChainId::Solana,
+        )
+        .expect("create watch database");
+        (db, dir)
+    }
+
+    #[tokio::test]
+    async fn poll_target_rejects_an_invalid_address_before_any_observation_starts() {
+        // Nothing is registered as valid on this fake runtime -- every address is
+        // rejected at `resolve_subject`, mirroring an adapter boundary rejection
+        // for a wrong-chain or malformed target.
+        let chain_runtime: Arc<dyn WalletWatchRuntime> = FakeRuntime::new(vec![]);
+        let (watch_db, _dir) = temp_watch_db();
+        let own = Subject::from_account(
+            crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+        );
+
+        let mut target_runtime = idle_target_runtime(own_watch_target("NotAValidTarget1111"));
+        poll_target(&mut target_runtime, &chain_runtime, &watch_db, own).await;
+
+        assert!(
+            target_runtime.catch_up.is_none(),
+            "an invalid target must never enter catch-up state"
+        );
+        assert_eq!(
+            watch_db.get_cursor("NotAValidTarget1111").await.unwrap(),
+            None,
+            "an invalid target must never get a cursor row"
+        );
+    }
+
+    #[tokio::test]
+    async fn first_observation_establishes_a_bounded_baseline_without_replaying_history() {
+        let address = "FreshTarget1111";
+        let chain_runtime = FakeRuntime::new(vec![address.to_owned()]);
+        // A short (< PAGE_SIZE) page proves the range complete on the first call.
+        chain_runtime.queue_page(
+            address,
+            vec!["newest-sig".to_owned(), "older-sig".to_owned()],
+        );
+        let chain_runtime: Arc<dyn WalletWatchRuntime> = chain_runtime;
+
+        let (watch_db, _dir) = temp_watch_db();
+        let own = Subject::from_account(
+            crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+        );
+
+        // No cursor row yet and not the own wallet -- this is the baseline-only path.
+        let mut target_runtime = idle_target_runtime(alert_watch_target(address, 1));
+        poll_target(&mut target_runtime, &chain_runtime, &watch_db, own).await;
+
+        assert_eq!(
+            watch_db.get_cursor(address).await.unwrap().as_deref(),
+            Some("newest-sig"),
+            "baseline must adopt the newest signature as the cursor"
+        );
+        assert!(
+            target_runtime.catch_up.is_none() && !target_runtime.baseline_only,
+            "baseline establishment must clear catch-up state without processing anything"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_processing_failure_never_advances_the_durable_cursor() {
+        let address = "EscalatedTarget1111";
+        let chain_runtime = FakeRuntime::new(vec![address.to_owned()]);
+        chain_runtime.queue_page(address, vec!["pending-sig".to_owned()]);
+        let chain_runtime: Arc<dyn WalletWatchRuntime> = chain_runtime;
+
+        let (watch_db, _dir) = temp_watch_db();
+        // A cursor row already exists (an established target), so this is NOT the
+        // baseline path -- the queued signature goes through `process_signature`.
+        watch_db.mark_cursor_initialized(address).await.unwrap();
+        let own = Subject::from_account(
+            crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+        );
+
+        let mut target_runtime = idle_target_runtime(alert_watch_target(address, 2));
+        poll_target(&mut target_runtime, &chain_runtime, &watch_db, own).await;
+
+        // No global transaction database is installed in this unit test, so dedupe
+        // admission fails and `process_signature` returns `Retryable` -- exactly the
+        // path a real transient failure takes. The cursor must stay put either way.
+        assert_eq!(
+            watch_db.get_cursor(address).await.unwrap(),
+            None,
+            "a retryable processing outcome must not advance the cursor"
+        );
+        assert!(
+            target_runtime.catch_up.is_some(),
+            "an incomplete replay must keep its catch-up state for the next tick"
+        );
+    }
+
+    #[tokio::test]
+    async fn process_signature_resolves_the_exact_target_identity_before_dedupe() {
+        let address = "IdentityTarget1111";
+        let chain_runtime = FakeRuntime::new(vec![address.to_owned()]);
+
+        let outcome = process_signature(
+            &(Arc::clone(&chain_runtime) as Arc<dyn WalletWatchRuntime>),
+            &own_watch_target(address),
+            Subject::from_account(
+                crate::chains::AccountId::new(crate::chains::ChainId::Solana, address).unwrap(),
+            ),
+            "some-signature",
+            Utc::now(),
+        )
+        .await;
+
+        assert_eq!(
+            chain_runtime.calls.lock().unwrap().resolved,
+            vec![address.to_owned()],
+            "the funnel must resolve the exact address the target carries"
+        );
+        // No global transaction database in this unit test -- dedupe admission
+        // fails closed (retryable), never panics, and never reaches decode.
+        assert_eq!(outcome, ProcessOutcome::Retryable);
+        assert!(chain_runtime.calls.lock().unwrap().decoded.is_empty());
+    }
+
+    #[tokio::test]
+    async fn process_signature_rejects_a_wrong_chain_target_before_any_call() {
+        let chain_runtime: Arc<dyn WalletWatchRuntime> = FakeRuntime::new(vec![]);
+
+        let outcome = process_signature(
+            &chain_runtime,
+            &own_watch_target("WrongChainTarget1111"),
+            Subject::from_account(
+                crate::chains::AccountId::new(
+                    crate::chains::ChainId::Solana,
+                    "WrongChainTarget1111",
+                )
+                .unwrap(),
+            ),
+            "some-signature",
+            Utc::now(),
+        )
+        .await;
+
+        assert_eq!(outcome, ProcessOutcome::Terminal);
     }
 }

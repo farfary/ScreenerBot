@@ -69,15 +69,18 @@ async fn commit_to_database(
 
 #[cfg(test)]
 mod tests {
-    use crate::chains::solana::solana_sdk::pubkey::Pubkey;
+    use crate::chains::{AccountId, ChainId};
 
     use super::*;
     use crate::transactions::utils::remove_signature_from_known_globally;
 
+    fn fake_subject(address: &str) -> Subject {
+        Subject::from_account(AccountId::new(ChainId::Solana, address).expect("valid test address"))
+    }
+
     #[tokio::test]
     async fn in_memory_admission_is_subject_scoped() {
-        let subject =
-            crate::chains::solana::transactions::subject::from_pubkey(Pubkey::new_unique());
+        let subject = fake_subject("DedupeAdmissionSubject1111");
         let signature = "dedupe-admission-signature";
 
         remove_signature_from_known_globally(subject.clone(), signature).await;
@@ -93,8 +96,7 @@ mod tests {
     async fn durable_admission_survives_database_reopen() {
         let dir = tempfile::tempdir().expect("temp database directory");
         let path = dir.path().join("transactions.db");
-        let subject =
-            crate::chains::solana::transactions::subject::from_pubkey(Pubkey::new_unique());
+        let subject = fake_subject("DurableDedupeSubject1111");
         let signature = "durable-dedupe-signature";
 
         let db = TransactionDatabase::new_with_path(&path, crate::chains::ChainId::Solana)

@@ -11,35 +11,41 @@
 //!   mod.rs         # this file: public API, target CRUD, service start/stop
 //!   types.rs       # WatchTarget, WatchSource, WalletActivity, ActivityKind, WatchStatus
 //!   database.rs    # watch_targets + watch_cursors tables (wallets.db)
+//!   runtime.rs     # WalletWatchRuntime: the injected chain execution seam
 //!   service.rs     # the loop: WS stream + poll fallback + gap-fill + dispatch
-//!   poller.rs      # getSignaturesForAddress cursor paging (the HTTP fallback)
+//!   poller.rs      # signature-page cursor paging (the HTTP fallback), chain-neutral
 //!   dedupe.rs      # durable per-subject seen-signature set
 //!   recorder.rs    # per-subject persistence policy (§5.4)
 //!
-//! Decoded-transaction -> ActivityKind classification (§6.4) is Solana wire
-//! interpretation, so it lives in `crate::chains::solana::wallets::classify`.
+//! Everything that has to know a chain's wire format -- address parsing, the
+//! realtime subscription transport, signature paging, transaction decode, and
+//! decoded-transaction -> ActivityKind classification (§6.4) -- lives behind
+//! `runtime::WalletWatchRuntime`, implemented for Solana by
+//! `crate::chains::solana::wallets::runtime` and registered once by the
+//! composition root (`crate::run::services`) before this service can start.
 //! ```
 
 mod database;
 mod dedupe;
 mod poller;
 mod recorder;
+pub mod runtime;
 mod service;
+mod service_targets;
 mod source_registry;
 mod types;
 
 pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp};
 pub use service::subscribe_activity;
 pub use types::{
-    ActivityKind, SwapSide, TransferDirection, WalletActivity, WatchSource, WatchStatus,
-    WatchTarget,
+    ActivityKind, SwapSide, TransferDirection, WalletActivity, WatchNotification, WatchSource,
+    WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};
 
 use tokio::sync::Notify;
 
-use crate::chains::solana::accounts::validate_address;
 use crate::transactions::types::Subject;
 use crate::{chains::active_chain, config::with_config};
 
@@ -58,13 +64,19 @@ fn watch_db() -> Result<WatchDatabase, String> {
 /// Start the wallet observation service: open `watch_targets` / `watch_cursors`,
 /// resolve the own wallet, and spawn the loop. Called by `WalletWatchService::start()`.
 pub async fn start(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>, String> {
+    let chain_runtime = runtime::get_runtime().map_err(|e| e.to_string())?;
     let own_subject =
         Subject::own().map_err(|e| format!("Cannot resolve own wallet for watch service: {e}"))?;
 
     let db = WatchDatabase::new(active_chain())?;
     let _ = GLOBAL_WATCH_DB.set(db.clone());
 
-    Ok(tokio::spawn(service::run(shutdown, db, own_subject)))
+    Ok(tokio::spawn(service::run(
+        shutdown,
+        chain_runtime,
+        db,
+        own_subject,
+    )))
 }
 
 /// `Healthy` when the shared subscription transport is connected or the service is
@@ -108,7 +120,10 @@ pub async fn add_target(address: &str, label: Option<&str>) -> Result<WatchTarge
         );
     }
 
-    validate_address(address)?;
+    runtime::get_runtime()
+        .map_err(|e| e.to_string())?
+        .resolve_subject(address)
+        .map_err(|e| format!("Invalid watch address: {e}"))?;
 
     let own_wallets = crate::wallets::list_wallets(true).await?;
     let db = watch_db()?;
@@ -170,7 +185,10 @@ pub async fn add_copy_source(
     address: &str,
     label: Option<&str>,
 ) -> Result<WatchTarget, String> {
-    validate_address(address)?;
+    runtime::get_runtime()
+        .map_err(|e| e.to_string())?
+        .resolve_subject(address)
+        .map_err(|e| format!("Invalid watch address: {e}"))?;
     let own_wallets = crate::wallets::list_wallets(true).await?;
     if own_wallets.iter().any(|wallet| wallet.address == address) {
         return Err("This address is one of your own wallets and cannot be copied".to_owned());
@@ -215,8 +233,7 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, String> {
 
     let last_signature = db.get_cursor(&target.address).await?;
     let last_activity_at = db.get_cursor_updated_at(&target.address).await?;
-    let subscribed = *crate::chains::solana::rpc::connection_state().borrow()
-        == crate::chains::solana::rpc::ConnectionState::Connected;
+    let subscribed = runtime::try_get_runtime().is_some_and(|runtime| runtime.is_connected());
 
     Ok(WatchStatus {
         target,

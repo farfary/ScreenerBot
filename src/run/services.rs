@@ -16,6 +16,11 @@ pub(super) fn register_all_services(manager: &mut ServiceManager) {
         crate::chains::solana::swaps::routers::build_routers,
     );
 
+    // Select the Solana wallet-watch runtime before WalletWatchService can start.
+    crate::wallets::watch::runtime::set_runtime_factory(
+        crate::chains::solana::wallets::runtime::build_runtime,
+    );
+
     // Core infrastructure services
     manager.register(Box::new(ConnectivityService::new()));
     manager.register(Box::new(EventsService));
