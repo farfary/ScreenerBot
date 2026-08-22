@@ -90,10 +90,13 @@ impl DefiLlamaClient {
             )));
         }
 
-        let protocols: Vec<DefiLlamaProtocol> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
+        let protocols: Vec<DefiLlamaProtocol> = match response.json().await {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                self.stats.record_request(false, elapsed).await;
+                return Err(ApiError::InvalidResponse(e.to_string()));
+            }
+        };
 
         self.stats.record_request(true, elapsed).await;
 
@@ -135,10 +138,13 @@ impl DefiLlamaClient {
             )));
         }
 
-        let price_response: DefiLlamaPriceResponse = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
+        let price_response: DefiLlamaPriceResponse = match response.json().await {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                self.stats.record_request(false, elapsed).await;
+                return Err(ApiError::InvalidResponse(e.to_string()));
+            }
+        };
 
         self.stats.record_request(true, elapsed).await;
 

@@ -94,10 +94,13 @@ impl JupiterClient {
             )));
         }
 
-        let tokens: Vec<JupiterToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
+        let tokens: Vec<JupiterToken> = match response.json().await {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                self.stats.record_request(false, elapsed).await;
+                return Err(ApiError::InvalidResponse(e.to_string()));
+            }
+        };
 
         self.stats.record_request(true, elapsed).await;
 
@@ -150,10 +153,13 @@ impl JupiterClient {
             )));
         }
 
-        let tokens: Vec<JupiterToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
+        let tokens: Vec<JupiterToken> = match response.json().await {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                self.stats.record_request(false, elapsed).await;
+                return Err(ApiError::InvalidResponse(e.to_string()));
+            }
+        };
 
         self.stats.record_request(true, elapsed).await;
 
@@ -206,10 +212,13 @@ impl JupiterClient {
             )));
         }
 
-        let tokens: Vec<JupiterToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
+        let tokens: Vec<JupiterToken> = match response.json().await {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                self.stats.record_request(false, elapsed).await;
+                return Err(ApiError::InvalidResponse(e.to_string()));
+            }
+        };
 
         self.stats.record_request(true, elapsed).await;
 
@@ -262,10 +271,13 @@ impl JupiterClient {
             )));
         }
 
-        let tokens: Vec<JupiterToken> = response.json().await.map_err(|e| {
-            self.stats.record_request(false, elapsed);
-            ApiError::InvalidResponse(e.to_string())
-        })?;
+        let tokens: Vec<JupiterToken> = match response.json().await {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                self.stats.record_request(false, elapsed).await;
+                return Err(ApiError::InvalidResponse(e.to_string()));
+            }
+        };
 
         self.stats.record_request(true, elapsed).await;
 
