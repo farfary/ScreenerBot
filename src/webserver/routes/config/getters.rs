@@ -6,7 +6,7 @@ use axum::{http::StatusCode, response::Response, Json};
 
 use crate::config;
 use crate::config::metadata::collect_config_metadata;
-use crate::config::schemas::{default_tabs, TabConfig};
+use crate::config::schemas::default_tabs;
 use crate::webserver::utils::{error_response, success_response};
 
 use super::types::*;
@@ -164,7 +164,7 @@ pub async fn get_account_config() -> Response {
 
 /// GET /api/config/summary - Get summary display configuration
 pub async fn get_summary_config() -> Response {
-    let data = config::with_config(|cfg| ConfigResponse {
+    let data = config::with_config(|_cfg| ConfigResponse {
         data: serde_json::json!({}),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });

@@ -15,14 +15,11 @@
 //! Security data (Rugcheck) is fetched in a separate loop, one token per interval (configurable, default 60s),
 //! and only for tokens that don't have security data yet.
 
-use super::core::{
-    update_security_data, update_token, update_tokens_batch, PoolPriorityManager, UpdateResult,
-};
+use super::core::{update_security_data, update_tokens_batch, PoolPriorityManager};
 use super::helpers::{filter_dashboard_active_token, handle_market_failure, should_skip_for_tools};
 use super::rate_limiter::RateLimitCoordinator;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
-use crate::pools;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::priorities::Priority;
 use crate::utils::{check_shutdown_or_delay, run_or_shutdown};

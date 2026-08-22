@@ -2,9 +2,6 @@
 //
 // Functions for detecting WSOL wraps, sync-native deposits, and wallet WSOL ATA resolution.
 
-use serde_json::Value;
-
-use crate::chains::solana::transactions::program_ids::*;
 use crate::transactions::utils::*;
 
 use super::helpers::account_keys_from_message;
@@ -31,7 +28,7 @@ pub(super) fn find_owner_wsol_change_ui(
 /// Find lamports deposited into the wallet's WSOL ATA by inspecting pre/post balances at that account index
 pub(super) fn find_wsol_wrap_deposit_lamports(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-    wallet_key: &str,
+    _wallet_key: &str,
 ) -> Option<u64> {
     let meta = tx_data.meta.as_ref()?;
     let empty_vec: Vec<crate::chains::solana::rpc::TokenBalance> = Vec::new();

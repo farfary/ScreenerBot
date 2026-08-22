@@ -8,7 +8,7 @@
 
 mod queries;
 
-use super::types::{Action, ActionId, ActionState, ActionStep, ActionType, StepStatus};
+use super::types::{Action, ActionState, ActionStep, ActionType, StepStatus};
 use crate::database;
 use crate::database::WriteTransaction;
 use crate::logger::{self, LogTag};
@@ -16,9 +16,8 @@ use crate::utils::get_wallet_address;
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, Result as SqliteResult};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::time::Duration;
 
 // =============================================================================

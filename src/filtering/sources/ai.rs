@@ -4,7 +4,6 @@
 //! Disabled by default. Configure in [ai] section of config.
 
 use crate::ai::types::{EvaluationContext, Priority};
-use crate::ai::AiEngine;
 use crate::config::with_config;
 use crate::tokens::types::Token;
 

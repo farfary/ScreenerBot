@@ -239,7 +239,7 @@ pub fn confirm_token_blacklist(mint: &str, symbol: &str) -> InlineKeyboardMarkup
 }
 
 /// Confirmation for buying a token
-pub fn confirm_token_buy(mint: &str, symbol: &str, amount: f64) -> InlineKeyboardMarkup {
+pub fn confirm_token_buy(mint: &str, _symbol: &str, amount: f64) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
 
     InlineKeyboardMarkup::new(vec![vec![

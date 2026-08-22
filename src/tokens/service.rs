@@ -14,7 +14,6 @@ use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::tokens::cleanup;
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::discovery;
-use crate::tokens::schema;
 use crate::tokens::updates;
 use crate::tokens::updates::RateLimitCoordinator;
 use async_trait::async_trait;

@@ -5,13 +5,15 @@
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 use crate::logger::{self, LogTag};
-use crate::transactions::{types::*, utils::*};
+use crate::transactions::types::*;
 use crate::{chains::ChainId, database};
 
 use super::schema::*;

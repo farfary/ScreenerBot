@@ -17,11 +17,13 @@
 //! - `--cache-only`: Use cached data only (works with debug tools)
 //! - `--force-refresh`: Force refresh from RPC (works with debug tools)
 
+pub mod banner;
 mod help;
 mod modes;
 pub mod patterns;
 mod validation;
 
+pub use banner::print_banner;
 pub use help::*;
 pub use modes::*;
 pub use validation::*;

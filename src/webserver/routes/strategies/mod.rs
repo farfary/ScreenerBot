@@ -1,6 +1,6 @@
 //! Strategy CRUD and configuration routes for the web UI.
 use axum::{
-    routing::{delete, get, patch, post, put},
+    routing::{get, patch, post},
     Router,
 };
 use std::sync::Arc;

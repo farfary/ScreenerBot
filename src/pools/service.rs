@@ -12,7 +12,7 @@ use super::types::max_watched_tokens;
 use super::{cache, db, PoolError};
 use crate::chains::active_chain;
 use crate::config::with_config;
-use crate::events::{record_safe, Event, EventCategory, Severity};
+use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 
 use std::future::Future;

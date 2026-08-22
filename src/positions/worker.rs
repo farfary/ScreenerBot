@@ -228,7 +228,8 @@ pub async fn start_positions_manager_service(
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     // Start price updater task
-    let price_updater_handle = tokio::spawn(super::price_updater::start_price_updater(shutdown_rx));
+    let _price_updater_handle =
+        tokio::spawn(super::price_updater::start_price_updater(shutdown_rx));
 
     // Start verification worker
     let verification_handle = tokio::spawn(monitor.instrument(async move {

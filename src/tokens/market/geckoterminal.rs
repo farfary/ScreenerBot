@@ -8,7 +8,6 @@
 //! - Returns aggregated token data (price, volume, market cap, etc.)
 //! - No pool filtering logic (uses aggregated metrics from API)
 
-use crate::apis::geckoterminal::{GeckoTerminalPool, GeckoTerminalTokenInfoResponse};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};

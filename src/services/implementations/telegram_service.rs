@@ -3,7 +3,6 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
-use crate::telegram::discovery;
 use crate::telegram::notifier::{self, send_notification};
 use crate::telegram::polling;
 use crate::telegram::types::{BotState, Notification};

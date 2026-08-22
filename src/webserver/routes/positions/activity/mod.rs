@@ -33,7 +33,7 @@ use crate::transactions::get_transaction;
 use crate::utils::lamports_to_sol;
 use crate::webserver::utils::{error_response, success_response};
 
-use drafts::{Draft, Side};
+use drafts::Draft;
 
 /// Most SPL tokens; used only when the token's decimals are not known yet, which is also
 /// what the dashboard defaulted to before decimals moved server-side.

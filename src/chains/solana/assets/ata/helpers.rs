@@ -5,7 +5,6 @@ use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::solana_sdk::{
     instruction::{AccountMeta, Instruction},
-    signer::Signer,
     transaction::Transaction,
 };
 use crate::chains::solana::spl_token::instruction::close_account;
@@ -286,7 +285,7 @@ fn build_token_2022_close_instruction(
 ) -> Result<Instruction> {
     // Token-2022 uses the same close account instruction format as SPL Token
     // but with different program ID
-    let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|e| {
+    let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|_e| {
         Error::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
             signature: "unknown".to_owned(),
             account: TOKEN_2022_PROGRAM_ID.to_string(),

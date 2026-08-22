@@ -1,8 +1,6 @@
 //! Position tracking — monitors active positions for exit triggers and price changes.
 
-use super::{
-    apply::apply_transition, state::update_position_state, transitions::PositionTransition,
-};
+use super::{apply::apply_transition, transitions::PositionTransition};
 use crate::logger::{self, LogTag};
 use tokio::time::Duration;
 

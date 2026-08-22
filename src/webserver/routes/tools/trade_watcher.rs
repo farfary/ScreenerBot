@@ -1,6 +1,6 @@
 //! Trade watcher handlers
 
-use axum::{extract::Path, http::StatusCode, response::Response, routing::delete, Json};
+use axum::{extract::Path, http::StatusCode, response::Response, Json};
 
 use crate::logger::{self, LogTag};
 use crate::tools::database::{

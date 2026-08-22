@@ -12,7 +12,6 @@
 // - Apply DEX-specific fee structures
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use super::{
     ata::AtaAnalysis,
@@ -363,7 +362,7 @@ fn detect_mev_tips_from_instructions(
 /// Estimate swap fees based on DEX and transaction patterns
 async fn estimate_swap_fees(
     balance_analysis: &BalanceAnalysis,
-    tx_data: &crate::chains::solana::rpc::TransactionDetails,
+    _tx_data: &crate::chains::solana::rpc::TransactionDetails,
 ) -> Result<f64, String> {
     // This would implement DEX-specific fee calculation
     // For now, return a reasonable estimate based on transfer amounts
@@ -498,7 +497,7 @@ fn find_corresponding_sol_change(
 
 /// Extract individual swap components for complex transactions
 async fn extract_swap_components(
-    balance_analysis: &BalanceAnalysis,
+    _balance_analysis: &BalanceAnalysis,
     classification: &TransactionClass,
 ) -> Result<Vec<SwapComponent>, String> {
     let mut components = Vec::new();

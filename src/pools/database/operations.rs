@@ -1,7 +1,7 @@
 //! Core PoolsDatabase struct and operations
 
 use super::super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
-use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord, DbPriceResult};
+use super::types::DbPriceResult;
 use super::writer::run_database_writer;
 use crate::logger::{self, LogTag};
 

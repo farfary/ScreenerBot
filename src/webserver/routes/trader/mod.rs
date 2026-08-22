@@ -3,7 +3,6 @@
 //! Endpoints for trader control, stats, manual trading, templates, and previews.
 
 use axum::{
-    response::Response,
     routing::{get, post},
     Router,
 };

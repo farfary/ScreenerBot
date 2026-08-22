@@ -3,10 +3,8 @@
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
-use std::path::Path;
+use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::LazyLock;
-use std::time::Duration;
 use tokio::sync::Mutex;
 
 use crate::logger::{self, LogTag};

@@ -165,7 +165,7 @@ pub async fn search_events(
     category: Option<&str>,
     mint: Option<&str>,
     reference_id: Option<&str>,
-    since_hours: Option<u64>,
+    _since_hours: Option<u64>,
     limit: usize,
 ) -> Result<Vec<Event>, String> {
     let db = crate::events::EVENTS_DB

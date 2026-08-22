@@ -3,7 +3,6 @@
 use crate::chains::solana::assets::ata::get_total_token_balance;
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
-use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -16,7 +15,6 @@ use crate::swaps::{
 };
 use crate::utils::get_wallet_address;
 use chrono::Utc;
-use serde_json::json;
 use tokio::time::{sleep, Duration};
 
 /// Back off before the next slippage rung — longer when the router is rate-limiting us.

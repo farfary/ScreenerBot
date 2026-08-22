@@ -15,13 +15,13 @@ use crate::transactions::get_transaction_database;
 
 use super::cache::{
     canonical_window, circuit_record_failure, circuit_reset, compute_and_cache_metrics,
-    compute_and_cache_metrics_internal, hydrate_wallet_snapshot_status,
-    update_wallet_snapshot_status, warmup_dashboard_metrics, API_RESPONSE_CACHE, CACHE_METRICS,
+    compute_and_cache_metrics_internal, hydrate_wallet_snapshot_status, warmup_dashboard_metrics,
+    API_RESPONSE_CACHE, CACHE_METRICS,
 };
 use super::dashboard::clamp_window_hours;
 use super::database::{
-    get_wallet_service_metrics, increment_errors, increment_flow_syncs, increment_operations,
-    increment_snapshots, mark_wallet_db_ready, GLOBAL_WALLET_DB,
+    increment_errors, increment_flow_syncs, increment_operations, increment_snapshots,
+    mark_wallet_db_ready, GLOBAL_WALLET_DB,
 };
 use super::types::*;
 use super::worth::{

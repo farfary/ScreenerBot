@@ -5,20 +5,15 @@
 // This module handles all blockchain data retrieval operations including
 // batch signature fetching, transaction details retrieval, and RPC optimization.
 
-use crate::chains::solana::solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config;
-use crate::chains::solana::solana_client::rpc_client::RpcClient;
 use crate::chains::solana::solana_sdk::commitment_config::CommitmentConfig;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
-use crate::chains::solana::solana_sdk::signature::Signature;
-use crate::chains::solana::solana_transaction_status::UiTransactionEncoding;
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::transactions::{types::*, utils::*};
+use crate::transactions::utils::*;
 
 // =============================================================================
 // FETCHER CONFIGURATION

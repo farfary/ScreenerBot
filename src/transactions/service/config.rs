@@ -2,7 +2,7 @@
 //
 // Service configuration, constants, and deferred retry queue
 
-use crate::transactions::utils::{NORMAL_CHECK_INTERVAL_SECS, RPC_BATCH_SIZE};
+use crate::transactions::utils::NORMAL_CHECK_INTERVAL_SECS;
 
 // =============================================================================
 // BOOTSTRAP CONFIGURATION

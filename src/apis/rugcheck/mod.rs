@@ -119,7 +119,7 @@ impl RugcheckClient {
     where
         T: DeserializeOwned,
     {
-        let (mut response, elapsed) = self.execute_request(url, endpoint).await?;
+        let (response, elapsed) = self.execute_request(url, endpoint).await?;
         let status = response.status();
 
         if !status.is_success() {

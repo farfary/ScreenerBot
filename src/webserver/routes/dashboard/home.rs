@@ -25,7 +25,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         return Json(promo::get_promo_home_dashboard());
     }
 
-    use chrono::{DateTime, Duration, TimeZone};
+    use chrono::{Duration, TimeZone};
 
     let now = chrono::Utc::now();
     let today_start = now

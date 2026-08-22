@@ -5,8 +5,6 @@
 //! chain-neutral `crate::swaps::types::{Quote, QuoteRequest, SwapResult}` used
 //! by the router/quoting layer.
 
-use crate::chains::solana::constants::SOL_MINT;
-use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
 use crate::chains::solana::solana_sdk::{
     pubkey::Pubkey, signature::Signature, transaction::Transaction,
 };

@@ -3,7 +3,6 @@
 use axum::{extract::State, http::StatusCode, response::Response, Json};
 use std::sync::Arc;
 
-use crate::ai::engine::AiEngine;
 use crate::ai::types::{EvaluationContext, Priority};
 use crate::apis::llm::Provider;
 use crate::config::{update_config_section, with_config};

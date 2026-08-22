@@ -1,12 +1,9 @@
 //! API fetching functions - retrieve pool data from external sources
 
-use crate::apis::dexscreener::types::DexScreenerPool;
-use crate::apis::geckoterminal::types::GeckoTerminalPool;
 use crate::apis::manager::get_api_manager;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::sol_price::get_sol_price;
-use crate::tokens::service::get_rate_coordinator;
 use crate::tokens::types::{TokenError, TokenPoolInfo, TokenResult};
 use crate::tokens::updates::RateLimitCoordinator;
 use std::collections::HashMap;

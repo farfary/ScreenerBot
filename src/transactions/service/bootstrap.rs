@@ -2,7 +2,6 @@
 //
 // Startup bootstrap logic - initial transaction history loading
 
-use chrono::Utc;
 use futures::stream::{FuturesUnordered, StreamExt};
 use std::sync::Arc;
 use std::time::Duration;
@@ -52,7 +51,7 @@ pub async fn perform_initial_transaction_bootstrap(
     manager_arc: &Arc<Mutex<TransactionsManager>>,
 ) -> Result<BootstrapStats, String> {
     let bootstrap_timer = std::time::Instant::now();
-    let (wallet_pubkey, debug, transaction_db) = {
+    let (wallet_pubkey, _debug, transaction_db) = {
         let mgr = manager_arc.lock().await;
         (
             mgr.wallet_pubkey,

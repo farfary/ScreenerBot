@@ -3,7 +3,6 @@
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
-use crate::logger::{self, LogTag};
 use crate::tokens::store;
 use crate::tokens::types::{RugcheckData, SecurityRisk, TokenError, TokenHolder, TokenResult};
 
@@ -12,7 +11,7 @@ use super::TokenDatabase;
 impl TokenDatabase {
     /// Insert or update Rugcheck security data for a token
     pub fn upsert_rugcheck_data(&self, mint: &str, data: &RugcheckData) -> TokenResult<()> {
-        let mut conn = self.conn()?;
+        let conn = self.conn()?;
 
         let risks_json = serde_json::to_string(&data.risks)
             .map_err(|e| TokenError::Database(format!("Failed to serialize risks: {e}")))?;

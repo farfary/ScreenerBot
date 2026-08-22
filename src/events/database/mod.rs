@@ -15,10 +15,8 @@ use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use rusqlite::params;
 use std::collections::HashMap;
-use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 // =============================================================================
@@ -220,7 +218,7 @@ impl EventsDatabase {
                 }
             });
 
-        let id = conn
+        let _id = conn
             .execute(
                 "INSERT INTO events (
                     event_time, category, subtype, severity, 

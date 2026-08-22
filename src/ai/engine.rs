@@ -226,7 +226,7 @@ impl AiEngine {
             LlmError::RateLimited { retry_after_ms, .. } => AiError::RateLimited {
                 retry_after: retry_after_ms.map(|ms| ms / 1000),
             },
-            LlmError::Timeout { timeout_ms, .. } => AiError::Timeout,
+            LlmError::Timeout { .. } => AiError::Timeout,
             _ => AiError::LlmError(error.to_string()),
         }
     }
@@ -313,7 +313,7 @@ impl AiEngine {
     pub async fn evaluate_exit(
         &self,
         context: &EvaluationContext,
-        priority: Priority,
+        _priority: Priority,
     ) -> Result<EvaluationResult, AiError> {
         // Check if AI is enabled
         let (ai_enabled, exit_enabled) =

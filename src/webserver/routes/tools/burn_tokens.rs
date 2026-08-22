@@ -10,7 +10,6 @@ use crate::chains::solana::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
-use crate::tokens::decimals;
 use crate::utils::get_wallet_address;
 use crate::webserver::utils::{error_response, success_response};
 

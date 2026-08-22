@@ -1,11 +1,9 @@
 //! Positions debug route — exposes detailed position internals for troubleshooting.
 
 use axum::{extract::Path, Json};
-use chrono::Utc;
 use serde::Serialize;
 
 use crate::positions;
-use crate::tokens;
 
 // =============================================================================
 // DEBUG INFO ENDPOINT FOR POSITIONS

@@ -3,7 +3,6 @@
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
-use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};

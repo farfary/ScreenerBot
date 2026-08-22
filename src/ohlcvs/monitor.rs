@@ -6,14 +6,13 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
-use crate::ohlcvs::database::OhlcvTokenStatus;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
 use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
-    Candle, MintGapAggregate, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvResult,
-    Priority, Timeframe, TokenOhlcvConfig,
+    Candle, MonitorStats, MonitorTelemetrySnapshot, OhlcvError, OhlcvResult, Priority, Timeframe,
+    TokenOhlcvConfig,
 };
 use chrono::{DateTime, Utc};
 use serde_json::json;

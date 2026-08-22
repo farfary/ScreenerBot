@@ -1,6 +1,5 @@
 //! ATA cleanup and wallet generator handlers
 
-use crate::chains::solana::solana_sdk::signer::Signer;
 use axum::{http::StatusCode, response::Response, Json};
 
 use crate::chains::solana::assets::ata::get_all_token_accounts;

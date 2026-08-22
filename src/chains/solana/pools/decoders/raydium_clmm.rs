@@ -354,7 +354,7 @@ impl RaydiumClmmDecoder {
 
         // Extract reward_infos (3 rewards, calculate size more carefully)
         let mut reward_infos = Vec::new();
-        for i in 0..3 {
+        for _i in 0..3 {
             // Calculate available space for this reward
             let remaining_space = data.len() - offset;
             if remaining_space < 100 {

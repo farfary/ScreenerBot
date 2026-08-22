@@ -1,7 +1,6 @@
 //! Tools API routes for wallet utilities, token operations, and trading tools
 
 use axum::{
-    response::Response,
     routing::{delete, get, patch, post},
     Router,
 };

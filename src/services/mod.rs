@@ -4,6 +4,7 @@ mod health;
 pub mod implementations;
 mod logging;
 mod metrics;
+pub mod startup;
 
 pub use global::*;
 pub use health::ServiceHealth;
@@ -11,7 +12,6 @@ pub use logging::*;
 pub use metrics::{MetricsCollector, ServiceMetrics};
 
 use crate::logger::{self, LogTag};
-use crate::startup;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;

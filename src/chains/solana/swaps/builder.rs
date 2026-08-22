@@ -10,7 +10,6 @@ use super::programs::ProgramSwap;
 use super::types::{SwapDirection, SwapError, SwapRequest, SwapResult};
 
 use crate::chains::solana::constants::{RAYDIUM_CLMM_PROGRAM_ID, RAYDIUM_CPMM_PROGRAM_ID};
-use crate::chains::solana::pools::decoders::PoolDecoder;
 use crate::chains::solana::pools::fetcher::AccountData;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};

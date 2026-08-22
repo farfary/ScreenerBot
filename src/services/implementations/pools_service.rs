@@ -1,7 +1,7 @@
 //! Pools parent service — initializes pool components and runs helper background tasks.
 
 use crate::logger::{self, LogTag};
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;

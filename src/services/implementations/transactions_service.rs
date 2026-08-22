@@ -1,6 +1,5 @@
 //! Transactions service — monitors on-chain transactions for the configured wallet.
 
-use crate::chains::solana::solana_sdk::signer::Signer;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -33,7 +32,7 @@ impl Service for TransactionsService {
 
     async fn start(
         &mut self,
-        shutdown: Arc<Notify>,
+        _shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
         // Get wallet pubkey from config

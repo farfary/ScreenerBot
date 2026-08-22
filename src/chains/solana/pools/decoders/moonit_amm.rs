@@ -5,16 +5,15 @@
 //! a CurveAccount structure with pricing information.
 
 use super::{AccountData, PoolDecoder};
-use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
+use crate::chains::solana::constants::SOL_DECIMALS;
 use crate::chains::solana::pools::decode_utils::read_pubkey_struct_at_offset;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;
-use crate::pools::utils::{is_sol_mint, read_token_account_amount};
+use crate::pools::utils::is_sol_mint;
 use crate::tokens::get_cached_decimals;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 /// Moonit AMM decoder implementation
 pub struct MoonitAmmDecoder;
@@ -198,7 +197,7 @@ impl MoonitAmmDecoder {
     fn calculate_moonit_price(
         curve_info: &MoonitCurveInfo,
         curve_account: &AccountData,
-        accounts: &HashMap<String, AccountData>,
+        _accounts: &HashMap<String, AccountData>,
         base_mint: &str,
         quote_mint: &str,
     ) -> Option<PriceResult> {

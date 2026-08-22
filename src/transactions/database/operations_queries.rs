@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use crate::transactions::types::*;
 
 use super::operations::TransactionDatabase;
-use super::schema::*;
 
 // =============================================================================
 // IMPLEMENTATION - PENDING TRANSACTIONS MANAGEMENT
@@ -66,7 +65,7 @@ impl TransactionDatabase {
                 let signature: String = row.get(0)?;
                 let timestamp_str: String = row.get(1)?;
                 let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
-                    .map_err(|e| {
+                    .map_err(|_e| {
                         rusqlite::Error::InvalidColumnType(
                             0,
                             "timestamp".to_owned(),
@@ -181,7 +180,7 @@ impl TransactionDatabase {
             TransactionStatus::Pending => "Pending",
             TransactionStatus::Confirmed => "Confirmed",
             TransactionStatus::Finalized => "Finalized",
-            TransactionStatus::Failed(msg) => "Failed",
+            TransactionStatus::Failed(_msg) => "Failed",
         };
 
         let raw_transaction_json = transaction

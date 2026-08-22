@@ -15,7 +15,7 @@ use crate::chains::{AssetId, ChainId, PoolId};
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
-use crate::pools::service::{get_debug_token_override, is_single_pool_mode_enabled};
+use crate::pools::service::get_debug_token_override;
 use crate::pools::types::{max_watched_tokens, PoolDescriptor};
 use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
 use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools};

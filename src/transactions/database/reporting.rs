@@ -2,7 +2,7 @@
 //
 // Reporting, querying, and export operations
 
-use crate::transactions::{types::*, utils::*};
+use crate::transactions::types::*;
 use chrono::{DateTime, Utc};
 
 use super::operations::TransactionDatabase;
@@ -506,7 +506,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::transactions::types::{
-        SolBalanceChange, Subject, TransactionDirection, TransactionStatus, TransactionType,
+        SolBalanceChange, TransactionDirection, TransactionStatus, TransactionType,
     };
 
     fn sample_row(

@@ -1,6 +1,5 @@
 //! Position profit & loss calculations — P&L for open, closed, and partially exited positions.
 
-use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::types::Position;
 use crate::tokens::get_decimals;
@@ -111,7 +110,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
     let is_closed = position.exit_time.is_some();
 
     // For closed positions, prioritize sol_received for most accurate P&L
-    if let (true, Some(exit_price), Some(sol_received)) =
+    if let (true, Some(_exit_price), Some(sol_received)) =
         (is_closed, position.exit_price, position.sol_received)
     {
         // Total SOL invested vs total SOL received. `total_size_sol` includes every DCA add

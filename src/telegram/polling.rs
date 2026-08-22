@@ -6,7 +6,6 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::telegram::commands::{handle_auth_attempt, handle_callback_query, handle_command};
-use crate::telegram::discovery;
 use crate::telegram::session::get_session_manager;
 use crate::telegram::types::SessionState;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};

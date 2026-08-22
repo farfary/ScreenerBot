@@ -190,7 +190,7 @@ impl Tool for GetMarketDataTool {
         };
 
         // Request immediate update to get fresh market data
-        let update_result = match tokens::request_immediate_update(&params.mint_address).await {
+        let _update_result = match tokens::request_immediate_update(&params.mint_address).await {
             Ok(r) => r,
             Err(e) => return ToolResult::error(format!("Failed to fetch market data: {e}")),
         };

@@ -11,7 +11,6 @@
 // 3. Pool address recognition - Identify specific pool contracts
 // 4. Confidence scoring - Weight multiple detection signals
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -19,7 +18,7 @@ use std::collections::HashMap;
 use super::balance::BalanceAnalysis;
 use crate::chains::solana::transactions::program_ids::*;
 use crate::logger::{self, LogTag};
-use crate::transactions::{types::*, utils::*};
+use crate::transactions::types::*;
 
 // =============================================================================
 // DEX ANALYSIS TYPES
@@ -173,7 +172,7 @@ pub async fn detect_dex_interactions(
 pub async fn detect_dex_and_router(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-    balance_analysis: &BalanceAnalysis,
+    _balance_analysis: &BalanceAnalysis,
 ) -> Result<DexAnalysis, String> {
     logger::debug(
         LogTag::Transactions,
@@ -217,7 +216,7 @@ pub async fn detect_dex_and_router(
 
 /// Quick DEX detection for performance-critical paths
 pub async fn quick_dex_detection(
-    transaction: &Transaction,
+    _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
 ) -> Result<DexAnalysis, String> {
     // Lightweight detection - just program ID matching
@@ -483,7 +482,7 @@ fn is_orca_pool_pattern(account: &str) -> bool {
 
 /// Extract DEX-specific metadata from transaction logs
 fn extract_dex_metadata(
-    tx_data: &crate::chains::solana::rpc::TransactionDetails,
+    _tx_data: &crate::chains::solana::rpc::TransactionDetails,
     detected_dex: &Option<DetectedDex>,
 ) -> Result<HashMap<String, String>, String> {
     let mut metadata = HashMap::new();

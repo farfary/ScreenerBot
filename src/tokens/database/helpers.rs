@@ -51,7 +51,7 @@ pub(super) fn assemble_token(
         market_data_last_fetched_at,
         pair_blockchain_created_at,
         pool_metrics,
-        market_data_first_fetched_at,
+        _market_data_first_fetched_at,
     ) = match market_data {
         MarketDataType::DexScreener(data) => {
             let txns = (

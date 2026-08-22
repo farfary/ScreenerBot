@@ -3,6 +3,7 @@
 use super::{AccountData, PoolDecoder};
 use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::chains::solana::pools::types::ProgramKind;
+#[cfg(test)]
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;

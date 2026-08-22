@@ -870,8 +870,8 @@ impl TransactionProcessor {
     /// Calculate total tip amount from system transfers to MEV addresses
     pub(super) fn calculate_tip_amount(
         &self,
-        transaction: &Transaction,
-        tx_data: &crate::chains::solana::rpc::TransactionDetails,
+        _transaction: &Transaction,
+        _tx_data: &crate::chains::solana::rpc::TransactionDetails,
     ) -> f64 {
         // Simple placeholder implementation
         0.0

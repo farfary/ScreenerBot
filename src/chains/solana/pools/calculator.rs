@@ -20,7 +20,7 @@ use crate::pools::cache;
 use crate::pools::types::{PoolDescriptor, PriceResult};
 
 use crate::chains::solana::constants::SOL_MINT;
-use crate::events::{record_safe, Event, EventCategory, Severity};
+use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::get_global_database;
 
@@ -102,7 +102,7 @@ impl PriceCalculator {
     pub async fn start_calculator_task(&self, shutdown: Arc<Notify>) {
         logger::info(LogTag::PoolCalculator, "Starting price calculator task");
 
-        let pool_directory = self.pool_directory.clone();
+        let _pool_directory = self.pool_directory.clone();
         let sol_reference_price = self.sol_reference_price.clone();
 
         // Clone metrics for tracking in background task
@@ -295,7 +295,7 @@ impl PriceCalculator {
         pool_id: Pubkey,
         pool_descriptor: &PoolDescriptor,
         account_bundle: &PoolAccountBundle,
-        sol_reference_price: &Arc<RwLock<f64>>,
+        _sol_reference_price: &Arc<RwLock<f64>>,
     ) -> PoolCalculationResult {
         // Determine which token we're calculating price for (the non-SOL token).
         // Discovery stage already ensures one side is SOL, so this always succeeds

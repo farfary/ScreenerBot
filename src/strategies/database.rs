@@ -3,14 +3,11 @@
 use crate::database;
 use crate::errors::{DatabaseError, Error};
 use crate::logger::{self, LogTag};
-use crate::strategies::types::{
-    EvaluationResult, RiskLevel, Strategy, StrategyPerformance, StrategyTemplate, StrategyType,
-};
+use crate::strategies::types::{EvaluationResult, Strategy, StrategyPerformance, StrategyType};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
-use std::path::Path;
+use rusqlite::{params, OptionalExtension};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 

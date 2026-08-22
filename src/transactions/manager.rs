@@ -9,7 +9,7 @@ use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Notify;
 
 use crate::logger::{self, LogTag};
 use crate::transactions::{database::TransactionDatabase, types::*, utils::*};

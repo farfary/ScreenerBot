@@ -188,8 +188,8 @@ fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo>
     let last_error_at = ts_to_datetime(row.get::<_, Option<i64>>(11)?);
     let market_error_count = row.get::<_, Option<i64>>(12)?.unwrap_or_default().max(0) as u64;
     let market_error_type: Option<String> = row.get(13)?;
-    let last_security_error: Option<String> = row.get(14)?;
-    let last_security_error_at = ts_to_datetime(row.get::<_, Option<i64>>(15)?);
+    let _last_security_error: Option<String> = row.get(14)?;
+    let _last_security_error_at = ts_to_datetime(row.get::<_, Option<i64>>(15)?);
     let security_error_count = row.get::<_, Option<i64>>(16)?.unwrap_or_default().max(0) as u64;
 
     Ok(UpdateTrackingInfo {

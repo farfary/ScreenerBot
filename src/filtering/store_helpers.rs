@@ -2,7 +2,7 @@
 //! sorting, pool-price overlay, stats building, and staleness checks.
 
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 

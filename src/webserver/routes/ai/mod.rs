@@ -3,7 +3,6 @@
 //! Endpoints for AI analysis, provider management, chat, and testing.
 
 use axum::{
-    response::Response,
     routing::{delete, get, patch, post},
     Router,
 };

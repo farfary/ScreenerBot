@@ -171,7 +171,7 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
         && summary.degraded_services == 0
         && summary.starting_services == 0;
 
-    let unhealthy = summary.unhealthy_services + summary.degraded_services;
+    let _unhealthy = summary.unhealthy_services + summary.degraded_services;
     logger::debug(
         LogTag::Webserver,
         &format!(

@@ -1,7 +1,6 @@
 //! Tokens API routes for token listing, details, favorites, blacklist, and OHLCV data
 
 use axum::{
-    response::Response,
     routing::{delete, get, patch, post},
     Router,
 };

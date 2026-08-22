@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, Duration};
 
 /// OHLCV (Open, High, Low, Close, Volume) data collection service
 ///

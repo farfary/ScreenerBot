@@ -1,6 +1,6 @@
 //! Token update core — main update loop that refreshes token data from multiple sources.
 
-use super::helpers::{clear_in_flight, handle_market_failure, try_mark_in_flight};
+use super::helpers::{clear_in_flight, try_mark_in_flight};
 use super::rate_limiter::RateLimitCoordinator;
 use crate::chains::ChainId;
 use crate::events::{record_token_event, Severity};

@@ -1,8 +1,6 @@
 //! Type definitions for Tools API routes
 
-use chrono::DateTime;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // =============================================================================
 // Multi-Wallet Request/Response Types

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
-use crate::transactions::{types::*, utils::*};
+use crate::transactions::types::*;
 
 // =============================================================================
 // VERIFICATION RESULT STRUCTURES
@@ -234,7 +234,7 @@ pub async fn verify_exit_transaction(
 async fn perform_comprehensive_verification(
     transaction: &Transaction,
     expected_type: TransactionType,
-    wallet_pubkey: Pubkey,
+    _wallet_pubkey: Pubkey,
 ) -> Result<TransactionVerificationResult, String> {
     let mut issues = Vec::new();
     let mut confidence_score = 1.0;
@@ -393,7 +393,7 @@ async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<St
 }
 
 /// Calculate estimated slippage for swap transaction
-async fn calculate_slippage_estimate(swap_info: &TokenSwapInfo) -> Result<Option<f64>, String> {
+async fn calculate_slippage_estimate(_swap_info: &TokenSwapInfo) -> Result<Option<f64>, String> {
     // This would calculate slippage based on expected vs actual amounts
     // For now, return None as placeholder - would require price oracle integration
     Ok(None)

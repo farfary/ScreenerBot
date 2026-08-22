@@ -77,6 +77,7 @@
 
 pub mod bot;
 pub mod commands;
+pub mod crash;
 pub mod discovery;
 pub mod formatters;
 pub mod keyboards;

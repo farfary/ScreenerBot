@@ -264,7 +264,7 @@ impl FilteringStore {
         }
         let priced_set: std::collections::HashSet<_> = priced_mints.iter().cloned().collect();
         let open_set: std::collections::HashSet<_> = open_position_mints.iter().cloned().collect();
-        let ohlcv_set: std::collections::HashSet<_> = ohlcv_mints.iter().cloned().collect();
+        let _ohlcv_set: std::collections::HashSet<_> = ohlcv_mints.iter().cloned().collect();
 
         let priced_total = tokens
             .iter()

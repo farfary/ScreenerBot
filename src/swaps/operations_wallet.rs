@@ -5,7 +5,6 @@
 //! routers), never enabled-vector position.
 
 use crate::swaps::registry::{get_registry, RouterRegistry};
-use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::{Error, Result};
 

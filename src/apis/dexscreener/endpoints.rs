@@ -157,7 +157,7 @@ impl DexScreenerClient {
 
         logger::debug(LogTag::Api, "[DEXSCREENER] Fetching latest token profiles");
 
-        let (mut response, elapsed) = self
+        let (response, elapsed) = self
             .execute_request(
                 endpoint,
                 self.client.get(&url),
@@ -289,7 +289,7 @@ impl DexScreenerClient {
             ),
         );
 
-        let (mut response, elapsed) = self
+        let (response, elapsed) = self
             .execute_request(endpoint, builder, &self.limiter_latest_profiles)
             .await?;
 
@@ -336,7 +336,7 @@ impl DexScreenerClient {
             LogTag::Api,
             &format!("[DEXSCREENER] Fetching token info: {address}"),
         );
-        let (mut response, elapsed) = self
+        let (response, elapsed) = self
             .execute_request(&endpoint, self.client.get(&url), &self.limiter_token_info)
             .await?;
 

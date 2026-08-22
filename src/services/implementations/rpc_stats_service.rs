@@ -1,6 +1,6 @@
 //! RPC stats service — periodically saves RPC call statistics to database.
 
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;

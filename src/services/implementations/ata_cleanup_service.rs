@@ -1,6 +1,6 @@
 //! ATA (Associated Token Account) cleanup service — reclaims rent from unused token accounts.
 
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;

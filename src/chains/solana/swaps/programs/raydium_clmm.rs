@@ -26,9 +26,6 @@ use crate::chains::solana::solana_sdk::{
     system_instruction,
     transaction::Transaction,
 };
-use crate::chains::solana::spl_associated_token_account;
-use crate::chains::solana::spl_token;
-use crate::chains::solana::spl_token_2022;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -116,7 +113,7 @@ impl RaydiumClmmSwap {
         );
 
         // Determine which token is SOL and get current price
-        let (sol_mint, token_mint, sol_decimals, token_decimals, is_token_0_sol) =
+        let (_sol_mint, _token_mint, sol_decimals, token_decimals, is_token_0_sol) =
             if pool_info.token_mint_0 == SOL_MINT {
                 (
                     SOL_MINT,

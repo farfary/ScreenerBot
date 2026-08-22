@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
-use crate::events::{self, EventCategory, Severity};
+use crate::events::{self};
 use crate::global;
 use crate::services;
 

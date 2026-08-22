@@ -12,7 +12,7 @@ use colored::*;
 /// - Current P&L if position is open
 /// - Pool type and address information
 pub fn log_price_change(
-    mint: &str,
+    _mint: &str,
     symbol: &str,
     old_price: f64,
     new_price: f64,

@@ -7,10 +7,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
 
 use super::global::GLOBAL_POSITIONS_DB;
-use super::types::{
-    DailyTradingStats, PeriodTradingStats, PositionState, PositionTracking, PositionsDatabaseStats,
-    TokenSnapshot,
-};
+use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
 // =============================================================================
 // HELPER FUNCTIONS FOR POSITIONS MANAGEMENT

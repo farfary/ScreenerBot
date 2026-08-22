@@ -12,7 +12,6 @@
 // - MEV/Jito tip exclusion for clean swap amount detection
 // - Account-to-mint mapping for token identification
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -182,7 +181,7 @@ pub async fn extract_basic_changes(
 
 /// Extract SOL balance changes using meta.preBalances/postBalances
 async fn extract_sol_balance_changes(
-    transaction: &Transaction,
+    _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
 ) -> Result<HashMap<String, SolBalanceChange>, String> {
     let mut sol_changes = HashMap::new();
@@ -256,7 +255,7 @@ async fn extract_sol_balance_changes(
 
 /// Extract token balance changes using meta.preTokenBalances/postTokenBalances
 async fn extract_token_balance_changes(
-    transaction: &Transaction,
+    _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
 ) -> Result<HashMap<String, Vec<TokenBalanceChange>>, String> {
     let mut token_changes: HashMap<String, Vec<TokenBalanceChange>> = HashMap::new();

@@ -3,7 +3,6 @@
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
-use crate::logger::{self, LogTag};
 use crate::tokens::store;
 use crate::tokens::types::{
     DexScreenerData, GeckoTerminalData, Priority, RugcheckData, Token, TokenError, TokenMetadata,

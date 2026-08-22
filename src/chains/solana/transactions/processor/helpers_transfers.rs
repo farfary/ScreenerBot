@@ -2,10 +2,6 @@
 //
 // Functions for finding system transfers and MEV/Jito tips in parsed transactions.
 
-use serde_json::Value;
-
-use crate::chains::solana::transactions::program_ids::*;
-
 /// Find the largest parsed system transfer amount from the wallet in inner/outer instructions
 pub(super) fn find_largest_system_transfer_from_wallet(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,

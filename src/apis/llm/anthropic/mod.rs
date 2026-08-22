@@ -20,7 +20,7 @@ pub use self::types::{
 
 use crate::apis::client::RateLimiter;
 use crate::apis::llm::{
-    ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, MessageRole, Provider, Usage,
+    ChatRequest, ChatResponse, LlmClient, LlmError, MessageRole, Provider, Usage,
 };
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{self, LogTag};
@@ -200,7 +200,7 @@ impl AnthropicClient {
         drop(guard);
         let elapsed = start.elapsed().as_millis() as f64;
 
-        let mut response = response_result.map_err(|e| {
+        let response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
                     provider: "anthropic".to_owned(),

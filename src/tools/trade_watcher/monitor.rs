@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-use super::types::{DetectedTrade, PoolSource, TradeMonitorStatus, WatchType};
+use super::types::{DetectedTrade, TradeMonitorStatus, WatchType};
 use crate::apis::manager::get_api_manager;
 use crate::logger::{self, LogTag};
 use crate::telegram::{queue_notification, Notification};

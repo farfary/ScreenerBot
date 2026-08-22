@@ -4,11 +4,10 @@
 //! These types are designed to be minimal, efficient, and focused on the core functionality.
 
 use crate::chains::{AccountId, AssetId, PoolId};
-use crate::config::with_config;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::Instant;
 
 /// Chain-neutral protocol identity for a pool's DEX/AMM implementation.
 ///

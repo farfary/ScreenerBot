@@ -23,17 +23,18 @@
 //! This repository is public, which is what makes the paragraph above worth
 //! writing: it is checkable rather than promised.
 
+#[cfg(test)]
+use crate::chains::solana::solana_sdk::signer::Signer;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::chains::solana::solana_sdk::signer::Signer;
 use async_trait::async_trait;
 use serde::Serialize;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 use crate::config::get_config_clone;
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{Service, ServiceHealth};
 
 /// Give the wallet and connectivity services time to settle before the first
 /// announce. A referral that arrives 30 seconds late costs nothing; one that

@@ -1,7 +1,6 @@
 //! Position metrics — PnL calculations, win rates, and portfolio performance stats.
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::LazyLock;

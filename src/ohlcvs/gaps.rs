@@ -6,7 +6,7 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
-use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
+use crate::ohlcvs::types::{OhlcvResult, Priority, Timeframe};
 use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
@@ -55,7 +55,7 @@ impl GapManager {
         .await;
 
         // Get existing data sliced to the retention window in ascending order
-        let mut data = self.db.get_candles(
+        let data = self.db.get_candles(
             mint,
             Some(pool_address),
             Timeframe::Minute1,

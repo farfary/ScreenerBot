@@ -25,9 +25,6 @@
 //! surface stays chain-neutral. Solana swap instruction building/execution
 //! lives under `crate::chains::solana::swaps`.
 
-use std::sync::Arc;
-use tokio::sync::Notify;
-
 mod api;
 pub(crate) mod cache;
 

@@ -206,8 +206,6 @@ pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<(), 
 
 /// Send token detail view
 pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
-    use crate::tokens::get_full_token_async;
-
     // Try to find token by mint prefix from the filtering store
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Import unified types from OHLCV module
-use crate::ohlcvs::{Candle, TimeframeBundle};
+use crate::ohlcvs::TimeframeBundle;
 
 /// Strategy type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

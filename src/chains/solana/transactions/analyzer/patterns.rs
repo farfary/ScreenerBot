@@ -13,7 +13,6 @@
 // - High-frequency trading signatures
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use super::{balance::BalanceAnalysis, classify::TransactionClass, dex::DexAnalysis};
 use crate::logger::{self, LogTag};
@@ -221,7 +220,7 @@ async fn detect_specific_patterns(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-    classification: &TransactionClass,
+    _classification: &TransactionClass,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
 
@@ -256,7 +255,7 @@ async fn detect_specific_patterns(
 
 /// Detect MEV activity patterns
 async fn detect_mev_patterns(
-    transaction: &Transaction,
+    _transaction: &Transaction,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
 ) -> Result<Vec<DetectedPattern>, String> {
@@ -298,7 +297,7 @@ async fn detect_mev_patterns(
 
 /// Detect wash trading patterns
 async fn detect_wash_trading(
-    transaction: &Transaction,
+    _transaction: &Transaction,
     balance_analysis: &BalanceAnalysis,
 ) -> Result<Vec<DetectedPattern>, String> {
     let mut patterns = Vec::new();
@@ -512,7 +511,7 @@ async fn assess_risk(
 
 /// Analyze trading behavior patterns
 async fn analyze_trading_behavior(
-    transaction: &Transaction,
+    _transaction: &Transaction,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
     classification: &TransactionClass,

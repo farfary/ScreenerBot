@@ -1,12 +1,6 @@
 //! Web API route registration, static asset serving, and top-level request handlers.
 use crate::webserver::{state::AppState, templates};
-use axum::{
-    extract::Path as AxumPath,
-    http::{header as http_header, StatusCode},
-    response::{Html, IntoResponse, Response},
-    routing::get,
-    Router,
-};
+use axum::{extract::Path as AxumPath, response::Html, routing::get, Router};
 use std::sync::Arc;
 
 pub mod account;

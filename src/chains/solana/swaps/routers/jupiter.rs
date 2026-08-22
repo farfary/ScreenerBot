@@ -15,7 +15,7 @@ use crate::chains::solana::rpc::RpcClientMethods;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::swaps::router::SwapRouter;
-use crate::swaps::types::{Quote, QuoteRequest, SwapMode, SwapResult};
+use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
 use async_trait::async_trait;

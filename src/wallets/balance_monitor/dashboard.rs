@@ -1,7 +1,7 @@
 //! Dashboard data computation and API
 
 use chrono::{Duration as ChronoDuration, Utc};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};

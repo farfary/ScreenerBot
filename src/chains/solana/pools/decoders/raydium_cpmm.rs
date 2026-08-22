@@ -4,9 +4,11 @@
 //! Extracts reserve data and calculates token prices.
 
 use super::{AccountData, PoolDecoder};
+#[cfg(test)]
+use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
 use crate::chains::solana::constants::RAYDIUM_CPMM_PROGRAM_ID;
-use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
+use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::pools::decode_utils::read_pubkey_at_offset;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::logger::{self, LogTag};
@@ -14,9 +16,7 @@ use crate::pools::types::PriceResult;
 use crate::pools::utils::{read_bool_at_offset, read_u64_at_offset, read_u8_at_offset};
 use crate::tokens::get_cached_decimals;
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 /// Raydium CPMM decoder implementation
 pub struct RaydiumCpmmDecoder;

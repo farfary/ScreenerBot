@@ -20,7 +20,7 @@ pub use self::types::{
 };
 
 use crate::apis::client::RateLimiter;
-use crate::apis::llm::{ChatMessage, ChatRequest, ChatResponse, LlmClient, LlmError, Provider};
+use crate::apis::llm::{ChatRequest, ChatResponse, LlmClient, LlmError, Provider};
 use crate::apis::stats::ApiStatsTracker;
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
@@ -135,7 +135,7 @@ impl MistralClient {
         drop(guard);
         let elapsed = start.elapsed().as_millis() as f64;
 
-        let mut response = response_result.map_err(|e| {
+        let response = response_result.map_err(|e| {
             if e.is_timeout() {
                 LlmError::Timeout {
                     provider: "mistral".to_owned(),

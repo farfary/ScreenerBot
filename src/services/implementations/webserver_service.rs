@@ -1,7 +1,7 @@
 //! Webserver service — runs the HTTP dashboard and API server.
 
 use crate::logger::{self, LogTag};
-use crate::services::{log_service_notice, Service, ServiceHealth, ServiceMetrics};
+use crate::services::{log_service_notice, Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;

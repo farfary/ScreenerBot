@@ -133,7 +133,7 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
 
 pub(super) async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, String> {
     let window_hours = clamp_window_hours(window_hours);
-    let (window_start, is_all_time) = if window_hours == 0 {
+    let (window_start, _is_all_time) = if window_hours == 0 {
         (DateTime::<Utc>::from(std::time::UNIX_EPOCH), true)
     } else {
         (Utc::now() - ChronoDuration::hours(window_hours), false)

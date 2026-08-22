@@ -13,7 +13,6 @@ use crate::logger::{self, LogTag};
 use crate::pools::types::PriceResult;
 use crate::tokens::get_cached_decimals;
 use std::collections::HashMap;
-use std::time::Instant;
 
 pub struct OrcaWhirlpoolDecoder;
 

@@ -72,7 +72,7 @@ pub async fn handle_positions_command() -> String {
     let mut total_invested = 0.0;
     let mut total_pnl = 0.0;
 
-    for (i, pos) in positions.iter().take(10).enumerate() {
+    for (_i, pos) in positions.iter().take(10).enumerate() {
         let pnl_pct = pos.unrealized_pnl_percent.unwrap_or_default();
         let pnl_sol = pos.unrealized_pnl.unwrap_or_default();
         let pnl_emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };

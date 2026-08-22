@@ -1,16 +1,12 @@
 //! Position helpers — utility functions for index maintenance, snapshots, and database sync.
 
-use crate::chains::solana::rpc::get_rpc_client;
 use crate::{
-    config::with_config,
     logger::{self, LogTag},
     positions::{
         acquire_position_lock, delete_position_by_id, save_position, save_token_snapshot,
         update_position, Position, TokenSnapshot, MINT_TO_POSITION_INDEX, POSITIONS,
         SIG_TO_MINT_INDEX,
     },
-    tokens::get_decimals,
-    utils::lamports_to_sol,
 };
 use chrono::Utc;
 

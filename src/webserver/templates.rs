@@ -3,7 +3,7 @@
 //! This module provides functions to render HTML pages by combining templates with dynamic data.
 //! All embedded assets (HTML, CSS, JS) are imported from the `embeds` module.
 
-use crate::{arguments, version};
+use crate::version;
 
 // Import all embedded assets from the embeds module
 use super::embeds::*;

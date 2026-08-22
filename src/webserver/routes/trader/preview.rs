@@ -2,7 +2,7 @@
 
 use axum::{extract::Query, http::StatusCode, response::Response, Json};
 
-use crate::config::{update_config_section, with_config};
+use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::webserver::utils::{error_response, success_response};
@@ -266,7 +266,7 @@ pub async fn get_trailing_stop_preview(Query(query): Query<TrailingStopPreviewQu
 
 pub fn generate_what_if_scenarios(
     entry_price: f64,
-    current_price: f64,
+    _current_price: f64,
     peak_price: f64,
     base_activation: f64,
     base_distance: f64,

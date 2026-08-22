@@ -1,9 +1,7 @@
 //! Token rejection storage — records why tokens were filtered out with timestamps.
 
-use chrono::{DateTime, Utc};
 use rusqlite::params;
 
-use crate::filtering::RejectedToken;
 use crate::logger::{self, LogTag};
 use crate::tokens::types::{TokenError, TokenResult};
 

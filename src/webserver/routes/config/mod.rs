@@ -4,7 +4,6 @@
 //! All responses follow the standard ScreenerBot API format.
 
 use axum::{
-    response::Response,
     routing::{get, patch, post},
     Router,
 };

@@ -25,7 +25,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwapOption;
-use chrono::Utc;
 use tokio::sync::Notify;
 
 use super::types::{WalletSnapshot, WalletWorth};

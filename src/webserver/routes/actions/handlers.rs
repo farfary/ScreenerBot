@@ -11,7 +11,6 @@ use futures::stream::Stream;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio_stream::StreamExt as _;
 
 use super::types::*;
 use crate::webserver::state::AppState;

@@ -32,9 +32,7 @@ pub use dex::DexAnalysis;
 pub use patterns::PatternAnalysis;
 pub use pnl::PnLAnalysis;
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;

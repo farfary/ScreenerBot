@@ -30,8 +30,6 @@ pub use types::{
     ToolDefinition, Usage,
 };
 
-use crate::apis::client::RateLimiter;
-use crate::apis::stats::ApiStatsTracker;
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::Duration;

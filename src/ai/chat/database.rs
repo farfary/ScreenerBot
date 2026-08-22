@@ -285,7 +285,7 @@ mod tests {
 
         // Add another message with tool calls
         let tool_calls = r#"[{"name": "get_price", "args": {"symbol": "BTC"}}]"#;
-        let message_id2 = add_message(
+        let _message_id2 = add_message(
             &pool,
             session_id,
             "assistant",

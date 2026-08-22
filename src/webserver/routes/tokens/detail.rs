@@ -189,7 +189,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     let (
         price_sol,
         price_confidence,
-        price_updated_at,
+        _price_updated_at,
         pool_address,
         pool_dex,
         pool_reserves_sol,

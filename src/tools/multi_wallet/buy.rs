@@ -14,7 +14,7 @@ use crate::tools::swap_executor::tool_buy;
 use crate::wallets::{self, Wallet, WalletRole};
 
 use super::transfer::fund_wallets;
-use super::types::{MultiBuyConfig, SessionResult, SessionStatus, WalletOpResult, WalletPlan};
+use super::types::{MultiBuyConfig, SessionResult, WalletOpResult, WalletPlan};
 
 /// Execute a multi-buy operation across multiple wallets
 ///

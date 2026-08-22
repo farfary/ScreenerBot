@@ -1,6 +1,6 @@
 //! System route types — response structs for system endpoints.
 
-use crate::startup::StartupServiceStatus;
+use crate::services::startup::StartupServiceStatus;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]

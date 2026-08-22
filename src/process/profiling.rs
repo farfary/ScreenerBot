@@ -16,10 +16,7 @@
 //! - `--profile-duration <seconds>`: Set profiling duration (default: 60)
 
 use crate::{
-    arguments::{
-        get_profile_duration, is_profile_cpu_enabled, is_profile_tokio_console_enabled,
-        is_profile_tracing_enabled,
-    },
+    arguments::is_profile_tracing_enabled,
     logger::{self, LogTag},
 };
 
@@ -51,7 +48,7 @@ pub fn init_profiling() {
 
     // Tracing-based profiling
     if is_profile_tracing_enabled() {
-        use tracing_subscriber::{fmt, EnvFilter};
+        use tracing_subscriber::EnvFilter;
 
         tracing_subscriber::fmt()
             .with_env_filter(

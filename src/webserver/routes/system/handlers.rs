@@ -10,8 +10,8 @@ use crate::{
         self, are_core_services_ready, get_pending_services, CONNECTIVITY_SYSTEM_READY,
         POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
     },
-    services::get_service_manager,
-    startup, wallet,
+    services::{get_service_manager, startup},
+    wallet,
 };
 use axum::{extract::State, http::StatusCode, response::Response, Json};
 use chrono::Utc;

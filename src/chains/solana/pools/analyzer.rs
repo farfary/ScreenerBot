@@ -9,13 +9,13 @@ use super::types::ProgramKind;
 use crate::chains::solana::pools::service;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClient, RpcClientMethods};
 use crate::chains::{AccountId, AssetId, ChainId, PoolId};
-use crate::events::{record_safe, Event, EventCategory, Severity};
+use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
 use crate::pools::types::PoolDescriptor;
 use crate::pools::utils::is_sol_mint;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -175,7 +175,7 @@ impl PoolAnalyzer {
                                                 // is exiting. Logging it at warning buried the
                                                 // real shutdown sequence under a dozen identical
                                                 // lines every run.
-                                                if crate::is_shutdown_requested() {
+                                                if crate::process::shutdown::is_shutdown_requested() {
                                                     logger::debug(LogTag::PoolAnalyzer, &format!("Dropping fetch request for pool {pool_id} during shutdown: {e}"));
                                                 } else {
                                                     logger::warning(LogTag::PoolAnalyzer, &format!("Failed to request fetch for analyzed pool {pool_id}: {e}"));

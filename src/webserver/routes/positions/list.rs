@@ -3,10 +3,7 @@
 use axum::{extract::Query, Json};
 
 use super::types::*;
-use crate::logger::{self, LogTag};
-use crate::pools;
 use crate::positions;
-use crate::sol_price;
 use crate::tokens;
 
 pub async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<PositionResponse>> {

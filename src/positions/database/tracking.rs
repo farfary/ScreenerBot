@@ -196,7 +196,7 @@ impl PositionsDatabase {
         let history_iter = stmt
             .query_map(params![position_id], |row| {
                 let state_str: String = row.get(1)?;
-                let state = state_str.parse::<PositionState>().map_err(|e| {
+                let state = state_str.parse::<PositionState>().map_err(|_e| {
                     rusqlite::Error::InvalidColumnType(
                         1,
                         "Invalid state".to_owned(),
@@ -206,7 +206,7 @@ impl PositionsDatabase {
 
                 let changed_at_str: String = row.get(2)?;
                 let changed_at = DateTime::parse_from_rfc3339(&changed_at_str)
-                    .map_err(|e| {
+                    .map_err(|_e| {
                         rusqlite::Error::InvalidColumnType(
                             2,
                             "Invalid datetime".to_owned(),
@@ -286,7 +286,7 @@ impl PositionsDatabase {
             .query_map(params![position_id, limit], |row| {
                 let tracked_at_str: String = row.get(6)?;
                 let tracked_at = DateTime::parse_from_rfc3339(&tracked_at_str)
-                    .map_err(|e| {
+                    .map_err(|_e| {
                         rusqlite::Error::InvalidColumnType(
                             6,
                             "Invalid datetime".to_owned(),
@@ -436,7 +436,7 @@ impl PositionsDatabase {
 
         let conn = self.get_connection()?;
 
-        let result = conn
+        let _result = conn
       .execute(
         r#"
       INSERT INTO token_snapshots (

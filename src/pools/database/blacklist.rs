@@ -2,7 +2,6 @@
 
 use super::operations::PoolsDatabase;
 use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord};
-use crate::chains::ChainId;
 
 use rusqlite::params;
 use std::time::{SystemTime, UNIX_EPOCH};

@@ -2,18 +2,15 @@
 
 use super::{
     queue::VerificationItem,
-    state::{get_mint_by_signature, get_position_by_id},
+    state::get_position_by_id,
     transitions::PositionTransition,
     types::{VerificationKind, VerificationOutcome},
 };
 use crate::{
-    chains::solana::assets::ata::{get_token_balance, get_total_token_balance},
+    chains::solana::assets::ata::get_total_token_balance,
     logger::{self, LogTag},
     tokens::get_decimals,
-    transactions::{
-        get_global_transaction_manager, get_transaction, reprocess_transaction, Transaction,
-        TransactionStatus,
-    },
+    transactions::{get_transaction, reprocess_transaction, TransactionStatus},
     utils::{get_wallet_address, sol_to_lamports},
 };
 use chrono::Utc;
@@ -239,7 +236,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     }
                 }
 
-                if let Some((status, success, payload)) = decided {
+                if let Some((status, success, _payload)) = decided {
                     if success && status == "confirmed" {
                         // Confirmed by events but transaction object not yet available → retry shortly
                         return VerificationOutcome::RetryTransient(

@@ -3,11 +3,8 @@
 
 use std::str::FromStr;
 
-use crate::chains::solana::constants::TOKEN_2022_PROGRAM_ID;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
-use crate::chains::solana::solana_sdk::{
-    pubkey::Pubkey, signer::Signer as _, transaction::Transaction,
-};
+use crate::chains::solana::solana_sdk::{pubkey::Pubkey, transaction::Transaction};
 use crate::chains::solana::spl_token::instruction as spl_instruction;
 
 /// Burn `amount` of `mint` from the configured wallet's associated token

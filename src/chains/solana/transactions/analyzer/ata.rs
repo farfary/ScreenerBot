@@ -11,13 +11,11 @@
 // - Rent recovery on account closure
 // - Multi-ATA operations in complex transactions
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 
 use crate::logger::{self, LogTag};
-use crate::transactions::{types::*, utils::*};
+use crate::transactions::types::*;
 use crate::utils::lamports_to_sol;
 
 // =============================================================================
@@ -191,7 +189,7 @@ async fn extract_ata_operations(
 
 /// Extract ATA operations from balance changes (rent detection)
 async fn extract_from_balance_changes(
-    transaction: &Transaction,
+    _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
 ) -> Result<Vec<AtaOperation>, String> {
     let mut operations = Vec::new();
@@ -357,8 +355,8 @@ async fn analyze_instruction_for_ata(
 
 /// Parse Token program instruction for ATA-related operations
 async fn parse_token_instruction(
-    instruction: &Value,
-    account_keys: &[String],
+    _instruction: &Value,
+    _account_keys: &[String],
 ) -> Result<Option<AtaOperation>, String> {
     // This would implement detailed Token program instruction parsing
     // For now, return a placeholder
@@ -458,7 +456,7 @@ fn identify_rent_pattern(lamports: u64) -> Option<&'static str> {
 /// Track account creation and closure lifecycle
 async fn track_account_lifecycle(
     operations: &[AtaOperation],
-    tx_data: &crate::chains::solana::rpc::TransactionDetails,
+    _tx_data: &crate::chains::solana::rpc::TransactionDetails,
 ) -> Result<AccountLifecycle, String> {
     let mut created_accounts = Vec::new();
     let mut closed_accounts = Vec::new();

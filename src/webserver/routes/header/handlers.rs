@@ -5,7 +5,7 @@ use crate::connectivity::state::are_critical_endpoints_healthy;
 use crate::filtering::{global_store, SnapshotState};
 use crate::global::are_core_services_ready;
 use crate::rpc::get_global_rpc_stats;
-use crate::services::{get_service_manager, ServiceHealth};
+use crate::services::get_service_manager;
 use crate::wallet::{get_balance_at_time, get_wallet_worth};
 
 use super::types::*;

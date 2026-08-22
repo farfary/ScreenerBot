@@ -1,16 +1,10 @@
 //! Token assembly — reconstructs full Token structs from database rows.
 
 use chrono::{DateTime, Utc};
-use rusqlite::{params, params_from_iter, types::FromSql, Row};
-use std::collections::HashMap;
+use rusqlite::{params, Row};
 
-use crate::logger::{self, LogTag};
-use crate::tokens::pools;
-use crate::tokens::store;
 use crate::tokens::types::{
-    DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, SecurityRisk,
-    SocialLink, Token, TokenError, TokenHolder, TokenMetadata, TokenPoolInfo, TokenPoolSources,
-    TokenPoolsSnapshot, TokenResult, WebsiteLink,
+    DataSource, Priority, SecurityRisk, Token, TokenError, TokenHolder, TokenResult,
 };
 
 use super::helpers::{assemble_token, MarketDataType};
@@ -570,7 +564,7 @@ impl TokenDatabase {
             // Parse all timestamps
             let first_discovered_dt =
                 DateTime::from_timestamp(first_discovered_at, 0).unwrap_or_else(|| Utc::now());
-            let blockchain_created_dt =
+            let _blockchain_created_dt =
                 blockchain_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
             let metadata_last_fetched_dt =
                 DateTime::from_timestamp(metadata_last_fetched_at, 0).unwrap_or_else(|| Utc::now());

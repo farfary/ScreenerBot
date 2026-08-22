@@ -11,7 +11,7 @@ use super::blockchain::{BlockchainError, FailureType, SolanaTransactionError};
 /// Parse structured Solana transaction error from meta.err JSON
 pub fn parse_structured_solana_error(
     error_value: &Value,
-    signature: Option<&str>,
+    _signature: Option<&str>,
 ) -> SolanaTransactionError {
     match error_value {
         // InstructionError format: {"InstructionError": [index, error_detail]}
@@ -437,17 +437,17 @@ pub fn parse_solana_error(
 }
 
 /// Helper functions for error parsing
-fn extract_blockhash(error_msg: &str) -> Option<String> {
+fn extract_blockhash(_error_msg: &str) -> Option<String> {
     // Try to extract blockhash from error message
     None // Implement based on actual error formats
 }
 
-fn extract_pubkey(error_msg: &str) -> Option<String> {
+fn extract_pubkey(_error_msg: &str) -> Option<String> {
     // Try to extract pubkey from error message
     None // Implement based on actual error formats
 }
 
-fn extract_error_code(error_msg: &str) -> Option<u32> {
+fn extract_error_code(_error_msg: &str) -> Option<u32> {
     // Try to extract numeric error code from message
     None // Implement based on actual error formats
 }

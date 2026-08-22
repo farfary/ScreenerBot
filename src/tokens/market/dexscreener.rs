@@ -12,7 +12,7 @@ use crate::apis::dexscreener::DexScreenerPool;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
-use crate::tokens::types::{DexScreenerData, TokenError, TokenResult};
+use crate::tokens::types::{DexScreenerData, TokenResult};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 

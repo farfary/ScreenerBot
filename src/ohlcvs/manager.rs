@@ -6,7 +6,7 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use crate::tokens::pools;
-use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
+use crate::tokens::types::TokenPoolInfo;
 use crate::tokens::{fetch_token_pools_immediate, get_token_pools_snapshot_allow_stale};
 use serde_json::json;
 use std::cmp::Ordering;

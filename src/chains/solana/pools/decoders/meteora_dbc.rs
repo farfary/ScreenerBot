@@ -35,8 +35,8 @@ impl PoolDecoder for MeteoraDbcDecoder {
 
     fn decode_and_calculate(
         accounts: &HashMap<String, AccountData>,
-        base_mint: &str,
-        quote_mint: &str,
+        _base_mint: &str,
+        _quote_mint: &str,
     ) -> Option<PriceResult> {
         // Find the DBC pool account by owner
         let pool_acc = accounts
@@ -58,7 +58,7 @@ impl PoolDecoder for MeteoraDbcDecoder {
         // We need to identify which vault holds SOL (wrapped) vs the token.
 
         // Find two candidate token accounts (exclude the pool account itself)
-        let mut token_accounts: Vec<&AccountData> = accounts
+        let token_accounts: Vec<&AccountData> = accounts
             .values()
             .filter(|a| a.pubkey != pool_acc.pubkey && a.data.len() >= 72) // SPL token acc length >= 72
             .collect();
@@ -72,8 +72,8 @@ impl PoolDecoder for MeteoraDbcDecoder {
         let mint_b = read_pubkey_at(&token_accounts[1].data, 0).unwrap_or_default();
 
         // Store for later use before moving
-        let mint_a_clone = mint_a.clone();
-        let mint_b_clone = mint_b.clone();
+        let _mint_a_clone = mint_a.clone();
+        let _mint_b_clone = mint_b.clone();
 
         // Identify SOL vault and token vault by mint
         let (sol_vault, token_vault, token_mint) = if mint_a == SOL_MINT {

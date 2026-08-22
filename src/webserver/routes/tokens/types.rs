@@ -607,7 +607,7 @@ pub(super) fn resolve_page_and_size(
 
 pub(super) fn build_token_list_response(
     result: FilteringQueryResult,
-    view: FilteringView,
+    _view: FilteringView,
 ) -> TokenListResponse {
     let start_index = result
         .page

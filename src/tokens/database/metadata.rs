@@ -4,7 +4,6 @@ use chrono::Utc;
 use rusqlite::{params, params_from_iter};
 use std::collections::HashMap;
 
-use crate::logger::{self, LogTag};
 use crate::tokens::types::{TokenError, TokenMetadata, TokenResult};
 
 use super::TokenDatabase;

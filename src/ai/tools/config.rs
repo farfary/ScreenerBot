@@ -1,11 +1,11 @@
 //! AI config tools — read and update bot configuration via AI assistant.
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
-use crate::config::{get_config_clone, with_config};
+use crate::config::get_config_clone;
 
 // ============================================================================
 // GetConfigTool - Read configuration

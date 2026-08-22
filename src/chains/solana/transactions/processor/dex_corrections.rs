@@ -77,7 +77,7 @@ impl TransactionProcessor {
     /// Apply Raydium-specific corrections
     fn apply_raydium_corrections(
         &self,
-        calculated_amount: u64,
+        _calculated_amount: u64,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
         _balance_analysis: &crate::chains::solana::transactions::analyzer::balance::BalanceAnalysis,
     ) -> Option<u64> {
@@ -116,9 +116,9 @@ impl TransactionProcessor {
     /// Apply Pumpfun-specific corrections (placeholder: keep micro-adjustments strictly <0.5%)
     fn apply_pumpfun_corrections(
         &self,
-        calculated_amount: u64,
+        _calculated_amount: u64,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
-        balance_analysis: &crate::chains::solana::transactions::analyzer::balance::BalanceAnalysis,
+        _balance_analysis: &crate::chains::solana::transactions::analyzer::balance::BalanceAnalysis,
         direction: &crate::chains::solana::transactions::analyzer::classify::SwapDirection,
     ) -> Option<u64> {
         // Detect PumpFun by presence of legacy or AMM program IDs among outer instructions
@@ -180,8 +180,8 @@ impl TransactionProcessor {
     /// Check if adjustment pattern is likely for Pumpfun
     fn is_likely_pumpfun_pattern(
         &self,
-        calculated_amount: u64,
-        adjusted_amount: u64,
+        _calculated_amount: u64,
+        _adjusted_amount: u64,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
         balance_analysis: &crate::chains::solana::transactions::analyzer::balance::BalanceAnalysis,
     ) -> bool {
@@ -214,7 +214,7 @@ impl TransactionProcessor {
             balance_analysis
                 .sol_changes
                 .iter()
-                .any(|(account, change)| {
+                .any(|(_account, change)| {
                     // Look for accounts that aren't the main wallet but have SOL changes
                     change.change.abs() > 0.0 && !change.change.is_nan()
                 });

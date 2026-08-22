@@ -22,11 +22,6 @@ pub use database::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus
 pub use priorities::ActivityType;
 pub use service::OhlcvService;
 
-use cache::OhlcvCache;
-use database::OhlcvDatabase;
-use fetcher::OhlcvFetcher;
-use manager::PoolManager;
-use monitor::OhlcvMonitor;
 use std::collections::HashSet;
 
 // Public API for accessing OHLCV data

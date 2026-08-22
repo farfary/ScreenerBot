@@ -306,8 +306,8 @@ impl PoolAnalyzer {
     /// Extract Pump.fun AMM accounts
     pub(crate) async fn extract_pump_fun_accounts(
         pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
+        _base_mint: &Pubkey,
+        _quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
         logger::debug(
@@ -353,11 +353,11 @@ impl PoolAnalyzer {
     /// Extract Moonit AMM accounts
     pub(crate) async fn extract_moonit_accounts(
         pool_id: &Pubkey,
-        base_mint: &Pubkey,
-        quote_mint: &Pubkey,
-        rpc_client: &RpcClient,
+        _base_mint: &Pubkey,
+        _quote_mint: &Pubkey,
+        _rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        let mut accounts = vec![*pool_id];
+        let accounts = vec![*pool_id];
 
         logger::debug(
             LogTag::PoolAnalyzer,

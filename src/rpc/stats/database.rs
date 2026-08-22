@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use super::types::*;
 use crate::database;
 use crate::database::WriteTransaction;
-use crate::errors::{DatabaseError, Error};
 use crate::rpc::types::{CircuitState, ProviderKind};
 
 /// Database path for RPC stats

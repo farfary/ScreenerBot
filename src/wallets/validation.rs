@@ -3,7 +3,6 @@
 use crate::paths;
 use crate::utils::get_wallet_address;
 use rusqlite::{Connection, OptionalExtension};
-use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub enum WalletValidationResult {

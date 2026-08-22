@@ -17,7 +17,5 @@ pub use multi_buy::{abort_multi_buy, get_multi_buy_status, preview_multi_buy, st
 pub use multi_sell::{
     abort_multi_sell, get_multi_sell_status, preview_multi_sell, start_multi_sell,
 };
-pub use session::{
-    cleanup_old_sessions, get_multi_wallet_sessions, has_active_multi_wallet_session,
-};
+pub use session::get_multi_wallet_sessions;
 pub use wallet_ops::{cleanup_subwallet_atas, consolidate_wallets, get_wallets_summary};

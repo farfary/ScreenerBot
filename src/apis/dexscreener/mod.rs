@@ -164,7 +164,7 @@ impl DexScreenerClient {
     where
         T: DeserializeOwned,
     {
-        let (mut response, elapsed) = self.execute_request(endpoint, builder, limiter).await?;
+        let (response, elapsed) = self.execute_request(endpoint, builder, limiter).await?;
         let status = response.status();
 
         if !status.is_success() {

@@ -189,7 +189,7 @@ impl GeckoTerminalClient {
     where
         T: DeserializeOwned,
     {
-        let (mut response, elapsed) = self.execute_request(endpoint, builder).await?;
+        let (response, elapsed) = self.execute_request(endpoint, builder).await?;
         let status = response.status();
 
         if !status.is_success() {

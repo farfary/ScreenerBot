@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn verify_migrated_row_count_propagates_the_count_querys_own_failure() {
-        let mut conn = Connection::open_in_memory().expect("open test database");
+        let conn = Connection::open_in_memory().expect("open test database");
         conn.execute_batch("CREATE TABLE new_table (id INTEGER PRIMARY KEY);")
             .expect("create replacement table");
         let tx = conn.unchecked_transaction().expect("start transaction");
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn verify_migrated_row_count_rejects_a_genuine_mismatch() {
-        let mut conn = Connection::open_in_memory().expect("open test database");
+        let conn = Connection::open_in_memory().expect("open test database");
         conn.execute_batch(
             "CREATE TABLE old_table (id INTEGER PRIMARY KEY);
              CREATE TABLE new_table (id INTEGER PRIMARY KEY);

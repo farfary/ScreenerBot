@@ -3,8 +3,7 @@
 //! Uses LLM for intelligent entry/exit decisions.
 //! All features disabled by default.
 
-use crate::ai::schemas::{ExitSuggestion, TradeAction, TradeDecision};
-use crate::ai::{AiEngine, EvaluationContext, Priority};
+use crate::ai::{EvaluationContext, Priority};
 use crate::config::with_config;
 use crate::positions::types::Position;
 use crate::tokens::types::Token;

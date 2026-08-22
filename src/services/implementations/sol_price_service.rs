@@ -1,6 +1,6 @@
 //! SOL price service — tracks real-time SOL/USD price for portfolio valuation.
 
-use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;

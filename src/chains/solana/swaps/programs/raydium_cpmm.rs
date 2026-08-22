@@ -25,8 +25,6 @@ use crate::chains::solana::solana_sdk::{
     system_instruction,
     transaction::Transaction,
 };
-use crate::chains::solana::spl_associated_token_account;
-use crate::chains::solana::spl_token;
 use std::collections::HashMap;
 use std::str::FromStr;
 

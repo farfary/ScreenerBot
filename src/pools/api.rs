@@ -5,9 +5,8 @@
 //! implementation details are hidden.
 
 use super::cache;
-use super::db;
 use super::service;
-use super::types::{CacheStats, PoolError, PriceResult};
+use super::types::{CacheStats, PriceResult};
 
 /// Get current price for a token
 ///

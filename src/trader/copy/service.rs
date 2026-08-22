@@ -15,7 +15,7 @@ use super::{
     arrival_distance_ms, execute_copy_sell_with, execute_live_with, latency_should_pause,
     matching_tasks, paper_sell_outcome, prepare_copy_sell, prepare_live_entry, run_paper_pipeline,
     CopyDatabase, CopyMode, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTelemetry,
-    LiveSubmitResult, PaperCosts, PipelinePolicy, RiskContext, SpendState,
+    LiveSubmitResult, PaperCosts, PipelinePolicy, RiskContext,
 };
 
 pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {

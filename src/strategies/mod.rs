@@ -7,13 +7,12 @@ pub mod types;
 
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::TimeframeBundle;
-use crate::strategies::db::{get_enabled_strategies, get_strategy, record_evaluation};
+use crate::strategies::db::{get_enabled_strategies, record_evaluation};
 use crate::strategies::engine::{EngineConfig, StrategyEngine};
 use crate::strategies::types::{
-    EvaluationContext, EvaluationResult, MarketData, PositionData, Strategy, StrategyType,
+    EvaluationContext, MarketData, PositionData, Strategy, StrategyType,
 };
 use chrono::Utc;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use tokio::sync::RwLock;
