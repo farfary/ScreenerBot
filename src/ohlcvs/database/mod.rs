@@ -2,6 +2,7 @@
 
 mod candles;
 mod config;
+mod data_version;
 mod gaps;
 mod maintenance;
 pub mod types;
@@ -11,40 +12,10 @@ pub use types::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
 use crate::{chains::ChainId, database};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
+use rusqlite::{params, Connection, Result as SqliteResult};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-/// Version of the OHLCV candle data logic. Bump this whenever a change to how
-/// candles are fetched/stored (locally or by the data server) means the existing
-/// cached candles are no longer trustworthy and should be re-fetched. On startup
-/// a stored version that differs from this constant triggers a one-time wipe of
-/// the local candle/gap data so every monitored token re-backfills with the
-/// current logic — self-healing across app restarts for every user, no manual
-/// cache clearing required.
-///
-/// Pool rows and the monitoring list (which tokens to watch) are preserved; only
-/// the candle data and gap tracking are cleared and backfill progress is reset.
-///
-/// Changelog:
-///   1 — 2026-07: data-server `fetch_limit` now bridges interior gaps in one
-///       fetch (was a fixed refresh window that left permanent holes on cold
-///       tokens); wipe stale local caches so they re-pull the healed series.
-///   2 — 2026-07: backfill now requests full depth (`max_backfill_candles` = 1000
-///       per timeframe, was per-tf ~30-day caps) and the data server deep-pages
-///       history backward. Existing caches capped at ~30 days had their backfill
-///       flags marked complete, so they would never re-deepen — wipe them so
-///       every token re-pulls the now-deep coarse-frame series.
-///   3 — 2026-07: candle timestamps are now snapped to the canonical UTC bucket
-///       at ingest. Providers disagreed on the 12h anchor (GeckoTerminal phases
-///       12h at +10h, ts % 43200 == 36000; others use the midnight grid), so the
-///       stored 12h series interleaved two grids ~2h apart and rendered corrupt.
-///       Wipe so every token re-pulls onto the single normalized grid.
-///   4 — 2026-07: empty no-trade candles (volume == 0) are no longer recorded,
-///       and reads/status are scoped to the single resolved pool (no cross-pool
-///       combining). Wipe so existing zero-volume rows and any stale other-pool
-///       candles are cleared and re-pulled clean.
-const OHLCV_DATA_VERSION: i64 = 4;
 const CHAIN_SCOPE_MIGRATION: &str = "20260821_chain_scope";
 
 pub struct OhlcvDatabase {
@@ -185,7 +156,7 @@ impl OhlcvDatabase {
 
         migrate_chain_scope(&conn)?;
         create_chain_indexes(&conn)?;
-        ensure_data_version(&conn)?;
+        data_version::ensure_data_version(&conn, self.chain_id())?;
 
         Ok(())
     }
@@ -447,7 +418,7 @@ fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
         .map_err(|e| OhlcvError::DatabaseError(format!("Failed to commit OHLCV migration: {e}")))
 }
 
-fn table_has_column(conn: &Connection, table: &str, column: &str) -> OhlcvResult<bool> {
+pub(super) fn table_has_column(conn: &Connection, table: &str, column: &str) -> OhlcvResult<bool> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table})"))
         .map_err(|e| OhlcvError::DatabaseError(format!("Failed to inspect {table}: {e}")))?;
@@ -474,57 +445,11 @@ fn create_chain_indexes(conn: &Connection) -> OhlcvResult<()> {
     .map_err(|e| OhlcvError::DatabaseError(format!("Failed to create OHLCV indexes: {e}")))
 }
 
-fn ensure_data_version(conn: &Connection) -> OhlcvResult<()> {
-    let version_table_exists: bool = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ohlcv_data_versions')",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to inspect OHLCV data version table: {e}")))?
-        != 0;
-    conn.execute_batch("CREATE TABLE IF NOT EXISTS ohlcv_data_versions (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)")
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to initialize OHLCV data version: {e}")))?;
-    let stored = conn
-        .query_row(
-            "SELECT version FROM ohlcv_data_versions WHERE id = 1",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()
-        .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to read OHLCV data version: {e}"))
-        })?;
-    if stored.is_none() && !version_table_exists {
-        let legacy_version: i64 = conn
-            .query_row("PRAGMA user_version", [], |row| row.get(0))
-            .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to read legacy OHLCV data version: {e}"))
-            })?;
-        if legacy_version == OHLCV_DATA_VERSION {
-            conn.execute(
-                "INSERT INTO ohlcv_data_versions (id, version) VALUES (1, ?1)",
-                params![legacy_version],
-            )
-            .map_err(|e| {
-                OhlcvError::DatabaseError(format!("Failed to seed OHLCV data version: {e}"))
-            })?;
-            return Ok(());
-        }
-    }
-    if stored != Some(OHLCV_DATA_VERSION) {
-        wipe_candle_data(conn, ChainId::Solana.as_str())
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to wipe candle data: {e}")))?;
-        conn.execute("INSERT INTO ohlcv_data_versions (id, version) VALUES (1, ?1) ON CONFLICT(id) DO UPDATE SET version = excluded.version", params![OHLCV_DATA_VERSION]).map_err(|e| OhlcvError::DatabaseError(format!("Failed to update OHLCV data version: {e}")))?;
-    }
-    Ok(())
-}
-
 /// Delete all candles + gaps and reset every monitor row's backfill progress so
 /// the token re-backfills from scratch on the next scheduler pass. Operates on an
 /// already-locked connection so it can be shared by both the constructor's
 /// version wipe and the public `clear_all_ohlcv_data` (which locks first).
-fn wipe_candle_data(conn: &Connection, chain_id: &str) -> SqliteResult<ClearAllResult> {
+pub(super) fn wipe_candle_data(conn: &Connection, chain_id: &str) -> SqliteResult<ClearAllResult> {
     let candles_deleted = conn.execute(
         "DELETE FROM ohlcv_candles WHERE chain_id = ?1",
         params![chain_id],

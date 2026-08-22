@@ -7,23 +7,15 @@
 //! - {action}: fetched / calculated / updated / created / discovered
 //! - _at: Suffix for all timestamps (consistent)
 
+use super::migrations;
 use crate::database;
-use rusqlite::{Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension};
 
-const SCHEMA_VERSION: i64 = 2;
-const TOKEN_TABLES: &[&str] = &[
-    "tokens",
-    "market_dexscreener",
-    "market_geckoterminal",
-    "token_pools",
-    "security_rugcheck",
-    "blacklist",
-    "update_tracking",
-    "token_favorites",
-    "rejection_history",
-    "rejection_stats",
-    "authority_reputation",
-];
+/// Current tokens.db schema version recorded in `PRAGMA user_version`.
+/// Additive column repair inspects on-disk columns and does not trust this
+/// number alone: a database already stamped current still receives a required
+/// column that is missing from the live table.
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// All CREATE TABLE statements
 pub const CREATE_TABLES: &[&str] = &[
@@ -351,18 +343,19 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_authority_rep_confidence ON authority_reputation(confidence DESC)",
 ];
 
-/// Initialize database schema
+/// Initialize database schema.
+///
+/// Fresh table/index creation is separate from upgrades. The chain-identity
+/// rebuild and additive column steps each inspect on-disk shape before touching
+/// anything: `user_version` is recorded after success, never used as the only
+/// signal that a required structural change is already present.
 pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     // Apply centralized PRAGMA configuration
     database::configure_connection(conn, database::TOKENS_DB)
         .map_err(|e| format!("Failed to configure connection: {e}"))?;
 
-    let version = conn
-        .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
-        .map_err(|error| format!("Failed to read tokens schema version: {error}"))?;
-
-    if version < SCHEMA_VERSION && table_needs_chain_rebuild(conn)? {
-        migrate_legacy_schema(conn)?;
+    if migrations::table_needs_chain_rebuild(conn)? {
+        migrations::migrate_legacy_schema(conn)?;
     }
 
     for statement in CREATE_TABLES {
@@ -370,177 +363,24 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
             .map_err(|e| format!("Failed to create table: {e}"))?;
     }
 
+    migrations::apply_additive_migrations(conn)?;
+
     for statement in CREATE_INDEXES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create index: {e}"))?;
     }
 
-    conn.pragma_update(None, "user_version", SCHEMA_VERSION)
-        .map_err(|error| format!("Failed to record tokens schema version: {error}"))
-}
-
-fn table_needs_chain_rebuild(conn: &Connection) -> Result<bool, String> {
-    let exists = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tokens'",
-            [],
-            |_| Ok(()),
-        )
-        .optional()
-        .map_err(|error| format!("Failed to inspect tokens schema: {error}"))?
-        .is_some();
-    if !exists {
-        return Ok(false);
-    }
-    let mut statement = conn
-        .prepare("PRAGMA table_info(tokens)")
-        .map_err(|error| format!("Failed to inspect token columns: {error}"))?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| format!("Failed to read token columns: {error}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to decode token columns: {error}"))?;
-    Ok(!columns.iter().any(|column| column == "chain_id"))
-}
-
-fn migrate_legacy_schema(conn: &Connection) -> Result<(), String> {
-    let transaction = conn
-        .unchecked_transaction()
-        .map_err(|error| format!("Failed to begin tokens chain migration: {error}"))?;
-    transaction
-        .execute_batch("PRAGMA defer_foreign_keys = ON")
-        .map_err(|error| format!("Failed to defer tokens foreign keys for migration: {error}"))?;
-
-    let legacy_indexes = TOKEN_TABLES
-        .iter()
-        .map(|table| -> Result<Vec<String>, String> {
-            let mut statement = transaction
-                .prepare(
-                    "SELECT name FROM sqlite_master \
-                     WHERE type = 'index' AND tbl_name = ?1 AND sql IS NOT NULL",
-                )
-                .map_err(|error| {
-                    format!("Failed to inspect legacy tokens indexes for {table}: {error}")
-                })?;
-            let indexes = statement
-                .query_map([table], |row| row.get::<_, String>(0))
-                .map_err(|error| {
-                    format!("Failed to read legacy tokens indexes for {table}: {error}")
-                })?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| {
-                    format!("Failed to decode legacy tokens indexes for {table}: {error}")
-                })?;
-            Ok(indexes)
-        })
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-
-    for index in legacy_indexes {
-        // SQLite does not bind identifiers. Metadata supplies the name, and quoting it prevents a
-        // malformed legacy index name from changing the migration statement.
-        let quoted_index = format!("\"{}\"", index.replace('"', "\"\""));
-        transaction
-            .execute(&format!("DROP INDEX {quoted_index}"), [])
-            .map_err(|error| format!("Failed to drop legacy tokens index {index}: {error}"))?;
-    }
-    for table in TOKEN_TABLES {
-        transaction
-            .execute(
-                &format!("ALTER TABLE {table} RENAME TO {table}_legacy_chain"),
-                [],
-            )
-            .map_err(|error| format!("Failed to stage legacy tokens table {table}: {error}"))?;
-    }
-    for statement in CREATE_TABLES {
-        transaction
-            .execute(statement, [])
-            .map_err(|error| format!("Failed to create chain-scoped tokens table: {error}"))?;
-    }
-    for table in TOKEN_TABLES {
-        copy_legacy_rows(&transaction, table)?;
-    }
-    for table in TOKEN_TABLES {
-        let legacy = format!("{table}_legacy_chain");
-        let old_count: i64 = transaction
-            .query_row(&format!("SELECT COUNT(*) FROM {legacy}"), [], |row| {
-                row.get(0)
-            })
-            .map_err(|error| format!("Failed to count legacy {table} rows: {error}"))?;
-        let new_count: i64 = transaction
-            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                row.get(0)
-            })
-            .map_err(|error| format!("Failed to count migrated {table} rows: {error}"))?;
-        if old_count != new_count {
-            return Err(format!(
-                "Tokens chain migration changed {table} row count: {old_count} -> {new_count}"
-            ));
-        }
-        transaction
-            .execute(&format!("DROP TABLE {legacy}"), [])
-            .map_err(|error| format!("Failed to remove staged legacy table {legacy}: {error}"))?;
-    }
-    transaction
-        .commit()
-        .map_err(|error| format!("Failed to commit tokens chain migration: {error}"))?;
     if conn
         .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
         .optional()
         .map_err(|error| format!("Failed to validate tokens foreign keys: {error}"))?
         .is_some()
     {
-        return Err("Tokens chain migration failed foreign-key validation".to_owned());
+        return Err("Tokens schema initialization failed foreign-key validation".to_owned());
     }
-    Ok(())
-}
 
-fn copy_legacy_rows(transaction: &Transaction<'_>, table: &str) -> Result<(), String> {
-    let legacy = format!("{table}_legacy_chain");
-    let columns = |name: &str| -> Result<Vec<String>, String> {
-        let mut statement = transaction
-            .prepare(&format!("PRAGMA table_info({name})"))
-            .map_err(|error| format!("Failed to inspect {name}: {error}"))?;
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|error| format!("Failed to read {name} columns: {error}"))?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("Failed to decode {name} columns: {error}"))
-    };
-    let old = columns(&legacy)?;
-    let new = columns(table)?;
-    let mut shared = new
-        .into_iter()
-        .filter(|column| column != "chain_id" && old.contains(column))
-        .collect::<Vec<_>>();
-    if table == "market_dexscreener" {
-        shared.retain(|column| column != "provider_chain_id");
-    }
-    let mut target = vec!["chain_id".to_owned()];
-    let mut source = vec!["'solana'".to_owned()];
-    if table == "market_dexscreener" {
-        target.push("provider_chain_id".to_owned());
-        source.push(if old.contains(&"chain_id".to_owned()) {
-            "chain_id".to_owned()
-        } else {
-            "NULL".to_owned()
-        });
-    }
-    target.extend(shared.iter().cloned());
-    source.extend(shared);
-    transaction
-        .execute(
-            &format!(
-                "INSERT INTO {table} ({}) SELECT {} FROM {legacy}",
-                target.join(", "),
-                source.join(", ")
-            ),
-            [],
-        )
-        .map_err(|error| format!("Failed to copy legacy {table} rows: {error}"))?;
-    Ok(())
+    conn.pragma_update(None, "user_version", SCHEMA_VERSION)
+        .map_err(|error| format!("Failed to record tokens schema version: {error}"))
 }
 
 /// Check if database is initialized
