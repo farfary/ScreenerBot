@@ -63,6 +63,10 @@
   </tr>
 </table>
 
+<p align="center">
+  <a href="https://screenerbot.io/screenshots">View all screenshots</a>
+</p>
+
 ---
 
 <p align="center">
