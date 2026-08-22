@@ -310,25 +310,26 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
     // 5. Two subjects can now both hold the same signature -- the exact collision the
     // migration exists to fix. Exercised through the public API, not raw SQL, since
     // that is what a real caller (the watch service) will do.
-    let target =
-        Subject::from(screenerbot::chains::solana::solana_sdk::pubkey::Pubkey::new_unique());
+    let target = screenerbot::chains::solana::transactions::subject::from_pubkey(
+        screenerbot::chains::solana::solana_sdk::pubkey::Pubkey::new_unique(),
+    );
     let own_subject = Subject::own().expect("own subject after wallet configured");
 
-    db.add_known_signature(own_subject, "SIG_SHARED")
+    db.add_known_signature(own_subject.clone(), "SIG_SHARED")
         .await
         .expect("own subject records the shared signature");
-    db.add_known_signature(target, "SIG_SHARED")
+    db.add_known_signature(target.clone(), "SIG_SHARED")
         .await
         .expect("target subject records the SAME shared signature");
 
     assert!(
-        db.is_signature_known(own_subject, "SIG_SHARED")
+        db.is_signature_known(own_subject.clone(), "SIG_SHARED")
             .await
             .expect("check own subject"),
         "own subject's row must survive the second subject's insert"
     );
     assert!(
-        db.is_signature_known(target, "SIG_SHARED")
+        db.is_signature_known(target.clone(), "SIG_SHARED")
             .await
             .expect("check target subject"),
         "target subject's row must exist independently of the own subject's"
@@ -342,10 +343,10 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
     own_view.sol_balance_change = -1.0;
     let mut target_view = own_view.clone();
     target_view.sol_balance_change = 2.0;
-    db.upsert_full_transaction(own_subject, &own_view)
+    db.upsert_full_transaction(own_subject.clone(), &own_view)
         .await
         .expect("store own perspective");
-    db.upsert_full_transaction(target, &target_view)
+    db.upsert_full_transaction(target.clone(), &target_view)
         .await
         .expect("store target perspective");
 
@@ -354,13 +355,13 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
         ..Default::default()
     };
     let target_rows = db
-        .list_transactions_for_subject(target, &filters, None, 10)
+        .list_transactions_for_subject(target.clone(), &filters, None, 10)
         .await
         .expect("list target subject");
     assert_eq!(target_rows.items.len(), 1);
     assert_eq!(target_rows.items[0].sol_delta, 2.0);
     let own_detail = db
-        .get_transaction_for_subject(own_subject, "SIG_SUBJECT_READ")
+        .get_transaction_for_subject(own_subject.clone(), "SIG_SUBJECT_READ")
         .await
         .expect("read own detail")
         .expect("own detail exists");

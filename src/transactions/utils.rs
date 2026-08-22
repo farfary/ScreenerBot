@@ -74,18 +74,18 @@ static GLOBAL_PENDING_TRANSACTIONS: LazyLock<Arc<Mutex<HashMap<String, DateTime<
 /// Cache key for a subject's signature. The caches are process-wide and shared by
 /// every watched wallet, so the subject has to be part of the key -- otherwise one
 /// wallet's signature would mark another wallet's dedupe entry as already seen.
-fn subject_key(subject: Subject, signature: &str) -> String {
+fn subject_key(subject: &Subject, signature: &str) -> String {
     format!("{}:{}:{}", subject.chain(), subject.address(), signature)
 }
 
 /// Check if signature is known globally across all managers, for the given subject
 pub async fn is_signature_known_globally(subject: Subject, signature: &str) -> bool {
-    GLOBAL_KNOWN_SIGNATURES.contains_key(&subject_key(subject, signature))
+    GLOBAL_KNOWN_SIGNATURES.contains_key(&subject_key(&subject, signature))
 }
 
 /// Add signature to global known cache, for the given subject
 pub async fn add_signature_to_known_globally(subject: Subject, signature: String) {
-    let key = subject_key(subject, &signature);
+    let key = subject_key(&subject, &signature);
     let was_new = GLOBAL_KNOWN_SIGNATURES.get(&key).is_none();
     GLOBAL_KNOWN_SIGNATURES.insert(key, ());
     if was_new {
@@ -103,7 +103,7 @@ pub async fn add_signature_to_known_globally(subject: Subject, signature: String
 
 /// Remove signature from global known cache, for the given subject
 pub async fn remove_signature_from_known_globally(subject: Subject, signature: &str) {
-    GLOBAL_KNOWN_SIGNATURES.invalidate(&subject_key(subject, signature));
+    GLOBAL_KNOWN_SIGNATURES.invalidate(&subject_key(&subject, signature));
 }
 
 /// Get count of globally known signatures (across all subjects)
@@ -127,13 +127,13 @@ pub async fn add_pending_transaction_globally(
     timestamp: DateTime<Utc>,
 ) {
     let mut pending = GLOBAL_PENDING_TRANSACTIONS.lock().await;
-    pending.insert(subject_key(subject, &signature), timestamp);
+    pending.insert(subject_key(&subject, &signature), timestamp);
 }
 
 /// Remove pending transaction globally, for the given subject
 pub async fn remove_pending_transaction_globally(subject: Subject, signature: &str) {
     let mut pending = GLOBAL_PENDING_TRANSACTIONS.lock().await;
-    pending.remove(&subject_key(subject, signature));
+    pending.remove(&subject_key(&subject, signature));
 }
 
 /// Get count of pending transactions
@@ -261,8 +261,12 @@ mod tests {
     /// itself instead.
     fn subjects() -> (Subject, Subject) {
         (
-            Subject::solana(crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique()),
-            Subject::solana(crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique()),
+            crate::chains::solana::transactions::subject::from_pubkey(
+                crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique(),
+            ),
+            crate::chains::solana::transactions::subject::from_pubkey(
+                crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique(),
+            ),
         )
     }
 
@@ -270,9 +274,9 @@ mod tests {
     async fn known_signature_is_scoped_to_its_subject() {
         let (subject_a, subject_b) = subjects();
 
-        add_signature_to_known_globally(subject_a, "sigA1".to_owned()).await;
+        add_signature_to_known_globally(subject_a.clone(), "sigA1".to_owned()).await;
 
-        assert!(is_signature_known_globally(subject_a, "sigA1").await);
+        assert!(is_signature_known_globally(subject_a.clone(), "sigA1").await);
         assert!(!is_signature_known_globally(subject_b, "sigA1").await);
 
         remove_signature_from_known_globally(subject_a, "sigA1").await;
@@ -282,13 +286,13 @@ mod tests {
     async fn removing_a_signature_for_one_subject_does_not_affect_another() {
         let (subject_a, subject_b) = subjects();
 
-        add_signature_to_known_globally(subject_a, "sigA2".to_owned()).await;
-        add_signature_to_known_globally(subject_b, "sigA2".to_owned()).await;
+        add_signature_to_known_globally(subject_a.clone(), "sigA2".to_owned()).await;
+        add_signature_to_known_globally(subject_b.clone(), "sigA2".to_owned()).await;
 
-        remove_signature_from_known_globally(subject_a, "sigA2").await;
+        remove_signature_from_known_globally(subject_a.clone(), "sigA2").await;
 
         assert!(!is_signature_known_globally(subject_a, "sigA2").await);
-        assert!(is_signature_known_globally(subject_b, "sigA2").await);
+        assert!(is_signature_known_globally(subject_b.clone(), "sigA2").await);
 
         remove_signature_from_known_globally(subject_b, "sigA2").await;
     }
@@ -298,15 +302,15 @@ mod tests {
         let (subject_a, subject_b) = subjects();
         let now = Utc::now();
 
-        add_pending_transaction_globally(subject_a, "sigB1".to_owned(), now).await;
-        add_pending_transaction_globally(subject_b, "sigB1".to_owned(), now).await;
+        add_pending_transaction_globally(subject_a.clone(), "sigB1".to_owned(), now).await;
+        add_pending_transaction_globally(subject_b.clone(), "sigB1".to_owned(), now).await;
 
         // Removing subject B's pending entry must not remove subject A's.
-        remove_pending_transaction_globally(subject_b, "sigB1").await;
+        remove_pending_transaction_globally(subject_b.clone(), "sigB1").await;
 
         let pending = GLOBAL_PENDING_TRANSACTIONS.lock().await;
-        assert!(pending.contains_key(&subject_key(subject_a, "sigB1")));
-        assert!(!pending.contains_key(&subject_key(subject_b, "sigB1")));
+        assert!(pending.contains_key(&subject_key(&subject_a, "sigB1")));
+        assert!(!pending.contains_key(&subject_key(&subject_b, "sigB1")));
         drop(pending);
 
         // Clean up so later tests in this process are not affected.
@@ -321,13 +325,13 @@ mod tests {
         let (subject_a, subject_b) = subjects();
         let now = Utc::now();
 
-        add_pending_transaction_globally(subject_a, "sigC1".to_owned(), now).await;
-        add_pending_transaction_globally(subject_b, "sigC1".to_owned(), now).await;
+        add_pending_transaction_globally(subject_a.clone(), "sigC1".to_owned(), now).await;
+        add_pending_transaction_globally(subject_b.clone(), "sigC1".to_owned(), now).await;
 
         {
             let pending = GLOBAL_PENDING_TRANSACTIONS.lock().await;
-            assert!(pending.contains_key(&subject_key(subject_a, "sigC1")));
-            assert!(pending.contains_key(&subject_key(subject_b, "sigC1")));
+            assert!(pending.contains_key(&subject_key(&subject_a, "sigC1")));
+            assert!(pending.contains_key(&subject_key(&subject_b, "sigC1")));
         }
 
         // Clean up so later tests in this process are not affected.

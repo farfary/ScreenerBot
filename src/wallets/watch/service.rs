@@ -263,7 +263,7 @@ async fn poll_target(runtime: &mut TargetRuntime, watch_db: &WatchDatabase, own_
 
     let mut replay_complete = true;
     for signature in &completed.signatures {
-        if process_signature(&runtime.target, own_subject, signature, Utc::now()).await
+        if process_signature(&runtime.target, own_subject.clone(), signature, Utc::now()).await
             == ProcessOutcome::Retryable
         {
             replay_complete = false;
@@ -297,11 +297,14 @@ enum ProcessOutcome {
 }
 
 async fn mark_pending(subject: Subject, signature: &str, detected_at: chrono::DateTime<Utc>) {
-    add_pending_transaction_globally(subject, signature.to_owned(), detected_at).await;
+    add_pending_transaction_globally(subject.clone(), signature.to_owned(), detected_at).await;
 
     if let Some(db) = crate::transactions::database::get_transaction_database().await {
         let pending = HashMap::from([(signature.to_owned(), detected_at)]);
-        if let Err(e) = db.save_pending_transactions(subject, &pending).await {
+        if let Err(e) = db
+            .save_pending_transactions(subject.clone(), &pending)
+            .await
+        {
             logger::warning(
                 LogTag::WalletWatch,
                 &format!("Failed to persist pending signature {signature} for {subject}: {e}"),
@@ -311,10 +314,13 @@ async fn mark_pending(subject: Subject, signature: &str, detected_at: chrono::Da
 }
 
 async fn clear_pending(subject: Subject, signature: &str) {
-    remove_pending_transaction_globally(subject, signature).await;
+    remove_pending_transaction_globally(subject.clone(), signature).await;
 
     if let Some(db) = crate::transactions::database::get_transaction_database().await {
-        if let Err(e) = db.remove_pending_transaction(subject, signature).await {
+        if let Err(e) = db
+            .remove_pending_transaction(subject.clone(), signature)
+            .await
+        {
             logger::warning(
                 LogTag::WalletWatch,
                 &format!("Failed to clear pending signature {signature} for {subject}: {e}"),
@@ -334,9 +340,9 @@ async fn process_signature(
     let Ok(pubkey) = Pubkey::from_str(&target.address) else {
         return ProcessOutcome::Terminal;
     };
-    let subject = Subject::solana(pubkey);
+    let subject = crate::chains::solana::transactions::subject::from_pubkey(pubkey);
 
-    let already_seen = match dedupe::has_seen(subject, signature).await {
+    let already_seen = match dedupe::has_seen(subject.clone(), signature).await {
         Ok(seen) => seen,
         Err(e) => {
             logger::warning(
@@ -348,11 +354,11 @@ async fn process_signature(
     };
     if already_seen {
         // Reconcile a crash between durable dedupe commit and pending cleanup.
-        clear_pending(subject, signature).await;
+        clear_pending(subject.clone(), signature).await;
         return ProcessOutcome::Terminal;
     }
 
-    mark_pending(subject, signature, detected_at).await;
+    mark_pending(subject.clone(), signature, detected_at).await;
 
     let is_own = target.sources.contains(&WatchSource::OwnWallet);
     let processor = if is_own {
@@ -380,7 +386,7 @@ async fn process_signature(
                     target.address
                 ),
             );
-            if dedupe::commit(subject, signature).await.is_err() {
+            if dedupe::commit(subject.clone(), signature).await.is_err() {
                 return ProcessOutcome::Retryable;
             }
             clear_pending(subject, signature).await;
@@ -395,14 +401,14 @@ async fn process_signature(
         // targets get nothing recorded and no broadcast -- there is nothing to
         // alert on and nothing that moved.
         if is_own {
-            if recorder::record(subject, &target.sources, &transaction)
+            if recorder::record(subject.clone(), &target.sources, &transaction)
                 .await
                 .is_err()
             {
                 return ProcessOutcome::Retryable;
             }
         }
-        if dedupe::commit(subject, signature).await.is_err() {
+        if dedupe::commit(subject.clone(), signature).await.is_err() {
             return ProcessOutcome::Retryable;
         }
         clear_pending(subject, signature).await;
@@ -412,7 +418,7 @@ async fn process_signature(
     let Some((kind, skip_reason)) =
         classify::classify_transaction_activity(&target.address, &transaction)
     else {
-        if dedupe::commit(subject, signature).await.is_err() {
+        if dedupe::commit(subject.clone(), signature).await.is_err() {
             return ProcessOutcome::Retryable;
         }
         clear_pending(subject, signature).await;
@@ -429,7 +435,7 @@ async fn process_signature(
         );
     }
 
-    if recorder::record(subject, &target.sources, &transaction)
+    if recorder::record(subject.clone(), &target.sources, &transaction)
         .await
         .is_err()
     {
@@ -437,7 +443,7 @@ async fn process_signature(
         // consumers. The retained poll range retries it without losing ordering.
         return ProcessOutcome::Retryable;
     }
-    if dedupe::commit(subject, signature).await.is_err() {
+    if dedupe::commit(subject.clone(), signature).await.is_err() {
         return ProcessOutcome::Retryable;
     }
     clear_pending(subject, signature).await;
@@ -469,14 +475,14 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
 
     let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<(String, SubscriptionEvent)>();
     let mut runtimes: HashMap<String, TargetRuntime> = HashMap::new();
-    reload_targets(&mut runtimes, &ws_tx, &watch_db, own_subject).await;
+    reload_targets(&mut runtimes, &ws_tx, &watch_db, own_subject.clone()).await;
 
     // Gap-fill at service start: catch up on anything that landed while the bot was
     // down, for every registered target including the own wallet.
     let startup_addresses: Vec<String> = runtimes.keys().cloned().collect();
     for address in startup_addresses {
         if let Some(runtime) = runtimes.get_mut(&address) {
-            poll_target(runtime, &watch_db, own_subject).await;
+            poll_target(runtime, &watch_db, own_subject.clone()).await;
         }
     }
 
@@ -495,7 +501,7 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                 break;
             }
             _ = retention_tick.tick() => {
-                run_retention_cleanup(own_subject).await;
+                run_retention_cleanup(own_subject.clone()).await;
             }
             Some((address, event)) = ws_rx.recv() => {
                 if let Some(runtime) = runtimes.get(&address) {
@@ -505,7 +511,7 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                             &format!("Notification for a failed transaction on {address}, decoding anyway to confirm"),
                         );
                     }
-                    process_signature(&runtime.target, own_subject, &event.signature, Utc::now()).await;
+                    process_signature(&runtime.target, own_subject.clone(), &event.signature, Utc::now()).await;
                 }
             }
             result = connection_state.changed() => {
@@ -523,13 +529,13 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                     let addresses: Vec<String> = runtimes.keys().cloned().collect();
                     for address in addresses {
                         if let Some(runtime) = runtimes.get_mut(&address) {
-                            poll_target(runtime, &watch_db, own_subject).await;
+                            poll_target(runtime, &watch_db, own_subject.clone()).await;
                         }
                     }
                 }
             }
             _ = RELOAD_NOTIFY.notified() => {
-                reload_targets(&mut runtimes, &ws_tx, &watch_db, own_subject).await;
+                reload_targets(&mut runtimes, &ws_tx, &watch_db, own_subject.clone()).await;
             }
             _ = tick.tick() => {
                 let state = *connection_state.borrow();
@@ -556,7 +562,7 @@ pub(super) async fn run(shutdown: Arc<Notify>, watch_db: WatchDatabase, own_subj
                     .collect();
                 for address in due {
                     if let Some(runtime) = runtimes.get_mut(&address) {
-                        poll_target(runtime, &watch_db, own_subject).await;
+                        poll_target(runtime, &watch_db, own_subject.clone()).await;
                     }
                 }
             }

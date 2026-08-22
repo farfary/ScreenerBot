@@ -19,6 +19,7 @@
 //! No database, no network, no clock: `SubjectAssetDelta` values are built inline.
 
 use screenerbot::chains::solana::constants::{SOL_MINT, USDC_MINT};
+use screenerbot::chains::ChainId;
 use screenerbot::positions::ledger::{
     reconcile_with_wallet, reduce_rounds, LedgerEventKind, LedgerRound, QuoteAsset, WalletHolding,
 };
@@ -42,6 +43,7 @@ fn token(
     kind: DeltaKind,
 ) -> SubjectAssetDelta {
     SubjectAssetDelta {
+        chain: ChainId::Solana,
         wallet_address: WALLET.to_string(),
         signature: signature.to_string(),
         mint: mint.to_string(),
@@ -54,7 +56,7 @@ fn token(
         decimals: TOKEN_DECIMALS,
         kind,
         venue: matches!(kind, DeltaKind::Trade).then(|| "raydium".to_string()),
-        fee_lamports: Some(5_000),
+        fee_native_raw: Some(5_000),
         success: true,
     }
 }
@@ -62,6 +64,7 @@ fn token(
 /// The native SOL consideration leg of a trade, in whole SOL.
 fn native(signature: &str, slot: u64, sol: f64) -> SubjectAssetDelta {
     SubjectAssetDelta {
+        chain: ChainId::Solana,
         wallet_address: WALLET.to_string(),
         signature: signature.to_string(),
         mint: NATIVE_SOL_SENTINEL.to_string(),
@@ -74,7 +77,7 @@ fn native(signature: &str, slot: u64, sol: f64) -> SubjectAssetDelta {
         decimals: 9,
         kind: DeltaKind::Trade,
         venue: Some("raydium".to_string()),
-        fee_lamports: Some(5_000),
+        fee_native_raw: Some(5_000),
         success: true,
     }
 }

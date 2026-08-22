@@ -15,6 +15,7 @@ use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::transactions::analyzer::balance::account_keys_from_message;
 use crate::chains::solana::transactions::analyzer::dex::extract_program_ids;
 use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
+use crate::chains::ChainId;
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 use crate::transactions::types::Transaction;
 
@@ -166,6 +167,7 @@ pub fn extract_subject_deltas(
         let after = post_by_mint.get(&mint).copied().unwrap_or(0);
         let decimals = decimals_by_mint.get(&mint).copied().unwrap_or(0);
         deltas.push(SubjectAssetDelta {
+            chain: ChainId::Solana,
             wallet_address: subject_address.to_owned(),
             signature: transaction.signature.clone(),
             mint,
@@ -178,13 +180,14 @@ pub fn extract_subject_deltas(
             decimals,
             kind,
             venue: venue.clone(),
-            fee_lamports: Some(meta.fee),
+            fee_native_raw: Some(meta.fee),
             success: transaction.success,
         });
     }
 
     if native_above_noise {
         deltas.push(SubjectAssetDelta {
+            chain: ChainId::Solana,
             wallet_address: subject_address.to_owned(),
             signature: transaction.signature.clone(),
             mint: NATIVE_SOL_SENTINEL.to_owned(),
@@ -197,7 +200,7 @@ pub fn extract_subject_deltas(
             decimals: 9,
             kind,
             venue: venue.clone(),
-            fee_lamports: Some(meta.fee),
+            fee_native_raw: Some(meta.fee),
             success: transaction.success,
         });
     }
@@ -282,6 +285,8 @@ mod tests {
         let token_deltas: Vec<_> = deltas.iter().filter(|d| d.mint == MINT_A).collect();
         assert_eq!(token_deltas.len(), 1);
         assert_eq!(token_deltas[0].delta_raw, 1_000_000);
+        assert_eq!(token_deltas[0].chain, ChainId::Solana);
+        assert_eq!(token_deltas[0].fee_native_raw, Some(5_000));
     }
 
     #[test]

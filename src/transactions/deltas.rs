@@ -6,6 +6,8 @@
 //! next to the chain's decode pipeline — see
 //! `crate::chains::solana::transactions::deltas::extract_subject_deltas` for Solana.
 
+use crate::chains::ChainId;
+
 /// The literal mint used for native SOL rows (there is no real mint for it).
 pub const NATIVE_SOL_SENTINEL: &str = "native";
 
@@ -47,9 +49,11 @@ impl DeltaKind {
 /// One subject-relative asset movement within one transaction. See module docs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubjectAssetDelta {
+    pub chain: ChainId,
     pub wallet_address: String,
     pub signature: String,
-    /// SPL mint, or [`NATIVE_SOL_SENTINEL`] for native SOL.
+    /// Native or token mint identity for this chain, or [`NATIVE_SOL_SENTINEL`]
+    /// for the chain's native asset.
     pub mint: String,
     pub slot: Option<u64>,
     pub block_time: Option<i64>,
@@ -62,6 +66,36 @@ pub struct SubjectAssetDelta {
     pub decimals: u8,
     pub kind: DeltaKind,
     pub venue: Option<String>,
-    pub fee_lamports: Option<u64>,
+    /// Native-asset fee in the chain's raw integer unit.
+    pub fee_native_raw: Option<u64>,
     pub success: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn delta_carries_chain_and_raw_native_fee() {
+        let delta = SubjectAssetDelta {
+            chain: crate::chains::active_chain(),
+            wallet_address: "wallet".to_owned(),
+            signature: "sig".to_owned(),
+            mint: NATIVE_SOL_SENTINEL.to_owned(),
+            slot: Some(1),
+            block_time: Some(2),
+            tx_index: 0,
+            delta_raw: -1_000_000_000,
+            before_raw: None,
+            after_raw: None,
+            decimals: 9,
+            kind: DeltaKind::Trade,
+            venue: Some("raydium".to_owned()),
+            fee_native_raw: Some(5_000),
+            success: true,
+        };
+
+        assert_eq!(delta.chain, crate::chains::active_chain());
+        assert_eq!(delta.fee_native_raw, Some(5_000));
+    }
 }

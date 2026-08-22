@@ -14,9 +14,8 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::time::interval;
 
 use crate::logger::{self, LogTag};
-use crate::transactions::{
-    types::Subject,
-    utils::{add_signature_to_known_globally, cleanup_expired_pending_transactions},
+use crate::transactions::utils::{
+    add_signature_to_known_globally, cleanup_expired_pending_transactions,
 };
 use crate::wallets::watch::{subscribe_activity, WalletActivity};
 
@@ -120,7 +119,7 @@ async fn handle_own_wallet_activity(
     metrics: &mut ServiceMetrics,
     activity: &WalletActivity,
 ) {
-    let subject = Subject::solana(config.wallet_pubkey);
+    let subject = crate::chains::solana::transactions::subject::from_pubkey(config.wallet_pubkey);
     add_signature_to_known_globally(subject, activity.signature.clone()).await;
     metrics.update_activity();
 

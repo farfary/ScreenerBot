@@ -37,6 +37,7 @@ mod debug_helpers;
 pub mod deltas;
 pub mod manager;
 pub mod service;
+pub mod subject;
 pub mod types;
 pub mod utils;
 pub mod verifier;
@@ -53,10 +54,11 @@ pub use service::{
 pub use deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 // Public API exports - Types
+pub use subject::Subject;
 pub use types::{
     AtaAnalysis, AtaOperation, AtaOperationType, CachedAnalysis, DeferredRetry, InstructionInfo,
-    SolBalanceChange, Subject, SwapPnLInfo, TokenBalanceChange, TokenSwapInfo, TokenTransfer,
-    Transaction, TransactionDirection, TransactionStats, TransactionStatus, TransactionType,
+    SolBalanceChange, SwapPnLInfo, TokenBalanceChange, TokenSwapInfo, TokenTransfer, Transaction,
+    TransactionDirection, TransactionStats, TransactionStatus, TransactionType,
 };
 
 // Public API exports - Constants from types

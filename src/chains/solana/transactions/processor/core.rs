@@ -85,7 +85,7 @@ impl TransactionProcessor {
 
     /// The wallet this processor decodes for.
     pub fn subject(&self) -> crate::transactions::types::Subject {
-        crate::transactions::types::Subject::solana(self.wallet_pubkey)
+        crate::chains::solana::transactions::subject::from_pubkey(self.wallet_pubkey)
     }
 
     /// Fetch, analyze and project one transaction onto this processor's subject.

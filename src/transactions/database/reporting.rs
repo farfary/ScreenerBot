@@ -39,7 +39,7 @@ impl TransactionDatabase {
     ) -> Result<TransactionListResult, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         // Limit page size to max 200 for performance
         let effective_limit = limit.min(200);
@@ -391,7 +391,7 @@ impl TransactionDatabase {
     ) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let mut query =
             "SELECT COUNT(*) FROM raw_transactions r WHERE r.chain_id = ?1 AND r.wallet_address = ?2".to_owned();
@@ -567,9 +567,10 @@ mod tests {
         let raw_json_string = raw_json.to_string();
         transaction.raw_transaction_data = Some(raw_json);
 
-        let subject =
-            Subject::solana(crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique());
-        db.upsert_full_transaction(subject, &transaction)
+        let subject = crate::chains::solana::transactions::subject::from_pubkey(
+            crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique(),
+        );
+        db.upsert_full_transaction(subject.clone(), &transaction)
             .await
             .expect("upsert transaction");
 

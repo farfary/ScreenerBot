@@ -16,6 +16,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use std::collections::{HashMap, HashSet};
 
+use screenerbot::chains::ChainId;
 use screenerbot::positions::ledger::reduce_rounds;
 use screenerbot::positions::ledger::sync::{plan_position_writes, RoundMetadata, TraderLegs};
 use screenerbot::positions::ledger::{
@@ -1104,6 +1105,7 @@ fn token_delta(
     after: u128,
 ) -> SubjectAssetDelta {
     SubjectAssetDelta {
+        chain: ChainId::Solana,
         wallet_address: "wallet".to_owned(),
         signature: signature.to_owned(),
         mint: TRADED_MINT.to_owned(),
@@ -1116,7 +1118,7 @@ fn token_delta(
         decimals: 6,
         kind: DeltaKind::Trade,
         venue: Some("raydium".to_owned()),
-        fee_lamports: Some(5_000),
+        fee_native_raw: Some(5_000),
         success: true,
     }
 }

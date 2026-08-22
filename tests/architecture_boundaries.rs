@@ -302,7 +302,7 @@ fn shared_pools_domain_never_names_a_solana_address_type() {
 /// Scoped to the exact files audited when this boundary was introduced, not
 /// a whole-directory ban: `src/wallets/watch/**` still parses a `Pubkey`
 /// inline for the observation pipeline's own use (RPC subscriptions,
-/// `Subject::solana`) and is out of scope. `balance_ops.rs`/
+/// Solana subject conversion) and is out of scope. `balance_ops.rs`/
 /// `balance_queries.rs` are IN scope — their RPC balance reads were moved
 /// behind `crate::chains::solana::accounts::{fetch_wallet_sol_balance,
 /// fetch_wallet_token_balances}`.
@@ -453,6 +453,37 @@ fn tool_swap_executor_never_calls_jupiter_wallet_helper() {
              crate::swaps::quote_and_execute_for_wallet so the producing router owns the payload"
         );
     }
+}
+
+/// Shared transaction subject and delta domain files stay chain-neutral:
+/// Solana pubkey conversion lives under `src/chains/solana/transactions/subject.rs`,
+/// and native fees use a raw-unit name rather than Solana lamports.
+#[test]
+fn shared_transaction_subject_and_delta_domain_stay_chain_neutral() {
+    const SCOPED_FILES: &[&str] = &["transactions/subject.rs", "transactions/deltas.rs"];
+    let banned_needles = ["solana_sdk", "lamports", "Pubkey"];
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        if !SCOPED_FILES.contains(&path_str.as_ref()) {
+            continue;
+        }
+        let code = code_lines(&contents);
+        for needle in banned_needles {
+            if code.contains(needle) {
+                violations.push(format!("src/{path_str}: names `{needle}`"));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "src/transactions/subject.rs and src/transactions/deltas.rs must not import \
+         solana_sdk or name lamports — Solana conversion belongs under \
+         src/chains/solana/transactions:\n{}",
+        violations.join("\n")
+    );
 }
 
 /// The empty `src/constants.rs` compatibility façade was removed. Solana

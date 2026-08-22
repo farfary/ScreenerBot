@@ -26,8 +26,7 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let tx = conn
             .unchecked_transaction()
@@ -54,7 +53,7 @@ impl TransactionDatabase {
     ) -> Result<HashMap<String, DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let mut stmt = conn
             .prepare(
@@ -97,7 +96,7 @@ impl TransactionDatabase {
     ) -> Result<bool, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let affected = conn
             .execute(
@@ -113,7 +112,7 @@ impl TransactionDatabase {
     pub async fn get_pending_transactions_count(&self, subject: Subject) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let count: i64 = conn
             .query_row(
@@ -176,7 +175,7 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let status_str = match &transaction.status {
             TransactionStatus::Pending => "Pending",
@@ -226,7 +225,7 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         // Serialize complex fields as JSON strings
         let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
@@ -301,7 +300,8 @@ impl TransactionDatabase {
         subject: Subject,
         transaction: &Transaction,
     ) -> Result<(), String> {
-        self.store_raw_transaction(subject, transaction).await?;
+        self.store_raw_transaction(subject.clone(), transaction)
+            .await?;
         self.store_processed_transaction(subject, transaction)
             .await?;
         Ok(())
@@ -318,7 +318,7 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         conn
             .execute(
@@ -344,7 +344,7 @@ impl TransactionDatabase {
     ) -> Result<Option<Transaction>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         // Join raw_transactions with processed_transactions to get full data
         let result = conn.query_row(
@@ -527,7 +527,7 @@ impl TransactionDatabase {
     ) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let count: i64 = conn
             .query_row(
@@ -553,7 +553,7 @@ impl TransactionDatabase {
     ) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let count: i64 = conn
             .query_row(

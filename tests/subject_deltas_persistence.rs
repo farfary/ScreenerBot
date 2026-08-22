@@ -104,6 +104,8 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
     assert_eq!(token.delta_raw, 2_000_000);
     assert_eq!(token.before_raw, Some(0));
     assert_eq!(token.after_raw, Some(2_000_000));
+    assert_eq!(token.chain, screenerbot::chains::ChainId::Solana);
+    assert_eq!(token.fee_native_raw, Some(5_000));
 
     // Storing the same transaction again is a no-op, not a duplicate: the primary key
     // is (wallet, signature, mint) and a re-record must never double a balance.
@@ -120,7 +122,7 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
     // This is precisely the state the old code left behind: raw JSON stored, signature
     // known, no ledger rows, and nothing that would ever revisit it.
     let orphan = swap("orphan-signature", &wallet, 200, 500_000_000, 1_500_000);
-    db.store_raw_transaction(subject, &orphan)
+    db.store_raw_transaction(subject.clone(), &orphan)
         .await
         .expect("store the raw transaction without extracting deltas");
     assert_eq!(
@@ -157,7 +159,7 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
     // transaction is deliberately NOT re-examined. Without that bound this pass would
     // re-read the whole raw history — tens of thousands of JSON blobs — every boot.
     let ancient = swap("ancient-signature", &wallet, 10, 250_000_000, 750_000);
-    db.store_raw_transaction(subject, &ancient)
+    db.store_raw_transaction(subject.clone(), &ancient)
         .await
         .expect("store an old raw transaction");
 

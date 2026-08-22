@@ -829,7 +829,7 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to get database connection from pool: {e}"))
     }
 
-    pub(super) fn require_subject_chain(&self, subject: Subject) -> Result<&'static str, String> {
+    pub(super) fn require_subject_chain(&self, subject: &Subject) -> Result<&'static str, String> {
         if subject.chain() != self.chain {
             return Err(format!(
                 "Transaction subject chain {} does not match database chain {}",
@@ -874,8 +874,7 @@ impl TransactionDatabase {
     ) -> Result<bool, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let exists: bool = conn
             .query_row(
@@ -896,7 +895,7 @@ impl TransactionDatabase {
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         conn.execute(
             "INSERT OR IGNORE INTO known_signatures (chain_id, signature, wallet_address) VALUES (?1, ?2, ?3)",
@@ -911,7 +910,7 @@ impl TransactionDatabase {
     pub async fn get_known_signatures_count(&self, subject: Subject) -> Result<u64, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let count: i64 = conn
             .query_row(
@@ -931,7 +930,7 @@ impl TransactionDatabase {
     ) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let result: Option<String> = conn
             .query_row(
@@ -956,7 +955,7 @@ impl TransactionDatabase {
     ) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
-        let chain_id = self.require_subject_chain(subject)?;
+        let chain_id = self.require_subject_chain(&subject)?;
 
         let result: Option<String> = conn
             .query_row(

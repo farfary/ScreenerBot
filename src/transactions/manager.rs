@@ -121,11 +121,11 @@ impl TransactionsManager {
     pub async fn initialize(&mut self) -> Result<(), String> {
         let duration = DurationMeasure::start("TransactionsManager::initialize");
 
-        let subject = Subject::solana(self.wallet_pubkey);
+        let subject = self.subject();
 
         // Load known signatures from database if available
         if let Some(ref db) = self.transaction_database {
-            match db.get_known_signatures_count(subject).await {
+            match db.get_known_signatures_count(subject.clone()).await {
                 Ok(count) => {
                     self.total_transactions = count;
                     if self.debug_enabled {
@@ -222,7 +222,7 @@ impl TransactionsManager {
 
         // Save pending transactions to database
         if let Some(ref db) = self.transaction_database {
-            let subject = Subject::solana(self.wallet_pubkey);
+            let subject = self.subject();
             if let Err(e) = db
                 .save_pending_transactions(subject, &self.pending_transactions)
                 .await
@@ -309,10 +309,10 @@ impl TransactionsManager {
 
     /// Check if signature is known using database (if available) or fallback to HashSet
     pub async fn is_signature_known(&self, signature: &str) -> bool {
-        let subject = Subject::solana(self.wallet_pubkey);
+        let subject = self.subject();
 
         // First check global cache
-        if is_signature_known_globally(subject, signature).await {
+        if is_signature_known_globally(subject.clone(), signature).await {
             return true;
         }
 
@@ -329,10 +329,10 @@ impl TransactionsManager {
 
     /// Add signature to known cache using database (if available) or fallback to HashSet
     pub async fn add_signature_to_known(&mut self, signature: String) {
-        let subject = Subject::solana(self.wallet_pubkey);
+        let subject = self.subject();
 
         // Add to global cache
-        add_signature_to_known_globally(subject, signature.clone()).await;
+        add_signature_to_known_globally(subject.clone(), signature.clone()).await;
 
         // Add to database if available
         if let Some(ref db) = self.transaction_database {
@@ -365,6 +365,10 @@ impl TransactionsManager {
         self.wallet_pubkey
     }
 
+    fn subject(&self) -> Subject {
+        crate::chains::solana::transactions::subject::from_pubkey(self.wallet_pubkey)
+    }
+
     /// Get debug status
     pub fn is_debug_enabled(&self) -> bool {
         self.debug_enabled
@@ -378,7 +382,7 @@ impl TransactionsManager {
 impl TransactionsManager {
     /// Add a pending transaction
     pub async fn add_pending_transaction(&mut self, signature: String) {
-        let subject = Subject::solana(self.wallet_pubkey);
+        let subject = self.subject();
         let now = Utc::now();
         self.pending_transactions.insert(signature.clone(), now);
 
@@ -396,7 +400,7 @@ impl TransactionsManager {
     /// Remove a pending transaction
     pub async fn remove_pending_transaction(&mut self, signature: &str) {
         if self.pending_transactions.remove(signature).is_some() {
-            let subject = Subject::solana(self.wallet_pubkey);
+            let subject = self.subject();
             // Also remove from global pending cache
             remove_pending_transaction_globally(subject, signature).await;
 

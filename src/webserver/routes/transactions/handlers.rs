@@ -1,13 +1,11 @@
 //! Route handlers for transactions API.
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Response,
     Json,
 };
-use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::transactions::{get_transaction_database, Subject};
@@ -38,7 +36,7 @@ pub(super) async fn list_transactions(
 
     let result = match db
         .list_transactions_for_subject(
-            subject,
+            subject.clone(),
             &request.filters,
             request.pagination.cursor.as_ref(),
             request.pagination.limit,
@@ -96,7 +94,7 @@ pub(super) async fn get_summary(
         Err(response) => return response,
     };
     let own_subject = Subject::own().ok();
-    let is_own = own_subject == Some(subject);
+    let is_own = own_subject.as_ref() == Some(&subject);
     let db = match get_transaction_database().await {
         Some(db) => db,
         None => {
@@ -148,15 +146,15 @@ pub(super) async fn get_summary(
 
     // Get counts
     let total = db
-        .count_transactions_for_subject(subject, &Default::default())
+        .count_transactions_for_subject(subject.clone(), &Default::default())
         .await
         .unwrap_or_default();
     let success_count = db
-        .get_successful_transactions_count_for_subject(subject)
+        .get_successful_transactions_count_for_subject(subject.clone())
         .await
         .unwrap_or_default();
     let failed_count = db
-        .get_failed_transactions_count_for_subject(subject)
+        .get_failed_transactions_count_for_subject(subject.clone())
         .await
         .unwrap_or_default();
 
@@ -180,7 +178,7 @@ pub(super) async fn get_summary(
 
     // Get pending counts from DB
     let pending_global = db
-        .get_pending_transactions_count(subject)
+        .get_pending_transactions_count(subject.clone())
         .await
         .unwrap_or_default() as usize;
     let pending_local = 0; // TODO: Get from TransactionsManager if exposed
@@ -191,7 +189,11 @@ pub(super) async fn get_summary(
     };
 
     // Get newest/oldest known signatures for the selected subject.
-    let newest_known_signature = db.get_newest_known_signature(subject).await.ok().flatten();
+    let newest_known_signature = db
+        .get_newest_known_signature(subject.clone())
+        .await
+        .ok()
+        .flatten();
     let oldest_known_signature = db.get_oldest_known_signature(subject).await.ok().flatten();
 
     success_response(TransactionSummaryResponse {
@@ -230,16 +232,17 @@ async fn resolve_subject(requested: Option<&str>) -> Result<Subject, Response> {
         return Ok(own);
     }
 
-    let pubkey = Pubkey::from_str(address).map_err(|_| {
-        error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_SUBJECT",
-            "Transaction subject is not a valid Solana address",
-            None,
-        )
-    })?;
+    let subject =
+        crate::chains::solana::transactions::subject::try_from_address(address).map_err(|_| {
+            error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_SUBJECT",
+                "Transaction subject is not a valid Solana address",
+                None,
+            )
+        })?;
     match crate::wallets::watch::get_target_by_address(address).await {
-        Ok(Some(_)) => Ok(Subject::solana(pubkey)),
+        Ok(Some(_)) => Ok(subject),
         Ok(None) => Err(error_response(
             StatusCode::FORBIDDEN,
             "SUBJECT_NOT_WATCHED",

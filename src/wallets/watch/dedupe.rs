@@ -20,7 +20,7 @@ use crate::transactions::utils::{add_signature_to_known_globally, is_signature_k
 /// in-memory cache first, falling back to the database -- the source of truth across
 /// restarts, when the in-memory cache is cold.
 pub(super) async fn has_seen(subject: Subject, signature: &str) -> Result<bool, String> {
-    if is_signature_known_globally(subject, signature).await {
+    if is_signature_known_globally(subject.clone(), signature).await {
         return Ok(true);
     }
 
@@ -38,7 +38,7 @@ pub(super) async fn commit(subject: Subject, signature: &str) -> Result<(), Stri
     let db = get_transaction_database()
         .await
         .ok_or_else(|| "Transaction database not initialized".to_owned())?;
-    commit_to_database(&db, subject, signature)
+    commit_to_database(&db, subject.clone(), signature)
         .await
         .map_err(|e| {
             logger::warning(
@@ -76,15 +76,16 @@ mod tests {
 
     #[tokio::test]
     async fn in_memory_admission_is_subject_scoped() {
-        let subject = Subject::solana(Pubkey::new_unique());
+        let subject =
+            crate::chains::solana::transactions::subject::from_pubkey(Pubkey::new_unique());
         let signature = "dedupe-admission-signature";
 
-        remove_signature_from_known_globally(subject, signature).await;
+        remove_signature_from_known_globally(subject.clone(), signature).await;
         // No global database is installed in this co-located unit test, so exercise
         // the fast admission seam directly rather than claiming restart durability.
-        assert!(!is_signature_known_globally(subject, signature).await);
-        add_signature_to_known_globally(subject, signature.to_owned()).await;
-        assert!(is_signature_known_globally(subject, signature).await);
+        assert!(!is_signature_known_globally(subject.clone(), signature).await);
+        add_signature_to_known_globally(subject.clone(), signature.to_owned()).await;
+        assert!(is_signature_known_globally(subject.clone(), signature).await);
         remove_signature_from_known_globally(subject, signature).await;
     }
 
@@ -92,13 +93,14 @@ mod tests {
     async fn durable_admission_survives_database_reopen() {
         let dir = tempfile::tempdir().expect("temp database directory");
         let path = dir.path().join("transactions.db");
-        let subject = Subject::solana(Pubkey::new_unique());
+        let subject =
+            crate::chains::solana::transactions::subject::from_pubkey(Pubkey::new_unique());
         let signature = "durable-dedupe-signature";
 
         let db = TransactionDatabase::new_with_path(&path, crate::chains::ChainId::Solana)
             .await
             .expect("create transaction database");
-        commit_to_database(&db, subject, signature)
+        commit_to_database(&db, subject.clone(), signature)
             .await
             .expect("persist dedupe admission");
         drop(db);

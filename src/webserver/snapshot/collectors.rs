@@ -632,14 +632,14 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             db.get_failed_transactions_count(),
             db.get_bootstrap_state(),
             async {
-                match own_subject {
-                    Some(subject) => db.get_newest_known_signature(subject).await,
+                match own_subject.as_ref() {
+                    Some(subject) => db.get_newest_known_signature(subject.clone()).await,
                     None => Ok(None),
                 }
             },
             async {
-                match own_subject {
-                    Some(subject) => db.get_oldest_known_signature(subject).await,
+                match own_subject.as_ref() {
+                    Some(subject) => db.get_oldest_known_signature(subject.clone()).await,
                     None => Ok(None),
                 }
             }

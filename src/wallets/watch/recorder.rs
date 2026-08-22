@@ -37,7 +37,10 @@ pub(super) async fn record(
         return Err("Transaction database not initialized".to_owned());
     };
 
-    if let Err(e) = db.store_processed_transaction(subject, transaction).await {
+    if let Err(e) = db
+        .store_processed_transaction(subject.clone(), transaction)
+        .await
+    {
         logger::warning(
             LogTag::WalletWatch,
             &format!(

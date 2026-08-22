@@ -10,3 +10,4 @@ pub mod deltas;
 pub mod fetcher;
 pub mod processor;
 pub mod program_ids;
+pub mod subject;

@@ -7,6 +7,7 @@
 
 use rusqlite::{params, OptionalExtension, Transaction as SqlTransaction};
 
+use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, SUBJECT_DELTAS_VERSION};
 
@@ -117,7 +118,7 @@ impl TransactionDatabase {
                 fee_lamports, success
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
-                self.chain.as_str(),
+                delta.chain.as_str(),
                 delta.wallet_address,
                 delta.signature,
                 delta.mint,
@@ -130,7 +131,7 @@ impl TransactionDatabase {
                 delta.decimals,
                 delta.kind.as_str(),
                 delta.venue,
-                delta.fee_lamports.map(|f| f as i64),
+                delta.fee_native_raw.map(|f| f as i64),
                 delta.success,
             ],
         )
@@ -149,7 +150,7 @@ impl TransactionDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT wallet_address, signature, mint, slot, block_time, tx_index,
+                "SELECT chain_id, wallet_address, signature, mint, slot, block_time, tx_index,
                     delta_raw, before_raw, after_raw, decimals, kind, venue,
                     fee_lamports, success
                  FROM subject_asset_deltas
@@ -160,34 +161,43 @@ impl TransactionDatabase {
 
         let rows = stmt
             .query_map(params![self.chain.as_str(), wallet_address], |row| {
-                let kind_str: String = row.get(10)?;
+                let chain_str: String = row.get(0)?;
+                let chain = chain_str.parse::<ChainId>().map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        0,
+                        rusqlite::types::Type::Text,
+                        e.into(),
+                    )
+                })?;
+                let kind_str: String = row.get(11)?;
                 let kind = DeltaKind::parse(&kind_str).map_err(|e| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        10,
+                        11,
                         rusqlite::types::Type::Text,
                         e.into(),
                     )
                 })?;
 
                 Ok(SubjectAssetDelta {
-                    wallet_address: row.get(0)?,
-                    signature: row.get(1)?,
-                    mint: row.get(2)?,
-                    slot: row.get::<_, Option<i64>>(3)?.map(|v| v as u64),
-                    block_time: row.get(4)?,
-                    tx_index: row.get::<_, i64>(5)? as u32,
-                    delta_raw: row.get::<_, i64>(6)? as i128,
+                    chain,
+                    wallet_address: row.get(1)?,
+                    signature: row.get(2)?,
+                    mint: row.get(3)?,
+                    slot: row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
+                    block_time: row.get(5)?,
+                    tx_index: row.get::<_, i64>(6)? as u32,
+                    delta_raw: row.get::<_, i64>(7)? as i128,
                     before_raw: row
-                        .get::<_, Option<i64>>(7)?
-                        .and_then(|v| u128::try_from(v).ok()),
-                    after_raw: row
                         .get::<_, Option<i64>>(8)?
                         .and_then(|v| u128::try_from(v).ok()),
-                    decimals: row.get::<_, i64>(9)? as u8,
+                    after_raw: row
+                        .get::<_, Option<i64>>(9)?
+                        .and_then(|v| u128::try_from(v).ok()),
+                    decimals: row.get::<_, i64>(10)? as u8,
                     kind,
-                    venue: row.get(11)?,
-                    fee_lamports: row.get::<_, Option<i64>>(12)?.map(|v| v as u64),
-                    success: row.get(13)?,
+                    venue: row.get(12)?,
+                    fee_native_raw: row.get::<_, Option<i64>>(13)?.map(|v| v as u64),
+                    success: row.get(14)?,
                 })
             })
             .map_err(|e| format!("Failed to execute subject deltas query: {e}"))?;
