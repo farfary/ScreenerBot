@@ -190,3 +190,88 @@ async fn completed_actions_are_deleted_together_with_their_steps() {
         "the action must be gone after cleanup"
     );
 }
+
+fn uninitialized_quote_request() -> screenerbot::swaps::QuoteRequest {
+    use screenerbot::swaps::{QuoteRequest, SwapMode};
+    QuoteRequest {
+        input_mint: "So11111111111111111111111111111111111111112".to_owned(),
+        output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
+        input_amount: 1_000_000,
+        wallet_address: "Wallet1111111111111111111111111111111111111".to_owned(),
+        slippage_pct: 1.0,
+        swap_mode: SwapMode::ExactIn,
+        exclude_dexes: None,
+    }
+}
+
+fn assert_registry_uninitialized(err: screenerbot::Error) {
+    match err {
+        screenerbot::Error::Service(screenerbot::errors::ServiceError::Initialize {
+            service,
+            ..
+        }) => {
+            assert_eq!(service, "swaps.registry");
+        }
+        other => panic!("expected swaps.registry init error, got {other}"),
+    }
+}
+
+/// Quote/execution before `set_router_factory` must return a domain error.
+/// This binary never registers a factory; the accessor must not abort the process.
+#[test]
+fn uninitialized_registry_access_does_not_panic() {
+    let result = std::panic::catch_unwind(screenerbot::swaps::try_get_registry);
+    assert!(result.is_ok(), "try_get_registry must not panic");
+    assert!(
+        result.expect("catch_unwind").is_none(),
+        "no factory is registered in this test binary"
+    );
+
+    let result = std::panic::catch_unwind(screenerbot::swaps::get_registry);
+    assert!(result.is_ok(), "get_registry must not panic");
+    match result.expect("catch_unwind") {
+        Err(err) => assert_registry_uninitialized(err),
+        Ok(_) => panic!("get_registry must fail when uninitialized"),
+    }
+}
+
+#[tokio::test]
+async fn uninitialized_quote_returns_a_domain_error() {
+    let err = screenerbot::swaps::get_best_quote(uninitialized_quote_request())
+        .await
+        .expect_err("quote without a factory");
+    assert_registry_uninitialized(err);
+}
+
+#[tokio::test]
+async fn uninitialized_execution_returns_a_domain_error() {
+    use screenerbot::swaps::{
+        execute_swap_with_fallback, quote_and_execute_for_wallet, Quote, SwapMode,
+    };
+
+    let quote = Quote {
+        router_id: "jupiter".to_owned(),
+        router_name: "Jupiter".to_owned(),
+        input_mint: "So11111111111111111111111111111111111111112".to_owned(),
+        output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
+        input_amount: 1_000_000,
+        output_amount: 1,
+        price_impact_pct: 0.0,
+        fee_lamports: 0,
+        slippage_bps: 100,
+        route_plan: "none".to_owned(),
+        swap_mode: SwapMode::ExactIn,
+        wallet_address: "Wallet1111111111111111111111111111111111111".to_owned(),
+        execution_data: b"jupiter".to_vec(),
+    };
+
+    let err = execute_swap_with_fallback(&common::filter_token("mint"), quote)
+        .await
+        .expect_err("execute without a factory");
+    assert_registry_uninitialized(err);
+
+    let err = quote_and_execute_for_wallet(uninitialized_quote_request(), 1)
+        .await
+        .expect_err("wallet execute without a factory");
+    assert_registry_uninitialized(err);
+}

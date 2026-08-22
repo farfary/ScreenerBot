@@ -291,17 +291,17 @@ pub(crate) fn referral_fee_account(input_mint: &str, output_mint: &str) -> Optio
 }
 
 /// Build, sign and submit a Jupiter swap transaction with a caller-supplied
-/// keypair (rather than the main wallet). Used by the multi-wallet tool
-/// executor, which trades from wallets other than the configured main wallet
-/// but must still collect the same referral fee via `referral_fee_account`.
+/// keypair (rather than the main wallet). Used by
+/// [`JupiterRouter::execute_swap_for_wallet`] so a Jupiter quote is executed
+/// by Jupiter, collecting the same referral fee via `referral_fee_account`.
 pub(crate) async fn execute_with_keypair(
     quote: &Quote,
     keypair: &crate::chains::solana::solana_sdk::signature::Keypair,
-) -> std::result::Result<String, String> {
+) -> Result<String> {
     use crate::chains::solana::solana_sdk::signer::Signer;
 
     let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
-        .map_err(|e| format!("Quote deserialization failed: {e}"))?;
+        .map_err(|e| Error::parse_error(format!("Quote deserialization failed: {e}")))?;
 
     let fee_account = referral_fee_account(&quote.input_mint, &quote.output_mint);
 
@@ -332,17 +332,17 @@ pub(crate) async fn execute_with_keypair(
             .json(&swap_req)
             .timeout(JUPITER_HTTP_TIMEOUT)
     })
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
-        .map_err(|e| format!("Jupiter swap response parse failed: {e}"))?;
+        .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
 
     let rpc_client = crate::chains::solana::rpc::get_rpc_client();
+    // Propagate the send/confirm error unchanged so an unconfirmed signature
+    // remains recoverable (see `swaps::unconfirmed_swap_signature`).
     let signature = rpc_client
         .sign_send_and_confirm_with_keypair(&swap_response.swap_transaction, keypair)
-        .await
-        .map_err(|e| format!("Transaction failed: {e}"))?;
+        .await?;
 
     Ok(signature.to_string())
 }
@@ -505,6 +505,7 @@ impl SwapRouter for JupiterRouter {
     }
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
+        self.accept_own_quote(quote)?;
         // Keep background Jupiter pollers deferred while the swap transaction is
         // being built (see throttle module).
         let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
@@ -593,6 +594,27 @@ impl SwapRouter for JupiterRouter {
             price_impact_pct: quote.price_impact_pct,
             fee_lamports: 0,
             execution_time_ms: elapsed.as_millis() as u64,
+            effective_price_sol: None,
+        })
+    }
+
+    async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
+        self.accept_own_quote(quote)?;
+        let start = Instant::now();
+        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id)
+            .await
+            .map_err(|e| Error::internal_error(e))?;
+        let signature = execute_with_keypair(quote, &keypair).await?;
+        Ok(SwapResult {
+            success: true,
+            router_id: self.id().to_string(),
+            router_name: self.name().to_string(),
+            transaction_signature: signature,
+            input_amount: quote.input_amount,
+            output_amount: quote.output_amount,
+            price_impact_pct: quote.price_impact_pct,
+            fee_lamports: quote.fee_lamports,
+            execution_time_ms: start.elapsed().as_millis() as u64,
             effective_price_sol: None,
         })
     }

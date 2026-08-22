@@ -18,7 +18,7 @@ use std::time::Instant;
 /// Fetches quotes from all enabled routers simultaneously
 /// Returns the quote with highest output amount
 pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
-    let registry = get_registry();
+    let registry = get_registry()?;
     let enabled = registry.enabled_routers();
 
     if enabled.is_empty() {
@@ -159,7 +159,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
         ));
     }
 
-    let registry = get_registry();
+    let registry = get_registry()?;
 
     // Get primary router
     let primary = registry

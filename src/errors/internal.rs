@@ -9,10 +9,26 @@
 
 #[derive(Debug, Clone)]
 pub enum InternalError {
-    InvariantViolation { message: String },
-    TaskJoin { message: String },
-    Timeout { message: String },
-    Generic { message: String },
+    InvariantViolation {
+        message: String,
+    },
+    TaskJoin {
+        message: String,
+    },
+    Timeout {
+        message: String,
+    },
+    Generic {
+        message: String,
+    },
+    /// A caller requested an operation this owner does not implement.
+    /// Distinct from an invariant violation: the request is well-formed,
+    /// the capability is simply absent (e.g. wallet-scoped swap execution
+    /// on a stub router).
+    UnsupportedCapability {
+        capability: String,
+        owner: String,
+    },
 }
 
 impl std::fmt::Display for InternalError {
@@ -24,6 +40,9 @@ impl std::fmt::Display for InternalError {
             InternalError::TaskJoin { message } => write!(f, "Task join error: {message}"),
             InternalError::Timeout { message } => write!(f, "Timeout: {message}"),
             InternalError::Generic { message } => write!(f, "{message}"),
+            InternalError::UnsupportedCapability { capability, owner } => {
+                write!(f, "Unsupported capability '{capability}' on {owner}")
+            }
         }
     }
 }

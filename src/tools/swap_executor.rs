@@ -7,10 +7,11 @@
 
 use crate::chains::solana::constants::SOL_MINT;
 use crate::config::with_config;
+use crate::errors::DataError;
 use crate::logger::{self, LogTag};
-use crate::swaps::registry::get_registry;
 use crate::swaps::types::{QuoteRequest, SwapMode};
 use crate::wallets::Wallet;
+use crate::{Error, Result};
 
 /// Result of a tool swap execution
 #[derive(Debug, Clone)]
@@ -37,7 +38,7 @@ pub async fn execute_tool_swap(
     output_mint: &str,
     input_amount: u64,
     slippage_pct: Option<f64>,
-) -> Result<ToolSwapResult, String> {
+) -> Result<ToolSwapResult> {
     let wallet_address = wallet.address.clone();
     let slippage =
         slippage_pct.unwrap_or_else(|| with_config(|cfg| cfg.swaps.slippage.quote_default_pct));
@@ -53,44 +54,30 @@ pub async fn execute_tool_swap(
         exclude_dexes: None,
     };
 
-    // Get quote from registry (uses best available router)
-    let registry = get_registry();
-    let enabled = registry.enabled_routers();
-
-    if enabled.is_empty() {
-        return Err("No swap routers enabled".to_owned());
-    }
-
-    // Get quote from first enabled router (Jupiter preferred)
-    let router = &enabled[0];
-    let quote = router
-        .get_quote(&quote_request)
-        .await
-        .map_err(|e| format!("Failed to get quote: {e}"))?;
+    // Quote and execute through the same primary router instance. The quoting
+    // router owns execution; payloads never cross into another adapter.
+    let (quote, result) =
+        crate::swaps::quote_and_execute_for_wallet(quote_request, wallet.id).await?;
 
     logger::debug(
         LogTag::Tools,
         &format!(
-            "Tool swap quote: {} -> {} (input={}, output={}, impact={:.2}%)",
+            "Tool swap quote: {} -> {} (input={}, output={}, impact={:.2}%) via {}",
             input_mint,
             output_mint,
             quote.input_amount,
             quote.output_amount,
-            quote.price_impact_pct
+            quote.price_impact_pct,
+            result.router_name
         ),
     );
 
-    // Execute the swap, resolving and signing with this wallet's key inside
-    // crate::chains::solana — this function never sees the keypair itself.
-    let signature =
-        crate::chains::solana::swaps::routers::execute_for_wallet(&quote, wallet.id).await?;
-
     Ok(ToolSwapResult {
-        signature,
+        signature: result.transaction_signature,
         input_amount: quote.input_amount,
         output_amount: quote.output_amount,
         price_impact_pct: quote.price_impact_pct,
-        router_name: quote.router_name,
+        router_name: result.router_name,
     })
 }
 
@@ -103,15 +90,24 @@ pub async fn tool_buy(
     token_mint: &str,
     amount_sol: f64,
     slippage_pct: Option<f64>,
-) -> Result<ToolSwapResult, String> {
+) -> Result<ToolSwapResult> {
     // Validate token mint
-    crate::wallets::validate_address(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
+    crate::wallets::validate_address(token_mint).map_err(|e| {
+        Error::Data(DataError::ValidationError {
+            field: "token_mint".to_owned(),
+            value: token_mint.to_owned(),
+            reason: e,
+        })
+    })?;
 
     // Convert SOL to lamports
     let lamports = (amount_sol * 1_000_000_000.0) as u64;
 
     if lamports < 1_000_000 {
-        return Err("Amount too small (minimum 0.001 SOL)".to_owned());
+        return Err(Error::invalid_amount(
+            lamports.to_string(),
+            "Amount too small (minimum 0.001 SOL)",
+        ));
     }
 
     logger::info(
@@ -136,12 +132,18 @@ pub async fn tool_sell(
     token_mint: &str,
     token_amount: u64,
     slippage_pct: Option<f64>,
-) -> Result<ToolSwapResult, String> {
+) -> Result<ToolSwapResult> {
     // Validate token mint
-    crate::wallets::validate_address(token_mint).map_err(|e| format!("Invalid token mint: {e}"))?;
+    crate::wallets::validate_address(token_mint).map_err(|e| {
+        Error::Data(DataError::ValidationError {
+            field: "token_mint".to_owned(),
+            value: token_mint.to_owned(),
+            reason: e,
+        })
+    })?;
 
     if token_amount == 0 {
-        return Err("Token amount cannot be zero".to_owned());
+        return Err(Error::invalid_amount("0", "Token amount cannot be zero"));
     }
 
     logger::info(

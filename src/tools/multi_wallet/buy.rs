@@ -252,6 +252,6 @@ async fn execute_single_buy(
             amount_sol,
             Some(swap_result.output_amount as f64),
         ),
-        Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e),
+        Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e.to_string()),
     }
 }

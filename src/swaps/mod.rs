@@ -4,6 +4,7 @@
 //! `SwapRouter` contract, the registry that wires adapters up, and the
 //! router-agnostic quote/execute-with-fallback policy.
 pub mod operations;
+mod operations_wallet;
 pub mod registry;
 pub mod router;
 pub mod types;
@@ -13,7 +14,8 @@ pub use operations::{
     execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening,
     unconfirmed_swap_signature, unconfirmed_swap_signature_from_message,
 };
-pub use registry::{get_registry, RouterRegistry};
+pub use operations_wallet::quote_and_execute_for_wallet;
+pub use registry::{get_registry, try_get_registry, RouterRegistry};
 pub use router::SwapRouter;
 pub use types::{ExitType, Quote, QuoteRequest, RouterType, SwapMode, SwapResult};
 

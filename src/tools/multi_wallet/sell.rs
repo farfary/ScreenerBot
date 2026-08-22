@@ -328,6 +328,6 @@ async fn execute_single_sell(
                 Some(amount as f64),
             )
         }
-        Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e),
+        Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e.to_string()),
     }
 }

@@ -421,6 +421,7 @@ impl SwapRouter for GmgnRouter {
     }
 
     async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult> {
+        self.accept_own_quote(quote)?;
         let start = Instant::now();
 
         let swap_data: SwapData = serde_json::from_slice(&quote.execution_data)
@@ -440,6 +441,56 @@ impl SwapRouter for GmgnRouter {
             router_id: self.id().to_string(),
             router_name: self.name().to_string(),
             transaction_signature: signature,
+            input_amount: quote.input_amount,
+            output_amount: quote.output_amount,
+            price_impact_pct: quote.price_impact_pct,
+            fee_lamports: quote.fee_lamports,
+            execution_time_ms: start.elapsed().as_millis() as u64,
+            effective_price_sol: None,
+        })
+    }
+
+    async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
+        self.accept_own_quote(quote)?;
+        let start = Instant::now();
+
+        let swap_data: SwapData = serde_json::from_slice(&quote.execution_data)
+            .map_err(|e| Error::internal_error(format!("Swap data deserialization failed: {e}")))?;
+
+        if let Some(unhealthy) =
+            crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
+        {
+            return Err(Error::connectivity_error(format!(
+                "Cannot send GMGN transaction - Unhealthy endpoints: {}",
+                unhealthy
+            )));
+        }
+
+        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id)
+            .await
+            .map_err(|e| Error::internal_error(e))?;
+        let rpc_client = crate::chains::solana::rpc::get_rpc_client();
+        let signature = rpc_client
+            .sign_send_and_confirm_with_keypair(&swap_data.raw_tx.swap_transaction, &keypair)
+            .await?;
+        let sig_str = signature.to_string();
+
+        crate::events::record_swap_event(
+            &sig_str,
+            &quote.input_mint,
+            &quote.output_mint,
+            quote.input_amount,
+            quote.output_amount,
+            true,
+            None,
+        )
+        .await;
+
+        Ok(SwapResult {
+            success: true,
+            router_id: self.id().to_string(),
+            router_name: self.name().to_string(),
+            transaction_signature: sig_str,
             input_amount: quote.input_amount,
             output_amount: quote.output_amount,
             price_impact_pct: quote.price_impact_pct,

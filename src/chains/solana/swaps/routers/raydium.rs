@@ -43,7 +43,8 @@ impl SwapRouter for RaydiumRouter {
         Err(Error::internal_error("Raydium router not implemented yet"))
     }
 
-    async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> Result<SwapResult> {
+    async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
+        self.accept_own_quote(quote)?;
         Err(Error::internal_error("Raydium router not implemented yet"))
     }
 }

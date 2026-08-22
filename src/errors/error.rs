@@ -226,4 +226,13 @@ impl Error {
             message: message.into(),
         })
     }
+
+    /// Create an unsupported-capability error (well-formed request, missing
+    /// implementation on the named owner).
+    pub fn unsupported_capability(capability: impl Into<String>, owner: impl Into<String>) -> Self {
+        Error::Internal(InternalError::UnsupportedCapability {
+            capability: capability.into(),
+            owner: owner.into(),
+        })
+    }
 }

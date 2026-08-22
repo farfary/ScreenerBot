@@ -402,6 +402,59 @@ fn shared_swaps_registry_never_imports_solana_routers() {
     );
 }
 
+/// Registry access is fallible. Boot registers a factory; quote/execution
+/// paths convert a missing factory into a structured error. Reintroducing
+/// `expect`/`unwrap`/`panic` on initialization would abort tests and
+/// library callers that reach swaps before `set_router_factory`.
+#[test]
+fn shared_swaps_registry_never_panics_on_missing_factory() {
+    let path = "swaps/registry.rs";
+    let contents = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path))
+        .expect("src/swaps/registry.rs must exist");
+    let production = contents
+        .split("#[cfg(test)]")
+        .next()
+        .expect("production source");
+    let code = code_lines(production);
+
+    for needle in [
+        ".expect(",
+        "panic!(",
+        ".unwrap()",
+        ".unwrap_or_else(|| panic!",
+    ] {
+        assert!(
+            !code.contains(needle),
+            "src/{path} must not {needle} — uninitialized registry access is fallible"
+        );
+    }
+}
+
+/// Tool swaps must bind execution to the quoting router via the SwapRouter
+/// contract. Calling Jupiter's wallet helper with another router's quote
+/// submits foreign `execution_data` to Jupiter.
+#[test]
+fn tool_swap_executor_never_calls_jupiter_wallet_helper() {
+    let path = "tools/swap_executor.rs";
+    let contents = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(path))
+        .expect("src/tools/swap_executor.rs must exist");
+    let code = code_lines(&contents);
+
+    for needle in [
+        "swaps::routers::execute_for_wallet",
+        "execute_with_keypair",
+        "JupiterRouter",
+        "enabled_routers()",
+        "enabled[0]",
+    ] {
+        assert!(
+            !code.contains(needle),
+            "src/{path} must not {needle} — quote and wallet execution go through \
+             crate::swaps::quote_and_execute_for_wallet so the producing router owns the payload"
+        );
+    }
+}
+
 /// SOL/WSOL/USDC/USDT mint addresses, decimals and lamport conversion
 /// constants have exactly one owner: `crate::chains::solana::constants`.
 /// `crate::constants` (the chain-neutral home for a future second chain)

@@ -93,13 +93,138 @@ pub fn set_router_factory(factory: fn() -> Vec<Arc<dyn SwapRouter>>) {
     let _ = ROUTER_FACTORY.set(factory);
 }
 
-/// Get global router registry
-/// Initializes on first access, using the registered router factory.
-pub fn get_registry() -> &'static RouterRegistry {
-    REGISTRY.get_or_init(|| {
-        let factory = ROUTER_FACTORY
-            .get()
-            .expect("swaps::registry::set_router_factory must be called before get_registry()");
-        RouterRegistry::new(factory())
+/// Fallible global registry access. Returns `None` when the composition root
+/// has not registered a router factory — integration tests, library callers,
+/// and startup paths that quote before boot. Never panics.
+pub fn try_get_registry() -> Option<&'static RouterRegistry> {
+    if let Some(registry) = REGISTRY.get() {
+        return Some(registry);
+    }
+    let factory = ROUTER_FACTORY.get()?;
+    let _ = REGISTRY.set(RouterRegistry::new(factory()));
+    REGISTRY.get()
+}
+
+/// Get the global router registry, initializing it from the registered factory
+/// on first access. Returns a structured service-init error when the factory
+/// has not been registered — never panics.
+pub fn get_registry() -> crate::Result<&'static RouterRegistry> {
+    try_get_registry().ok_or_else(|| {
+        crate::Error::Service(crate::errors::ServiceError::Initialize {
+            service: "swaps.registry".to_owned(),
+            message: "router factory has not been registered".to_owned(),
+        })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
+    use crate::tokens::Token;
+    use crate::Result;
+    use async_trait::async_trait;
+
+    struct StubRouter {
+        id: &'static str,
+        enabled: bool,
+        priority: u8,
+    }
+
+    #[async_trait]
+    impl SwapRouter for StubRouter {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn name(&self) -> &'static str {
+            self.id
+        }
+        fn is_enabled(&self) -> bool {
+            self.enabled
+        }
+        fn priority(&self) -> u8 {
+            self.priority
+        }
+        async fn get_quote(&self, _request: &QuoteRequest) -> Result<Quote> {
+            Err(crate::Error::api_error("stub"))
+        }
+        async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> Result<SwapResult> {
+            Err(crate::Error::api_error("stub"))
+        }
+    }
+
+    fn stub(id: &'static str, enabled: bool, priority: u8) -> Arc<dyn SwapRouter> {
+        Arc::new(StubRouter {
+            id,
+            enabled,
+            priority,
+        })
+    }
+
+    #[test]
+    fn primary_router_is_the_enabled_router_with_lowest_priority() {
+        let registry = RouterRegistry::new(vec![
+            stub("gmgn", true, 1),
+            stub("jupiter", true, 0),
+            stub("raydium", true, 2),
+        ]);
+        let primary = registry.get_primary_router().expect("enabled routers");
+        assert_eq!(primary.id(), "jupiter");
+    }
+
+    #[test]
+    fn primary_router_skips_disabled_routers_regardless_of_registration_order() {
+        let registry = RouterRegistry::new(vec![
+            stub("jupiter", false, 0),
+            stub("gmgn", true, 1),
+            stub("raydium", false, 2),
+        ]);
+        let primary = registry.get_primary_router().expect("gmgn enabled");
+        assert_eq!(primary.id(), "gmgn");
+        let enabled: Vec<_> = registry.enabled_routers().iter().map(|r| r.id()).collect();
+        assert_eq!(enabled, vec!["gmgn"]);
+    }
+
+    #[test]
+    fn primary_selection_is_deterministic_across_shuffled_registration() {
+        let orders = [
+            vec![
+                stub("raydium", true, 2),
+                stub("gmgn", true, 1),
+                stub("jupiter", true, 0),
+            ],
+            vec![
+                stub("gmgn", true, 1),
+                stub("jupiter", true, 0),
+                stub("raydium", true, 2),
+            ],
+            vec![
+                stub("jupiter", true, 0),
+                stub("raydium", true, 2),
+                stub("gmgn", true, 1),
+            ],
+        ];
+        for routers in orders {
+            let registry = RouterRegistry::new(routers);
+            assert_eq!(
+                registry.get_primary_router().expect("enabled").id(),
+                "jupiter"
+            );
+        }
+    }
+
+    #[test]
+    fn fallback_chain_is_enabled_routers_by_priority_excluding_failed() {
+        let registry = RouterRegistry::new(vec![
+            stub("jupiter", true, 0),
+            stub("gmgn", true, 1),
+            stub("raydium", false, 2),
+        ]);
+        let chain: Vec<_> = registry
+            .get_fallback_chain("jupiter")
+            .iter()
+            .map(|r| r.id())
+            .collect();
+        assert_eq!(chain, vec!["gmgn"]);
+    }
 }
