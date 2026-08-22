@@ -91,5 +91,3 @@ _backup/
 .stylelintrc.json
 eslint.config.js
 
-# Generated knowledge-graph output from the /graphify skill (not source)
-graphify-out/
