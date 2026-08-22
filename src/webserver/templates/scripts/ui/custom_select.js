@@ -333,13 +333,13 @@ export class CustomSelect {
     this._updateDisplayValue();
 
     // Create arrow with SVG chevron
-    const arrowEl = document.createElement("span");
-    arrowEl.className = "cs-arrow";
-    arrowEl.innerHTML =
+    this.arrowEl = document.createElement("span");
+    this.arrowEl.className = "cs-arrow";
+    this.arrowEl.innerHTML =
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 
     this.triggerEl.appendChild(this.valueEl);
-    this.triggerEl.appendChild(arrowEl);
+    this.triggerEl.appendChild(this.arrowEl);
 
     // Create dropdown (will be appended to body when opened - portal pattern)
     this.dropdownEl = document.createElement("div");
@@ -714,6 +714,7 @@ export class CustomSelect {
     }
 
     // Position dropdown with fixed positioning
+    this._syncMenuMetrics();
     this._positionDropdown();
     this._startPositionTracking();
 
@@ -788,6 +789,34 @@ export class CustomSelect {
     } else {
       this.open();
     }
+  }
+
+  /**
+   * Copy the trigger's real label box onto the portaled menu.
+   *
+   * The menu is hard-clamped to the trigger width, so any surface that restyles
+   * `.cs-trigger` padding/gap (the table toolbar does) used to leave the options
+   * with the component default and truncate labels the trigger showed in full --
+   * which is why widths kept being hand-bumped per surface. Deriving the option
+   * padding from the computed trigger instead keeps the two label boxes identical
+   * everywhere, with no per-surface compensation.
+   */
+  _syncMenuMetrics() {
+    if (!this.triggerEl?.isConnected || !this.dropdownEl) return;
+
+    const triggerStyle = window.getComputedStyle(this.triggerEl);
+    const paddingLeft = parseFloat(triggerStyle.paddingLeft) || 0;
+    const paddingRight = parseFloat(triggerStyle.paddingRight) || 0;
+    const gap = parseFloat(triggerStyle.columnGap) || 0;
+    const arrowWidth = this.arrowEl?.getBoundingClientRect().width || 0;
+
+    const style = this.dropdownEl.style;
+    style.setProperty("--cs-pad-left", `${paddingLeft}px`);
+    // The arrow column is reserved for the selected checkmark, so an option label
+    // starts and ends exactly where the trigger's value does.
+    style.setProperty("--cs-pad-right", `${paddingRight + gap + arrowWidth}px`);
+    style.setProperty("--cs-check-right", `${paddingRight}px`);
+    style.setProperty("--cs-check-size", `${arrowWidth || 16}px`);
   }
 
   _positionDropdown(triggerRect = this.triggerEl?.getBoundingClientRect()) {

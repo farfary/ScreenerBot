@@ -15,7 +15,13 @@ select.cs-enhanced-source {
 .custom-select {
   position: relative;
   display: inline-flex;
-  min-width: 140px;
+
+  /* A trigger must never be wider than the field that holds it: the portaled menu
+     is positioned and sized from the trigger's box, so an overflowing trigger drags
+     its whole open menu over the control to its right. `min-width` is therefore a
+     preference, not a floor. */
+  min-width: min(140px, 100%);
+  max-width: 100%;
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   cursor: pointer;
@@ -232,8 +238,12 @@ select.cs-enhanced-source {
   box-sizing: border-box;
   width: 100%;
   min-height: var(--cs-control-height, 36px);
-  /* Keep a dedicated trailing column for the selected checkmark. */
-  padding: 0.375rem 2.5rem 0.375rem 0.75rem;
+
+  /* The label box mirrors the trigger's: same leading padding, and a trailing column
+     the exact width of the trigger's chevron column, reserved for the checkmark.
+     Both are measured off the live trigger by `_syncMenuMetrics()`, so a surface that
+     restyles `.cs-trigger` padding never needs its select widths hand-compensated. */
+  padding: 0.375rem var(--cs-pad-right, 2.25rem) 0.375rem var(--cs-pad-left, 0.75rem);
   color: var(--text-primary);
   font-size: 0.8125rem;
   font-weight: 450;
@@ -270,11 +280,11 @@ select.cs-enhanced-source {
 .cs-option.selected::after {
   content: "";
   position: absolute;
-  right: 12px;
+  right: var(--cs-check-right, 12px);
   top: 50%;
   transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
+  width: var(--cs-check-size, 16px);
+  height: var(--cs-check-size, 16px);
   background-color: var(--primary-color);
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") no-repeat center / contain;
   animation: cs-check-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -321,17 +331,12 @@ select.cs-enhanced-source {
 
 /* Size variants */
 .custom-select.cs-sm {
-  min-width: 100px;
+  min-width: min(100px, 100%);
   font-size: 0.75rem;
 }
 
 .custom-select.cs-sm .cs-trigger {
   padding: 6px 10px;
-}
-
-.custom-select.cs-sm .cs-option {
-  padding: 8px 12px;
-  padding-right: 40px;
 }
 
 .custom-select.cs-sm .cs-arrow svg {
@@ -340,17 +345,12 @@ select.cs-enhanced-source {
 }
 
 .custom-select.cs-lg {
-  min-width: 180px;
+  min-width: min(180px, 100%);
   font-size: 0.9375rem;
 }
 
 .custom-select.cs-lg .cs-trigger {
   padding: 12px 16px;
-}
-
-.custom-select.cs-lg .cs-option {
-  padding: 12px 16px;
-  padding-right: 40px;
 }
 
 /* Full width variant */
