@@ -7,6 +7,7 @@
 //! concrete Solana router set lives in
 //! `crate::chains::solana::swaps::routers::build_routers`.
 
+use crate::chains::{active_chain, ChainId};
 use crate::swaps::router::SwapRouter;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -29,11 +30,19 @@ impl RouterRegistry {
         Self { routers }
     }
 
-    /// Get all enabled routers
+    /// Get all enabled routers for the currently active chain.
+    /// Thin delegate over [`Self::enabled_routers_for`] kept so existing call
+    /// sites keep compiling and behaving identically today (single-chain).
     pub fn enabled_routers(&self) -> Vec<Arc<dyn SwapRouter>> {
+        self.enabled_routers_for(active_chain())
+    }
+
+    /// Get all enabled routers that serve `chain`. A router for a different
+    /// chain never appears here, regardless of registration order.
+    pub fn enabled_routers_for(&self, chain: ChainId) -> Vec<Arc<dyn SwapRouter>> {
         self.routers
             .iter()
-            .filter(|r| r.is_enabled())
+            .filter(|r| r.is_enabled() && r.chain() == chain)
             .cloned()
             .collect()
     }
@@ -43,13 +52,24 @@ impl RouterRegistry {
         self.routers.iter().find(|r| r.id() == id).cloned()
     }
 
-    /// Get fallback chain for failed router
-    /// Returns routers sorted by priority (excluding failed router)
+    /// Get fallback chain for failed router, scoped to the active chain.
+    /// Thin delegate over [`Self::get_fallback_chain_for`].
     pub fn get_fallback_chain(&self, failed_router_id: &str) -> Vec<Arc<dyn SwapRouter>> {
+        self.get_fallback_chain_for(active_chain(), failed_router_id)
+    }
+
+    /// Get fallback routers for `chain`, excluding the failed router.
+    /// Returns routers sorted by priority; a router for a different chain
+    /// never appears in the fallback chain.
+    pub fn get_fallback_chain_for(
+        &self,
+        chain: ChainId,
+        failed_router_id: &str,
+    ) -> Vec<Arc<dyn SwapRouter>> {
         let mut fallbacks: Vec<_> = self
             .routers
             .iter()
-            .filter(|r| r.is_enabled() && r.id() != failed_router_id)
+            .filter(|r| r.is_enabled() && r.chain() == chain && r.id() != failed_router_id)
             .cloned()
             .collect();
 
@@ -57,14 +77,30 @@ impl RouterRegistry {
         fallbacks
     }
 
-    /// Check if any router is enabled
+    /// Check if any router is enabled for the currently active chain.
+    /// Thin delegate over [`Self::has_enabled_routers_for`].
     pub fn has_enabled_routers(&self) -> bool {
-        self.routers.iter().any(|r| r.is_enabled())
+        self.has_enabled_routers_for(active_chain())
     }
 
-    /// Get primary router (lowest priority number among enabled routers)
+    /// Check if any router serving `chain` is enabled.
+    pub fn has_enabled_routers_for(&self, chain: ChainId) -> bool {
+        self.routers
+            .iter()
+            .any(|r| r.is_enabled() && r.chain() == chain)
+    }
+
+    /// Get primary router (lowest priority number among enabled routers) for
+    /// the currently active chain. Thin delegate over
+    /// [`Self::get_primary_router_for`].
     pub fn get_primary_router(&self) -> Option<Arc<dyn SwapRouter>> {
-        self.enabled_routers()
+        self.get_primary_router_for(active_chain())
+    }
+
+    /// Get the primary router for `chain` — the lowest-`priority()` ENABLED
+    /// router serving that chain, never the first registered.
+    pub fn get_primary_router_for(&self, chain: ChainId) -> Option<Arc<dyn SwapRouter>> {
+        self.enabled_routers_for(chain)
             .into_iter()
             .min_by_key(|r| r.priority())
     }
@@ -144,6 +180,9 @@ mod tests {
         }
         fn priority(&self) -> u8 {
             self.priority
+        }
+        fn chain(&self) -> ChainId {
+            crate::chains::active_chain()
         }
         async fn get_quote(&self, _request: &QuoteRequest) -> Result<Quote> {
             Err(crate::Error::api_error("stub"))

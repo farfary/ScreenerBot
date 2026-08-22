@@ -102,6 +102,7 @@ pub async fn add_to_position(
     // Manual override when the user set one in the trade dialog; config default otherwise.
     let slippage = super::slippage::entry_slippage(slippage_pct);
     let quote_request = QuoteRequest {
+        chain: crate::chains::active_chain(),
         input_mint: SOL_MINT.to_string(),
         output_mint: token_mint.to_string(),
         input_amount: sol_to_lamports(dca_amount_sol),

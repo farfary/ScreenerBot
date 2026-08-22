@@ -19,7 +19,7 @@ use std::time::Instant;
 /// Returns the quote with highest output amount
 pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     let registry = get_registry()?;
-    let enabled = registry.enabled_routers();
+    let enabled = registry.enabled_routers_for(request.chain);
 
     if enabled.is_empty() {
         return Err(Error::configuration_error(
@@ -231,7 +231,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
             );
 
             // Try fallback chain
-            let fallbacks = registry.get_fallback_chain(&quote.router_id);
+            let fallbacks = registry.get_fallback_chain_for(quote.chain, &quote.router_id);
 
             if fallbacks.is_empty() {
                 logger::error(
@@ -265,6 +265,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
 
                 // Get fresh quote from fallback router
                 let fallback_request = QuoteRequest {
+                    chain: quote.chain,
                     input_mint: quote.input_mint.clone(),
                     output_mint: quote.output_mint.clone(),
                     input_amount: quote.input_amount,

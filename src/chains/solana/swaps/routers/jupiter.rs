@@ -401,7 +401,12 @@ impl SwapRouter for JupiterRouter {
         0 // Highest priority (primary router)
     }
 
+    fn chain(&self) -> crate::chains::ChainId {
+        crate::chains::ChainId::Solana
+    }
+
     async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
+        self.accept_own_chain(request)?;
         // Mark a swap as in flight so background Jupiter pollers (price, token
         // discovery, health) defer and don't steal the shared rate budget.
         let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
@@ -488,6 +493,7 @@ impl SwapRouter for JupiterRouter {
         let execution_data = response_text.into_bytes();
 
         Ok(Quote {
+            chain: request.chain,
             router_id: self.id().to_string(),
             router_name: self.name().to_string(),
             input_mint: request.input_mint.clone(),

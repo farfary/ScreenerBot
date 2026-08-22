@@ -5,6 +5,7 @@
 //! routers), never enabled-vector position.
 
 use crate::swaps::registry::{get_registry, RouterRegistry};
+use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::{Error, Result};
 
@@ -29,8 +30,9 @@ pub(crate) async fn quote_and_execute_for_wallet_on(
     wallet_id: i64,
 ) -> Result<(Quote, SwapResult)> {
     let router = registry
-        .get_primary_router()
+        .get_primary_router_for(request.chain)
         .ok_or_else(|| Error::configuration_error("No swap routers enabled in config"))?;
+    router.accept_own_chain(&request)?;
     let quote = router.get_quote(&request).await?;
     let result = router.execute_swap_for_wallet(&quote, wallet_id).await?;
     Ok((quote, result))
@@ -70,6 +72,7 @@ mod tests {
 
     fn request() -> QuoteRequest {
         QuoteRequest {
+            chain: crate::chains::active_chain(),
             input_mint: "So11111111111111111111111111111111111111112".to_owned(),
             output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
             input_amount: 1_000_000,
@@ -94,10 +97,14 @@ mod tests {
         fn priority(&self) -> u8 {
             self.priority
         }
+        fn chain(&self) -> crate::chains::ChainId {
+            crate::chains::ChainId::Solana
+        }
 
         async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
             self.log.quotes.lock().expect("quotes").push(self.id);
             Ok(Quote {
+                chain: request.chain,
                 router_id: self.id.to_owned(),
                 router_name: self.id.to_owned(),
                 input_mint: request.input_mint.clone(),
@@ -302,8 +309,12 @@ mod tests {
             fn priority(&self) -> u8 {
                 2
             }
+            fn chain(&self) -> crate::chains::ChainId {
+                crate::chains::ChainId::Solana
+            }
             async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
                 Ok(Quote {
+                    chain: request.chain,
                     router_id: self.id().to_owned(),
                     router_name: self.name().to_owned(),
                     input_mint: request.input_mint.clone(),

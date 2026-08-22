@@ -194,6 +194,7 @@ async fn completed_actions_are_deleted_together_with_their_steps() {
 fn uninitialized_quote_request() -> screenerbot::swaps::QuoteRequest {
     use screenerbot::swaps::{QuoteRequest, SwapMode};
     QuoteRequest {
+        chain: screenerbot::chains::active_chain(),
         input_mint: "So11111111111111111111111111111111111111112".to_owned(),
         output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
         input_amount: 1_000_000,
@@ -250,6 +251,7 @@ async fn uninitialized_execution_returns_a_domain_error() {
     };
 
     let quote = Quote {
+        chain: screenerbot::chains::active_chain(),
         router_id: "jupiter".to_owned(),
         router_name: "Jupiter".to_owned(),
         input_mint: "So11111111111111111111111111111111111111112".to_owned(),

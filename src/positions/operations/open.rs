@@ -229,6 +229,7 @@ async fn open_position_impl(
     let slippage_quote_default = super::slippage::entry_slippage(slippage_pct);
 
     let quote_request = QuoteRequest {
+        chain: crate::chains::active_chain(),
         input_mint: SOL_MINT.to_string(),
         output_mint: api_token.mint.clone(),
         input_amount: sol_to_lamports(trade_size_sol),

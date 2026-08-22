@@ -1,5 +1,6 @@
 //! Router trait — defines the unified interface for all DEX swap routers.
 
+use crate::chains::ChainId;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
@@ -26,6 +27,10 @@ pub trait SwapRouter: Send + Sync {
     /// Used to determine fallback order when primary fails
     fn priority(&self) -> u8;
 
+    /// The chain this router serves. Selection is scoped to this chain —
+    /// see `RouterRegistry::enabled_routers_for` and friends.
+    fn chain(&self) -> ChainId;
+
     /// Get quote from this router
     async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote>;
 
@@ -40,6 +45,22 @@ pub trait SwapRouter: Send + Sync {
                 "Quote from router '{}' cannot be executed by '{}'",
                 quote.router_id,
                 self.id()
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Refuse a request for a chain this router does not serve. A router must
+    /// never quote or execute for a chain other than its own, even if it was
+    /// (incorrectly) handed the request.
+    fn accept_own_chain(&self, request: &QuoteRequest) -> Result<()> {
+        if request.chain != self.chain() {
+            Err(Error::internal_error(format!(
+                "Request for chain '{}' cannot be routed to '{}' which serves '{}'",
+                request.chain,
+                self.id(),
+                self.chain()
             )))
         } else {
             Ok(())

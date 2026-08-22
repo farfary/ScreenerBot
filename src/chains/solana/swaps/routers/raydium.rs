@@ -39,7 +39,12 @@ impl SwapRouter for RaydiumRouter {
         2 // Tertiary priority (after Jupiter and GMGN)
     }
 
-    async fn get_quote(&self, _request: &QuoteRequest) -> Result<Quote> {
+    fn chain(&self) -> crate::chains::ChainId {
+        crate::chains::ChainId::Solana
+    }
+
+    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
+        self.accept_own_chain(request)?;
         Err(Error::internal_error("Raydium router not implemented yet"))
     }
 

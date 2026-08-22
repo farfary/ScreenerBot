@@ -1,6 +1,7 @@
 //! Common swap structures and types used across different swap modules
 //! This module contains shared data structures for swap operations
 
+use crate::chains::ChainId;
 use serde::{Deserialize, Deserializer, Serialize};
 
 // ============================================================================
@@ -10,6 +11,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 /// Quote request parameters (immutable, passed to all routers)
 #[derive(Debug, Clone)]
 pub struct QuoteRequest {
+    /// The chain this request is for. Routers must refuse a request whose
+    /// chain does not match their own (see `SwapRouter::accept_own_chain`).
+    pub chain: ChainId,
     pub input_mint: String,
     pub output_mint: String,
     pub input_amount: u64,
@@ -40,6 +44,8 @@ impl SwapMode {
 /// Unified quote response (router-agnostic)
 #[derive(Debug, Clone)]
 pub struct Quote {
+    /// The chain this quote was produced for, carried over from the request.
+    pub chain: ChainId,
     pub router_id: String,
     pub router_name: String,
     pub input_mint: String,

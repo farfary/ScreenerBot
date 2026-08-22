@@ -529,6 +529,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
     };
 
     let quote_request = QuoteRequest {
+        chain: crate::chains::active_chain(),
         input_mint,
         output_mint,
         input_amount,

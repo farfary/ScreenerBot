@@ -376,7 +376,12 @@ impl SwapRouter for GmgnRouter {
         1
     }
 
+    fn chain(&self) -> crate::chains::ChainId {
+        crate::chains::ChainId::Solana
+    }
+
     async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
+        self.accept_own_chain(request)?;
         let swap_data = self
             .fetch_gmgn_quote_internal(
                 &request.input_mint,
@@ -404,6 +409,7 @@ impl SwapRouter for GmgnRouter {
             .map_err(|e| Error::internal_error(format!("Swap data serialization failed: {e}")))?;
 
         Ok(Quote {
+            chain: request.chain,
             router_id: self.id().to_string(),
             router_name: self.name().to_string(),
             input_mint: request.input_mint.clone(),

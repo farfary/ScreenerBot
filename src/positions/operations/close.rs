@@ -196,6 +196,7 @@ pub async fn close_position_direct(
     let mut submitted_signature: Option<String> = None;
     for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
         let quote_request = QuoteRequest {
+            chain: crate::chains::active_chain(),
             input_mint: token_mint.to_string(),
             output_mint: SOL_MINT.to_string(),
             input_amount: sell_amount,

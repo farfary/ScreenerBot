@@ -45,6 +45,7 @@ pub async fn execute_tool_swap(
 
     // Create quote request
     let quote_request = QuoteRequest {
+        chain: crate::chains::active_chain(),
         input_mint: input_mint.to_string(),
         output_mint: output_mint.to_string(),
         input_amount,

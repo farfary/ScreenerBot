@@ -161,6 +161,7 @@ pub async fn partial_close_position(
 
     for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
         let quote_request = QuoteRequest {
+            chain: crate::chains::active_chain(),
             input_mint: token_mint.to_string(),
             output_mint: SOL_MINT.to_string(),
             input_amount: exit_amount,
