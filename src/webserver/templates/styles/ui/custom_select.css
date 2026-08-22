@@ -11,16 +11,28 @@ select.cs-enhanced-source {
   display: none !important;
 }
 
+/* The host the enhancer inserts around every select. It is frequently a grid or
+   flex item (form field, toolbar cell), where the default `min-width: auto` floors
+   it at its content and lets it push out of its track. Zero that floor here, once,
+   so no surface has to remember to. */
+.custom-select-host {
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* Wrapper */
 .custom-select {
   position: relative;
-  display: inline-flex;
 
-  /* A trigger must never be wider than the field that holds it: the portaled menu
-     is positioned and sized from the trigger's box, so an overflowing trigger drags
-     its whole open menu over the control to its right. `min-width` is therefore a
-     preference, not a floor. */
-  min-width: min(140px, 100%);
+  /* A select is as wide as the slot it sits in -- NEVER as wide as the label it
+     currently shows. As a shrink-to-fit `inline-flex` it grew with the selected
+     option, so picking a long value ("Disabled for this task") pushed the control
+     out of its grid column and over the control beside it -- and the portaled menu,
+     which is sized and placed from the trigger's rect, was dragged over with it.
+     A long value now ellipsizes in `.cs-value` instead of widening the box. */
+  display: flex;
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
@@ -331,7 +343,6 @@ select.cs-enhanced-source {
 
 /* Size variants */
 .custom-select.cs-sm {
-  min-width: min(100px, 100%);
   font-size: 0.75rem;
 }
 
@@ -345,18 +356,11 @@ select.cs-enhanced-source {
 }
 
 .custom-select.cs-lg {
-  min-width: min(180px, 100%);
   font-size: 0.9375rem;
 }
 
 .custom-select.cs-lg .cs-trigger {
   padding: 12px 16px;
-}
-
-/* Full width variant */
-.custom-select.cs-full {
-  display: flex;
-  width: 100%;
 }
 
 /* Touch-friendly: ensure minimum touch target */
