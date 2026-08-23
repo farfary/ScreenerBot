@@ -152,6 +152,11 @@ impl ServiceManager {
         self.services.insert(name, service);
     }
 
+    /// Number of services registered with this manager.
+    pub fn registered_count(&self) -> usize {
+        self.services.len()
+    }
+
     /// Start all enabled services in dependency and priority order
     pub async fn start_all(&mut self) -> crate::Result<()> {
         let total_registered = self.services.len();

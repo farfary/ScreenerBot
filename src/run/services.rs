@@ -65,12 +65,74 @@ pub fn register_all_services(manager: &mut ServiceManager) {
     // Background utility services
     manager.register(Box::new(UpdateCheckService));
 
-    let service_count = 24; // connectivity, events, wallet_watch, copy_trading, transactions, sol_price, pool_discovery,
-                            // pool_fetcher, pool_calculator, pool_analyzer, pools, tokens, filtering, ohlcv,
-                            // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, ai,
-                            // scheduled_ai_tasks, telegram, update_check
     logger::info(
         LogTag::System,
-        &format!("All services registered ({service_count} total)"),
+        &format!(
+            "All services registered ({} total)",
+            manager.registered_count()
+        ),
     );
+}
+
+/// Create the service manager, register every service, publish it globally,
+/// and start the enabled ones. `mode_label` only annotates the log line.
+pub(super) async fn create_and_start_services(mode_label: &str) -> Result<(), String> {
+    let mut service_manager = crate::services::ServiceManager::new()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if mode_label.is_empty() {
+        logger::info(LogTag::System, "Service manager initialized");
+    } else {
+        logger::info(
+            LogTag::System,
+            &format!("Service manager initialized ({mode_label})"),
+        );
+    }
+
+    register_all_services(&mut service_manager);
+
+    crate::services::init_global_service_manager(service_manager).await;
+
+    let manager_ref = crate::services::get_service_manager()
+        .await
+        .ok_or("Failed to get ServiceManager reference")?;
+
+    let mut service_manager = {
+        let mut guard = manager_ref.write().await;
+        guard.take().ok_or("ServiceManager was already taken")?
+    };
+
+    service_manager
+        .start_all()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    {
+        let mut guard = manager_ref.write().await;
+        *guard = Some(service_manager);
+    }
+
+    Ok(())
+}
+
+/// Take the global service manager back and stop every running service.
+pub(super) async fn stop_all_services() -> Result<(), String> {
+    let manager_ref = crate::services::get_service_manager()
+        .await
+        .ok_or("Failed to get ServiceManager reference for shutdown")?;
+
+    let mut service_manager = {
+        let mut guard = manager_ref.write().await;
+        guard
+            .take()
+            .ok_or("ServiceManager was already taken during shutdown")?
+    };
+
+    service_manager
+        .stop_all()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }

@@ -3,121 +3,22 @@
 //! Orchestrates bot lifecycle: process lock, configuration, wallet setup,
 //! service registration, and graceful shutdown handling.
 
+mod boot;
 mod bootstrap;
-mod llm_init;
 pub mod services;
 mod shutdown;
+
+pub use boot::boot;
 
 use bootstrap::{initialize_ai_runtime_if_enabled, initialize_full_runtime};
 
 use crate::{
-    arguments::{print_banner, print_help, print_version, set_cmd_args},
-    config::utils::load_config,
     errors::StartupError,
     global,
     logger::{self, LogTag},
     process::lock::ProcessLock,
     process::profiling,
-    services::ServiceManager,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
-/// Full process boot sequence: CLI early-exits, banner, logger, config, panic
-/// hook, ctrl-c shutdown signal, one-shot wallet reset, run the bot, and
-/// restart-after-graceful-shutdown handling. Called once from `main()`.
-pub async fn boot() {
-    // Store command line arguments
-    set_cmd_args(std::env::args().collect());
-
-    // Handle help flag
-    if std::env::args().any(|arg| arg == "--help" || arg == "-h") {
-        print_help();
-        return;
-    }
-
-    // Handle version flag
-    if std::env::args().any(|arg| arg == "--version" || arg == "-v") {
-        print_version();
-        return;
-    }
-
-    print_banner();
-
-    // Initialize logger
-    crate::logger::init();
-    logger::info(
-        LogTag::System,
-        "Logger initialized, attempting to load config...",
-    );
-
-    // Load configuration
-    if let Err(e) = load_config() {
-        logger::error(
-            LogTag::System,
-            &format!("Failed to load configuration: {e}"),
-        );
-        return;
-    }
-    logger::info(LogTag::System, "Configuration loaded successfully");
-
-    // Detect and log the system/network proxy once (used by HTTP, RPC and WS).
-    // Must run AFTER config load so `[network] proxy` is available.
-    crate::net::log_detected_proxy();
-
-    // Set up panic hook for crash notifications (after config is loaded)
-    crate::process::panic_hook::install();
-
-    logger::info(LogTag::System, "ScreenerBot starting...");
-
-    // Set up shutdown signal handler
-    let shutdown_flag = Arc::new(AtomicBool::new(false));
-    let shutdown_flag_clone = shutdown_flag.clone();
-
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to listen for ctrl+c");
-        logger::info(LogTag::System, "Shutdown signal received");
-        shutdown_flag_clone.store(true, Ordering::SeqCst);
-        crate::process::shutdown::request_shutdown();
-    });
-
-    // Handle one-shot wallet-data reset (safe: backs up before clearing) then
-    // continue into a normal boot, so a single relaunch fixes a wallet mismatch.
-    // This is what the GUI's "Reset wallet data & restart" and the documented
-    // `screenerbot --clean-wallet-data` both trigger.
-    if crate::arguments::is_clean_wallet_data_enabled() {
-        match crate::wallets::recovery::backup_and_clean_wallet_data() {
-            Ok(backup_dir) => logger::info(
-                LogTag::System,
-                &format!(
-                    "Wallet data reset complete (backup: {}). Continuing startup.",
-                    backup_dir.display()
-                ),
-            ),
-            Err(e) => logger::error(
-                LogTag::System,
-                &format!("Wallet data reset failed: {e}. Continuing startup anyway."),
-            ),
-        }
-    }
-
-    // Run the bot in headless mode. On a fatal startup failure, surface a
-    // structured error to the terminal/log file and the GUI shell, then exit
-    // with a non-zero code so callers (Electron, systemd) can tell a failed
-    // boot apart from a clean shutdown.
-    if let Err(e) = run_bot().await {
-        e.emit();
-        std::process::exit(1);
-    }
-
-    if crate::global::is_restart_requested() {
-        crate::process::restart::restart_after_graceful_shutdown();
-    }
-
-    logger::info(LogTag::System, "ScreenerBot shutdown complete");
-}
 
 /// Main bot execution function — handles the full bot lifecycle with ServiceManager.
 pub async fn run_bot() -> Result<(), StartupError> {
@@ -222,37 +123,8 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
         // Set initialization flag to false (services will be gated)
         global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
 
-        // Create service manager with only webserver enabled
-        let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
-        logger::info(LogTag::System, "Service manager initialized");
-
-        // Register all services (but only webserver will be enabled)
-        services::register_all_services(&mut service_manager);
-
-        // Initialize global ServiceManager for webserver access
-        crate::services::init_global_service_manager(service_manager).await;
-
-        // Get mutable reference to continue
-        let manager_ref = crate::services::get_service_manager()
-            .await
-            .ok_or("Failed to get ServiceManager reference")?;
-
-        let mut service_manager = {
-            let mut guard = manager_ref.write().await;
-            guard.take().ok_or("ServiceManager was already taken")?
-        };
-
-        // Start only enabled services (webserver only in pre-init mode)
-        service_manager
-            .start_all()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        // Put it back for webserver access
-        {
-            let mut guard = manager_ref.write().await;
-            *guard = Some(service_manager);
-        }
+        // Register every service; only the webserver is enabled before setup.
+        services::create_and_start_services("").await?;
 
         logger::info(
             LogTag::System,
@@ -305,30 +177,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
             // configuration enables AI, make the assistant usable here too.
             initialize_ai_runtime_if_enabled().await?;
 
-            let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
-            logger::info(LogTag::System, "Service manager initialized (Explore Mode)");
-
-            services::register_all_services(&mut service_manager);
-            crate::services::init_global_service_manager(service_manager).await;
-
-            let manager_ref = crate::services::get_service_manager()
-                .await
-                .ok_or("Failed to get ServiceManager reference")?;
-
-            let mut service_manager = {
-                let mut guard = manager_ref.write().await;
-                guard.take().ok_or("ServiceManager was already taken")?
-            };
-
-            service_manager
-                .start_all()
-                .await
-                .map_err(|e| e.to_string())?;
-
-            {
-                let mut guard = manager_ref.write().await;
-                *guard = Some(service_manager);
-            }
+            services::create_and_start_services("Explore Mode").await?;
 
             logger::info(
                 LogTag::System,
@@ -344,38 +193,8 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
             global::set_explore_mode(false);
             global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
 
-            // 9. Create service manager
-            let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
-
-            logger::info(LogTag::System, "Service manager initialized");
-
-            // 10. Register all services
-            services::register_all_services(&mut service_manager);
-
-            // 11. Initialize global ServiceManager for webserver access
-            crate::services::init_global_service_manager(service_manager).await;
-
-            // 12. Get mutable reference to continue
-            let manager_ref = crate::services::get_service_manager()
-                .await
-                .ok_or("Failed to get ServiceManager reference")?;
-
-            let mut service_manager = {
-                let mut guard = manager_ref.write().await;
-                guard.take().ok_or("ServiceManager was already taken")?
-            };
-
-            // 13. Start all enabled services
-            service_manager
-                .start_all()
-                .await
-                .map_err(|e| e.to_string())?;
-
-            // 14. Put it back for webserver access
-            {
-                let mut guard = manager_ref.write().await;
-                *guard = Some(service_manager);
-            }
+            // Every service is enabled in full mode.
+            services::create_and_start_services("").await?;
 
             logger::info(
                 LogTag::System,
@@ -390,21 +209,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
     // 16. Stop all services gracefully
     logger::info(LogTag::System, "Initiating graceful shutdown...");
 
-    let manager_ref = crate::services::get_service_manager()
-        .await
-        .ok_or("Failed to get ServiceManager reference for shutdown")?;
-
-    let mut service_manager = {
-        let mut guard = manager_ref.write().await;
-        guard
-            .take()
-            .ok_or("ServiceManager was already taken during shutdown")?
-    };
-
-    service_manager
-        .stop_all()
-        .await
-        .map_err(|e| e.to_string())?;
+    services::stop_all_services().await?;
 
     logger::info(LogTag::System, "ScreenerBot shut down successfully");
 

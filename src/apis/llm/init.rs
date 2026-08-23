@@ -1,9 +1,9 @@
-//! LLM provider initialization — configures AI providers from config.
+//! Builds the LlmManager's providers from `[ai.providers]` config.
 
 use crate::logger::{self, LogTag};
 
 /// Initialize LLM providers based on configuration.
-pub(super) async fn initialize_llm_providers() -> Result<(), String> {
+pub async fn init_providers_from_config() -> Result<(), String> {
     use crate::apis::llm::{init_llm_manager, LlmManager};
     use crate::config::with_config;
 

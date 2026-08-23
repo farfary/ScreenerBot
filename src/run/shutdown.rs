@@ -5,6 +5,18 @@ use crate::{
     logger::{self, LogTag},
 };
 
+/// Spawn the ctrl-c listener that requests shutdown during the initial boot
+/// sequence, before the full shutdown-signal machinery is waited on.
+pub(super) fn spawn_initial_ctrl_c_listener() {
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to listen for ctrl+c");
+        logger::info(LogTag::System, "Shutdown signal received");
+        crate::process::shutdown::request_shutdown();
+    });
+}
+
 /// Wait for shutdown signal (Ctrl+C, SIGTERM, SIGQUIT on Unix).
 ///
 /// NOTE: SIGHUP is intentionally NOT handled. SIGHUP is sent when a terminal

@@ -83,7 +83,7 @@ pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupErro
     }
 
     if crate::apis::llm::try_get_llm_manager().is_none() {
-        super::llm_init::initialize_llm_providers().await?;
+        crate::apis::llm::init::init_providers_from_config().await?;
     }
 
     Ok(())
