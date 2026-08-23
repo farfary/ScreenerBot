@@ -10,6 +10,7 @@ use rusqlite::{params, OptionalExtension, Transaction as SqlTransaction};
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, SUBJECT_DELTAS_VERSION};
+use crate::transactions::error::Error;
 
 use super::operations::TransactionDatabase;
 use crate::database::WriteTransaction;
@@ -51,7 +52,7 @@ impl TransactionDatabase {
     /// `(wallet_address, signature, mint)`). A row whose `delta_raw` cannot fit in
     /// `i64` is logged and skipped rather than corrupting the ledger with a clamped
     /// value; `before_raw`/`after_raw` are informational and fall back to `NULL`.
-    pub async fn store_subject_deltas(&self, deltas: &[SubjectAssetDelta]) -> Result<(), String> {
+    pub async fn store_subject_deltas(&self, deltas: &[SubjectAssetDelta]) -> Result<(), Error> {
         if deltas.is_empty() {
             return Ok(());
         }
@@ -59,7 +60,7 @@ impl TransactionDatabase {
         let mut conn = self.get_connection()?;
         let tx = conn
             .write_tx()
-            .map_err(|e| format!("Failed to start subject deltas transaction: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         for delta in deltas {
             if let Err(e) = self.insert_subject_delta(&tx, delta) {
@@ -73,8 +74,7 @@ impl TransactionDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit subject deltas transaction: {e}"))?;
+        tx.commit().map_err(crate::errors::DatabaseError::from)?;
 
         Ok(())
     }
@@ -92,7 +92,7 @@ impl TransactionDatabase {
         &self,
         wallet_address: &str,
         transaction: &crate::transactions::types::Transaction,
-    ) -> Result<usize, String> {
+    ) -> Result<usize, Error> {
         let deltas = crate::chains::solana::transactions::deltas::extract_subject_deltas(
             wallet_address,
             transaction,
@@ -106,9 +106,11 @@ impl TransactionDatabase {
         &self,
         tx: &SqlTransaction,
         delta: &SubjectAssetDelta,
-    ) -> Result<(), String> {
-        let delta_raw = i64::try_from(delta.delta_raw)
-            .map_err(|_| format!("delta_raw {} does not fit in i64", delta.delta_raw))?;
+    ) -> Result<(), Error> {
+        let delta_raw = i64::try_from(delta.delta_raw).map_err(|_| Error::RowDecode {
+            column: "delta_raw",
+            detail: format!("{} does not fit in i64", delta.delta_raw),
+        })?;
         let before_raw = delta.before_raw.and_then(|v| i64::try_from(v).ok());
         let after_raw = delta.after_raw.and_then(|v| i64::try_from(v).ok());
 
@@ -136,7 +138,7 @@ impl TransactionDatabase {
                 delta.success,
             ],
         )
-        .map_err(|e| format!("Failed to insert subject delta: {e}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(())
     }
@@ -146,7 +148,7 @@ impl TransactionDatabase {
     pub async fn get_subject_deltas(
         &self,
         wallet_address: &str,
-    ) -> Result<Vec<SubjectAssetDelta>, String> {
+    ) -> Result<Vec<SubjectAssetDelta>, Error> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -158,7 +160,7 @@ impl TransactionDatabase {
                  WHERE chain_id = ?1 AND wallet_address = ?2
                  ORDER BY slot IS NULL, slot ASC, tx_index ASC, signature ASC",
             )
-            .map_err(|e| format!("Failed to prepare subject deltas query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let rows = stmt
             .query_map(params![self.chain.as_str(), wallet_address], |row| {
@@ -201,11 +203,11 @@ impl TransactionDatabase {
                     success: row.get(14)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute subject deltas query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut deltas = Vec::new();
         for row in rows {
-            deltas.push(row.map_err(|e| format!("Failed to parse subject delta row: {e}"))?);
+            deltas.push(row.map_err(crate::errors::DatabaseError::from)?);
         }
 
         Ok(deltas)
@@ -220,7 +222,7 @@ impl TransactionDatabase {
     /// marked known -- bootstrap skips known signatures -- so without this,
     /// `subject_asset_deltas` (and everything built on it) would stay empty
     /// forever on an upgrade. Pages the table instead of loading it whole.
-    pub async fn backfill_subject_deltas(&self, wallet_address: &str) -> Result<u64, String> {
+    pub async fn backfill_subject_deltas(&self, wallet_address: &str) -> Result<u64, Error> {
         {
             let conn = self.get_connection()?;
             let stored: Option<String> = conn
@@ -230,7 +232,9 @@ impl TransactionDatabase {
                     |row| row.get(0),
                 )
                 .optional()
-                .map_err(|e| format!("Failed to read subject deltas backfill version: {e}"))?;
+                .map_err(|e| Error::DeltaBackfill {
+                    detail: format!("failed to read subject deltas backfill version: {e}"),
+                })?;
 
             if stored.as_deref() == Some(SUBJECT_DELTAS_VERSION.to_string().as_str()) {
                 return Ok(0);
@@ -259,7 +263,9 @@ impl TransactionDatabase {
                          ORDER BY signature
                          LIMIT ?3 OFFSET ?4",
                     )
-                    .map_err(|e| format!("Failed to prepare subject deltas backfill query: {e}"))?;
+                    .map_err(|e| Error::DeltaBackfill {
+                        detail: format!("failed to prepare subject deltas backfill query: {e}"),
+                    })?;
 
                 let rows = stmt
                     .query_map(
@@ -279,11 +285,15 @@ impl TransactionDatabase {
                             ))
                         },
                     )
-                    .map_err(|e| format!("Failed to execute subject deltas backfill query: {e}"))?;
+                    .map_err(|e| Error::DeltaBackfill {
+                        detail: format!("failed to execute subject deltas backfill query: {e}"),
+                    })?;
 
                 let mut collected = Vec::new();
                 for row in rows {
-                    collected.push(row.map_err(|e| format!("Failed to read backfill row: {e}"))?);
+                    collected.push(row.map_err(|e| Error::DeltaBackfill {
+                        detail: format!("failed to read backfill row: {e}"),
+                    })?);
                 }
                 collected
             };
@@ -331,7 +341,9 @@ impl TransactionDatabase {
                 "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
                 params![BACKFILL_METADATA_KEY, SUBJECT_DELTAS_VERSION.to_string()],
             )
-            .map_err(|e| format!("Failed to persist subject deltas backfill version: {e}"))?;
+            .map_err(|e| Error::DeltaBackfill {
+                detail: format!("failed to persist subject deltas backfill version: {e}"),
+            })?;
         }
 
         logger::info(
@@ -356,7 +368,7 @@ impl TransactionDatabase {
     ///
     /// A transaction that genuinely moves nothing produces no delta rows and is
     /// re-examined on the next boot; that is a handful of rows, not a rescan.
-    pub async fn fill_subject_delta_gaps(&self, wallet_address: &str) -> Result<u64, String> {
+    pub async fn fill_subject_delta_gaps(&self, wallet_address: &str) -> Result<u64, Error> {
         let watermark: i64 = {
             let conn = self.get_connection()?;
             conn.query_row(
@@ -364,7 +376,9 @@ impl TransactionDatabase {
                 params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to read subject deltas watermark: {e}"))?
+            .map_err(|e| Error::DeltaBackfill {
+                detail: format!("failed to read subject deltas watermark: {e}"),
+            })?
         };
 
         let mut cursor = String::new();
@@ -390,7 +404,9 @@ impl TransactionDatabase {
                          ORDER BY r.signature
                          LIMIT ?5",
                     )
-                    .map_err(|e| format!("Failed to prepare subject deltas gap query: {e}"))?;
+                    .map_err(|e| Error::DeltaBackfill {
+                        detail: format!("failed to prepare subject deltas gap query: {e}"),
+                    })?;
 
                 let rows = stmt
                     .query_map(
@@ -411,11 +427,15 @@ impl TransactionDatabase {
                             ))
                         },
                     )
-                    .map_err(|e| format!("Failed to execute subject deltas gap query: {e}"))?;
+                    .map_err(|e| Error::DeltaBackfill {
+                        detail: format!("failed to execute subject deltas gap query: {e}"),
+                    })?;
 
                 let mut collected = Vec::new();
                 for row in rows {
-                    collected.push(row.map_err(|e| format!("Failed to read gap row: {e}"))?);
+                    collected.push(row.map_err(|e| Error::DeltaBackfill {
+                        detail: format!("failed to read gap row: {e}"),
+                    })?);
                 }
                 collected
             };
@@ -464,7 +484,7 @@ impl TransactionDatabase {
     }
 
     /// Count of stored deltas for `wallet_address`.
-    pub async fn count_subject_deltas(&self, wallet_address: &str) -> Result<u64, String> {
+    pub async fn count_subject_deltas(&self, wallet_address: &str) -> Result<u64, Error> {
         let conn = self.get_connection()?;
 
         let count: i64 = conn
@@ -473,7 +493,7 @@ impl TransactionDatabase {
                 params![self.chain.as_str(), wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count subject deltas: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(count as u64)
     }

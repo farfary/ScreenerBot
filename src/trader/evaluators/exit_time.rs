@@ -17,13 +17,14 @@ pub async fn check_time_override(
     position: &Position,
     current_price: f64,
     policy: &TimePolicy,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!(
-            "Invalid current_price for time override: {}",
-            current_price
-        ));
+        return Err(crate::positions::Error::InvalidPrice {
+            mint: position.mint.clone(),
+            price: current_price,
+        }
+        .into());
     }
 
     // Check if time override is enabled
@@ -38,23 +39,25 @@ pub async fn check_time_override(
 
     // Defensive runtime validation of config values
     if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
-        return Err(format!(
-            "Invalid time_override_duration: {} seconds",
-            duration_seconds
-        ));
+        return Err(crate::trader::Error::StrategyEvaluation {
+            mint: position.mint.clone(),
+            detail: format!("invalid time_override_duration: {duration_seconds} seconds"),
+        });
     }
     if !loss_threshold_pct.is_finite() {
-        return Err(format!(
-            "Invalid time_override_loss_threshold_pct: {}",
-            loss_threshold_pct
-        ));
+        return Err(crate::trader::Error::StrategyEvaluation {
+            mint: position.mint.clone(),
+            detail: format!("invalid time_override_loss_threshold_pct: {loss_threshold_pct}"),
+        });
     }
     // Warn if threshold is positive (would exit on profit, likely misconfigured)
     if loss_threshold_pct > 0.0 {
-        return Err(format!(
-            "Invalid time_override_loss_threshold_pct: {} (must be <= 0 to represent loss)",
-            loss_threshold_pct
-        ));
+        return Err(crate::trader::Error::StrategyEvaluation {
+            mint: position.mint.clone(),
+            detail: format!(
+                "invalid time_override_loss_threshold_pct: {loss_threshold_pct} (must be <= 0 to represent loss)"
+            ),
+        });
     }
 
     // Calculate position age in seconds

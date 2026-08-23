@@ -88,19 +88,21 @@ fn default_limit() -> usize {
     50
 }
 
-async fn open_database() -> Result<CopyDatabase, String> {
+async fn open_database() -> crate::trader::Result<CopyDatabase> {
     tokio::task::spawn_blocking(|| CopyDatabase::shared(crate::chains::active_chain()))
         .await
-        .map_err(|e| format!("Copy database task failed: {e}"))?
+        .map_err(|e| crate::trader::Error::CopyDatabaseUnavailable {
+            detail: e.to_string(),
+        })?
 }
 
 async fn status() -> Response {
     match open_database().await {
         Ok(db) => match db.list_tasks().await {
             Ok(tasks) => success_response(build_status(&tasks)),
-            Err(error) => internal_error(error),
+            Err(error) => internal_error(error.to_string()),
         },
-        Err(error) => internal_error(error),
+        Err(error) => internal_error(error.to_string()),
     }
 }
 
@@ -112,15 +114,15 @@ async fn overview() -> Response {
 
     let db = match open_database().await {
         Ok(db) => db,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let tasks = match db.list_tasks().await {
         Ok(tasks) => tasks,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let activity = match db.list_activity(50).await {
         Ok(activity) => activity,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let mut positions = crate::positions::get_open_positions().await;
     positions.extend(crate::positions::get_closed_positions().await);
@@ -130,11 +132,11 @@ async fn overview() -> Response {
     for task in tasks {
         let task_activity = match db.list_task_activity(task.id, 10_000).await {
             Ok(activity) => activity,
-            Err(error) => return internal_error(error),
+            Err(error) => return internal_error(error.to_string()),
         };
         let spent_sol = match db.task_total_spent(task.id).await {
             Ok(spent) => spent,
-            Err(error) => return internal_error(error),
+            Err(error) => return internal_error(error.to_string()),
         };
         let effective_state = if !status.enabled {
             "system_paused"
@@ -205,9 +207,9 @@ async fn list_tasks() -> Response {
     match open_database().await {
         Ok(db) => match db.list_tasks().await {
             Ok(tasks) => success_response(TaskList { tasks }),
-            Err(error) => internal_error(error),
+            Err(error) => internal_error(error.to_string()),
         },
-        Err(error) => internal_error(error),
+        Err(error) => internal_error(error.to_string()),
     }
 }
 
@@ -216,9 +218,9 @@ async fn get_task(Path(id): Path<i64>) -> Response {
         Ok(db) => match db.get_task(id).await {
             Ok(Some(task)) => success_response(TaskResponse { task }),
             Ok(None) => not_found(id),
-            Err(error) => internal_error(error),
+            Err(error) => internal_error(error.to_string()),
         },
-        Err(error) => internal_error(error),
+        Err(error) => internal_error(error.to_string()),
     }
 }
 
@@ -237,7 +239,7 @@ async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
     }
     let db = match open_database().await {
         Ok(db) => db,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     if task.enabled {
         match active_task_limit_reached(&db).await {
@@ -250,12 +252,12 @@ async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
                 );
             }
             Ok(false) => {}
-            Err(error) => return internal_error(error),
+            Err(error) => return internal_error(error.to_string()),
         }
     }
     let inserted = match db.insert_task(task).await {
         Ok(task) => task,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     if inserted.enabled {
         if let Err(error) = watch::add_copy_source(
@@ -280,12 +282,12 @@ async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
 async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> Response {
     let db = match open_database().await {
         Ok(db) => db,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let original = match db.get_task(id).await {
         Ok(Some(task)) => task,
         Ok(None) => return not_found(id),
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let mut task = match input.into_task_for_update(
         crate::chains::active_chain(),
@@ -308,7 +310,7 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
                 );
             }
             Ok(false) => {}
-            Err(error) => return internal_error(error),
+            Err(error) => return internal_error(error.to_string()),
         }
     }
     if task.enabled {
@@ -369,7 +371,7 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
             if source_was_added {
                 let _ = watch::remove_copy_source(id, &new_address).await;
             }
-            internal_error(error)
+            internal_error(error.to_string())
         }
     }
 }
@@ -377,12 +379,12 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
 async fn set_task_mode(Path(id): Path<i64>, Json(request): Json<ModeRequest>) -> Response {
     let db = match open_database().await {
         Ok(db) => db,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let current = match db.get_task(id).await {
         Ok(Some(task)) => task,
         Ok(None) => return not_found(id),
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let mode = match confirm_mode_transition(
         current.mode,
@@ -401,7 +403,7 @@ async fn set_task_mode(Path(id): Path<i64>, Json(request): Json<ModeRequest>) ->
     };
     match db.set_task_mode(id, mode, request.confirmation).await {
         Ok(task) => success_response(TaskResponse { task }),
-        Err(error) => internal_error(error),
+        Err(error) => internal_error(error.to_string()),
     }
 }
 
@@ -409,25 +411,25 @@ async fn list_activity(Query(query): Query<ActivityQuery>) -> Response {
     match open_database().await {
         Ok(db) => match db.list_activity(query.limit).await {
             Ok(activity) => success_response(serde_json::json!({ "activity": activity })),
-            Err(error) => internal_error(error),
+            Err(error) => internal_error(error.to_string()),
         },
-        Err(error) => internal_error(error),
+        Err(error) => internal_error(error.to_string()),
     }
 }
 
 async fn task_stats(Path(id): Path<i64>) -> Response {
     let db = match open_database().await {
         Ok(db) => db,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     match db.get_task(id).await {
         Ok(Some(_)) => {}
         Ok(None) => return not_found(id),
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     }
     let activity = match db.list_task_activity(id, 10_000).await {
         Ok(activity) => activity,
-        Err(error) => return internal_error(error),
+        Err(error) => return internal_error(error.to_string()),
     };
     let mut positions = crate::positions::get_open_positions().await;
     positions.extend(crate::positions::get_closed_positions().await);
@@ -462,7 +464,7 @@ fn internal_error(error: String) -> Response {
     )
 }
 
-async fn active_task_limit_reached(database: &CopyDatabase) -> Result<bool, String> {
+async fn active_task_limit_reached(database: &CopyDatabase) -> crate::trader::Result<bool> {
     let active = database
         .list_tasks()
         .await?

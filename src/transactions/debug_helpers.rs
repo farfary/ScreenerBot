@@ -8,7 +8,7 @@ use std::time::Instant;
 
 use crate::chains::adapter;
 use crate::chains::solana::transactions::processor::TransactionProcessor;
-use crate::transactions::{database::get_transaction_database, types::*};
+use crate::transactions::{database::get_transaction_database, error::Error, types::*};
 
 use super::debug::{DebugAnalysisResult, DebugValidation, TransactionDebugStats};
 
@@ -19,7 +19,7 @@ use super::debug::{DebugAnalysisResult, DebugValidation, TransactionDebugStats};
 /// Perform comprehensive debug validations
 pub(crate) async fn perform_debug_validations(
     transaction: &Transaction,
-) -> Result<Vec<DebugValidation>, String> {
+) -> Result<Vec<DebugValidation>, Error> {
     let mut validations = Vec::new();
 
     // Validation 1: Basic transaction structure
@@ -276,7 +276,7 @@ pub fn print_debug_statistics(stats: &TransactionDebugStats) {
 // =============================================================================
 
 /// Debug database connection and statistics
-pub async fn debug_database_connection() -> Result<(), String> {
+pub async fn debug_database_connection() -> Result<(), Error> {
     println!("\n DATABASE DEBUG");
     println!("═══════════════════════════════════════════════════════════════");
 
@@ -350,9 +350,12 @@ pub async fn debug_database_connection() -> Result<(), String> {
 pub async fn profile_transaction_processing(
     signatures: Vec<String>,
     subject: &Subject,
-) -> Result<PerformanceProfile, String> {
+) -> Result<PerformanceProfile, Error> {
     let start_time = Instant::now();
-    let processor = TransactionProcessor::for_subject(subject).map_err(|e| e.to_string())?;
+    let processor =
+        TransactionProcessor::for_subject(subject).map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
 
     let mut processing_times = Vec::new();
     let mut success_count = 0;

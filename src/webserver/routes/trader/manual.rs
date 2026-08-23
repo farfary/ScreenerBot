@@ -153,7 +153,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ManualBuyError",
-            &e,
+            &e.to_string(),
             None,
         ),
     }
@@ -269,7 +269,7 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ManualAddError",
-            &e,
+            &e.to_string(),
             None,
         ),
     }
@@ -397,7 +397,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ManualSellError",
-            &e,
+            &e.to_string(),
             None,
         ),
     }

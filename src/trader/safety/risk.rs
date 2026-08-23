@@ -9,7 +9,7 @@ use chrono::Utc;
 pub async fn check_risk_limits(
     position: &Position,
     current_price: f64,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     // For now, this is a placeholder for future risk management features
     // Examples of what could be added:
     // - Maximum loss per position

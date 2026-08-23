@@ -927,7 +927,8 @@ fn chain_parameter_values_have_exactly_one_owning_const() {
 /// Top-level module directories under `src/` that have finished migrating off
 /// stringly-typed errors onto their own `error.rs`. Each migration task
 /// appends its module here — this list may only ever grow.
-const MIGRATED_TO_TYPED_ERRORS: &[&str] = &["ohlcvs", "swaps", "positions"];
+const MIGRATED_TO_TYPED_ERRORS: &[&str] =
+    &["ohlcvs", "swaps", "positions", "transactions", "trader"];
 
 /// True when `line` declares a two-parameter `Result<_, String>` — a signature
 /// that still flattens its error channel to a bare `String` instead of a real
@@ -1005,7 +1006,6 @@ const PENDING_RELOCATION: &[&str] = &[
     "pools/types.rs",
     "apis/llm/types.rs",
     "ohlcvs/types.rs",
-    "trader/controller.rs",
     "ai/types.rs",
     "rpc/errors.rs",
     "tokens/types.rs",

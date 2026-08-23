@@ -5,6 +5,8 @@
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::transactions::error::Error;
+
 use super::operations::TransactionDatabase;
 
 // =============================================================================
@@ -20,7 +22,7 @@ pub struct BootstrapState {
 
 impl TransactionDatabase {
     /// Get the current bootstrap state
-    pub async fn get_bootstrap_state(&self) -> Result<BootstrapState, String> {
+    pub async fn get_bootstrap_state(&self) -> Result<BootstrapState, Error> {
         let conn = self.get_connection()?;
         let mut state = BootstrapState::default();
 
@@ -35,7 +37,7 @@ impl TransactionDatabase {
                 }
             )
             .optional()
-            .map_err(|e| format!("Failed to load bootstrap_state: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         if let Some((cursor, completed_i)) = result {
             state.backfill_before_cursor = cursor;
@@ -46,37 +48,37 @@ impl TransactionDatabase {
     }
 
     /// Update the backfill cursor (the `before` parameter for next page)
-    pub async fn set_backfill_cursor(&self, cursor: Option<&str>) -> Result<(), String> {
+    pub async fn set_backfill_cursor(&self, cursor: Option<&str>) -> Result<(), Error> {
         let conn = self.get_connection()?;
         conn.execute(
             "INSERT OR IGNORE INTO bootstrap_state (chain_id, id, full_history_completed) VALUES (?1, 1, 0)",
             params![self.chain.as_str()],
         )
-        .map_err(|e| format!("Failed to ensure bootstrap_state row: {e}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
 
         conn
             .execute(
                 "UPDATE bootstrap_state SET backfill_before_cursor = ?1, updated_at = datetime('now') WHERE chain_id = ?2 AND id = 1",
                 params![cursor, self.chain.as_str()]
             )
-            .map_err(|e| format!("Failed to update backfill cursor: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
         Ok(())
     }
 
     /// Clear the backfill cursor
-    pub async fn clear_backfill_cursor(&self) -> Result<(), String> {
+    pub async fn clear_backfill_cursor(&self) -> Result<(), Error> {
         self.set_backfill_cursor(None).await
     }
 
     /// Mark the full history as completed
-    pub async fn mark_full_history_completed(&self) -> Result<(), String> {
+    pub async fn mark_full_history_completed(&self) -> Result<(), Error> {
         let conn = self.get_connection()?;
         conn
             .execute(
                 "UPDATE bootstrap_state SET full_history_completed = 1, updated_at = datetime('now') WHERE chain_id = ?1 AND id = 1",
                 params![self.chain.as_str()]
             )
-            .map_err(|e| format!("Failed to mark full history completed: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
         Ok(())
     }
 
@@ -85,14 +87,14 @@ impl TransactionDatabase {
     /// subject -- both columns of the composite key must be carried across, or every
     /// row would violate the `wallet_address NOT NULL` constraint and silently
     /// reconcile nothing (`INSERT OR IGNORE` swallows constraint failures).
-    pub async fn reconcile_known_with_processed(&self) -> Result<usize, String> {
+    pub async fn reconcile_known_with_processed(&self) -> Result<usize, Error> {
         let conn = self.get_connection()?;
         let affected = conn
             .execute(
                 "INSERT OR IGNORE INTO known_signatures(chain_id, signature, wallet_address) SELECT chain_id, signature, wallet_address FROM processed_transactions WHERE chain_id = ?1",
                 params![self.chain.as_str()]
             )
-            .map_err(|e| format!("Failed to reconcile known signatures: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
         Ok(affected as usize)
     }
 }

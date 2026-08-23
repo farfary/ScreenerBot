@@ -85,6 +85,10 @@ pub struct TradeResult {
     /// The swap has a signature but the router confirmation poll timed out. It must
     /// be reconciled, never retried as a fresh buy.
     pub confirmation_pending: bool,
+    /// Set when this failure was the global position-capacity guard
+    /// (`positions::Error::SlotUnavailable`) rather than an execution failure, so
+    /// callers can react to it structurally instead of pattern-matching `error`.
+    pub capacity_guard_remaining: Option<usize>,
 }
 
 impl TradeResult {
@@ -107,6 +111,7 @@ impl TradeResult {
             execution_timestamp: Utc::now(),
             retry_count: 0,
             confirmation_pending: false,
+            capacity_guard_remaining: None,
         }
     }
 
@@ -123,6 +128,7 @@ impl TradeResult {
             execution_timestamp: Utc::now(),
             retry_count,
             confirmation_pending: false,
+            capacity_guard_remaining: None,
         }
     }
 }

@@ -26,7 +26,12 @@ impl TransactionProcessor {
         database: &crate::transactions::database::TransactionDatabase,
         signature: &str,
     ) -> Result<Option<crate::chains::solana::rpc::TransactionDetails>, String> {
-        let Some(value) = database.get_raw_transaction_json(signature).await? else {
+        // SEAM: chains still returns String errors; removed when it migrates.
+        let Some(value) = database
+            .get_raw_transaction_json(signature)
+            .await
+            .map_err(|e| e.to_string())?
+        else {
             return Ok(None);
         };
         serde_json::from_value(value).map(Some).map_err(|e| {

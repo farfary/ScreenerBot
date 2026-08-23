@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
 use crate::logger::{self, LogTag};
+use crate::transactions::error::Error;
 use crate::transactions::types::*;
 use crate::{chains::ChainId, database};
 
@@ -48,7 +49,7 @@ pub struct WalletFlowExportRow {
 
 impl TransactionDatabase {
     /// Create new TransactionDatabase with connection pooling
-    pub async fn new(chain: ChainId) -> Result<Self, String> {
+    pub async fn new(chain: ChainId) -> Result<Self, Error> {
         let database_path = crate::paths::get_transactions_db_path();
         let is_first_init = !DATABASE_INITIALIZED.load(Ordering::Relaxed);
         let db = Self::create_database(database_path, is_first_init, true, chain).await?;
@@ -63,7 +64,7 @@ impl TransactionDatabase {
         log_details: bool,
         record_current_wallet: bool,
         chain: ChainId,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let database_path_str = database_path.to_string_lossy().to_string();
 
         if log_details {
@@ -81,7 +82,7 @@ impl TransactionDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create connection pool: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut db = Self {
             pool,
@@ -106,12 +107,14 @@ impl TransactionDatabase {
     pub(crate) async fn new_with_path<P: AsRef<Path>>(
         path: P,
         chain: ChainId,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let database_path = path.as_ref().to_path_buf();
 
         if let Some(parent) = database_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create data directory: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| Error::Migration {
+                step: "create data directory".to_owned(),
+                detail: e.to_string(),
+            })?;
         }
 
         // Explicit-path databases are used for isolated tests and offline
@@ -121,10 +124,8 @@ impl TransactionDatabase {
     }
 
     /// Initialize database schema and indexes
-    async fn initialize_schema(&mut self, record_current_wallet: bool) -> Result<(), String> {
-        let mut conn = self
-            .get_connection()
-            .map_err(|e| format!("Failed to get database connection: {e}"))?;
+    async fn initialize_schema(&mut self, record_current_wallet: bool) -> Result<(), Error> {
+        let mut conn = self.get_connection()?;
 
         // Create all tables
         let tables = [
@@ -139,8 +140,10 @@ impl TransactionDatabase {
         ];
 
         for table_sql in &tables {
-            conn.execute(table_sql, [])
-                .map_err(|e| format!("Failed to create table: {e}"))?;
+            conn.execute(table_sql, []).map_err(|e| Error::Migration {
+                step: "create table".to_owned(),
+                detail: e.to_string(),
+            })?;
         }
 
         // Apply the legacy processed-transaction column migrations before the v5
@@ -168,8 +171,10 @@ impl TransactionDatabase {
 
         // Create all indexes (fresh for anything just rebuilt above)
         for index_sql in INDEXES {
-            conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create index: {e}"))?;
+            conn.execute(index_sql, []).map_err(|e| Error::Migration {
+                step: "create index".to_owned(),
+                detail: e.to_string(),
+            })?;
         }
 
         // Set or update schema version
@@ -177,16 +182,25 @@ impl TransactionDatabase {
             "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
             params!["schema_version", self.schema_version.to_string()],
         )
-        .map_err(|e| format!("Failed to set schema version: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "set schema version".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         if record_current_wallet {
-            let wallet_address = crate::utils::get_wallet_address()
-                .map_err(|e| format!("Failed to get wallet address: {e}"))?;
+            let wallet_address =
+                crate::utils::get_wallet_address().map_err(|e| Error::Migration {
+                    step: "get wallet address".to_owned(),
+                    detail: e.to_string(),
+                })?;
             conn.execute(
                 "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
                 params!["current_wallet", wallet_address],
             )
-            .map_err(|e| format!("Failed to set current_wallet in metadata: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "set current_wallet in metadata".to_owned(),
+                detail: e.to_string(),
+            })?;
         }
 
         Ok(())
@@ -195,25 +209,25 @@ impl TransactionDatabase {
     /// Get database connection from pool
     pub(super) fn get_connection(
         &self,
-    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool
+    ) -> Result<PooledConnection<SqliteConnectionManager>, Error> {
+        Ok(self
+            .pool
             .get()
-            .map_err(|e| format!("Failed to get database connection from pool: {e}"))
+            .map_err(crate::errors::DatabaseError::from)?)
     }
 
-    pub(super) fn require_subject_chain(&self, subject: &Subject) -> Result<&'static str, String> {
+    pub(super) fn require_subject_chain(&self, subject: &Subject) -> Result<&'static str, Error> {
         if subject.chain() != self.chain {
-            return Err(format!(
-                "Transaction subject chain {} does not match database chain {}",
-                subject.chain(),
-                self.chain
-            ));
+            return Err(Error::ChainMismatch {
+                expected: self.chain,
+                actual: subject.chain(),
+            });
         }
         Ok(self.chain.as_str())
     }
 
     /// Health check - verify database connectivity and basic operations
-    pub async fn health_check(&self) -> Result<(), String> {
+    pub async fn health_check(&self) -> Result<(), Error> {
         let conn = self.get_connection()?;
 
         // Test basic query
@@ -223,10 +237,12 @@ impl TransactionDatabase {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Database health check failed: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         if count < 5 {
-            return Err("Database schema incomplete".to_owned());
+            return Err(Error::SchemaInspect {
+                detail: "database schema incomplete".to_owned(),
+            });
         }
 
         Ok(())
@@ -243,7 +259,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         signature: &str,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -254,7 +270,7 @@ impl TransactionDatabase {
                 params![chain_id, signature, wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to check known signature: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(exists)
     }
@@ -264,7 +280,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         signature: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -273,13 +289,13 @@ impl TransactionDatabase {
             "INSERT OR IGNORE INTO known_signatures (chain_id, signature, wallet_address) VALUES (?1, ?2, ?3)",
             params![chain_id, signature, wallet_address],
         )
-        .map_err(|e| format!("Failed to add known signature: {e}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(())
     }
 
     /// Get count of known signatures, for the given subject
-    pub async fn get_known_signatures_count(&self, subject: Subject) -> Result<u64, String> {
+    pub async fn get_known_signatures_count(&self, subject: Subject) -> Result<u64, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -290,7 +306,7 @@ impl TransactionDatabase {
                 params![chain_id, wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get known signatures count: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(count as u64)
     }
@@ -299,7 +315,7 @@ impl TransactionDatabase {
     pub async fn get_newest_known_signature(
         &self,
         subject: Subject,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<String>, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -311,7 +327,7 @@ impl TransactionDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to get newest known signature: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(result)
     }
@@ -324,7 +340,7 @@ impl TransactionDatabase {
     pub async fn get_oldest_known_signature(
         &self,
         subject: Subject,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<String>, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -336,13 +352,13 @@ impl TransactionDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to get oldest known signature: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(result)
     }
 
     /// Remove old known signatures (cleanup)
-    pub async fn cleanup_old_known_signatures(&self, days: i64) -> Result<usize, String> {
+    pub async fn cleanup_old_known_signatures(&self, days: i64) -> Result<usize, Error> {
         let conn = self.get_connection()?;
 
         let affected = conn
@@ -350,7 +366,7 @@ impl TransactionDatabase {
                 "DELETE FROM known_signatures WHERE chain_id = ?1 AND added_at < datetime('now', '-' || ?2 || ' days')",
                 params![self.chain.as_str(), days]
             )
-            .map_err(|e| format!("Failed to cleanup old known signatures: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(affected)
     }

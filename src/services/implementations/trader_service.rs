@@ -60,7 +60,7 @@ impl Service for TraderService {
         crate::trader::init_trader_system().await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
                 service: "trader".to_owned(),
-                message: e,
+                message: e.to_string(),
             })
         })?;
         Ok(())

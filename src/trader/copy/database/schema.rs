@@ -1,5 +1,7 @@
 use rusqlite::{Connection, OptionalExtension};
 
+use crate::trader::error::Error;
+
 pub(super) const SCHEMA_VERSION: i64 = 4;
 
 pub(super) const SCHEMA: &str = r#"
@@ -96,38 +98,38 @@ CREATE TABLE IF NOT EXISTS copy_position_links (
 );
 "#;
 
-pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
+pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
     let mut statement = connection
         .prepare("PRAGMA table_info(copy_tasks)")
-        .map_err(|error| format!("Failed to inspect copy task schema: {error}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
     let columns = statement
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| format!("Failed to query copy task schema: {error}"))?
+        .map_err(crate::errors::DatabaseError::from)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to decode copy task schema: {error}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
     if !columns.iter().any(|column| column == "exit_policy_json") {
         connection
             .execute(
                 "ALTER TABLE copy_tasks ADD COLUMN exit_policy_json TEXT NOT NULL DEFAULT '{}'",
                 [],
             )
-            .map_err(|error| format!("Failed to add copy exit-policy storage: {error}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
     }
     let mut statement = connection
         .prepare("PRAGMA table_info(copy_live_claims)")
-        .map_err(|error| format!("Failed to inspect copy claim schema: {error}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
     let claim_columns = statement
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| format!("Failed to query copy claim schema: {error}"))?
+        .map_err(crate::errors::DatabaseError::from)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to decode copy claim schema: {error}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
     if !claim_columns.iter().any(|column| column == "state") {
         connection
             .execute(
                 "ALTER TABLE copy_live_claims ADD COLUMN state TEXT NOT NULL DEFAULT 'claimed'",
                 [],
             )
-            .map_err(|error| format!("Failed to add copy claim state: {error}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
     }
     if !claim_columns.iter().any(|column| column == "updated_at") {
         connection
@@ -135,44 +137,46 @@ pub(super) fn migrate(connection: &Connection) -> Result<(), String> {
                 "ALTER TABLE copy_live_claims ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
                 [],
             )
-            .map_err(|error| format!("Failed to add copy claim update time: {error}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
         connection
             .execute(
                 "UPDATE copy_live_claims SET updated_at = claimed_at WHERE updated_at = ''",
                 [],
             )
-            .map_err(|error| format!("Failed to backfill copy claim update time: {error}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
     }
     let mut statement = connection
         .prepare("PRAGMA table_info(copy_tasks)")
-        .map_err(|error| format!("Failed to inspect copy task identity schema: {error}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
     let columns = statement
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|error| format!("Failed to query copy task identity schema: {error}"))?
+        .map_err(crate::errors::DatabaseError::from)?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to decode copy task identity schema: {error}"))?;
+        .map_err(crate::errors::DatabaseError::from)?;
     drop(statement);
     if !columns.iter().any(|column| column == "chain_id") {
         let transaction = connection
             .unchecked_transaction()
-            .map_err(|error| format!("Failed to begin copy chain migration: {error}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
         transaction
             .execute(
                 "ALTER TABLE copy_tasks ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
                 [],
             )
-            .map_err(|error| format!("Failed to add copy task chain identity: {error}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
         let invalid = transaction
             .query_row("PRAGMA foreign_key_check", [], |_| Ok(1_i64))
             .optional()
-            .map_err(|error| format!("Failed to validate copy chain migration: {error}"))?
+            .map_err(crate::errors::DatabaseError::from)?
             .unwrap_or(0);
         if invalid != 0 {
-            return Err("Copy chain migration failed foreign-key validation".to_owned());
+            return Err(Error::CopyValidation {
+                detail: "chain migration failed foreign-key validation".to_owned(),
+            });
         }
         transaction
             .commit()
-            .map_err(|error| format!("Failed to commit copy chain migration: {error}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
     }
     Ok(())
 }

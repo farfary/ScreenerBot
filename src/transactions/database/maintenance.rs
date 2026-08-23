@@ -7,6 +7,8 @@ use rusqlite::params;
 
 use crate::logger::{self, LogTag};
 
+use crate::transactions::error::Error;
+
 use super::operations::TransactionDatabase;
 use super::types::{DatabaseStats, IntegrityReport};
 
@@ -16,9 +18,12 @@ use super::types::{DatabaseStats, IntegrityReport};
 
 impl TransactionDatabase {
     /// Get comprehensive database statistics
-    pub async fn get_stats(&self) -> Result<DatabaseStats, String> {
+    pub async fn get_stats(&self) -> Result<DatabaseStats, Error> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let raw_count: i64 = conn
             .query_row(
@@ -78,18 +83,18 @@ impl TransactionDatabase {
     }
 
     /// Perform database maintenance (vacuum, analyze, cleanup)
-    pub async fn perform_maintenance(&self) -> Result<(), String> {
+    pub async fn perform_maintenance(&self) -> Result<(), Error> {
         let conn = self.get_connection()?;
 
         logger::info(LogTag::Transactions, "Starting database maintenance");
 
         // Vacuum to reclaim space
         conn.execute("VACUUM", [])
-            .map_err(|e| format!("Failed to vacuum database: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         // Analyze for query optimization
         conn.execute("ANALYZE", [])
-            .map_err(|e| format!("Failed to analyze database: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         // Cleanup old pending transactions (older than 1 day)
         let cleaned_pending = conn
@@ -97,7 +102,7 @@ impl TransactionDatabase {
                 "DELETE FROM pending_transactions WHERE chain_id = ?1 AND added_at < datetime('now', '-1 day')",
                 params![self.chain.as_str()],
             )
-            .map_err(|e| format!("Failed to cleanup old pending transactions: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         // Cleanup old deferred retries (older than 1 day with 0 attempts)
         let cleaned_retries = conn
@@ -105,7 +110,7 @@ impl TransactionDatabase {
                 "DELETE FROM deferred_retries WHERE chain_id = ?1 AND remaining_attempts = 0 AND created_at < datetime('now', '-1 day')",
                 params![self.chain.as_str()]
             )
-            .map_err(|e| format!("Failed to cleanup old deferred retries: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         logger::info(
             LogTag::Transactions,
@@ -130,7 +135,7 @@ impl TransactionDatabase {
         &self,
         own_wallet_address: &str,
         retention_days: u32,
-    ) -> Result<usize, String> {
+    ) -> Result<usize, Error> {
         let conn = self.get_connection()?;
         let cutoff_expr = format!("datetime('now', '-{retention_days} days')");
 
@@ -142,7 +147,7 @@ impl TransactionDatabase {
                 ),
                 params![self.chain.as_str(), own_wallet_address],
             )
-            .map_err(|e| format!("Failed to cleanup stale target processed_transactions: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let deleted_raw = conn
             .execute(
@@ -152,7 +157,7 @@ impl TransactionDatabase {
                 ),
                 params![self.chain.as_str(), own_wallet_address],
             )
-            .map_err(|e| format!("Failed to cleanup stale target raw_transactions: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let total = deleted_processed + deleted_raw;
         if total > 0 {
@@ -169,9 +174,12 @@ impl TransactionDatabase {
     }
 
     /// Get integrity report
-    pub async fn get_integrity_report(&self) -> Result<IntegrityReport, String> {
+    pub async fn get_integrity_report(&self) -> Result<IntegrityReport, Error> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let raw_count: i64 = conn
             .query_row(

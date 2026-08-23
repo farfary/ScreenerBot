@@ -4,6 +4,7 @@ use crate::actions::{
     complete_action_failed, complete_action_success, register_action, update_step, Action,
     ActionType, StepStatus,
 };
+use crate::trader::error::Error;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -28,7 +29,7 @@ impl AutoOpenAction {
         symbol: Option<&str>,
         strategy_id: Option<&str>,
         reason: &str,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
         let metadata = json!({
@@ -47,7 +48,9 @@ impl AutoOpenAction {
             metadata,
         );
 
-        register_action(action).await?;
+        register_action(action)
+            .await
+            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
         Ok(Self { action_id })
     }
 
@@ -109,7 +112,7 @@ impl AutoCloseAction {
         symbol: Option<&str>,
         position_id: Option<i64>,
         reason: &str,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
         let metadata = json!({
@@ -128,7 +131,9 @@ impl AutoCloseAction {
             metadata,
         );
 
-        register_action(action).await?;
+        register_action(action)
+            .await
+            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
         Ok(Self { action_id })
     }
 
@@ -190,7 +195,7 @@ impl AutoDcaAction {
         symbol: Option<&str>,
         position_id: Option<&str>,
         dca_count: u32,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
         let metadata = json!({
@@ -209,7 +214,9 @@ impl AutoDcaAction {
             metadata,
         );
 
-        register_action(action).await?;
+        register_action(action)
+            .await
+            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
         Ok(Self { action_id })
     }
 

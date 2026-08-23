@@ -48,7 +48,8 @@ pub(super) async fn record(
                 transaction.signature, subject
             ),
         );
-        return Err(e);
+        // SEAM: wallets still returns String errors; removed when it migrates.
+        return Err(e.to_string());
     }
 
     // The own wallet's ledger rows. Detection moved to this funnel, so this is the

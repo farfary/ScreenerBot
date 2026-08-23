@@ -52,7 +52,7 @@ pub struct DcaEvaluation {
 
 impl DcaEvaluation {
     /// Evaluate whether DCA should trigger for a position
-    pub fn evaluate(position: &Position, config: DcaConfigSnapshot) -> Result<Self, String> {
+    pub fn evaluate(position: &Position, config: DcaConfigSnapshot) -> crate::trader::Result<Self> {
         let mut reasons = Vec::new();
         let mut should_trigger = true;
 
@@ -212,7 +212,7 @@ impl DcaEvaluation {
 }
 
 /// Process DCA opportunities for eligible positions
-pub async fn process_dca_opportunities() -> Result<Vec<TradeDecision>, String> {
+pub async fn process_dca_opportunities() -> crate::trader::Result<Vec<TradeDecision>> {
     // Build config snapshot (batch read)
     let dca_config = ExitPolicy::from_config().dca;
 

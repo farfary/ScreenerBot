@@ -30,25 +30,6 @@ static POSITION_LOCKS: LazyLock<RwLock<HashMap<String, Arc<Mutex<()>>>>> =
 static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
-/// Error identifier returned when no global position permits remain.
-pub const POSITION_SLOT_UNAVAILABLE_ERR: &str = "position_slots_unavailable";
-const POSITION_SLOT_ERR_DELIM: char = ':';
-
-/// Format a standardized capacity error payload (e.g., "position_slots_unavailable:2").
-pub fn format_position_slot_error(remaining_permits: usize) -> String {
-    format!(
-        "{}{}{}",
-        POSITION_SLOT_UNAVAILABLE_ERR, POSITION_SLOT_ERR_DELIM, remaining_permits
-    )
-}
-
-/// Parse a capacity error payload and extract remaining permits when possible.
-pub fn parse_position_slot_error(error: &str) -> Option<usize> {
-    let payload = error.strip_prefix(POSITION_SLOT_UNAVAILABLE_ERR)?;
-    let payload = payload.strip_prefix(POSITION_SLOT_ERR_DELIM)?;
-    payload.parse::<usize>().ok()
-}
-
 // Global position creation semaphore to enforce max_open_positions atomically
 // NOTE: Uses OnceLock because initialization requires config which isn't available at static init time
 static GLOBAL_POSITION_SEMAPHORE: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
@@ -143,7 +124,7 @@ pub async fn acquire_global_position_permit(
         Err(_) => {
             let available = semaphore.available_permits();
             Err(crate::positions::Error::SlotUnavailable {
-                detail: format_position_slot_error(available as usize),
+                remaining: available as usize,
             })
         }
     }

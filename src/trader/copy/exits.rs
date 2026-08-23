@@ -29,7 +29,7 @@ pub enum CopySellSubmitResult {
 }
 
 impl CopySellSubmitResult {
-    pub fn from_trade_result(result: Result<TradeResult, String>) -> Self {
+    pub fn from_trade_result(result: crate::trader::Result<TradeResult>) -> Self {
         match result {
             Ok(result) if result.success => match result.tx_signature {
                 Some(transaction_signature) => Self::Submitted {
@@ -44,7 +44,9 @@ impl CopySellSubmitResult {
                     .error
                     .unwrap_or_else(|| "copy sell submission failed".to_owned()),
             },
-            Err(error) => Self::Failed { error },
+            Err(error) => Self::Failed {
+                error: error.to_string(),
+            },
         }
     }
 }

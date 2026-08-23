@@ -43,13 +43,14 @@ pub async fn check_stop_loss(
     position: &Position,
     current_price: f64,
     policy: &StopLossPolicy,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!(
-            "Invalid current_price for stop loss: {}",
-            current_price
-        ));
+        return Err(crate::positions::Error::InvalidPrice {
+            mint: position.mint.clone(),
+            price: current_price,
+        }
+        .into());
     }
 
     // Check if stop loss is enabled
@@ -64,10 +65,11 @@ pub async fn check_stop_loss(
     // Validate entry price
     let entry_price = position.average_entry_price;
     if entry_price <= 0.0 || !entry_price.is_finite() {
-        return Err(format!(
-            "Invalid entry_price for stop loss: {} (mint={})",
-            entry_price, position.mint
-        ));
+        return Err(crate::positions::Error::InvalidPrice {
+            mint: position.mint.clone(),
+            price: entry_price,
+        }
+        .into());
     }
 
     // Check minimum hold time if configured

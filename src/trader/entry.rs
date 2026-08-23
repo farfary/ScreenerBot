@@ -5,7 +5,6 @@
 //! a decision through the identical pipeline instead of a copy of it.
 
 use crate::logger::{self, LogTag};
-use crate::positions;
 use crate::positions::{PositionManagement, PositionOrigin};
 use crate::trader::types::{TradeDecision, TradeResult};
 use crate::trader::{actions, constants, executors};
@@ -161,7 +160,7 @@ pub async fn submit_entry_with_context(
                     a.fail(&error_msg).await;
                 }
 
-                if let Some(remaining) = positions::parse_position_slot_error(&error_msg) {
+                if let Some(remaining) = result.capacity_guard_remaining {
                     logger::info(
                         LogTag::Trader,
                         &format!(
@@ -211,7 +210,7 @@ pub async fn submit_entry_with_context(
 
             // Fail action
             if let Some(ref a) = action {
-                a.fail(&e).await;
+                a.fail(&e.to_string()).await;
             }
 
             logger::error(

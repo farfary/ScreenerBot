@@ -10,13 +10,14 @@ pub async fn check_trailing_stop(
     position: &Position,
     current_price: f64,
     policy: &TrailingPolicy,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!(
-            "Invalid current_price for trailing stop: {}",
-            current_price
-        ));
+        return Err(crate::positions::Error::InvalidPrice {
+            mint: position.mint.clone(),
+            price: current_price,
+        }
+        .into());
     }
 
     // Skip if position doesn't have highest price recorded
@@ -36,10 +37,12 @@ pub async fn check_trailing_stop(
 
     // Runtime validation: distance must be less than activation to prevent impossible conditions
     if distance_pct >= activation_pct {
-        return Err(format!(
-            "Invalid trailing stop config: distance_pct ({:.1}%) must be less than activation_pct ({:.1}%)",
-            distance_pct, activation_pct
-        ));
+        return Err(crate::trader::Error::StrategyEvaluation {
+            mint: position.mint.clone(),
+            detail: format!(
+                "invalid trailing stop config: distance_pct ({distance_pct:.1}%) must be less than activation_pct ({activation_pct:.1}%)"
+            ),
+        });
     }
 
     // Calculate unrealized profit percentage using average entry price

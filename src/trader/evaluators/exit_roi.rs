@@ -10,13 +10,14 @@ pub async fn check_roi_exit(
     position: &Position,
     current_price: f64,
     policy: &RoiPolicy,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!(
-            "Invalid current_price for ROI exit: {}",
-            current_price
-        ));
+        return Err(crate::positions::Error::InvalidPrice {
+            mint: position.mint.clone(),
+            price: current_price,
+        }
+        .into());
     }
 
     // Check if ROI-based exit is enabled

@@ -259,6 +259,8 @@ impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
         match self {
             Error::Positions(e) => e.is_retryable(),
+            Error::Transactions(e) => e.is_retryable(),
+            Error::Trader(e) => e.is_retryable(),
             Error::Account(e) => e.is_retryable(),
             Error::Network(e) => e.is_retryable(),
             Error::Database(e) => e.is_retryable(),
@@ -280,6 +282,8 @@ impl ErrorClass for Error {
     fn retry_after(&self) -> Option<Duration> {
         match self {
             Error::Positions(e) => e.retry_after(),
+            Error::Transactions(e) => e.retry_after(),
+            Error::Trader(e) => e.retry_after(),
             Error::Account(e) => e.retry_after(),
             Error::Network(e) => e.retry_after(),
             Error::Database(e) => e.retry_after(),
@@ -295,6 +299,8 @@ impl ErrorClass for Error {
     fn severity(&self) -> Severity {
         match self {
             Error::Positions(e) => e.severity(),
+            Error::Transactions(e) => e.severity(),
+            Error::Trader(e) => e.severity(),
             Error::Account(e) => e.severity(),
             Error::Network(e) => e.severity(),
             Error::Database(e) => e.severity(),
@@ -311,6 +317,8 @@ impl ErrorClass for Error {
     fn http_status(&self) -> u16 {
         match self {
             Error::Positions(e) => e.http_status(),
+            Error::Transactions(e) => e.http_status(),
+            Error::Trader(e) => e.http_status(),
             Error::Account(e) => e.http_status(),
             Error::Network(e) => e.http_status(),
             Error::Database(e) => e.http_status(),

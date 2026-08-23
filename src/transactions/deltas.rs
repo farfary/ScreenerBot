@@ -35,13 +35,16 @@ impl DeltaKind {
         }
     }
 
-    pub fn parse(value: &str) -> Result<Self, String> {
+    pub fn parse(value: &str) -> crate::transactions::Result<Self> {
         match value {
             "trade" => Ok(Self::Trade),
             "transfer" => Ok(Self::Transfer),
             "defi" => Ok(Self::DeFi),
             "other" => Ok(Self::Other),
-            other => Err(format!("unknown delta kind: {other}")),
+            other => Err(crate::transactions::Error::RowDecode {
+                column: "kind",
+                detail: format!("unknown delta kind: {other}"),
+            }),
         }
     }
 }

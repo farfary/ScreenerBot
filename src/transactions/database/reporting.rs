@@ -2,6 +2,7 @@
 //
 // Reporting, querying, and export operations
 
+use crate::transactions::error::Error;
 use crate::transactions::types::*;
 use chrono::{DateTime, Utc};
 
@@ -22,8 +23,10 @@ impl TransactionDatabase {
         filters: &TransactionListFilters,
         cursor: Option<&TransactionCursor>,
         limit: usize,
-    ) -> Result<TransactionListResult, String> {
-        let subject = Subject::own().map_err(|e| e.to_string())?;
+    ) -> Result<TransactionListResult, Error> {
+        let subject = Subject::own().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
         self.list_transactions_for_subject(subject, filters, cursor, limit)
             .await
     }
@@ -36,7 +39,7 @@ impl TransactionDatabase {
         filters: &TransactionListFilters,
         cursor: Option<&TransactionCursor>,
         limit: usize,
-    ) -> Result<TransactionListResult, String> {
+    ) -> Result<TransactionListResult, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -138,7 +141,7 @@ impl TransactionDatabase {
             params_vec.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare list query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -260,13 +263,13 @@ impl TransactionDatabase {
                     instructions_count,
                 })
             })
-            .map_err(|e| format!("Failed to execute list query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         // Collect and apply Rust-side filters
         let mut results: Vec<TransactionListRow> = Vec::new();
 
         for row_result in rows {
-            let row = row_result.map_err(|e| format!("Failed to parse row: {e}"))?;
+            let row = row_result.map_err(crate::errors::DatabaseError::from)?;
 
             if !Self::row_matches_filters(&row, filters) {
                 continue;
@@ -376,11 +379,10 @@ impl TransactionDatabase {
     }
 
     /// Get estimated count of transactions matching filters (optional, for UI)
-    pub async fn count_transactions(
-        &self,
-        filters: &TransactionListFilters,
-    ) -> Result<u64, String> {
-        let subject = Subject::own().map_err(|e| e.to_string())?;
+    pub async fn count_transactions(&self, filters: &TransactionListFilters) -> Result<u64, Error> {
+        let subject = Subject::own().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
         self.count_transactions_for_subject(subject, filters).await
     }
 
@@ -388,7 +390,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         filters: &TransactionListFilters,
-    ) -> Result<u64, String> {
+    ) -> Result<u64, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -435,7 +437,7 @@ impl TransactionDatabase {
 
         let count: i64 = conn
             .query_row(&query, params_refs.as_slice(), |row| row.get(0))
-            .map_err(|e| format!("Failed to count transactions: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(count as u64)
     }

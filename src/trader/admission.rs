@@ -140,7 +140,7 @@ pub async fn check_entry_admission(
             );
             return Err(EntryBlock::PositionLimit);
         }
-        Err(e) => return Err(EntryBlock::CheckFailed(e)),
+        Err(e) => return Err(EntryBlock::CheckFailed(e.to_string())),
     }
 
     // 3. Existing position check - prevent duplicate entries
@@ -156,7 +156,7 @@ pub async fn check_entry_admission(
             );
             return Err(EntryBlock::AlreadyOpen);
         }
-        Err(e) => return Err(EntryBlock::CheckFailed(e)),
+        Err(e) => return Err(EntryBlock::CheckFailed(e.to_string())),
     }
 
     // 4. Re-entry cooldown - prevent immediate re-entry after exit
@@ -172,7 +172,7 @@ pub async fn check_entry_admission(
             );
             return Err(EntryBlock::ReentryCooldown);
         }
-        Err(e) => return Err(EntryBlock::CheckFailed(e)),
+        Err(e) => return Err(EntryBlock::CheckFailed(e.to_string())),
     }
 
     // 5. Blacklist check - token-level only (not pool-level)

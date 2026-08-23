@@ -15,7 +15,7 @@ pub use risk::check_risk_limits;
 use crate::logger::{self, LogTag};
 
 /// Initialize the safety system
-pub async fn init_safety_system() -> Result<(), String> {
+pub async fn init_safety_system() -> crate::trader::Result<()> {
     logger::info(LogTag::Trader, "Initializing safety system...");
 
     // Initialize loss limit state from historical data (survives restart)

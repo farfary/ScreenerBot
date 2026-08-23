@@ -15,7 +15,7 @@ use chrono::Utc;
 /// Logic:
 /// - If cooldown is 0, no cooldown is enforced (returns false)
 /// - Otherwise, checks if token's last exit was within cooldown period
-pub async fn is_in_reentry_cooldown(mint: &str) -> Result<bool, String> {
+pub async fn is_in_reentry_cooldown(mint: &str) -> crate::trader::Result<bool> {
     let cooldown_minutes = config::get_position_close_cooldown_minutes();
     if cooldown_minutes == 0 {
         return Ok(false); // Cooldown disabled

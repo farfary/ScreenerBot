@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 
 use crate::logger::{self, LogTag};
-use crate::transactions::{database::TransactionDatabase, types::*, utils::*};
+use crate::transactions::{database::TransactionDatabase, error::Error, types::*, utils::*};
 
 // =============================================================================
 // TRANSACTIONS MANAGER STRUCT
@@ -67,7 +67,7 @@ pub struct TransactionsManager {
 
 impl TransactionsManager {
     /// Create new TransactionsManager instance with token database integration
-    pub async fn new(subject: Subject) -> Result<Self, String> {
+    pub async fn new(subject: Subject) -> Result<Self, Error> {
         logger::debug(
             LogTag::Transactions,
             &format!(
@@ -117,7 +117,7 @@ impl TransactionsManager {
     }
 
     /// Initialize the manager with existing state from database
-    pub async fn initialize(&mut self) -> Result<(), String> {
+    pub async fn initialize(&mut self) -> Result<(), Error> {
         let duration = DurationMeasure::start("TransactionsManager::initialize");
 
         let subject = self.subject().clone();
@@ -187,7 +187,7 @@ impl TransactionsManager {
     }
 
     /// Initialize WebSocket connection for real-time transaction monitoring
-    async fn initialize_websocket(&mut self) -> Result<(), String> {
+    async fn initialize_websocket(&mut self) -> Result<(), Error> {
         // This will be implemented when integrating with the existing websocket module
         // For now, we'll skip WebSocket initialization to avoid breaking changes
 
@@ -202,7 +202,7 @@ impl TransactionsManager {
     }
 
     /// Shutdown the manager and cleanup resources
-    pub async fn shutdown(&mut self) -> Result<(), String> {
+    pub async fn shutdown(&mut self) -> Result<(), Error> {
         logger::info(LogTag::Transactions, "TransactionsManager shutting down...");
 
         self.is_running = false;

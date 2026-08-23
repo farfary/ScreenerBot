@@ -28,7 +28,7 @@ pub struct ManualTradeRecord {
 }
 
 /// Record a manual trade
-pub async fn record_manual_trade(result: &TradeResult) -> Result<(), String> {
+pub async fn record_manual_trade(result: &TradeResult) -> crate::trader::Result<()> {
     let record = ManualTradeRecord {
         timestamp: result.execution_timestamp,
         mint: result.decision.mint.clone(),

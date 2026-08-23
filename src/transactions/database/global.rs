@@ -22,7 +22,7 @@ static GLOBAL_TRANSACTION_DATABASE: LazyLock<Arc<Mutex<Option<Arc<TransactionDat
     LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Initialize global transaction database
-pub async fn init_transaction_database() -> Result<Arc<TransactionDatabase>, String> {
+pub async fn init_transaction_database() -> crate::transactions::Result<Arc<TransactionDatabase>> {
     let db = TransactionDatabase::new(active_chain()).await?;
     let db_arc = Arc::new(db);
 

@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 
+use crate::transactions::error::Error;
 use crate::transactions::types::*;
 
 use super::operations::TransactionDatabase;
@@ -22,25 +23,24 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         pending: &HashMap<String, DateTime<Utc>>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
 
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| format!("Failed to start transaction: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         for (signature, timestamp) in pending {
             tx.execute(
                 "INSERT OR REPLACE INTO pending_transactions (chain_id, signature, wallet_address, added_at) VALUES (?1, ?2, ?3, ?4)",
                 params![chain_id, signature, wallet_address, timestamp.to_rfc3339()],
             )
-            .map_err(|e| format!("Failed to save pending transaction: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
         }
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit pending transactions: {e}"))?;
+        tx.commit().map_err(crate::errors::DatabaseError::from)?;
 
         Ok(())
     }
@@ -49,7 +49,7 @@ impl TransactionDatabase {
     pub async fn get_pending_transactions(
         &self,
         subject: Subject,
-    ) -> Result<HashMap<String, DateTime<Utc>>, String> {
+    ) -> Result<HashMap<String, DateTime<Utc>>, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -58,7 +58,7 @@ impl TransactionDatabase {
             .prepare(
                 "SELECT signature, added_at FROM pending_transactions WHERE chain_id = ?1 AND wallet_address = ?2",
             )
-            .map_err(|e| format!("Failed to prepare pending transactions query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let rows = stmt
             .query_map(params![chain_id, wallet_address], |row| {
@@ -75,12 +75,11 @@ impl TransactionDatabase {
                     .with_timezone(&Utc);
                 Ok((signature, timestamp))
             })
-            .map_err(|e| format!("Failed to query pending transactions: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut result = HashMap::new();
         for row in rows {
-            let (signature, timestamp) =
-                row.map_err(|e| format!("Failed to parse pending transaction row: {e}"))?;
+            let (signature, timestamp) = row.map_err(crate::errors::DatabaseError::from)?;
             result.insert(signature, timestamp);
         }
 
@@ -92,7 +91,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         signature: &str,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -102,13 +101,13 @@ impl TransactionDatabase {
                 "DELETE FROM pending_transactions WHERE chain_id = ?1 AND signature = ?2 AND wallet_address = ?3",
                 params![chain_id, signature, wallet_address],
             )
-            .map_err(|e| format!("Failed to remove pending transaction: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(affected > 0)
     }
 
     /// Get count of pending transactions, for the given subject
-    pub async fn get_pending_transactions_count(&self, subject: Subject) -> Result<u64, String> {
+    pub async fn get_pending_transactions_count(&self, subject: Subject) -> Result<u64, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -119,7 +118,7 @@ impl TransactionDatabase {
                 params![chain_id, wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get pending transactions count: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(count as u64)
     }
@@ -136,9 +135,12 @@ impl TransactionDatabase {
     pub async fn get_raw_transaction_json(
         &self,
         signature: &str,
-    ) -> Result<Option<serde_json::Value>, String> {
+    ) -> Result<Option<serde_json::Value>, Error> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let result: rusqlite::Result<Option<String>> = conn
             .query_row(
@@ -155,14 +157,14 @@ impl TransactionDatabase {
                 }
                 match serde_json::from_str::<serde_json::Value>(&json_str) {
                     Ok(value) => Ok(Some(value)),
-                    Err(e) => Err(format!(
-                        "Failed to parse cached raw transaction for {}: {}",
-                        signature, e
-                    )),
+                    Err(e) => Err(Error::JsonParse {
+                        signature: signature.to_owned(),
+                        detail: e.to_string(),
+                    }),
                 }
             }
             Ok(None) => Ok(None),
-            Err(e) => Err(format!("Failed to read cached raw transaction: {e}")),
+            Err(e) => Err(crate::errors::DatabaseError::from(e).into()),
         }
     }
 
@@ -171,7 +173,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         transaction: &Transaction,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -211,7 +213,7 @@ impl TransactionDatabase {
                     raw_transaction_json
                 ]
             )
-            .map_err(|e| format!("Failed to store raw transaction: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(())
     }
@@ -221,7 +223,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         transaction: &Transaction,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -285,7 +287,7 @@ impl TransactionDatabase {
                     sol_delta
                 ]
             )
-            .map_err(|e| format!("Failed to store processed transaction: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(())
     }
@@ -298,7 +300,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         transaction: &Transaction,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         self.store_raw_transaction(subject.clone(), transaction)
             .await?;
         self.store_processed_transaction(subject, transaction)
@@ -314,7 +316,7 @@ impl TransactionDatabase {
         status: &str,
         success: bool,
         error_message: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -324,14 +326,16 @@ impl TransactionDatabase {
                 "UPDATE raw_transactions SET status = ?1, success = ?2, error_message = ?3, updated_at = datetime('now') WHERE chain_id = ?4 AND signature = ?5 AND wallet_address = ?6",
                 params![status, success, error_message, chain_id, signature, wallet_address]
             )
-            .map_err(|e| format!("Failed to update transaction status: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(())
     }
 
     /// Get transaction by signature with full analysis data
-    pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {
-        let subject = Subject::own().map_err(|e| e.to_string())?;
+    pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, Error> {
+        let subject = Subject::own().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
         self.get_transaction_for_subject(subject, signature).await
     }
 
@@ -340,7 +344,7 @@ impl TransactionDatabase {
         &self,
         subject: Subject,
         signature: &str,
-    ) -> Result<Option<Transaction>, String> {
+    ) -> Result<Option<Transaction>, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -509,13 +513,15 @@ impl TransactionDatabase {
         match result {
             Ok(transaction) => Ok(Some(transaction)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to get transaction: {e}")),
+            Err(e) => Err(crate::errors::DatabaseError::from(e).into()),
         }
     }
 
     /// Get successful transactions count
-    pub async fn get_successful_transactions_count(&self) -> Result<u64, String> {
-        let subject = Subject::own().map_err(|e| e.to_string())?;
+    pub async fn get_successful_transactions_count(&self) -> Result<u64, Error> {
+        let subject = Subject::own().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
         self.get_successful_transactions_count_for_subject(subject)
             .await
     }
@@ -523,7 +529,7 @@ impl TransactionDatabase {
     pub async fn get_successful_transactions_count_for_subject(
         &self,
         subject: Subject,
-    ) -> Result<u64, String> {
+    ) -> Result<u64, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -534,14 +540,16 @@ impl TransactionDatabase {
                 params![chain_id, wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get successful transactions count: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(count as u64)
     }
 
     /// Get failed transactions count
-    pub async fn get_failed_transactions_count(&self) -> Result<u64, String> {
-        let subject = Subject::own().map_err(|e| e.to_string())?;
+    pub async fn get_failed_transactions_count(&self) -> Result<u64, Error> {
+        let subject = Subject::own().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
         self.get_failed_transactions_count_for_subject(subject)
             .await
     }
@@ -549,7 +557,7 @@ impl TransactionDatabase {
     pub async fn get_failed_transactions_count_for_subject(
         &self,
         subject: Subject,
-    ) -> Result<u64, String> {
+    ) -> Result<u64, Error> {
         let conn = self.get_connection()?;
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
@@ -560,7 +568,7 @@ impl TransactionDatabase {
                 params![chain_id, wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get failed transactions count: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(count as u64)
     }
@@ -575,7 +583,7 @@ impl TransactionDatabase {
     pub async fn get_latest_transaction_time(
         &self,
         wallet_address: &str,
-    ) -> Result<Option<DateTime<Utc>>, String> {
+    ) -> Result<Option<DateTime<Utc>>, Error> {
         let conn = self.get_connection()?;
 
         let row: Option<(Option<i64>, String)> = conn
@@ -588,7 +596,7 @@ impl TransactionDatabase {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
-            .map_err(|e| format!("Failed to query latest transaction time: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         Ok(row.and_then(|(block_time, timestamp)| {
             block_time

@@ -25,12 +25,17 @@ use crate::trader::{ai_analysis, evaluators};
 pub async fn evaluate_entry_for_token(
     token_mint: &str,
     price_info: &PriceResult,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     if let Err(block) = check_entry_admission(token_mint, &["rpc", "dexscreener", "rugcheck"]).await
     {
         return match block {
-            EntryBlock::Connectivity(unhealthy) => Err(format!("Unhealthy endpoints: {unhealthy}")),
-            EntryBlock::CheckFailed(e) => Err(e),
+            EntryBlock::Connectivity(unhealthy) => {
+                Err(crate::trader::Error::UnhealthyEndpoints { detail: unhealthy })
+            }
+            EntryBlock::CheckFailed(e) => Err(crate::trader::Error::StrategyEvaluation {
+                mint: token_mint.to_owned(),
+                detail: e,
+            }),
             EntryBlock::ForceStopped
             | EntryBlock::LossLimit
             | EntryBlock::PositionLimit

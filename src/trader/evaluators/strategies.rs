@@ -31,7 +31,7 @@ impl StrategyEvaluator {
     pub async fn check_entry_strategies(
         token_mint: &str,
         price_info: &PriceResult,
-    ) -> Result<Option<TradeDecision>, String> {
+    ) -> crate::trader::Result<Option<TradeDecision>> {
         // Early check: skip if no entry strategies configured
         match has_enabled_strategies(StrategyType::Entry) {
             Ok(false) => return Ok(None),
@@ -199,7 +199,7 @@ impl StrategyEvaluator {
     pub async fn check_exit_strategies(
         position: &Position,
         current_price: f64,
-    ) -> Result<Option<TradeDecision>, String> {
+    ) -> crate::trader::Result<Option<TradeDecision>> {
         // Early check: skip if no exit strategies configured
         match has_enabled_strategies(StrategyType::Exit) {
             Ok(false) => return Ok(None),

@@ -53,7 +53,7 @@ pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
     }
 }
 
-async fn reconcile_runtime_state(database: &CopyDatabase) -> Result<(), String> {
+async fn reconcile_runtime_state(database: &CopyDatabase) -> crate::trader::Result<()> {
     let abandoned = database.reconcile_stale_claims(300).await?;
     if abandoned > 0 {
         logger::warning(
@@ -92,7 +92,7 @@ async fn reconcile_runtime_state(database: &CopyDatabase) -> Result<(), String> 
 async fn process_activity(
     database: &CopyDatabase,
     activity: &WalletActivity,
-) -> Result<(), String> {
+) -> crate::trader::Result<()> {
     let (copy_enabled, require_filter_pass) = with_config(|config| {
         (
             config.copy_trading.enabled,
@@ -142,7 +142,11 @@ async fn process_activity(
     }
     let filter_passed = if require_filter_pass {
         crate::filtering::get_filtered_token_mints()
-            .await?
+            .await
+            .map_err(|e| crate::trader::Error::Dependency {
+                dependency: "filtering",
+                detail: e,
+            })?
             .iter()
             .any(|passed| passed == mint)
     } else {
@@ -151,7 +155,11 @@ async fn process_activity(
     let mut spend = HashMap::new();
     let mut risk = HashMap::new();
     let own_addresses = crate::wallets::list_wallets(true)
-        .await?
+        .await
+        .map_err(|e| crate::trader::Error::Dependency {
+            dependency: "wallets",
+            detail: e,
+        })?
         .into_iter()
         .map(|wallet| wallet.address)
         .collect::<Vec<_>>();
@@ -275,7 +283,7 @@ async fn observe_target_inventory(
     database: &CopyDatabase,
     activity: &WalletActivity,
     tasks: &[super::CopyTask],
-) -> Result<HashMap<i64, f64>, String> {
+) -> crate::trader::Result<HashMap<i64, f64>> {
     let ActivityKind::Swap {
         mint,
         side,
@@ -305,7 +313,7 @@ async fn apply_latency_kill_switch(
     database: &CopyDatabase,
     activity: &WalletActivity,
     tasks: &mut Vec<super::CopyTask>,
-) -> Result<(), String> {
+) -> crate::trader::Result<()> {
     let (enabled, window_size, threshold_ms) = with_config(|config| {
         (
             config.copy_trading.latency_kill_switch_enabled,
@@ -357,7 +365,12 @@ async fn apply_latency_kill_switch(
             let average_ms = (window.iter().map(|value| u128::from(*value)).sum::<u128>()
                 / window_size as u128) as u64;
             if database.pause_task(task.id).await? {
-                crate::wallets::watch::remove_copy_source(task.id, &task.target_address).await?;
+                crate::wallets::watch::remove_copy_source(task.id, &task.target_address)
+                    .await
+                    .map_err(|e| crate::trader::Error::Dependency {
+                        dependency: "wallets",
+                        detail: e,
+                    })?;
             }
             let mint = match &activity.kind {
                 ActivityKind::Swap { mint, .. } => mint.clone(),
@@ -395,7 +408,7 @@ async fn process_sell_activity(
     tasks: &[super::CopyTask],
     mint: &str,
     target_holdings_before: &HashMap<i64, f64>,
-) -> Result<(), String> {
+) -> crate::trader::Result<()> {
     let force_stopped = crate::global::is_force_stopped();
     for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
         let target_holding = target_holdings_before

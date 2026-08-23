@@ -75,7 +75,7 @@ impl ServiceMetrics {
 }
 
 /// Perform service health check
-pub async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), String> {
+pub async fn perform_health_check(metrics: &mut ServiceMetrics) -> crate::transactions::Result<()> {
     let now = Utc::now();
 
     if let Some(last_check) = metrics.last_periodic_check {
@@ -89,9 +89,7 @@ pub async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), St
     }
 
     if let Some(db) = crate::transactions::database::get_transaction_database().await {
-        if let Err(e) = db.health_check().await {
-            return Err(format!("Database health check failed: {e}"));
-        }
+        db.health_check().await?;
     }
 
     logger::debug(

@@ -4,6 +4,8 @@
 
 use rusqlite::params;
 
+use crate::transactions::error::Error;
+
 use super::operations::TransactionDatabase;
 
 impl TransactionDatabase {
@@ -13,7 +15,7 @@ impl TransactionDatabase {
     pub(super) fn rebuild_raw_transactions(
         tx: &rusqlite::Transaction,
         own_wallet_address: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         if Self::has_composite_signature_wallet_key(tx, "raw_transactions")? {
             return Ok(());
         }
@@ -39,7 +41,10 @@ impl TransactionDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create raw_transactions__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "create raw_transactions__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute(
             "INSERT INTO raw_transactions__v5
@@ -53,15 +58,24 @@ impl TransactionDatabase {
              FROM raw_transactions",
             params![own_wallet_address],
         )
-        .map_err(|e| format!("Failed to copy raw_transactions rows into v5 shape: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "copy raw_transactions rows into v5 shape".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute("DROP TABLE raw_transactions", [])
-            .map_err(|e| format!("Failed to drop old raw_transactions: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "drop old raw_transactions".to_owned(),
+                detail: e.to_string(),
+            })?;
         tx.execute(
             "ALTER TABLE raw_transactions__v5 RENAME TO raw_transactions",
             [],
         )
-        .map_err(|e| format!("Failed to rename raw_transactions__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "rename raw_transactions__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         Ok(())
     }
@@ -72,7 +86,7 @@ impl TransactionDatabase {
     pub(super) fn rebuild_processed_transactions(
         tx: &rusqlite::Transaction,
         own_wallet_address: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         if Self::has_composite_signature_wallet_key(tx, "processed_transactions")? {
             return Ok(());
         }
@@ -103,7 +117,10 @@ impl TransactionDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create processed_transactions__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "create processed_transactions__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute(
             "INSERT INTO processed_transactions__v5
@@ -119,15 +136,24 @@ impl TransactionDatabase {
              FROM processed_transactions",
             params![own_wallet_address],
         )
-        .map_err(|e| format!("Failed to copy processed_transactions rows into v5 shape: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "copy processed_transactions rows into v5 shape".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute("DROP TABLE processed_transactions", [])
-            .map_err(|e| format!("Failed to drop old processed_transactions: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "drop old processed_transactions".to_owned(),
+                detail: e.to_string(),
+            })?;
         tx.execute(
             "ALTER TABLE processed_transactions__v5 RENAME TO processed_transactions",
             [],
         )
-        .map_err(|e| format!("Failed to rename processed_transactions__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "rename processed_transactions__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         Ok(())
     }
@@ -136,7 +162,7 @@ impl TransactionDatabase {
     pub(super) fn rebuild_known_signatures(
         tx: &rusqlite::Transaction,
         own_wallet_address: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         if Self::has_composite_signature_wallet_key(tx, "known_signatures")? {
             return Ok(());
         }
@@ -151,7 +177,10 @@ impl TransactionDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create known_signatures__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "create known_signatures__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute(
             "INSERT INTO known_signatures__v5 (signature, wallet_address, status, added_at)
@@ -159,15 +188,24 @@ impl TransactionDatabase {
              FROM known_signatures",
             params![own_wallet_address],
         )
-        .map_err(|e| format!("Failed to copy known_signatures rows into v5 shape: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "copy known_signatures rows into v5 shape".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute("DROP TABLE known_signatures", [])
-            .map_err(|e| format!("Failed to drop old known_signatures: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "drop old known_signatures".to_owned(),
+                detail: e.to_string(),
+            })?;
         tx.execute(
             "ALTER TABLE known_signatures__v5 RENAME TO known_signatures",
             [],
         )
-        .map_err(|e| format!("Failed to rename known_signatures__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "rename known_signatures__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         Ok(())
     }
@@ -176,7 +214,7 @@ impl TransactionDatabase {
     pub(super) fn rebuild_pending_transactions(
         tx: &rusqlite::Transaction,
         own_wallet_address: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         if Self::has_composite_signature_wallet_key(tx, "pending_transactions")? {
             return Ok(());
         }
@@ -192,7 +230,10 @@ impl TransactionDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create pending_transactions__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "create pending_transactions__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute(
             "INSERT INTO pending_transactions__v5
@@ -202,15 +243,24 @@ impl TransactionDatabase {
              FROM pending_transactions",
             params![own_wallet_address],
         )
-        .map_err(|e| format!("Failed to copy pending_transactions rows into v5 shape: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "copy pending_transactions rows into v5 shape".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute("DROP TABLE pending_transactions", [])
-            .map_err(|e| format!("Failed to drop old pending_transactions: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "drop old pending_transactions".to_owned(),
+                detail: e.to_string(),
+            })?;
         tx.execute(
             "ALTER TABLE pending_transactions__v5 RENAME TO pending_transactions",
             [],
         )
-        .map_err(|e| format!("Failed to rename pending_transactions__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "rename pending_transactions__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         Ok(())
     }
@@ -221,7 +271,7 @@ impl TransactionDatabase {
     pub(super) fn rebuild_deferred_retries(
         tx: &rusqlite::Transaction,
         own_wallet_address: &str,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         if Self::has_composite_signature_wallet_key(tx, "deferred_retries")? {
             return Ok(());
         }
@@ -240,7 +290,10 @@ impl TransactionDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create deferred_retries__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "create deferred_retries__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute(
             "INSERT INTO deferred_retries__v5
@@ -251,15 +304,24 @@ impl TransactionDatabase {
              FROM deferred_retries",
             params![own_wallet_address],
         )
-        .map_err(|e| format!("Failed to copy deferred_retries rows into v5 shape: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "copy deferred_retries rows into v5 shape".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         tx.execute("DROP TABLE deferred_retries", [])
-            .map_err(|e| format!("Failed to drop old deferred_retries: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "drop old deferred_retries".to_owned(),
+                detail: e.to_string(),
+            })?;
         tx.execute(
             "ALTER TABLE deferred_retries__v5 RENAME TO deferred_retries",
             [],
         )
-        .map_err(|e| format!("Failed to rename deferred_retries__v5: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "rename deferred_retries__v5".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         Ok(())
     }

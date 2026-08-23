@@ -19,7 +19,7 @@ use tokio::time::{sleep, Duration, Instant};
 /// Monitor open positions for exit opportunities
 pub async fn monitor_positions(
     mut shutdown: tokio::sync::watch::Receiver<bool>,
-) -> Result<(), String> {
+) -> crate::trader::Result<()> {
     logger::info(LogTag::Trader, "Starting position monitor");
 
     // Record monitor start event
@@ -283,6 +283,7 @@ pub async fn monitor_positions(
                         }
                     }
                     Err(e) => {
+                        let e = e.to_string();
                         // Fail action
                         if let Some(ref a) = action {
                             a.fail(&e).await;
@@ -377,7 +378,7 @@ pub async fn monitor_positions(
                         Err(e) => {
                             // Fail action
                             if let Some(ref a) = action {
-                                a.fail(&e).await;
+                                a.fail(&e.to_string()).await;
                             }
 
                             logger::error(LogTag::Trader, &format!("Failed to execute DCA: {e}"));

@@ -663,7 +663,9 @@ pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
     let deltas = transactions_db
         .get_subject_deltas(&wallet_address)
         .await
-        .map_err(|e| Error::WalletHistorySync { detail: e })?;
+        .map_err(|e| Error::WalletHistorySync {
+            detail: e.to_string(),
+        })?;
     if deltas.is_empty() {
         return Ok(SyncSummary::default());
     }

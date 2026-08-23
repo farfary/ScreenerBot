@@ -15,6 +15,14 @@ pub enum Error {
     #[error(transparent)]
     Positions(#[from] crate::positions::Error),
 
+    /// Transaction processing, persistence and verification errors.
+    #[error(transparent)]
+    Transactions(#[from] crate::transactions::Error),
+
+    /// Trader control, execution and copy-trading errors.
+    #[error(transparent)]
+    Trader(#[from] crate::trader::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

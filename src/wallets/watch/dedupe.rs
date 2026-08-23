@@ -56,7 +56,10 @@ async fn has_seen_in_database(
     subject: Subject,
     signature: &str,
 ) -> Result<bool, String> {
-    db.is_signature_known(subject, signature).await
+    // SEAM: wallets still returns String errors; removed when it migrates.
+    db.is_signature_known(subject, signature)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 async fn commit_to_database(
@@ -64,7 +67,10 @@ async fn commit_to_database(
     subject: Subject,
     signature: &str,
 ) -> Result<(), String> {
-    db.add_known_signature(subject, signature).await
+    // SEAM: wallets still returns String errors; removed when it migrates.
+    db.add_known_signature(subject, signature)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

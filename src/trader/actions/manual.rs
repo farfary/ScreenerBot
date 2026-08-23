@@ -4,6 +4,7 @@ use crate::actions::{
     complete_action_failed, complete_action_success, register_action, update_step, Action,
     ActionType, StepStatus,
 };
+use crate::trader::error::Error;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -25,7 +26,7 @@ pub struct ManualBuyAction {
 
 impl ManualBuyAction {
     /// Create and register a new manual buy action
-    pub async fn new(mint: &str, symbol: Option<&str>, size_sol: f64) -> Result<Self, String> {
+    pub async fn new(mint: &str, symbol: Option<&str>, size_sol: f64) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
         let metadata = json!({
@@ -43,7 +44,9 @@ impl ManualBuyAction {
             metadata,
         );
 
-        register_action(action).await?;
+        register_action(action)
+            .await
+            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
         Ok(Self { action_id })
     }
 
@@ -221,7 +224,7 @@ impl ManualSellAction {
         symbol: Option<&str>,
         percentage: f64,
         position_id: Option<i64>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
         let metadata = json!({
@@ -240,7 +243,9 @@ impl ManualSellAction {
             metadata,
         );
 
-        register_action(action).await?;
+        register_action(action)
+            .await
+            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
         Ok(Self { action_id })
     }
 
@@ -420,7 +425,7 @@ impl ManualAddAction {
         symbol: Option<&str>,
         size_sol: f64,
         position_id: Option<i64>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let action_id = Uuid::new_v4().to_string();
 
         let metadata = json!({
@@ -439,7 +444,9 @@ impl ManualAddAction {
             metadata,
         );
 
-        register_action(action).await?;
+        register_action(action)
+            .await
+            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
         Ok(Self { action_id })
     }
 

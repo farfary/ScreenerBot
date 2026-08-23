@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
-use crate::trader::{is_trader_running, start_trader, stop_trader_gracefully, TraderControlError};
+use crate::trader::{self, is_trader_running, start_trader, stop_trader_gracefully};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 
@@ -81,9 +81,9 @@ pub async fn start_trader_handler() -> Response {
         }
         Err(err) => {
             let (status, message) = match err {
-                TraderControlError::ConfigUpdate(e) => (
+                trader::Error::ConfigUpdate { detail } => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update trader config: {e}"),
+                    format!("Failed to update trader config: {detail}"),
                 ),
                 other => (StatusCode::BAD_REQUEST, other.to_string()),
             };
@@ -123,18 +123,19 @@ pub async fn stop_trader_handler() -> Response {
         }
         Err(err) => {
             let (status, message) = match err {
-                TraderControlError::ConfigUpdate(e) => (
+                trader::Error::ConfigUpdate { detail } => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update trader config: {e}"),
+                    format!("Failed to update trader config: {detail}"),
                 ),
-                TraderControlError::AlreadyStopped => (
+                trader::Error::AlreadyStopped => (
                     StatusCode::BAD_REQUEST,
                     "Trader is already stopped".to_owned(),
                 ),
-                TraderControlError::AlreadyRunning => (
+                trader::Error::AlreadyRunning => (
                     StatusCode::BAD_REQUEST,
                     "Trader is already running".to_owned(),
                 ),
+                other => (StatusCode::BAD_REQUEST, other.to_string()),
             };
 
             error_response(status, "Trader Error", &message, None)

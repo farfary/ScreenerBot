@@ -15,6 +15,7 @@ use tabled::Tabled;
 use crate::chains::adapter;
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
+use crate::transactions::error::Error;
 use crate::transactions::types::*;
 
 use super::debug_helpers::{perform_debug_validations, print_debug_analysis};
@@ -112,7 +113,7 @@ pub async fn debug_transaction(
     signature: &str,
     subject: &Subject,
     verbose: bool,
-) -> Result<DebugAnalysisResult, String> {
+) -> Result<DebugAnalysisResult, Error> {
     logger::info(
         LogTag::Transactions,
         &format!("Starting debug analysis for transaction: {signature}"),
@@ -124,8 +125,18 @@ pub async fn debug_transaction(
 
     // Step 1: Process transaction
     let step_start = Instant::now();
-    let processor = TransactionProcessor::for_subject(subject).map_err(|e| e.to_string())?;
-    let transaction = processor.process_transaction(signature).await?;
+    let processor =
+        TransactionProcessor::for_subject(subject).map_err(|e| Error::VerificationFailed {
+            signature: signature.to_owned(),
+            detail: e.to_string(),
+        })?;
+    let transaction = processor
+        .process_transaction(signature)
+        .await
+        .map_err(|e| Error::VerificationFailed {
+            signature: signature.to_owned(),
+            detail: e,
+        })?;
     let processing_duration = step_start.elapsed();
 
     analysis_steps.push(DebugStep {
@@ -192,7 +203,7 @@ pub async fn debug_transaction(
 pub async fn debug_transactions_batch(
     signatures: Vec<String>,
     subject: &Subject,
-) -> Result<Vec<DebugAnalysisResult>, String> {
+) -> Result<Vec<DebugAnalysisResult>, Error> {
     logger::info(
         LogTag::Transactions,
         &format!(

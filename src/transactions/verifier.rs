@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
+use crate::transactions::error::Error;
 use crate::transactions::types::*;
 
 // =============================================================================
@@ -75,8 +76,12 @@ pub async fn verify_transaction_for_position(
     signature: &str,
     expected_type: TransactionType,
     subject: &Subject,
-) -> Result<TransactionVerificationResult, String> {
-    let processor = TransactionProcessor::for_subject(subject).map_err(|e| e.to_string())?;
+) -> Result<TransactionVerificationResult, Error> {
+    let processor =
+        TransactionProcessor::for_subject(subject).map_err(|e| Error::VerificationFailed {
+            signature: signature.to_owned(),
+            detail: e.to_string(),
+        })?;
 
     logger::debug(
         LogTag::Transactions,
@@ -133,7 +138,7 @@ pub async fn verify_entry_transaction(
     expected_mint: &str,
     expected_amount_range: Option<(f64, f64)>,
     subject: &Subject,
-) -> Result<TransactionVerificationResult, String> {
+) -> Result<TransactionVerificationResult, Error> {
     let mut result =
         verify_transaction_for_position(signature, TransactionType::Buy, subject).await?;
 
@@ -182,7 +187,7 @@ pub async fn verify_exit_transaction(
     expected_mint: &str,
     expected_amount_range: Option<(f64, f64)>,
     subject: &Subject,
-) -> Result<TransactionVerificationResult, String> {
+) -> Result<TransactionVerificationResult, Error> {
     let mut result =
         verify_transaction_for_position(signature, TransactionType::Sell, subject).await?;
 
@@ -234,7 +239,7 @@ async fn perform_comprehensive_verification(
     transaction: &Transaction,
     expected_type: TransactionType,
     _subject: &Subject,
-) -> Result<TransactionVerificationResult, String> {
+) -> Result<TransactionVerificationResult, Error> {
     let mut issues = Vec::new();
     let mut confidence_score = 1.0;
 
@@ -354,7 +359,7 @@ fn transaction_types_compatible(actual: &TransactionType, expected: &Transaction
 }
 
 /// Analyze transaction for suspicious patterns
-async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<String>, String> {
+async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<String>, Error> {
     let mut patterns = Vec::new();
 
     // Pattern 1: Failed transaction with high fee
@@ -392,7 +397,7 @@ async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<St
 }
 
 /// Calculate estimated slippage for swap transaction
-async fn calculate_slippage_estimate(_swap_info: &TokenSwapInfo) -> Result<Option<f64>, String> {
+async fn calculate_slippage_estimate(_swap_info: &TokenSwapInfo) -> Result<Option<f64>, Error> {
     // This would calculate slippage based on expected vs actual amounts
     // For now, return None as placeholder - would require price oracle integration
     Ok(None)
@@ -451,7 +456,7 @@ pub async fn verify_transactions_batch(
                         confidence_score: 0.0,
                         issues: vec![VerificationIssue {
                             issue_type: IssueType::InsufficientData,
-                            description: e,
+                            description: e.to_string(),
                             severity: IssueSeverity::Critical,
                         }],
                         verification_timestamp: Utc::now(),
@@ -543,7 +548,7 @@ impl VerificationReport {
 // =============================================================================
 
 /// Legacy verification function for compatibility during migration
-pub async fn verify_transaction_legacy(signature: &str, subject: &Subject) -> Result<bool, String> {
+pub async fn verify_transaction_legacy(signature: &str, subject: &Subject) -> Result<bool, Error> {
     logger::info(
         LogTag::Transactions,
         "Using legacy verification function - please migrate to new verification API",

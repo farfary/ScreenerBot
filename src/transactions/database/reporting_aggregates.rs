@@ -9,6 +9,8 @@ use std::collections::HashMap;
 
 use crate::logger::{self, LogTag};
 
+use crate::transactions::error::Error;
+
 use super::operations::TransactionDatabase;
 use super::types::WalletFlowExportRow;
 
@@ -18,9 +20,12 @@ impl TransactionDatabase {
         &self,
         from: DateTime<Utc>,
         to: Option<DateTime<Utc>>,
-    ) -> Result<(f64, f64, usize), String> {
+    ) -> Result<(f64, f64, usize), Error> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         // Check if this is "all time" query (from epoch = no time filter)
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
@@ -74,11 +79,11 @@ impl TransactionDatabase {
 
         let mut stmt = conn
             .prepare(&row_query)
-            .map_err(|e| format!("Failed to prepare flow aggregation query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut rows = stmt
             .query(params_refs.as_slice())
-            .map_err(|e| format!("Failed to execute flow aggregation query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut inflow = 0.0;
         let mut outflow = 0.0;
@@ -88,10 +93,7 @@ impl TransactionDatabase {
         let mut parse_error_count = 0;
         let mut no_wallet_account_count = 0;
 
-        while let Some(row) = rows
-            .next()
-            .map_err(|e| format!("Failed to read flow row: {e}"))?
-        {
+        while let Some(row) = rows.next().map_err(crate::errors::DatabaseError::from)? {
             count += 1;
             let signature: String = row.get(0).unwrap_or_default();
             let sol_balance_change_json: Option<String> = row.get(2).ok();
@@ -184,9 +186,12 @@ impl TransactionDatabase {
         &self,
         from: DateTime<Utc>,
         to: Option<DateTime<Utc>>,
-    ) -> Result<Vec<(String, f64, f64, usize)>, String> {
+    ) -> Result<Vec<(String, f64, f64, usize)>, Error> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         // Check if this is "all time" query
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
@@ -224,19 +229,16 @@ impl TransactionDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare daily flows query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut rows = stmt
             .query(params_refs.as_slice())
-            .map_err(|e| format!("Failed to execute daily flows query: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         // Group by day manually
         let mut daily_data: HashMap<String, (f64, f64, usize)> = HashMap::new();
 
-        while let Some(row) = rows
-            .next()
-            .map_err(|e| format!("Failed to read daily flow row: {e}"))?
-        {
+        while let Some(row) = rows.next().map_err(crate::errors::DatabaseError::from)? {
             let day: String = row.get(0).unwrap_or_default();
             let sol_balance_change_json: Option<String> = row.get(2).ok();
 
@@ -280,9 +282,12 @@ impl TransactionDatabase {
         &self,
         from: DateTime<Utc>,
         limit: usize,
-    ) -> Result<Vec<WalletFlowExportRow>, String> {
+    ) -> Result<Vec<WalletFlowExportRow>, Error> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let mut stmt = conn
             .prepare(
@@ -293,7 +298,7 @@ impl TransactionDatabase {
                  ORDER BY r.timestamp ASC, r.signature ASC \
                  LIMIT ?4",
             )
-            .map_err(|e| format!("Failed to prepare wallet flow export: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut rows = stmt
             .query(params![
@@ -302,22 +307,24 @@ impl TransactionDatabase {
                 from.to_rfc3339(),
                 (limit as i64).max(1)
             ])
-            .map_err(|e| format!("Failed to query wallet flow export: {e}"))?;
+            .map_err(crate::errors::DatabaseError::from)?;
 
         let mut results = Vec::new();
-        while let Some(row) = rows
-            .next()
-            .map_err(|e| format!("Failed to iterate wallet flow export: {e}"))?
-        {
-            let signature: String = row
-                .get(0)
-                .map_err(|e| format!("Failed to read signature: {e}"))?;
-            let ts_str: String = row
-                .get(1)
-                .map_err(|e| format!("Failed to read timestamp: {e}"))?;
+        while let Some(row) = rows.next().map_err(crate::errors::DatabaseError::from)? {
+            let signature: String = row.get(0).map_err(|e| Error::RowDecode {
+                column: "signature",
+                detail: e.to_string(),
+            })?;
+            let ts_str: String = row.get(1).map_err(|e| Error::RowDecode {
+                column: "timestamp",
+                detail: e.to_string(),
+            })?;
             let timestamp = DateTime::parse_from_rfc3339(&ts_str)
                 .map(|dt| dt.with_timezone(&Utc))
-                .map_err(|e| format!("Failed to parse timestamp: {e}"))?;
+                .map_err(|e| Error::RowDecode {
+                    column: "timestamp",
+                    detail: e.to_string(),
+                })?;
             let sol_delta: f64 = row
                 .get::<_, Option<f64>>(2)
                 .unwrap_or(Some(0.0))

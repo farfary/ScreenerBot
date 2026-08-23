@@ -72,12 +72,9 @@ pub enum Error {
     WalletUnavailable { detail: String },
 
     /// The global position-capacity semaphore has no free permit (no fitting variant
-    /// above: this is neither a per-mint conflict nor a validation failure). `detail`
-    /// carries `state::format_position_slot_error`'s wire format unchanged because
-    /// `state::parse_position_slot_error` downstream (in `trader`) still matches
-    /// against that exact prefix.
-    #[error("{detail}")]
-    SlotUnavailable { detail: String },
+    /// above: this is neither a per-mint conflict nor a validation failure).
+    #[error("no free position slot ({remaining} remaining)")]
+    SlotUnavailable { remaining: usize },
 }
 
 /// Result alias for the positions module.

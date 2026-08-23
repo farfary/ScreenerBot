@@ -13,6 +13,7 @@ use crate::chains::solana::transactions::{
 };
 use crate::logger::{self, LogTag};
 use crate::transactions::{
+    error::Error,
     manager::TransactionsManager,
     utils::{add_signature_to_known_globally, is_signature_known_globally, RPC_BATCH_SIZE},
 };
@@ -49,7 +50,7 @@ pub struct BootstrapStats {
 /// Perform full transaction history bootstrap before marking system ready
 pub async fn perform_initial_transaction_bootstrap(
     manager_arc: &Arc<Mutex<TransactionsManager>>,
-) -> Result<BootstrapStats, String> {
+) -> Result<BootstrapStats, Error> {
     let bootstrap_timer = std::time::Instant::now();
     let (subject, _debug, transaction_db) = {
         let mgr = manager_arc.lock().await;
@@ -60,10 +61,15 @@ pub async fn perform_initial_transaction_bootstrap(
         )
     };
     let wallet_pubkey = crate::chains::solana::transactions::subject::try_to_pubkey(&subject)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
     let fetcher = TransactionFetcher::new();
-    let processor =
-        Arc::new(TransactionProcessor::for_subject(&subject).map_err(|e| e.to_string())?);
+    let processor = Arc::new(TransactionProcessor::for_subject(&subject).map_err(|e| {
+        Error::WalletUnavailable {
+            detail: e.to_string(),
+        }
+    })?);
 
     let mut stats = BootstrapStats::default();
     let batch_limit = RPC_BATCH_SIZE;
@@ -159,7 +165,8 @@ pub async fn perform_initial_transaction_bootstrap(
     loop {
         let signatures = fetcher
             .fetch_signatures_page(wallet_pubkey, batch_limit, before.as_deref(), None)
-            .await?;
+            .await
+            .map_err(|e| Error::Bootstrap { detail: e })?;
 
         if signatures.is_empty() {
             reached_chain_end = true;

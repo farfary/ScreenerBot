@@ -8,7 +8,9 @@ use tokio::sync::{Mutex, Notify};
 
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
-use crate::transactions::{manager::TransactionsManager, types::Transaction, Subject};
+use crate::transactions::{
+    error::Error, manager::TransactionsManager, types::Transaction, Subject,
+};
 
 use super::bootstrap::perform_initial_transaction_bootstrap;
 use super::config::ServiceConfig;
@@ -39,10 +41,10 @@ pub static SHUTDOWN_NOTIFY: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(No
 pub async fn start_global_transaction_service(
     subject: &Subject,
     monitor: tokio_metrics::TaskMonitor,
-) -> Result<tokio::task::JoinHandle<()>, String> {
+) -> Result<tokio::task::JoinHandle<()>, Error> {
     let mut running = SERVICE_RUNNING.lock().await;
     if *running {
-        return Err("Transaction service is already running".to_owned());
+        return Err(Error::ServiceAlreadyRunning);
     }
 
     logger::info(
@@ -98,7 +100,7 @@ pub async fn start_global_transaction_service(
                 );
             }
         }
-        Err(e) if is_network_bootstrap_error(&e) => {
+        Err(e) if is_network_bootstrap_error(&e.to_string()) => {
             logger::warning(
                 LogTag::Transactions,
                 &format!(
@@ -190,7 +192,7 @@ fn is_network_bootstrap_error(msg: &str) -> bool {
 }
 
 /// Stop the global transaction service
-pub async fn stop_global_transaction_service() -> Result<(), String> {
+pub async fn stop_global_transaction_service() -> Result<(), Error> {
     let mut running = SERVICE_RUNNING.lock().await;
     if !*running {
         return Ok(()); // Already stopped
@@ -241,11 +243,15 @@ pub async fn get_global_transaction_manager() -> Option<Arc<Mutex<TransactionsMa
 /// bypassing the DB cache. Used when a cached row exists but lacks swap analysis
 /// (e.g. it was stored at submit time before the tx landed), so the verifier can
 /// obtain real proceeds and finalize the position.
-pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction>, String> {
+pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction>, Error> {
     if let Some(manager_arc) = get_global_transaction_manager().await {
         let manager = manager_arc.lock().await;
-        let processor =
-            TransactionProcessor::for_subject(manager.subject()).map_err(|e| e.to_string())?;
+        let processor = TransactionProcessor::for_subject(manager.subject()).map_err(|e| {
+            Error::VerificationFailed {
+                signature: signature.to_owned(),
+                detail: e.to_string(),
+            }
+        })?;
         drop(manager); // Avoid holding lock across RPC
 
         let mut attempts = 0u32;
@@ -265,7 +271,10 @@ pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction
                         delay_ms = ((delay_ms as f64) * 1.8) as u64;
                         continue;
                     }
-                    return Err(e);
+                    return Err(Error::VerificationFailed {
+                        signature: signature.to_owned(),
+                        detail: e,
+                    });
                 }
             }
         }
@@ -273,7 +282,7 @@ pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction
     Ok(None)
 }
 
-pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, String> {
+pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Error> {
     // Try database first
     if let Some(db) = crate::transactions::database::get_transaction_database().await {
         if let Ok(Some(tx)) = db.get_transaction(signature).await {
@@ -284,8 +293,12 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
     // If not in DB, attempt on-demand processing via processor with short retries for indexing delays
     if let Some(manager_arc) = get_global_transaction_manager().await {
         let manager = manager_arc.lock().await;
-        let processor =
-            TransactionProcessor::for_subject(manager.subject()).map_err(|e| e.to_string())?;
+        let processor = TransactionProcessor::for_subject(manager.subject()).map_err(|e| {
+            Error::VerificationFailed {
+                signature: signature.to_owned(),
+                detail: e.to_string(),
+            }
+        })?;
         drop(manager); // Avoid holding lock across RPC
 
         let mut attempts = 0u32;

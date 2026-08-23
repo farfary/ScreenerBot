@@ -67,7 +67,7 @@ async fn resolve_evaluation_input(position: &Position) -> Option<(Position, f64)
 pub(crate) async fn evaluate_safety_exit(
     position: &Position,
     current_price: f64,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     // Priority 1: Blacklist (emergency - token-level DB check only)
     if let Some(decision) = safety::check_blacklist_exit(position, current_price).await {
         crate::logger::info(
@@ -101,7 +101,7 @@ pub(crate) async fn evaluate_safety_exit(
 pub(crate) async fn evaluate_policy_exit(
     position: &Position,
     current_price: f64,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     let policy = crate::trader::policy::resolve_exit_policy(position).await;
 
     // Priority 3: AI exit analysis (high priority - if enabled)
@@ -408,7 +408,7 @@ pub(crate) async fn evaluate_policy_exit(
 /// - Err(String) if evaluation failed
 pub async fn evaluate_exit_for_position(
     position: Position,
-) -> Result<Option<TradeDecision>, String> {
+) -> crate::trader::Result<Option<TradeDecision>> {
     let Some((fresh_position, current_price)) = resolve_evaluation_input(&position).await else {
         return Ok(None);
     };

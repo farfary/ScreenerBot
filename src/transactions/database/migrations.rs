@@ -9,24 +9,31 @@ use crate::transactions::types::*;
 use super::operations::TransactionDatabase;
 use super::schema::*;
 use crate::database::WriteTransaction;
+use crate::transactions::error::Error;
 
 impl TransactionDatabase {
     /// Apply schema migrations that are safe before chain identity exists.
-    pub(super) fn apply_pre_chain_migrations(&self, conn: &mut Connection) -> Result<bool, String> {
+    pub(super) fn apply_pre_chain_migrations(&self, conn: &mut Connection) -> Result<bool, Error> {
         // Ensure processed_transactions has fee_sol column for MCP tools compatibility
         let mut has_fee_sol = false;
         let mut has_sol_delta = false;
         let mut stmt = conn
             .prepare("PRAGMA table_info(processed_transactions)")
-            .map_err(|e| format!("Failed to inspect processed_transactions schema: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                detail: format!("failed to inspect processed_transactions schema: {e}"),
+            })?;
         let rows = stmt
             .query_map([], |row| {
                 let name: String = row.get(1)?;
                 Ok(name)
             })
-            .map_err(|e| format!("Failed to read processed_transactions schema: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                detail: format!("failed to read processed_transactions schema: {e}"),
+            })?;
         for r in rows {
-            let name = r.map_err(|e| format!("Failed to parse schema row: {e}"))?;
+            let name = r.map_err(|e| Error::SchemaInspect {
+                detail: format!("failed to parse schema row: {e}"),
+            })?;
             if name.eq_ignore_ascii_case("fee_sol") {
                 has_fee_sol = true;
             } else if name.eq_ignore_ascii_case("sol_delta") {
@@ -39,7 +46,10 @@ impl TransactionDatabase {
                 "ALTER TABLE processed_transactions ADD COLUMN fee_sol REAL NOT NULL DEFAULT 0",
                 [],
             )
-            .map_err(|e| format!("Failed to add fee_sol column: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "add fee_sol column".to_owned(),
+                detail: e.to_string(),
+            })?;
         }
 
         if !has_sol_delta {
@@ -47,7 +57,10 @@ impl TransactionDatabase {
                 "ALTER TABLE processed_transactions ADD COLUMN sol_delta REAL",
                 [],
             )
-            .map_err(|e| format!("Failed to add sol_delta column: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "add sol_delta column".to_owned(),
+                detail: e.to_string(),
+            })?;
         }
 
         Ok(!has_sol_delta)
@@ -57,12 +70,15 @@ impl TransactionDatabase {
     pub(super) fn initialize_chain_bootstrap_state(
         &self,
         conn: &mut Connection,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         conn.execute(
             "INSERT OR IGNORE INTO bootstrap_state (chain_id, id, full_history_completed) VALUES (?1, 1, 0)",
             params![self.chain.as_str()],
         )
-        .map_err(|e| format!("Failed to initialize bootstrap_state row: {e}"))?;
+        .map_err(|e| Error::Migration {
+            step: "initialize bootstrap_state row".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         Ok(())
     }
@@ -90,7 +106,7 @@ impl TransactionDatabase {
     pub(super) fn migrate_signature_wallet_tables(
         &self,
         conn: &mut Connection,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let stored_version = Self::read_schema_version(conn)?;
         if stored_version.unwrap_or(0) >= 5 {
             return Ok(());
@@ -116,9 +132,11 @@ impl TransactionDatabase {
             return Ok(());
         }
 
-        let own_wallet_address = crate::utils::get_wallet_address().map_err(|e| {
-            format!("Failed to resolve own wallet address for schema migration: {e}")
-        })?;
+        let own_wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::Migration {
+                step: "resolve own wallet address for schema migration".to_owned(),
+                detail: e.to_string(),
+            })?;
 
         logger::info(
             LogTag::Transactions,
@@ -131,12 +149,16 @@ impl TransactionDatabase {
         // processed_transactions row -- possible today, see `IntegrityReport` -- cannot
         // abort the whole migration; it is simply carried over as still-orphaned.
         conn.pragma_update(None, "foreign_keys", 0)
-            .map_err(|e| format!("Failed to disable foreign_keys for migration: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "disable foreign_keys for migration".to_owned(),
+                detail: e.to_string(),
+            })?;
 
-        let migration_result = (|| -> Result<(), String> {
-            let tx = conn
-                .write_tx()
-                .map_err(|e| format!("Failed to begin v5 schema migration: {e}"))?;
+        let migration_result = (|| -> Result<(), Error> {
+            let tx = conn.write_tx().map_err(|e| Error::Migration {
+                step: "begin v5 schema migration".to_owned(),
+                detail: e.to_string(),
+            })?;
 
             Self::rebuild_raw_transactions(&tx, &own_wallet_address)?;
             Self::rebuild_processed_transactions(&tx, &own_wallet_address)?;
@@ -144,12 +166,17 @@ impl TransactionDatabase {
             Self::rebuild_pending_transactions(&tx, &own_wallet_address)?;
             Self::rebuild_deferred_retries(&tx, &own_wallet_address)?;
 
-            tx.commit()
-                .map_err(|e| format!("Failed to commit v5 schema migration: {e}"))
+            tx.commit().map_err(|e| Error::Migration {
+                step: "commit v5 schema migration".to_owned(),
+                detail: e.to_string(),
+            })
         })();
 
         conn.pragma_update(None, "foreign_keys", 1)
-            .map_err(|e| format!("Failed to re-enable foreign_keys after migration: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "re-enable foreign_keys after migration".to_owned(),
+                detail: e.to_string(),
+            })?;
 
         migration_result?;
 
@@ -164,7 +191,7 @@ impl TransactionDatabase {
     /// The stored `schema_version`, or `None` when `db_metadata` has no row for it yet
     /// (a database that has never finished `initialize_schema`, including a brand new
     /// install).
-    fn read_schema_version(conn: &Connection) -> Result<Option<u32>, String> {
+    fn read_schema_version(conn: &Connection) -> Result<Option<u32>, Error> {
         let raw: Option<String> = conn
             .query_row(
                 "SELECT value FROM db_metadata WHERE key = 'schema_version'",
@@ -172,11 +199,15 @@ impl TransactionDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to read schema_version: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                detail: format!("failed to read schema_version: {e}"),
+            })?;
 
         raw.map(|v| {
-            v.parse::<u32>()
-                .map_err(|e| format!("Invalid stored schema_version '{v}': {e}"))
+            v.parse::<u32>().map_err(|e| Error::Migration {
+                step: "parse schema_version".to_owned(),
+                detail: format!("invalid stored schema_version '{v}': {e}"),
+            })
         })
         .transpose()
     }
@@ -190,14 +221,18 @@ impl TransactionDatabase {
     pub(super) fn has_composite_signature_wallet_key(
         conn: &Connection,
         table: &str,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, Error> {
         let mut stmt = conn
             .prepare(&format!("PRAGMA table_info({table})"))
-            .map_err(|e| format!("Failed to inspect {table} schema: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                detail: format!("failed to inspect {table} schema: {e}"),
+            })?;
 
         let pk_columns = stmt
             .query_map([], |row| row.get::<_, i64>(5))
-            .map_err(|e| format!("Failed to read {table} schema: {e}"))?
+            .map_err(|e| Error::SchemaInspect {
+                detail: format!("failed to read {table} schema: {e}"),
+            })?
             .filter_map(|r| r.ok())
             .filter(|&pk| pk > 0)
             .count();
@@ -208,21 +243,22 @@ impl TransactionDatabase {
     /// Rebuilds every chain-owned transaction table into the v7 key shape. Legacy
     /// rows are Solana rows by definition; copying is transactional and is verified
     /// before the schema version advances so a crash leaves the prior database intact.
-    pub(super) fn migrate_chain_identity_tables(
-        &self,
-        conn: &mut Connection,
-    ) -> Result<(), String> {
+    pub(super) fn migrate_chain_identity_tables(&self, conn: &mut Connection) -> Result<(), Error> {
         let stored_version = Self::read_schema_version(conn)?;
         if stored_version.unwrap_or(0) >= 7 {
             return Ok(());
         }
-        let has_chain = |table: &str| -> Result<bool, String> {
+        let has_chain = |table: &str| -> Result<bool, Error> {
             let mut stmt = conn
                 .prepare(&format!("PRAGMA table_info({table})"))
-                .map_err(|e| format!("Failed to inspect {table}: {e}"))?;
+                .map_err(|e| Error::SchemaInspect {
+                    detail: format!("failed to inspect {table}: {e}"),
+                })?;
             let columns = stmt
                 .query_map([], |row| row.get::<_, String>(1))
-                .map_err(|e| format!("Failed to inspect {table}: {e}"))?;
+                .map_err(|e| Error::SchemaInspect {
+                    detail: format!("failed to inspect {table}: {e}"),
+                })?;
             let has_chain = columns
                 .filter_map(Result::ok)
                 .any(|name| name == "chain_id");
@@ -240,11 +276,15 @@ impl TransactionDatabase {
         }
 
         conn.execute("PRAGMA foreign_keys = OFF", [])
-            .map_err(|e| format!("Failed to disable foreign keys for v7 migration: {e}"))?;
-        let result = (|| -> Result<(), String> {
-            let tx = conn
-                .write_tx()
-                .map_err(|e| format!("Failed to begin v7 chain identity migration: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "disable foreign keys for v7 migration".to_owned(),
+                detail: e.to_string(),
+            })?;
+        let result = (|| -> Result<(), Error> {
+            let tx = conn.write_tx().map_err(|e| Error::Migration {
+                step: "begin v7 chain identity migration".to_owned(),
+                detail: e.to_string(),
+            })?;
             let tables = [
                 ("raw_transactions", SCHEMA_RAW_TRANSACTIONS, "chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message, fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, created_at, updated_at"),
                 ("processed_transactions", SCHEMA_PROCESSED_TRANSACTIONS, "chain_id, signature, wallet_address, transaction_type, direction, sol_balance_change, token_balance_changes, token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info, analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, processed_at, updated_at"),
@@ -260,65 +300,97 @@ impl TransactionDatabase {
                     &format!("CREATE TABLE {table}__v7 ("),
                     1,
                 );
-                tx.execute(&create, [])
-                    .map_err(|e| format!("Failed to create {table}__v7: {e}"))?;
+                tx.execute(&create, []).map_err(|e| Error::Migration {
+                    step: format!("create {table}__v7"),
+                    detail: e.to_string(),
+                })?;
                 let legacy_columns = columns.strip_prefix("chain_id, ").unwrap_or(columns);
                 tx.execute(
                     &format!("INSERT INTO {table}__v7 ({columns}) SELECT 'solana', {legacy_columns} FROM {table}"),
                     [],
-                ).map_err(|e| format!("Failed to copy {table} into v7: {e}"))?;
+                ).map_err(|e| Error::Migration {
+                    step: format!("copy {table} into v7"),
+                    detail: e.to_string(),
+                })?;
                 let before: i64 = tx
                     .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                         row.get(0)
                     })
-                    .map_err(|e| format!("Failed to count {table}: {e}"))?;
+                    .map_err(|e| Error::Migration {
+                        step: format!("count {table}"),
+                        detail: e.to_string(),
+                    })?;
                 let after: i64 = tx
                     .query_row(&format!("SELECT COUNT(*) FROM {table}__v7"), [], |row| {
                         row.get(0)
                     })
-                    .map_err(|e| format!("Failed to count {table}__v7: {e}"))?;
+                    .map_err(|e| Error::Migration {
+                        step: format!("count {table}__v7"),
+                        detail: e.to_string(),
+                    })?;
                 if before != after {
-                    return Err(format!(
-                        "v7 migration row count mismatch for {table}: {before} != {after}"
-                    ));
+                    return Err(Error::Migration {
+                        step: format!("v7 row count check for {table}"),
+                        detail: format!("row count mismatch: {before} != {after}"),
+                    });
                 }
                 tx.execute(&format!("DROP TABLE {table}"), [])
-                    .map_err(|e| format!("Failed to drop {table}: {e}"))?;
+                    .map_err(|e| Error::Migration {
+                        step: format!("drop {table}"),
+                        detail: e.to_string(),
+                    })?;
                 tx.execute(&format!("ALTER TABLE {table}__v7 RENAME TO {table}"), [])
-                    .map_err(|e| format!("Failed to rename {table}__v7: {e}"))?;
+                    .map_err(|e| Error::Migration {
+                        step: format!("rename {table}__v7"),
+                        detail: e.to_string(),
+                    })?;
             }
             let fk_errors: i64 = tx
                 .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
                     row.get(0)
                 })
-                .map_err(|e| format!("Failed to run foreign_key_check for v7 migration: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "v7 migration foreign_key_check".to_owned(),
+                    detail: e.to_string(),
+                })?;
             if fk_errors != 0 {
-                return Err(format!(
-                    "v7 migration foreign key check found {fk_errors} errors"
-                ));
+                return Err(Error::Migration {
+                    step: "v7 migration foreign_key_check".to_owned(),
+                    detail: format!("found {fk_errors} errors"),
+                });
             }
-            tx.commit()
-                .map_err(|e| format!("Failed to commit v7 chain identity migration: {e}"))
+            tx.commit().map_err(|e| Error::Migration {
+                step: "commit v7 chain identity migration".to_owned(),
+                detail: e.to_string(),
+            })
         })();
         conn.execute("PRAGMA foreign_keys = ON", [])
-            .map_err(|e| format!("Failed to re-enable foreign keys after v7 migration: {e}"))?;
+            .map_err(|e| Error::Migration {
+                step: "re-enable foreign keys after v7 migration".to_owned(),
+                detail: e.to_string(),
+            })?;
         result
     }
 
-    pub(super) fn backfill_processed_sol_delta(&self, conn: &mut Connection) -> Result<(), String> {
+    pub(super) fn backfill_processed_sol_delta(&self, conn: &mut Connection) -> Result<(), Error> {
         const BATCH_SIZE: i64 = 1000;
         let mut total_updated = 0usize;
 
         // Get wallet address for filtering (this is a migration function, so it operates on current wallet data only)
-        let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address for sol_delta backfill: {e}"))?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| Error::Migration {
+            step: "get wallet address for sol_delta backfill".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         loop {
             let mut stmt = conn
                 .prepare(
                     "SELECT signature, sol_balance_change FROM processed_transactions WHERE chain_id = ?1 AND wallet_address = ?2 AND sol_delta IS NULL LIMIT ?3",
                 )
-                .map_err(|e| format!("Failed to prepare sol_delta backfill query: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "prepare sol_delta backfill query".to_owned(),
+                    detail: e.to_string(),
+                })?;
 
             let rows = stmt
                 .query_map(
@@ -329,12 +401,17 @@ impl TransactionDatabase {
                         Ok((signature, change_json))
                     },
                 )
-                .map_err(|e| format!("Failed to iterate sol_delta backfill rows: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "iterate sol_delta backfill rows".to_owned(),
+                    detail: e.to_string(),
+                })?;
 
             let mut batch: Vec<(String, Option<String>)> = Vec::new();
             for row in rows {
-                let (signature, change_json) =
-                    row.map_err(|e| format!("Failed to read sol_delta row: {e}"))?;
+                let (signature, change_json) = row.map_err(|e| Error::Migration {
+                    step: "read sol_delta row".to_owned(),
+                    detail: e.to_string(),
+                })?;
                 batch.push((signature, change_json));
             }
 
@@ -344,9 +421,10 @@ impl TransactionDatabase {
 
             drop(stmt);
 
-            let tx = conn
-                .write_tx()
-                .map_err(|e| format!("Failed to start sol_delta backfill transaction: {e}"))?;
+            let tx = conn.write_tx().map_err(|e| Error::Migration {
+                step: "start sol_delta backfill transaction".to_owned(),
+                detail: e.to_string(),
+            })?;
 
             for (signature, change_json) in batch.into_iter() {
                 let delta = Self::compute_sol_delta_from_json(change_json.as_deref());
@@ -354,12 +432,17 @@ impl TransactionDatabase {
                     "UPDATE processed_transactions SET sol_delta = ?1 WHERE chain_id = ?2 AND signature = ?3 AND wallet_address = ?4",
                     params![delta, self.chain.as_str(), signature, wallet_address],
                 )
-                .map_err(|e| format!("Failed to update sol_delta: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "update sol_delta".to_owned(),
+                    detail: e.to_string(),
+                })?;
                 total_updated += 1;
             }
 
-            tx.commit()
-                .map_err(|e| format!("Failed to commit sol_delta backfill: {e}"))?;
+            tx.commit().map_err(|e| Error::Migration {
+                step: "commit sol_delta backfill".to_owned(),
+                detail: e.to_string(),
+            })?;
         }
 
         if total_updated > 0 {

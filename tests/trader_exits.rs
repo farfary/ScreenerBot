@@ -413,7 +413,7 @@ async fn trailing_stop_rejects_a_config_whose_distance_swallows_the_activation()
     let err = exit_trailing::check_trailing_stop(&position, 1.5, &policy.trailing)
         .await
         .expect_err("equal distance and activation must error");
-    assert!(err.contains("must be less than"), "got: {err}");
+    assert!(err.to_string().contains("must be less than"), "got: {err}");
 }
 
 #[tokio::test]
@@ -627,7 +627,7 @@ async fn time_override_rejects_a_positive_loss_threshold() {
     let err = exit_time::check_time_override(&position, 0.5, &policy.time)
         .await
         .expect_err("a positive threshold must error");
-    assert!(err.contains("must be <= 0"), "got: {err}");
+    assert!(err.to_string().contains("must be <= 0"), "got: {err}");
 }
 
 #[tokio::test]

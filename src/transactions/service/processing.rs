@@ -28,7 +28,7 @@ use super::lifecycle::{get_global_transaction_manager, SHUTDOWN_NOTIFY};
 // =============================================================================
 
 /// Main service loop: react to own-wallet activity, run periodic housekeeping.
-pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
+pub async fn run_transaction_service(config: ServiceConfig) -> crate::transactions::Result<()> {
     logger::info(
         LogTag::Transactions,
         &format!(
@@ -152,7 +152,7 @@ async fn handle_own_wallet_activity(
 
 /// Perform periodic housekeeping: expired-pending cleanup and deferred-retry
 /// processing. No detection work happens here any more -- see the module doc.
-async fn perform_periodic_check(metrics: &mut ServiceMetrics) -> Result<(), String> {
+async fn perform_periodic_check(metrics: &mut ServiceMetrics) -> crate::transactions::Result<()> {
     let start_time = std::time::Instant::now();
 
     let expired_count = cleanup_expired_pending_transactions().await;

@@ -35,6 +35,7 @@ pub mod database;
 pub mod debug;
 mod debug_helpers;
 pub mod deltas;
+mod error;
 pub mod manager;
 pub mod service;
 pub mod subject;
@@ -43,6 +44,7 @@ pub mod utils;
 pub mod verifier;
 
 // Public API exports - Core functionality
+pub use error::{Error, Result};
 pub use manager::TransactionsManager;
 pub use service::{
     get_global_transaction_manager, get_transaction, is_global_transaction_service_running,

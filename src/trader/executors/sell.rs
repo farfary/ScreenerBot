@@ -61,7 +61,7 @@ pub(super) fn resolve_exit_size(
 }
 
 /// Execute a sell trade
-pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, String> {
+pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
     if crate::global::is_force_stopped() {
         return Ok(TradeResult::failure(
             decision.clone(),

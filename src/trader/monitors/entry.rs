@@ -18,7 +18,7 @@ use tokio::time::{sleep, Duration, Instant};
 /// Monitor for new entry opportunities
 pub async fn monitor_entries(
     mut shutdown: tokio::sync::watch::Receiver<bool>,
-) -> Result<(), String> {
+) -> crate::trader::Result<()> {
     logger::info(LogTag::Trader, "Starting entry opportunity monitor");
 
     // Record monitor start event

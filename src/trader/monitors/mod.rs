@@ -19,7 +19,7 @@ use serde_json::json;
 /// Start the auto trading monitors
 pub async fn start_automated_trading(
     shutdown: tokio::sync::watch::Receiver<bool>,
-) -> Result<(), String> {
+) -> crate::trader::Result<()> {
     logger::info(LogTag::Trader, "Starting automated trading monitors...");
 
     // Record auto trading start event

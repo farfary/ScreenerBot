@@ -32,6 +32,7 @@ mod constants;
 mod controller;
 pub mod copy;
 pub mod entry;
+mod error;
 pub mod evaluators;
 pub mod executors;
 pub mod manual;
@@ -42,14 +43,15 @@ mod types;
 
 // Re-exports for common usage
 pub use constants::*;
-pub use controller::{is_trader_running, start_trader, stop_trader_gracefully, TraderControlError};
+pub use controller::{is_trader_running, start_trader, stop_trader_gracefully};
+pub use error::{Error, Result};
 pub use executors::execute_trade;
 pub use types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 
 use crate::logger::{self, LogTag};
 
 /// Initialize the trader system
-pub async fn init_trader_system() -> Result<(), String> {
+pub async fn init_trader_system() -> Result<()> {
     logger::info(LogTag::Trader, "Initializing trader system...");
 
     // Initialize subsystems

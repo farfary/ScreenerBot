@@ -10,7 +10,7 @@ use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
 /// Manual management is derived from the decision reason: manual/force buys are
 /// protected from the auto-trader by default. Dashboard manual buys that need an
 /// explicit choice call [`execute_buy_managed`] instead.
-pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String> {
+pub async fn execute_buy(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
     let is_manual = matches!(
         decision.reason,
         TradeReason::ManualEntry | TradeReason::ForceBuy
@@ -37,7 +37,7 @@ pub async fn execute_buy_managed(
     decision: &TradeDecision,
     origin: PositionOrigin,
     management: PositionManagement,
-) -> Result<TradeResult, String> {
+) -> crate::trader::Result<TradeResult> {
     // Check connectivity before executing trade - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute buy - Unhealthy endpoints: {unhealthy}");
@@ -93,25 +93,24 @@ pub async fn execute_buy_managed(
             result.confirmation_pending = submission.confirmation_pending;
             Ok(result)
         }
+        Err(positions::Error::SlotUnavailable { remaining }) => {
+            let guard_msg = format!(
+                "position_slots_unavailable: global position limit reached (remaining permits: {remaining})"
+            );
+
+            logger::debug(
+                LogTag::Trader,
+                &format!(
+                    "Entry guard engaged for {} – max open positions reached (permits left: {})",
+                    decision.mint, remaining
+                ),
+            );
+
+            let mut result = TradeResult::failure(decision.clone(), guard_msg, 0);
+            result.capacity_guard_remaining = Some(remaining);
+            Ok(result)
+        }
         Err(e) => {
-            if let Some(remaining) = crate::positions::parse_position_slot_error(&e.to_string()) {
-                let guard_msg = format!(
-                    "{}: global position limit reached (remaining permits: {})",
-                    crate::positions::POSITION_SLOT_UNAVAILABLE_ERR,
-                    remaining
-                );
-
-                logger::debug(
-                    LogTag::Trader,
-                    &format!(
-            "Entry guard engaged for {} – max open positions reached (permits left: {})",
-            decision.mint, remaining
-          ),
-                );
-
-                return Ok(TradeResult::failure(decision.clone(), guard_msg, 0));
-            }
-
             let error = format!("Buy execution failed: {e}");
             logger::error(LogTag::Trader, &error);
             Ok(TradeResult::failure(decision.clone(), error, 0))
@@ -120,7 +119,7 @@ pub async fn execute_buy_managed(
 }
 
 /// Execute a DCA (dollar cost averaging) buy
-pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String> {
+pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
     // Check connectivity before executing DCA - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute DCA - Unhealthy endpoints: {unhealthy}");

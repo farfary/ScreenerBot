@@ -9,6 +9,7 @@ use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::actions::{ManualAddAction, ManualBuyAction, ManualSellAction};
 use crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
+use crate::trader::error::Error;
 use crate::trader::executors;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use chrono::Utc;
@@ -25,12 +26,12 @@ pub async fn manual_buy(
     size_sol: f64,
     management: positions::PositionManagement,
     slippage_pct: Option<f64>,
-) -> Result<TradeResult, String> {
+) -> Result<TradeResult, Error> {
     if !management.is_valid_for_origin(&positions::PositionOrigin::Manual) {
-        return Err(format!(
-            "{} management requires a copy-origin position",
-            management.as_str()
-        ));
+        return Err(Error::InvalidManagement {
+            management: management.as_str().to_owned(),
+            reason: "requires a copy-origin position".to_owned(),
+        });
     }
 
     // Get token symbol for action display
@@ -55,19 +56,28 @@ pub async fn manual_buy(
     if positions::is_open_position(mint).await {
         let error = "Position already open for this token - use add to position instead";
         action.fail_validation(error).await;
-        return Err(error.to_string());
+        return Err(positions::Error::AlreadyOpen {
+            mint: mint.to_owned(),
+        }
+        .into());
     }
 
     // Validate SOL amount
     if !size_sol.is_finite() {
         let error = "Invalid SOL amount: must be finite";
         action.fail_validation(error).await;
-        return Err(error.to_string());
+        return Err(Error::InvalidSolAmount {
+            amount_sol: size_sol,
+            reason: "must be finite".to_owned(),
+        });
     }
     if size_sol <= 0.0 {
         let error = format!("Invalid SOL amount: {size_sol}. Must be positive");
         action.fail_validation(&error).await;
-        return Err(error);
+        return Err(Error::InvalidSolAmount {
+            amount_sol: size_sol,
+            reason: "must be positive".to_owned(),
+        });
     }
 
     // Check against reasonable upper bound
@@ -79,7 +89,13 @@ pub async fn manual_buy(
             size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
-        return Err(error);
+        return Err(Error::InvalidSolAmount {
+            amount_sol: size_sol,
+            reason: format!(
+                "exceeds maximum trade size of {:.4} SOL ({}x default)",
+                max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
+            ),
+        });
     }
 
     action.complete_validation().await;
@@ -122,10 +138,11 @@ pub async fn manual_buy(
         Ok(result) => result,
         Err(e) => {
             // Check if this is a quote error or later
-            if e.contains("Quote") || e.contains("quote") {
-                action.fail_quote(&e).await;
+            let msg = e.to_string();
+            if msg.contains("Quote") || msg.contains("quote") {
+                action.fail_quote(&msg).await;
             } else {
-                action.fail(&e).await;
+                action.fail(&msg).await;
             }
             return Err(e);
         }
@@ -186,7 +203,7 @@ pub async fn manual_sell(
     mint: &str,
     percentage: Option<f64>,
     slippage_pct: Option<f64>,
-) -> Result<TradeResult, String> {
+) -> Result<TradeResult, Error> {
     let exit_percentage = percentage.unwrap_or(100.0);
 
     // Get token symbol and position for action display
@@ -213,7 +230,9 @@ pub async fn manual_sell(
         None => {
             let error = format!("No open position for token: {mint}");
             action.fail_validation(&error).await;
-            return Err(error);
+            return Err(Error::NoOpenPosition {
+                mint: mint.to_owned(),
+            });
         }
     };
 
@@ -224,7 +243,11 @@ pub async fn manual_sell(
             exit_percentage
         );
         action.fail_validation(&error).await;
-        return Err(error);
+        return Err(positions::Error::InvalidExitPercentage {
+            percent: exit_percentage,
+            reason: "must be in range (0, 100]".to_owned(),
+        }
+        .into());
     }
 
     action.complete_validation().await;
@@ -259,10 +282,11 @@ pub async fn manual_sell(
     let result = match executors::execute_trade(&decision).await {
         Ok(result) => result,
         Err(e) => {
-            if e.contains("Quote") || e.contains("quote") {
-                action.fail_quote(&e).await;
+            let msg = e.to_string();
+            if msg.contains("Quote") || msg.contains("quote") {
+                action.fail_quote(&msg).await;
             } else {
-                action.fail(&e).await;
+                action.fail(&msg).await;
             }
             return Err(e);
         }
@@ -321,7 +345,7 @@ pub async fn manual_add(
     mint: &str,
     size_sol: f64,
     slippage_pct: Option<f64>,
-) -> Result<TradeResult, String> {
+) -> Result<TradeResult, Error> {
     // Get token symbol and position for action display
     let symbol = crate::tokens::get_full_token_async(mint)
         .await
@@ -345,7 +369,9 @@ pub async fn manual_add(
         None => {
             let error = format!("No open position for token: {mint}");
             action.fail_validation(&error).await;
-            return Err(error);
+            return Err(Error::NoOpenPosition {
+                mint: mint.to_owned(),
+            });
         }
     };
 
@@ -353,12 +379,18 @@ pub async fn manual_add(
     if !size_sol.is_finite() {
         let error = "Invalid SOL amount: must be finite";
         action.fail_validation(error).await;
-        return Err(error.to_string());
+        return Err(Error::InvalidSolAmount {
+            amount_sol: size_sol,
+            reason: "must be finite".to_owned(),
+        });
     }
     if size_sol <= 0.0 {
         let error = format!("Invalid SOL amount: {size_sol}. Must be positive");
         action.fail_validation(&error).await;
-        return Err(error);
+        return Err(Error::InvalidSolAmount {
+            amount_sol: size_sol,
+            reason: "must be positive".to_owned(),
+        });
     }
 
     // Check against reasonable upper bound
@@ -370,7 +402,13 @@ pub async fn manual_add(
             size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
-        return Err(error);
+        return Err(Error::InvalidSolAmount {
+            amount_sol: size_sol,
+            reason: format!(
+                "exceeds maximum trade size of {:.4} SOL ({}x default)",
+                max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
+            ),
+        });
     }
 
     action.complete_validation().await;
@@ -405,10 +443,11 @@ pub async fn manual_add(
     let result = match executors::execute_trade(&decision).await {
         Ok(result) => result,
         Err(e) => {
-            if e.contains("Quote") || e.contains("quote") {
-                action.fail_quote(&e).await;
+            let msg = e.to_string();
+            if msg.contains("Quote") || msg.contains("quote") {
+                action.fail_quote(&msg).await;
             } else {
-                action.fail(&e).await;
+                action.fail(&msg).await;
             }
             return Err(e);
         }
