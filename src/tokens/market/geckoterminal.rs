@@ -90,7 +90,12 @@ pub async fn fetch_geckoterminal_data_batch(
 
     let tokens_response = api_manager
         .geckoterminal
-        .fetch_tokens_multi("solana", &addresses_str, None, None)
+        .fetch_tokens_multi(
+            crate::chains::adapter().market_data_network(),
+            &addresses_str,
+            None,
+            None,
+        )
         .await
         .map_err(|e| TokenError::Api {
             source: "GeckoTerminal".to_owned(),

@@ -63,7 +63,9 @@ pub(super) async fn fetch_dexscreener_profiles(
             profile
                 .chain_id
                 .as_ref()
-                .map(|chain| chain.eq_ignore_ascii_case("solana"))
+                .map(|chain| {
+                    chain.eq_ignore_ascii_case(crate::chains::adapter().market_data_network())
+                })
                 .unwrap_or_default()
         })
         .map(|profile| DiscoveryRecord {
@@ -89,7 +91,11 @@ pub(super) async fn fetch_dexscreener_latest_boosts(
 
     Ok(boosts
         .into_iter()
-        .filter(|boost| boost.chain_id.eq_ignore_ascii_case("solana"))
+        .filter(|boost| {
+            boost
+                .chain_id
+                .eq_ignore_ascii_case(crate::chains::adapter().market_data_network())
+        })
         .map(|boost| DiscoveryRecord {
             mint: boost.token_address,
             symbol: None,
@@ -110,7 +116,7 @@ pub(super) async fn fetch_dexscreener_top_boosts(
         .map_err(|e| e.to_string())?;
     let boosts = api
         .dexscreener
-        .get_top_boosted_tokens(Some("solana"))
+        .get_top_boosted_tokens(Some(crate::chains::adapter().market_data_network()))
         .await?;
     permit.forget();
 
@@ -137,7 +143,11 @@ pub(super) async fn fetch_gecko_new_pools(
         .map_err(|e| e.to_string())?;
     let pools = api
         .geckoterminal
-        .fetch_new_pools_by_network("solana", None, Some(1))
+        .fetch_new_pools_by_network(
+            crate::chains::adapter().market_data_network(),
+            None,
+            Some(1),
+        )
         .await?;
     permit.forget();
 
@@ -166,7 +176,7 @@ pub(super) async fn fetch_gecko_recent_updates(
         .map_err(|e| e.to_string())?;
     let response = api
         .geckoterminal
-        .fetch_recently_updated_tokens(None, Some("solana"))
+        .fetch_recently_updated_tokens(None, Some(crate::chains::adapter().market_data_network()))
         .await?;
     permit.forget();
 
@@ -192,7 +202,12 @@ pub(super) async fn fetch_gecko_trending(
         .map_err(|e| e.to_string())?;
     let pools = api
         .geckoterminal
-        .fetch_trending_pools_by_network(Some("solana"), Some(1), None, None)
+        .fetch_trending_pools_by_network(
+            Some(crate::chains::adapter().market_data_network()),
+            Some(1),
+            None,
+            None,
+        )
         .await?;
     permit.forget();
 

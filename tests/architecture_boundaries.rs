@@ -63,6 +63,8 @@ const VENDOR_CRATES: &[&str] = &[
     "spl_token_2022",
     "spl_associated_token_account",
     "spl_token",
+    "bs58",
+    "borsh",
 ];
 
 #[test]
@@ -739,5 +741,181 @@ fn sqlite_writers_use_immediate_transactions() {
          `crate::database::WriteTransaction` so the write lock is taken before \
          the first read and `busy_timeout` actually applies:\n{}",
         offenders.join("\n")
+    );
+}
+
+/// The vendor façade is not a loophole. `shared_modules_never_import_solana_vendor_crates_raw`
+/// only inspects lines beginning `use <crate>::`, so a fully-qualified
+/// `crate::chains::solana::solana_sdk::pubkey::Pubkey` in a type position slipped
+/// straight past it — which is how `Pubkey` survived in `src/transactions` long
+/// after that module's own doc comment declared it chain-neutral. Reaching a vendor
+/// type through the façade path is the same dependency as importing it raw.
+///
+/// Test code is exempt: a `#[cfg(test)]` block may build a real `Keypair` when that
+/// is what the test is proving (see `services/implementations/referral_service.rs`,
+/// where the test signs a referral proof for real). Weakening such a test to satisfy
+/// a textual scan would delete the check, not the coupling.
+#[test]
+fn shared_modules_never_name_solana_vendor_types_through_the_facade() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_solana_owned(&relative) {
+            continue;
+        }
+        let production = production_text(&contents);
+        for (idx, line) in code_lines(production).lines().enumerate() {
+            for crate_name in VENDOR_CRATES {
+                if line.contains(&format!("chains::solana::{crate_name}")) {
+                    violations.push(format!(
+                        "src/{}:{}: reaches `{crate_name}` through the chains::solana façade — \
+                         shared code must use a chain-neutral type (Subject, AccountId, AssetId) \
+                         and let src/chains/solana convert at the boundary",
+                        relative.display(),
+                        idx + 1
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "shared modules must not name a Solana vendor type, even through the façade:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Asset and native-unit facts come from `chains::adapter()`, not from a direct
+/// import of the Solana constants. `SOL_MINT`, the stable mints, `SOL_DECIMALS`
+/// and the lamport converters all have adapter equivalents
+/// (`native_asset_address`, `is_native_asset`, `stable_assets`,
+/// `native_asset_decimals`, `raw_to_native`, `native_to_raw`).
+///
+/// The ATA/rent constants are deliberately NOT on this list: the ATA-cleanup and
+/// multi-wallet tools model a Solana-only concept end to end, so importing the
+/// constant is honest there. When those tools move behind a chain-asset-operations
+/// seam, add the names here.
+#[test]
+fn shared_modules_take_asset_and_unit_facts_from_the_adapter() {
+    const ADAPTER_OWNED: &[&str] = &[
+        "SOL_MINT",
+        "USDC_MINT",
+        "USDT_MINT",
+        "SOL_DECIMALS",
+        "LAMPORTS_PER_SOL",
+        "SYSTEM_PROGRAM_ID",
+        "lamports_to_sol",
+        "sol_to_lamports",
+    ];
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative) {
+            continue;
+        }
+        for (idx, line) in code_lines(&contents).lines().enumerate() {
+            if !line.contains("chains::solana::constants") {
+                continue;
+            }
+            for name in ADAPTER_OWNED {
+                if line.contains(name) {
+                    violations.push(format!(
+                        "src/{}:{}: imports `{name}` — ask crate::chains::adapter() instead",
+                        relative.display(),
+                        idx + 1
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "shared modules must take asset and native-unit facts from the chain adapter, \
+         not from Solana constants:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// A provider's name for this chain is a chain fact. Hardcoding `"solana"` as a
+/// network/chainId/platform argument pins every market-data call to one chain;
+/// it comes from `chains::adapter().market_data_network()`.
+///
+/// Doc comments may still name Solana when documenting a parameter, and the
+/// legacy schema-evolution files record it as a historical row value.
+#[test]
+fn shared_modules_never_hardcode_the_market_data_network_slug() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative)
+            || is_composition_root(&relative)
+            || is_test_support_file(&relative)
+            || is_legacy_schema_evolution(&relative)
+        {
+            continue;
+        }
+        let production = production_text(&contents);
+        for (idx, line) in code_lines(production).lines().enumerate() {
+            if line.contains("\"solana\"") {
+                violations.push(format!(
+                    "src/{}:{}: hardcodes the \"solana\" network slug — call \
+                     crate::chains::adapter().market_data_network()",
+                    relative.display(),
+                    idx + 1
+                ));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "the provider network slug must come from the chain adapter:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Every chain-parameter value has exactly one owning `const`. These four were
+/// each duplicated across modules — the rent-exempt minimum existed twice in
+/// different units (890_880 lamports and 0.00089088 SOL) and the ATA rent value
+/// seven times in three forms. Copies that share a value but not a name are
+/// invisible to a name-based search, so this guard scans by value.
+#[test]
+fn chain_parameter_values_have_exactly_one_owning_const() {
+    const OWNED_VALUES: &[(&str, &str)] = &[
+        ("ATA rent (lamports)", "2_039_280"),
+        ("ATA rent (SOL)", "0.00203928"),
+        ("rent-exempt minimum (lamports)", "890_880"),
+        ("rent-exempt minimum (SOL)", "0.00089088"),
+        ("lamports per SOL", "1_000_000_000"),
+    ];
+    const OWNER: &str = "chains/solana/constants.rs";
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        if path_str == OWNER {
+            continue;
+        }
+        let production = production_text(&contents);
+        for (label, value) in OWNED_VALUES {
+            for (idx, line) in production.lines().enumerate() {
+                let trimmed = line.trim_start();
+                let is_const_def = (trimmed.starts_with("const ")
+                    || trimmed.starts_with("pub const ")
+                    || trimmed.starts_with("pub(crate) const ")
+                    || trimmed.starts_with("pub(super) const "))
+                    && trimmed.contains('=');
+                if is_const_def && trimmed.contains(value) {
+                    violations.push(format!(
+                        "src/{path_str}:{}: redefines the {label} value {value} — import it \
+                         from crate::chains::solana::constants",
+                        idx + 1
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "chain parameter values must have exactly one owning const, in \
+         crate::chains::solana::constants:\n{}",
+        violations.join("\n")
     );
 }

@@ -226,7 +226,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
 
                     // Filter to only Solana tokens and deduplicate by mint
                     for pool in pools {
-                        if pool.chain_id != "solana" {
+                        if pool.chain_id != crate::chains::adapter().market_data_network() {
                             continue;
                         }
                         if results_map.len() >= max_results {
