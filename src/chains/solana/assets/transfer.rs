@@ -31,7 +31,7 @@ pub async fn transfer_sol(
     let to_pubkey =
         Pubkey::from_str(to_address).map_err(|e| format!("Invalid recipient address: {e}"))?;
 
-    let lamports = crate::utils::sol_to_lamports(amount_sol);
+    let lamports = crate::chains::solana::constants::sol_to_lamports(amount_sol);
 
     let instruction = system_instruction::transfer(&from_pubkey, &to_pubkey, lamports);
 

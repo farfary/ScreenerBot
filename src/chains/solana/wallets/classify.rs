@@ -10,12 +10,12 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
 use crate::chains::solana::transactions::analyzer::balance::account_keys_from_message;
 use crate::chains::solana::transactions::analyzer::dex::extract_program_ids;
 use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
 use crate::transactions::types::Transaction;
-use crate::utils::lamports_to_sol;
 use crate::wallets::watch::{ActivityKind, SwapSide, TransferDirection};
 
 /// Below this, a SOL balance delta is indistinguishable from transaction-fee noise

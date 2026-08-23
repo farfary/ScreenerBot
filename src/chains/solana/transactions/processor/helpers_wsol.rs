@@ -2,7 +2,7 @@
 //
 // Functions for detecting WSOL wraps, sync-native deposits, and wallet WSOL ATA resolution.
 
-use crate::transactions::utils::*;
+use crate::chains::solana::constants::SOL_MINT;
 
 use super::helpers::account_keys_from_message;
 use super::helpers::resolve_account_keys_vec;
@@ -20,7 +20,7 @@ pub(super) fn find_owner_wsol_change_ui(
         .and_then(|changes| {
             changes
                 .iter()
-                .find(|c| c.mint == WSOL_MINT && c.change < 0.0)
+                .find(|c| c.mint == SOL_MINT && c.change < 0.0)
                 .map(|c| c.change.abs())
         })
 }
@@ -39,7 +39,7 @@ pub(super) fn find_wsol_wrap_deposit_lamports(
     // Build candidate account indices for WSOL accounts owned by wallet
     let mut indices: std::collections::HashSet<u32> = std::collections::HashSet::new();
     for bal in pre_token.iter().chain(post_token.iter()) {
-        if bal.mint == WSOL_MINT {
+        if bal.mint == SOL_MINT {
             indices.insert(bal.account_index);
         }
     }
@@ -150,14 +150,14 @@ pub(super) fn get_wallet_wsol_ata_addresses(
     let mut indices: std::collections::HashSet<u32> = std::collections::HashSet::new();
     if let Some(pre) = &meta.pre_token_balances {
         for bal in pre {
-            if bal.mint == WSOL_MINT && bal.owner.as_deref() == Some(wallet_key) {
+            if bal.mint == SOL_MINT && bal.owner.as_deref() == Some(wallet_key) {
                 indices.insert(bal.account_index);
             }
         }
     }
     if let Some(post) = &meta.post_token_balances {
         for bal in post {
-            if bal.mint == WSOL_MINT && bal.owner.as_deref() == Some(wallet_key) {
+            if bal.mint == SOL_MINT && bal.owner.as_deref() == Some(wallet_key) {
                 indices.insert(bal.account_index);
             }
         }
@@ -173,7 +173,7 @@ pub(super) fn get_wallet_wsol_ata_addresses(
                     let mint = info.get("mint").and_then(|v| v.as_str());
                     let wallet = info.get("wallet").and_then(|v| v.as_str());
                     if let Some(acc) = account {
-                        if mint == Some(WSOL_MINT) && wallet == Some(wallet_key) {
+                        if mint == Some(SOL_MINT) && wallet == Some(wallet_key) {
                             if let Some(index) = account_keys.iter().position(|k| k == acc) {
                                 indices.insert(index as u32);
                             }
@@ -374,7 +374,7 @@ pub(super) fn sum_inner_wsol_transferchecked_ui(
                             .get("mint")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default();
-                        if mint == crate::transactions::utils::WSOL_MINT {
+                        if mint == SOL_MINT {
                             if let Some(token_amount) = info.get("tokenAmount") {
                                 if let Some(ui) =
                                     token_amount.get("uiAmount").and_then(|v| v.as_f64())
@@ -431,7 +431,7 @@ pub(super) fn sum_inner_wsol_transfers_ui_to_wallet(
                                 .get("mint")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or_default();
-                            if mint == crate::transactions::utils::WSOL_MINT {
+                            if mint == SOL_MINT {
                                 let dest = info
                                     .get("destination")
                                     .and_then(|v| v.as_str())

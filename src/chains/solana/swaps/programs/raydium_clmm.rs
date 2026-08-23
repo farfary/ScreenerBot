@@ -5,6 +5,7 @@
 //! account derivation and swap calculations based on the Uniswap V3 model.
 
 use super::ProgramSwap;
+use crate::chains::solana::constants::sol_to_lamports;
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::constants::{
     MEMO_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
@@ -17,7 +18,6 @@ use crate::chains::solana::swaps::types::{
     SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult,
 };
 use crate::logger::{self, LogTag};
-use crate::utils::sol_to_lamports;
 
 use crate::chains::solana::solana_sdk::{
     instruction::{AccountMeta, Instruction},

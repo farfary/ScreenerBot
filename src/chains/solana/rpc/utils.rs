@@ -2,7 +2,6 @@
 //!
 //! Common utilities for RPC operations.
 
-use crate::chains::solana::constants::LAMPORTS_PER_SOL;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::logger::{self, LogTag};
 use std::str::FromStr;
@@ -14,17 +13,6 @@ use std::time::{Duration, Instant};
 /// Wrapper around `Pubkey::from_str` with better error messages.
 pub fn parse_pubkey_string(s: &str) -> Result<Pubkey, String> {
     Pubkey::from_str(s).map_err(|e| format!("Invalid pubkey '{s}': {e}"))
-}
-
-/// Convert SOL amount to lamports
-///
-/// # Example
-/// ```ignore
-/// let lamports = sol_to_lamports(1.5);
-/// assert_eq!(lamports, 1_500_000_000);
-/// ```
-pub fn sol_to_lamports(sol_amount: f64) -> u64 {
-    (sol_amount * LAMPORTS_PER_SOL as f64) as u64
 }
 
 /// Get minimum rent for ATA from chain with caching

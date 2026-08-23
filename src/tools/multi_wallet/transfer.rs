@@ -9,9 +9,9 @@ use futures::stream::{self, StreamExt};
 use tokio::time::{sleep, Duration};
 
 use crate::chains::solana::assets::transfer::{transfer_sol_for_wallet, transfer_sol_from_main};
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::utils::lamports_to_sol;
 use crate::wallets::Wallet;
 
 use super::types::WalletOpResult;

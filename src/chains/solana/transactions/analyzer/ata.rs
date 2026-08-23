@@ -14,9 +14,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
-use crate::utils::lamports_to_sol;
 
 // =============================================================================
 // ATA ANALYSIS TYPES

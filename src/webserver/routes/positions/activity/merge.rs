@@ -1,9 +1,9 @@
 //! Joining an event's record half to its on-chain half.
 
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::transactions::{
     TokenTransfer, Transaction, TransactionDirection, TransactionStatus, TransactionType,
 };
-use crate::utils::lamports_to_sol;
 
 use super::super::types::{ActivityEvent, TransactionTokenTransferSummary};
 use super::drafts::Draft;

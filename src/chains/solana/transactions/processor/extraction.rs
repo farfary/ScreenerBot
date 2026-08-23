@@ -5,9 +5,9 @@
 // This module contains methods for extracting data from RPC responses,
 // including fetching transaction data and creating Transaction structures.
 
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
-use crate::utils::lamports_to_sol;
 use chrono::{DateTime, Utc};
 
 use super::core::TransactionProcessor;

@@ -32,9 +32,6 @@ use tokio::time::{interval, sleep};
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// WSOL mint (SOL/USD is quoted as the price of wrapped SOL).
-const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
-
 /// DexScreener token endpoint for WSOL — PRIMARY source.
 const DEXSCREENER_SOL_URL: &str =
     "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112";
@@ -429,7 +426,7 @@ async fn fetch_from_dexscreener() -> Result<f64, String> {
             .get("baseToken")
             .and_then(|b| b.get("address"))
             .and_then(|a| a.as_str())
-            == Some(WSOL_MINT);
+            == Some(crate::chains::solana::constants::SOL_MINT);
         if !base_is_wsol {
             continue;
         }

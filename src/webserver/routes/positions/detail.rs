@@ -5,12 +5,12 @@ use chrono::Utc;
 
 use super::list::map_position_to_response_async;
 use super::types::*;
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
 use crate::sol_price;
 use crate::tokens;
-use crate::utils::lamports_to_sol;
 use crate::webserver::utils::{error_response, success_response};
 
 pub async fn get_position_details(Path(key): Path<String>) -> Response {

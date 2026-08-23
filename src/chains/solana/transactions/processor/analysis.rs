@@ -8,7 +8,7 @@
 use crate::chains::solana::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::tokens::get_decimals;
-use crate::transactions::{types::*, utils::WSOL_MINT};
+use crate::transactions::types::*;
 
 use super::core::TransactionProcessor;
 use super::helpers::*;
@@ -303,7 +303,7 @@ impl TransactionProcessor {
                 match direction {
                     crate::chains::solana::transactions::analyzer::classify::SwapDirection::SolToToken => {
                         swap_type_str = "sol_to_token";
-                        input_mint = WSOL_MINT.to_string();
+                        input_mint = SOL_MINT.to_string();
                         output_mint = primary_mint.clone();
 
                         // Prefer authoritative WSOL wrap deposit:
@@ -480,7 +480,7 @@ impl TransactionProcessor {
                     crate::chains::solana::transactions::analyzer::classify::SwapDirection::TokenToSol => {
                         swap_type_str = "token_to_sol";
                         input_mint = primary_mint.clone();
-                        output_mint = WSOL_MINT.to_string();
+                        output_mint = SOL_MINT.to_string();
 
                         let token_abs = token_ui_change.unwrap_or_default().abs();
                         input_ui = token_abs;

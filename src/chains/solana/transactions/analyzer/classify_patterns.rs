@@ -6,7 +6,7 @@ use super::classify::{
 };
 use super::dex::DexAnalysis;
 use super::AnalysisConfidence;
-use crate::transactions::utils::WSOL_MINT;
+use crate::chains::solana::constants::SOL_MINT;
 
 // =============================================================================
 // PATTERN DETECTION
@@ -43,7 +43,7 @@ pub(super) async fn detect_flow_patterns(
     {
         let wsol_ui = sum_inner_wsol_transferchecked_ui(tx_data);
         if wsol_ui > 0.0 {
-            let sol_mint = WSOL_MINT;
+            let sol_mint = SOL_MINT;
             // Find the most likely sold token: largest-magnitude negative change (non-WSOL)
             let mut best_token: Option<(String, f64)> = None;
             for node in &flow_analysis.nodes {
@@ -96,7 +96,7 @@ pub(super) async fn detect_flow_patterns(
         };
 
         if has_aggregator {
-            let sol_mint = WSOL_MINT;
+            let sol_mint = SOL_MINT;
             // Select the dominant sold token by magnitude of negative change
             let mut best_token: Option<(String, f64)> = None;
             for node in &flow_analysis.nodes {
@@ -149,7 +149,7 @@ pub(super) async fn detect_flow_patterns(
         };
 
         if has_aggregator {
-            let sol_mint = WSOL_MINT;
+            let sol_mint = SOL_MINT;
             // Select the dominant bought token by magnitude of positive change
             let mut best_token_in: Option<(String, f64)> = None;
             for node in &flow_analysis.nodes {
@@ -195,7 +195,7 @@ async fn detect_swap_patterns(
     if !has_dex_program {
         return Ok(patterns);
     }
-    let sol_mint = WSOL_MINT;
+    let sol_mint = SOL_MINT;
 
     // Find accounts with both SOL and token changes
     for node in &flow_analysis.nodes {
@@ -242,7 +242,7 @@ async fn detect_transfer_patterns(
     // Look for edges that represent pure transfers
     for edge in &flow_analysis.edges {
         if matches!(edge.edge_type, EdgeType::Transfer) {
-            let pattern_type = if edge.token == WSOL_MINT {
+            let pattern_type = if edge.token == SOL_MINT {
                 PatternType::SolTransfer
             } else {
                 PatternType::TokenTransfer
@@ -353,7 +353,7 @@ pub(super) async fn classify_from_patterns(
     } else {
         patterns.iter().max_by(confidence_cmp).unwrap()
     };
-    let sol_mint = WSOL_MINT;
+    let sol_mint = SOL_MINT;
 
     match dominant_pattern.pattern_type {
         PatternType::SimpleSwap => {
@@ -522,7 +522,7 @@ fn sum_inner_wsol_transferchecked_ui(
                             .get("mint")
                             .and_then(|v| v.as_str())
                             .unwrap_or_default();
-                        if mint == WSOL_MINT {
+                        if mint == SOL_MINT {
                             if let Some(token_amount) = info.get("tokenAmount") {
                                 if let Some(ui) =
                                     token_amount.get("uiAmount").and_then(|v| v.as_f64())

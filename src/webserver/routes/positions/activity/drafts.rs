@@ -11,10 +11,9 @@
 //!   4. the wallet's TRANSACTIONS — every tx that ever touched the mint, which is how
 //!      transfers, airdrops and swaps made outside the bot get into the timeline.
 
+use crate::chains::solana::constants::SOL_MINT;
 use crate::positions::Position;
-use crate::transactions::{
-    get_transaction_database, TransactionListFilters, TransactionListRow, WSOL_MINT,
-};
+use crate::transactions::{get_transaction_database, TransactionListFilters, TransactionListRow};
 
 use super::super::types::{EntryRecordResponse, ExitRecordResponse};
 
@@ -299,7 +298,7 @@ fn classify(row: &TransactionListRow) -> &'static str {
 /// The mint of the token itself, never wSOL — guards a caller passing the wrapped-SOL mint,
 /// which every swap touches and which would match the whole wallet.
 pub(super) fn is_tradeable_mint(mint: &str) -> bool {
-    mint != WSOL_MINT
+    mint != SOL_MINT
 }
 
 /// Add a draft unless it has no signature or one already claimed.

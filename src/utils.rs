@@ -4,27 +4,6 @@ use crate::Error;
 use std::time::Duration;
 use tokio::sync::Notify;
 
-// =============================================================================
-// NATIVE-UNIT CONVERSIONS
-// =============================================================================
-//
-// Pubkey parsing lives in `crate::chains::solana::accounts` (concrete chain
-// mechanics). Lamports/SOL conversion stays here: its signature carries no
-// chain-specific type, and SOL is, per the app mission, the single monetary
-// unit in trading logic today.
-
-use crate::chains::solana::constants::LAMPORTS_PER_SOL;
-
-/// Convert lamports to SOL with consistent precision
-pub fn lamports_to_sol(lamports: u64) -> f64 {
-    (lamports as f64) / (LAMPORTS_PER_SOL as f64)
-}
-
-/// Convert SOL to lamports with proper rounding
-pub fn sol_to_lamports(sol: f64) -> u64 {
-    (sol * (LAMPORTS_PER_SOL as f64)).round() as u64
-}
-
 /// Format a mint address for log output (first 8 + last 4 chars)
 pub fn format_mint_for_log(mint: &str) -> String {
     let len = mint.len();

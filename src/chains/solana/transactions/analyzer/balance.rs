@@ -16,11 +16,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+use crate::chains::solana::constants::{lamports_to_sol, sol_to_lamports, SOL_MINT};
 use crate::chains::solana::transactions::program_ids;
 use crate::logger::{self, LogTag};
 use crate::tokens::get_cached_decimals;
-use crate::transactions::{types::*, utils::*};
-use crate::utils::{lamports_to_sol, sol_to_lamports};
+use crate::transactions::types::*;
 
 // =============================================================================
 // BALANCE ANALYSIS TYPES
@@ -410,7 +410,7 @@ async fn filter_noise_transfers(
             } else {
                 "unknown".to_owned()
             },
-            mint: WSOL_MINT.to_string(), // SOL mint
+            mint: SOL_MINT.to_string(), // SOL mint
             amount: change.change.abs(),
             transfer_type: TransferType::SolTransfer,
         });

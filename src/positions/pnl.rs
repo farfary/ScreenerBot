@@ -1,9 +1,9 @@
 //! Position profit & loss calculations — P&L for open, closed, and partially exited positions.
 
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::logger::{self, LogTag};
 use crate::positions::types::Position;
 use crate::tokens::get_decimals;
-use crate::utils::lamports_to_sol;
 
 // ==================== P&L CALCULATION ====================
 

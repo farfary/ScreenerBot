@@ -37,22 +37,6 @@ pub const PROCESS_BATCH_SIZE: usize = 50;
 pub const TRANSACTION_DATA_BATCH_SIZE: usize = 1;
 
 // =============================================================================
-// SOLANA NETWORK CONSTANTS
-// =============================================================================
-
-/// Standard ATA creation/closure cost in SOL
-pub const ATA_RENT_COST_SOL: f64 = 0.00203928;
-
-/// Tolerance for ATA rent variations (lamports)
-pub const ATA_RENT_TOLERANCE_LAMPORTS: i64 = 10000;
-
-/// Default compute unit price (micro-lamports)
-pub const DEFAULT_COMPUTE_UNIT_PRICE: u64 = 1000;
-
-/// Wrapped SOL mint address
-pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
-
-// =============================================================================
 // GLOBAL STATE MANAGEMENT
 // =============================================================================
 
@@ -182,7 +166,7 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
 
 /// Check if mint address is WSOL (wrapped SOL)
 pub fn is_wsol_mint(mint: &str) -> bool {
-    mint == WSOL_MINT
+    mint == crate::chains::solana::constants::SOL_MINT
 }
 
 // =============================================================================

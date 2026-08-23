@@ -5,11 +5,13 @@
 //! call [`active_chain`] rather than naming a `ChainId` variant at the call
 //! site.
 
+mod adapter;
 mod error;
 mod registry;
 pub mod solana;
 mod types;
 
+pub use adapter::{adapter, ChainAdapter};
 pub use error::ChainError;
 pub use registry::ChainRegistry;
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};

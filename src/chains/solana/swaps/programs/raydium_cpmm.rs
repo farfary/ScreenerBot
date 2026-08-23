@@ -4,6 +4,7 @@
 //! It integrates with the centralized Raydium CPMM decoder and provides both buy and sell operations.
 
 use super::ProgramSwap;
+use crate::chains::solana::constants::sol_to_lamports;
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::constants::{RAYDIUM_CPMM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
 use crate::chains::solana::pools::decoders::raydium_cpmm::{
@@ -16,7 +17,6 @@ use crate::chains::solana::swaps::types::{
     SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult,
 };
 use crate::logger::{self, LogTag};
-use crate::utils::sol_to_lamports;
 
 use crate::chains::solana::solana_sdk::{
     instruction::{AccountMeta, Instruction},

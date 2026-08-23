@@ -8,10 +8,11 @@ use super::{
 };
 use crate::{
     chains::solana::assets::ata::get_total_token_balance,
+    chains::solana::constants::sol_to_lamports,
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{get_transaction, reprocess_transaction, TransactionStatus},
-    utils::{get_wallet_address, sol_to_lamports},
+    utils::get_wallet_address,
 };
 use chrono::Utc;
 use std::sync::LazyLock;

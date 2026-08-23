@@ -1,6 +1,6 @@
 //! Open position operations — new position entry with swap execution and verification.
 
-use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::constants::{sol_to_lamports, SOL_MINT};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -17,7 +17,7 @@ use crate::positions::types::{
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
 };
-use crate::utils::{get_wallet_address, sol_to_lamports};
+use crate::utils::get_wallet_address;
 use chrono::Utc;
 use serde_json::json;
 

@@ -25,12 +25,12 @@ use super::types::{
     ActivityEvent, ActivityPositionSummary, ActivityStateChange, ActivityTotals,
     EntryRecordResponse, ExitRecordResponse, TokenActivityResponse,
 };
+use crate::chains::solana::constants::lamports_to_sol;
 use crate::logger::{self, LogTag};
 use crate::positions::{self, Position};
 use crate::sol_price;
 use crate::tokens;
 use crate::transactions::get_transaction;
-use crate::utils::lamports_to_sol;
 use crate::webserver::utils::{error_response, success_response};
 
 use drafts::Draft;

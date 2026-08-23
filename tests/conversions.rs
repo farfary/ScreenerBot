@@ -4,7 +4,7 @@
 
 mod common;
 
-use screenerbot::utils::{lamports_to_sol, sol_to_lamports};
+use screenerbot::chains::solana::constants::{lamports_to_sol, sol_to_lamports};
 
 const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
