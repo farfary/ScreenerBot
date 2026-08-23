@@ -4,7 +4,7 @@ use super::types::{
     ChainInfo, DexScreenerPairRaw, DexScreenerPool, PairResponse, PairsResponse, TokenBoostLatest,
     TokenBoostTop, TokenInfo, TokenOrder, TokenProfile,
 };
-use super::{DexScreenerClient, DEFAULT_CHAIN_ID, DEXSCREENER_BASE_URL, MAX_TOKENS_PER_REQUEST};
+use super::{default_chain_id, DexScreenerClient, DEXSCREENER_BASE_URL, MAX_TOKENS_PER_REQUEST};
 use crate::logger::{self, LogTag};
 use reqwest::StatusCode;
 use std::time::Duration;
@@ -27,7 +27,7 @@ impl DexScreenerClient {
         token_address: &str,
         chain_id: Option<&str>,
     ) -> Result<Vec<DexScreenerPool>, String> {
-        let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
+        let chain = chain_id.unwrap_or_else(|| default_chain_id());
         let endpoint = format!("token-pairs/v1/{chain}/{token_address}");
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
@@ -75,7 +75,7 @@ impl DexScreenerClient {
             ));
         }
 
-        let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
+        let chain = chain_id.unwrap_or_else(|| default_chain_id());
         let address_list = addresses.join(",");
         let endpoint = format!("tokens/v1/{chain}/{address_list}");
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
@@ -389,7 +389,7 @@ impl DexScreenerClient {
         token_address: &str,
         chain_id: Option<&str>,
     ) -> Result<Vec<TokenOrder>, String> {
-        let chain = chain_id.unwrap_or(DEFAULT_CHAIN_ID);
+        let chain = chain_id.unwrap_or_else(|| default_chain_id());
         let endpoint = format!("orders/v1/{chain}/{token_address}");
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 

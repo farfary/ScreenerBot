@@ -34,8 +34,10 @@ use std::time::{Duration, Instant};
 
 pub(crate) const DEXSCREENER_BASE_URL: &str = "https://api.dexscreener.com";
 
-/// Default chain for Solana operations
-pub(crate) const DEFAULT_CHAIN_ID: &str = "solana";
+/// The active chain's identifier in DexScreener's API.
+pub(crate) fn default_chain_id() -> &'static str {
+    crate::chains::adapter().market_data_network()
+}
 
 /// Maximum tokens per batch request
 pub(crate) const MAX_TOKENS_PER_REQUEST: usize = 30;

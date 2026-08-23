@@ -159,10 +159,11 @@ pub struct ExternalLinks {
 
 impl ExternalLinks {
     pub fn for_mint(mint: &str) -> Self {
+        let adapter = crate::chains::adapter();
         Self {
-            solscan: format!("https://solscan.io/token/{mint}"),
-            dexscreener: format!("https://dexscreener.com/solana/{mint}"),
-            birdeye: format!("https://birdeye.so/token/{mint}?chain=solana"),
+            solscan: adapter.explorer_token_url(mint),
+            dexscreener: adapter.dex_chart_url(mint),
+            birdeye: adapter.analytics_token_url(mint),
             rugcheck: format!("https://rugcheck.xyz/tokens/{mint}"),
             photon: format!("https://photon-sol.tinyastro.io/en/lp/{mint}"),
         }

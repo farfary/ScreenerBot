@@ -227,12 +227,12 @@ async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
         Ok(task) => task,
         Err(reason) => return invalid_task(reason),
     };
-    if let Err(error) = crate::chains::solana::accounts::validate_address(&task.target_address) {
+    if let Err(error) = crate::chains::adapter().validate_address(&task.target_address) {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_ADDRESS",
             "Invalid target wallet",
-            Some(&error),
+            Some(&error.to_string()),
         );
     }
     let db = match open_database().await {

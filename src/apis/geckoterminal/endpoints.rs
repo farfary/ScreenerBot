@@ -5,8 +5,8 @@ use super::types::{
     GeckoTerminalResponse, GeckoTerminalTokenInfoResponse, GeckoTerminalTokensMultiResponse,
     GeckoTerminalTradesResponse,
 };
+use super::{default_network, MAX_TRENDING_PAGE};
 use super::{GeckoTerminalClient, OhlcvResponse, TokenInfo};
-use super::{DEFAULT_NETWORK, MAX_TRENDING_PAGE};
 use crate::logger::{self, LogTag};
 use serde::Deserialize;
 
@@ -48,7 +48,7 @@ impl GeckoTerminalClient {
         mint: &str,
         network: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
-        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/tokens/{mint}/pools");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -124,7 +124,7 @@ impl GeckoTerminalClient {
         duration: Option<&str>,
         include: Option<Vec<&str>>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
-        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/trending_pools");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -172,7 +172,7 @@ impl GeckoTerminalClient {
         page: Option<u32>,
         sort: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
-        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/pools");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -222,7 +222,7 @@ impl GeckoTerminalClient {
         include_volume_breakdown: bool,
         include_composition: bool,
     ) -> Result<GeckoTerminalPool, String> {
-        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/pools/{pool_address}");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -279,7 +279,7 @@ impl GeckoTerminalClient {
             return Err("Maximum 30 addresses allowed".to_owned());
         }
 
-        let network_id = network.unwrap_or(DEFAULT_NETWORK);
+        let network_id = network.unwrap_or_else(|| default_network());
         let address_count = addresses.len();
         let addresses_str = addresses.join(",");
         let endpoint = format!("networks/{network_id}/pools/multi/{addresses_str}");

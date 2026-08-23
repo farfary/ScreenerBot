@@ -167,9 +167,11 @@ impl DefiLlamaClient {
                     .chains
                     .as_ref()
                     .map(|chains| {
-                        chains
-                            .iter()
-                            .any(|chain| chain.to_lowercase().contains("solana"))
+                        chains.iter().any(|chain| {
+                            chain
+                                .to_lowercase()
+                                .contains(crate::chains::adapter().market_data_network())
+                        })
                     })
                     .unwrap_or_default();
 
@@ -200,9 +202,11 @@ impl DefiLlamaClient {
                     .chains
                     .as_ref()
                     .map(|chains| {
-                        chains
-                            .iter()
-                            .any(|chain| chain.to_lowercase().contains("solana"))
+                        chains.iter().any(|chain| {
+                            chain
+                                .to_lowercase()
+                                .contains(crate::chains::adapter().market_data_network())
+                        })
                     })
                     .unwrap_or_default();
 

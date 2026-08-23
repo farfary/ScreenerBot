@@ -37,7 +37,10 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     );
 
     // Validate token mint
-    if crate::chains::solana::accounts::validate_address(&request.token_mint).is_err() {
+    if crate::chains::adapter()
+        .validate_address(&request.token_mint)
+        .is_err()
+    {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",
@@ -175,7 +178,10 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
     cleanup_old_sessions().await;
 
     // Validate token mint
-    if crate::chains::solana::accounts::validate_address(&request.token_mint).is_err() {
+    if crate::chains::adapter()
+        .validate_address(&request.token_mint)
+        .is_err()
+    {
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_MINT",

@@ -135,7 +135,7 @@ impl OhlcvFetcher {
             .api_manager
             .geckoterminal
             .fetch_ohlcv(
-                "solana",
+                crate::chains::adapter().market_data_network(),
                 pool_address,
                 api_endpoint,
                 Some(aggregate),
@@ -492,7 +492,7 @@ impl OhlcvFetcher {
             .api_manager
             .geckoterminal
             .fetch_ohlcv(
-                "solana",
+                crate::chains::adapter().market_data_network(),
                 pool_address,
                 timeframe.to_api_param(),
                 None,

@@ -191,7 +191,7 @@ async fn process_geckoterminal_trades(
     // Fetch trades
     let trades_response = match client
         .fetch_pool_trades(
-            "solana",
+            crate::chains::adapter().market_data_network(),
             &token.pool_address,
             Some(MIN_TRADE_VOLUME_USD),
             None,

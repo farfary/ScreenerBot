@@ -114,13 +114,15 @@ impl CoinGeckoClient {
             .iter()
             .filter_map(|coin| {
                 coin.platforms.as_ref().and_then(|platforms| {
-                    platforms.get("solana").and_then(|addr| {
-                        if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
-                            Some(addr.clone())
-                        } else {
-                            None
-                        }
-                    })
+                    platforms
+                        .get(crate::chains::adapter().market_data_network())
+                        .and_then(|addr| {
+                            if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
+                                Some(addr.clone())
+                            } else {
+                                None
+                            }
+                        })
                 })
             })
             .collect()
@@ -132,13 +134,15 @@ impl CoinGeckoClient {
             .iter()
             .filter_map(|coin| {
                 coin.platforms.as_ref().and_then(|platforms| {
-                    platforms.get("solana").and_then(|addr| {
-                        if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
-                            Some((coin.name.clone(), addr.clone()))
-                        } else {
-                            None
-                        }
-                    })
+                    platforms
+                        .get(crate::chains::adapter().market_data_network())
+                        .and_then(|addr| {
+                            if !addr.is_empty() && addr.len() > 32 && addr.len() < 50 {
+                                Some((coin.name.clone(), addr.clone()))
+                            } else {
+                                None
+                            }
+                        })
                 })
             })
             .collect()

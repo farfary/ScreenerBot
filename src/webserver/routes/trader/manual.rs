@@ -64,7 +64,10 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     }
 
     // Validate mint
-    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
+    if crate::chains::adapter()
+        .validate_address(&req.mint)
+        .is_err()
+    {
         let error_msg = "Invalid token mint address";
         crate::trader::actions::create_failed_buy_action(&req.mint, error_msg).await;
         return error_response(
@@ -197,7 +200,10 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
     }
 
     // Validate mint
-    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
+    if crate::chains::adapter()
+        .validate_address(&req.mint)
+        .is_err()
+    {
         let error_msg = "Invalid token mint address";
         crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
         return error_response(
@@ -294,7 +300,10 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
     }
 
     // Validate mint
-    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
+    if crate::chains::adapter()
+        .validate_address(&req.mint)
+        .is_err()
+    {
         let error_msg = "Invalid token mint address";
         crate::trader::actions::create_failed_sell_action(&req.mint, error_msg).await;
         return error_response(
@@ -409,7 +418,10 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
     use crate::utils::get_wallet_address;
 
     // Validate mint
-    if crate::chains::solana::accounts::validate_address(&req.mint).is_err() {
+    if crate::chains::adapter()
+        .validate_address(&req.mint)
+        .is_err()
+    {
         return error_response(
             StatusCode::BAD_REQUEST,
             "InvalidMint",

@@ -93,13 +93,15 @@ pub async fn tool_buy(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult> {
     // Validate token mint
-    crate::chains::solana::accounts::validate_address(token_mint).map_err(|e| {
-        Error::Data(DataError::ValidationError {
-            field: "token_mint".to_owned(),
-            value: token_mint.to_owned(),
-            reason: e,
-        })
-    })?;
+    crate::chains::adapter()
+        .validate_address(token_mint)
+        .map_err(|e| {
+            Error::Data(DataError::ValidationError {
+                field: "token_mint".to_owned(),
+                value: token_mint.to_owned(),
+                reason: e.to_string(),
+            })
+        })?;
 
     // Convert SOL to lamports
     let lamports = (amount_sol * 1_000_000_000.0) as u64;
@@ -135,13 +137,15 @@ pub async fn tool_sell(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult> {
     // Validate token mint
-    crate::chains::solana::accounts::validate_address(token_mint).map_err(|e| {
-        Error::Data(DataError::ValidationError {
-            field: "token_mint".to_owned(),
-            value: token_mint.to_owned(),
-            reason: e,
-        })
-    })?;
+    crate::chains::adapter()
+        .validate_address(token_mint)
+        .map_err(|e| {
+            Error::Data(DataError::ValidationError {
+                field: "token_mint".to_owned(),
+                value: token_mint.to_owned(),
+                reason: e.to_string(),
+            })
+        })?;
 
     if token_amount == 0 {
         return Err(Error::invalid_amount("0", "Token amount cannot be zero"));

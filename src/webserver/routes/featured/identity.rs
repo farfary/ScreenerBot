@@ -176,7 +176,7 @@ async fn fetch_dexscreener_identity(mints: &[String]) -> HashMap<String, TokenId
     for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
         match api
             .dexscreener
-            .fetch_token_batch(chunk, Some("solana"))
+            .fetch_token_batch(chunk, Some(crate::chains::adapter().market_data_network()))
             .await
         {
             Ok(pools) => {

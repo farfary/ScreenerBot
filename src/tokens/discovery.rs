@@ -530,7 +530,7 @@ fn normalize_mint(candidate: &str) -> Option<String> {
         return None;
     }
 
-    if crate::chains::solana::accounts::validate_address(trimmed).is_err() {
+    if crate::chains::adapter().validate_address(trimmed).is_err() {
         return None;
     }
 

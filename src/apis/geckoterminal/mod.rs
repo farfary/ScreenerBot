@@ -41,8 +41,10 @@ use std::time::{Duration, Instant};
 
 pub(crate) const GECKOTERMINAL_BASE_URL: &str = "https://api.geckoterminal.com/api/v2";
 
-/// Default network for Solana operations
-pub(crate) const DEFAULT_NETWORK: &str = "solana";
+/// The active chain's network slug in GeckoTerminal's API.
+pub(crate) fn default_network() -> &'static str {
+    crate::chains::adapter().market_data_network()
+}
 
 /// Maximum page number for trending pools pagination
 pub(crate) const MAX_TRENDING_PAGE: u32 = 10;

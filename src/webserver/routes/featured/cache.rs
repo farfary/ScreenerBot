@@ -115,7 +115,7 @@ async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>, String> {
 
     let tokens = api
         .dexscreener
-        .get_top_boosted_tokens(Some("solana"))
+        .get_top_boosted_tokens(Some(crate::chains::adapter().market_data_network()))
         .await
         .map_err(|e| format!("DexScreener trending fetch failed: {e}"))?;
 

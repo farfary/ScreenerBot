@@ -120,19 +120,6 @@ async fn persist_token_to_database(result: &TokenSearchResult) -> bool {
 // SEARCH IMPLEMENTATION
 // =============================================================================
 
-/// Check if a string looks like a Solana mint address (base58, ~44 chars)
-fn is_mint_address(query: &str) -> bool {
-    let trimmed = query.trim();
-    // Solana addresses are base58 encoded and typically 32-44 characters
-    if trimmed.len() < 32 || trimmed.len() > 44 {
-        return false;
-    }
-    // Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
-    trimmed
-        .chars()
-        .all(|c| matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z'))
-}
-
 /// Search for tokens across available data sources
 ///
 /// Strategy:
@@ -158,7 +145,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
     let mut results_map: HashMap<String, TokenSearchResult> = HashMap::new();
 
     // If it looks like a mint address, do direct lookups
-    if is_mint_address(query) {
+    if crate::chains::adapter().looks_like_address(query) {
         logger::debug(
             LogTag::Api,
             &format!(
@@ -306,34 +293,26 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_is_mint_address() {
+        let adapter = crate::chains::adapter();
+
         // Valid Solana addresses
-        assert!(is_mint_address(
-            "So11111111111111111111111111111111111111112"
-        ));
-        assert!(is_mint_address(
-            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-        ));
+        assert!(adapter.looks_like_address("So11111111111111111111111111111111111111112"));
+        assert!(adapter.looks_like_address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"));
 
         // Invalid - too short
-        assert!(!is_mint_address("So11111111"));
+        assert!(!adapter.looks_like_address("So11111111"));
 
         // Invalid - contains invalid characters
-        assert!(!is_mint_address(
-            "0xabcdef1234567890abcdef1234567890abcdef12"
-        ));
+        assert!(!adapter.looks_like_address("0xabcdef1234567890abcdef1234567890abcdef12"));
 
         // Invalid - has spaces
-        assert!(!is_mint_address(
-            "So11 1111111111111111111111111111111111112"
-        ));
+        assert!(!adapter.looks_like_address("So11 1111111111111111111111111111111111112"));
 
         // Name/symbol queries
-        assert!(!is_mint_address("BONK"));
-        assert!(!is_mint_address("solana"));
-        assert!(!is_mint_address("pepe"));
+        assert!(!adapter.looks_like_address("BONK"));
+        assert!(!adapter.looks_like_address("solana"));
+        assert!(!adapter.looks_like_address("pepe"));
     }
 }

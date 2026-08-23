@@ -386,26 +386,17 @@ pub fn unconfirmed_swap_signature_from_message(message: &str) -> Option<String> 
     // The signature is the last whitespace-separated token before the marker.
     let candidate = before_marker.split_whitespace().next_back()?;
 
-    is_plausible_signature(candidate).then(|| candidate.to_owned())
-}
-
-/// Base58 alphabet used by Solana signatures (no 0, O, I or l).
-const BASE58_ALPHABET: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-/// Whether a string can actually BE a Solana transaction signature.
-///
-/// A recovered "signature" is written to the position and handed to verification, so a
-/// value that cannot exist on chain is worse than none at all: it produces an exit that
-/// stays pending forever. An ed25519 signature is 64 bytes, which is 86-88 base58
-/// characters; anything outside that, or carrying a character base58 cannot encode, is
-/// prose that leaked out of an error message.
-fn is_plausible_signature(candidate: &str) -> bool {
-    (86..=88).contains(&candidate.len()) && candidate.chars().all(|c| BASE58_ALPHABET.contains(c))
+    // A recovered "signature" is written to the position and handed to verification, so a
+    // value that cannot exist on chain is worse than none at all: it produces an exit that
+    // stays pending forever. Reject anything that is not shaped like a real hash.
+    crate::chains::adapter()
+        .looks_like_transaction_hash(candidate)
+        .then(|| candidate.to_owned())
 }
 
 #[cfg(test)]
 mod submitted_timeout_tests {
-    use super::{is_plausible_signature, unconfirmed_swap_signature_from_message};
+    use super::unconfirmed_swap_signature_from_message;
 
     /// A real (well-formed) mainnet signature: 88 base58 characters.
     const SIGNATURE: &str =
@@ -460,11 +451,12 @@ mod submitted_timeout_tests {
 
     #[test]
     fn signature_shape_is_checked_against_base58_and_length() {
-        assert!(is_plausible_signature(SIGNATURE));
-        assert!(!is_plausible_signature(""));
-        assert!(!is_plausible_signature("short"));
+        let adapter = crate::chains::adapter();
+        assert!(adapter.looks_like_transaction_hash(SIGNATURE));
+        assert!(!adapter.looks_like_transaction_hash(""));
+        assert!(!adapter.looks_like_transaction_hash("short"));
         // Right length, but '0' is not in the base58 alphabet.
-        assert!(!is_plausible_signature(&SIGNATURE.replacen('5', "0", 1)));
+        assert!(!adapter.looks_like_transaction_hash(&SIGNATURE.replacen('5', "0", 1)));
     }
 }
 
