@@ -1,7 +1,6 @@
 //! Close position operations — full position exit with swap execution and verification.
 
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
-use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::positions::price_resolution::get_price_with_api_fallback;
@@ -197,7 +196,7 @@ pub async fn close_position_direct(
         let quote_request = QuoteRequest {
             chain: crate::chains::active_chain(),
             input_mint: token_mint.to_string(),
-            output_mint: SOL_MINT.to_string(),
+            output_mint: crate::chains::adapter().native_asset_address().to_string(),
             input_amount: sell_amount,
             wallet_address: wallet_address.clone(),
             slippage_pct: *slippage,

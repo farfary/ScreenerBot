@@ -6,7 +6,6 @@
 //! holds a `Keypair`.
 
 use crate::chains::adapter;
-use crate::chains::solana::constants::SOL_MINT;
 use crate::config::with_config;
 use crate::errors::DataError;
 use crate::logger::{self, LogTag};
@@ -124,7 +123,14 @@ pub async fn tool_buy(
         ),
     );
 
-    execute_tool_swap(wallet, SOL_MINT, token_mint, lamports, slippage_pct).await
+    execute_tool_swap(
+        wallet,
+        adapter().native_asset_address(),
+        token_mint,
+        lamports,
+        slippage_pct,
+    )
+    .await
 }
 
 /// Sell token for SOL
@@ -162,5 +168,12 @@ pub async fn tool_sell(
         ),
     );
 
-    execute_tool_swap(wallet, token_mint, SOL_MINT, token_amount, slippage_pct).await
+    execute_tool_swap(
+        wallet,
+        token_mint,
+        adapter().native_asset_address(),
+        token_amount,
+        slippage_pct,
+    )
+    .await
 }

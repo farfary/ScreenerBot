@@ -7,8 +7,6 @@
 //! - Handling all possible base/quote token combinations
 
 use super::types::{PoolMintVaultInfo, TokenPairInfo};
-use crate::chains::solana::constants::SYSTEM_PROGRAM_ID;
-use crate::chains::solana::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
 use crate::logger::{self, LogTag};
 
 impl TokenPairInfo {
@@ -21,7 +19,7 @@ impl TokenPairInfo {
 
         Self {
             token_mint: String::new(),
-            sol_mint: SOL_MINT.to_string(),
+            sol_mint: crate::chains::adapter().native_asset_address().to_string(),
             token_vault: String::new(),
             sol_vault: String::new(),
             sol_is_first: false,
@@ -32,21 +30,17 @@ impl TokenPairInfo {
 
 /// Check if a mint address represents SOL (wrapped SOL or system program)
 pub fn is_sol_mint(mint: &str) -> bool {
-    mint == SOL_MINT || mint == SYSTEM_PROGRAM_ID
+    crate::chains::adapter().is_native_asset(mint)
 }
 
 /// Check if a mint address is a stablecoin that we should skip
 pub fn is_stablecoin_mint(mint: &str) -> bool {
-    mint == USDC_MINT || mint == USDT_MINT
+    crate::chains::adapter().is_stable_asset(mint)
 }
 
 /// Normalize SOL mint to wrapped SOL format
 pub fn normalize_sol_mint(mint: &str) -> String {
-    if is_sol_mint(mint) {
-        SOL_MINT.to_string()
-    } else {
-        mint.to_string()
-    }
+    crate::chains::adapter().normalize_native_asset(mint)
 }
 
 /// Determine if a token pair is SOL-based and extract the correct token/vault pairing

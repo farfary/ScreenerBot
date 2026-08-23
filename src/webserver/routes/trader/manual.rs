@@ -411,7 +411,6 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 /// For BUY: requires amount_sol (SOL to spend), returns tokens received
 /// For SELL: requires amount_tokens (tokens to sell), returns SOL received
 pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Response {
-    use crate::chains::solana::constants::SOL_MINT;
     use crate::swaps::operations::get_best_quote;
     use crate::swaps::types::{QuoteRequest, SwapMode};
     use crate::tokens::database::get_token_async;
@@ -471,7 +470,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         };
         let amount_lamports = crate::chains::adapter().native_to_raw(amount_sol);
         (
-            SOL_MINT.to_string(),
+            crate::chains::adapter().native_asset_address().to_string(),
             req.mint.clone(),
             amount_lamports,
             amount_sol,
@@ -534,7 +533,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         let amount_tokens_display = amount_raw as f64 / 10f64.powi(token_decimals as i32);
         (
             req.mint.clone(),
-            SOL_MINT.to_string(),
+            crate::chains::adapter().native_asset_address().to_string(),
             amount_raw,
             amount_tokens_display,
         )

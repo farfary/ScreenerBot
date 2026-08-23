@@ -5,7 +5,6 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::chains::solana::constants::{SOL_MINT, USDC_MINT, USDT_MINT};
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 use super::{
@@ -605,13 +604,13 @@ fn quote_for(
     };
 
     find(&|mint| mint == NATIVE_SOL_SENTINEL)
-        .or_else(|| find(&|mint| mint == SOL_MINT))
+        .or_else(|| find(&|mint| crate::chains::adapter().is_native_asset(mint)))
         .map(|amount| QuoteLeg {
             asset: QuoteAsset::Sol,
             amount,
         })
         .or_else(|| {
-            find(&|mint| mint == USDC_MINT || mint == USDT_MINT).map(|amount| QuoteLeg {
+            find(&|mint| crate::chains::adapter().is_stable_asset(mint)).map(|amount| QuoteLeg {
                 asset: QuoteAsset::Usd,
                 amount,
             })
@@ -620,5 +619,7 @@ fn quote_for(
 
 /// Assets that denominate trades rather than being positions themselves.
 fn is_reference_asset(mint: &str) -> bool {
-    matches!(mint, NATIVE_SOL_SENTINEL | SOL_MINT | USDC_MINT | USDT_MINT)
+    mint == NATIVE_SOL_SENTINEL
+        || crate::chains::adapter().is_native_asset(mint)
+        || crate::chains::adapter().is_stable_asset(mint)
 }

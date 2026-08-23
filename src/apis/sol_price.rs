@@ -32,17 +32,31 @@ use tokio::time::{interval, sleep};
 // CONFIGURATION CONSTANTS
 // =============================================================================
 
-/// DexScreener token endpoint for WSOL — PRIMARY source.
-const DEXSCREENER_SOL_URL: &str =
-    "https://api.dexscreener.com/latest/dex/tokens/So11111111111111111111111111111111111111112";
+/// DexScreener token endpoint for the native asset — PRIMARY source.
+fn dexscreener_sol_url() -> String {
+    format!(
+        "https://api.dexscreener.com/latest/dex/tokens/{}",
+        crate::chains::adapter().native_asset_address()
+    )
+}
 
-/// GeckoTerminal simple token-price endpoint for WSOL — SECONDARY source.
-const GECKOTERMINAL_SOL_URL: &str =
-    "https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/So11111111111111111111111111111111111111112";
+/// GeckoTerminal simple token-price endpoint for the native asset — SECONDARY source.
+fn geckoterminal_sol_url() -> String {
+    let adapter = crate::chains::adapter();
+    format!(
+        "https://api.geckoterminal.com/api/v2/simple/networks/{}/token_price/{}",
+        adapter.market_data_network(),
+        adapter.native_asset_address()
+    )
+}
 
 /// Jupiter price endpoint — LAST-RESORT fallback (shares the swap rate budget).
-const JUPITER_PRICE_API: &str =
-    "https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112";
+fn jupiter_price_api() -> String {
+    format!(
+        "https://lite-api.jup.ag/price/v3?ids={}",
+        crate::chains::adapter().native_asset_address()
+    )
+}
 
 /// Price refresh interval in seconds
 const PRICE_REFRESH_INTERVAL_SECS: u64 = 30;
@@ -63,12 +77,10 @@ const MAX_CONSECUTIVE_ERRORS: u32 = 10;
 // DATA STRUCTURES
 // =============================================================================
 
-/// Jupiter API price response structure (direct mint address mapping)
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct JupiterPriceResponse {
-    #[serde(rename = "So11111111111111111111111111111111111111112")]
-    pub sol: JupiterTokenPrice,
-}
+/// Jupiter API price response structure — keyed by mint address. Serde cannot
+/// compute a `rename` at runtime, so the native asset is looked up by key at
+/// the call site instead of being a named field.
+pub type JupiterPriceResponse = std::collections::HashMap<String, JupiterTokenPrice>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct JupiterTokenPrice {
@@ -400,7 +412,7 @@ async fn fetch_sol_price() -> Result<(f64, &'static str), String> {
 async fn fetch_from_dexscreener() -> Result<f64, String> {
     let client = crate::net::client();
     let response = client
-        .get(DEXSCREENER_SOL_URL)
+        .get(dexscreener_sol_url())
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await
@@ -426,7 +438,7 @@ async fn fetch_from_dexscreener() -> Result<f64, String> {
             .get("baseToken")
             .and_then(|b| b.get("address"))
             .and_then(|a| a.as_str())
-            == Some(crate::chains::solana::constants::SOL_MINT);
+            == Some(crate::chains::adapter().native_asset_address());
         if !base_is_wsol {
             continue;
         }
@@ -456,7 +468,7 @@ async fn fetch_from_dexscreener() -> Result<f64, String> {
 async fn fetch_from_geckoterminal() -> Result<f64, String> {
     let client = crate::net::client();
     let response = client
-        .get(GECKOTERMINAL_SOL_URL)
+        .get(geckoterminal_sol_url())
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await
@@ -498,7 +510,7 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
     let client = crate::net::client();
 
     let response = client
-        .get(JUPITER_PRICE_API)
+        .get(jupiter_price_api())
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await
@@ -513,8 +525,13 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
         .await
         .map_err(|e| format!("JSON parsing failed: {e}"))?;
 
-    // Extract SOL price directly from the response
-    let sol_price = price_response.sol.usd_price;
+    // Extract the native asset's price from the response, keyed by mint. A
+    // missing key gets the same error-propagation treatment as any other parse
+    // failure on this path — no unwrap/panic and no silent zero substitution.
+    let sol_price = price_response
+        .get(crate::chains::adapter().native_asset_address())
+        .ok_or_else(|| "native asset price missing from Jupiter response".to_owned())?
+        .usd_price;
 
     if sol_price > 0.0 && sol_price.is_finite() {
         Ok(sol_price)

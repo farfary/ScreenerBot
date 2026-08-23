@@ -54,8 +54,9 @@ impl EndpointMonitor for DexScreenerMonitor {
 
         // Use latest/dex/tokens endpoint with a known good token as health check
         let url = format!(
-            "{}/latest/dex/tokens/So11111111111111111111111111111111111111112",
-            Self::BASE_URL
+            "{}/latest/dex/tokens/{}",
+            Self::BASE_URL,
+            crate::chains::adapter().native_asset_address()
         );
         let start = Instant::now();
 

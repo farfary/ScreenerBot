@@ -1,6 +1,5 @@
 //! GMGN API health monitor — checks DEX aggregator endpoint availability.
 
-use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
@@ -72,8 +71,8 @@ impl EndpointMonitor for GmgnMonitor {
         let url = format!(
             "{}?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&swap_mode={}&fee={}&is_anti_mev={}&partner={}",
             GMGN_QUOTE_API,
-            SOL_MINT,
-            USDC_MINT,
+            crate::chains::adapter().native_asset_address(),
+            crate::chains::adapter().stable_assets()[0],
             input_amount,
             wallet_address,
             slippage,

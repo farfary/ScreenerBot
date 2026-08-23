@@ -1,7 +1,6 @@
 //! DCA (Dollar Cost Averaging) operations — add to an existing position.
 
 use crate::chains::adapter;
-use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -104,7 +103,7 @@ pub async fn add_to_position(
     let slippage = super::slippage::entry_slippage(slippage_pct);
     let quote_request = QuoteRequest {
         chain: crate::chains::active_chain(),
-        input_mint: SOL_MINT.to_string(),
+        input_mint: adapter().native_asset_address().to_string(),
         output_mint: token_mint.to_string(),
         input_amount: adapter().native_to_raw(dca_amount_sol),
         wallet_address: wallet_address.clone(),

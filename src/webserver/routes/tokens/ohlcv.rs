@@ -35,7 +35,7 @@ pub async fn get_token_ohlcv(
     // regular OHLCV path is meaningless. Serve the SOL/USD reference chart (SOL's
     // price in USD) mirrored from the data server, so the token-details dialog shows
     // a real SOL chart. No monitoring/activity — this series is maintained globally.
-    if mint == crate::chains::solana::constants::SOL_MINT {
+    if crate::chains::adapter().is_native_asset(&mint) {
         let series = crate::ohlcvs::sol_usd_chart::series(timeframe);
         // `limit == 0` means "all" here (the chart sends CHART_CANDLE_LIMIT = 0 to
         // fetch the full series); otherwise keep the newest `limit` candles.
@@ -141,7 +141,7 @@ pub async fn get_token_ohlcv_status(
 ) -> Result<Json<crate::ohlcvs::OhlcvStatus>, StatusCode> {
     // WSOL/SOL uses the globally-maintained SOL/USD reference chart, so synthesize
     // its status from that in-memory series (it isn't in the per-token monitor).
-    if mint == crate::chains::solana::constants::SOL_MINT {
+    if crate::chains::adapter().is_native_asset(&mint) {
         use crate::ohlcvs::{sol_usd_chart, Timeframe};
         let tfs = [
             Timeframe::Minute1,

@@ -1,7 +1,6 @@
 //! Open position operations — new position entry with swap execution and verification.
 
 use crate::chains::adapter;
-use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -231,7 +230,7 @@ async fn open_position_impl(
 
     let quote_request = QuoteRequest {
         chain: crate::chains::active_chain(),
-        input_mint: SOL_MINT.to_string(),
+        input_mint: adapter().native_asset_address().to_string(),
         output_mint: api_token.mint.clone(),
         input_amount: adapter().native_to_raw(trade_size_sol),
         wallet_address: wallet_address.clone(),

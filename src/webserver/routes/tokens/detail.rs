@@ -279,7 +279,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 Some(p) => (p.base_mint, p.quote_mint),
                 None => (
                     mint.clone(),
-                    crate::chains::solana::constants::SOL_MINT.to_string(),
+                    crate::chains::adapter().native_asset_address().to_string(),
                 ),
             };
 

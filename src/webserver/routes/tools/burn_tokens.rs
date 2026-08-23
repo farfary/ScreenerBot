@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::assets::burn_configured_wallet_token;
-use crate::chains::solana::constants::{ATA_RENT_COST_SOL, SOL_MINT};
+use crate::chains::solana::constants::ATA_RENT_COST_SOL;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
@@ -82,7 +82,7 @@ pub async fn scan_burnable_tokens() -> Response {
 
     for account in &all_accounts {
         // Skip SOL itself and NFTs
-        if account.mint == SOL_MINT || account.is_nft {
+        if crate::chains::adapter().is_native_asset(&account.mint) || account.is_nft {
             continue;
         }
 
@@ -266,7 +266,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
 
     for mint in &request.mints {
         // Skip SOL
-        if mint == SOL_MINT {
+        if crate::chains::adapter().is_native_asset(mint) {
             results.push(BurnResult {
                 mint: mint.clone(),
                 success: false,

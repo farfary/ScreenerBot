@@ -226,8 +226,6 @@ pub async fn fetch_dexscreener_data_batch(
     };
 
     // Process pools - DexScreener batch returns ONE best pool per token
-    use crate::chains::solana::constants::SOL_MINT;
-
     for pool in pools {
         let mint = &pool.base_token_address;
 
@@ -236,7 +234,7 @@ pub async fn fetch_dexscreener_data_batch(
             continue;
         }
 
-        let is_sol_pair = pool.quote_token_address == SOL_MINT;
+        let is_sol_pair = crate::chains::adapter().is_native_asset(&pool.quote_token_address);
         let data = convert_pool_to_data(&pool, is_sol_pair);
 
         // Store market data in database

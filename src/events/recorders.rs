@@ -5,7 +5,6 @@
 //! category via `is_category_enabled` before doing any work.
 
 use super::maintenance::is_category_enabled;
-use crate::chains::solana::constants::SOL_MINT;
 use crate::events::{Event, EventCategory, Severity};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
@@ -89,7 +88,7 @@ pub async fn record_swap_event(
     } else {
         Severity::Error
     };
-    let mint = if input_mint != SOL_MINT {
+    let mint = if !crate::chains::adapter().is_native_asset(input_mint) {
         Some(input_mint.to_string())
     } else {
         Some(output_mint.to_string())

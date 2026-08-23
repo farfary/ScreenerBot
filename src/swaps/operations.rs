@@ -1,7 +1,6 @@
 //! Core Swap Operations - High-level swap functions
 //! Provides get_best_quote() and execute_swap_with_fallback()
 
-use crate::chains::solana::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
 use crate::swaps::registry::get_registry;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
@@ -491,7 +490,7 @@ pub async fn get_best_quote_for_opening(
                 || (error_msg.contains("Jupiter") && error_msg.contains("400"));
 
             if is_no_route_error {
-                let output_mint = if request.input_mint == SOL_MINT {
+                let output_mint = if crate::chains::adapter().is_native_asset(&request.input_mint) {
                     &request.output_mint
                 } else {
                     &request.input_mint

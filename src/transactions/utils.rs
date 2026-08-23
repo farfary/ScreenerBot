@@ -164,9 +164,9 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
 // VALIDATION UTILITIES
 // =============================================================================
 
-/// Check if mint address is WSOL (wrapped SOL)
+/// Check if an asset address denotes the chain's native asset.
 pub fn is_wsol_mint(mint: &str) -> bool {
-    mint == crate::chains::solana::constants::SOL_MINT
+    crate::chains::adapter().is_native_asset(mint)
 }
 
 // =============================================================================

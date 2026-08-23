@@ -2,7 +2,6 @@
 
 use chrono::Utc;
 
-use crate::chains::solana::constants::SOL_MINT;
 use crate::config::FilteringConfig;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::positions;
@@ -52,7 +51,9 @@ fn is_too_new(token: &Token, config: &FilteringConfig) -> bool {
 }
 
 async fn has_decimals(token: &Token) -> bool {
-    if token.mint == SOL_MINT || token.decimals.is_some_and(tokens::decimals_are_valid) {
+    if crate::chains::adapter().is_native_asset(&token.mint)
+        || token.decimals.is_some_and(tokens::decimals_are_valid)
+    {
         return true;
     }
 

@@ -22,7 +22,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
-use crate::chains::solana::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 
@@ -106,8 +105,8 @@ static INVALID_DECIMALS_WARNED: LazyLock<moka::sync::Cache<CacheKey, ()>> = Lazy
 /// Returns None if not in cache - caller should handle appropriately
 pub fn get_cached(chain: ChainId, mint: &str) -> Option<u8> {
     // SOL always has 9 decimals
-    if mint == SOL_MINT {
-        return Some(SOL_DECIMALS);
+    if crate::chains::adapter().is_native_asset(mint) {
+        return Some(crate::chains::adapter().native_asset_decimals());
     }
 
     if is_marked_failure(chain, mint) {
@@ -124,7 +123,7 @@ pub fn get_cached(chain: ChainId, mint: &str) -> Option<u8> {
 /// Returns None if not in cache - caller should use is_token_2022() for async check
 pub fn is_token_2022_cached(chain: ChainId, mint: &str) -> Option<bool> {
     // SOL/WSOL is always standard SPL
-    if mint == SOL_MINT {
+    if crate::chains::adapter().is_native_asset(mint) {
         return Some(false);
     }
 
@@ -137,7 +136,7 @@ pub fn is_token_2022_cached(chain: ChainId, mint: &str) -> Option<bool> {
 /// Result is cached for future calls.
 pub async fn is_token_2022(chain: ChainId, mint: &str) -> bool {
     // SOL/WSOL is always standard SPL
-    if mint == SOL_MINT {
+    if crate::chains::adapter().is_native_asset(mint) {
         return false;
     }
 
@@ -288,8 +287,8 @@ pub async fn get(chain: ChainId, mint: &str) -> Option<u8> {
 /// Fetch token decimals directly from Solana blockchain (public for debug bins)
 pub async fn get_token_decimals_from_chain(chain: ChainId, mint: &str) -> Result<u8, String> {
     // SOL always has 9 decimals
-    if mint == SOL_MINT {
-        return Ok(SOL_DECIMALS);
+    if crate::chains::adapter().is_native_asset(mint) {
+        return Ok(crate::chains::adapter().native_asset_decimals());
     }
 
     let mint_data = crate::chains::solana::assets::mint::fetch_mint_account(mint).await?;
