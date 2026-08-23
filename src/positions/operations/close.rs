@@ -3,6 +3,7 @@
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
+use crate::positions::error::{Error, Result};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{acquire_position_lock, add_signature_to_index};
@@ -18,11 +19,15 @@ pub async fn close_position_direct(
     token_mint: &str,
     exit_reason: String,
     slippage_pct: Option<f64>,
-) -> Result<String, String> {
+) -> Result<String> {
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
+        .map_err(|_| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?
+        .ok_or_else(|| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?;
 
     // Get price for the exit record. Price is used only for historical purposes —
     // the actual swap determines SOL received. Fall back to 0.0 if unavailable
@@ -111,20 +116,26 @@ pub async fn close_position_direct(
             )
             .await;
 
-            return Err(format!(
-                "Position already has pending exit transaction: {}",
-                &short_sig
-            ));
+            return Err(Error::TransitionFailed {
+                transition: "close",
+                mint: api_token.mint.clone(),
+                detail: format!("position already has pending exit transaction: {short_sig}"),
+            });
         }
     }
 
     // Get TOTAL token balance across ALL accounts (CRITICAL FOR COMPLETE LIQUIDATION)
-    let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
+    let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
+        detail: e.to_string(),
+    })?;
 
     let total_token_balance = get_total_token_balance(&wallet_address, token_mint)
         .await
-        .map_err(|e| format!("Failed to get total token balance: {e}"))?;
+        .map_err(|e| Error::TransitionFailed {
+            transition: "close",
+            mint: api_token.mint.clone(),
+            detail: format!("failed to get total token balance: {e}"),
+        })?;
 
     // Fetch primary (associated) token account balance separately. This is the balance most
     // swap routes will actually spend from. When multiple token accounts exist, passing the
@@ -158,10 +169,9 @@ pub async fn close_position_direct(
     };
 
     if sell_amount == 0 {
-        return Err(format!(
-            "No tokens to sell: wallet balance is 0 for {}",
-            api_token.symbol
-        ));
+        return Err(Error::ZeroExitAmount {
+            mint: api_token.mint.clone(),
+        });
     }
 
     logger::info(
@@ -362,7 +372,10 @@ pub async fn close_position_direct(
         // we must NOT do is send it again.
         (None, Some(signature)) => signature,
         (None, None) => {
-            return Err(last_err.unwrap_or_else(|| "Exit swap failed".to_owned()));
+            return Err(Error::SwapFailed {
+                mint: api_token.mint.clone(),
+                detail: last_err.unwrap_or_else(|| "exit swap failed".to_owned()),
+            });
         }
     };
 

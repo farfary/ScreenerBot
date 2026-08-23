@@ -2,6 +2,7 @@
 
 use crate::logger::{self, LogTag};
 use crate::pools;
+use crate::positions::error::{Error, Result};
 use crate::positions::get_open_positions;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -139,9 +140,12 @@ async fn update_position_price_and_pnl(
     position_id: i64,
     token_mint: &str,
     current_price: f64,
-) -> Result<(), String> {
+) -> Result<()> {
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!("Invalid price: {current_price}"));
+        return Err(Error::InvalidPrice {
+            mint: token_mint.to_owned(),
+            price: current_price,
+        });
     }
 
     let _lock = crate::positions::acquire_position_lock(token_mint).await;
@@ -179,17 +183,13 @@ async fn update_position_price_and_pnl(
     .await;
 
     if !updated {
-        return Err(format!(
-            "Position id={position_id} not found for mint: {token_mint}"
-        ));
+        return Err(Error::NotFoundById { position_id });
     }
 
     // Get position by ID for PnL calculation
     let mut position = crate::positions::state::get_position_by_id(position_id)
         .await
-        .ok_or_else(|| {
-            format!("Position id={position_id} disappeared after price update: {token_mint}")
-        })?;
+        .ok_or(Error::NotFoundById { position_id })?;
 
     // Calculate PnL with the bias-corrected price.
     //

@@ -2,22 +2,31 @@
 
 use rusqlite::{params, Connection};
 
-fn has_column(conn: &Connection, name: &str) -> Result<bool, String> {
-    let mut statement = conn
-        .prepare("PRAGMA table_info(positions)")
-        .map_err(|e| format!("Failed to inspect positions schema: {e}"))?;
+use crate::positions::error::{Error, Result};
+
+fn has_column(conn: &Connection, name: &str) -> Result<bool> {
+    let mut statement =
+        conn.prepare("PRAGMA table_info(positions)")
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to inspect positions schema: {e}"),
+            })?;
     let names = statement
         .query_map([], |row| row.get::<_, String>(1))
-        .map_err(|e| format!("Failed to read positions schema: {e}"))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to read positions schema: {e}"),
+        })?;
     for column in names {
-        if column.map_err(|e| format!("Failed to decode positions schema: {e}"))? == name {
+        if column.map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to decode positions schema: {e}"),
+        })? == name
+        {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<(), String> {
+pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<()> {
     let legacy_manual = has_column(conn, "manual_management")?;
     for (column, sql) in [
         (
@@ -50,8 +59,9 @@ pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<(), Strin
         ),
     ] {
         if !has_column(conn, column)? {
-            conn.execute(sql, [])
-                .map_err(|e| format!("Failed to add positions.{column}: {e}"))?;
+            conn.execute(sql, []).map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to add positions.{column}: {e}"),
+            })?;
         }
     }
 
@@ -60,7 +70,9 @@ pub(super) fn migrate_position_provenance(conn: &Connection) -> Result<(), Strin
             "UPDATE positions SET origin_kind = CASE WHEN manual_management THEN 'manual' ELSE 'auto' END, origin_ref = NULL, management = CASE WHEN manual_management THEN 'user_only' ELSE 'auto_trader' END WHERE origin_kind = 'auto' AND origin_ref IS NULL AND management = 'auto_trader'",
             [],
         )
-        .map_err(|e| format!("Failed to backfill position provenance: {e}"))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to backfill position provenance: {e}"),
+        })?;
     }
     Ok(())
 }
@@ -90,7 +102,7 @@ const POSITION_CHILD_TABLES: &[&str] = &[
 /// from then on instead of importing it again.
 ///
 /// Idempotent: once a row carries a round key it is no longer a candidate.
-pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64, String> {
+pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64> {
     if !has_column(conn, "round_key")? {
         return Ok(0);
     }
@@ -112,7 +124,9 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64, String> 
                    AND legacy.entry_transaction_signature IS NOT NULL
                  ORDER BY legacy.entry_time, legacy.id",
             )
-            .map_err(|e| format!("Failed to prepare duplicate position query: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to prepare duplicate position query: {e}"),
+            })?;
 
         let rows = statement
             .query_map([], |row| {
@@ -122,11 +136,15 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64, String> 
                     row.get::<_, String>(2)?,
                 ))
             })
-            .map_err(|e| format!("Failed to read duplicate positions: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to read duplicate positions: {e}"),
+            })?;
 
         let mut collected = Vec::new();
         for row in rows {
-            collected.push(row.map_err(|e| format!("Failed to decode duplicate position: {e}"))?);
+            collected.push(row.map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to decode duplicate position: {e}"),
+            })?);
         }
         collected
     };
@@ -144,7 +162,9 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64, String> 
 
     let tx = conn
         .unchecked_transaction()
-        .map_err(|e| format!("Failed to start duplicate position merge: {e}"))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to start duplicate position merge: {e}"),
+        })?;
 
     for (legacy_id, imported_id, round_key) in pairs {
         if !claimed_legacy.insert(legacy_id) || !claimed_imported.insert(imported_id) {
@@ -158,24 +178,29 @@ pub(super) fn merge_ledger_duplicates(conn: &Connection) -> Result<u64, String> 
                 &format!("DELETE FROM {table} WHERE position_id = ?1"),
                 params![imported_id],
             )
-            .map_err(|e| {
-                format!("Failed to delete {table} rows for position {imported_id}: {e}")
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to delete {table} rows for position {imported_id}: {e}"),
             })?;
         }
         tx.execute("DELETE FROM positions WHERE id = ?1", params![imported_id])
-            .map_err(|e| format!("Failed to delete imported duplicate {imported_id}: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to delete imported duplicate {imported_id}: {e}"),
+            })?;
 
         tx.execute(
             "UPDATE positions SET round_key = ?1 WHERE id = ?2",
             params![round_key, legacy_id],
         )
-        .map_err(|e| format!("Failed to stamp round key on position {legacy_id}: {e}"))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to stamp round key on position {legacy_id}: {e}"),
+        })?;
 
         merged += 1;
     }
 
-    tx.commit()
-        .map_err(|e| format!("Failed to commit duplicate position merge: {e}"))?;
+    tx.commit().map_err(|e| Error::SchemaMigration {
+        detail: format!("failed to commit duplicate position merge: {e}"),
+    })?;
 
     Ok(merged)
 }
@@ -232,7 +257,7 @@ mod tests {
             .unwrap()
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
             .unwrap()
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap()
     }
 
@@ -429,7 +454,7 @@ mod tests {
                 ))
             })
             .unwrap()
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap();
 
         assert_eq!(

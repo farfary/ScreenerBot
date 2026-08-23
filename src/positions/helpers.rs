@@ -10,6 +10,8 @@ use crate::{
 };
 use chrono::Utc;
 
+use super::error::{Error, Result};
+
 pub use super::pnl::{
     calculate_position_pnl, calculate_position_pnl_safe, calculate_position_total_fees,
     calculate_split_pnl,
@@ -75,12 +77,16 @@ async fn fetch_and_create_token_snapshot(
     position_id: i64,
     mint: &str,
     snapshot_type: &str,
-) -> Result<TokenSnapshot, String> {
+) -> Result<TokenSnapshot> {
     // Read token from the unified tokens store
     let token = crate::tokens::get_full_token_async(mint)
         .await
-        .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found in store: {mint}"))?;
+        .map_err(|_| Error::TokenNotFound {
+            mint: mint.to_owned(),
+        })?
+        .ok_or_else(|| Error::TokenNotFound {
+            mint: mint.to_owned(),
+        })?;
 
     // Compute freshness based on last price update vs now
     let now = Utc::now();
@@ -207,7 +213,7 @@ pub async fn save_position_token_snapshot(
     position_id: i64,
     mint: &str,
     snapshot_type: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let _lock = acquire_position_lock(mint).await;
 
     // Fetch and create snapshot
@@ -241,7 +247,7 @@ pub async fn save_position_token_snapshot(
 // ==================== DATABASE SYNC HELPERS ====================
 
 /// Remove a position by its transaction signature (for cleanup of failed positions)
-pub async fn remove_position_by_signature(signature: &str) -> Result<(), String> {
+pub async fn remove_position_by_signature(signature: &str) -> Result<()> {
     logger::info(
         LogTag::Positions,
         &format!("Starting cleanup of position with signature {signature}"),
@@ -344,7 +350,10 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
                             position.symbol, position_id, e
                         ),
                     );
-                    return Err(format!("Database cleanup failed: {e}"));
+                    return Err(Error::Maintenance {
+                        operation: "cleanup",
+                        detail: e.to_string(),
+                    });
                 }
             }
         }
@@ -362,7 +371,7 @@ pub async fn remove_position_by_signature(signature: &str) -> Result<(), String>
 }
 
 /// Sync a position between memory and database
-pub async fn sync_position_to_database(position: &Position) -> Result<(), String> {
+pub async fn sync_position_to_database(position: &Position) -> Result<()> {
     let _lock = acquire_position_lock(&position.mint).await;
 
     if let Some(_position_id) = position.id {

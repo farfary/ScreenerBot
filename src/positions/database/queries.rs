@@ -3,15 +3,20 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 
+use crate::errors::DatabaseError;
+use crate::positions::error::{Error, Result};
 use crate::positions::types::Position;
 
 use super::types::*;
 
 impl PositionsDatabase {
     /// Get position by ID
-    pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>, String> {
+    pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
             "SELECT {} FROM positions WHERE id = ?1 AND wallet_address = ?2 AND chain_id = ?3",
@@ -24,7 +29,10 @@ impl PositionsDatabase {
                 |row| self.row_to_position(row),
             )
             .optional()
-            .map_err(|e| format!("Failed to get position by ID: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "get position by ID".to_owned(),
+                message: e.to_string(),
+            })?;
 
         Ok(result)
     }
@@ -33,12 +41,12 @@ impl PositionsDatabase {
     ///
     /// This is the history lookup — callers that want the tradeable position must use the
     /// in-memory `state::get_position_by_mint`, which returns only an open one.
-    pub async fn get_latest_position_by_mint(
-        &self,
-        mint: &str,
-    ) -> Result<Option<Position>, String> {
+    pub async fn get_latest_position_by_mint(&self, mint: &str) -> Result<Option<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
       "SELECT {} FROM positions WHERE mint = ?1 AND wallet_address = ?2 AND chain_id = ?3 ORDER BY entry_time DESC LIMIT 1",
@@ -51,7 +59,10 @@ impl PositionsDatabase {
                 |row| self.row_to_position(row),
             )
             .optional()
-            .map_err(|e| format!("Failed to get position by mint: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "get position by mint".to_owned(),
+                message: e.to_string(),
+            })?;
 
         Ok(result)
     }
@@ -63,24 +74,31 @@ impl PositionsDatabase {
     /// all-time activity view is built from; the single-position lookups
     /// (`get_position_by_mint`, `get_latest_position_by_mint`) each answer a narrower
     /// question and would silently drop every earlier round.
-    pub async fn get_all_positions_for_mint(&self, mint: &str) -> Result<Vec<Position>, String> {
+    pub async fn get_all_positions_for_mint(&self, mint: &str) -> Result<Vec<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
             "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
              WHERE mint = ?1 AND wallet_address = ?2 AND chain_id = ?3 ORDER BY entry_time ASC"
         );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare positions-for-mint query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare positions-for-mint query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let rows = stmt
             .query_map(params![mint, wallet_address, self.chain.as_str()], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute positions-for-mint query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute positions-for-mint query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for row in rows.flatten() {
@@ -93,9 +111,12 @@ impl PositionsDatabase {
     pub async fn get_position_by_entry_signature(
         &self,
         signature: &str,
-    ) -> Result<Option<Position>, String> {
+    ) -> Result<Option<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
             "SELECT {POSITION_SELECT_COLUMNS} FROM positions \
@@ -109,7 +130,10 @@ impl PositionsDatabase {
                 |row| self.row_to_position(row),
             )
             .optional()
-            .map_err(|e| format!("Failed to get position by entry signature: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "get position by entry signature".to_owned(),
+                message: e.to_string(),
+            })?;
 
         Ok(result)
     }
@@ -118,9 +142,12 @@ impl PositionsDatabase {
     pub async fn get_position_by_exit_signature(
         &self,
         signature: &str,
-    ) -> Result<Option<Position>, String> {
+    ) -> Result<Option<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
       "SELECT {} FROM positions WHERE exit_transaction_signature = ?1 AND wallet_address = ?2 AND chain_id = ?3",
@@ -134,7 +161,10 @@ impl PositionsDatabase {
                 |row| self.row_to_position(row),
             )
             .optional()
-            .map_err(|e| format!("Failed to get position by exit signature: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "get position by exit signature".to_owned(),
+                message: e.to_string(),
+            })?;
 
         Ok(result)
     }
@@ -144,7 +174,7 @@ impl PositionsDatabase {
         &self,
         limit: Option<usize>,
         offset: Option<usize>,
-    ) -> Result<Vec<Position>, String> {
+    ) -> Result<Vec<Position>> {
         let conn = self.get_connection()?;
 
         let mut query = format!(
@@ -159,20 +189,26 @@ impl PositionsDatabase {
             }
         }
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare positions query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare positions query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let position_iter = stmt
             .query_map(params![self.chain.as_str()], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute positions query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute positions query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
+            positions.push(position_result.map_err(|e| Error::RowDecode {
+                column: "<row>",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(positions)
@@ -180,29 +216,38 @@ impl PositionsDatabase {
 
     /// Get open positions (not archived, no exit recorded, exit tx not verified).
     /// Mirrors the in-memory filter in state::get_open_positions().
-    pub async fn get_open_positions(&self) -> Result<Vec<Position>, String> {
+    pub async fn get_open_positions(&self) -> Result<Vec<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
       "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND archived = 0 AND exit_time IS NULL AND transaction_exit_verified = 0 ORDER BY entry_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare open positions query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare open positions query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let position_iter = stmt
             .query_map(params![wallet_address, self.chain.as_str()], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute open positions query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute open positions query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
+            positions.push(position_result.map_err(|e| Error::RowDecode {
+                column: "<row>",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(positions)
@@ -210,50 +255,60 @@ impl PositionsDatabase {
 
     /// Get closed positions (exit verified, not archived).
     /// Mirrors the in-memory filter in state::get_closed_positions().
-    pub async fn get_closed_positions(&self) -> Result<Vec<Position>, String> {
+    pub async fn get_closed_positions(&self) -> Result<Vec<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
       "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND archived = 0 AND transaction_exit_verified = 1 ORDER BY exit_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare closed positions query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare closed positions query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let position_iter = stmt
             .query_map(params![wallet_address, self.chain.as_str()], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute closed positions query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute closed positions query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
+            positions.push(position_result.map_err(|e| Error::RowDecode {
+                column: "<row>",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(positions)
     }
 
     /// Get closed positions since a specific date (have exit_time >= since)
-    pub async fn get_closed_positions_since(
-        &self,
-        since: DateTime<Utc>,
-    ) -> Result<Vec<Position>, String> {
+    pub async fn get_closed_positions_since(&self, since: DateTime<Utc>) -> Result<Vec<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
       "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND archived = 0 AND transaction_exit_verified = 1 AND origin_kind != 'external' AND datetime(exit_time) >= datetime(?3) ORDER BY exit_time DESC",
       POSITION_SELECT_COLUMNS
     );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare closed positions since query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare closed positions since query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let since_str = since.to_rfc3339();
         let position_iter = stmt
@@ -261,21 +316,29 @@ impl PositionsDatabase {
                 params![wallet_address, self.chain.as_str(), since_str],
                 |row| self.row_to_position(row),
             )
-            .map_err(|e| format!("Failed to execute closed positions since query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute closed positions since query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
+            positions.push(position_result.map_err(|e| Error::RowDecode {
+                column: "<row>",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(positions)
     }
 
     /// Count closed positions since the provided timestamp
-    pub async fn count_closed_positions_since(&self, since: DateTime<Utc>) -> Result<i64, String> {
+    pub async fn count_closed_positions_since(&self, since: DateTime<Utc>) -> Result<i64> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let mut stmt = conn
             .prepare(
@@ -290,7 +353,10 @@ impl PositionsDatabase {
        AND datetime(exit_time) >= datetime(?3)
       "#,
             )
-            .map_err(|e| format!("Failed to prepare closed position count query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare closed position count query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let since_str = since.to_rfc3339();
         let count: i64 = stmt
@@ -298,7 +364,10 @@ impl PositionsDatabase {
                 params![wallet_address, self.chain.as_str(), since_str],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to execute closed position count query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute closed position count query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         Ok(count)
     }
@@ -315,9 +384,12 @@ impl PositionsDatabase {
         &self,
         period_start: DateTime<Utc>,
         period_end: Option<DateTime<Utc>>,
-    ) -> Result<PeriodTradingStats, String> {
+    ) -> Result<PeriodTradingStats> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = if period_end.is_some() {
             r#"
@@ -400,7 +472,10 @@ impl PositionsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute period stats query: {e}"))?
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute period stats query".to_owned(),
+                message: e.to_string(),
+            })?
         } else {
             conn.query_row(
                 query,
@@ -432,7 +507,10 @@ impl PositionsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute period stats query: {e}"))?
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute period stats query".to_owned(),
+                message: e.to_string(),
+            })?
         };
 
         Ok(stats)
@@ -445,9 +523,12 @@ impl PositionsDatabase {
         &self,
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
-    ) -> Result<Vec<DailyTradingStats>, String> {
+    ) -> Result<Vec<DailyTradingStats>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let mut stmt = conn
             .prepare(
@@ -470,7 +551,10 @@ impl PositionsDatabase {
         ORDER BY day ASC
         "#,
             )
-            .map_err(|e| format!("Failed to prepare daily stats query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare daily stats query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let rows = stmt
             .query_map(
@@ -491,11 +575,17 @@ impl PositionsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute daily stats query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute daily stats query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut result = Vec::new();
         for row in rows {
-            result.push(row.map_err(|e| format!("Failed to read daily stats row: {e}"))?);
+            result.push(row.map_err(|e| DatabaseError::Query {
+                operation: "read daily stats row".to_owned(),
+                message: e.to_string(),
+            })?);
         }
         Ok(result)
     }
@@ -506,25 +596,32 @@ impl PositionsDatabase {
         &self,
         mint: &str,
         limit: usize,
-    ) -> Result<Vec<Position>, String> {
+    ) -> Result<Vec<Position>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let query = format!(
       "SELECT {} FROM positions WHERE wallet_address = ?1 AND chain_id = ?2 AND mint = ?3 AND transaction_exit_verified = 1 AND exit_price IS NOT NULL AND exit_time IS NOT NULL ORDER BY exit_time DESC LIMIT ?4",
       POSITION_SELECT_COLUMNS
     );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare recent closed positions query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare recent closed positions query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let rows = stmt
             .query_map(
                 params![wallet_address, self.chain.as_str(), mint, limit as i64],
                 |row| self.row_to_position(row),
             )
-            .map_err(|e| format!("Failed to execute recent closed positions query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute recent closed positions query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for row in rows {
@@ -541,9 +638,12 @@ impl PositionsDatabase {
         &self,
         mint: &str,
         limit: usize,
-    ) -> Result<Vec<(Option<f64>, Option<f64>)>, String> {
+    ) -> Result<Vec<(Option<f64>, Option<f64>)>> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let mut stmt = conn
             .prepare(
@@ -556,7 +656,10 @@ impl PositionsDatabase {
       LIMIT ?4
       "#,
             )
-            .map_err(|e| format!("Failed to prepare recent closed exit prices query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare recent closed exit prices query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut out: Vec<(Option<f64>, Option<f64>)> = Vec::new();
         let rows = stmt
@@ -568,7 +671,10 @@ impl PositionsDatabase {
                     Ok((exit_p, eff_exit_p))
                 },
             )
-            .map_err(|e| format!("Failed to execute recent closed exit prices query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute recent closed exit prices query".to_owned(),
+                message: e.to_string(),
+            })?;
         for r in rows {
             if let Ok(v) = r {
                 out.push(v);
@@ -578,10 +684,7 @@ impl PositionsDatabase {
     }
 
     /// Get positions by state
-    pub async fn get_positions_by_state(
-        &self,
-        state: &PositionState,
-    ) -> Result<Vec<Position>, String> {
+    pub async fn get_positions_by_state(&self, state: &PositionState) -> Result<Vec<Position>> {
         // This requires joining with position_states to get current state
         let conn = self.get_connection()?;
 
@@ -599,27 +702,33 @@ impl PositionsDatabase {
              ORDER BY p.entry_time DESC"
         );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare positions by state query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare positions by state query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let position_iter = stmt
             .query_map(params![state.to_string(), self.chain.as_str()], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute positions by state query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute positions by state query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
+            positions.push(position_result.map_err(|e| Error::RowDecode {
+                column: "<row>",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(positions)
     }
 
     /// Get positions with unverified transactions
-    pub async fn get_unverified_positions(&self) -> Result<Vec<Position>, String> {
+    pub async fn get_unverified_positions(&self) -> Result<Vec<Position>> {
         let conn = self.get_connection()?;
 
         let query = format!(
@@ -629,20 +738,26 @@ impl PositionsDatabase {
              ) ORDER BY entry_time DESC"
         );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare unverified positions query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| DatabaseError::Query {
+            operation: "prepare unverified positions query".to_owned(),
+            message: e.to_string(),
+        })?;
 
         let position_iter = stmt
             .query_map(params![self.chain.as_str()], |row| {
                 self.row_to_position(row)
             })
-            .map_err(|e| format!("Failed to execute unverified positions query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute unverified positions query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut positions = Vec::new();
         for position_result in position_iter {
-            positions
-                .push(position_result.map_err(|e| format!("Failed to parse position row: {e}"))?);
+            positions.push(position_result.map_err(|e| Error::RowDecode {
+                column: "<row>",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(positions)

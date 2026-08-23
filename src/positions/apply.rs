@@ -22,6 +22,8 @@ use crate::logger::{self, LogTag};
 use crate::telegram::{queue_notification, Notification};
 use chrono::Utc;
 
+use super::error::{Error, Result};
+
 #[derive(Debug)]
 pub struct ApplyEffects {
     pub db_updated: bool,
@@ -30,7 +32,7 @@ pub struct ApplyEffects {
 }
 
 /// Apply a position transition to state and database
-pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEffects, String> {
+pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEffects> {
     let mut effects = ApplyEffects {
         db_updated: false,
         position_removed: false,
@@ -126,7 +128,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             }
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {e}"));
+                            return Err(Error::TransitionFailed {
+                                transition: "apply",
+                                mint: position.mint.clone(),
+                                detail: e.to_string(),
+                            });
                         }
                     }
                 }
@@ -376,7 +382,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 }
                             }
                             Err(e) => {
-                                return Err(format!("Failed to update database: {e}"));
+                                return Err(Error::TransitionFailed {
+                                    transition: "apply",
+                                    mint: position.mint.clone(),
+                                    detail: e.to_string(),
+                                });
                             }
                         }
                     }
@@ -426,7 +436,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             effects.db_updated = true;
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {e}"));
+                            return Err(Error::TransitionFailed {
+                                transition: "apply",
+                                mint: position.mint.clone(),
+                                detail: e.to_string(),
+                            });
                         }
                     }
                 }
@@ -519,7 +533,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             }
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {e}"));
+                            return Err(Error::TransitionFailed {
+                                transition: "apply",
+                                mint: position.mint.clone(),
+                                detail: e.to_string(),
+                            });
                         }
                     }
                 }
@@ -735,10 +753,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             if let Err(err) =
                                 super::state::clear_pending_partial_exit(&exit_signature).await
                             {
-                                return Err(format!(
-                                    "Failed to clear pending partial exit {} for position {}: {}",
-                                    exit_signature, position_id, err
-                                ));
+                                return Err(Error::TransitionFailed {
+                                    transition: "partial_exit",
+                                    mint: position.mint.clone(),
+                                    detail: format!(
+                                        "failed to clear pending partial exit {exit_signature} for position {position_id}: {err}"
+                                    ),
+                                });
                             }
 
                             // Realized P&L for THIS partial: proceeds minus the cost basis of
@@ -829,7 +850,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // IMPORTANT: Do NOT release semaphore permit - position still open!
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {e}"));
+                            return Err(Error::TransitionFailed {
+                                transition: "apply",
+                                mint: position.mint.clone(),
+                                detail: e.to_string(),
+                            });
                         }
                     }
                 }
@@ -1057,10 +1082,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             }
 
                             if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
-                                return Err(format!(
-                                    "Failed to clear pending DCA {} for position {}: {}",
-                                    dca_signature, position_id, err
-                                ));
+                                return Err(Error::TransitionFailed {
+                                    transition: "dca",
+                                    mint: position.mint.clone(),
+                                    detail: format!(
+                                        "failed to clear pending DCA {dca_signature} for position {position_id}: {err}"
+                                    ),
+                                });
                             }
 
                             crate::events::record_position_event(
@@ -1101,7 +1129,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             // IMPORTANT: Do NOT consume another semaphore permit - same position!
                         }
                         Err(e) => {
-                            return Err(format!("Failed to update database: {e}"));
+                            return Err(Error::TransitionFailed {
+                                transition: "apply",
+                                mint: position.mint.clone(),
+                                detail: e.to_string(),
+                            });
                         }
                     }
                 }
@@ -1135,10 +1167,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             );
 
             if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
-                return Err(format!(
-                    "Failed to clear pending DCA {} after failure: {}",
-                    dca_signature, err
-                ));
+                let mint = find_mint_by_position_id(position_id)
+                    .await
+                    .unwrap_or_default();
+                return Err(Error::TransitionFailed {
+                    transition: "dca",
+                    mint,
+                    detail: format!(
+                        "failed to clear pending DCA {dca_signature} after failure: {err}"
+                    ),
+                });
             }
             // TODO: Implement retry logic if needed
         }
@@ -1197,11 +1235,11 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
     Ok(effects)
 }
 
-async fn find_mint_by_position_id(position_id: i64) -> Result<String, String> {
+async fn find_mint_by_position_id(position_id: i64) -> Result<String> {
     let positions = POSITIONS.read().await;
     positions
         .iter()
         .find(|p| p.id == Some(position_id))
         .map(|p| p.mint.clone())
-        .ok_or_else(|| format!("Position not found: {position_id}"))
+        .ok_or(Error::NotFoundById { position_id })
 }

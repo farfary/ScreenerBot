@@ -1,6 +1,7 @@
 //! Pending swap state — tracks in-flight partial exits and DCA swaps with persistence.
 
 use super::db;
+use super::error::{Error, Result};
 pub use super::types::{PendingDcaSwap, PendingPartialExit};
 use crate::logger::{self, LogTag};
 use std::{collections::HashMap, sync::LazyLock};
@@ -59,7 +60,7 @@ pub async fn is_partial_exit_pending(mint: &str) -> bool {
 ///
 /// Used by failure handling, which knows the position but not necessarily the
 /// signature — a partial exit is no longer recorded on the position itself.
-pub async fn clear_pending_partial_exits_for_mint(mint: &str) -> Result<(), String> {
+pub async fn clear_pending_partial_exits_for_mint(mint: &str) -> Result<()> {
     let removed: Vec<String> = {
         let mut details = PENDING_PARTIAL_EXIT_DETAILS.write().await;
         let signatures: Vec<String> = details
@@ -86,20 +87,22 @@ pub async fn clear_pending_partial_exits_for_mint(mint: &str) -> Result<(), Stri
 }
 
 /// Persist current pending DCA map to the database metadata store
-async fn persist_pending_dca_swaps() -> Result<(), String> {
+async fn persist_pending_dca_swaps() -> Result<()> {
     let pending: Vec<PendingDcaSwap> = {
         let map = PENDING_DCA_SWAPS.read().await;
         map.values().cloned().collect()
     };
 
-    let serialized = serde_json::to_string(&pending)
-        .map_err(|e| format!("Failed to serialize pending DCA swaps: {e}"))?;
+    let serialized = serde_json::to_string(&pending).map_err(|e| Error::Maintenance {
+        operation: "persist_pending_dca",
+        detail: e.to_string(),
+    })?;
 
     db::set_metadata(PENDING_DCA_METADATA_KEY, &serialized).await
 }
 
 /// Register a pending DCA swap for durability
-pub async fn register_pending_dca_swap(entry: PendingDcaSwap) -> Result<(), String> {
+pub async fn register_pending_dca_swap(entry: PendingDcaSwap) -> Result<()> {
     let signature = entry.signature.clone();
     {
         let mut map = PENDING_DCA_SWAPS.write().await;
@@ -116,7 +119,7 @@ pub async fn register_pending_dca_swap(entry: PendingDcaSwap) -> Result<(), Stri
 }
 
 /// Clear a pending DCA swap once processed
-pub async fn clear_pending_dca_swap(signature: &str) -> Result<Option<PendingDcaSwap>, String> {
+pub async fn clear_pending_dca_swap(signature: &str) -> Result<Option<PendingDcaSwap>> {
     let removed = {
         let mut map = PENDING_DCA_SWAPS.write().await;
         map.remove(signature)
@@ -159,12 +162,16 @@ pub async fn get_pending_dca_swaps_for_mint(mint: &str) -> Vec<PendingDcaSwap> {
 }
 
 /// Load pending DCA swaps from metadata into memory (used at startup)
-pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>, String> {
+pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>> {
     let raw = db::get_metadata(PENDING_DCA_METADATA_KEY).await?;
 
     let entries: Vec<PendingDcaSwap> = match raw {
-        Some(payload) if !payload.is_empty() => serde_json::from_str(&payload)
-            .map_err(|e| format!("Failed to deserialize pending DCA metadata payload: {e}"))?,
+        Some(payload) if !payload.is_empty() => {
+            serde_json::from_str(&payload).map_err(|e| Error::RowDecode {
+                column: "pending_dca_metadata",
+                detail: e.to_string(),
+            })?
+        }
         _ => Vec::new(),
     };
 
@@ -179,20 +186,22 @@ pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>, String
     Ok(entries)
 }
 
-async fn persist_pending_partial_exits() -> Result<(), String> {
+async fn persist_pending_partial_exits() -> Result<()> {
     let pending: Vec<PendingPartialExit> = {
         let map = PENDING_PARTIAL_EXIT_DETAILS.read().await;
         map.values().cloned().collect()
     };
 
-    let serialized = serde_json::to_string(&pending)
-        .map_err(|e| format!("Failed to serialize pending partial exits: {e}"))?;
+    let serialized = serde_json::to_string(&pending).map_err(|e| Error::Maintenance {
+        operation: "persist_pending_partial_exits",
+        detail: e.to_string(),
+    })?;
 
     db::set_metadata(PENDING_PARTIAL_EXIT_METADATA_KEY, &serialized).await
 }
 
 /// Register a pending partial exit for durability
-pub async fn register_pending_partial_exit(entry: PendingPartialExit) -> Result<(), String> {
+pub async fn register_pending_partial_exit(entry: PendingPartialExit) -> Result<()> {
     let signature = entry.signature.clone();
     {
         let mut map = PENDING_PARTIAL_EXIT_DETAILS.write().await;
@@ -209,9 +218,7 @@ pub async fn register_pending_partial_exit(entry: PendingPartialExit) -> Result<
 }
 
 /// Clear a pending partial exit once processed
-pub async fn clear_pending_partial_exit(
-    signature: &str,
-) -> Result<Option<PendingPartialExit>, String> {
+pub async fn clear_pending_partial_exit(signature: &str) -> Result<Option<PendingPartialExit>> {
     let removed = {
         let mut map = PENDING_PARTIAL_EXIT_DETAILS.write().await;
         map.remove(signature)
@@ -283,12 +290,16 @@ pub async fn mints_with_pending_swaps() -> std::collections::HashSet<String> {
 }
 
 /// Load pending partial exits from metadata into memory (used at startup)
-pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>, String> {
+pub async fn rehydrate_pending_partial_exits() -> Result<Vec<PendingPartialExit>> {
     let raw = db::get_metadata(PENDING_PARTIAL_EXIT_METADATA_KEY).await?;
 
     let entries: Vec<PendingPartialExit> = match raw {
-        Some(payload) if !payload.is_empty() => serde_json::from_str(&payload)
-            .map_err(|e| format!("Failed to deserialize pending partial exit payload: {e}"))?,
+        Some(payload) if !payload.is_empty() => {
+            serde_json::from_str(&payload).map_err(|e| Error::RowDecode {
+                column: "pending_partial_exit_metadata",
+                detail: e.to_string(),
+            })?
+        }
         _ => Vec::new(),
     };
 

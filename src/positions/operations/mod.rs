@@ -18,6 +18,7 @@ pub use partial_close::partial_close_position;
 
 use crate::logger::{self, LogTag};
 use crate::positions::db::{save_position, update_position_price_fields};
+use crate::positions::error::{Error, Result};
 use crate::positions::state::acquire_position_lock;
 use crate::positions::types::Position;
 use chrono::Utc;
@@ -75,7 +76,7 @@ async fn persist_position_with_retry(position: &Position) -> i64 {
                         json!({
                           "mint": position.mint,
                           "attempts": attempt,
-                          "error": err,
+                          "error": err.to_string(),
                         }),
                     )
                     .await;
@@ -102,9 +103,12 @@ async fn persist_position_with_retry(position: &Position) -> i64 {
 // =============================================================================
 
 /// Update position's current price and track high/low for trailing stop
-pub async fn update_position_price(token_mint: &str, current_price: f64) -> Result<(), String> {
+pub async fn update_position_price(token_mint: &str, current_price: f64) -> Result<()> {
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!("Invalid price: {current_price}"));
+        return Err(Error::InvalidPrice {
+            mint: token_mint.to_owned(),
+            price: current_price,
+        });
     }
 
     let _lock = acquire_position_lock(token_mint).await;
@@ -125,7 +129,9 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
     .await;
 
     if !updated {
-        return Err(format!("Position not found for mint: {token_mint}"));
+        return Err(Error::NotFound {
+            mint: token_mint.to_owned(),
+        });
     }
 
     let position = crate::positions::state::get_position_by_mint(token_mint).await;
@@ -133,11 +139,8 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
     // Release per-mint lock before hitting the database to reduce contention
     drop(_lock);
 
-    let position = position.ok_or_else(|| {
-        format!(
-            "Position disappeared after price update (mint: {})",
-            token_mint
-        )
+    let position = position.ok_or_else(|| Error::NotFound {
+        mint: token_mint.to_owned(),
     })?;
 
     update_position_price_fields(&position).await?;

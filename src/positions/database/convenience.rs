@@ -3,7 +3,9 @@
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
+use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
+use crate::positions::error::{Error, Result};
 use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
 
 use super::global::GLOBAL_POSITIONS_DB;
@@ -14,16 +16,16 @@ use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 // =============================================================================
 
 /// Load all positions from database
-pub async fn load_all_positions() -> Result<Vec<Position>, String> {
+pub async fn load_all_positions() -> Result<Vec<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_positions(None, None).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Save position to database
-pub async fn save_position(position: &Position) -> Result<i64, String> {
+pub async fn save_position(position: &Position) -> Result<i64> {
     logger::debug(
         LogTag::Positions,
         &format!(
@@ -57,51 +59,48 @@ pub async fn save_position(position: &Position) -> Result<i64, String> {
                 Ok(new_id)
             }
         }
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Delete position by ID
-pub async fn delete_position_by_id(id: i64) -> Result<bool, String> {
+pub async fn delete_position_by_id(id: i64) -> Result<bool> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.delete_position(id).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Archive or unarchive a position by ID (reversible flag; no data is deleted)
-pub async fn set_position_archived_db(id: i64, archived: bool) -> Result<bool, String> {
+pub async fn set_position_archived_db(id: i64, archived: bool) -> Result<bool> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.set_position_archived(id, archived).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Change action ownership for a position by ID.
-pub async fn set_position_management_db(
-    id: i64,
-    management: PositionManagement,
-) -> Result<bool, String> {
+pub async fn set_position_management_db(id: i64, management: PositionManagement) -> Result<bool> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.set_position_management(id, management).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Hard-delete all archived positions (cascades only to this position's child rows)
-pub async fn delete_archived_positions() -> Result<usize, String> {
+pub async fn delete_archived_positions() -> Result<usize> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.delete_archived_positions().await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Update position in database
-pub async fn update_position(position: &Position) -> Result<(), String> {
+pub async fn update_position(position: &Position) -> Result<()> {
     logger::debug(
         LogTag::Positions,
         &format!(
@@ -134,15 +133,17 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
             }
             result
         }
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Update only the price-related fields for a position using the latest in-memory state
-pub async fn update_position_price_fields(position: &Position) -> Result<(), String> {
-    let position_id = position
-        .id
-        .ok_or_else(|| "Cannot update price fields without position ID".to_owned())?;
+pub async fn update_position_price_fields(position: &Position) -> Result<()> {
+    let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
+        transition: "update_price_fields",
+        mint: position.mint.clone(),
+        detail: "position has no id".to_owned(),
+    })?;
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
@@ -156,12 +157,12 @@ pub async fn update_position_price_fields(position: &Position) -> Result<(), Str
             )
             .await
         }
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Force database synchronization after critical updates
-pub async fn force_database_sync() -> Result<(), String> {
+pub async fn force_database_sync() -> Result<()> {
     logger::debug(LogTag::Positions, "Forcing database synchronization...");
 
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
@@ -180,61 +181,61 @@ pub async fn force_database_sync() -> Result<(), String> {
             }
             result
         }
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Store a key-value metadata pair in the positions database
-pub async fn set_metadata(key: &str, value: &str) -> Result<(), String> {
+pub async fn set_metadata(key: &str, value: &str) -> Result<()> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.set_metadata_value(key, value),
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Retrieve a metadata value by key from the positions database
-pub async fn get_metadata(key: &str) -> Result<Option<String>, String> {
+pub async fn get_metadata(key: &str) -> Result<Option<String>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_metadata_value(key),
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Get open positions from database
-pub async fn get_open_positions() -> Result<Vec<Position>, String> {
+pub async fn get_open_positions() -> Result<Vec<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_open_positions().await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Get closed positions from database
-pub async fn get_closed_positions() -> Result<Vec<Position>, String> {
+pub async fn get_closed_positions() -> Result<Vec<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_closed_positions().await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Get closed positions since a specific date
-pub async fn get_closed_positions_since(since: DateTime<Utc>) -> Result<Vec<Position>, String> {
+pub async fn get_closed_positions_since(since: DateTime<Utc>) -> Result<Vec<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_closed_positions_since(since).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Count closed positions since the provided UTC timestamp
-pub async fn get_closed_positions_count_since(since: DateTime<Utc>) -> Result<i64, String> {
+pub async fn get_closed_positions_count_since(since: DateTime<Utc>) -> Result<i64> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.count_closed_positions_since(since).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
@@ -242,11 +243,11 @@ pub async fn get_closed_positions_count_since(since: DateTime<Utc>) -> Result<i6
 pub async fn get_period_trading_stats(
     period_start: DateTime<Utc>,
     period_end: Option<DateTime<Utc>>,
-) -> Result<PeriodTradingStats, String> {
+) -> Result<PeriodTradingStats> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_period_trading_stats(period_start, period_end).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
@@ -254,34 +255,34 @@ pub async fn get_period_trading_stats(
 pub async fn get_daily_trading_stats(
     period_start: DateTime<Utc>,
     period_end: DateTime<Utc>,
-) -> Result<Vec<DailyTradingStats>, String> {
+) -> Result<Vec<DailyTradingStats>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_daily_trading_stats(period_start, period_end).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// The most recent position for a mint from the database, OPEN OR CLOSED.
-pub async fn get_latest_position_by_mint(mint: &str) -> Result<Option<Position>, String> {
+pub async fn get_latest_position_by_mint(mint: &str) -> Result<Option<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_latest_position_by_mint(mint).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Get position by ID from database
-pub async fn get_position_by_id(id: i64) -> Result<Option<Position>, String> {
+pub async fn get_position_by_id(id: i64) -> Result<Option<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_position_by_id(id).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Save token snapshot to database
-pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String> {
+pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64> {
     logger::debug(
         LogTag::Positions,
         &format!(
@@ -312,16 +313,16 @@ pub async fn save_token_snapshot(snapshot: &TokenSnapshot) -> Result<i64, String
             }
             result
         }
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Get token snapshots for a position
-pub async fn get_token_snapshots(position_id: i64) -> Result<Vec<TokenSnapshot>, String> {
+pub async fn get_token_snapshots(position_id: i64) -> Result<Vec<TokenSnapshot>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_snapshots(position_id).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
@@ -329,11 +330,11 @@ pub async fn get_token_snapshots(position_id: i64) -> Result<Vec<TokenSnapshot>,
 pub async fn get_token_snapshot(
     position_id: i64,
     snapshot_type: &str,
-) -> Result<Option<TokenSnapshot>, String> {
+) -> Result<Option<TokenSnapshot>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_snapshot(position_id, snapshot_type).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
@@ -341,20 +342,20 @@ pub async fn get_token_snapshot(
 pub async fn get_recent_closed_positions_for_mint(
     mint: &str,
     limit: usize,
-) -> Result<Vec<Position>, String> {
+) -> Result<Vec<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_recent_closed_positions_for_mint(mint, limit).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
 /// Every position ever opened on a mint (open, closed, archived), oldest first.
-pub async fn get_all_positions_for_mint(mint: &str) -> Result<Vec<Position>, String> {
+pub async fn get_all_positions_for_mint(mint: &str) -> Result<Vec<Position>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_all_positions_for_mint(mint).await,
-        None => Err("Positions database not initialized".to_owned()),
+        None => Err(Error::NotInitialised),
     }
 }
 
@@ -371,18 +372,18 @@ pub async fn save_exit_record(
     is_partial: bool,
     percentage: f64,
     fees_lamports: Option<u64>,
-) -> Result<(), String> {
+) -> Result<()> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Positions database not initialized")?;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
 
-    let conn = db
-        .pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
+        message: e.to_string(),
+    })?;
 
-    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
 
     // Idempotent per (position, signature): one on-chain swap = one exit record. The table
     // has no unique constraint, so a re-applied verification (retry, restart) would
@@ -408,7 +409,7 @@ pub async fn save_exit_record(
       fees_lamports.map(|f| f as i64),
     ],
   )
-  .map_err(|e| format!("Failed to save exit record: {e}"))?;
+  .map_err(|e| DatabaseError::Query { operation: "save exit record".to_owned(), message: e.to_string() })?;
 
     logger::info(
         LogTag::Positions,
@@ -450,18 +451,18 @@ pub async fn exit_record_exists(position_id: i64, transaction_signature: &str) -
 /// Exits in CHRONOLOGICAL order, matching `get_entry_history`. Callers number
 /// them by index ("Exit 1", "Exit 2"), so a DESC order silently labelled the
 /// newest partial exit as the first one on the position chart.
-pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, String> {
+pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Positions database not initialized")?;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
 
-    let conn = db
-        .pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
+        message: e.to_string(),
+    })?;
 
-    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
 
     let mut stmt = conn
         .prepare(
@@ -469,7 +470,10 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
        transaction_signature, is_partial, percentage, fees_lamports 
        FROM position_exits WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| DatabaseError::Query {
+            operation: "prepare statement".to_owned(),
+            message: e.to_string(),
+        })?;
 
     let records = stmt
         .query_map(params![position_id, wallet_address], |row| {
@@ -494,9 +498,15 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
                 fees_lamports: row.get::<_, Option<i64>>(9)?.map(|f| f as u64),
             })
         })
-        .map_err(|e| format!("Failed to query exit records: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect exit records: {e}"))?;
+        .map_err(|e| DatabaseError::Query {
+            operation: "query exit records".to_owned(),
+            message: e.to_string(),
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| DatabaseError::Query {
+            operation: "collect exit records".to_owned(),
+            message: e.to_string(),
+        })?;
 
     Ok(records)
 }
@@ -511,18 +521,18 @@ pub async fn save_entry_record(
     transaction_signature: &str,
     is_dca: bool,
     fees_lamports: Option<u64>,
-) -> Result<(), String> {
+) -> Result<()> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Positions database not initialized")?;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
 
-    let conn = db
-        .pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
+        message: e.to_string(),
+    })?;
 
-    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
 
     // Idempotent per (position, signature) — see save_exit_record. A DCA add re-verified
     // after a restart must not be recorded (and averaged in) twice.
@@ -545,7 +555,7 @@ pub async fn save_entry_record(
       fees_lamports.map(|f| f as i64),
     ],
   )
-  .map_err(|e| format!("Failed to save entry record: {e}"))?;
+  .map_err(|e| DatabaseError::Query { operation: "save entry record".to_owned(), message: e.to_string() })?;
 
     logger::info(
         LogTag::Positions,
@@ -559,18 +569,18 @@ pub async fn save_entry_record(
 }
 
 /// Get entry history for a position
-pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, String> {
+pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Positions database not initialized")?;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
 
-    let conn = db
-        .pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
+        message: e.to_string(),
+    })?;
 
-    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
 
     let mut stmt = conn
         .prepare(
@@ -578,7 +588,10 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
        transaction_signature, is_dca, fees_lamports 
        FROM position_entries WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| DatabaseError::Query {
+            operation: "prepare statement".to_owned(),
+            message: e.to_string(),
+        })?;
 
     let records = stmt
         .query_map(params![position_id, wallet_address], |row| {
@@ -602,9 +615,15 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
                 fees_lamports: row.get::<_, Option<i64>>(8)?.map(|f| f as u64),
             })
         })
-        .map_err(|e| format!("Failed to query entry records: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect entry records: {e}"))?;
+        .map_err(|e| DatabaseError::Query {
+            operation: "query entry records".to_owned(),
+            message: e.to_string(),
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| DatabaseError::Query {
+            operation: "collect entry records".to_owned(),
+            message: e.to_string(),
+        })?;
 
     Ok(records)
 }
@@ -615,18 +634,18 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
 /// ledger uses it to tell the legs it already has a fee-exact number for apart from the
 /// ones the user executed elsewhere, so a bot-owned position can absorb an outside buy
 /// without double-counting its own.
-pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>, String> {
+pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Positions database not initialized")?;
+    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
 
-    let conn = db
-        .pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
+        message: e.to_string(),
+    })?;
 
-    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
 
     let mut stmt = conn
         .prepare(
@@ -636,7 +655,10 @@ pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>, Str
              SELECT position_id, transaction_signature, 1 AS is_exit, sol_received AS sol
                FROM position_exits WHERE wallet_address = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| DatabaseError::Query {
+            operation: "prepare statement".to_owned(),
+            message: e.to_string(),
+        })?;
 
     let legs = stmt
         .query_map(params![wallet_address], |row| {
@@ -647,9 +669,15 @@ pub async fn get_trader_swap_legs() -> Result<Vec<(i64, String, bool, f64)>, Str
                 row.get::<_, f64>(3)?,
             ))
         })
-        .map_err(|e| format!("Failed to query trader swap legs: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to read trader swap legs: {e}"))?;
+        .map_err(|e| DatabaseError::Query {
+            operation: "query trader swap legs".to_owned(),
+            message: e.to_string(),
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| DatabaseError::Query {
+            operation: "read trader swap legs".to_owned(),
+            message: e.to_string(),
+        })?;
 
     Ok(legs)
 }

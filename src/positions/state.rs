@@ -127,7 +127,7 @@ pub async fn acquire_position_lock(mint: &str) -> PositionLockGuard {
 /// Acquire a global position creation permit to enforce MAX_OPEN_POSITIONS atomically
 /// This must be called BEFORE any position creation to prevent race conditions
 pub async fn acquire_global_position_permit(
-) -> Result<tokio::sync::SemaphorePermit<'static>, String> {
+) -> crate::positions::Result<tokio::sync::SemaphorePermit<'static>> {
     let semaphore = get_global_position_semaphore();
     match semaphore.try_acquire() {
         Ok(permit) => {
@@ -142,7 +142,9 @@ pub async fn acquire_global_position_permit(
         }
         Err(_) => {
             let available = semaphore.available_permits();
-            Err(format_position_slot_error(available as usize))
+            Err(crate::positions::Error::SlotUnavailable {
+                detail: format_position_slot_error(available as usize),
+            })
         }
     }
 }

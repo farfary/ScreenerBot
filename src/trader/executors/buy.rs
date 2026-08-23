@@ -94,7 +94,7 @@ pub async fn execute_buy_managed(
             Ok(result)
         }
         Err(e) => {
-            if let Some(remaining) = crate::positions::parse_position_slot_error(&e) {
+            if let Some(remaining) = crate::positions::parse_position_slot_error(&e.to_string()) {
                 let guard_msg = format!(
                     "{}: global position limit reached (remaining permits: {})",
                     crate::positions::POSITION_SLOT_UNAVAILABLE_ERR,

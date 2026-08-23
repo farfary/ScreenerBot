@@ -5,6 +5,7 @@ use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::db as positions_db;
+use crate::positions::error::{Error, Result};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -22,7 +23,7 @@ use chrono::Utc;
 use serde_json::json;
 
 /// Open a new position using trade size from configuration (auto-trader path)
-pub async fn open_position_direct(token_mint: &str) -> Result<EntrySubmission, String> {
+pub async fn open_position_direct(token_mint: &str) -> Result<EntrySubmission> {
     let trade_size_sol = with_config(|cfg| cfg.trader.trade_size_sol);
     // Auto-trader entry: slippage always follows config.
     open_position_impl(
@@ -43,9 +44,12 @@ pub async fn open_position_with_size(
     origin: PositionOrigin,
     management: PositionManagement,
     slippage_pct: Option<f64>,
-) -> Result<EntrySubmission, String> {
+) -> Result<EntrySubmission> {
     if !trade_size_sol.is_finite() || trade_size_sol <= 0.0 {
-        return Err(format!("Invalid trade size: {trade_size_sol}"));
+        return Err(Error::InvalidTradeSize {
+            amount_sol: trade_size_sol,
+            reason: "must be a positive, finite amount".to_owned(),
+        });
     }
     open_position_impl(token_mint, trade_size_sol, origin, management, slippage_pct).await
 }
@@ -57,30 +61,33 @@ async fn open_position_impl(
     origin: PositionOrigin,
     management: PositionManagement,
     slippage_pct: Option<f64>,
-) -> Result<EntrySubmission, String> {
+) -> Result<EntrySubmission> {
     // Ensure the token exists in the local DB. For manual/force buys this lets the user
     // trade tokens that were never tracked by the pool service or that failed filtering
     // (decimals fetched from chain + metadata fetched from APIs on demand).
     let api_token = crate::tokens::ensure_token_available(token_mint)
         .await
-        .map_err(|e| format!("Token unavailable for trading: {e}"))?;
+        .map_err(|_| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?;
 
     // Get price with fallback to API when pool price unavailable
     // This enables trading for tokens not yet tracked by pool service
     let (price_info, price_source) =
         get_price_with_api_fallback(token_mint)
             .await
-            .ok_or_else(|| {
-                format!(
-                    "No price data for token: {} (checked pool + API)",
-                    token_mint
-                )
+            .ok_or_else(|| Error::InvalidPrice {
+                mint: token_mint.to_owned(),
+                price: 0.0,
             })?;
 
     let entry_price = match price_info.price_sol {
         price if price > 0.0 && price.is_finite() => price,
-        _ => {
-            return Err(format!("Invalid price for token: {token_mint}"));
+        price => {
+            return Err(Error::InvalidPrice {
+                mint: token_mint.to_owned(),
+                price,
+            });
         }
     };
 
@@ -133,7 +140,9 @@ async fn open_position_impl(
             }),
         )
         .await;
-        return Err("Already have open position for this token".to_owned());
+        return Err(Error::AlreadyOpen {
+            mint: api_token.mint.clone(),
+        });
     }
 
     // Extra safety: consult database for any existing open or unverified position for this mint.
@@ -182,7 +191,9 @@ async fn open_position_impl(
                     }),
                 )
                 .await;
-                return Err("Open position already exists in DB".to_owned());
+                return Err(Error::AlreadyOpen {
+                    mint: api_token.mint.clone(),
+                });
             }
         }
     }
@@ -196,17 +207,22 @@ async fn open_position_impl(
         if let Some(last_open) = last_open_opt {
             let elapsed = Utc::now().signed_duration_since(last_open).num_seconds();
             if elapsed < cooldown_secs {
-                return Err(format!(
-                    "Opening positions cooldown active: wait {}s",
-                    cooldown_secs - elapsed
-                ));
+                return Err(Error::TransitionFailed {
+                    transition: "open",
+                    mint: token_mint.to_owned(),
+                    detail: format!(
+                        "opening positions cooldown active: wait {}s",
+                        cooldown_secs - elapsed
+                    ),
+                });
             }
         }
     }
 
     // Execute swap
-    let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
+    let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
+        detail: e.to_string(),
+    })?;
 
     // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
     crate::positions::state::set_pending_open(
@@ -241,7 +257,10 @@ async fn open_position_impl(
 
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
         .await
-        .map_err(|e| format!("Quote failed: {e}"))?;
+        .map_err(|e| Error::SwapFailed {
+            mint: api_token.mint.clone(),
+            detail: format!("quote failed: {e}"),
+        })?;
 
     let expected_output_amount = quote.output_amount;
     let (transaction_signature, output_amount, confirmation_pending, effective_entry_price) =
@@ -276,7 +295,12 @@ async fn open_position_impl(
                     .unwrap_or(entry_price);
                     (signature, expected_output_amount, true, effective_price)
                 }
-                None => return Err(format!("Swap failed: {error}")),
+                None => {
+                    return Err(Error::SwapFailed {
+                        mint: api_token.mint.clone(),
+                        detail: error.to_string(),
+                    })
+                }
             },
         };
 

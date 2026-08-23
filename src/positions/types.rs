@@ -65,7 +65,8 @@ impl PositionOrigin {
         }
     }
 
-    pub fn from_columns(kind: &str, reference: Option<String>) -> Result<Self, String> {
+    pub fn from_columns(kind: &str, reference: Option<String>) -> super::error::Result<Self> {
+        use super::error::Error;
         match kind {
             "auto" => Ok(Self::Auto {
                 strategy_id: reference,
@@ -73,19 +74,29 @@ impl PositionOrigin {
             "manual" => Ok(Self::Manual),
             "external" => Ok(Self::External),
             "copy" => {
-                let value =
-                    reference.ok_or_else(|| "copy origin is missing origin_ref".to_owned())?;
-                let (task_id, source_wallet) = value
-                    .split_once(':')
-                    .ok_or_else(|| "copy origin_ref must contain task id and wallet".to_owned())?;
+                let value = reference.ok_or_else(|| Error::UnknownPersistedValue {
+                    field: "origin_ref",
+                    value: "<missing>".to_owned(),
+                })?;
+                let (task_id, source_wallet) =
+                    value
+                        .split_once(':')
+                        .ok_or_else(|| Error::UnknownPersistedValue {
+                            field: "origin_ref",
+                            value: value.clone(),
+                        })?;
                 Ok(Self::Copy {
-                    task_id: task_id
-                        .parse()
-                        .map_err(|_| "copy origin_ref has an invalid task id".to_owned())?,
+                    task_id: task_id.parse().map_err(|_| Error::UnknownPersistedValue {
+                        field: "origin_ref",
+                        value: value.clone(),
+                    })?,
                     source_wallet: source_wallet.to_owned(),
                 })
             }
-            other => Err(format!("unknown position origin kind: {other}")),
+            other => Err(Error::UnknownPersistedValue {
+                field: "origin_kind",
+                value: other.to_owned(),
+            }),
         }
     }
 }
@@ -110,13 +121,16 @@ impl PositionManagement {
         }
     }
 
-    pub fn parse(value: &str) -> Result<Self, String> {
+    pub fn parse(value: &str) -> super::error::Result<Self> {
         match value {
             "auto_trader" => Ok(Self::AutoTrader),
             "user_only" => Ok(Self::UserOnly),
             "copy_task" => Ok(Self::CopyTask),
             "hybrid" => Ok(Self::Hybrid),
-            other => Err(format!("unknown position management: {other}")),
+            other => Err(super::error::Error::UnknownPersistedValue {
+                field: "management",
+                value: other.to_owned(),
+            }),
         }
     }
 

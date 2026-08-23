@@ -7,7 +7,9 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::atomic::Ordering;
 
 use crate::database;
+use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
+use crate::positions::error::{Error, Result};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
@@ -15,7 +17,7 @@ use super::types::*;
 
 impl PositionsDatabase {
     /// Create new PositionsDatabase with connection pooling
-    pub async fn new(chain: crate::chains::ChainId) -> Result<Self, String> {
+    pub async fn new(chain: crate::chains::ChainId) -> Result<Self> {
         let database_path = crate::paths::get_positions_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
@@ -39,7 +41,9 @@ impl PositionsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create positions connection pool: {e}"))?;
+            .map_err(|e| DatabaseError::Connection {
+                message: format!("failed to create positions connection pool: {e}"),
+            })?;
 
         let mut db = PositionsDatabase {
             pool,
@@ -63,32 +67,46 @@ impl PositionsDatabase {
     }
 
     /// Initialize database schema with all tables and indexes
-    async fn initialize_schema(&mut self, log_initialization: bool) -> Result<(), String> {
+    async fn initialize_schema(&mut self, log_initialization: bool) -> Result<()> {
         let conn = self.get_connection()?;
 
         Self::migrate_chain_identity(&conn)?;
 
         // Create all tables
         conn.execute(SCHEMA_POSITIONS, [])
-            .map_err(|e| format!("Failed to create positions table: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create positions table: {e}"),
+            })?;
 
         conn.execute(SCHEMA_POSITION_STATES, [])
-            .map_err(|e| format!("Failed to create position_states table: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create position_states table: {e}"),
+            })?;
 
         conn.execute(SCHEMA_POSITION_EXITS, [])
-            .map_err(|e| format!("Failed to create position_exits table: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create position_exits table: {e}"),
+            })?;
 
         conn.execute(SCHEMA_POSITION_ENTRIES, [])
-            .map_err(|e| format!("Failed to create position_entries table: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create position_entries table: {e}"),
+            })?;
 
         conn.execute(SCHEMA_POSITION_TRACKING, [])
-            .map_err(|e| format!("Failed to create position_tracking table: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create position_tracking table: {e}"),
+            })?;
 
         conn.execute(SCHEMA_POSITION_METADATA, [])
-            .map_err(|e| format!("Failed to create position_metadata table: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create position_metadata table: {e}"),
+            })?;
 
         conn.execute(SCHEMA_TOKEN_SNAPSHOTS, [])
-            .map_err(|e| format!("Failed to create token_snapshots table: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create token_snapshots table: {e}"),
+            })?;
 
         // Migrate existing database to add PnL fields if needed
         // Check if migration is needed by attempting to add columns
@@ -117,7 +135,9 @@ impl PositionsDatabase {
                         crate::logger::LogTag::Positions,
                         &format!("CRITICAL: Failed to migrate PnL columns: {e}"),
                     );
-                    return Err(format!("Database migration failed: {e}"));
+                    return Err(Error::SchemaMigration {
+                        detail: format!("PnL columns migration failed: {e}"),
+                    });
                 }
             }
         }
@@ -147,7 +167,9 @@ impl PositionsDatabase {
                         crate::logger::LogTag::Positions,
                         &format!("CRITICAL: Failed to migrate archival columns: {e}"),
                     );
-                    return Err(format!("Database migration failed: {e}"));
+                    return Err(Error::SchemaMigration {
+                        detail: format!("archival columns migration failed: {e}"),
+                    });
                 }
             }
         }
@@ -167,7 +189,9 @@ impl PositionsDatabase {
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {
             conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create positions index: {e}"))?;
+                .map_err(|e| Error::SchemaMigration {
+                    detail: format!("failed to create positions index: {e}"),
+                })?;
         }
 
         // Set schema version
@@ -175,7 +199,9 @@ impl PositionsDatabase {
             "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('schema_version', ?1)",
             params![self.schema_version.to_string()],
         )
-        .map_err(|e| format!("Failed to set positions schema version: {e}"))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to set positions schema version: {e}"),
+        })?;
 
         // Run migrations for existing positions (one-time data migration)
         self.run_data_migrations(&conn, log_initialization)?;
@@ -192,7 +218,7 @@ impl PositionsDatabase {
 
     /// Upgrades legacy shared storage in one transaction. Position IDs remain stable so
     /// every state, entry, exit, tracking and snapshot row continues to belong to its root.
-    fn migrate_chain_identity(conn: &Connection) -> Result<(), String> {
+    fn migrate_chain_identity(conn: &Connection) -> Result<()> {
         let has_positions: bool = conn
             .query_row(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='positions'",
@@ -200,7 +226,9 @@ impl PositionsDatabase {
                 |_| Ok(()),
             )
             .optional()
-            .map_err(|e| format!("Failed to inspect positions schema: {e}"))?
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to inspect positions schema: {e}"),
+            })?
             .is_some();
         if !has_positions {
             return Ok(());
@@ -210,9 +238,11 @@ impl PositionsDatabase {
             .and_then(|mut statement| {
                 statement
                     .query_map([], |row| row.get::<_, String>(1))?
-                    .collect::<Result<Vec<_>, _>>()
+                    .collect::<std::result::Result<Vec<_>, _>>()
             })
-            .map_err(|e| format!("Failed to inspect positions identity columns: {e}"))?
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to inspect positions identity columns: {e}"),
+            })?
             .iter()
             .any(|column| column == "chain_id");
         if has_chain {
@@ -220,14 +250,20 @@ impl PositionsDatabase {
         }
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| format!("Failed to begin positions chain migration: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to begin positions chain migration: {e}"),
+            })?;
         tx.execute(
             "ALTER TABLE positions ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
             [],
         )
-        .map_err(|e| format!("Failed to add positions chain identity: {e}"))?;
+        .map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to add positions chain identity: {e}"),
+        })?;
         tx.execute("DROP INDEX IF EXISTS idx_positions_round_key", [])
-            .map_err(|e| format!("Failed to replace legacy round index: {e}"))?;
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to replace legacy round index: {e}"),
+            })?;
         for index in [
             "idx_positions_wallet",
             "idx_positions_mint",
@@ -235,26 +271,35 @@ impl PositionsDatabase {
             "idx_positions_exit_signature",
         ] {
             tx.execute(&format!("DROP INDEX IF EXISTS {index}"), [])
-                .map_err(|e| format!("Failed to replace legacy positions index: {e}"))?;
+                .map_err(|e| Error::SchemaMigration {
+                    detail: format!("failed to replace legacy positions index: {e}"),
+                })?;
         }
         tx.execute(
             "CREATE UNIQUE INDEX idx_positions_round_key ON positions(chain_id, wallet_address, round_key) WHERE round_key IS NOT NULL",
             [],
-        ).map_err(|e| format!("Failed to create chain-qualified round index: {e}"))?;
+        ).map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to create chain-qualified round index: {e}"),
+        })?;
         let violations: i64 = tx
             .query_row("PRAGMA foreign_key_check", [], |_| Ok(1_i64))
             .optional()
-            .map_err(|e| format!("Failed to validate positions foreign keys: {e}"))?
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to validate positions foreign keys: {e}"),
+            })?
             .unwrap_or(0);
         if violations != 0 {
-            return Err("Positions chain migration failed foreign-key validation".to_owned());
+            return Err(Error::SchemaMigration {
+                detail: "positions chain migration failed foreign-key validation".to_owned(),
+            });
         }
-        tx.commit()
-            .map_err(|e| format!("Failed to commit positions chain migration: {e}"))
+        tx.commit().map_err(|e| Error::SchemaMigration {
+            detail: format!("failed to commit positions chain migration: {e}"),
+        })
     }
 
     /// Run data migrations for existing positions
-    fn run_data_migrations(&self, conn: &Connection, log: bool) -> Result<(), String> {
+    fn run_data_migrations(&self, conn: &Connection, log: bool) -> Result<()> {
         // Migration: Initialize remaining_token_amount and average_entry_price for existing open positions
         // This is a one-time migration for positions created before partial sell/DCA support
         let migration_result = conn.execute(
@@ -335,16 +380,17 @@ impl PositionsDatabase {
     }
 
     /// Get database connection from pool
-    pub(crate) fn get_connection(
-        &self,
-    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool
-            .get()
-            .map_err(|e| format!("Failed to get positions database connection: {e}"))
+    pub(crate) fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>> {
+        self.pool.get().map_err(|e| {
+            DatabaseError::Connection {
+                message: format!("failed to get positions database connection: {e}"),
+            }
+            .into()
+        })
     }
 
     /// Insert new position and return the assigned ID
-    pub async fn insert_position(&self, position: &Position) -> Result<i64, String> {
+    pub async fn insert_position(&self, position: &Position) -> Result<i64> {
         logger::debug(
             LogTag::Positions,
             &format!(
@@ -354,7 +400,10 @@ impl PositionsDatabase {
         );
 
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let position_id = conn
             .query_row(
@@ -434,7 +483,10 @@ impl PositionsDatabase {
                 ],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("Failed to insert position: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "insert_position".to_owned(),
+                message: e.to_string(),
+            })?;
 
         // Record initial state as Open
         self.record_state_change(position_id, PositionState::Open, Some("Position created"))
@@ -465,10 +517,12 @@ impl PositionsDatabase {
     }
 
     /// Update existing position by ID
-    pub async fn update_position(&self, position: &Position) -> Result<(), String> {
-        let position_id = position
-            .id
-            .ok_or_else(|| "Cannot update position without ID".to_owned())?;
+    pub async fn update_position(&self, position: &Position) -> Result<()> {
+        let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
+            transition: "update",
+            mint: position.mint.clone(),
+            detail: "position has no id".to_owned(),
+        })?;
 
         logger::debug(
             LogTag::Positions,
@@ -554,10 +608,13 @@ impl PositionsDatabase {
                     self.chain.as_str(),
                 ],
             )
-            .map_err(|e| format!("Failed to update position: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "update_position".to_owned(),
+                message: e.to_string(),
+            })?;
 
         if rows_affected == 0 {
-            return Err(format!("Position with ID {position_id} not found"));
+            return Err(Error::NotFoundById { position_id });
         }
 
         logger::debug(
@@ -585,7 +642,7 @@ impl PositionsDatabase {
         current_price_updated: Option<DateTime<Utc>>,
         price_highest: f64,
         price_lowest: f64,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         logger::debug(
             LogTag::Positions,
             &format!(
@@ -616,13 +673,13 @@ impl PositionsDatabase {
                     self.chain.as_str(),
                 ],
             )
-            .map_err(|e| format!("Failed to update position prices: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "update_position_prices".to_owned(),
+                message: e.to_string(),
+            })?;
 
         if rows_affected == 0 {
-            return Err(format!(
-                "Position with ID {} not found when updating prices",
-                position_id
-            ));
+            return Err(Error::NotFoundById { position_id });
         }
 
         Ok(())
@@ -630,55 +687,67 @@ impl PositionsDatabase {
 
     /// Force database synchronization to ensure all connections see recent writes
     /// This should be called after critical updates to prevent race conditions
-    pub async fn force_sync(&self) -> Result<(), String> {
+    pub async fn force_sync(&self) -> Result<()> {
         let conn = self.get_connection()?;
 
         // Force WAL checkpoint to synchronize all connections
         // Use prepare and query since PRAGMA wal_checkpoint returns results
-        let mut stmt = conn
-            .prepare("PRAGMA wal_checkpoint(FULL);")
-            .map_err(|e| format!("Failed to prepare WAL checkpoint: {e}"))?;
+        let mut stmt =
+            conn.prepare("PRAGMA wal_checkpoint(FULL);")
+                .map_err(|e| Error::Maintenance {
+                    operation: "sync",
+                    detail: format!("failed to prepare WAL checkpoint: {e}"),
+                })?;
 
-        let _result = stmt
-            .query([])
-            .map_err(|e| format!("Failed to execute WAL checkpoint: {e}"))?;
+        let _result = stmt.query([]).map_err(|e| Error::Maintenance {
+            operation: "sync",
+            detail: format!("failed to execute WAL checkpoint: {e}"),
+        })?;
 
         Ok(())
     }
 
     /// Persist a key-value metadata pair via INSERT OR REPLACE
-    pub fn set_metadata_value(&self, key: &str, value: &str) -> Result<(), String> {
+    pub fn set_metadata_value(&self, key: &str, value: &str) -> Result<()> {
         let conn = self.get_connection()?;
 
         conn.execute(
       "INSERT OR REPLACE INTO position_metadata (key, value, updated_at) VALUES (?1, ?2, datetime('now'))",
       params![key, value],
     )
-    .map_err(|e| format!("Failed to persist metadata key {key}: {e}"))?;
+    .map_err(|e| DatabaseError::Query {
+        operation: format!("set_metadata_value({key})"),
+        message: e.to_string(),
+    })?;
 
         Ok(())
     }
 
     /// Fetch a metadata value by key, returning None if not found
-    pub fn get_metadata_value(&self, key: &str) -> Result<Option<String>, String> {
+    pub fn get_metadata_value(&self, key: &str) -> Result<Option<String>> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
             .prepare("SELECT value FROM position_metadata WHERE key = ?1 LIMIT 1")
-            .map_err(|e| format!("Failed to prepare metadata fetch for key {key}: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: format!("get_metadata_value({key})"),
+                message: e.to_string(),
+            })?;
 
-        let mut rows = stmt
-            .query(params![key])
-            .map_err(|e| format!("Failed to query metadata for key {key}: {e}"))?;
+        let mut rows = stmt.query(params![key]).map_err(|e| DatabaseError::Query {
+            operation: format!("get_metadata_value({key})"),
+            message: e.to_string(),
+        })?;
 
-        match rows
-            .next()
-            .map_err(|e| format!("Failed to iterate metadata for key {key}: {e}"))?
-        {
+        match rows.next().map_err(|e| DatabaseError::Query {
+            operation: format!("get_metadata_value({key})"),
+            message: e.to_string(),
+        })? {
             Some(row) => {
-                let value: String = row
-                    .get(0)
-                    .map_err(|e| format!("Failed to decode metadata payload for key {key}: {e}"))?;
+                let value: String = row.get(0).map_err(|e| Error::RowDecode {
+                    column: "value",
+                    detail: e.to_string(),
+                })?;
                 Ok(Some(value))
             }
             None => Ok(None),
@@ -692,7 +761,7 @@ impl PositionsDatabase {
     /// 2. ISO8601 without timezone (e.g. "2026-02-26T08:25:54") → assume UTC
     /// 3. Space-separated without timezone (e.g. "2026-02-26 08:25:54") → assume UTC
     /// 4. Space-separated with fractional seconds (e.g. "2026-02-26 08:25:54.123") → assume UTC
-    fn parse_datetime_lenient(s: &str) -> Result<DateTime<Utc>, String> {
+    fn parse_datetime_lenient(s: &str) -> Result<DateTime<Utc>> {
         // 1. RFC3339
         if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
             return Ok(dt.with_timezone(&Utc));
@@ -718,9 +787,10 @@ impl PositionsDatabase {
             }
         }
 
-        Err(format!(
-            "Failed to parse datetime '{s}' with any known format"
-        ))
+        Err(Error::RowDecode {
+            column: "<datetime>",
+            detail: format!("could not parse datetime '{s}' with any known format"),
+        })
     }
 
     /// Helper function to convert database row to Position struct

@@ -4,6 +4,7 @@ use crate::chains::adapter;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::positions::error::{Error, Result};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -23,15 +24,21 @@ pub async fn add_to_position(
     dca_amount_sol: f64,
     slippage_pct: Option<f64>,
     origin: TradeOrigin,
-) -> Result<String, String> {
+) -> Result<String> {
     // Serialize per-mint DCA operations
     let _lock = acquire_position_lock(token_mint).await;
     // Get position
     let position = crate::positions::state::get_position_by_mint(token_mint)
         .await
-        .ok_or_else(|| format!("No open position found for token: {token_mint}"))?;
+        .ok_or_else(|| Error::NotFound {
+            mint: token_mint.to_owned(),
+        })?;
 
-    let position_id = position.id.ok_or_else(|| "Position has no ID".to_owned())?;
+    let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
+        transition: "dca",
+        mint: token_mint.to_owned(),
+        detail: "position has no id".to_owned(),
+    })?;
 
     // The DCA config governs what the AUTO-TRADER may do on its own — it is not a
     // capability switch for the user. A manual "Add to Position" from the dashboard is
@@ -42,15 +49,19 @@ pub async fn add_to_position(
     if origin == TradeOrigin::Auto {
         let dca_enabled = with_config(|cfg| cfg.trader.dca_enabled);
         if !dca_enabled {
-            return Err("DCA is disabled in configuration".to_owned());
+            return Err(Error::DcaDisabled);
         }
 
         let max_dca_count = with_config(|cfg| cfg.trader.dca_max_count);
         if position.dca_count >= max_dca_count as u32 {
-            return Err(format!(
-                "Maximum DCA count reached: {} (max: {})",
-                position.dca_count, max_dca_count
-            ));
+            return Err(Error::TransitionFailed {
+                transition: "dca",
+                mint: token_mint.to_owned(),
+                detail: format!(
+                    "maximum DCA count reached: {} (max: {})",
+                    position.dca_count, max_dca_count
+                ),
+            });
         }
 
         // Check DCA cooldown
@@ -58,10 +69,14 @@ pub async fn add_to_position(
             let cooldown_minutes = with_config(|cfg| cfg.trader.dca_cooldown_minutes);
             let elapsed = Utc::now().signed_duration_since(last_dca).num_minutes();
             if elapsed < cooldown_minutes {
-                return Err(format!(
-                    "DCA cooldown active: {} minutes remaining",
-                    cooldown_minutes - elapsed
-                ));
+                return Err(Error::TransitionFailed {
+                    transition: "dca",
+                    mint: token_mint.to_owned(),
+                    detail: format!(
+                        "DCA cooldown active: {} minutes remaining",
+                        cooldown_minutes - elapsed
+                    ),
+                });
             }
         }
     }
@@ -93,12 +108,17 @@ pub async fn add_to_position(
     // Get API token for swap
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
+        .map_err(|_| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?
+        .ok_or_else(|| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?;
 
     // Get quote for DCA entry
-    let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
+    let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
+        detail: e.to_string(),
+    })?;
     // Manual override when the user set one in the trade dialog; config default otherwise.
     let slippage = super::slippage::entry_slippage(slippage_pct);
     let quote_request = QuoteRequest {
@@ -113,7 +133,10 @@ pub async fn add_to_position(
     };
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
         .await
-        .map_err(|e| format!("Failed to get DCA quote: {e}"))?;
+        .map_err(|e| Error::SwapFailed {
+            mint: token_mint.to_owned(),
+            detail: format!("DCA quote failed: {e}"),
+        })?;
 
     // Only scale into a UI amount when the decimals are actually known; printing raw
     // units against an assumed 9 decimals misreports the quote by orders of magnitude.
@@ -132,7 +155,10 @@ pub async fn add_to_position(
     // Execute swap
     let swap_result = execute_swap_with_fallback(&api_token, quote)
         .await
-        .map_err(|e| format!("DCA swap failed: {e}"))?;
+        .map_err(|e| Error::SwapFailed {
+            mint: token_mint.to_owned(),
+            detail: format!("DCA swap failed: {e}"),
+        })?;
 
     let transaction_signature = swap_result.transaction_signature.clone();
 
@@ -163,18 +189,16 @@ pub async fn add_to_position(
                     position_id, token_mint, e
                 ),
             );
-            format!("Failed to persist pending DCA metadata: {e}")
+            e
         })?;
 
     // Get price with fallback to API for DCA transition
     let (price_info, _price_source) =
         get_price_with_api_fallback(token_mint)
             .await
-            .ok_or_else(|| {
-                format!(
-                    "No price data for token: {} (checked pool + API)",
-                    token_mint
-                )
+            .ok_or_else(|| Error::InvalidPrice {
+                mint: token_mint.to_owned(),
+                price: 0.0,
             })?;
 
     let transition = crate::positions::transitions::PositionTransition::DcaSubmitted {
@@ -199,7 +223,11 @@ pub async fn add_to_position(
                 err
             })
             .ok();
-        return Err(format!("Failed to apply DCA transition: {e}"));
+        return Err(Error::TransitionFailed {
+            transition: "dca",
+            mint: token_mint.to_owned(),
+            detail: e.to_string(),
+        });
     }
 
     // Enqueue for verification

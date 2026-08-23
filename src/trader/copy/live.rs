@@ -105,7 +105,10 @@ pub async fn sync_open_position_management(task_id: i64, mode: ExitMode) -> Resu
         let position_id = position
             .id
             .ok_or_else(|| format!("Open copy position {} has no database id", position.mint))?;
-        crate::positions::set_position_management_db(position_id, management).await?;
+        // SEAM: trader still returns String errors; removed when it migrates.
+        crate::positions::set_position_management_db(position_id, management)
+            .await
+            .map_err(|e| e.to_string())?;
         if !crate::positions::set_position_management_in_memory(position_id, management).await {
             return Err(format!(
                 "Copy position {position_id} disappeared while updating management"

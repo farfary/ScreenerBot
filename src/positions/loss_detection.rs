@@ -9,6 +9,8 @@ use crate::logger::{self, LogTag};
 use crate::tokens::cleanup;
 use crate::tokens::database::get_global_database;
 
+use super::error::{Error, Result};
+
 // =============================================================================
 // LOSS DETECTION AND BLACKLISTING FUNCTIONS
 // =============================================================================
@@ -27,7 +29,7 @@ use crate::tokens::database::get_global_database;
 /// # Returns
 /// * `Ok(())` - Processing completed successfully
 /// * `Err(String)` - Error during P&L calculation or blacklisting
-pub async fn process_position_loss_detection(position: &Position) -> Result<(), String> {
+pub async fn process_position_loss_detection(position: &Position) -> Result<()> {
     // An imported/wallet-history loss is not the bot's loss and must not blacklist a
     // token the user happened to already be holding at a loss.
     if matches!(position.origin, PositionOrigin::External) {
@@ -114,10 +116,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
                         position.symbol
                     ),
                 );
-                return Err(format!(
-                    "Failed to blacklist token {} after loss",
-                    position.symbol
-                ));
+                return Err(Error::NotInitialised);
             }
         } else {
             logger::info(

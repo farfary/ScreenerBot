@@ -94,7 +94,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
 
     // Convert from database PeriodTradingStats to dashboard TradingPeriodStats
     let convert_stats =
-        |result: Result<positions::PeriodTradingStats, String>| -> TradingPeriodStats {
+        |result: positions::Result<positions::PeriodTradingStats>| -> TradingPeriodStats {
             match result {
                 Ok(stats) => TradingPeriodStats {
                     buys: stats.buys,

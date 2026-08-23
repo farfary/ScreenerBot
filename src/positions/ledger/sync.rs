@@ -647,15 +647,23 @@ fn short_mint(mint: &str) -> String {
 /// Never fails the caller in a way that matters: every step degrades to "sync nothing"
 /// rather than corrupting an existing position. Safe to call repeatedly — a wallet whose
 /// history has not moved produces an empty plan and writes nothing.
-pub async fn sync_wallet_history() -> Result<SyncSummary, String> {
-    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
+    use crate::positions::error::Error;
+
+    let wallet_address =
+        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+            detail: e.to_string(),
+        })?;
 
     let Some(transactions_db) = crate::transactions::database::get_transaction_database().await
     else {
-        return Err("Transaction database is not initialised".to_owned());
+        return Err(Error::NotInitialised);
     };
 
-    let deltas = transactions_db.get_subject_deltas(&wallet_address).await?;
+    let deltas = transactions_db
+        .get_subject_deltas(&wallet_address)
+        .await
+        .map_err(|e| Error::WalletHistorySync { detail: e })?;
     if deltas.is_empty() {
         return Ok(SyncSummary::default());
     }

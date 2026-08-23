@@ -3,13 +3,15 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 
+use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
+use crate::positions::error::{Error, Result};
 
 use super::types::*;
 
 impl PositionsDatabase {
     /// Delete position by ID
-    pub async fn delete_position(&self, id: i64) -> Result<bool, String> {
+    pub async fn delete_position(&self, id: i64) -> Result<bool> {
         let conn = self.get_connection()?;
 
         let rows_affected = conn
@@ -17,7 +19,10 @@ impl PositionsDatabase {
                 "DELETE FROM positions WHERE id = ?1 AND chain_id = ?2",
                 params![id, self.chain.as_str()],
             )
-            .map_err(|e| format!("Failed to delete position: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "delete_position".to_owned(),
+                message: e.to_string(),
+            })?;
 
         Ok(rows_affected > 0)
     }
@@ -29,7 +34,7 @@ impl PositionsDatabase {
     /// Archived tab. `archived_at` is stamped when archiving and cleared when
     /// unarchiving. Deliberately separate from `update_position` so routine
     /// price/state writes never clobber the flag.
-    pub async fn set_position_archived(&self, id: i64, archived: bool) -> Result<bool, String> {
+    pub async fn set_position_archived(&self, id: i64, archived: bool) -> Result<bool> {
         let conn = self.get_connection()?;
 
         let archived_at = if archived {
@@ -43,7 +48,7 @@ impl PositionsDatabase {
                 "UPDATE positions SET archived = ?2, archived_at = ?3, updated_at = datetime('now') WHERE id = ?1 AND chain_id=?4",
                 params![id, archived, archived_at, self.chain.as_str()],
             )
-            .map_err(|e| format!("Failed to set position archived flag: {e}"))?;
+            .map_err(|e| DatabaseError::Query { operation: "set position archived flag".to_owned(), message: e.to_string() })?;
 
         // Force WAL checkpoint so other pooled connections see the change immediately.
         if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
@@ -68,7 +73,7 @@ impl PositionsDatabase {
         &self,
         id: i64,
         management: crate::positions::PositionManagement,
-    ) -> Result<bool, String> {
+    ) -> Result<bool> {
         let conn = self.get_connection()?;
 
         let rows_affected = conn
@@ -76,7 +81,7 @@ impl PositionsDatabase {
                 "UPDATE positions SET management = ?2, updated_at = datetime('now') WHERE id = ?1 AND chain_id=?3",
                 params![id, management.as_str(), self.chain.as_str()],
             )
-            .map_err(|e| format!("Failed to set position management: {e}"))?;
+            .map_err(|e| DatabaseError::Query { operation: "set position management".to_owned(), message: e.to_string() })?;
 
         // Force WAL checkpoint so other pooled connections see the change immediately.
         if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
@@ -97,7 +102,7 @@ impl PositionsDatabase {
     ///
     /// Cascades only to this position's own child rows (states, exits, entries,
     /// tracking, snapshots) via `ON DELETE CASCADE`. Transactions/tokens untouched.
-    pub async fn delete_archived_positions(&self) -> Result<usize, String> {
+    pub async fn delete_archived_positions(&self) -> Result<usize> {
         let conn = self.get_connection()?;
 
         let rows_affected = conn
@@ -105,7 +110,10 @@ impl PositionsDatabase {
                 "DELETE FROM positions WHERE archived = 1 AND chain_id=?1",
                 params![self.chain.as_str()],
             )
-            .map_err(|e| format!("Failed to delete archived positions: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "delete archived positions".to_owned(),
+                message: e.to_string(),
+            })?;
 
         if rows_affected > 0 {
             logger::info(
@@ -118,10 +126,7 @@ impl PositionsDatabase {
     }
 
     /// Delete position by entry signature
-    pub async fn delete_position_by_entry_signature(
-        &self,
-        signature: &str,
-    ) -> Result<bool, String> {
+    pub async fn delete_position_by_entry_signature(&self, signature: &str) -> Result<bool> {
         let conn = self.get_connection()?;
 
         let rows_affected = conn
@@ -129,7 +134,10 @@ impl PositionsDatabase {
                 "DELETE FROM positions WHERE entry_transaction_signature = ?1 AND chain_id=?2",
                 params![signature, self.chain.as_str()],
             )
-            .map_err(|e| format!("Failed to delete position by entry signature: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "delete position by entry signature".to_owned(),
+                message: e.to_string(),
+            })?;
 
         if rows_affected > 0 {
             logger::info(
@@ -147,7 +155,7 @@ impl PositionsDatabase {
         position_id: i64,
         state: PositionState,
         reason: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let changed_at = Utc::now().to_rfc3339();
 
         logger::debug(
@@ -167,7 +175,7 @@ impl PositionsDatabase {
       "INSERT INTO position_states (position_id, state, changed_at, reason) VALUES (?1, ?2, ?3, ?4)",
       params![position_id, state.to_string(), changed_at, reason],
     )
-    .map_err(|e| format!("Failed to record state change: {e}"))?;
+    .map_err(|e| DatabaseError::Query { operation: "record state change".to_owned(), message: e.to_string() })?;
 
         logger::debug(
             LogTag::Positions,
@@ -184,14 +192,14 @@ impl PositionsDatabase {
     pub async fn get_position_state_history(
         &self,
         position_id: i64,
-    ) -> Result<Vec<PositionStateHistory>, String> {
+    ) -> Result<Vec<PositionStateHistory>> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
       .prepare(
         "SELECT position_id, state, changed_at, reason FROM position_states WHERE position_id = ?1 ORDER BY changed_at DESC"
       )
-      .map_err(|e| format!("Failed to prepare state history query: {e}"))?;
+      .map_err(|e| DatabaseError::Query { operation: "prepare state history query".to_owned(), message: e.to_string() })?;
 
         let history_iter = stmt
             .query_map(params![position_id], |row| {
@@ -222,23 +230,24 @@ impl PositionsDatabase {
                     reason: row.get(3)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute state history query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute state history query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut history = Vec::new();
         for history_result in history_iter {
-            history.push(
-                history_result.map_err(|e| format!("Failed to parse state history row: {e}"))?,
-            );
+            history.push(history_result.map_err(|e| DatabaseError::Query {
+                operation: "parse state history row".to_owned(),
+                message: e.to_string(),
+            })?);
         }
 
         Ok(history)
     }
 
     /// Record position tracking data
-    pub async fn record_position_tracking(
-        &self,
-        tracking: &PositionTracking,
-    ) -> Result<(), String> {
+    pub async fn record_position_tracking(&self, tracking: &PositionTracking) -> Result<()> {
         let conn = self.get_connection()?;
 
         conn
@@ -257,7 +266,7 @@ impl PositionsDatabase {
           tracking.tracked_at.to_rfc3339()
         ]
       )
-      .map_err(|e| format!("Failed to record position tracking: {e}"))?;
+      .map_err(|e| DatabaseError::Query { operation: "record position tracking".to_owned(), message: e.to_string() })?;
 
         Ok(())
     }
@@ -267,7 +276,7 @@ impl PositionsDatabase {
         &self,
         position_id: i64,
         limit: usize,
-    ) -> Result<Vec<PositionTracking>, String> {
+    ) -> Result<Vec<PositionTracking>> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -280,7 +289,10 @@ impl PositionsDatabase {
       LIMIT ?2
       "#,
             )
-            .map_err(|e| format!("Failed to prepare tracking query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare tracking query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let tracking_iter = stmt
             .query_map(params![position_id, limit], |row| {
@@ -305,21 +317,29 @@ impl PositionsDatabase {
                     tracked_at,
                 })
             })
-            .map_err(|e| format!("Failed to execute tracking query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute tracking query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut tracking_data = Vec::new();
         for tracking_result in tracking_iter {
-            tracking_data
-                .push(tracking_result.map_err(|e| format!("Failed to parse tracking row: {e}"))?);
+            tracking_data.push(tracking_result.map_err(|e| DatabaseError::Query {
+                operation: "parse tracking row".to_owned(),
+                message: e.to_string(),
+            })?);
         }
 
         Ok(tracking_data)
     }
 
     /// Get database statistics
-    pub async fn get_database_stats(&self) -> Result<PositionsDatabaseStats, String> {
+    pub async fn get_database_stats(&self) -> Result<PositionsDatabaseStats> {
         let conn = self.get_connection()?;
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        let wallet_address =
+            crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                detail: e.to_string(),
+            })?;
 
         let total_positions: i64 = conn
             .query_row(
@@ -327,7 +347,10 @@ impl PositionsDatabase {
                 params![wallet_address, self.chain.as_str()],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count total positions: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "count total positions".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let open_positions: i64 = conn
       .query_row(
@@ -335,7 +358,7 @@ impl PositionsDatabase {
         params![wallet_address, self.chain.as_str()],
         |row| row.get(0),
       )
-      .map_err(|e| format!("Failed to count open positions: {e}"))?;
+      .map_err(|e| DatabaseError::Query { operation: "count open positions".to_owned(), message: e.to_string() })?;
 
         let closed_positions: i64 = conn
       .query_row(
@@ -343,7 +366,7 @@ impl PositionsDatabase {
         params![wallet_address, self.chain.as_str()],
         |row| row.get(0),
       )
-      .map_err(|e| format!("Failed to count closed positions: {e}"))?;
+      .map_err(|e| DatabaseError::Query { operation: "count closed positions".to_owned(), message: e.to_string() })?;
 
         let phantom_positions: i64 = conn
       .query_row(
@@ -351,7 +374,7 @@ impl PositionsDatabase {
         params![wallet_address, self.chain.as_str()],
         |row| row.get(0),
       )
-      .map_err(|e| format!("Failed to count phantom positions: {e}"))?;
+      .map_err(|e| DatabaseError::Query { operation: "count phantom positions".to_owned(), message: e.to_string() })?;
 
         let total_state_history: i64 = conn
             .query_row(
@@ -359,7 +382,10 @@ impl PositionsDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count state history: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "count state history".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let total_tracking_records: i64 = conn
             .query_row(
@@ -367,7 +393,10 @@ impl PositionsDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count tracking records: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "count tracking records".to_owned(),
+                message: e.to_string(),
+            })?;
 
         // Get database file size
         let database_size = std::fs::metadata(&self.database_path)
@@ -387,7 +416,7 @@ impl PositionsDatabase {
     }
 
     /// Vacuum database to reclaim space and optimize performance
-    pub async fn vacuum_database(&self) -> Result<(), String> {
+    pub async fn vacuum_database(&self) -> Result<()> {
         logger::info(
             LogTag::Positions,
             "Starting positions database vacuum operation...",
@@ -395,7 +424,10 @@ impl PositionsDatabase {
 
         let conn = self.get_connection()?;
         conn.execute("VACUUM", [])
-            .map_err(|e| format!("Failed to vacuum positions database: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "vacuum positions database".to_owned(),
+                message: e.to_string(),
+            })?;
 
         logger::info(
             LogTag::Positions,
@@ -405,7 +437,7 @@ impl PositionsDatabase {
     }
 
     /// Analyze database for query optimization
-    pub async fn analyze_database(&self) -> Result<(), String> {
+    pub async fn analyze_database(&self) -> Result<()> {
         logger::info(
             LogTag::Positions,
             "Running positions database analysis for optimization...",
@@ -413,7 +445,10 @@ impl PositionsDatabase {
 
         let conn = self.get_connection()?;
         conn.execute("ANALYZE", [])
-            .map_err(|e| format!("Failed to analyze positions database: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "analyze positions database".to_owned(),
+                message: e.to_string(),
+            })?;
 
         logger::info(
             LogTag::Positions,
@@ -423,7 +458,7 @@ impl PositionsDatabase {
     }
 
     /// Save token snapshot to database
-    pub async fn save_token_snapshot(&self, snapshot: &TokenSnapshot) -> Result<i64, String> {
+    pub async fn save_token_snapshot(&self, snapshot: &TokenSnapshot) -> Result<i64> {
         logger::debug(
             LogTag::Positions,
             &format!(
@@ -500,7 +535,7 @@ impl PositionsDatabase {
           snapshot.data_freshness_score
         ]
       )
-      .map_err(|e| format!("Failed to insert token snapshot: {e}"))?;
+      .map_err(|e| DatabaseError::Query { operation: "insert token snapshot".to_owned(), message: e.to_string() })?;
 
         let snapshot_id = conn.last_insert_rowid();
 
@@ -516,10 +551,7 @@ impl PositionsDatabase {
     }
 
     /// Get token snapshots for a position
-    pub async fn get_token_snapshots(
-        &self,
-        position_id: i64,
-    ) -> Result<Vec<TokenSnapshot>, String> {
+    pub async fn get_token_snapshots(&self, position_id: i64) -> Result<Vec<TokenSnapshot>> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -539,17 +571,24 @@ impl PositionsDatabase {
       ORDER BY snapshot_time ASC
       "#,
             )
-            .map_err(|e| format!("Failed to prepare token snapshots query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare token snapshots query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let snapshot_iter = stmt
             .query_map(params![position_id], |row| self.row_to_token_snapshot(row))
-            .map_err(|e| format!("Failed to execute token snapshots query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute token snapshots query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
-            snapshots.push(
-                snapshot_result.map_err(|e| format!("Failed to parse token snapshot row: {e}"))?,
-            );
+            snapshots.push(snapshot_result.map_err(|e| DatabaseError::Query {
+                operation: "parse token snapshot row".to_owned(),
+                message: e.to_string(),
+            })?);
         }
 
         Ok(snapshots)
@@ -560,7 +599,7 @@ impl PositionsDatabase {
         &self,
         position_id: i64,
         snapshot_type: &str,
-    ) -> Result<Option<TokenSnapshot>, String> {
+    ) -> Result<Option<TokenSnapshot>> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -581,14 +620,20 @@ impl PositionsDatabase {
       LIMIT 1
       "#,
             )
-            .map_err(|e| format!("Failed to prepare token snapshot query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "prepare token snapshot query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         let result = stmt
             .query_row(params![position_id, snapshot_type], |row| {
                 self.row_to_token_snapshot(row)
             })
             .optional()
-            .map_err(|e| format!("Failed to execute token snapshot query: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "execute token snapshot query".to_owned(),
+                message: e.to_string(),
+            })?;
 
         Ok(result)
     }

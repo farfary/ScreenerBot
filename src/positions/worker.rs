@@ -16,6 +16,7 @@ use super::{
 };
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
+use crate::positions::error::Result;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
@@ -27,13 +28,11 @@ use tokio::{
 const VERIFICATION_BATCH_SIZE: usize = 10;
 
 /// Initialize positions system
-pub async fn initialize_positions_system() -> Result<(), String> {
+pub async fn initialize_positions_system() -> Result<()> {
     logger::info(LogTag::Positions, "Initializing positions system");
 
     // Initialize database
-    initialize_positions_database()
-        .await
-        .map_err(|e| format!("Failed to initialize positions database: {e}"))?;
+    initialize_positions_database().await?;
 
     // Load existing positions from database
     match crate::positions::load_all_positions().await {
@@ -216,7 +215,7 @@ pub async fn initialize_positions_system() -> Result<(), String> {
 pub async fn start_positions_manager_service(
     shutdown: Arc<Notify>,
     monitor: tokio_metrics::TaskMonitor,
-) -> Result<tokio::task::JoinHandle<()>, String> {
+) -> Result<tokio::task::JoinHandle<()>> {
     logger::info(
         LogTag::Positions,
         "Starting positions manager service (instrumented)",
@@ -607,7 +606,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                "duration_ms": timer.elapsed().as_millis() as u64,
                                "started_at": started_at.to_rfc3339(),
                                "result": "apply_error",
-                               "error": e,
+                               "error": e.to_string(),
                                "position_id": item.position_id
                              }),
                            ).await;

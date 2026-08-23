@@ -4,6 +4,7 @@ use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_total_token_balance;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
+use crate::positions::error::{Error, Result};
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_position_lock, add_signature_to_index, clear_pending_partial_exit,
@@ -38,16 +39,16 @@ pub async fn partial_close_position(
     exit_percentage: f64,
     exit_reason: &str,
     slippage_pct: Option<f64>,
-) -> Result<String, String> {
+) -> Result<String> {
     // Serialize per-mint operations to avoid overlapping partials/full exits
     let _lock = acquire_position_lock(token_mint).await;
 
     // Validate percentage
     if exit_percentage <= 0.0 || exit_percentage >= 100.0 {
-        return Err(format!(
-            "Invalid exit percentage: {}. Must be between 0 and 100 (exclusive)",
-            exit_percentage
-        ));
+        return Err(Error::InvalidExitPercentage {
+            percent: exit_percentage,
+            reason: "must be between 0 and 100 (exclusive)".to_owned(),
+        });
     }
 
     // Refuse to overlap two partial exits. The per-mint lock above only covers the
@@ -57,24 +58,35 @@ pub async fn partial_close_position(
     // — sized its percentage against a remaining amount the first exit had already sold,
     // and the position was oversold.
     if crate::positions::state::is_partial_exit_pending(token_mint).await {
-        return Err(
-            "A partial exit is already in flight for this position - wait for it to confirm"
-                .to_owned(),
-        );
+        return Err(Error::TransitionFailed {
+            transition: "partial_exit",
+            mint: token_mint.to_owned(),
+            detail: "a partial exit is already in flight for this position".to_owned(),
+        });
     }
 
     // Get position
     let position = crate::positions::state::get_position_by_mint(token_mint)
         .await
-        .ok_or_else(|| format!("No open position found for token: {token_mint}"))?;
+        .ok_or_else(|| Error::NotFound {
+            mint: token_mint.to_owned(),
+        })?;
 
-    let position_id = position.id.ok_or_else(|| "Position has no ID".to_owned())?;
+    let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
+        transition: "partial_exit",
+        mint: token_mint.to_owned(),
+        detail: "position has no id".to_owned(),
+    })?;
 
     // Get remaining token amount
     let remaining_amount = position
         .remaining_token_amount
         .or(position.token_amount)
-        .ok_or_else(|| "Position has no token amount".to_owned())?;
+        .ok_or_else(|| Error::TransitionFailed {
+            transition: "partial_exit",
+            mint: token_mint.to_owned(),
+            detail: "position has no token amount".to_owned(),
+        })?;
 
     // Size against what the WALLET actually holds, not only what the position believes.
     // The quote preview (`/api/trader/quote`) already prices the percentage against the
@@ -82,8 +94,9 @@ pub async fn partial_close_position(
     // the trade disagree whenever the two drifted — and a DB amount larger than the real
     // balance simply failed the swap with insufficient funds. Take the LOWER of the two:
     // never sell more than the wallet has, never more than the position owns.
-    let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
+    let wallet_address = get_wallet_address().map_err(|e| Error::WalletUnavailable {
+        detail: e.to_string(),
+    })?;
 
     let sell_base = match get_total_token_balance(&wallet_address, token_mint).await {
         Ok(on_chain) if on_chain > 0 => {
@@ -107,7 +120,9 @@ pub async fn partial_close_position(
     let exit_amount = calculate_partial_amount(sell_base, exit_percentage);
 
     if exit_amount == 0 {
-        return Err("Calculated exit amount is zero".to_owned());
+        return Err(Error::ZeroExitAmount {
+            mint: token_mint.to_owned(),
+        });
     }
 
     logger::info(
@@ -135,8 +150,12 @@ pub async fn partial_close_position(
     // Get API token for swap
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
-        .map_err(|e| format!("Failed to get token: {e}"))?
-        .ok_or_else(|| format!("Token not found: {token_mint}"))?;
+        .map_err(|_| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?
+        .ok_or_else(|| Error::TokenNotFound {
+            mint: token_mint.to_owned(),
+        })?;
 
     // Manual override starts the ladder; configured steps above it still escalate.
     let slippage_exit_retry_steps = super::slippage::exit_slippage_ladder(slippage_pct);
@@ -300,10 +319,10 @@ pub async fn partial_close_position(
             )
             .await;
 
-            return Err(format!(
-                "Partial exit swap failed: {}",
-                last_err.unwrap_or_else(|| "no route".to_owned())
-            ));
+            return Err(Error::SwapFailed {
+                mint: token_mint.to_owned(),
+                detail: last_err.unwrap_or_else(|| "no route".to_owned()),
+            });
         }
     };
 
@@ -332,10 +351,7 @@ pub async fn partial_close_position(
                 position_id, token_mint, e
             ),
         );
-        return Err(format!(
-            "Failed to persist pending partial exit metadata: {}",
-            e
-        ));
+        return Err(e);
     }
 
     // A partial exit must NOT be written to `position.exit_transaction_signature`.
@@ -384,7 +400,11 @@ pub async fn partial_close_position(
             );
         }
         crate::positions::state::clear_partial_exit_pending(token_mint).await;
-        return Err(format!("Failed to apply partial exit transition: {e}"));
+        return Err(Error::TransitionFailed {
+            transition: "partial_exit",
+            mint: token_mint.to_owned(),
+            detail: e.to_string(),
+        });
     }
 
     // Enqueue for verification with partial exit flag

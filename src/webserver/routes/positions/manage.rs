@@ -92,7 +92,7 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "ARCHIVE_FAILED",
             "Failed to archive position",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
     positions::set_position_archived_in_memory(position_id, true).await;
@@ -147,7 +147,7 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
             StatusCode::INTERNAL_SERVER_ERROR,
             "UNARCHIVE_FAILED",
             "Failed to unarchive position",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
     positions::set_position_archived_in_memory(position_id, false).await;
@@ -221,7 +221,7 @@ pub(super) async fn set_management(
             StatusCode::INTERNAL_SERVER_ERROR,
             "MANAGEMENT_FAILED",
             "Failed to update position management",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
     positions::set_position_management_in_memory(position_id, req.management).await;
@@ -282,7 +282,7 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DELETE_FAILED",
                 "Failed to delete position",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     }
@@ -331,7 +331,7 @@ pub(super) async fn delete_all_archived() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "BULK_DELETE_FAILED",
                 "Failed to delete archived positions",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };

@@ -11,6 +11,9 @@ use crate::rpc::errors::RpcError;
 /// This is re-exported as `crate::Error` for ergonomic usage across the codebase.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
+    /// Position lifecycle errors (open/close/DCA/verification).
+    #[error(transparent)]
+    Positions(#[from] crate::positions::Error),
 
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
