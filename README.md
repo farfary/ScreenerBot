@@ -175,7 +175,7 @@ priority-based startup, readiness gates, health monitoring, and reverse-order sh
 ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
 │   AI Assistant   │ │ Telegram Service │ │   SOL Price      │ │  Update Checker  │
 ├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
-│ • 10 LLM provid. │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
+│ • 9 LLM provid.  │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
 │ • Tool-calling   │ │ • Bot commands   │ │ • 30s refresh    │ │ • Auto-notify    │
 │ • Scheduled tasks│ │ • Inline actions │ │ • USD conversion │ │ • Release notes  │
 └──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
@@ -402,8 +402,8 @@ Multi-provider LLM integration for intelligent analysis and automated tasks. All
 
 ### Providers
 
-Supports 10 providers: OpenAI, Anthropic, Groq, DeepSeek, Gemini, Ollama, Together AI, OpenRouter,
-Mistral, and GitHub Copilot.
+Supports 9 providers: OpenAI, Anthropic, Groq, DeepSeek, Gemini, Ollama, Together AI, OpenRouter,
+and Mistral.
 
 ### Features
 
@@ -609,7 +609,7 @@ platform dependencies, package outputs, and cross-compilation instructions.
 ```
 src/
 ├── actions/        # Operation progress tracking with SSE broadcasting
-├── ai/             # AI assistant (10 LLM providers, chat, automation)
+├── ai/             # AI assistant (9 LLM providers, chat, automation)
 ├── apis/           # External API clients (DexScreener, Jupiter, Rugcheck, LLM)
 ├── config/         # Macro-driven configuration system with hot-reload
 ├── connectivity/   # Endpoint health monitoring with fallback strategies
