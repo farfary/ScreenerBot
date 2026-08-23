@@ -2,28 +2,19 @@
 //!
 //! Keep errors `Clone` by storing messages as strings.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum IoError {
+    #[error("not found: {message}")]
     NotFound { message: String },
+    #[error("permission denied: {message}")]
     PermissionDenied { message: String },
+    #[error("already exists: {message}")]
     AlreadyExists { message: String },
+    #[error("invalid input: {message}")]
     InvalidInput { message: String },
+    #[error("{message}")]
     Generic { message: String },
 }
-
-impl std::fmt::Display for IoError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IoError::NotFound { message } => write!(f, "Not found: {message}"),
-            IoError::PermissionDenied { message } => write!(f, "Permission denied: {message}"),
-            IoError::AlreadyExists { message } => write!(f, "Already exists: {message}"),
-            IoError::InvalidInput { message } => write!(f, "Invalid input: {message}"),
-            IoError::Generic { message } => write!(f, "{message}"),
-        }
-    }
-}
-
-impl std::error::Error for IoError {}
 
 impl From<std::io::Error> for IoError {
     fn from(err: std::io::Error) -> Self {

@@ -40,8 +40,6 @@ pub enum StartupErrorCode {
     LockHeld,
     /// `config.toml` exists but could not be read or parsed.
     ConfigInvalid,
-    /// Required data/log directories could not be created.
-    DirectorySetup,
     /// Any other fatal startup failure without a dedicated remedy.
     Generic,
 }
@@ -54,7 +52,6 @@ impl StartupErrorCode {
             StartupErrorCode::PortInUse => "port_in_use",
             StartupErrorCode::LockHeld => "lock_held",
             StartupErrorCode::ConfigInvalid => "config_invalid",
-            StartupErrorCode::DirectorySetup => "directory_setup",
             StartupErrorCode::Generic => "generic",
         }
     }

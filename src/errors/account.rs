@@ -8,56 +8,30 @@
 //! `Refused` carries the SERVER'S sentence rather than one composed here, so
 //! the app and the website say the same thing about the same problem.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum AccountError {
     /// The server declined the sign-in and explained why.
-    Refused {
-        message: String,
-    },
+    #[error("{message}")]
+    Refused { message: String },
 
     /// An operation needed an account and there is none.
+    #[error("not signed in to a ScreenerBot account")]
     NotSignedIn,
 
     /// The stored session no longer works — revoked, expired, or rotated out
     /// from under us. The user must sign in again; nothing is retryable.
+    #[error("your ScreenerBot session has ended. Sign in again from Settings.")]
     SessionEnded,
 
     /// A response arrived but did not mean anything we understand. Almost
     /// always an old binary against a newer server, or a captive portal.
-    UnexpectedResponse {
-        message: String,
-    },
+    #[error("unexpected response from screenerbot.io: {message}")]
+    UnexpectedResponse { message: String },
 
     /// Local storage of the session failed.
-    Storage {
-        message: String,
-    },
+    #[error("could not save the ScreenerBot session: {message}")]
+    Storage { message: String },
 
-    Generic {
-        message: String,
-    },
+    #[error("{message}")]
+    Generic { message: String },
 }
-
-impl std::fmt::Display for AccountError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AccountError::Refused { message } => write!(f, "{message}"),
-            AccountError::NotSignedIn => {
-                write!(f, "Not signed in to a ScreenerBot account")
-            }
-            AccountError::SessionEnded => write!(
-                f,
-                "Your ScreenerBot session has ended. Sign in again from Settings."
-            ),
-            AccountError::UnexpectedResponse { message } => {
-                write!(f, "Unexpected response from screenerbot.io: {message}")
-            }
-            AccountError::Storage { message } => {
-                write!(f, "Could not save the ScreenerBot session: {message}")
-            }
-            AccountError::Generic { message } => write!(f, "{message}"),
-        }
-    }
-}
-
-impl std::error::Error for AccountError {}

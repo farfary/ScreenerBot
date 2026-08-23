@@ -1,42 +1,17 @@
 //! Data processing errors — parsing, transformation, and validation failures.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum DataError {
-    ParseError {
-        data_type: String,
-        error: String,
-    },
+    #[error("failed to parse {data_type}: {error}")]
+    ParseError { data_type: String, error: String },
+    #[error("invalid value for field '{field}' ({value}): {reason}")]
     ValidationError {
         field: String,
         value: String,
         reason: String,
     },
-    InvalidFormat {
-        expected: String,
-        received: String,
-    },
-    InvalidAmount {
-        amount: String,
-        reason: String,
-    },
-    Generic {
-        message: String,
-    },
+    #[error("expected {expected}, received {received}")]
+    InvalidFormat { expected: String, received: String },
+    #[error("invalid amount '{amount}': {reason}")]
+    InvalidAmount { amount: String, reason: String },
 }
-
-impl std::fmt::Display for DataError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DataError::ParseError { data_type, error } => {
-                write!(f, "Failed to parse {data_type}: {error}")
-            }
-            DataError::InvalidAmount { amount, reason } => {
-                write!(f, "Invalid amount '{amount}': {reason}")
-            }
-            DataError::Generic { message } => write!(f, "{message}"),
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
-
-impl std::error::Error for DataError {}

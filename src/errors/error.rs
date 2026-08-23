@@ -2,79 +2,63 @@
 
 use super::{
     AccountError, BlockchainError, ConfigurationError, DataError, DatabaseError, InternalError,
-    IoError, NetworkError, PositionError, RateLimitError, RpcProviderError, ServiceError,
+    IoError, NetworkError, RpcProviderError, ServiceError,
 };
 use crate::rpc::errors::RpcError;
 
 /// Top-level error type for ScreenerBot.
 ///
 /// This is re-exported as `crate::Error` for ergonomic usage across the codebase.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
-    // ScreenerBot account / sign-in errors
-    Account(AccountError),
 
-    // Blockchain & Solana specific errors
-    Blockchain(BlockchainError),
+    /// ScreenerBot account / sign-in errors.
+    #[error(transparent)]
+    Account(#[from] AccountError),
 
-    // Network connectivity errors
-    Network(NetworkError),
+    /// Blockchain & Solana specific errors.
+    #[error(transparent)]
+    Blockchain(#[from] BlockchainError),
 
-    // RPC client operation errors
-    Rpc(RpcError),
+    /// Network connectivity errors.
+    #[error(transparent)]
+    Network(#[from] NetworkError),
 
-    // RPC provider issues
-    RpcProvider(RpcProviderError),
+    /// RPC client operation errors.
+    #[error(transparent)]
+    Rpc(#[from] RpcError),
 
-    // Database errors (rusqlite/r2d2, schema, migrations)
-    Database(DatabaseError),
+    /// RPC provider issues.
+    #[error(transparent)]
+    RpcProvider(#[from] RpcProviderError),
 
-    // Service lifecycle errors (startup/shutdown/deps)
-    Service(ServiceError),
+    /// Database errors (rusqlite/r2d2, schema, migrations).
+    #[error(transparent)]
+    Database(#[from] DatabaseError),
 
-    // Filesystem / OS I/O errors
-    Io(IoError),
+    /// Service lifecycle errors (startup/shutdown/deps).
+    #[error(transparent)]
+    Service(#[from] ServiceError),
 
-    // Invariants, task join failures, cancellation/timeouts, etc.
-    Internal(InternalError),
+    /// Filesystem / OS I/O errors.
+    #[error(transparent)]
+    Io(#[from] IoError),
 
-    // Configuration errors
-    Configuration(ConfigurationError),
+    /// Invariants, task join failures, cancellation/timeouts, etc.
+    #[error(transparent)]
+    Internal(#[from] InternalError),
 
-    // Data parsing & validation errors
-    Data(DataError),
+    /// Configuration errors.
+    #[error(transparent)]
+    Configuration(#[from] ConfigurationError),
 
-    // Position management errors
-    Position(PositionError),
-
-    // Rate limiting errors
-    RateLimit(RateLimitError),
+    /// Data parsing & validation errors.
+    #[error(transparent)]
+    Data(#[from] DataError),
 }
 
 /// Convenient result type for ScreenerBot core code.
 pub type Result<T> = std::result::Result<T, Error>;
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Account(e) => write!(f, "Account Error: {e}"),
-            Error::Blockchain(e) => write!(f, "Blockchain Error: {e}"),
-            Error::Network(e) => write!(f, "Network Error: {e}"),
-            Error::Rpc(e) => write!(f, "RPC Error: {e}"),
-            Error::RpcProvider(e) => write!(f, "RPC Provider Error: {e}"),
-            Error::Database(e) => write!(f, "Database Error: {e}"),
-            Error::Service(e) => write!(f, "Service Error: {e}"),
-            Error::Io(e) => write!(f, "IO Error: {e}"),
-            Error::Internal(e) => write!(f, "Internal Error: {e}"),
-            Error::Configuration(e) => write!(f, "Configuration Error: {e}"),
-            Error::Data(e) => write!(f, "Data Error: {e}"),
-            Error::Position(e) => write!(f, "Position Error: {e}"),
-            Error::RateLimit(e) => write!(f, "Rate Limit Error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 // =============================================================================
 // Conversions from standard library and external types
@@ -124,12 +108,6 @@ impl From<tokio::task::JoinError> for Error {
 impl From<tokio::time::error::Elapsed> for Error {
     fn from(err: tokio::time::error::Elapsed) -> Self {
         Error::Internal(InternalError::from(err))
-    }
-}
-
-impl From<RpcError> for Error {
-    fn from(err: RpcError) -> Self {
-        Error::Rpc(err)
     }
 }
 

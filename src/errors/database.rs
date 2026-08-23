@@ -2,34 +2,15 @@
 //!
 //! Note: Keep errors `Clone` by storing messages as strings (do not store raw rusqlite errors).
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum DatabaseError {
+    #[error("database connection error: {message}")]
     Connection { message: String },
+    #[error("sqlite error: {message}")]
     Sqlite { message: String },
-    Migration { message: String },
+    #[error("database query error (op={operation}): {message}")]
     Query { operation: String, message: String },
-    Generic { message: String },
 }
-
-impl std::fmt::Display for DatabaseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DatabaseError::Connection { message } => {
-                write!(f, "Database connection error: {message}")
-            }
-            DatabaseError::Sqlite { message } => write!(f, "SQLite error: {message}"),
-            DatabaseError::Migration { message } => {
-                write!(f, "Database migration error: {message}")
-            }
-            DatabaseError::Query { operation, message } => {
-                write!(f, "Database query error (op={operation}): {message}")
-            }
-            DatabaseError::Generic { message } => write!(f, "{message}"),
-        }
-    }
-}
-
-impl std::error::Error for DatabaseError {}
 
 impl From<rusqlite::Error> for DatabaseError {
     fn from(err: rusqlite::Error) -> Self {

@@ -463,7 +463,7 @@ mod submitted_timeout_tests {
 fn is_retryable_error(error: &Error) -> bool {
     match error {
         Error::Rpc(e) => e.is_retryable(),
-        Error::Network(_) | Error::RpcProvider(_) | Error::RateLimit(_) => true,
+        Error::Network(_) | Error::RpcProvider(_) => true,
         _ => false,
     }
 }

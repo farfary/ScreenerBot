@@ -919,3 +919,191 @@ fn chain_parameter_values_have_exactly_one_owning_const() {
         violations.join("\n")
     );
 }
+
+// =============================================================================
+// Error-architecture migration ratchet (see the migration contract).
+// =============================================================================
+
+/// Top-level module directories under `src/` that have finished migrating off
+/// stringly-typed errors onto their own `error.rs`. Each migration task
+/// appends its module here — this list may only ever grow.
+const MIGRATED_TO_TYPED_ERRORS: &[&str] = &["ohlcvs", "swaps"];
+
+/// True when `line` declares a two-parameter `Result<_, String>` — a signature
+/// that still flattens its error channel to a bare `String` instead of a real
+/// type.
+///
+/// A one-parameter `Result<String>` is deliberately NOT a violation: through a
+/// module's own `Result<T>` alias it means the *success* value is a `String`
+/// (a signature, a mint address), and `std::result::Result` cannot be spelled
+/// with a single parameter at all. Only the error half counts. Angle-bracket
+/// depth is tracked so a nested `Result<Vec<String>, String>` is still caught.
+fn contains_result_of_string(line: &str) -> bool {
+    let mut haystack = line;
+    while let Some((_, after)) = haystack.split_once("Result<") {
+        let mut depth = 1usize;
+        let mut params: Vec<&str> = Vec::new();
+        let mut param_start = 0usize;
+        let mut closed = false;
+        for (idx, ch) in after.char_indices() {
+            match ch {
+                '<' => depth += 1,
+                '>' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        params.push(&after[param_start..idx]);
+                        closed = true;
+                        break;
+                    }
+                }
+                ',' if depth == 1 => {
+                    params.push(&after[param_start..idx]);
+                    param_start = idx + 1;
+                }
+                _ => {}
+            }
+        }
+        if closed && params.len() == 2 && params[1].trim() == "String" {
+            return true;
+        }
+        haystack = after;
+    }
+    false
+}
+
+/// **The ratchet.** Once a module is listed in [`MIGRATED_TO_TYPED_ERRORS`],
+/// its production code may never again return a bare `Result<_, String>`.
+#[test]
+fn migrated_modules_never_return_string_errors() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        let top_level = path_str.split('/').next().unwrap_or("");
+        if !MIGRATED_TO_TYPED_ERRORS.contains(&top_level) {
+            continue;
+        }
+        let production = production_text(&contents);
+        for (idx, line) in production.lines().enumerate() {
+            if contains_result_of_string(line) {
+                violations.push(format!("src/{path_str}:{}: {}", idx + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "migrated modules must not return Result<_, String> — define the module's own \
+         error type in src/<module>/error.rs and return that instead (never re-add the \
+         module to MIGRATED_TO_TYPED_ERRORS to make this pass):\n{}",
+        violations.join("\n")
+    );
+}
+
+/// Exact current violators of [`error_types_live_in_their_module`], scanned by
+/// hand against today's tree. Entries are removed as each module migrates to
+/// its own `src/<module>/error.rs`; this list may only ever shrink.
+const PENDING_RELOCATION: &[&str] = &[
+    "pools/types.rs",
+    "apis/llm/types.rs",
+    "ohlcvs/types.rs",
+    "trader/controller.rs",
+    "ai/types.rs",
+    "rpc/errors.rs",
+    "tokens/types.rs",
+];
+
+/// A `pub enum <Something>Error` (or `pub enum Error`) may only be declared in
+/// `src/errors/*.rs`, in a file named `error.rs` directly inside a top-level
+/// module directory (`src/<module>/error.rs`), or anywhere under
+/// `src/chains/` (the chain-execution split owns its own vocabulary).
+#[test]
+fn error_types_live_in_their_module() {
+    fn is_allowed_location(relative: &Path) -> bool {
+        let mut components = relative.components();
+        let Some(first) = components.next() else {
+            return false;
+        };
+        let first = first.as_os_str().to_string_lossy();
+        if first == "errors" {
+            return true;
+        }
+        if first == "chains" {
+            return true;
+        }
+        // src/<module>/error.rs — exactly one path segment after the
+        // top-level module directory, and it must be named `error.rs`.
+        let rest: Vec<_> = components.collect();
+        rest.len() == 1 && rest[0].as_os_str() == "error.rs"
+    }
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy().into_owned();
+        if is_allowed_location(&relative) {
+            continue;
+        }
+        let production = production_text(&contents);
+        for (idx, line) in production.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let enum_name = trimmed.strip_prefix("pub enum ").map(|rest| {
+                rest.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .next()
+                    .unwrap_or("")
+            });
+            let declares_error_enum = enum_name.is_some_and(|name| name.ends_with("Error"));
+            if declares_error_enum {
+                if PENDING_RELOCATION.contains(&path_str.as_str()) {
+                    continue;
+                }
+                violations.push(format!(
+                    "src/{path_str}:{}: {} — error enums may only live in src/errors/*.rs, \
+                     src/<module>/error.rs, or src/chains/; add this exact path to \
+                     PENDING_RELOCATION only if it is a pre-existing violation being tracked \
+                     for a later migration task",
+                    idx + 1,
+                    trimmed
+                ));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "error types must live in their owning module:\n{}",
+        violations.join("\n")
+    );
+}
+
+/// No error enum may declare a catch-all `Generic { ... }`, `Other(String)`
+/// or `Unknown(String)` variant — that is the exact escape hatch that let
+/// errors collapse back into strings. Scoped to [`MIGRATED_TO_TYPED_ERRORS`]
+/// modules only in T0: several `src/errors/` central types (`AccountError`,
+/// `NetworkError`, ...) still carry `Generic` because they are kept alive by
+/// the builder helpers on `crate::Error`. `src/errors/` joins this guard once
+/// those builder helpers — and the `Generic` variants they construct — are
+/// deleted in a later task.
+#[test]
+fn no_catch_all_error_variants() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        let top_level = path_str.split('/').next().unwrap_or("");
+        if !MIGRATED_TO_TYPED_ERRORS.contains(&top_level) {
+            continue;
+        }
+        let production = production_text(&contents);
+        for (idx, line) in production.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let is_catch_all = trimmed.starts_with("Generic {")
+                || trimmed.starts_with("Other(String)")
+                || trimmed.starts_with("Unknown(String)");
+            if is_catch_all {
+                violations.push(format!("src/{path_str}:{}: {}", idx + 1, trimmed));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "no catch-all error variant (Generic/Other(String)/Unknown(String)) is allowed in a \
+         migrated module's error type — name the failure instead:\n{}",
+        violations.join("\n")
+    );
+}

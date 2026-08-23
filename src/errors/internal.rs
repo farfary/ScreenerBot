@@ -7,47 +7,21 @@
 //!
 //! Keep errors `Clone` by storing messages as strings.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum InternalError {
-    InvariantViolation {
-        message: String,
-    },
-    TaskJoin {
-        message: String,
-    },
-    Timeout {
-        message: String,
-    },
-    Generic {
-        message: String,
-    },
+    #[error("invariant violation: {message}")]
+    InvariantViolation { message: String },
+    #[error("task join error: {message}")]
+    TaskJoin { message: String },
+    #[error("timeout: {message}")]
+    Timeout { message: String },
     /// A caller requested an operation this owner does not implement.
     /// Distinct from an invariant violation: the request is well-formed,
     /// the capability is simply absent (e.g. wallet-scoped swap execution
     /// on a stub router).
-    UnsupportedCapability {
-        capability: String,
-        owner: String,
-    },
+    #[error("unsupported capability '{capability}' on {owner}")]
+    UnsupportedCapability { capability: String, owner: String },
 }
-
-impl std::fmt::Display for InternalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InternalError::InvariantViolation { message } => {
-                write!(f, "Invariant violation: {message}")
-            }
-            InternalError::TaskJoin { message } => write!(f, "Task join error: {message}"),
-            InternalError::Timeout { message } => write!(f, "Timeout: {message}"),
-            InternalError::Generic { message } => write!(f, "{message}"),
-            InternalError::UnsupportedCapability { capability, owner } => {
-                write!(f, "Unsupported capability '{capability}' on {owner}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for InternalError {}
 
 impl From<tokio::task::JoinError> for InternalError {
     fn from(err: tokio::task::JoinError) -> Self {
