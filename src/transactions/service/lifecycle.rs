@@ -8,7 +8,7 @@ use tokio::sync::{Mutex, Notify};
 
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
-use crate::transactions::{manager::TransactionsManager, types::Transaction};
+use crate::transactions::{manager::TransactionsManager, types::Transaction, Subject};
 
 use super::bootstrap::perform_initial_transaction_bootstrap;
 use super::config::ServiceConfig;
@@ -37,7 +37,7 @@ pub static SHUTDOWN_NOTIFY: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(No
 ///
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_global_transaction_service(
-    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
+    subject: &Subject,
     monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, String> {
     let mut running = SERVICE_RUNNING.lock().await;
@@ -51,7 +51,7 @@ pub async fn start_global_transaction_service(
     );
 
     // Create and initialize manager
-    let mut manager = TransactionsManager::new(wallet_pubkey).await?;
+    let mut manager = TransactionsManager::new(subject.clone()).await?;
     manager.initialize().await?;
 
     // Create manager Arc and register globally BEFORE bootstrap so on-demand calls can access it
@@ -127,8 +127,8 @@ pub async fn start_global_transaction_service(
 
     // Create service configuration
     let config = ServiceConfig {
-        wallet_pubkey,
-        ..Default::default()
+        subject: subject.clone(),
+        check_interval_secs: crate::transactions::utils::NORMAL_CHECK_INTERVAL_SECS,
     };
 
     // Mark service as running
@@ -149,7 +149,7 @@ pub async fn start_global_transaction_service(
         LogTag::Transactions,
         &format!(
             "Global transaction service started for wallet: {}",
-            &wallet_pubkey.to_string()
+            &subject.address()
         ),
     );
 
@@ -244,7 +244,8 @@ pub async fn get_global_transaction_manager() -> Option<Arc<Mutex<TransactionsMa
 pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction>, String> {
     if let Some(manager_arc) = get_global_transaction_manager().await {
         let manager = manager_arc.lock().await;
-        let processor = TransactionProcessor::new(manager.get_wallet_pubkey());
+        let processor =
+            TransactionProcessor::for_subject(manager.subject()).map_err(|e| e.to_string())?;
         drop(manager); // Avoid holding lock across RPC
 
         let mut attempts = 0u32;
@@ -283,7 +284,8 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Str
     // If not in DB, attempt on-demand processing via processor with short retries for indexing delays
     if let Some(manager_arc) = get_global_transaction_manager().await {
         let manager = manager_arc.lock().await;
-        let processor = TransactionProcessor::new(manager.get_wallet_pubkey());
+        let processor =
+            TransactionProcessor::for_subject(manager.subject()).map_err(|e| e.to_string())?;
         drop(manager); // Avoid holding lock across RPC
 
         let mut attempts = 0u32;

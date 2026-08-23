@@ -12,6 +12,7 @@ use std::time::Instant;
 use crate::chains::solana::transactions::{
     analyzer::TransactionAnalyzer, fetcher::TransactionFetcher,
 };
+use crate::chains::ChainError;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
@@ -59,6 +60,26 @@ impl TransactionProcessor {
             force_refresh,
             retain_raw_json: true,
         }
+    }
+
+    /// Builds a processor for a chain-neutral subject.
+    pub fn for_subject(subject: &Subject) -> Result<Self, ChainError> {
+        Ok(Self::new(
+            crate::chains::solana::transactions::subject::try_to_pubkey(subject)?,
+        ))
+    }
+
+    /// Builds a processor for a chain-neutral subject with cache options.
+    pub fn for_subject_with_cache_options(
+        subject: &Subject,
+        cache_only: bool,
+        force_refresh: bool,
+    ) -> Result<Self, ChainError> {
+        Ok(Self::new_with_cache_options(
+            crate::chains::solana::transactions::subject::try_to_pubkey(subject)?,
+            cache_only,
+            force_refresh,
+        ))
     }
 
     /// Create a processor for a watched (non-own) subject: the raw jsonParsed

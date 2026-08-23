@@ -244,12 +244,23 @@ mod tests {
     /// each test's entries, so no test here clears the global; each cleans up after
     /// itself instead.
     fn subjects() -> (Subject, Subject) {
+        // Each call must yield genuinely unique addresses -- see the doc comment
+        // above -- so this generates a fresh random address rather than reusing
+        // a fixed literal that every test invocation would collide on.
         (
-            crate::chains::solana::transactions::subject::from_pubkey(
-                crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique(),
+            Subject::from_account(
+                crate::chains::AccountId::new(
+                    crate::chains::active_chain(),
+                    uuid::Uuid::new_v4().to_string(),
+                )
+                .unwrap(),
             ),
-            crate::chains::solana::transactions::subject::from_pubkey(
-                crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique(),
+            Subject::from_account(
+                crate::chains::AccountId::new(
+                    crate::chains::active_chain(),
+                    uuid::Uuid::new_v4().to_string(),
+                )
+                .unwrap(),
             ),
         )
     }

@@ -5,7 +5,6 @@
 // This module provides transaction verification functionality specifically
 // designed for integration with the positions system to verify entry and exit transactions.
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
@@ -75,9 +74,9 @@ pub enum IssueSeverity {
 pub async fn verify_transaction_for_position(
     signature: &str,
     expected_type: TransactionType,
-    wallet_pubkey: Pubkey,
+    subject: &Subject,
 ) -> Result<TransactionVerificationResult, String> {
-    let processor = TransactionProcessor::new(wallet_pubkey);
+    let processor = TransactionProcessor::for_subject(subject).map_err(|e| e.to_string())?;
 
     logger::debug(
         LogTag::Transactions,
@@ -112,7 +111,7 @@ pub async fn verify_transaction_for_position(
 
     // Step 2: Perform comprehensive verification
     let verification_result =
-        perform_comprehensive_verification(&transaction, expected_type, wallet_pubkey).await?;
+        perform_comprehensive_verification(&transaction, expected_type, subject).await?;
 
     logger::debug(
         LogTag::Transactions,
@@ -133,10 +132,10 @@ pub async fn verify_entry_transaction(
     signature: &str,
     expected_mint: &str,
     expected_amount_range: Option<(f64, f64)>,
-    wallet_pubkey: Pubkey,
+    subject: &Subject,
 ) -> Result<TransactionVerificationResult, String> {
     let mut result =
-        verify_transaction_for_position(signature, TransactionType::Buy, wallet_pubkey).await?;
+        verify_transaction_for_position(signature, TransactionType::Buy, subject).await?;
 
     result.verification_type = VerificationType::EntryTransaction;
 
@@ -182,10 +181,10 @@ pub async fn verify_exit_transaction(
     signature: &str,
     expected_mint: &str,
     expected_amount_range: Option<(f64, f64)>,
-    wallet_pubkey: Pubkey,
+    subject: &Subject,
 ) -> Result<TransactionVerificationResult, String> {
     let mut result =
-        verify_transaction_for_position(signature, TransactionType::Sell, wallet_pubkey).await?;
+        verify_transaction_for_position(signature, TransactionType::Sell, subject).await?;
 
     result.verification_type = VerificationType::ExitTransaction;
 
@@ -234,7 +233,7 @@ pub async fn verify_exit_transaction(
 async fn perform_comprehensive_verification(
     transaction: &Transaction,
     expected_type: TransactionType,
-    _wallet_pubkey: Pubkey,
+    _subject: &Subject,
 ) -> Result<TransactionVerificationResult, String> {
     let mut issues = Vec::new();
     let mut confidence_score = 1.0;
@@ -406,7 +405,7 @@ async fn calculate_slippage_estimate(_swap_info: &TokenSwapInfo) -> Result<Optio
 /// Verify multiple transactions in batch
 pub async fn verify_transactions_batch(
     verifications: Vec<(String, TransactionType)>,
-    wallet_pubkey: Pubkey,
+    subject: &Subject,
 ) -> HashMap<String, TransactionVerificationResult> {
     let mut results = HashMap::new();
 
@@ -425,7 +424,7 @@ pub async fn verify_transactions_batch(
             let sig_clone = signature.clone();
             async move {
                 let result =
-                    verify_transaction_for_position(&sig_clone, expected_type, wallet_pubkey).await;
+                    verify_transaction_for_position(&sig_clone, expected_type, subject).await;
                 (sig_clone, result)
             }
         })
@@ -544,17 +543,14 @@ impl VerificationReport {
 // =============================================================================
 
 /// Legacy verification function for compatibility during migration
-pub async fn verify_transaction_legacy(
-    signature: &str,
-    wallet_pubkey: Pubkey,
-) -> Result<bool, String> {
+pub async fn verify_transaction_legacy(signature: &str, subject: &Subject) -> Result<bool, String> {
     logger::info(
         LogTag::Transactions,
         "Using legacy verification function - please migrate to new verification API",
     );
 
     let result =
-        verify_transaction_for_position(signature, TransactionType::Unknown, wallet_pubkey).await?;
+        verify_transaction_for_position(signature, TransactionType::Unknown, subject).await?;
 
     Ok(result.verified)
 }

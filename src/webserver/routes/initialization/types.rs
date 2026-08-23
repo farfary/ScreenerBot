@@ -1,7 +1,6 @@
 //! Initialization route types — request/response structs for onboarding endpoints.
 
 use crate::chains::solana::rpc::RpcEndpointTestResult;
-use crate::chains::solana::solana_sdk::signature::Keypair;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
@@ -71,31 +70,4 @@ pub struct InitializationProgressResponse {
     pub message: String,
     pub services_started: usize,
     pub services_total: usize,
-}
-
-/// Parse wallet private key from string (supports base58 and JSON array formats)
-pub(super) fn parse_wallet_private_key(private_key: &str) -> Result<Keypair, String> {
-    let trimmed = private_key.trim();
-
-    // Try base58 format first
-    if let Ok(bytes) = bs58::decode(trimmed).into_vec() {
-        if bytes.len() == 64 {
-            if let Ok(keypair) = Keypair::from_bytes(&bytes) {
-                return Ok(keypair);
-            }
-        }
-    }
-
-    // Try JSON array format [1,2,3,...]
-    if trimmed.starts_with('[') && trimmed.ends_with(']') {
-        if let Ok(bytes) = serde_json::from_str::<Vec<u8>>(trimmed) {
-            if bytes.len() == 64 {
-                if let Ok(keypair) = Keypair::from_bytes(&bytes) {
-                    return Ok(keypair);
-                }
-            }
-        }
-    }
-
-    Err("Invalid private key format. Must be base58 string or JSON array of 64 bytes".to_owned())
 }

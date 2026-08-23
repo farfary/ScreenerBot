@@ -34,12 +34,12 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
         &format!(
             "Transaction service running for wallet: {} (housekeeping; \
              detection via wallets::watch, interval: {}s)",
-            &config.wallet_pubkey.to_string(),
+            config.subject.address(),
             config.check_interval_secs
         ),
     );
 
-    let own_address = config.wallet_pubkey.to_string();
+    let own_address = config.subject.address();
 
     let mut check_interval = interval(Duration::from_secs(config.check_interval_secs));
     let mut activity_rx = subscribe_activity();
@@ -119,7 +119,7 @@ async fn handle_own_wallet_activity(
     metrics: &mut ServiceMetrics,
     activity: &WalletActivity,
 ) {
-    let subject = crate::chains::solana::transactions::subject::from_pubkey(config.wallet_pubkey);
+    let subject = config.subject.clone();
     add_signature_to_known_globally(subject, activity.signature.clone()).await;
     metrics.update_activity();
 

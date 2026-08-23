@@ -5,7 +5,6 @@
 // This module contains the main TransactionsManager struct that coordinates
 // all transaction-related operations for the ScreenerBot trading system.
 
-use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -29,7 +28,7 @@ use crate::transactions::{database::TransactionDatabase, types::*, utils::*};
 /// - Retry logic for network resilience
 pub struct TransactionsManager {
     // Core identification
-    pub wallet_pubkey: Pubkey,
+    subject: Subject,
     pub debug_enabled: bool,
 
     // Transaction tracking state
@@ -68,12 +67,12 @@ pub struct TransactionsManager {
 
 impl TransactionsManager {
     /// Create new TransactionsManager instance with token database integration
-    pub async fn new(wallet_pubkey: Pubkey) -> Result<Self, String> {
+    pub async fn new(subject: Subject) -> Result<Self, String> {
         logger::debug(
             LogTag::Transactions,
             &format!(
                 "Creating TransactionsManager for wallet: {}",
-                &wallet_pubkey.to_string()
+                &subject.address()
             ),
         );
 
@@ -97,7 +96,7 @@ impl TransactionsManager {
             };
 
         Ok(Self {
-            wallet_pubkey,
+            subject,
             debug_enabled: false,
             known_signatures: HashSet::new(),
             last_signature_check: None,
@@ -121,7 +120,7 @@ impl TransactionsManager {
     pub async fn initialize(&mut self) -> Result<(), String> {
         let duration = DurationMeasure::start("TransactionsManager::initialize");
 
-        let subject = self.subject();
+        let subject = self.subject().clone();
 
         // Load known signatures from database if available
         if let Some(ref db) = self.transaction_database {
@@ -178,7 +177,7 @@ impl TransactionsManager {
                 LogTag::Transactions,
                 &format!(
                     "TransactionsManager initialized for wallet: {} (known transactions: {})",
-                    &self.wallet_pubkey.to_string(),
+                    &self.subject().address(),
                     self.total_transactions
                 ),
             );
@@ -222,7 +221,7 @@ impl TransactionsManager {
 
         // Save pending transactions to database
         if let Some(ref db) = self.transaction_database {
-            let subject = self.subject();
+            let subject = self.subject().clone();
             if let Err(e) = db
                 .save_pending_transactions(subject, &self.pending_transactions)
                 .await
@@ -309,7 +308,7 @@ impl TransactionsManager {
 
     /// Check if signature is known using database (if available) or fallback to HashSet
     pub async fn is_signature_known(&self, signature: &str) -> bool {
-        let subject = self.subject();
+        let subject = self.subject().clone();
 
         // First check global cache
         if is_signature_known_globally(subject.clone(), signature).await {
@@ -329,7 +328,7 @@ impl TransactionsManager {
 
     /// Add signature to known cache using database (if available) or fallback to HashSet
     pub async fn add_signature_to_known(&mut self, signature: String) {
-        let subject = self.subject();
+        let subject = self.subject().clone();
 
         // Add to global cache
         add_signature_to_known_globally(subject.clone(), signature.clone()).await;
@@ -360,13 +359,9 @@ impl TransactionsManager {
         Arc::clone(&self.shutdown_notify)
     }
 
-    /// Get wallet pubkey
-    pub fn get_wallet_pubkey(&self) -> Pubkey {
-        self.wallet_pubkey
-    }
-
-    fn subject(&self) -> Subject {
-        crate::chains::solana::transactions::subject::from_pubkey(self.wallet_pubkey)
+    /// The chain-neutral subject this manager monitors.
+    pub fn subject(&self) -> &Subject {
+        &self.subject
     }
 
     /// Get debug status
@@ -382,7 +377,7 @@ impl TransactionsManager {
 impl TransactionsManager {
     /// Add a pending transaction
     pub async fn add_pending_transaction(&mut self, signature: String) {
-        let subject = self.subject();
+        let subject = self.subject().clone();
         let now = Utc::now();
         self.pending_transactions.insert(signature.clone(), now);
 
@@ -400,7 +395,7 @@ impl TransactionsManager {
     /// Remove a pending transaction
     pub async fn remove_pending_transaction(&mut self, signature: &str) {
         if self.pending_transactions.remove(signature).is_some() {
-            let subject = self.subject();
+            let subject = self.subject().clone();
             // Also remove from global pending cache
             remove_pending_transaction_globally(subject, signature).await;
 

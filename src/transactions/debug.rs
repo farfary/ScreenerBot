@@ -110,7 +110,7 @@ pub struct DebugValidation {
 /// Debug a single transaction with comprehensive analysis
 pub async fn debug_transaction(
     signature: &str,
-    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
+    subject: &Subject,
     verbose: bool,
 ) -> Result<DebugAnalysisResult, String> {
     logger::info(
@@ -124,7 +124,7 @@ pub async fn debug_transaction(
 
     // Step 1: Process transaction
     let step_start = Instant::now();
-    let processor = TransactionProcessor::new(wallet_pubkey);
+    let processor = TransactionProcessor::for_subject(subject).map_err(|e| e.to_string())?;
     let transaction = processor.process_transaction(signature).await?;
     let processing_duration = step_start.elapsed();
 
@@ -191,7 +191,7 @@ pub async fn debug_transaction(
 /// Debug multiple transactions and generate summary
 pub async fn debug_transactions_batch(
     signatures: Vec<String>,
-    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
+    subject: &Subject,
 ) -> Result<Vec<DebugAnalysisResult>, String> {
     logger::info(
         LogTag::Transactions,
@@ -207,7 +207,7 @@ pub async fn debug_transactions_batch(
     // Process transactions concurrently
     let tasks: Vec<_> = signatures
         .into_iter()
-        .map(|signature| async move { debug_transaction(&signature, wallet_pubkey, false).await })
+        .map(|signature| async move { debug_transaction(&signature, subject, false).await })
         .collect();
 
     let batch_results = futures::future::join_all(tasks).await;

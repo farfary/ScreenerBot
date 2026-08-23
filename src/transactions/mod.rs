@@ -27,7 +27,7 @@
 // ```rust
 // use crate::transactions::{TransactionsManager, TransactionType};
 //
-// let manager = TransactionsManager::new(wallet_pubkey).await?;
+// let manager = TransactionsManager::new(subject).await?;
 // manager.start_service().await?;
 // ```
 

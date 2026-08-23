@@ -51,17 +51,19 @@ pub async fn perform_initial_transaction_bootstrap(
     manager_arc: &Arc<Mutex<TransactionsManager>>,
 ) -> Result<BootstrapStats, String> {
     let bootstrap_timer = std::time::Instant::now();
-    let (wallet_pubkey, _debug, transaction_db) = {
+    let (subject, _debug, transaction_db) = {
         let mgr = manager_arc.lock().await;
         (
-            mgr.wallet_pubkey,
+            mgr.subject().clone(),
             mgr.debug_enabled,
             mgr.transaction_database.clone(),
         )
     };
-    let subject = crate::chains::solana::transactions::subject::from_pubkey(wallet_pubkey);
+    let wallet_pubkey = crate::chains::solana::transactions::subject::try_to_pubkey(&subject)
+        .map_err(|e| e.to_string())?;
     let fetcher = TransactionFetcher::new();
-    let processor = Arc::new(TransactionProcessor::new(wallet_pubkey));
+    let processor =
+        Arc::new(TransactionProcessor::for_subject(&subject).map_err(|e| e.to_string())?);
 
     let mut stats = BootstrapStats::default();
     let batch_limit = RPC_BATCH_SIZE;
@@ -117,7 +119,7 @@ pub async fn perform_initial_transaction_bootstrap(
         LogTag::Transactions,
         &format!(
             "Bootstrapping transaction cache for wallet: {} (mode={}, batch_limit={})",
-            &wallet_pubkey.to_string(),
+            &subject.address(),
             &bootstrap_mode,
             batch_limit
         ),

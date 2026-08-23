@@ -349,10 +349,10 @@ pub async fn debug_database_connection() -> Result<(), String> {
 /// Profile transaction processing performance
 pub async fn profile_transaction_processing(
     signatures: Vec<String>,
-    wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
+    subject: &Subject,
 ) -> Result<PerformanceProfile, String> {
     let start_time = Instant::now();
-    let processor = TransactionProcessor::new(wallet_pubkey);
+    let processor = TransactionProcessor::for_subject(subject).map_err(|e| e.to_string())?;
 
     let mut processing_times = Vec::new();
     let mut success_count = 0;

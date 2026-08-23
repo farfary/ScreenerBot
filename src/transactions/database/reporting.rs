@@ -567,8 +567,9 @@ mod tests {
         let raw_json_string = raw_json.to_string();
         transaction.raw_transaction_data = Some(raw_json);
 
-        let subject = crate::chains::solana::transactions::subject::from_pubkey(
-            crate::chains::solana::solana_sdk::pubkey::Pubkey::new_unique(),
+        let subject = Subject::from_account(
+            crate::chains::AccountId::new(crate::chains::active_chain(), "ReportingTestWallet111")
+                .unwrap(),
         );
         db.upsert_full_transaction(subject.clone(), &transaction)
             .await

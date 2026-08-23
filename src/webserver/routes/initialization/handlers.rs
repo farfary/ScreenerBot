@@ -4,10 +4,12 @@ use super::types::*;
 use super::validation::{
     clear_setup_validation, consume_setup_validation, store_setup_validation, validate_rpc_url_list,
 };
-use crate::chains::solana::solana_sdk::signature::Signer;
 use crate::{
     arguments,
-    chains::solana::rpc,
+    chains::solana::{
+        accounts::{keypair_to_address, parse_private_key},
+        rpc,
+    },
     config::{self, schemas::Config},
     global,
     logger::{self, LogTag},
@@ -234,14 +236,12 @@ pub(super) async fn validate_credentials(
     let mut wallet_address: Option<String> = None;
 
     // Validate wallet private key
-    let keypair_result = parse_wallet_private_key(&request.wallet_private_key);
+    let keypair_result = parse_private_key(&request.wallet_private_key);
     match keypair_result {
         Ok(keypair) => {
-            wallet_address = Some(keypair.pubkey().to_string());
-            logger::info(
-                LogTag::Webserver,
-                &format!("Wallet validated: {}", keypair.pubkey()),
-            );
+            let address = keypair_to_address(&keypair);
+            logger::info(LogTag::Webserver, &format!("Wallet validated: {address}"));
+            wallet_address = Some(address);
         }
         Err(e) => {
             errors.push(format!("Invalid wallet private key: {e}"));

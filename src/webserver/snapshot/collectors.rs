@@ -541,7 +541,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
     if let Some(manager_arc) = crate::transactions::get_global_transaction_manager().await {
         let manager = manager_arc.lock().await;
         stats = manager.get_stats();
-        wallet_pubkey = Some(manager.wallet_pubkey.to_string());
+        wallet_pubkey = Some(manager.subject().address());
         last_signature_check = manager.last_signature_check.clone();
         deferred_retries = manager.get_deferred_retries_count() as u64;
         pending_entries = manager

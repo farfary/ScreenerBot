@@ -35,8 +35,8 @@ impl Service for TransactionsService {
         _shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        // Get wallet pubkey from config
-        let wallet_pubkey = crate::chains::solana::accounts::configured_pubkey().map_err(|e| {
+        // Get the chain-neutral subject for the configured wallet
+        let subject = crate::transactions::Subject::own().map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Start {
                 service: "transactions".to_owned(),
                 message: format!("Failed to load wallet: {e}"),
@@ -45,7 +45,7 @@ impl Service for TransactionsService {
 
         // Start global transaction service and capture handle (passing monitor)
         let handle =
-            crate::transactions::service::start_global_transaction_service(wallet_pubkey, monitor)
+            crate::transactions::service::start_global_transaction_service(&subject, monitor)
                 .await
                 .map_err(|e| {
                     crate::Error::Service(crate::errors::ServiceError::Start {

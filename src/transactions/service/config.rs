@@ -2,7 +2,7 @@
 //
 // Service configuration, constants, and deferred retry queue
 
-use crate::transactions::utils::NORMAL_CHECK_INTERVAL_SECS;
+use crate::transactions::Subject;
 
 // =============================================================================
 // BOOTSTRAP CONFIGURATION
@@ -29,19 +29,10 @@ pub const RETRY_BASE_DELAY_SECS: u64 = 2;
 /// Service configuration structure
 #[derive(Debug, Clone)]
 pub struct ServiceConfig {
-    /// Wallet public key to monitor
-    pub wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey,
+    /// Chain-neutral subject to monitor
+    pub subject: Subject,
     /// Interval for expired-pending cleanup. Real-time
     /// detection (WebSocket + poll fallback + gap-fill) is owned by
     /// `wallets::watch`, not this service -- see `processing.rs`.
     pub check_interval_secs: u64,
-}
-
-impl Default for ServiceConfig {
-    fn default() -> Self {
-        Self {
-            wallet_pubkey: crate::chains::solana::solana_sdk::pubkey::Pubkey::default(),
-            check_interval_secs: NORMAL_CHECK_INTERVAL_SECS,
-        }
-    }
 }
