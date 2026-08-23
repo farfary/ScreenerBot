@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
+use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_sol_balance;
 use crate::positions;
 
@@ -149,9 +150,10 @@ impl Tool for GetPositionTool {
         };
 
         let pnl = positions::calculate_position_pnl_safe(&position, position.current_price).await;
-        let total_fees = (position.entry_fee_lamports.unwrap_or_default()
-            + position.exit_fee_lamports.unwrap_or_default()) as f64
-            / 1_000_000_000.0;
+        let total_fees = adapter().raw_to_native(
+            position.entry_fee_lamports.unwrap_or_default()
+                + position.exit_fee_lamports.unwrap_or_default(),
+        );
 
         let details = PositionDetails {
             position_id: position.id.unwrap_or_default(),

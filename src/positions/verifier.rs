@@ -7,8 +7,8 @@ use super::{
     types::{VerificationKind, VerificationOutcome},
 };
 use crate::{
+    chains::adapter,
     chains::solana::assets::ata::get_total_token_balance,
-    chains::solana::constants::sol_to_lamports,
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{get_transaction, reprocess_transaction, TransactionStatus},
@@ -561,7 +561,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                     tokens_bought: token_amount_units,
                     sol_spent,
                     effective_price,
-                    fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                    fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
                     dca_time,
                     dca_signature: item.signature.clone(),
                 });
@@ -618,7 +618,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 position_id,
                 effective_entry_price: effective_price,
                 token_amount_units,
-                fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
                 sol_size: swap_info.sol_amount,
             })
         }
@@ -707,7 +707,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                     exit_amount,
                                     sol_received: swap_info.effective_sol_received.abs(),
                                     effective_exit_price: swap_info.calculated_price_sol,
-                                    fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                                    fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
                                     exit_time,
                                     exit_signature: item.signature.clone(),
                                     exit_percentage: match (
@@ -778,7 +778,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                     exit_amount,
                                     sol_received: swap_info.effective_sol_received.abs(),
                                     effective_exit_price: swap_info.calculated_price_sol,
-                                    fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                                    fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
                                     exit_time,
                                     exit_signature: item.signature.clone(),
                                     exit_percentage: sold_pct,
@@ -809,7 +809,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 position_id,
                 effective_exit_price: swap_info.calculated_price_sol,
                 sol_received: swap_info.effective_sol_received.abs(),
-                fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
                 exit_time,
             })
         }

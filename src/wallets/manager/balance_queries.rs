@@ -1,6 +1,8 @@
 //! Wallet balance queries — query stored balance data with filtering and aggregation.
 
+use crate::chains::adapter;
 use crate::chains::solana::accounts::{fetch_wallet_sol_balance, fetch_wallet_token_balances};
+use crate::chains::solana::constants::RENT_EXEMPT_MINIMUM_LAMPORTS;
 use crate::logger::{self, LogTag};
 
 use super::super::types::{SimpleTokenBalance, WalletBalanceSummary, WalletWithTokenBalance};
@@ -9,9 +11,6 @@ use super::list_active_wallets;
 // =============================================================================
 // BALANCE CONSTANTS
 // =============================================================================
-
-/// Rent-exempt minimum for ATA (~0.00089088 SOL)
-const ATA_RENT_EXEMPT: f64 = 0.00089088;
 
 /// Minimum SOL balance to operate a wallet (for transaction fees)
 const MIN_SOL_FOR_OPERATIONS: f64 = 0.005;
@@ -25,7 +24,8 @@ fn sol_topup_needed(sol_balance: f64) -> (bool, f64) {
 }
 
 fn reclaimable_ata_rent(empty_ata_count: u32) -> f64 {
-    empty_ata_count as f64 * ATA_RENT_EXEMPT
+    let ata_rent_exempt = adapter().raw_to_native(RENT_EXEMPT_MINIMUM_LAMPORTS);
+    empty_ata_count as f64 * ata_rent_exempt
 }
 
 /// Get all active wallets that hold a specific token

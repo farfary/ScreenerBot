@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use crate::chains::adapter;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::tools::swap_executor::tool_sell;
@@ -319,7 +320,7 @@ async fn execute_single_sell(
     match tool_sell(wallet, token_mint, amount, Some(slippage_pct)).await {
         Ok(swap_result) => {
             // output_amount is in lamports, convert to SOL
-            let sol_received = swap_result.output_amount as f64 / 1_000_000_000.0;
+            let sol_received = adapter().raw_to_native(swap_result.output_amount);
             WalletOpResult::success(
                 wallet_id,
                 wallet_address,

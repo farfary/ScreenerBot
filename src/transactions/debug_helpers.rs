@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use std::time::Instant;
 
+use crate::chains::adapter;
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::transactions::{database::get_transaction_database, types::*};
 
@@ -123,7 +124,7 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
     }
 
     if let Some(fee) = result.transaction.fee_lamports {
-        println!("Fee: {:.6} SOL", (fee as f64) / 1_000_000_000.0);
+        println!("Fee: {:.6} SOL", adapter().raw_to_native(fee));
     }
 
     if let Some(block_time) = result.transaction.block_time {

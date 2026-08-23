@@ -5,6 +5,7 @@
 //! wallet's key happens inside `crate::chains::solana` — this module never
 //! holds a `Keypair`.
 
+use crate::chains::adapter;
 use crate::chains::solana::constants::SOL_MINT;
 use crate::config::with_config;
 use crate::errors::DataError;
@@ -104,7 +105,7 @@ pub async fn tool_buy(
         })?;
 
     // Convert SOL to lamports
-    let lamports = (amount_sol * 1_000_000_000.0) as u64;
+    let lamports = adapter().native_to_raw(amount_sol);
 
     if lamports < 1_000_000 {
         return Err(Error::invalid_amount(

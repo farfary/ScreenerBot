@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc};
 use std::time::Instant;
 use tabled::Tabled;
 
+use crate::chains::adapter;
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
@@ -287,7 +288,7 @@ pub async fn generate_debug_statistics(transactions: &[Transaction]) -> Transact
     let total_fees_sol = transactions
         .iter()
         .filter_map(|tx| tx.fee_lamports)
-        .map(|fee| (fee as f64) / 1_000_000_000.0)
+        .map(|fee| adapter().raw_to_native(fee))
         .sum();
 
     let date_range = if !transactions.is_empty() {
@@ -335,7 +336,7 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
 
     let fee_sol = transaction
         .fee_lamports
-        .map(|f| format!("{:.6}", (f as f64) / 1_000_000_000.0))
+        .map(|f| format!("{:.6}", adapter().raw_to_native(f)))
         .unwrap_or_else(|| "Unknown".to_owned());
 
     let analysis_duration = transaction

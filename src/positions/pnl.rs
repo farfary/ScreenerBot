@@ -1,6 +1,6 @@
 //! Position profit & loss calculations — P&L for open, closed, and partially exited positions.
 
-use crate::chains::solana::constants::lamports_to_sol;
+use crate::chains::adapter;
 use crate::logger::{self, LogTag};
 use crate::positions::types::Position;
 use crate::tokens::get_decimals;
@@ -75,7 +75,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                     // buffer, not an actual cost (inflates losses ~2% on small trades)
                     let buy_fee = position
                         .entry_fee_lamports
-                        .map_or(0.0, |fee| lamports_to_sol(fee));
+                        .map_or(0.0, |fee| adapter().raw_to_native(fee));
                     let estimated_sell_fee = buy_fee;
                     let total_fees = buy_fee + estimated_sell_fee;
                     let net_pnl_sol = current_value + realized_sol - entry_cost - total_fees;
@@ -89,7 +89,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             let price_change = (current - entry_price) / entry_price;
             let buy_fee = position
                 .entry_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
+                .map_or(0.0, |fee| adapter().raw_to_native(fee));
             let estimated_sell_fee = buy_fee;
             let total_fees = buy_fee + estimated_sell_fee;
             let fee_percent = (total_fees / entry_cost) * 100.0;
@@ -123,10 +123,10 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         // not an actual cost. Including it here inflates losses by ~2% on small trades.
         let buy_fee = position
             .entry_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+            .map_or(0.0, |fee| adapter().raw_to_native(fee));
         let sell_fee = position
             .exit_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+            .map_or(0.0, |fee| adapter().raw_to_native(fee));
         let total_fees = buy_fee + sell_fee;
 
         let net_pnl_sol = sol_received - sol_invested - total_fees;
@@ -177,10 +177,10 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             // Account for actual buy + sell fees only (no profit buffer for realized P&L)
             let buy_fee = position
                 .entry_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
+                .map_or(0.0, |fee| adapter().raw_to_native(fee));
             let sell_fee = position
                 .exit_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
+                .map_or(0.0, |fee| adapter().raw_to_native(fee));
             let total_fees = buy_fee + sell_fee;
             let net_pnl_sol = exit_value - entry_cost - total_fees;
             let net_pnl_percent = (net_pnl_sol / entry_cost) * 100.0;
@@ -192,10 +192,10 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         let price_change = (effective_exit - entry_price) / entry_price;
         let buy_fee = position
             .entry_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+            .map_or(0.0, |fee| adapter().raw_to_native(fee));
         let sell_fee = position
             .exit_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+            .map_or(0.0, |fee| adapter().raw_to_native(fee));
         let total_fees = buy_fee + sell_fee;
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
         let net_pnl_percent = price_change * 100.0 - fee_percent;
@@ -246,7 +246,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             // buffer, not an actual cost (inflates losses ~2% on small trades)
             let buy_fee = position
                 .entry_fee_lamports
-                .map_or(0.0, |fee| lamports_to_sol(fee));
+                .map_or(0.0, |fee| adapter().raw_to_native(fee));
             let estimated_sell_fee = buy_fee;
             let total_fees = buy_fee + estimated_sell_fee;
             let net_pnl_sol = current_value + realized_sol - entry_cost - total_fees;
@@ -259,7 +259,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
         let price_change = (current - entry_price) / entry_price;
         let buy_fee = position
             .entry_fee_lamports
-            .map_or(0.0, |fee| lamports_to_sol(fee));
+            .map_or(0.0, |fee| adapter().raw_to_native(fee));
         let estimated_sell_fee = buy_fee;
         let total_fees = buy_fee + estimated_sell_fee;
         let fee_percent = (total_fees / position.entry_size_sol) * 100.0;
@@ -276,8 +276,8 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
 /// Calculate total fees for a position
 pub fn calculate_position_total_fees(position: &Position) -> f64 {
     // Sum entry and exit fees in SOL (excluding ATA rent from trading costs)
-    let entry_fees_sol = lamports_to_sol(position.entry_fee_lamports.unwrap_or_default());
-    let exit_fees_sol = lamports_to_sol(position.exit_fee_lamports.unwrap_or_default());
+    let entry_fees_sol = adapter().raw_to_native(position.entry_fee_lamports.unwrap_or_default());
+    let exit_fees_sol = adapter().raw_to_native(position.exit_fee_lamports.unwrap_or_default());
     entry_fees_sol + exit_fees_sol
 }
 
@@ -372,7 +372,7 @@ pub async fn calculate_split_pnl(
             let sol_received = position.sol_received.unwrap_or_default();
             let exit_portion = position.total_exited_amount as f64 / acquired;
             let invested_in_exited = position.total_size_sol * exit_portion;
-            let exit_fees = lamports_to_sol(position.exit_fee_lamports.unwrap_or_default());
+            let exit_fees = adapter().raw_to_native(position.exit_fee_lamports.unwrap_or_default());
             sol_received - invested_in_exited - exit_fees
         } else {
             0.0
@@ -391,9 +391,9 @@ pub async fn calculate_split_pnl(
                 let current_value = ui_remaining * current;
                 let remaining_portion = remaining as f64 / acquired;
                 let invested_in_remaining = position.total_size_sol * remaining_portion;
-                let entry_fees_portion =
-                    lamports_to_sol(position.entry_fee_lamports.unwrap_or_default())
-                        * remaining_portion;
+                let entry_fees_portion = adapter()
+                    .raw_to_native(position.entry_fee_lamports.unwrap_or_default())
+                    * remaining_portion;
                 current_value - invested_in_remaining - entry_fees_portion
             } else {
                 0.0

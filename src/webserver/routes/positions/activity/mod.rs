@@ -25,7 +25,7 @@ use super::types::{
     ActivityEvent, ActivityPositionSummary, ActivityStateChange, ActivityTotals,
     EntryRecordResponse, ExitRecordResponse, TokenActivityResponse,
 };
-use crate::chains::solana::constants::lamports_to_sol;
+use crate::chains::adapter;
 use crate::logger::{self, LogTag};
 use crate::positions::{self, Position};
 use crate::sol_price;
@@ -345,7 +345,7 @@ async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<Exi
             sol_spent: record.sol_spent,
             transaction_signature: record.transaction_signature,
             is_dca: record.is_dca,
-            fees_sol: record.fees_lamports.map(lamports_to_sol),
+            fees_sol: record.fees_lamports.map(|l| adapter().raw_to_native(l)),
         })
         .collect();
 
@@ -362,7 +362,7 @@ async fn load_records(position: &Position) -> (Vec<EntryRecordResponse>, Vec<Exi
             transaction_signature: record.transaction_signature,
             is_partial: record.is_partial,
             percentage: record.percentage,
-            fees_sol: record.fees_lamports.map(lamports_to_sol),
+            fees_sol: record.fees_lamports.map(|l| adapter().raw_to_native(l)),
         })
         .collect();
 

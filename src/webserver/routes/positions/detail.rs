@@ -5,7 +5,7 @@ use chrono::Utc;
 
 use super::list::map_position_to_response_async;
 use super::types::*;
-use crate::chains::solana::constants::lamports_to_sol;
+use crate::chains::adapter;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
@@ -249,7 +249,7 @@ async fn load_entry_exit_history(
                 sol_spent: r.sol_spent,
                 transaction_signature: r.transaction_signature,
                 is_dca: r.is_dca,
-                fees_sol: r.fees_lamports.map(lamports_to_sol),
+                fees_sol: r.fees_lamports.map(|l| adapter().raw_to_native(l)),
             })
             .collect(),
         Err(err) => {
@@ -274,7 +274,7 @@ async fn load_entry_exit_history(
                 transaction_signature: r.transaction_signature,
                 is_partial: r.is_partial,
                 percentage: r.percentage,
-                fees_sol: r.fees_lamports.map(lamports_to_sol),
+                fees_sol: r.fees_lamports.map(|l| adapter().raw_to_native(l)),
             })
             .collect(),
         Err(err) => {

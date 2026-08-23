@@ -1,6 +1,6 @@
 //! Joining an event's record half to its on-chain half.
 
-use crate::chains::solana::constants::lamports_to_sol;
+use crate::chains::adapter;
 use crate::transactions::{
     TokenTransfer, Transaction, TransactionDirection, TransactionStatus, TransactionType,
 };
@@ -135,7 +135,7 @@ pub(super) fn wallet_event(draft: Draft) -> ActivityEvent {
         fee_sol: if row.fee_sol > 0.0 {
             Some(row.fee_sol)
         } else {
-            row.fee_lamports.map(lamports_to_sol)
+            row.fee_lamports.map(|l| adapter().raw_to_native(l))
         },
         direction: row.direction.clone(),
         transaction_type: row.transaction_type.clone(),
@@ -157,7 +157,7 @@ pub(super) fn wallet_event(draft: Draft) -> ActivityEvent {
 
 fn transaction_fee_sol(tx: &Transaction) -> Option<f64> {
     if let Some(lamports) = tx.fee_lamports {
-        Some(lamports_to_sol(lamports))
+        Some(adapter().raw_to_native(lamports))
     } else if tx.fee_sol > 0.0 {
         Some(tx.fee_sol)
     } else {

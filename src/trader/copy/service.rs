@@ -215,9 +215,7 @@ async fn process_activity(
                 decision_price,
                 PaperCosts {
                     network_fee_sol: 0.000005,
-                    priority_fee_sol: crate::chains::solana::constants::lamports_to_sol(
-                        priority_lamports,
-                    ),
+                    priority_fee_sol: crate::chains::adapter().raw_to_native(priority_lamports),
                 },
                 Utc::now(),
             )

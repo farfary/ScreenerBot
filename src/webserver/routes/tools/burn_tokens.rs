@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::assets::burn_configured_wallet_token;
-use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::constants::{ATA_RENT_COST_SOL, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
@@ -21,9 +21,6 @@ use super::types::*;
 
 /// Scan wallet for tokens that can be burned, with categorization
 pub async fn scan_burnable_tokens() -> Response {
-    // ATA rent is approximately 0.00203928 SOL
-    const ATA_RENT_SOL: f64 = 0.00203928;
-
     // Get wallet address
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
@@ -149,7 +146,7 @@ pub async fn scan_burnable_tokens() -> Response {
 
         // Only count rent reclaimable for tokens we can burn
         if can_burn {
-            total_rent_reclaimable += ATA_RENT_SOL;
+            total_rent_reclaimable += ATA_RENT_COST_SOL;
         }
 
         tokens.push(BurnableTokenInfo {
@@ -167,7 +164,7 @@ pub async fn scan_burnable_tokens() -> Response {
             has_liquidity,
             can_burn,
             burn_warning,
-            rent_reclaimable_sol: if can_burn { ATA_RENT_SOL } else { 0.0 },
+            rent_reclaimable_sol: if can_burn { ATA_RENT_COST_SOL } else { 0.0 },
         });
     }
 
@@ -216,8 +213,6 @@ pub async fn scan_burnable_tokens() -> Response {
 
 /// Burn selected tokens
 pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Response {
-    const ATA_RENT_SOL: f64 = 0.00203928;
-
     if request.mints.is_empty() {
         return error_response(
             StatusCode::BAD_REQUEST,
@@ -348,7 +343,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     error: None,
                 });
                 successful += 1;
-                sol_reclaimed += ATA_RENT_SOL; // Will be reclaimed when ATA is closed
+                sol_reclaimed += ATA_RENT_COST_SOL; // Will be reclaimed when ATA is closed
             }
             Err(e) => {
                 logger::error(

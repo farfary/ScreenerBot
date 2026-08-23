@@ -1,6 +1,7 @@
 //! Open position operations — new position entry with swap execution and verification.
 
-use crate::chains::solana::constants::{sol_to_lamports, SOL_MINT};
+use crate::chains::adapter;
+use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -232,7 +233,7 @@ async fn open_position_impl(
         chain: crate::chains::active_chain(),
         input_mint: SOL_MINT.to_string(),
         output_mint: api_token.mint.clone(),
-        input_amount: sol_to_lamports(trade_size_sol),
+        input_amount: adapter().native_to_raw(trade_size_sol),
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage_quote_default,
         swap_mode: SwapMode::ExactIn,

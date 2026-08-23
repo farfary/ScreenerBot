@@ -161,7 +161,8 @@ pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<Stri
         }
     }
 
-    let rent_reclaimed = (closed_count as f64) * 0.00203928; // Approximate ATA rent in SOL
+    let rent_reclaimed =
+        (closed_count as f64) * crate::chains::solana::constants::ATA_RENT_COST_SOL;
     logger::info(
         LogTag::Wallet,
         &format!(

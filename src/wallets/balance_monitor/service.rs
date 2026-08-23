@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
 
+use crate::chains::adapter;
 use crate::chains::solana::assets::fetch_nft_metadata_batch;
-use crate::chains::solana::constants::sol_to_lamports;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
@@ -120,7 +120,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         }
     )?;
 
-    let sol_balance_lamports = sol_to_lamports(sol_balance);
+    let sol_balance_lamports = adapter().native_to_raw(sol_balance);
 
     // Separate fungible tokens and NFTs
     let mut token_balances = Vec::new();

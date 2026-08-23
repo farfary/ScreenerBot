@@ -469,7 +469,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 );
             }
         };
-        let amount_lamports = (amount_sol * 1_000_000_000.0) as u64;
+        let amount_lamports = crate::chains::adapter().native_to_raw(amount_sol);
         (
             SOL_MINT.to_string(),
             req.mint.clone(),
@@ -593,7 +593,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 } else {
                     format!("{:.4} tokens", input_amount_display)
                 };
-                let output_sol = quote.output_amount as f64 / 1_000_000_000.0;
+                let output_sol = crate::chains::adapter().raw_to_native(quote.output_amount);
                 let output_fmt = format!("{:.6} SOL", output_sol);
                 let price = if input_amount_display > 0.0 {
                     output_sol / input_amount_display

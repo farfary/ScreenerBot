@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 
+use crate::chains::adapter;
 use crate::logger::{self, LogTag};
 use crate::tools::database::{
     get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata, upsert_failed_ata,
@@ -187,8 +188,8 @@ pub async fn cleanup_empty_atas(wallet_address: &str) -> Result<AtaCleanupResult
 
                 // Query actual ATA rent from chain
                 let rent = match crate::chains::solana::rpc::get_ata_rent_lamports().await {
-                    Ok(lamports) => (lamports as f64) / 1_000_000_000.0,
-                    Err(_) => 0.00203928, // Fallback to standard ATA rent
+                    Ok(lamports) => adapter().raw_to_native(lamports),
+                    Err(_) => crate::chains::solana::constants::ATA_RENT_COST_SOL,
                 };
                 result.rent_reclaimed += rent;
             }
@@ -299,7 +300,7 @@ pub async fn get_ata_status() -> Result<String, String> {
     let non_empty_count = all_atas.len() - empty_count;
     let failed_count = get_failed_ata_count();
     let stats = get_cleanup_stats();
-    let potential_rent = (empty_count as f64) * 0.00203928;
+    let potential_rent = (empty_count as f64) * crate::chains::solana::constants::ATA_RENT_COST_SOL;
 
     let status = format!(
         "ATA Status - Total: {}, Empty: {}, Active: {}, Failed Cache: {}, Total Closed: {}, Rent Reclaimed: {:.6} SOL, Potential: {:.6} SOL",

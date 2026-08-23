@@ -1,6 +1,7 @@
 //! DCA (Dollar Cost Averaging) operations — add to an existing position.
 
-use crate::chains::solana::constants::{sol_to_lamports, SOL_MINT};
+use crate::chains::adapter;
+use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -105,7 +106,7 @@ pub async fn add_to_position(
         chain: crate::chains::active_chain(),
         input_mint: SOL_MINT.to_string(),
         output_mint: token_mint.to_string(),
-        input_amount: sol_to_lamports(dca_amount_sol),
+        input_amount: adapter().native_to_raw(dca_amount_sol),
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage,
         swap_mode: SwapMode::ExactIn,

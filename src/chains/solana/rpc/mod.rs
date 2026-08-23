@@ -76,10 +76,7 @@ pub use testing::{
 // Re-exports - Utility Functions
 // ============================================================================
 
-pub use utils::{
-    get_ata_rent_from_chain, get_ata_rent_lamports, parse_pubkey_string, AtaRentInfo,
-    DEFAULT_ATA_RENT_LAMPORTS,
-};
+pub use utils::{get_ata_rent_from_chain, get_ata_rent_lamports, parse_pubkey_string, AtaRentInfo};
 
 // ============================================================================
 // Re-exports - Transaction & Account Types

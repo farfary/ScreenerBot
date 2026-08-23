@@ -2,6 +2,7 @@
 //!
 //! Common utilities for RPC operations.
 
+use crate::chains::solana::constants::ATA_RENT_LAMPORTS;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::logger::{self, LogTag};
 use std::str::FromStr;
@@ -44,9 +45,6 @@ pub struct AtaRentInfo {
 static ATA_RENT_CACHE: LazyLock<Arc<Mutex<Option<AtaRentInfo>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(None)));
 
-/// Default ATA rent in lamports (0.00203928 SOL)
-pub const DEFAULT_ATA_RENT_LAMPORTS: u64 = 2_039_280;
-
 /// Get ATA rent with caching (10-second TTL)
 ///
 /// Attempts to fetch from chain, uses cache, falls back to default.
@@ -60,7 +58,7 @@ pub async fn get_ata_rent_lamports() -> crate::Result<u64> {
                     LogTag::Rpc,
                     "ATA rent cache lock contention - using default ATA rent",
                 );
-                return Ok(DEFAULT_ATA_RENT_LAMPORTS);
+                return Ok(ATA_RENT_LAMPORTS);
             }
         };
         if let Some(ref info) = *cache {
@@ -87,7 +85,7 @@ pub async fn get_ata_rent_lamports() -> crate::Result<u64> {
                 LogTag::Rpc,
                 &format!("Failed to get ATA rent from chain: {e} - using default"),
             );
-            Ok(DEFAULT_ATA_RENT_LAMPORTS)
+            Ok(ATA_RENT_LAMPORTS)
         }
     }
 }

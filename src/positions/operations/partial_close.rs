@@ -1,5 +1,6 @@
 //! Partial close operations — sell a percentage of remaining tokens without closing the position.
 
+use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_total_token_balance;
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
@@ -190,7 +191,7 @@ pub async fn partial_close_position(
                 "Partial exit quote ({}% slippage): {} tokens -> {} SOL",
                 slippage,
                 exit_amount,
-                quote.output_amount as f64 / 1_000_000_000.0
+                adapter().raw_to_native(quote.output_amount)
             ),
         );
 

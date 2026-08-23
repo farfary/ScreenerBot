@@ -3,6 +3,7 @@
 use axum::{extract::Path, Json};
 use serde::Serialize;
 
+use crate::chains::adapter;
 use crate::positions;
 
 // =============================================================================
@@ -363,8 +364,8 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         };
 
         // Fee details
-        let entry_fee_sol = pos.entry_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
-        let exit_fee_sol = pos.exit_fee_lamports.map(|l| (l as f64) / 1_000_000_000.0);
+        let entry_fee_sol = pos.entry_fee_lamports.map(|l| adapter().raw_to_native(l));
+        let exit_fee_sol = pos.exit_fee_lamports.map(|l| adapter().raw_to_native(l));
         let total_fees_sol = entry_fee_sol.unwrap_or_default() + exit_fee_sol.unwrap_or_default();
 
         let fee_details = FeeDetails {

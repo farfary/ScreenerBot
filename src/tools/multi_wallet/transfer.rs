@@ -8,16 +8,14 @@
 use futures::stream::{self, StreamExt};
 use tokio::time::{sleep, Duration};
 
+use crate::chains::adapter;
 use crate::chains::solana::assets::transfer::{transfer_sol_for_wallet, transfer_sol_from_main};
-use crate::chains::solana::constants::lamports_to_sol;
+use crate::chains::solana::constants::RENT_EXEMPT_MINIMUM_LAMPORTS;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::wallets::Wallet;
 
 use super::types::WalletOpResult;
-
-/// Minimum rent-exempt balance for accounts (~0.00089 SOL)
-pub const RENT_EXEMPT_MINIMUM: u64 = 890_880;
 
 // =============================================================================
 // BULK FUNDING
@@ -132,7 +130,7 @@ pub async fn collect_sol(
 
         // Calculate transfer amount
         let rent_reserve = if leave_rent {
-            lamports_to_sol(RENT_EXEMPT_MINIMUM)
+            adapter().raw_to_native(RENT_EXEMPT_MINIMUM_LAMPORTS)
         } else {
             0.0
         };
