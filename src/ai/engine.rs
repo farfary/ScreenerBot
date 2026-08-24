@@ -2,16 +2,18 @@
 
 use crate::ai::cache::AiCache;
 use crate::ai::db::{record_decision, with_ai_db};
+use crate::ai::error::{Error, Result};
 use crate::ai::prompts::{
     get_entry_analysis_prompt, get_exit_analysis_prompt, get_filter_prompt, PromptBuilder,
 };
 use crate::ai::schemas::{validate_json_response, FilterDecision, TradeDecision};
 use crate::ai::types::{
-    AiDecision, AiError, DecisionRecord, EvaluationContext, EvaluationResult, Factor, Impact,
-    Priority, RiskLevel,
+    AiDecision, DecisionRecord, EvaluationContext, EvaluationResult, Factor, Impact, Priority,
+    RiskLevel,
 };
 use crate::apis::llm::{get_llm_manager, ChatMessage, ChatRequest, LlmError, Provider};
 use crate::config::with_config;
+use crate::errors::InternalError;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::OnceCell;
@@ -20,11 +22,13 @@ use tokio::sync::OnceCell;
 static AI_ENGINE: OnceCell<Arc<AiEngine>> = OnceCell::const_new();
 
 /// Initialize the global AI engine
-pub async fn init_ai_engine() -> Result<(), String> {
+pub async fn init_ai_engine() -> Result<()> {
     let engine = AiEngine::new();
-    AI_ENGINE
-        .set(Arc::new(engine))
-        .map_err(|_| "AI engine already initialized".to_owned())
+    AI_ENGINE.set(Arc::new(engine)).map_err(|_| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: "AI engine already initialized".to_owned(),
+        })
+    })
 }
 
 /// Get the global AI engine
@@ -59,13 +63,13 @@ impl AiEngine {
         &self,
         context: EvaluationContext,
         priority: Priority,
-    ) -> Result<EvaluationResult, AiError> {
+    ) -> Result<EvaluationResult> {
         // Check if AI is enabled
         let (ai_enabled, filtering_enabled) =
             with_config(|cfg| (cfg.ai.enabled, cfg.ai.filtering_enabled));
 
         if !ai_enabled || !filtering_enabled {
-            return Err(AiError::Disabled);
+            return Err(Error::Disabled);
         }
 
         // Check cache first
@@ -80,8 +84,10 @@ impl AiEngine {
         let (provider_name, bypass_cache) =
             with_config(|cfg| (cfg.ai.default_provider.clone(), cfg.ai.trading_bypass_cache));
 
-        let provider = Provider::from_str(&provider_name)
-            .ok_or_else(|| AiError::ProviderNotConfigured(provider_name.clone()))?;
+        let provider =
+            Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {
+                provider: provider_name.clone(),
+            })?;
 
         // Build prompt
         let system_prompt = get_filter_prompt();
@@ -173,7 +179,7 @@ impl AiEngine {
         response: crate::apis::llm::ChatResponse,
         latency_ms: f64,
         provider: Provider,
-    ) -> Result<AiDecision, AiError> {
+    ) -> Result<AiDecision> {
         use crate::ai::schemas::FilterAction;
 
         let decision = match filter.decision {
@@ -220,14 +226,16 @@ impl AiEngine {
     }
 
     /// Map LLM errors to AI errors
-    fn map_llm_error(&self, error: LlmError) -> AiError {
+    fn map_llm_error(&self, error: LlmError) -> Error {
         match error {
-            LlmError::ProviderDisabled { provider } => AiError::ProviderNotConfigured(provider),
-            LlmError::RateLimited { retry_after_ms, .. } => AiError::RateLimited {
-                retry_after: retry_after_ms.map(|ms| ms / 1000),
+            LlmError::ProviderDisabled { provider } => Error::ProviderNotConfigured { provider },
+            LlmError::RateLimited { retry_after_ms, .. } => Error::RateLimited {
+                retry_after_secs: retry_after_ms.map(|ms| ms / 1000),
             },
-            LlmError::Timeout { .. } => AiError::Timeout,
-            _ => AiError::LlmError(error.to_string()),
+            LlmError::Timeout { timeout_ms, .. } => Error::Timeout {
+                waited_ms: timeout_ms,
+            },
+            other => Error::Apis(crate::apis::Error::from(other)),
         }
     }
 
@@ -236,13 +244,13 @@ impl AiEngine {
         &self,
         context: &EvaluationContext,
         priority: Priority,
-    ) -> Result<EvaluationResult, AiError> {
+    ) -> Result<EvaluationResult> {
         // Check if AI is enabled
         let (ai_enabled, entry_enabled) =
             with_config(|cfg| (cfg.ai.enabled, cfg.ai.entry_analysis_enabled));
 
         if !ai_enabled || !entry_enabled {
-            return Err(AiError::Disabled);
+            return Err(Error::Disabled);
         }
 
         // Check cache first (unless high priority)
@@ -258,8 +266,10 @@ impl AiEngine {
         // Get provider and model from config
         let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
 
-        let provider = Provider::from_str(&provider_name)
-            .ok_or_else(|| AiError::ProviderNotConfigured(provider_name.clone()))?;
+        let provider =
+            Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {
+                provider: provider_name.clone(),
+            })?;
 
         // Build prompt
         let system_prompt = get_entry_analysis_prompt();
@@ -314,20 +324,22 @@ impl AiEngine {
         &self,
         context: &EvaluationContext,
         _priority: Priority,
-    ) -> Result<EvaluationResult, AiError> {
+    ) -> Result<EvaluationResult> {
         // Check if AI is enabled
         let (ai_enabled, exit_enabled) =
             with_config(|cfg| (cfg.ai.enabled, cfg.ai.exit_analysis_enabled));
 
         if !ai_enabled || !exit_enabled {
-            return Err(AiError::Disabled);
+            return Err(Error::Disabled);
         }
 
         // Exit analysis should always be fresh (no cache for exit decisions)
         let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
 
-        let provider = Provider::from_str(&provider_name)
-            .ok_or_else(|| AiError::ProviderNotConfigured(provider_name.clone()))?;
+        let provider =
+            Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {
+                provider: provider_name.clone(),
+            })?;
 
         // Build prompt
         let system_prompt = get_exit_analysis_prompt();
@@ -378,7 +390,7 @@ impl AiEngine {
         response: crate::apis::llm::ChatResponse,
         latency_ms: f64,
         provider: Provider,
-    ) -> Result<AiDecision, AiError> {
+    ) -> Result<AiDecision> {
         use crate::ai::schemas::TradeAction;
 
         let decision = match trade.decision {

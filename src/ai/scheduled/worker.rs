@@ -6,9 +6,9 @@
 //! and weekly schedules with timeout handling, retry logic, and Telegram notifications.
 
 use super::database as scheduled_db;
-use crate::ai::{chat, ChatRequest, ToolMode};
+use crate::ai::{self, chat, ChatRequest, ToolMode};
 use crate::config::with_config;
-use crate::errors::ServiceError;
+use crate::errors::InternalError;
 use crate::events::{record_scheduled_task_event, Severity};
 use crate::logger::{self, LogTag};
 use chrono;
@@ -143,18 +143,10 @@ async fn execute_scheduled_task(
         task.name,
         chrono::Utc::now().format("%Y-%m-%d %H:%M")
     );
-    let session_id = chat::database::create_hidden_session(pool, &session_title).map_err(|e| {
-        crate::Error::Service(ServiceError::Generic {
-            message: format!("Failed to create session: {e}"),
-        })
-    })?;
+    let session_id = chat::database::create_hidden_session(pool, &session_title)?;
 
     // Record run start
-    let run_id = scheduled_db::record_run_start(pool, task.id, Some(session_id)).map_err(|e| {
-        crate::Error::Service(ServiceError::Generic {
-            message: format!("Failed to record run start: {e}"),
-        })
-    })?;
+    let run_id = scheduled_db::record_run_start(pool, task.id, Some(session_id))?;
 
     let start_time = std::time::Instant::now();
 
@@ -175,7 +167,7 @@ async fn execute_scheduled_task(
     };
 
     // Execute with timeout — select! drops (cancels) the losing branch
-    let result: Result<Result<crate::ai::ChatResponse, String>, ()> = tokio::select! {
+    let result: Result<ai::Result<crate::ai::ChatResponse>, ()> = tokio::select! {
         res = execute_chat_request(request) => Ok(res),
         _ = tokio::time::sleep(Duration::from_secs(timeout_secs)) => Err(()),
     };
@@ -204,17 +196,19 @@ async fn execute_scheduled_task(
                 None, // no error
                 duration_ms,
             )
-            .map_err(|e| {
-                crate::Error::Service(ServiceError::Generic {
-                    message: format!("Failed to record run completion: {e}"),
-                })
+            .map_err(|e| ai::Error::RunRecord {
+                phase: "completion",
+                run_id: run_id.to_string(),
+                detail: e.to_string(),
             })?;
 
             // Update task counters
             scheduled_db::update_task_after_run(pool, task.id, true).map_err(|e| {
-                crate::Error::Service(ServiceError::Generic {
-                    message: format!("Failed to update task: {e}"),
-                })
+                ai::Error::RunRecord {
+                    phase: "task counter update",
+                    run_id: run_id.to_string(),
+                    detail: e.to_string(),
+                }
             })?;
 
             // Send Telegram notification if configured
@@ -232,8 +226,8 @@ async fn execute_scheduled_task(
 
             Ok(())
         }
-        Ok(Err(e)) => {
-            let error_msg = e.to_string();
+        Ok(Err(err)) => {
+            let error_msg = err.to_string();
 
             // Record failed run
             if let Err(e) = scheduled_db::record_run_complete(
@@ -274,9 +268,7 @@ async fn execute_scheduled_task(
                 Severity::Warn,
             );
 
-            Err(crate::Error::Service(ServiceError::Generic {
-                message: error_msg,
-            }))
+            Err(err.into())
         }
         Err(_) => {
             // Timeout
@@ -318,17 +310,21 @@ async fn execute_scheduled_task(
                 Severity::Warn,
             );
 
-            Err(crate::Error::Service(ServiceError::Generic {
-                message: error_msg,
-            }))
+            Err(ai::Error::Timeout {
+                waited_ms: timeout_secs * 1000,
+            }
+            .into())
         }
     }
 }
 
 /// Execute a chat request via the ChatEngine with panic recovery
-async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatResponse, String> {
-    let engine =
-        crate::ai::try_get_chat_engine().ok_or_else(|| "Chat engine not initialized".to_owned())?;
+async fn execute_chat_request(request: ChatRequest) -> ai::Result<crate::ai::ChatResponse> {
+    let engine = crate::ai::try_get_chat_engine().ok_or_else(|| {
+        ai::Error::Internal(InternalError::InvariantViolation {
+            message: "chat engine not initialized".to_owned(),
+        })
+    })?;
 
     // NOTE: catch_unwind has limitations with async code. It can catch panics in synchronous
     // code within the async block, but may not catch all async panics depending on executor state.
@@ -338,8 +334,10 @@ async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatRes
         .catch_unwind()
         .await
     {
-        Ok(result) => result.map_err(|e| format!("Chat engine error: {e}")),
-        Err(_) => Err("Chat engine panicked during execution".to_owned()),
+        Ok(result) => result,
+        Err(_) => Err(ai::Error::Internal(InternalError::InvariantViolation {
+            message: "chat engine panicked during execution".to_owned(),
+        })),
     }
 }
 

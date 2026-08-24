@@ -3,6 +3,7 @@
 //! Contains all type definitions for scheduled AI tasks:
 //! ScheduleType, TaskToolPermissions, ScheduledTask, RunStatus, TaskRun, AutomationStats.
 
+use crate::ai::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -27,12 +28,14 @@ impl ScheduleType {
     }
 
     /// Parse a schedule type from its string representation
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn from_str(s: &str) -> Result<Self> {
         match s {
             "interval" => Ok(ScheduleType::Interval),
             "daily" => Ok(ScheduleType::Daily),
             "weekly" => Ok(ScheduleType::Weekly),
-            _ => Err(format!("Unknown schedule type: {s}")),
+            _ => Err(Error::UnknownScheduleType {
+                value: s.to_owned(),
+            }),
         }
     }
 }
@@ -55,11 +58,13 @@ impl TaskToolPermissions {
     }
 
     /// Parse a permission level from its string representation
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn from_str(s: &str) -> Result<Self> {
         match s {
             "read_only" => Ok(TaskToolPermissions::ReadOnly),
             "full" => Ok(TaskToolPermissions::Full),
-            _ => Err(format!("Unknown tool permission: {s}")),
+            _ => Err(Error::InvalidParameters {
+                detail: format!("unknown tool permission '{s}'"),
+            }),
         }
     }
 }

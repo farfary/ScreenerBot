@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
+use crate::ai::error::Error;
 use crate::config::get_config_clone;
 
 // ============================================================================
@@ -170,7 +171,7 @@ impl Tool for UpdateConfigTool {
                 "section": params.section,
                 "key": params.key,
             })),
-            Err(e) => ToolResult::error(e),
+            Err(e) => ToolResult::error(e.to_string()),
         }
     }
 }
@@ -179,102 +180,156 @@ impl Tool for UpdateConfigTool {
 // Helper functions for config updates
 // ============================================================================
 
-fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, String> {
+fn update_trader_config(key: &str, value: serde_json::Value) -> crate::ai::Result<String> {
     match key {
         "enabled" => {
-            let val = value.as_bool().ok_or("Value must be true or false")?;
+            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
+                detail: "value must be true or false".to_owned(),
+            })?;
             crate::config::update_config_section(
                 |cfg| {
                     cfg.trader.enabled = val;
                 },
                 true,
-            )?;
+            )
+            .map_err(|detail| Error::Dependency {
+                dependency: "config".to_owned(),
+                detail,
+            })?;
             Ok(format!("Updated trader enabled to {val}"))
         }
         "max_open_positions" => {
-            let val = value.as_u64().ok_or("Value must be a number")?;
+            let val = value.as_u64().ok_or_else(|| Error::InvalidParameters {
+                detail: "value must be a number".to_owned(),
+            })?;
             if val < 1 || val > 100 {
-                return Err("max_open_positions must be between 1 and 100".to_owned());
+                return Err(Error::InvalidParameters {
+                    detail: "max_open_positions must be between 1 and 100".to_owned(),
+                });
             }
             crate::config::update_config_section(
                 |cfg| {
                     cfg.trader.max_open_positions = val as usize;
                 },
                 true,
-            )?;
+            )
+            .map_err(|detail| Error::Dependency {
+                dependency: "config".to_owned(),
+                detail,
+            })?;
             Ok(format!("Updated max_open_positions to {val}"))
         }
         "trade_size_sol" => {
-            let val = value.as_f64().ok_or("Value must be a number")?;
+            let val = value.as_f64().ok_or_else(|| Error::InvalidParameters {
+                detail: "value must be a number".to_owned(),
+            })?;
             if val < 0.001 || val > 100.0 {
-                return Err("trade_size_sol must be between 0.001 and 100.0".to_owned());
+                return Err(Error::InvalidParameters {
+                    detail: "trade_size_sol must be between 0.001 and 100.0".to_owned(),
+                });
             }
             crate::config::update_config_section(
                 |cfg| {
                     cfg.trader.trade_size_sol = val;
                 },
                 true,
-            )?;
+            )
+            .map_err(|detail| Error::Dependency {
+                dependency: "config".to_owned(),
+                detail,
+            })?;
             Ok(format!("Updated trade_size_sol to {val}"))
         }
-        _ => Err(format!("Unknown trader config key: {key}")),
+        _ => Err(Error::InvalidParameters {
+            detail: format!("unknown trader config key '{key}'"),
+        }),
     }
 }
 
-fn update_filters_config(key: &str, value: serde_json::Value) -> Result<String, String> {
+fn update_filters_config(key: &str, value: serde_json::Value) -> crate::ai::Result<String> {
     match key {
         "age_enabled" => {
-            let val = value.as_bool().ok_or("Value must be true or false")?;
+            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
+                detail: "value must be true or false".to_owned(),
+            })?;
             crate::config::update_config_section(
                 |cfg| {
                     cfg.filtering.age_enabled = val;
                 },
                 true,
-            )?;
+            )
+            .map_err(|detail| Error::Dependency {
+                dependency: "config".to_owned(),
+                detail,
+            })?;
             Ok(format!("Updated age filtering enabled to {val}"))
         }
         "cooldown_enabled" => {
-            let val = value.as_bool().ok_or("Value must be true or false")?;
+            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
+                detail: "value must be true or false".to_owned(),
+            })?;
             crate::config::update_config_section(
                 |cfg| {
                     cfg.filtering.cooldown_enabled = val;
                 },
                 true,
-            )?;
+            )
+            .map_err(|detail| Error::Dependency {
+                dependency: "config".to_owned(),
+                detail,
+            })?;
             Ok(format!("Updated cooldown filtering enabled to {val}"))
         }
-        _ => Err(format!("Unknown filters config key: {key}")),
+        _ => Err(Error::InvalidParameters {
+            detail: format!("unknown filters config key '{key}'"),
+        }),
     }
 }
 
-fn update_telegram_config(key: &str, value: serde_json::Value) -> Result<String, String> {
+fn update_telegram_config(key: &str, value: serde_json::Value) -> crate::ai::Result<String> {
     match key {
         "enabled" => {
-            let val = value.as_bool().ok_or("Value must be true or false")?;
+            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
+                detail: "value must be true or false".to_owned(),
+            })?;
             crate::config::update_config_section(
                 |cfg| {
                     cfg.telegram.enabled = val;
                 },
                 true,
-            )?;
+            )
+            .map_err(|detail| Error::Dependency {
+                dependency: "config".to_owned(),
+                detail,
+            })?;
             Ok(format!("Updated telegram enabled to {val}"))
         }
-        _ => Err(format!("Unknown telegram config key: {key}")),
+        _ => Err(Error::InvalidParameters {
+            detail: format!("unknown telegram config key '{key}'"),
+        }),
     }
 }
 
-fn update_ai_config(key: &str, value: serde_json::Value) -> Result<String, String> {
+fn update_ai_config(key: &str, value: serde_json::Value) -> crate::ai::Result<String> {
     match key {
         "enabled" => {
-            let val = value.as_bool().ok_or("Value must be true or false")?;
+            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
+                detail: "value must be true or false".to_owned(),
+            })?;
             crate::config::update_config_section(
                 |cfg| {
                     cfg.ai.enabled = val;
                 },
                 true,
-            )?;
+            )
+            .map_err(|detail| Error::Dependency {
+                dependency: "config".to_owned(),
+                detail,
+            })?;
             Ok(format!("Updated AI enabled to {val}"))
         }
-        _ => Err(format!("Unknown AI config key: {key}")),
+        _ => Err(Error::InvalidParameters {
+            detail: format!("unknown AI config key '{key}'"),
+        }),
     }
 }

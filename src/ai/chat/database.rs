@@ -5,7 +5,9 @@
 //! - Chat messages with role, content, and tool calls
 //! - Tool execution tracking with inputs/outputs
 
+use crate::ai::error::{Error, Result};
 use crate::database;
+use crate::errors::{DatabaseError, InternalError, IoError};
 use crate::logger::{self, LogTag};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -65,14 +67,13 @@ pub struct ToolExecution {
 // =============================================================================
 
 /// Initialize chat database with connection pooling
-pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
+pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>> {
     let db_path = crate::paths::get_ai_chat_db_path();
     let db_path_str = db_path.to_string_lossy().to_string();
 
     // Ensure data directory exists
     if let Some(parent) = db_path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create data directory: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| Error::Io(IoError::from(e)))?;
     }
 
     // Create connection manager with centralized configuration
@@ -85,13 +86,19 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
         .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
         .max_lifetime(None) // SQLite: no connection recycling
         .build(manager)
-        .map_err(|e| format!("Failed to create connection pool: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Connection {
+                message: format!("build the AI chat database connection pool: {e}"),
+            })
+        })?;
 
     // Initialize schema using a connection from the pool
     {
-        let conn = pool
-            .get()
-            .map_err(|e| format!("Failed to get connection from pool: {e}"))?;
+        let conn = pool.get().map_err(|e| {
+            Error::Database(DatabaseError::Connection {
+                message: format!("acquire ai-chat database connection: {e}"),
+            })
+        })?;
         initialize_schema(&conn)?;
     }
 
@@ -102,9 +109,11 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
 
     // Store in global
     let pool_arc = Arc::new(pool);
-    GLOBAL_CHAT_POOL
-        .set(pool_arc.clone())
-        .map_err(|_| "Global chat pool already initialized".to_owned())?;
+    GLOBAL_CHAT_POOL.set(pool_arc.clone()).map_err(|_| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: "global chat pool already initialized".to_owned(),
+        })
+    })?;
 
     Ok(Arc::try_unwrap(pool_arc).unwrap_or_else(|arc| (*arc).clone()))
 }
@@ -115,7 +124,7 @@ pub fn get_chat_pool() -> Option<Arc<Pool<SqliteConnectionManager>>> {
 }
 
 /// Initialize database schema
-fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
+fn initialize_schema(conn: &rusqlite::Connection) -> Result<()> {
     // Chat sessions table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -127,7 +136,12 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create chat_sessions table: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create chat_sessions table".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Chat messages table
     conn.execute(
@@ -142,7 +156,12 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create chat_messages table: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create chat_messages table".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Tool executions table
     conn.execute(
@@ -158,26 +177,46 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create tool_executions table: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create tool_executions table".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Indexes for better query performance
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_messages_session ON chat_messages(session_id, created_at)",
         [],
     )
-    .map_err(|e| format!("Failed to create messages index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_messages_session index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_executions_message ON tool_executions(message_id)",
         [],
     )
-    .map_err(|e| format!("Failed to create executions index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_executions_message index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sessions_updated ON chat_sessions(updated_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create sessions index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_sessions_updated index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Add is_hidden column if not exists (for scheduled task sessions)
     let _ = conn.execute(
@@ -209,14 +248,20 @@ pub(super) fn test_pool() -> Pool<SqliteConnectionManager> {
 // =============================================================================
 
 /// Execute a function with a connection from the pool
-pub fn with_chat_db<F, T>(f: F) -> Result<T, String>
+pub fn with_chat_db<F, T>(f: F) -> Result<T>
 where
-    F: FnOnce(&rusqlite::Connection) -> Result<T, String>,
+    F: FnOnce(&rusqlite::Connection) -> Result<T>,
 {
-    let pool = get_chat_pool().ok_or("Chat database pool not initialized")?;
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection from pool: {e}"))?;
+    let pool = get_chat_pool().ok_or_else(|| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: "chat database pool not initialized".to_owned(),
+        })
+    })?;
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai-chat database connection: {e}"),
+        })
+    })?;
     f(&*conn)
 }
 

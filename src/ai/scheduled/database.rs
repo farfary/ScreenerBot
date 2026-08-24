@@ -4,6 +4,8 @@
 //! Schema initialization, task CRUD operations, and scheduling logic.
 //! Types are in types.rs, run history in runs.rs.
 
+use crate::ai::error::{Error, Result};
+use crate::errors::DatabaseError;
 use chrono::Datelike;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -21,7 +23,7 @@ pub use super::types::{
 // ─── Schema ──────────────────────────────────────────────────────────
 
 /// Initialize scheduled tasks tables in the chat database
-pub fn initialize_scheduled_tables(conn: &rusqlite::Connection) -> Result<(), String> {
+pub fn initialize_scheduled_tables(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ai_scheduled_tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +49,12 @@ pub fn initialize_scheduled_tables(conn: &rusqlite::Connection) -> Result<(), St
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_scheduled_tasks table: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create ai_scheduled_tasks table".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ai_task_runs (
@@ -68,29 +75,49 @@ pub fn initialize_scheduled_tables(conn: &rusqlite::Connection) -> Result<(), St
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_task_runs table: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create ai_task_runs table".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Indexes
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled 
+        "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled
          ON ai_scheduled_tasks(enabled, next_run_at)",
         [],
     )
-    .map_err(|e| format!("Failed to create scheduled tasks index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_scheduled_tasks_enabled index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_task_runs_task 
+        "CREATE INDEX IF NOT EXISTS idx_task_runs_task
          ON ai_task_runs(task_id, started_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create task runs index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_task_runs_task index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_task_runs_status 
+        "CREATE INDEX IF NOT EXISTS idx_task_runs_status
          ON ai_task_runs(status, started_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create task runs status index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_task_runs_status index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(())
 }
@@ -106,10 +133,12 @@ pub fn create_task(
     schedule_value: &str,
     tool_permissions: Option<&str>,
     priority: Option<&str>,
-) -> Result<i64, String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+) -> Result<i64> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
     let now = chrono::Utc::now().to_rfc3339();
     let tool_perms = tool_permissions.unwrap_or("read_only");
     let prio = priority.unwrap_or("low");
@@ -133,16 +162,23 @@ pub fn create_task(
             &now
         ],
     )
-    .map_err(|e| format!("Failed to create scheduled task: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "insert scheduled task".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(conn.last_insert_rowid())
 }
 
 /// Get all scheduled tasks
-pub fn list_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledTask>, String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+pub fn list_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledTask>> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
 
     let mut stmt = conn
         .prepare(
@@ -153,7 +189,12 @@ pub fn list_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledT
              FROM ai_scheduled_tasks
              ORDER BY enabled DESC, created_at DESC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare list scheduled tasks query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let tasks = stmt
         .query_map([], |row| {
@@ -180,21 +221,30 @@ pub fn list_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledT
                 updated_at: row.get(19)?,
             })
         })
-        .map_err(|e| format!("Failed to query tasks: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect tasks: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run list scheduled tasks query".to_owned(),
+                message: e.to_string(),
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "read scheduled tasks rows".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(tasks)
 }
 
 /// Get a single scheduled task
-pub fn get_task(
-    pool: &Pool<SqliteConnectionManager>,
-    id: i64,
-) -> Result<Option<ScheduledTask>, String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+pub fn get_task(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<Option<ScheduledTask>> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
 
     let mut stmt = conn
         .prepare(
@@ -204,7 +254,12 @@ pub fn get_task(
                     run_count, error_count, created_at, updated_at
              FROM ai_scheduled_tasks WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare get scheduled task query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let task = stmt
         .query_row(params![id], |row| {
@@ -232,7 +287,12 @@ pub fn get_task(
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query task: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run get scheduled task query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(task)
 }
@@ -253,10 +313,12 @@ pub fn update_task(
     notify_on_failure: Option<bool>,
     max_retries: Option<i32>,
     timeout_seconds: Option<i64>,
-) -> Result<(), String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+) -> Result<()> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let mut updates = Vec::new();
@@ -325,8 +387,12 @@ pub fn update_task(
     param_values.push(Box::new(id));
 
     let params_refs: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|b| b.as_ref()).collect();
-    conn.execute(&sql, params_refs.as_slice())
-        .map_err(|e| format!("Failed to update task: {e}"))?;
+    conn.execute(&sql, params_refs.as_slice()).map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "update scheduled task".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Recalculate next_run_at if schedule changed
     if schedule_type.is_some() || schedule_value.is_some() {
@@ -337,7 +403,12 @@ pub fn update_task(
                         "UPDATE ai_scheduled_tasks SET next_run_at = ? WHERE id = ?",
                         params![&next, id],
                     )
-                    .map_err(|e| format!("Failed to update next_run_at: {e}"))?;
+                    .map_err(|e| {
+                        Error::Database(DatabaseError::Query {
+                            operation: "update scheduled task next_run_at".to_owned(),
+                            message: e.to_string(),
+                        })
+                    })?;
                 }
                 Err(e) => {
                     // Log warning but keep task - next_run_at stays at old value
@@ -357,36 +428,50 @@ pub fn update_task(
 }
 
 /// Delete a scheduled task and its run history
-pub fn delete_task(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<(), String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+pub fn delete_task(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<()> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
 
-    conn.execute_batch("BEGIN TRANSACTION")
-        .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+    conn.execute_batch("BEGIN TRANSACTION").map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "start delete-task transaction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
     if let Err(e) = conn.execute("DELETE FROM ai_task_runs WHERE task_id = ?1", params![id]) {
         let _ = conn.execute_batch("ROLLBACK");
-        return Err(format!("Failed to delete task runs: {e}"));
+        return Err(Error::Database(DatabaseError::Query {
+            operation: "delete task runs".to_owned(),
+            message: e.to_string(),
+        }));
     }
     if let Err(e) = conn.execute("DELETE FROM ai_scheduled_tasks WHERE id = ?1", params![id]) {
         let _ = conn.execute_batch("ROLLBACK");
-        return Err(format!("Failed to delete task: {e}"));
+        return Err(Error::Database(DatabaseError::Query {
+            operation: "delete scheduled task".to_owned(),
+            message: e.to_string(),
+        }));
     }
-    conn.execute_batch("COMMIT")
-        .map_err(|e| format!("Failed to commit transaction: {e}"))?;
+    conn.execute_batch("COMMIT").map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "commit delete-task transaction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(())
 }
 
 /// Toggle task enabled/disabled
-pub fn toggle_task(
-    pool: &Pool<SqliteConnectionManager>,
-    id: i64,
-    enabled: bool,
-) -> Result<(), String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+pub fn toggle_task(pool: &Pool<SqliteConnectionManager>, id: i64, enabled: bool) -> Result<()> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let next_run = if enabled {
@@ -404,7 +489,12 @@ pub fn toggle_task(
         "UPDATE ai_scheduled_tasks SET enabled = ?1, next_run_at = ?2, updated_at = ?3 WHERE id = ?4",
         params![enabled as i32, next_run, &now, id],
     )
-    .map_err(|e| format!("Failed to toggle task: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "toggle scheduled task enabled".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(())
 }
@@ -412,16 +502,21 @@ pub fn toggle_task(
 // ─── Task Scheduling ─────────────────────────────────────────────────
 
 /// Get tasks that are due for execution
-pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledTask>, String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ScheduledTask>> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
     let now = chrono::Utc::now().to_rfc3339();
 
     // Use a transaction to atomically select and mark tasks as picked up
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| format!("Failed to start transaction: {e}"))?;
+    let tx = conn.unchecked_transaction().map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "start get-due-tasks transaction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     let mut stmt = tx
         .prepare(
@@ -433,7 +528,12 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
              WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?1
              ORDER BY next_run_at ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare due tasks query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let tasks = stmt
         .query_map(params![&now], |row| {
@@ -460,9 +560,19 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
                 updated_at: row.get(19)?,
             })
         })
-        .map_err(|e| format!("Failed to query due tasks: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect due tasks: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run due tasks query".to_owned(),
+                message: e.to_string(),
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "read due tasks rows".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     // Mark picked-up tasks so another cycle won't grab them
     let task_ids: Vec<i64> = tasks.iter().map(|t| t.id).collect();
@@ -471,14 +581,23 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
             "UPDATE ai_scheduled_tasks SET next_run_at = NULL WHERE id = ?1",
             params![task_id],
         )
-        .map_err(|e| format!("Failed to mark task as picked: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "clear next_run_at for picked-up task".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
     }
 
     // Need to drop the statement before committing
     drop(stmt);
 
-    tx.commit()
-        .map_err(|e| format!("Failed to commit transaction: {e}"))?;
+    tx.commit().map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "commit get-due-tasks transaction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(tasks)
 }
@@ -488,31 +607,43 @@ pub fn update_task_after_run(
     pool: &Pool<SqliteConnectionManager>,
     id: i64,
     success: bool,
-) -> Result<(), String> {
-    let conn = pool
-        .get()
-        .map_err(|e| format!("Failed to get connection: {e}"))?;
+) -> Result<()> {
+    let conn = pool.get().map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("acquire ai database connection: {e}"),
+        })
+    })?;
     let now = chrono::Utc::now().to_rfc3339();
 
     // Get the task to calculate next run
-    let task = get_task(pool, id)?.ok_or_else(|| format!("Task {id} not found"))?;
+    let task = get_task(pool, id)?.ok_or(Error::TaskNotFound { task_id: id })?;
 
     let next_run = calculate_next_run(&task.schedule_type, &task.schedule_value, None)?;
 
     if success {
         conn.execute(
-            "UPDATE ai_scheduled_tasks SET last_run_at = ?1, next_run_at = ?2, 
+            "UPDATE ai_scheduled_tasks SET last_run_at = ?1, next_run_at = ?2,
              run_count = run_count + 1, updated_at = ?3 WHERE id = ?4",
             params![&now, &next_run, &now, id],
         )
-        .map_err(|e| format!("Failed to update task after success: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "update scheduled task after successful run".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
     } else {
         conn.execute(
-            "UPDATE ai_scheduled_tasks SET last_run_at = ?1, next_run_at = ?2, 
+            "UPDATE ai_scheduled_tasks SET last_run_at = ?1, next_run_at = ?2,
              run_count = run_count + 1, error_count = error_count + 1, updated_at = ?3 WHERE id = ?4",
             params![&now, &next_run, &now, id],
         )
-        .map_err(|e| format!("Failed to update task after failure: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "update scheduled task after failed run".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
     }
 
     Ok(())
@@ -523,19 +654,20 @@ pub fn calculate_next_run(
     schedule_type: &str,
     schedule_value: &str,
     _from: Option<&str>,
-) -> Result<String, String> {
+) -> Result<String> {
     let now = chrono::Utc::now();
 
     match schedule_type {
         "interval" => {
             let seconds: u64 = schedule_value
                 .parse()
-                .map_err(|e| format!("Invalid interval value '{schedule_value}': {e}"))?;
+                .map_err(|e| Error::InvalidParameters {
+                    detail: format!("invalid interval value '{schedule_value}': {e}"),
+                })?;
             if seconds < 60 {
-                return Err(format!(
-                    "Interval must be at least 60 seconds, got {}",
-                    seconds
-                ));
+                return Err(Error::InvalidParameters {
+                    detail: format!("interval must be at least 60 seconds, got {seconds}"),
+                });
             }
             let next = now + chrono::Duration::seconds(seconds as i64);
             Ok(next.to_rfc3339())
@@ -546,15 +678,23 @@ pub fn calculate_next_run(
             // Users should specify times in UTC format.
             let parts: Vec<&str> = schedule_value.split(':').collect();
             if parts.len() != 2 {
-                return Err(format!("Invalid daily schedule format: {schedule_value}"));
+                return Err(Error::InvalidParameters {
+                    detail: format!("invalid daily schedule format: {schedule_value}"),
+                });
             }
-            let hour: u32 = parts[0].parse().map_err(|_| "Invalid hour")?;
-            let minute: u32 = parts[1].parse().map_err(|_| "Invalid minute")?;
+            let hour: u32 = parts[0].parse().map_err(|_| Error::InvalidParameters {
+                detail: "invalid hour".to_owned(),
+            })?;
+            let minute: u32 = parts[1].parse().map_err(|_| Error::InvalidParameters {
+                detail: "invalid minute".to_owned(),
+            })?;
 
-            let today = now
-                .date_naive()
-                .and_hms_opt(hour, minute, 0)
-                .ok_or("Invalid time")?;
+            let today =
+                now.date_naive()
+                    .and_hms_opt(hour, minute, 0)
+                    .ok_or(Error::InvalidParameters {
+                        detail: "invalid time".to_owned(),
+                    })?;
             let today_utc =
                 chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(today, chrono::Utc);
 
@@ -569,10 +709,9 @@ pub fn calculate_next_run(
             // schedule_value format: "mon,wed,fri:HH:MM"
             let parts: Vec<&str> = schedule_value.splitn(2, ':').collect();
             if parts.len() < 2 {
-                return Err(format!(
-                    "Invalid weekly schedule format: {}",
-                    schedule_value
-                ));
+                return Err(Error::InvalidParameters {
+                    detail: format!("invalid weekly schedule format: {schedule_value}"),
+                });
             }
 
             let days_str = parts[0];
@@ -605,15 +744,19 @@ pub fn calculate_next_run(
                 .collect();
 
             if target_weekdays.is_empty() {
-                return Err("No valid days specified".to_owned());
+                return Err(Error::InvalidParameters {
+                    detail: "no valid days specified".to_owned(),
+                });
             }
 
             // Find the next matching day
             for offset in 0..=7 {
                 let candidate_date = (now + chrono::Duration::days(offset)).date_naive();
-                let candidate_time = candidate_date
-                    .and_hms_opt(hour, minute, 0)
-                    .ok_or("Invalid time")?;
+                let candidate_time = candidate_date.and_hms_opt(hour, minute, 0).ok_or(
+                    Error::InvalidParameters {
+                        detail: "invalid time".to_owned(),
+                    },
+                )?;
                 let candidate_utc = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
                     candidate_time,
                     chrono::Utc,
@@ -625,8 +768,12 @@ pub fn calculate_next_run(
             }
 
             // Should not be reachable if target_weekdays is non-empty
-            Err("Could not calculate next weekly run time".to_owned())
+            Err(Error::InvalidParameters {
+                detail: "could not calculate next weekly run time".to_owned(),
+            })
         }
-        _ => Err(format!("Unknown schedule type: {schedule_type}")),
+        _ => Err(Error::UnknownScheduleType {
+            value: schedule_type.to_owned(),
+        }),
     }
 }

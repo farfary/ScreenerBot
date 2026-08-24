@@ -10,6 +10,7 @@ pub mod chat;
 pub mod database;
 pub use database as db;
 pub mod engine;
+mod error;
 pub mod permissions;
 pub mod prompts;
 pub mod scheduled;
@@ -37,6 +38,7 @@ pub use db::{
     update_instruction, with_ai_db,
 };
 pub use engine::{get_ai_engine, init_ai_engine, try_get_ai_engine, AiEngine};
+pub use error::{Error, Result};
 pub use permissions::{PermissionLevel, ToolPermissions};
 pub use scheduled::{
     calculate_next_run, create_task, delete_task, get_due_tasks, get_task,
@@ -54,6 +56,6 @@ pub use tools::{
     create_tool_registry, Tool, ToolCategory, ToolDefinition, ToolRegistry, ToolResult,
 };
 pub use types::{
-    AiDecision, AiError, DecisionRecord, EvaluationContext, EvaluationResult, Instruction,
+    AiDecision, DecisionRecord, EvaluationContext, EvaluationResult, Instruction,
     InstructionTemplate, Priority,
 };

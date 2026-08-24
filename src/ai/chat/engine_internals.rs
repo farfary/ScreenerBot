@@ -8,8 +8,8 @@ use super::engine::{ChatEngine, JSON_CODE_BLOCK_PATTERN, LOOSE_JSON_PATTERN};
 use super::types::{
     ChatContext, PendingConfirmation, ToolCall, ToolCallInfo, ToolCallStatus, ToolMode,
 };
+use crate::ai::error::{Error, Result};
 use crate::ai::tools::ToolResult;
-use crate::ai::types::AiError;
 use crate::apis::llm::{
     get_llm_manager, ChatMessage as LlmChatMessage, ChatRequest as LlmChatRequest, MessageRole,
     Provider,
@@ -29,7 +29,7 @@ impl ChatEngine {
         &self,
         history: &[database::ChatMessage],
         context: &Option<ChatContext>,
-    ) -> Result<Vec<LlmChatMessage>, AiError> {
+    ) -> Result<Vec<LlmChatMessage>> {
         let mut messages = Vec::new();
 
         // Add system prompt
@@ -232,7 +232,7 @@ impl ChatEngine {
     pub(super) async fn call_llm(
         &self,
         messages: &[LlmChatMessage],
-    ) -> Result<crate::apis::llm::ChatResponse, AiError> {
+    ) -> Result<crate::apis::llm::ChatResponse> {
         let tools = self
             .tool_registry
             .list_definitions()
@@ -251,19 +251,17 @@ impl ChatEngine {
             return match tokio::time::timeout(Duration::from_secs(60), completion.complete(request))
                 .await
             {
-                Ok(result) => {
-                    result.map_err(|error| AiError::LlmError(format!("LLM call failed: {error}")))
-                }
-                Err(_) => Err(AiError::LlmError(
-                    "LLM call timed out after 60 seconds".to_owned(),
-                )),
+                Ok(result) => result.map_err(|error| Error::Apis(crate::apis::Error::from(error))),
+                Err(_) => Err(Error::Timeout { waited_ms: 60_000 }),
             };
         }
 
         let llm_manager = get_llm_manager();
         let provider_name = crate::config::with_config(|cfg| cfg.ai.default_provider.clone());
-        let provider = Provider::from_str(&provider_name)
-            .ok_or_else(|| AiError::ProviderNotConfigured(provider_name.clone()))?;
+        let provider =
+            Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {
+                provider: provider_name.clone(),
+            })?;
         let model = self.get_model_for_provider(provider);
         let request = LlmChatRequest::new(model, messages.to_vec())
             .with_temperature(0.2)
@@ -272,10 +270,8 @@ impl ChatEngine {
         match tokio::time::timeout(Duration::from_secs(60), llm_manager.call(provider, request))
             .await
         {
-            Ok(result) => result.map_err(|e| AiError::LlmError(format!("LLM call failed: {e}"))),
-            Err(_) => Err(AiError::LlmError(
-                "LLM call timed out after 60 seconds".to_owned(),
-            )),
+            Ok(result) => result.map_err(|e| Error::Apis(crate::apis::Error::from(e))),
+            Err(_) => Err(Error::Timeout { waited_ms: 60_000 }),
         }
     }
 

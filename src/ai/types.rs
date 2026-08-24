@@ -65,47 +65,6 @@ pub struct EvaluationResult {
     pub cached: bool,
 }
 
-/// AI error types
-#[derive(Debug, Clone)]
-pub enum AiError {
-    Disabled,
-    ProviderNotConfigured(String),
-    RateLimited { retry_after: Option<u64> },
-    Timeout,
-    LlmError(String),
-    ParseError(String),
-    ValidationError(String),
-}
-
-impl std::fmt::Display for AiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AiError::Disabled => write!(f, "AI module is disabled"),
-            AiError::ProviderNotConfigured(p) => write!(f, "Provider not configured: {p}"),
-            AiError::RateLimited { retry_after } => {
-                if let Some(secs) = retry_after {
-                    write!(f, "Rate limited, retry after {secs} seconds")
-                } else {
-                    write!(f, "Rate limited")
-                }
-            }
-            AiError::Timeout => write!(f, "AI request timed out"),
-            AiError::LlmError(e) => write!(f, "LLM error: {e}"),
-            AiError::ParseError(e) => write!(f, "Failed to parse AI response: {e}"),
-            AiError::ValidationError(e) => write!(f, "Validation error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for AiError {}
-
-// Convert String to AiError for ? operator compatibility
-impl From<String> for AiError {
-    fn from(s: String) -> Self {
-        AiError::ParseError(s)
-    }
-}
-
 /// User-created AI instruction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Instruction {

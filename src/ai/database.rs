@@ -5,7 +5,9 @@
 //! - Decision history tracking
 //! - Built-in instruction templates
 
+use crate::ai::error::{Error, Result};
 use crate::database;
+use crate::errors::{DatabaseError, InternalError};
 use crate::logger::{self, LogTag};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::OnceLock;
@@ -24,16 +26,23 @@ static GLOBAL_AI_DB: OnceLock<Arc<Mutex<Connection>>> = OnceLock::new();
 // =============================================================================
 
 /// Initialize AI database with schema
-pub fn init_ai_database() -> Result<Connection, String> {
+pub fn init_ai_database() -> Result<Connection> {
     let db_path = crate::paths::get_ai_db_path();
     let db_path_str = db_path.to_string_lossy().to_string();
 
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open AI database at {db_path_str}: {e}"))?;
+    let conn = Connection::open(&db_path).map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("open the AI database at {db_path_str}: {e}"),
+        })
+    })?;
 
     // Apply centralized PRAGMA configuration
-    database::configure_connection(&conn, database::AI_DB)
-        .map_err(|e| format!("Failed to configure connection: {e}"))?;
+    database::configure_connection(&conn, database::AI_DB).map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "configure AI database connection".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Create schema
     initialize_schema(&conn)?;
@@ -44,17 +53,26 @@ pub fn init_ai_database() -> Result<Connection, String> {
     );
 
     // Store in global
-    GLOBAL_AI_DB
-        .set(Arc::new(Mutex::new(conn)))
-        .map_err(|_| "Global AI database already initialized".to_owned())?;
+    GLOBAL_AI_DB.set(Arc::new(Mutex::new(conn))).map_err(|_| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: "global AI database already initialized".to_owned(),
+        })
+    })?;
 
     // Return a new connection for immediate use
-    let new_conn =
-        Connection::open(&db_path).map_err(|e| format!("Failed to reopen AI database: {e}"))?;
+    let new_conn = Connection::open(&db_path).map_err(|e| {
+        Error::Database(DatabaseError::Connection {
+            message: format!("open a second AI database connection at {db_path_str}: {e}"),
+        })
+    })?;
 
     // Apply centralized PRAGMA configuration to new connection
-    database::configure_connection(&new_conn, database::AI_DB)
-        .map_err(|e| format!("Failed to configure connection: {e}"))?;
+    database::configure_connection(&new_conn, database::AI_DB).map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "configure new AI database connection".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(new_conn)
 }
@@ -65,7 +83,7 @@ pub fn get_ai_database() -> Option<Arc<Mutex<Connection>>> {
 }
 
 /// Initialize database schema
-fn initialize_schema(conn: &Connection) -> Result<(), String> {
+fn initialize_schema(conn: &Connection) -> Result<()> {
     // User instructions table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS ai_instructions (
@@ -80,7 +98,12 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_instructions table: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create ai_instructions table".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Decision history table
     conn.execute(
@@ -101,20 +124,35 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
         )",
         [],
     )
-    .map_err(|e| format!("Failed to create ai_decision_history table: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create ai_decision_history table".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     // Indexes for decision history
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_decisions_mint ON ai_decision_history(mint)",
         [],
     )
-    .map_err(|e| format!("Failed to create mint index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_decisions_mint index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_decisions_created ON ai_decision_history(created_at DESC)",
         [],
     )
-    .map_err(|e| format!("Failed to create created_at index: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "create idx_decisions_created index".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(())
 }
@@ -124,14 +162,19 @@ fn initialize_schema(conn: &Connection) -> Result<(), String> {
 // =============================================================================
 
 /// List all instructions ordered by priority (highest first) and name
-pub fn list_instructions(db: &Connection) -> Result<Vec<Instruction>, String> {
+pub fn list_instructions(db: &Connection) -> Result<Vec<Instruction>> {
     let mut stmt = db
         .prepare(
-            "SELECT id, name, content, category, priority, enabled, created_at, updated_at 
-             FROM ai_instructions 
+            "SELECT id, name, content, category, priority, enabled, created_at, updated_at
+             FROM ai_instructions
              ORDER BY priority DESC, name ASC",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare list instructions query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let instructions = stmt
         .query_map([], |row| {
@@ -146,22 +189,37 @@ pub fn list_instructions(db: &Connection) -> Result<Vec<Instruction>, String> {
                 updated_at: row.get(7)?,
             })
         })
-        .map_err(|e| format!("Failed to query instructions: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect instructions: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run list instructions query".to_owned(),
+                message: e.to_string(),
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "read instructions rows".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(instructions)
 }
 
 /// Get a single instruction by ID
-pub fn get_instruction(db: &Connection, id: i64) -> Result<Option<Instruction>, String> {
+pub fn get_instruction(db: &Connection, id: i64) -> Result<Option<Instruction>> {
     let mut stmt = db
         .prepare(
-            "SELECT id, name, content, category, priority, enabled, created_at, updated_at 
-             FROM ai_instructions 
+            "SELECT id, name, content, category, priority, enabled, created_at, updated_at
+             FROM ai_instructions
              WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare get instruction query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let instruction = stmt
         .query_row(params![id], |row| {
@@ -177,7 +235,12 @@ pub fn get_instruction(db: &Connection, id: i64) -> Result<Option<Instruction>, 
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query instruction: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run get instruction query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(instruction)
 }
@@ -188,15 +251,20 @@ pub fn create_instruction(
     name: &str,
     content: &str,
     category: &str,
-) -> Result<i64, String> {
+) -> Result<i64> {
     let now = chrono::Utc::now().to_rfc3339();
 
     db.execute(
-        "INSERT INTO ai_instructions (name, content, category, created_at, updated_at) 
+        "INSERT INTO ai_instructions (name, content, category, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![name, content, category, &now, &now],
     )
-    .map_err(|e| format!("Failed to insert instruction: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "insert instruction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     let id = db.last_insert_rowid();
     Ok(id)
@@ -211,7 +279,7 @@ pub fn update_instruction(
     category: Option<&str>,
     priority: Option<i32>,
     enabled: Option<bool>,
-) -> Result<(), String> {
+) -> Result<()> {
     let now = chrono::Utc::now().to_rfc3339();
     let mut updates = Vec::new();
     let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -254,41 +322,66 @@ pub fn update_instruction(
     // Convert to params for rusqlite
     let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
 
-    db.execute(&sql, params_refs.as_slice())
-        .map_err(|e| format!("Failed to update instruction: {e}"))?;
+    db.execute(&sql, params_refs.as_slice()).map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "update instruction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(())
 }
 
 /// Delete an instruction by ID
-pub fn delete_instruction(db: &Connection, id: i64) -> Result<(), String> {
+pub fn delete_instruction(db: &Connection, id: i64) -> Result<()> {
     db.execute("DELETE FROM ai_instructions WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete instruction: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "delete instruction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(())
 }
 
 /// Reorder instructions by setting priorities based on the order of IDs
 /// First ID in the list gets the highest priority
-pub fn reorder_instructions(db: &Connection, ids: &[i64]) -> Result<(), String> {
-    let tx = db
-        .unchecked_transaction()
-        .map_err(|e| format!("Failed to start transaction: {e}"))?;
+pub fn reorder_instructions(db: &Connection, ids: &[i64]) -> Result<()> {
+    let tx = db.unchecked_transaction().map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "start reorder-instructions transaction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let mut stmt = tx
         .prepare("UPDATE ai_instructions SET priority = ?1, updated_at = ?2 WHERE id = ?3")
-        .map_err(|e| format!("Failed to prepare update statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare reorder instructions statement".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     for (index, id) in ids.iter().enumerate() {
         let priority = (ids.len() - index) as i32; // Reverse: first = highest priority
-        stmt.execute(params![priority, &now, id])
-            .map_err(|e| format!("Failed to update priority for instruction {id}: {e}"))?;
+        stmt.execute(params![priority, &now, id]).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "update instruction priority".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
     }
 
     drop(stmt);
-    tx.commit()
-        .map_err(|e| format!("Failed to commit reorder transaction: {e}"))?;
+    tx.commit().map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "commit reorder-instructions transaction".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     Ok(())
 }
@@ -298,13 +391,13 @@ pub fn reorder_instructions(db: &Connection, ids: &[i64]) -> Result<(), String> 
 // =============================================================================
 
 /// Record an AI decision
-pub fn record_decision(db: &Connection, record: &DecisionRecord) -> Result<i64, String> {
+pub fn record_decision(db: &Connection, record: &DecisionRecord) -> Result<i64> {
     let now = chrono::Utc::now().to_rfc3339();
 
     db.execute(
-        "INSERT INTO ai_decision_history 
-         (mint, symbol, decision, confidence, reasoning, risk_level, provider, model, 
-          tokens_used, latency_ms, cached, created_at) 
+        "INSERT INTO ai_decision_history
+         (mint, symbol, decision, confidence, reasoning, risk_level, provider, model,
+          tokens_used, latency_ms, cached, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             &record.mint,
@@ -321,27 +414,33 @@ pub fn record_decision(db: &Connection, record: &DecisionRecord) -> Result<i64, 
             &now,
         ],
     )
-    .map_err(|e| format!("Failed to insert decision record: {e}"))?;
+    .map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "insert decision record".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     let id = db.last_insert_rowid();
     Ok(id)
 }
 
 /// List recent decisions with pagination
-pub fn list_decisions(
-    db: &Connection,
-    limit: usize,
-    offset: usize,
-) -> Result<Vec<DecisionRecord>, String> {
+pub fn list_decisions(db: &Connection, limit: usize, offset: usize) -> Result<Vec<DecisionRecord>> {
     let mut stmt = db
         .prepare(
-            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level, 
-                    provider, model, tokens_used, latency_ms, cached, created_at 
-             FROM ai_decision_history 
-             ORDER BY created_at DESC 
+            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level,
+                    provider, model, tokens_used, latency_ms, cached, created_at
+             FROM ai_decision_history
+             ORDER BY created_at DESC
              LIMIT ?1 OFFSET ?2",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare list decisions query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let decisions = stmt
         .query_map(params![limit, offset], |row| {
@@ -361,23 +460,38 @@ pub fn list_decisions(
                 created_at: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query decisions: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect decisions: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run list decisions query".to_owned(),
+                message: e.to_string(),
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "read decisions rows".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(decisions)
 }
 
 /// Get a single decision by ID
-pub fn get_decision(db: &Connection, id: i64) -> Result<Option<DecisionRecord>, String> {
+pub fn get_decision(db: &Connection, id: i64) -> Result<Option<DecisionRecord>> {
     let mut stmt = db
         .prepare(
-            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level, 
-                    provider, model, tokens_used, latency_ms, cached, created_at 
-             FROM ai_decision_history 
+            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level,
+                    provider, model, tokens_used, latency_ms, cached, created_at
+             FROM ai_decision_history
              WHERE id = ?1",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare get decision query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let decision = stmt
         .query_row(params![id], |row| {
@@ -398,7 +512,12 @@ pub fn get_decision(db: &Connection, id: i64) -> Result<Option<DecisionRecord>, 
             })
         })
         .optional()
-        .map_err(|e| format!("Failed to query decision: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run get decision query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(decision)
 }
@@ -408,17 +527,22 @@ pub fn list_decisions_for_mint(
     db: &Connection,
     mint: &str,
     limit: usize,
-) -> Result<Vec<DecisionRecord>, String> {
+) -> Result<Vec<DecisionRecord>> {
     let mut stmt = db
         .prepare(
-            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level, 
-                    provider, model, tokens_used, latency_ms, cached, created_at 
-             FROM ai_decision_history 
-             WHERE mint = ?1 
-             ORDER BY created_at DESC 
+            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level,
+                    provider, model, tokens_used, latency_ms, cached, created_at
+             FROM ai_decision_history
+             WHERE mint = ?1
+             ORDER BY created_at DESC
              LIMIT ?2",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare list decisions for mint query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let decisions = stmt
         .query_map(params![mint, limit], |row| {
@@ -438,9 +562,19 @@ pub fn list_decisions_for_mint(
                 created_at: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query decisions for mint: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect decisions: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run list decisions for mint query".to_owned(),
+                message: e.to_string(),
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "read decisions for mint rows".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(decisions)
 }
@@ -451,17 +585,22 @@ pub fn list_decisions_for_mint_paginated(
     mint: &str,
     limit: usize,
     offset: usize,
-) -> Result<Vec<DecisionRecord>, String> {
+) -> Result<Vec<DecisionRecord>> {
     let mut stmt = db
         .prepare(
-            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level, 
-                    provider, model, tokens_used, latency_ms, cached, created_at 
-             FROM ai_decision_history 
-             WHERE mint = ?1 
-             ORDER BY created_at DESC 
+            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level,
+                    provider, model, tokens_used, latency_ms, cached, created_at
+             FROM ai_decision_history
+             WHERE mint = ?1
+             ORDER BY created_at DESC
              LIMIT ?2 OFFSET ?3",
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare list decisions for mint paginated query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let decisions = stmt
         .query_map(params![mint, limit, offset], |row| {
@@ -481,15 +620,25 @@ pub fn list_decisions_for_mint_paginated(
                 created_at: row.get(12)?,
             })
         })
-        .map_err(|e| format!("Failed to query decisions for mint: {e}"))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect decisions: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "run list decisions for mint paginated query".to_owned(),
+                message: e.to_string(),
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "read decisions for mint paginated rows".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(decisions)
 }
 
 /// Clear old decision records (older than specified days)
-pub fn clear_old_decisions(db: &Connection, days: i64) -> Result<usize, String> {
+pub fn clear_old_decisions(db: &Connection, days: i64) -> Result<usize> {
     let cutoff = chrono::Utc::now() - chrono::Duration::days(days);
     let cutoff_str = cutoff.to_rfc3339();
 
@@ -498,7 +647,12 @@ pub fn clear_old_decisions(db: &Connection, days: i64) -> Result<usize, String> 
             "DELETE FROM ai_decision_history WHERE created_at < ?1",
             params![cutoff_str],
         )
-        .map_err(|e| format!("Failed to delete old decisions: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "delete old decision records".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(affected)
 }
@@ -560,14 +714,18 @@ pub fn get_builtin_templates() -> Vec<InstructionTemplate> {
 // =============================================================================
 
 /// Get a connection from the global database
-pub fn with_ai_db<F, T>(f: F) -> Result<T, String>
+pub fn with_ai_db<F, T>(f: F) -> Result<T>
 where
-    F: FnOnce(&Connection) -> Result<T, String>,
+    F: FnOnce(&Connection) -> Result<T>,
 {
-    let db = get_ai_database().ok_or("AI database not initialized")?;
-    let conn = db
-        .lock()
-        .map_err(|e| format!("Failed to lock AI database: {e}"))?;
+    let db = get_ai_database().ok_or(Error::Internal(InternalError::InvariantViolation {
+        message: "AI database not initialized".to_owned(),
+    }))?;
+    let conn = db.lock().map_err(|e| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: format!("AI database lock poisoned: {e}"),
+        })
+    })?;
     f(&conn)
 }
 

@@ -11,6 +11,10 @@ use crate::rpc::errors::RpcError;
 /// This is re-exported as `crate::Error` for ergonomic usage across the codebase.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
+    /// AI evaluation, chat, tool execution and scheduled automation errors.
+    #[error(transparent)]
+    Ai(#[from] crate::ai::Error),
+
     /// Position lifecycle errors (open/close/DCA/verification).
     #[error(transparent)]
     Positions(#[from] crate::positions::Error),

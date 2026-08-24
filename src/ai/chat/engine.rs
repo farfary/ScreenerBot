@@ -9,8 +9,8 @@ pub use super::types::{
     ToolMode,
 };
 use super::types::{ConfirmationState, PendingConfirmation, ToolCall};
+use crate::ai::error::{Error, Result};
 use crate::ai::tools::{create_tool_registry, ToolRegistry};
-use crate::ai::types::AiError;
 use crate::apis::llm::ChatMessage as LlmChatMessage;
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
@@ -50,11 +50,13 @@ pub(super) static LOOSE_JSON_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 static CHAT_ENGINE: OnceCell<Arc<ChatEngine>> = OnceCell::const_new();
 
 /// Initialize the global chat engine
-pub async fn init_chat_engine() -> Result<(), String> {
+pub async fn init_chat_engine() -> Result<()> {
     let engine = ChatEngine::new();
-    CHAT_ENGINE
-        .set(Arc::new(engine))
-        .map_err(|_| "Chat engine already initialized".to_owned())
+    CHAT_ENGINE.set(Arc::new(engine)).map_err(|_| {
+        Error::Internal(crate::errors::InternalError::InvariantViolation {
+            message: "chat engine already initialized".to_owned(),
+        })
+    })
 }
 
 /// Get the global chat engine
@@ -167,7 +169,7 @@ pub(super) trait ChatCompletion: Send + Sync {
     async fn complete(
         &self,
         request: crate::apis::llm::ChatRequest,
-    ) -> Result<crate::apis::llm::ChatResponse, crate::apis::llm::LlmError>;
+    ) -> std::result::Result<crate::apis::llm::ChatResponse, crate::apis::llm::LlmError>;
 }
 
 impl ChatEngine {
@@ -196,7 +198,7 @@ impl ChatEngine {
     }
 
     /// Process a user message and generate response
-    pub async fn process_message(&self, request: ChatRequest) -> Result<ChatResponse, AiError> {
+    pub async fn process_message(&self, request: ChatRequest) -> Result<ChatResponse> {
         self.process_message_with_progress(request, None).await
     }
 
@@ -205,7 +207,7 @@ impl ChatEngine {
         &self,
         request: ChatRequest,
         progress: tokio::sync::mpsc::UnboundedSender<ChatProgressEvent>,
-    ) -> Result<ChatResponse, AiError> {
+    ) -> Result<ChatResponse> {
         self.process_message_with_progress(request, Some(progress))
             .await
     }
@@ -214,9 +216,12 @@ impl ChatEngine {
         &self,
         request: ChatRequest,
         progress: Option<tokio::sync::mpsc::UnboundedSender<ChatProgressEvent>>,
-    ) -> Result<ChatResponse, AiError> {
-        let pool = database::get_chat_pool()
-            .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
+    ) -> Result<ChatResponse> {
+        let pool = database::get_chat_pool().ok_or_else(|| {
+            Error::Internal(crate::errors::InternalError::InvariantViolation {
+                message: "chat database not initialized".to_owned(),
+            })
+        })?;
         self.process_message_with_pool(request, &pool, progress)
             .await
     }
@@ -226,32 +231,28 @@ impl ChatEngine {
         request: ChatRequest,
         pool: &r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>,
         progress: Option<tokio::sync::mpsc::UnboundedSender<ChatProgressEvent>>,
-    ) -> Result<ChatResponse, AiError> {
+    ) -> Result<ChatResponse> {
         let (user_message_id, history, replaced_message_id) = if let Some(message_id) =
             request.regenerate_message_id
         {
-            let history = database::get_messages(&pool, request.session_id).map_err(|e| {
-                AiError::ParseError(format!("Failed to load regeneration history: {e}"))
-            })?;
+            let history = database::get_messages(&pool, request.session_id)?;
             let target_index = history
                 .iter()
                 .position(|message| message.id == message_id && message.role == "assistant")
-                .ok_or_else(|| {
-                    AiError::ValidationError(
-                        "Regeneration target is not an assistant message in this session"
-                            .to_owned(),
-                    )
+                .ok_or_else(|| Error::InvalidParameters {
+                    detail: "regeneration target is not an assistant message in this session"
+                        .to_owned(),
                 })?;
             if target_index + 1 != history.len() || target_index == 0 {
-                return Err(AiError::ValidationError(
-                    "Only the latest assistant response can be regenerated".to_owned(),
-                ));
+                return Err(Error::InvalidParameters {
+                    detail: "only the latest assistant response can be regenerated".to_owned(),
+                });
             }
             let user_message = &history[target_index - 1];
             if user_message.role != "user" {
-                return Err(AiError::ValidationError(
-                    "Regeneration target has no preceding user message".to_owned(),
-                ));
+                return Err(Error::InvalidParameters {
+                    detail: "regeneration target has no preceding user message".to_owned(),
+                });
             }
             (
                 user_message.id,
@@ -260,12 +261,8 @@ impl ChatEngine {
             )
         } else {
             let message_id =
-                database::add_message(&pool, request.session_id, "user", &request.message, None)
-                    .map_err(|e| {
-                        AiError::ParseError(format!("Failed to save user message: {e}"))
-                    })?;
-            let history = database::get_messages(&pool, request.session_id)
-                .map_err(|e| AiError::ParseError(format!("Failed to load history: {e}")))?;
+                database::add_message(&pool, request.session_id, "user", &request.message, None)?;
+            let history = database::get_messages(&pool, request.session_id)?;
             (message_id, history, None)
         };
 
@@ -347,9 +344,9 @@ impl ChatEngine {
                 if replaced_message_id.is_none() && tool_calls_info.is_empty() {
                     let _ = database::delete_message(pool, user_message_id);
                 }
-                return Err(AiError::ValidationError(
-                    "Chat request was cancelled".to_owned(),
-                ));
+                return Err(Error::InvalidParameters {
+                    detail: "chat request was cancelled".to_owned(),
+                });
             }
 
             if let Some(progress) = &progress {
@@ -388,9 +385,7 @@ impl ChatEngine {
                 );
 
                 if let Some(message_id) = replaced_message_id {
-                    database::delete_message(&pool, message_id).map_err(|e| {
-                        AiError::ParseError(format!("Failed to replace assistant response: {e}"))
-                    })?;
+                    database::delete_message(&pool, message_id)?;
                 }
                 let tool_calls_json = serde_json::to_string(&results).ok();
                 let assistant_message_id = database::add_message(
@@ -399,12 +394,7 @@ impl ChatEngine {
                     "assistant",
                     content,
                     tool_calls_json.as_deref(),
-                )
-                .map_err(|error| {
-                    AiError::ParseError(format!(
-                        "Failed to save pending assistant response: {error}"
-                    ))
-                })?;
+                )?;
                 let response = ChatResponse {
                     message_id: assistant_message_id,
                     content: content.to_string(),
@@ -464,13 +454,10 @@ impl ChatEngine {
             "assistant",
             &final_content,
             tool_calls_json.as_deref(),
-        )
-        .map_err(|e| AiError::ParseError(format!("Failed to save assistant message: {e}")))?;
+        )?;
 
         if let Some(message_id) = replaced_message_id {
-            database::delete_message(&pool, message_id).map_err(|e| {
-                AiError::ParseError(format!("Failed to replace assistant response: {e}"))
-            })?;
+            database::delete_message(&pool, message_id)?;
         }
 
         logger::info(
@@ -502,20 +489,20 @@ impl ChatEngine {
         confirmation_id: &str,
         approved: bool,
         session_id: i64,
-    ) -> Result<ChatResponse, AiError> {
+    ) -> Result<ChatResponse> {
         // Get confirmation state
         let state = self
             .confirmation_manager
             .get_confirmation(confirmation_id)
             .await
-            .ok_or_else(|| {
-                AiError::ValidationError("Confirmation not found or expired".to_owned())
+            .ok_or_else(|| Error::InvalidParameters {
+                detail: "confirmation not found or expired".to_owned(),
             })?;
 
         if state.session_id != session_id {
-            return Err(AiError::ValidationError(
-                "Confirmation does not belong to this session".to_owned(),
-            ));
+            return Err(Error::InvalidParameters {
+                detail: "confirmation does not belong to this session".to_owned(),
+            });
         }
 
         // Remove confirmation from pending
@@ -525,9 +512,9 @@ impl ChatEngine {
 
         // Bounds check before accessing tool_calls
         if state.current_index >= state.tool_calls.len() {
-            return Err(AiError::ValidationError(
-                "Invalid confirmation state: index out of bounds".to_owned(),
-            ));
+            return Err(Error::InvalidParameters {
+                detail: "invalid confirmation state: index out of bounds".to_owned(),
+            });
         }
 
         if !approved {
@@ -549,8 +536,11 @@ impl ChatEngine {
         }
 
         // Get database pool
-        let pool = database::get_chat_pool()
-            .ok_or_else(|| AiError::ValidationError("Chat database not initialized".to_owned()))?;
+        let pool = database::get_chat_pool().ok_or_else(|| {
+            Error::Internal(crate::errors::InternalError::InvariantViolation {
+                message: "chat database not initialized".to_owned(),
+            })
+        })?;
 
         // Execute the approved tool
         let tool_call = &state.tool_calls[state.current_index];
@@ -636,7 +626,7 @@ mod tests {
         async fn complete(
             &self,
             request: crate::apis::llm::ChatRequest,
-        ) -> Result<crate::apis::llm::ChatResponse, LlmError> {
+        ) -> std::result::Result<crate::apis::llm::ChatResponse, LlmError> {
             assert!(request
                 .tools
                 .as_ref()
